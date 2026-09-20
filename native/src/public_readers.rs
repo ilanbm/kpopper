@@ -183,8 +183,8 @@ fn replaced(
     let value = crate::history_yaml::decode_document(&inventory.read(&path)?)?;
     Ok((Some(value), relative))
 }
-fn prefix_order(source: &crate::history_yaml::OrdinaryValue) -> Vec<String> {
-    let Some(crate::history_yaml::OrdinaryValue::Map(prefixes)) =
+fn prefix_order(source: &crate::ordinary_source::Source) -> Vec<String> {
+    let Some(crate::ordinary_source::Source::Map(prefixes)) =
         source.get("meta").and_then(|meta| meta.get("prefixes"))
     else {
         return vec![];
@@ -194,8 +194,8 @@ fn prefix_order(source: &crate::history_yaml::OrdinaryValue) -> Vec<String> {
         .filter_map(|(key, _)| key.text().map(str::to_owned))
         .collect()
 }
-fn orientation(source: &crate::history_yaml::OrdinaryValue) -> Vec<String> {
-    use crate::history_yaml::OrdinaryValue as S;
+fn orientation(source: &crate::ordinary_source::Source) -> Vec<String> {
+    use crate::ordinary_source::Source as S;
     let S::Map(fields) = source else {
         return vec![];
     };
@@ -205,7 +205,10 @@ fn orientation(source: &crate::history_yaml::OrdinaryValue) -> Vec<String> {
         if !["record", "also", "skill", "entry"].contains(&key) {
             continue;
         }
-        let name = if let S::Scalar(crate::value::TypedValue::Text(s)) = value {
+        let name = if let S::Scalar(crate::ordinary_value::Scalar::Finite(
+            crate::value::TypedValue::Text(s),
+        )) = value
+        {
             s.clone()
         } else {
             let values = match value {
@@ -216,11 +219,9 @@ fn orientation(source: &crate::history_yaml::OrdinaryValue) -> Vec<String> {
             values
                 .into_iter()
                 .filter_map(|v| match v {
-                    S::Scalar(crate::value::TypedValue::Text(s))
-                        if s.ends_with(".yaml") || s.ends_with(".yml") =>
-                    {
-                        Some(s.as_str())
-                    }
+                    S::Scalar(crate::ordinary_value::Scalar::Finite(
+                        crate::value::TypedValue::Text(s),
+                    )) if s.ends_with(".yaml") || s.ends_with(".yml") => Some(s.as_str()),
                     _ => None,
                 })
                 .collect::<Vec<_>>()
@@ -317,14 +318,19 @@ pub fn run(
             });
         }
     }
-    let capture = source_capture::capture_source_with_runtime(&paths, &cwd, mode, None, runtime)?;
-    let capabilities = crate::reasoning_fields::capabilities(
+    let capture =
+        source_capture::capture_ordinary_source_with_runtime(&paths, &cwd, mode, None, runtime)?;
+    let capabilities = crate::ordinary_fields::capabilities(
         capture.ordinary_document(),
         options.profile.as_deref(),
-    )?;
+    )?
+    .try_typed()?;
     if !string_is(&map(&capabilities)?["profile"], "core/v1") {
         let context = capture.ordinary_context();
-        let conflicts = map(&map(&context)?["conflicts"])?;
+        let ordinary_context = crate::ordinary_value::Value::from_typed(&context);
+        let conflicts = crate::ordinary_value::map(
+            &crate::ordinary_value::map(&ordinary_context)?["conflicts"],
+        )?;
         let mut knowledge = capture.reader_lines()?;
         if mode == ReadMode::Live {
             let drafts = private_draft_count(&paths, &cwd, &mut inventory)?;
@@ -334,9 +340,9 @@ pub fn run(
                 ));
             }
         }
-        let projection = crate::public_ordinary_readers::Projection::new(
+        let projection = crate::ordinary_views::Projection::new(
             capture.ordinary_document(),
-            map(capture.hypotheses())?,
+            crate::ordinary_value::map(capture.hypotheses())?,
             conflicts,
             knowledge,
             runtime,
@@ -367,7 +373,10 @@ pub fn run(
                     let (history, path) = replaced(&paths, &mut inventory)?;
                     let mut output = projection.pull(&seeds, options.budget.unwrap_or(40))?;
                     output.push('\n');
-                    let retained = projection.history(history.as_ref(), &path, &seeds)?;
+                    let ordinary_history = history
+                        .as_ref()
+                        .map(crate::ordinary_value::Value::from_typed);
+                    let retained = projection.history(ordinary_history.as_ref(), &path, &seeds)?;
                     if retained.is_empty() {
                         output.push_str(&format!(
                             "no replaced version is kept for {}\n",

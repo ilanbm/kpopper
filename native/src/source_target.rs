@@ -278,10 +278,10 @@ fn records_isolated(
         if raw_names.contains(&path) {
             continue;
         }
-        let body = Y::decode_source_document(&raw)?;
+        let body = Y::decode_ordinary_source_value(&raw)?;
         if active && path == entry {
             if let Some(imported) = body.get("meta").and_then(|v| v.get("history_import")) {
-                let value = imported.typed();
+                let value = imported.strict_typed()?;
                 for member in list(&map(&value)?["members"])? {
                     let p = safe(name(
                         &Path::new(&entry)
@@ -296,13 +296,13 @@ fn records_isolated(
         } else {
             for key in ["record", "also"] {
                 let values = match body.get(key) {
-                    Some(v @ Y::SourceValue::Scalar(V::Text(_))) => vec![v],
-                    Some(Y::SourceValue::List(a)) => a.iter().collect(),
-                    Some(Y::SourceValue::Map(m)) => m.iter().map(|(_, v)| v).collect(),
+                    Some(v @ Y::OrdinaryValue::Scalar(V::Text(_))) => vec![v],
+                    Some(Y::OrdinaryValue::List(a)) => a.iter().collect(),
+                    Some(Y::OrdinaryValue::Map(m)) => m.iter().map(|(_, v)| v).collect(),
                     _ => vec![],
                 };
                 for value in values {
-                    if let Y::SourceValue::Scalar(V::Text(p)) = value
+                    if let Y::OrdinaryValue::Scalar(V::Text(p)) = value
                         && (p.ends_with(".yaml") || p.ends_with(".yml"))
                     {
                         queue.push_back(pointer(&Path::new(&path).parent().unwrap().join(p))?);

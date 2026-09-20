@@ -1,74 +1,93 @@
 //! Ordinary-reader/v1 values and authored syntax. Legacy coercion is preserved;
 //! explicit formulas use only the separately supplied, verified ordinary Lean program.
+use crate::ordinary_semantics as O;
+pub(crate) use crate::ordinary_semantics::{CMP, EXPR, ID};
+use crate::ordinary_value::Value as OV;
 use crate::source_text::ordinary_python_str as py;
 use crate::{
     Error, Result,
     history_contract::*,
-    history_view::{map_mut, truth},
+    history_view::map_mut,
     ordinary_runtime::Program,
     reasoning_authoring::blocked_text,
     reasoning_authoring_guards::{self as G, Admission},
     reasoning_fields as F, reasoning_language as L,
-    reasoning_runtime::{OperationalBounds, Runtime},
+    reasoning_runtime::Runtime,
     require,
     value::TypedValue as V,
 };
 use serde_json::{Value as J, json};
-use std::{collections::BTreeSet, sync::LazyLock};
-pub(crate) static ID: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+").unwrap());
-pub(crate) static CMP: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(
-        r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$",
-    )
-    .unwrap()
-});
-pub(crate) static EXPR: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r"[<>=!+\-*/()]|\b(?:or|and|not)\b").unwrap());
-static SECOND: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r"[<>=!]=?|\b(?:or|and)\b").unwrap());
-static REPLACED_DAY: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r" on ([0-9]{4}-[0-9]{2}-[0-9]{2})$").unwrap());
+use std::collections::BTreeSet;
+pub(crate) fn ordinary(value: &V) -> OV {
+    OV::from_finite_projection(value)
+}
+pub(crate) fn ordinary_map(value: &Map) -> crate::ordinary_value::Map {
+    match ordinary(&V::Map(value.clone())) {
+        OV::Map(m) => m,
+        _ => unreachable!(),
+    }
+}
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
 pub(crate) fn predicate_refs(v: &V) -> Vec<String> {
-    if matches!(v, V::Map(_)) {
-        L::legacy_references(v)
-    } else {
-        ID.find_iter(&if truth(v) { py(v) } else { String::new() })
-            .map(|m| m.as_str().into())
-            .collect()
-    }
+    O::predicate_refs(&ordinary(v))
 }
-
-/// Return the unresolved replacement day, matching Python's reversal_pending helper.
 pub(crate) fn reversal_pending(body: &V) -> Option<String> {
-    let fields = map(body).ok()?;
-    let trail = fields.get("replaced")?;
-    let last = match trail {
-        V::List(values) => values.last().map(py)?,
-        V::Text(value) => value.clone(),
-        _ => return None,
-    };
-    let day = REPLACED_DAY.captures(&last)?.get(1)?.as_str().to_owned();
-    let reviewed = fields.get("reviewed").map(py);
-    let reviewed_day = reviewed
-        .as_deref()
-        .map(|value| {
-            value.trim_start_matches(|c: char| {
-                c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
-            })
-        })
-        .and_then(|value| value.get(..10))
-        .filter(|value| crate::value::Date::new(value).is_ok());
-    if reviewed_day.is_some_and(|value| value >= day.as_str()) {
-        None
-    } else {
-        Some(day)
-    }
+    O::reversal_pending(&ordinary(body))
 }
-
+pub(crate) fn predicate_of(body: &V, fields: &Map) -> V {
+    O::predicate_of(&ordinary(body), &ordinary_map(fields))
+        .finite_projection()
+        .expect("finite predicate")
+}
+fn refs(v: &V) -> Vec<String> {
+    L::legacy_references(v)
+}
+fn get<'a>(m: &'a Map, key: &str) -> &'a V {
+    m.get(key).unwrap_or(&V::Null)
+}
+pub fn why_undecided(pred: &V) -> String {
+    O::why_undecided(&ordinary(pred))
+}
+pub(crate) fn same_legacy(a: &V, b: &V) -> bool {
+    O::same_legacy(&ordinary(a), &ordinary(b))
+}
+fn number(v: &V) -> Option<f64> {
+    O::number(&ordinary(v))
+}
+pub(crate) fn json_value(v: &V, depth: usize) -> Result<J> {
+    O::json_value(&ordinary(v), depth)
+}
+pub fn compute(
+    raw: &Map,
+    ids: &BTreeSet<String>,
+    predicate: Option<&V>,
+    program: Option<&Program>,
+) -> J {
+    O::compute(
+        &ordinary_map(raw),
+        ids,
+        predicate.map(ordinary).as_ref(),
+        program,
+    )
+}
+pub fn value_of(
+    raw: &Map,
+    ids: &BTreeSet<String>,
+    key: &str,
+    program: Option<&Program>,
+) -> Result<V> {
+    O::value_of(&ordinary_map(raw), ids, key, program)?.finite_projection()
+}
+pub fn evaluate(
+    pred: &V,
+    raw: &Map,
+    ids: &BTreeSet<String>,
+    program: Option<&Program>,
+) -> Result<Option<bool>> {
+    O::evaluate(&ordinary(pred), &ordinary_map(raw), ids, program)
+}
 #[cfg(test)]
 mod reversal_tests {
     use super::*;
@@ -94,297 +113,6 @@ mod reversal_tests {
         }
     }
 }
-pub(crate) fn predicate_of(body: &V, fields: &Map) -> V {
-    let v = map(body)
-        .ok()
-        .and_then(|b| text(&fields["predicate"]).ok().and_then(|f| b.get(f)))
-        .unwrap_or(&V::Null);
-    if matches!(v, V::Map(_)) {
-        v.clone()
-    } else {
-        s(&if truth(v) { py(v) } else { String::new() })
-    }
-}
-fn refs(v: &V) -> Vec<String> {
-    L::legacy_references(v)
-}
-fn get<'a>(m: &'a Map, key: &str) -> &'a V {
-    m.get(key).unwrap_or(&V::Null)
-}
-fn unquoted(source: &str) -> String {
-    // The legacy regex removes paired quotes without interpreting escapes.
-    let chars: Vec<_> = source.chars().collect();
-    let mut out = String::new();
-    let mut i = 0;
-    while i < chars.len() {
-        if ['\'', '"'].contains(&chars[i])
-            && let Some(end) = chars[i + 1..].iter().position(|c| *c == chars[i])
-        {
-            i += end + 2;
-            continue;
-        }
-        out.push(chars[i]);
-        i += 1;
-    }
-    out
-}
-pub fn why_undecided(pred: &V) -> String {
-    if matches!(pred, V::Map(_)) {
-        let tree = match L::legacy_expression_detailed(pred, true) {
-            Ok(t) => t,
-            Err(e) => return e.0,
-        };
-        let m = map(&tree).unwrap();
-        let V::List(args) = &m["args"] else {
-            unreachable!()
-        };
-        if let (Some(left), Some(right)) = (map(&args[0]).ok(), map(&args[1]).ok())
-            && let (Some(V::Text(name)), Some(V::Bool(v))) = (left.get("ref"), right.get("bool"))
-        {
-            let op = match text(&m["op"]).unwrap() {
-                "eq" => "==",
-                "ne" => "!=",
-                "lt" => "<",
-                "le" => "<=",
-                "gt" => ">",
-                _ => ">=",
-            };
-            if !["==", "!="].contains(&op) {
-                return format!("orders a truth value ({op} {v}), which is matched, never ordered");
-            }
-            if F::BUILTINS.contains(&name.as_str()) {
-                return format!(
-                    "holds a count against a truth value ({name} {op} {v}), which never matches"
-                );
-            }
-        }
-        return String::new();
-    }
-    let source = if truth(pred) { py(pred) } else { String::new() };
-    let Some(c) = CMP.captures(&source) else {
-        return "is not one comparison this reader decides (a name, an operator, one value)".into();
-    };
-    if SECOND.is_match(&unquoted(c[3].trim())) {
-        return "is not one comparison this reader decides (a name, an operator, one value)".into();
-    }
-    if ["true", "false"].contains(&c[3].trim().to_lowercase().as_str()) {
-        if !["==", "!="].contains(&&c[2]) {
-            return format!(
-                "orders a truth value ({} {}), which is matched, never ordered",
-                &c[2],
-                c[3].trim()
-            );
-        }
-        if F::BUILTINS.contains(&&c[1]) {
-            return format!(
-                "holds a count against a truth value ({} {} {}), which never matches",
-                &c[1],
-                &c[2],
-                c[3].trim()
-            );
-        }
-    }
-    String::new()
-}
-/// Python float(str(value).replace(',', '')), used only by the legacy comparison.
-pub(crate) fn same_legacy(a: &V, b: &V) -> bool {
-    py(a).split_whitespace().collect::<Vec<_>>() == py(b).split_whitespace().collect::<Vec<_>>()
-        || crate::ordinary_counts::decimal(a)
-            .zip(crate::ordinary_counts::decimal(b))
-            .is_some_and(|(a, b)| a == b)
-}
-fn number(v: &V) -> Option<f64> {
-    let source = crate::history_yaml::numeric_text(&py(v)).replace(',', "");
-    let source = source.trim();
-    let valid=regex::Regex::new(r"(?i)^[+-]?(?:(?:[0-9](?:_?[0-9])*)?(?:\.(?:[0-9](?:_?[0-9])*)?)?(?:e[+-]?[0-9](?:_?[0-9])*)?|inf(?:inity)?|nan)$").unwrap();
-    if source.is_empty() || !valid.is_match(source) {
-        return None;
-    }
-    source.replace('_', "").parse().ok()
-}
-pub(crate) fn json_value(v: &V, depth: usize) -> Result<J> {
-    if depth > 128 {
-        return Ok(J::Null);
-    }
-    Ok(match v {
-        V::Map(m) => J::Object(
-            m.iter()
-                .map(|(k, v)| {
-                    let key = match crate::history_yaml::projected_ordinary_key(k) {
-                        Some(V::Text(value)) => value,
-                        Some(V::Null) => "null".into(),
-                        Some(V::Bool(value)) => value.to_string(),
-                        Some(V::Integer(value)) => value.as_str().into(),
-                        Some(V::Float(value)) => crate::identity::python_float(value.get()),
-                        Some(V::Date(_) | V::DateTime(_) | V::List(_) | V::Map(_)) => {
-                            return Err(Error(
-                                "ordinary JSON requires scalar JSON-compatible keys".into(),
-                            ));
-                        }
-                        None => k.clone(),
-                    };
-                    Ok((key, json_value(v, depth + 1)?))
-                })
-                .collect::<Result<_>>()?,
-        ),
-        V::List(a) => J::Array(
-            a.iter()
-                .map(|v| json_value(v, depth + 1))
-                .collect::<Result<_>>()?,
-        ),
-        V::Date(_) | V::DateTime(_) => J::String(py(v)),
-        _ => v.to_json().unwrap_or(J::Null),
-    })
-}
-/// Request legacy computations without promoting the document or creating an assessment.
-/// Runtime failure is returned as an unavailable result, as in expressions.compute.
-pub fn compute(
-    raw: &Map,
-    ids: &BTreeSet<String>,
-    predicate: Option<&V>,
-    program: Option<&Program>,
-) -> J {
-    let result = (|| -> Result<J> {
-        let program =
-            program.ok_or_else(|| Error("ordinary expression program is not configured".into()))?;
-        let mut nodes = serde_json::Map::new();
-        for (id, body) in raw.iter().filter(|(id, _)| ids.contains(*id)) {
-            let mut body = match body {
-                V::Map(m) => V::Map(m.clone()),
-                v => V::Map(Map::from([("v".into(), v.clone())])),
-            };
-            let m = map_mut(&mut body)?;
-            // A nonfinite primary value must not fall through to quoted/verdict/read.
-            let reading = m
-                .get("v")
-                .filter(|v| **v != V::Null)
-                .or_else(|| m.get("quoted"));
-            if get(m, "rule") == &V::Null
-                && reading.is_some_and(|v| matches!(v, V::Float(_)) && v.to_json().is_err())
-            {
-                *m = Map::from([("v".into(), V::Null)]);
-            }
-            if let Some(rule @ V::Map(_)) = m.get("rule")
-                && let Ok(tree) = L::legacy_expression(rule, false)
-            {
-                m.insert("rule".into(), tree);
-            }
-            nodes.insert(id.clone(), json!({"body":json_value(&body,0)?}));
-        }
-        let pred = predicate.map(|p| L::legacy_expression(p, true).unwrap_or_else(|_| p.clone()));
-        let request = json!({"operation":"compute","record":{"nodes":nodes},"predicate":pred.as_ref().map(|p|json_value(p,0)).transpose()?.unwrap_or(J::Null),"dependencies":predicate.map(refs).unwrap_or_default()});
-        program.request(&request, &OperationalBounds::default())
-    })();
-    result.unwrap_or_else(|e|json!({"values":{},"predicate":{"holds_on_current_values":null,"reason":e.0},"error":e.0}))
-}
-pub fn value_of(
-    raw: &Map,
-    ids: &BTreeSet<String>,
-    key: &str,
-    program: Option<&Program>,
-) -> Result<V> {
-    let body = raw.get(key).unwrap_or(&V::Null);
-    let Ok(m) = map(body) else {
-        return Ok(if ids.contains(key) {
-            body.clone()
-        } else {
-            V::Null
-        });
-    };
-    if matches!(m.get("rule"), Some(V::Map(_))) {
-        return V::from_json(&compute(raw, ids, None, program)["values"][key]["value"]);
-    }
-    let v = m
-        .get("v")
-        .filter(|v| **v != V::Null)
-        .or_else(|| m.get("quoted"))
-        .unwrap_or(&V::Null);
-    if let V::Text(t) = v
-        && EXPR.is_match(t)
-        && ID.find_iter(t).any(|r| ids.contains(r.as_str()))
-    {
-        return Ok(V::Null);
-    }
-    Ok(v.clone())
-}
-pub fn evaluate(
-    pred: &V,
-    raw: &Map,
-    ids: &BTreeSet<String>,
-    program: Option<&Program>,
-) -> Result<Option<bool>> {
-    if matches!(pred, V::Map(_)) {
-        if L::legacy_expression(pred, true).is_err() {
-            return Ok(None);
-        }
-        return Ok(
-            compute(raw, ids, Some(pred), program)["predicate"]["holds_on_current_values"]
-                .as_bool(),
-        );
-    }
-    let source = if truth(pred) { py(pred) } else { String::new() };
-    let Some(c) = CMP.captures(&source) else {
-        return Ok(None);
-    };
-    if !why_undecided(pred).is_empty() {
-        return Ok(None);
-    }
-    let rhs = c[3].trim();
-    let op = &c[2];
-    if [&c[1], rhs].iter().any(|k| {
-        raw.get(*k)
-            .and_then(|v| map(v).ok())
-            .is_some_and(|m| matches!(m.get("rule"), Some(V::Map(_))))
-    }) {
-        let p = V::Map(Map::from([("expr".into(), s(&source))]));
-        if L::legacy_expression(&p, true).is_err() {
-            return Ok(None);
-        }
-        return Ok(
-            compute(raw, ids, Some(&p), program)["predicate"]["holds_on_current_values"].as_bool(),
-        );
-    }
-    let a = value_of(raw, ids, &c[1], program)?;
-    if a == V::Null {
-        return Ok(None);
-    }
-    if ["true", "false"].contains(&rhs.to_lowercase().as_str()) {
-        let V::Bool(a) = a else {
-            return Ok(None);
-        };
-        let same = a == (rhs.to_lowercase() == "true");
-        return Ok(Some(if op == "==" { same } else { !same }));
-    }
-    let b = if ID.find(rhs).is_some_and(|m| m.as_str() == rhs) {
-        value_of(raw, ids, rhs, program)?
-    } else {
-        s(rhs.trim_matches(['\'', '"']))
-    };
-    if b == V::Null || matches!(a, V::Bool(_)) != matches!(b, V::Bool(_)) {
-        return Ok(None);
-    }
-    let answer = if let (Some(a), Some(b)) = (number(&a), number(&b)) {
-        match op {
-            "<" => a < b,
-            ">" => a > b,
-            "<=" => a <= b,
-            ">=" => a >= b,
-            "==" => a == b,
-            _ => a != b,
-        }
-    } else {
-        let (a, b) = (py(&a), py(&b));
-        match op {
-            "<" => a < b,
-            ">" => a > b,
-            "<=" => a <= b,
-            ">=" => a >= b,
-            "==" => a == b,
-            _ => a != b,
-        }
-    };
-    Ok(Some(answer))
-}
 pub struct Reader<'a> {
     pub(crate) document: V,
     pub(crate) fields: Map,
@@ -395,135 +123,45 @@ pub struct Reader<'a> {
     runtime: Option<&'a Runtime>,
 }
 impl<'a> Reader<'a> {
-    /// Followups retain source-only records even when no judgment field roles
-    /// can be inferred, matching the legacy graph reader's explicit fallback.
+    // Rebuild from the current finite fields, rather than cache a second reader:
+    // writer validation may change roles and report consumers may narrow IDs.
+    pub(crate) fn ordinary(&self) -> O::Reader<'a> {
+        O::Reader {
+            document: ordinary(&self.document),
+            fields: ordinary_map(&self.fields),
+            raw: ordinary_map(&self.raw),
+            ids: self.ids.clone(),
+            hypotheses: ordinary_map(&self.hypotheses),
+            knowledge_conflicts: self.knowledge_conflicts.clone(),
+            runtime: self.runtime,
+        }
+    }
+    fn from_ordinary(reader: O::Reader<'a>) -> Result<Self> {
+        Ok(Self {
+            document: reader.document.finite_projection()?,
+            fields: map(&OV::Map(reader.fields).finite_projection()?)?.clone(),
+            raw: map(&OV::Map(reader.raw).finite_projection()?)?.clone(),
+            ids: reader.ids,
+            hypotheses: map(&OV::Map(reader.hypotheses).finite_projection()?)?.clone(),
+            knowledge_conflicts: reader.knowledge_conflicts,
+            runtime: reader.runtime,
+        })
+    }
     pub(crate) fn for_followups(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
-        match Self::new(document, runtime) {
-            Ok(reader) => Ok(reader),
-            Err(error) if error.0 == "ordinary_fields_unreadable" => {
-                let raw = F::collections(document)?
-                    .into_values()
-                    .flatten()
-                    .collect::<Map>();
-                let keys = raw
-                    .values()
-                    .filter_map(|v| map(v).ok())
-                    .flat_map(|m| m.keys())
-                    .collect::<BTreeSet<_>>();
-                let mut suffix = 0usize;
-                let role = loop {
-                    let key = format!("__followup_unassigned_role_{suffix}");
-                    if !keys.contains(&key) {
-                        break key;
-                    }
-                    suffix += 1;
-                };
-                let fields = ["deps", "snapshot", "predicate"]
-                    .into_iter()
-                    .map(|name| (name.to_owned(), s(&role)))
-                    .collect();
-                let mut reader = Self {
-                    document: document.clone(),
-                    fields,
-                    ids: raw.keys().cloned().collect(),
-                    raw,
-                    hypotheses: Map::new(),
-                    knowledge_conflicts: BTreeSet::new(),
-                    runtime,
-                };
-                reader
-                    .raw
-                    .extend(crate::ordinary_counts::builtins(&reader)?);
-                Ok(reader)
-            }
-            Err(error) => Err(error),
-        }
+        Self::from_ordinary(O::Reader::for_followups(&ordinary(document), runtime)?)
     }
-
     pub fn new(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
-        require(
-            map(&F::capabilities(document, None)?)?["profile"] == s("ordinary-reader/v1"),
-            "ordinary_reader_requires_ordinary_profile",
-        )?;
-        let (_, fields) = F::semantic_roles(document)?
-            .filter(|(_, f)| !f.is_empty())
-            .ok_or_else(|| Error("ordinary_fields_unreadable".into()))?;
-        let raw = map(document)?
-            .iter()
-            .filter(|(k, _)| !["meta", "schema", "record", "also"].contains(&k.as_str()))
-            .filter_map(|(_, v)| map(v).ok())
-            .flat_map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())))
-            .collect::<Map>();
-        let mut ids = F::collections(document)?
-            .values()
-            .flat_map(|m| m.keys().cloned())
-            .collect::<BTreeSet<_>>();
-        for body in raw.values() {
-            if let Ok(body) = map(body) {
-                for value in body.values() {
-                    let mentions = match value {
-                        V::Text(_) => predicate_refs(value),
-                        V::List(a) => a
-                            .iter()
-                            .filter(|v| matches!(v, V::Text(_)))
-                            .flat_map(predicate_refs)
-                            .collect(),
-                        V::Map(m) => {
-                            let rs = refs(value);
-                            if !rs.is_empty() {
-                                rs
-                            } else {
-                                m.keys().flat_map(|k| predicate_refs(&s(k))).collect()
-                            }
-                        }
-                        _ => vec![],
-                    };
-                    ids.extend(
-                        mentions
-                            .into_iter()
-                            .filter(|k| F::BUILTINS.contains(&k.as_str())),
-                    );
-                }
-            }
-        }
-        let mut reader = Self {
-            document: document.clone(),
-            fields,
-            raw,
-            ids,
-            hypotheses: Map::new(),
-            knowledge_conflicts: BTreeSet::new(),
-            runtime,
-        };
-        reader
-            .raw
-            .extend(crate::ordinary_counts::builtins(&reader)?);
-        Ok(reader)
+        Self::from_ordinary(O::Reader::new(&ordinary(document), runtime)?)
     }
-    /// Supply already captured hypothesis documents and conflict IDs explicitly.
-    /// These affect reader counters/guards; they never activate accepted history.
     pub fn with_layers(
-        mut self,
+        self,
         hypotheses: Map,
         knowledge_conflicts: BTreeSet<String>,
     ) -> Result<Self> {
-        for h in hypotheses.values() {
-            let h = map(h)?;
-            if !h.get("error").is_some_and(truth) {
-                let doc = field(h, "document")?;
-                // A physical hypothesis may contain only one collection and
-                // inherit the base record's field roles, as the legacy reader
-                // does. Explicit roles are still validated when present.
-                if F::semantic_roles(doc)?.is_none() {
-                    F::collections(doc)?;
-                }
-            }
-        }
-        self.hypotheses = hypotheses;
-        self.knowledge_conflicts = knowledge_conflicts;
-        self.raw.retain(|k, _| !F::BUILTINS.contains(&k.as_str()));
-        self.raw.extend(crate::ordinary_counts::builtins(&self)?);
-        Ok(self)
+        Self::from_ordinary(
+            self.ordinary()
+                .with_layers(ordinary_map(&hypotheses), knowledge_conflicts)?,
+        )
     }
     pub(crate) fn program(&self) -> Option<&Program> {
         self.runtime.and_then(Runtime::ordinary_program)

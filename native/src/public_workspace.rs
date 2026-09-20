@@ -79,9 +79,9 @@ pub fn runtime_for_paths(
         .map(|path| crate::source_inventory::absolute(&cwd.join(path)))
         .collect::<Result<Vec<_>>>()?;
     let mut inventory = crate::source_inventory::Inventory::default();
-    let document = crate::source_document::load(&paths, &mut inventory, true)?;
+    let document = crate::ordinary_document::load(&paths, &mut inventory, true)?;
     let capabilities =
-        crate::reasoning_fields::capabilities(&document.source.projected(), profile)?;
+        crate::ordinary_fields::capabilities(&document.source.projected(), profile)?.try_typed()?;
     let ordinary = !document.members.is_empty()
         && !crate::history_contract::string_is(
             &crate::history_contract::map(&capabilities)?["profile"],

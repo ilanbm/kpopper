@@ -173,6 +173,15 @@ impl Map {
             .values()
             .any(|k| matches!(k, Scalar::NonFinite(_)))
     }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&String, &mut Value)> {
+        self.entries.iter_mut().map(|(k, v)| (&*k, v))
+    }
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Value> {
+        self.entries.iter_mut().map(|(_, v)| v)
+    }
+    pub fn entry(&mut self, key: String) -> Entry<'_> {
+        Entry { map: self, key }
+    }
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)> {
         self.entries.iter().map(|(k, v)| (k, v))
     }
@@ -196,6 +205,25 @@ impl Map {
             self.index.insert(k.clone(), j);
         }
         Some(value)
+    }
+}
+pub struct Entry<'a> {
+    map: &'a mut Map,
+    key: String,
+}
+impl<'a> Entry<'a> {
+    pub fn or_insert_with(self, make: impl FnOnce() -> Value) -> &'a mut Value {
+        let i = if let Some(i) = self.map.index_for_text(&self.key) {
+            i
+        } else {
+            let i = self.map.entries.len();
+            self.map.insert(self.key, make());
+            i
+        };
+        &mut self.map.entries[i].1
+    }
+    pub fn or_insert(self, value: Value) -> &'a mut Value {
+        self.or_insert_with(|| value)
     }
 }
 impl PartialEq for Map {
@@ -265,6 +293,24 @@ impl Value {
                     .map(|(k, v)| (k.clone(), Self::from_typed(v)))
                     .collect(),
             ),
+        }
+    }
+    pub fn from_finite_projection(value: &TypedValue) -> Self {
+        match value {
+            TypedValue::Map(values) => {
+                let mut out = Map::new();
+                for (k, v) in values {
+                    let key = crate::history_yaml::projected_ordinary_key(k)
+                        .map(Scalar::Finite)
+                        .unwrap_or_else(|| Scalar::Finite(TypedValue::Text(k.clone())));
+                    out.insert_source_key(k.clone(), key, Self::from_finite_projection(v));
+                }
+                Self::Map(out)
+            }
+            TypedValue::List(values) => {
+                Self::List(values.iter().map(Self::from_finite_projection).collect())
+            }
+            _ => Self::from_typed(value),
         }
     }
     pub fn from_json(value: &Json) -> Result<Self> {
@@ -739,7 +785,7 @@ pub fn compute_record(raw: &Map, ids: &BTreeSet<String>) -> Result<FinitePayload
     Ok(payload)
 }
 
-pub fn list(value: &Value) -> Result<&Vec<Value>> {
+pub fn list(value: &Value) -> Result<&[Value]> {
     if let Value::List(v) = value {
         Ok(v)
     } else {

@@ -5,10 +5,10 @@ use crate::{
     history_contract::*,
     history_view::map_mut,
     identity::sha256,
+    ordinary_document::{self as D, Document},
     project_modes as M,
     reasoning_snapshot::{self as S, CaptureOptions, Snapshot},
     require,
-    source_document::{self as D, Document},
     source_inventory::{Inventory, Observation, absolute, name},
     value::TypedValue as V,
 };
@@ -294,7 +294,7 @@ fn snapshot(
         target_map.entry("ref".into()).or_insert(V::Null);
         target_map.entry("revision".into()).or_insert(V::Null);
         if let Some(snapshot) = &overlay.target_snapshot {
-            target_map.insert("snapshot".into(), snapshot.clone());
+            target_map.insert("snapshot".into(), snapshot.finite_projection()?);
         }
         map_mut(&mut context)?.insert("target".into(), portable(&target, &base, false)?);
     } else if let Some(pending) = &initial.pending {
@@ -343,7 +343,7 @@ fn snapshot(
     let mut revision = object([("files", V::List(files.into_values().collect()))]);
     let digest = S::digest(&revision)?;
     map_mut(&mut revision)?.insert("digest".into(), s(&digest));
-    let mut hypotheses = doc.hypotheses.clone();
+    let mut hypotheses = doc.hypotheses.finite_projection()?;
     for hypothesis in map_mut(&mut hypotheses)?.values_mut() {
         if map(hypothesis)?
             .get("kind")
@@ -365,9 +365,12 @@ fn snapshot(
         },
     )
 }
-pub struct CapturedSource {
+pub struct CapturedSource<T = V> {
     snapshot: Option<Snapshot>,
-    ordinary_document: V,
+    snapshot_error: Option<String>,
+    ordinary_document: T,
+    hypotheses: T,
+    source_finite: Option<crate::history_yaml::OrdinaryValue>,
     inventory: Inventory,
     routing: Routing,
     document: Document,
@@ -375,7 +378,7 @@ pub struct CapturedSource {
     cwd: PathBuf,
     mode: ReadMode,
 }
-impl CapturedSource {
+impl<T> CapturedSource<T> {
     pub(crate) fn inventory(&self) -> &Inventory {
         &self.inventory
     }
@@ -416,21 +419,22 @@ impl CapturedSource {
         ])
     }
     pub fn snapshot(&self) -> Result<&Snapshot> {
-        self.snapshot
-            .as_ref()
-            .ok_or_else(|| crate::Error("invalid_yaml_key".into()))
+        self.snapshot.as_ref().ok_or_else(|| {
+            crate::Error(
+                self.snapshot_error
+                    .clone()
+                    .unwrap_or_else(|| "invalid_yaml_key".into()),
+            )
+        })
     }
     pub fn strict_document(&self) -> Result<V> {
         self.document.source.strict_typed()
     }
-    pub fn ordinary_document(&self) -> &V {
+    pub fn ordinary_document(&self) -> &T {
         &self.ordinary_document
     }
-    pub fn source(&self) -> &crate::history_yaml::OrdinaryValue {
-        &self.document.source
-    }
-    pub fn hypotheses(&self) -> &V {
-        &self.document.hypotheses
+    pub fn hypotheses(&self) -> &T {
+        &self.hypotheses
     }
     /// The ordinary revision binds the original knowledge observation, before
     /// Snapshot portability rewrites paths and adds its own target status fields.
@@ -516,6 +520,62 @@ impl CapturedSource {
         )
     }
 }
+pub type OrdinaryCapture = CapturedSource<crate::ordinary_value::Value>;
+impl CapturedSource<V> {
+    pub fn source(&self) -> &crate::history_yaml::OrdinaryValue {
+        self.source_finite
+            .as_ref()
+            .expect("finite capture constructor")
+    }
+}
+impl OrdinaryCapture {
+    pub fn source(&self) -> &crate::ordinary_source::Source {
+        &self.document.source
+    }
+    pub fn try_finite(self) -> Result<CapturedSource> {
+        let source_finite = Some(self.document.source.try_finite()?);
+        let ordinary_document = self.ordinary_document.finite_projection()?;
+        let hypotheses = self.hypotheses.finite_projection()?;
+        if let Some(target) = self
+            .document
+            .overlay
+            .as_ref()
+            .and_then(|o| o.target_snapshot.as_ref())
+        {
+            target.finite_projection()?;
+        }
+        Ok(CapturedSource {
+            snapshot: self.snapshot,
+            snapshot_error: self.snapshot_error,
+            ordinary_document,
+            hypotheses,
+            source_finite,
+            inventory: self.inventory,
+            routing: self.routing,
+            document: self.document,
+            paths: self.paths,
+            cwd: self.cwd,
+            mode: self.mode,
+        })
+    }
+}
+pub fn capture_ordinary_source(
+    paths: &[PathBuf],
+    cwd: &Path,
+    mode: ReadMode,
+    as_of: Option<V>,
+) -> Result<OrdinaryCapture> {
+    capture_ordinary_source_with_runtime(paths, cwd, mode, as_of, None)
+}
+pub fn capture_ordinary_source_with_runtime(
+    paths: &[PathBuf],
+    cwd: &Path,
+    mode: ReadMode,
+    as_of: Option<V>,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<OrdinaryCapture> {
+    capture_ordinary_with(paths, cwd, mode, as_of, &mut |_, _| Ok(()), runtime)
+}
 pub fn capture_source(
     paths: &[PathBuf],
     cwd: &Path,
@@ -532,8 +592,9 @@ pub fn capture_source_with_runtime(
     as_of: Option<V>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<CapturedSource> {
-    capture_with(paths, cwd, mode, as_of, &mut |_, _| Ok(()), runtime)
+    capture_ordinary_source_with_runtime(paths, cwd, mode, as_of, runtime)?.try_finite()
 }
+#[cfg(test)]
 fn capture_with(
     paths: &[PathBuf],
     cwd: &Path,
@@ -542,6 +603,16 @@ fn capture_with(
     after_load: &mut dyn FnMut(usize, &Document) -> Result<()>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<CapturedSource> {
+    capture_ordinary_with(paths, cwd, mode, as_of, after_load, runtime)?.try_finite()
+}
+fn capture_ordinary_with(
+    paths: &[PathBuf],
+    cwd: &Path,
+    mode: ReadMode,
+    as_of: Option<V>,
+    after_load: &mut dyn FnMut(usize, &Document) -> Result<()>,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<OrdinaryCapture> {
     require(!paths.is_empty(), "invalid_snapshot")?;
     S::normalize_as_of(as_of.as_ref().unwrap_or(&V::Null))?;
     let paths = paths
@@ -565,7 +636,7 @@ fn capture_with(
                 .is_some_and(|p| p.ledger.head.is_some());
         let mut doc = D::load(&initial.selected, &mut inventory, allow_missing)?;
         if canonical && let Some(pending) = &initial.pending {
-            doc.overlay = Some(crate::source_overlay::apply(
+            doc.overlay = Some(crate::ordinary_overlay::apply(
                 &mut doc,
                 pending,
                 &initial.root,
@@ -594,13 +665,23 @@ fn capture_with(
     }
     let (document, inventory) = final_load.unwrap();
     let ordinary_document = document.source.projected();
-    let snapshot = match snapshot(&document, &inventory, &initial, &paths, mode, as_of) {
-        Ok(snapshot) => Some(snapshot),
-        Err(error) if error.0 == "invalid_yaml_key" => None,
-        Err(error) => return Err(error),
-    };
+    let (snapshot, snapshot_error) =
+        match snapshot(&document, &inventory, &initial, &paths, mode, as_of) {
+            Ok(snapshot) => (Some(snapshot), None),
+            Err(error)
+                if error.0 == "invalid_yaml_key"
+                    || error.0.starts_with("invalid_history_value: snapshot ")
+                    || error.0 == "nonfinite_value_not_canonical" =>
+            {
+                (None, Some(error.0))
+            }
+            Err(error) => return Err(error),
+        };
     let captured = CapturedSource {
         snapshot,
+        snapshot_error,
+        hypotheses: document.hypotheses.clone(),
+        source_finite: None,
         ordinary_document,
         inventory,
         routing: initial,
@@ -722,5 +803,60 @@ mod tests {
                 .0
                 .starts_with("invalid_pending_journal")
         );
+    }
+}
+
+#[cfg(test)]
+mod ordinary_domain_tests {
+    use super::*;
+    use crate::ordinary_value::{NonFiniteFloat, Value as O};
+    #[test]
+    fn full_ordinary_capture_retains_source_and_hypotheses_without_a_canonical_snapshot() {
+        for live in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            if live {
+                assert!(
+                    std::process::Command::new("git")
+                        .args(["init", "-q"])
+                        .arg(&root)
+                        .status()
+                        .unwrap()
+                        .success()
+                );
+            }
+            let entry = root.join("GROUNDING.yaml");
+            let raw =
+                b"known:\n  p.value: {name: Sample, v: .nan, quoted: 99}\nmeta: {note: .inf}\n";
+            std::fs::write(&entry, raw).unwrap();
+            let hyp = root.join(".kpopper/hypotheses");
+            std::fs::create_dir_all(&hyp).unwrap();
+            std::fs::write(hyp.join("other.yaml"), b"known: {p.value: {v: -.inf}}\n").unwrap();
+            let mode = if live {
+                ReadMode::Live
+            } else {
+                ReadMode::Frozen
+            };
+            let capture =
+                capture_ordinary_source(std::slice::from_ref(&entry), &root, mode, None).unwrap();
+            let doc = crate::ordinary_value::map(capture.ordinary_document()).unwrap();
+            let known = crate::ordinary_value::map(&doc["known"]).unwrap();
+            let body = crate::ordinary_value::map(&known["p.value"]).unwrap();
+            assert_eq!(body["v"], O::NonFinite(NonFiniteFloat::NaN));
+            assert!(capture.snapshot().is_err());
+            assert!(capture.strict_document().is_err());
+            assert!(
+                capture
+                    .hypotheses()
+                    .python_json(false)
+                    .unwrap()
+                    .contains("-Infinity")
+            );
+            assert_eq!(capture.files()[&entry], raw);
+            capture.verify().unwrap();
+            assert!(capture.try_finite().is_err());
+            assert!(capture_source(std::slice::from_ref(&entry), &root, mode, None).is_err());
+            assert_eq!(std::fs::read(&entry).unwrap(), raw);
+        }
     }
 }

@@ -1,7 +1,10 @@
 //! The actual `assess` command over captured records and versioned findings.
 use crate::{
-    Result, history_contract::*, history_view::map_mut, ordinary_assessment as A,
-    reasoning_runtime::OperationalBounds, source_capture::ReadMode, value::TypedValue as V,
+    Result, ordinary_findings as A,
+    ordinary_value::{Value as V, map, map_mut, string_is},
+    reasoning_runtime::OperationalBounds,
+    source_capture::ReadMode,
+    value::TypedValue as CV,
 };
 use std::path::{Path, PathBuf};
 
@@ -22,7 +25,7 @@ pub struct Options {
     #[arg(long)]
     pub attention_only: bool,
 }
-pub fn report(
+pub fn report_value(
     options: &Options,
     cwd: &Path,
     mode: ReadMode,
@@ -37,14 +40,14 @@ pub fn report(
     } else {
         options.records.clone()
     };
-    let capture = crate::source_capture::capture_source_with_runtime(
+    let capture = crate::source_capture::capture_ordinary_source_with_runtime(
         &paths,
         cwd,
         mode,
-        options.as_of.as_ref().map(|s| V::Text(s.clone())),
+        options.as_of.as_ref().map(|s| CV::Text(s.clone())),
         runtime,
     )?;
-    let cap = crate::reasoning_fields::capabilities(
+    let cap = crate::ordinary_fields::capabilities(
         capture.ordinary_document(),
         options.profile.as_deref(),
     )?;
@@ -60,25 +63,31 @@ pub fn report(
     let bounds = OperationalBounds::default();
     let mut report = if core {
         if options.history {
-            crate::reasoning_history_assessment::assess(
+            V::from_typed(&crate::reasoning_history_assessment::assess(
                 capture.snapshot()?,
                 Some(&options.ids),
                 &options.policy,
                 runtime,
                 bounds.clone(),
                 Some(&options.ids),
-            )?
+            )?)
         } else {
-            crate::reasoning_assessment::assess(
+            V::from_typed(&crate::reasoning_assessment::assess(
                 capture.snapshot()?,
                 Some(&options.ids),
                 &options.policy,
                 runtime,
                 bounds.clone(),
-            )?
+            )?)
         }
     } else {
-        A::from_capture(&capture, runtime, &options.policy)?
+        crate::ordinary_report::assess(
+            capture.ordinary_document(),
+            map(capture.hypotheses())?,
+            &V::from_typed(&capture.ordinary_context()),
+            runtime,
+            &options.policy,
+        )?
     };
     let nodes = map(&map(&report)?["nodes"])?;
     crate::require(
@@ -108,12 +117,20 @@ pub fn report(
     }
     if core {
         crate::require(
-            crate::history_yaml::compact_json_size(&report) < bounds.output_bytes,
+            crate::history_yaml::compact_json_size(&report.try_typed()?) < bounds.output_bytes,
             "output_limit",
         )?;
     }
     capture.verify()?;
     Ok(report)
+}
+pub fn report(
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<CV> {
+    report_value(options, cwd, mode, runtime)?.try_typed()
 }
 pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
     let paths = if options.records.is_empty() {
@@ -123,6 +140,6 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
     };
     let runtime =
         crate::public_workspace::runtime_for_paths(&paths, cwd, options.profile.as_deref())?;
-    let report = report(options, cwd, mode, runtime.as_ref())?;
-    crate::ordinary_assessment_report::compact_json(&report)
+    let report = report_value(options, cwd, mode, runtime.as_ref())?;
+    report.python_json(false)
 }
