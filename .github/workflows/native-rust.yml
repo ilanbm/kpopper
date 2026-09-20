@@ -27,6 +27,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       ELAN_TOOLCHAIN: leanprover/lean4:v4.33.1
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -63,22 +66,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/native-evidence"
           git rev-parse HEAD > "$RUNNER_TEMP/native-evidence/commit.txt"
           rustc --version --verbose > "$RUNNER_TEMP/native-evidence/rustc.txt"
-      - name: Compile and test the platform lock and interrupted recovery boundaries
+      - name: Test the native implementation and build the platform release
         working-directory: native
         shell: bash
         run: |
           set -o pipefail
-          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test platform_locking 2>&1 | tee "$RUNNER_TEMP/native-evidence/platform-locking.log"
-          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test public_authoring public_recovery_finishes_or_cancels_a_retained_first_write 2>&1 | tee "$RUNNER_TEMP/native-evidence/interrupted-recovery.log"
+          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
           cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
-      - name: Exercise the checked-session store on Windows
-        if: runner.os == 'Windows'
-        working-directory: native
-        shell: bash
-        run: >-
-          cargo test --locked --config 'profile.test.package.sha2.opt-level=3'
-          --test checked_session_store 2>&1 |
-          tee "$RUNNER_TEMP/native-evidence/checked-session-store.log"
       - name: Copy the executable and its verified native resources
         shell: python
         env:
