@@ -144,6 +144,13 @@ pub struct Store {
     _lock: File,
 }
 
+impl Drop for Store {
+    fn drop(&mut self) {
+        #[cfg(any(unix, windows))]
+        let _ = FileExt::unlock(&self._lock);
+    }
+}
+
 impl Store {
     #[cfg(windows)]
     fn windows_lock_file(root: &Path) -> Result<File> {
@@ -766,8 +773,10 @@ mod locking_tests {
         let first = Store::acquire(&root, true).unwrap();
         assert!(fs::read_dir(&root).unwrap().next().is_none());
         assert!(Store::acquire(&root, false).is_err());
+        let duplicate = first._lock.try_clone().unwrap();
         drop(first);
         Store::acquire(&root, false).unwrap();
+        drop(duplicate);
     }
 
     #[cfg(windows)]
