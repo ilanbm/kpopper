@@ -1,0 +1,50 @@
+[
+  {
+    "input": "null\n",
+    "output": "null\n...\n"
+  },
+  {
+    "input": "12\n",
+    "output": "12\n...\n"
+  },
+  {
+    "input": "true\n",
+    "output": "true\n...\n"
+  },
+  {
+    "input": "hello\n",
+    "output": "hello\n...\n"
+  },
+  {
+    "input": "שלום\n",
+    "output": "שלום\n...\n"
+  },
+  {
+    "input": "'12'\n",
+    "output": "'12'\n"
+  },
+  {
+    "input": "\"a\\nb\"\n",
+    "output": "'a\n\n  b'\n"
+  },
+  {
+    "input": "''\n",
+    "output": "''\n"
+  },
+  {
+    "input": "{b: שלום, a: [1, true, null]}\n",
+    "output": "b: שלום\na:\n- 1\n- true\n- null\n"
+  },
+  {
+    "input": "[x, {z: a, a: b}]\n",
+    "output": "- x\n- z: a\n  a: b\n"
+  },
+  {
+    "input": "{on: x, 1: y, '1': z}\n",
+    "output": "true: y\n'1': z\n"
+  },
+  {
+    "input": "date: 2025-01-02\n",
+    "output": "date: 2025-01-02\n"
+  }
+]

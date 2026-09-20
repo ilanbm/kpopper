@@ -469,6 +469,22 @@ fn python_safe_dump(value: &OrdinaryValue) -> Result<Vec<u8>> {
     Ok(output)
 }
 
+/// SafeDumper-compatible source-order text for local evidence corpora.
+pub(crate) fn python_safe_dump_unicode(value: &OrdinaryValue) -> Result<Vec<u8>> {
+    let mut output = Vec::new();
+    let mut emitter = python_emitter(&mut output)?;
+    emitter.set_unicode(true);
+    python_emit(value, &mut emitter, None)?;
+    python_finish(emitter)?;
+    if matches!(value, OrdinaryValue::Scalar(_))
+        && !matches!(output.first(), Some(b'\'' | b'"' | b'|' | b'>'))
+        && !output.ends_with(b"...\n")
+    {
+        output.extend_from_slice(b"...\n");
+    }
+    Ok(output)
+}
+
 fn python_gate_shape(
     body: &OrdinaryValue,
     dependencies: &V,
@@ -1298,7 +1314,7 @@ fn fmt(value: &V) -> String {
     }
 }
 impl World<'_> {
-    fn moved(&self, id: &str) -> Result<Vec<(String, V, V, &'static str)>> {
+    pub(crate) fn moved(&self, id: &str) -> Result<Vec<(String, V, V, &'static str)>> {
         let body = map(&self.judgments[id])?;
         let empty = Map::new();
         let seen = map(get(
@@ -2683,5 +2699,27 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n")
         );
+    }
+}
+
+#[cfg(test)]
+mod search_yaml_tests {
+    #[test]
+    fn unicode_safe_dump_matches_python_scalars_containers_keys_and_order() {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/search-yaml.json")).unwrap();
+        for case in cases.as_array().unwrap() {
+            let source = crate::history_yaml::decode_ordinary_source_value(
+                case["input"].as_str().unwrap().as_bytes(),
+            )
+            .unwrap();
+            let result = super::python_safe_dump_unicode(&source).unwrap();
+            assert_eq!(
+                String::from_utf8(result).unwrap(),
+                case["output"].as_str().unwrap(),
+                "{}",
+                case["input"]
+            );
+        }
     }
 }
