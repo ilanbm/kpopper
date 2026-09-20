@@ -289,8 +289,8 @@ fn run(args: Args) -> Result<Value> {
     }
     if let Command::Remeasure(options) = &args.command {
         let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
-        let text = kpop_native::public_remeasure::run(options, &root, args.frozen)?;
-        return Ok(json!({"text": text}));
+        let output = kpop_native::public_remeasure::run(options, &root, args.frozen)?;
+        return Ok(json!({"text": output.text, "stderr": output.stderr, "code": output.code}));
     }
     if let Command::Followups(options) = &args.command {
         let root = args
@@ -1080,9 +1080,12 @@ fn main() {
     match run(args) {
         Ok(value) if is_remeasure => {
             let text = value["text"].as_str().unwrap_or("");
+            let stderr = value["stderr"].as_str().unwrap_or("");
+            let code = value["code"].as_i64().unwrap_or(0) as i32;
             print!("{}", text);
-            if text.contains("not clean:") || text.contains("reads entries differently") {
-                std::process::exit(1);
+            eprint!("{}", stderr);
+            if code != 0 {
+                std::process::exit(code);
             }
         }
         Ok(value) if is_watch => {
