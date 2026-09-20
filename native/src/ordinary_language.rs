@@ -18,7 +18,14 @@ pub(crate) fn legacy_expression(value: &Value, predicate: bool) -> Result<Value>
     crate::reasoning_language::legacy_expression(&value, predicate).map(|v| Value::from_typed(&v))
 }
 pub(crate) fn legacy_expression_detailed(value: &Value, predicate: bool) -> Result<Value> {
-    crate::reasoning_language::legacy_expression_detailed(&syntax(value)?, predicate)
+    let syntax = syntax(value).map_err(|error| {
+        if error.0 == "invalid_yaml_key" {
+            crate::Error("invalid expression fields".into())
+        } else {
+            error
+        }
+    })?;
+    crate::reasoning_language::legacy_expression_detailed(&syntax, predicate)
         .map(|v| Value::from_typed(&v))
 }
 pub(crate) fn legacy_rule(value: &Value) -> Result<Value> {

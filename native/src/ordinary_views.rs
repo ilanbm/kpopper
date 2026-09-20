@@ -181,7 +181,15 @@ impl<'a> World<'a> {
         conflicts: &BTreeSet<String>,
         runtime: Option<&'a Runtime>,
     ) -> Result<Self> {
-        let reader = Reader::new(doc, runtime)?.with_layers(layers.clone(), conflicts.clone())?;
+        let mut reader =
+            Reader::new(doc, runtime)?.with_layers(layers.clone(), conflicts.clone())?;
+        // Public text views walk entry IDs lexically. Only this lookup table is
+        // ordered here; each source body retains its original mapping order.
+        reader.raw = std::mem::take(&mut reader.raw)
+            .into_iter()
+            .collect::<BTreeMap<_, _>>()
+            .into_iter()
+            .collect();
         let dep = text(&reader.fields["deps"])?;
         let judgments = reader
             .raw
