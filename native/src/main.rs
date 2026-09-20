@@ -1078,7 +1078,13 @@ fn main() {
     let as_json = args.json;
     let is_remeasure = matches!(&args.command, Command::Remeasure(_));
     match run(args) {
-        Ok(value) if is_remeasure => print!("{}", value["text"].as_str().unwrap_or("")),
+        Ok(value) if is_remeasure => {
+            let text = value["text"].as_str().unwrap_or("");
+            print!("{}", text);
+            if text.contains("not clean:") || text.contains("reads entries differently") {
+                std::process::exit(1);
+            }
+        }
         Ok(value) if is_watch => {
             if let Some(watch) = watch_args {
                 println!("{}", kpop_native::public_watch::cli_json(&watch, &value));
@@ -1103,6 +1109,7 @@ fn main() {
             }
         }
         Ok(value) if is_agent => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
+
 
         Ok(value) => println!("{}", value),
         Err(error) => {
