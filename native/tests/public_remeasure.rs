@@ -214,3 +214,22 @@ fn python_18_oracle_matches_arbitrary_integer_and_decimal_readings() {
     fs::write(record.parent().unwrap().join("recipe"), "#!/bin/sh\nprintf '1.0\\n'\n").unwrap();
     assert_oracle(&record, true);
 }
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_nonfinite_record_plan_and_failure() {
+    let (_temp, record) = fixture("inf", 0, "", ".inf", "echo: [./recipe]\n");
+    assert_oracle(&record, false);
+    assert_oracle(&record, true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_missing_allowlist_and_recipe() {
+    let (temp, record) = fixture("1", 0, "", "1", "spare: [./recipe]\n");
+    assert_oracle(&record, false);
+    fs::remove_file(temp.path().join(".kpopper/measure.yaml")).unwrap();
+    assert_oracle(&record, false);
+}

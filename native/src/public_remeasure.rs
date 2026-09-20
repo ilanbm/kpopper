@@ -1,5 +1,5 @@
 //! Read-only ordinary `remeasure` plan and bounded local recipe execution.
-use crate::{Error, Result, history_contract::*, history_view::{list, map_mut}, history_yaml, public_workspace, require, source_capture::{self, ReadMode}, value::TypedValue as V};
+use crate::{Error, Result, history_contract::{map as hmap, text as htext}, history_view::list as hlist, history_yaml, ordinary_value::{Map, Value as V, map, map_mut, text}, public_workspace, require, source_capture::{self, ReadMode}};
 use std::{collections::BTreeMap, path::{Path, PathBuf}, process::{Command, Stdio}, time::Duration};
 
 #[derive(Clone, Debug, clap::Args)]
@@ -20,7 +20,7 @@ fn output(lines: Vec<String>, code: i32) -> Output {
 }
 
 fn recipe_path(record: &Path) -> PathBuf { record.parent().unwrap_or(Path::new(".")).join(".kpopper/measure.yaml") }
-fn scalar(v: &V) -> String { crate::source_text::ordinary_python_str(v) }
+fn scalar(v: &V) -> String { v.python_str() }
 fn resolve(exe: &str, root: &Path) -> Option<PathBuf> {
     let path = Path::new(exe);
     if path.components().count() > 1 {
@@ -38,11 +38,11 @@ fn env_path() -> Vec<PathBuf> {
 fn allowlist(path: &Path) -> Result<BTreeMap<String, Vec<String>>> {
     if !path.is_file() { return Ok(BTreeMap::new()); }
     let value = history_yaml::decode_document(&std::fs::read(path)?)?;
-    let map = map(&value)?;
+    let map = hmap(&value)?;
     let mut out = BTreeMap::new();
     for (name, argv) in map {
         require(regex::Regex::new(r"^[A-Za-z][A-Za-z0-9_-]*$").unwrap().is_match(name), &format!("refused - .kpopper/measure.yaml:\n  '{name}' is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else"))?;
-        let values = list(argv)?.iter().map(|v| text(v).map(str::to_owned)).collect::<Result<Vec<_>>>()?;
+        let values = hlist(argv)?.iter().map(|v| htext(v).map(str::to_owned)).collect::<Result<Vec<_>>>()?;
         require(!values.is_empty() && values.iter().all(|v| !v.is_empty() && !v.contains('\0')), &format!("refused - {name}: a recipe is a non-empty list of non-empty strings - the executable and its arguments - never a line for a shell"))?;
         out.insert(name.clone(), values);
     }
@@ -86,12 +86,25 @@ fn parse_reading(out: &str, recorded: &V) -> Result<V> {
                 crate::value::Integer::new(line).map(V::Integer)
             }
         }
-        V::Float(_) => line.parse::<f64>().map_err(|_| Error(format!("printed '{}' where the record holds a number", line.replace('\'', "\\'")))).and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float)),
+        V::Float(_) | V::NonFinite(_) => {
+            let number = regex::Regex::new(r"^-?\d+(?:\.\d+)?$").unwrap();
+            if !number.is_match(line) {
+                Err(Error(format!("printed '{}' where the record holds a number", line.replace('\'', "\\'"))))
+            } else if line.contains('.') {
+                line.parse::<f64>().map_err(|_| Error("nonfinite_float".into())).and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float))
+            } else {
+                crate::value::Integer::new(line).map(V::Integer)
+            }
+        },
         _ => Ok(V::Text(line.into())),
     }
 }
 fn agrees(a: &V, b: &V) -> bool {
-    match (a,b) { (V::Integer(x), V::Integer(y)) => x.as_str() == y.as_str(), (V::Float(x), V::Float(y)) => x.get() == y.get(), (V::Integer(x), V::Float(y)) => x.as_str().parse::<f64>().ok() == Some(y.get()), (V::Float(x), V::Integer(y)) => Some(x.get()) == y.as_str().parse::<f64>().ok(), _ => a == b }
+    match (a, b) {
+        (V::Bool(x), V::Bool(y)) => x == y,
+        (V::Integer(_) | V::Float(_) | V::NonFinite(_), V::Integer(_) | V::Float(_) | V::NonFinite(_)) => crate::ordinary_value::python_equal(a, b),
+        _ => a.python_str() == b.python_str(),
+    }
 }
 
 fn measurement_declarations(
@@ -101,7 +114,7 @@ fn measurement_declarations(
     let mut declarations = BTreeMap::<String, BTreeMap<String, Vec<Option<String>>>>::new();
     let mut base_measures = BTreeMap::<String, String>::new();
     let mut current = base.clone();
-    for (_section, members) in crate::reasoning_fields::collections(base)? {
+    for (_section, members) in crate::ordinary_fields::collections(base)? {
         for (id, body) in members {
             if let Ok(body) = map(&body)
                 && let Some(name) = body.get("measure").and_then(|value| text(value).ok())
@@ -118,8 +131,8 @@ fn measurement_declarations(
             continue;
         }
         let document = hypothesis.get("doc").or_else(|| hypothesis.get("document")).ok_or_else(|| Error("invalid_snapshot".into()))?;
-        for (section, members) in crate::reasoning_fields::collections(document)? {
-            let target = map(&current)?.get(&section).cloned().unwrap_or_else(|| V::Map(BTreeMap::new()));
+        for (section, members) in crate::ordinary_fields::collections(document)? {
+            let target = map(&current)?.get(&section).cloned().unwrap_or_else(|| V::Map(Map::new()));
             let mut target = map(&target)?.clone();
             for (id, body) in members {
                 if let Ok(body_map) = map(&body) {
@@ -155,7 +168,7 @@ fn measurement_declarations(
 pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     let record = options.record.clone().unwrap_or_else(|| cwd.join("GROUNDING.yaml"));
     let runtime = public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None)?;
-    let capture = source_capture::capture_source_with_runtime(std::slice::from_ref(&record), cwd, if frozen { ReadMode::Frozen } else { ReadMode::Live }, None, runtime.as_ref())?;
+    let capture = source_capture::capture_ordinary_source_with_runtime(std::slice::from_ref(&record), cwd, if frozen { ReadMode::Frozen } else { ReadMode::Live }, None, runtime.as_ref())?;
     let doc = capture.ordinary_document();
     let (named, current, problems) = measurement_declarations(doc, capture.hypotheses())?;
     if !problems.is_empty() {
@@ -163,8 +176,10 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         lines.extend(problems.into_iter().map(|problem| format!("  {problem}")));
         return Ok(output(lines, 1));
     }
-    let collections = crate::reasoning_fields::collections(&current)?;
-    let recipes = match allowlist(&recipe_path(&record)) {
+    let collections = crate::ordinary_fields::collections(&current)?;
+    let allowlist_path = recipe_path(&record);
+    let allowlist_exists = allowlist_path.is_file();
+    let recipes = match allowlist(&allowlist_path) {
         Ok(recipes) => recipes,
         Err(error) => return Ok(Output { text: String::new(), stderr: format!("{error}\n"), code: 1 }),
     };
@@ -178,7 +193,13 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     }
     let root = record.parent().unwrap_or(cwd);
     let cited = named.keys().cloned().collect::<Vec<_>>();
-    for name in &cited { require(recipes.contains_key(name), &format!("refused - the record names recipe .kpopper/measure.yaml does not hold: {name} - a measurement nothing takes is a hole, and a falsifier reading it tests nothing"))?; }
+    if !allowlist_exists {
+        return Ok(output(vec![format!("refused - {} recipe{} named and no .kpopper/measure.yaml beside the record to hold {}: {}", cited.len(), if cited.len() == 1 { "" } else { "s" }, if cited.len() == 1 { "it" } else { "them" }, cited.join(", "))], 1));
+    }
+    let missing = cited.iter().filter(|name| !recipes.contains_key(name.as_str())).cloned().collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Ok(output(vec![format!("refused - the record names recipe{} .kpopper/measure.yaml does not hold: {} - a measurement nothing takes is a hole, and a falsifier reading it tests nothing", if missing.len() == 1 { "" } else { "s" }, missing.join(", "))], 1));
+    }
     let entries = named.values().map(Vec::len).sum::<usize>();
     let mut out = vec![format!("{} recipe{} named by {} entr{}, from .kpopper/measure.yaml, run from {}:", cited.len(), if cited.len()==1{""}else{"s"}, entries, if entries==1{"y"}else{"ies"}, root.display())];
     for name in &cited { let ids = &named[name]; let argv = &recipes[name]; let exe = resolve(&argv[0], root).map(|p| p.display().to_string()).unwrap_or_else(|| format!("{} (not found)", argv[0])); let args = argv[1..].iter().map(|v| shell_quote(v)).collect::<Vec<_>>().join(" "); out.push(format!("  {} <- {}: {} {}", ids.join(", "), name, exe, args)); }
