@@ -2,10 +2,11 @@
 use crate::{
     Result,
     history_contract::{error, map},
-    history_transaction_fs as F, legacy_batch,
+    history_transaction_fs as F,
+    history_yaml::SourceValue as Source,
+    legacy_batch,
     project_modes::WriteRoute,
     source_inventory::Inventory,
-    history_yaml::SourceValue as Source,
     value::TypedValue as V,
 };
 use base64::Engine as _;
@@ -199,7 +200,9 @@ fn save(path: &Path, value: &J) -> Result<()> {
 }
 
 fn state_root(record: &Path, selected: Option<&Path>) -> Result<PathBuf> {
-    if let Some(path) = selected { return crate::project_modes::resolved(path); }
+    if let Some(path) = selected {
+        return crate::project_modes::resolved(path);
+    }
     let base = std::env::var_os("XDG_STATE_HOME")
         .filter(|p| Path::new(p).is_absolute())
         .map(PathBuf::from)
@@ -330,17 +333,25 @@ fn actions(
             )),
         ),
     ]);
-    if let Some(source) = report.raw.get("source") { body.insert("from".into(), source.clone()); }
-    if let Some(at) = report.raw.get("at") { body.insert("at".into(), at.clone()); }
+    if let Some(source) = report.raw.get("source") {
+        body.insert("from".into(), source.clone());
+    }
+    if let Some(at) = report.raw.get("at") {
+        body.insert("at".into(), at.clone());
+    }
     let ordered_source = Source::Map(
         ["name", "file", "read", "recorded_for", "from", "at"]
             .into_iter()
-            .filter_map(|key| body.get(key).map(|value| {
-                V::from_json(value).map(|value| (key.into(), Source::from_typed(&value)))
-            }))
+            .filter_map(|key| {
+                body.get(key).map(|value| {
+                    V::from_json(value).map(|value| (key.into(), Source::from_typed(&value)))
+                })
+            })
             .collect::<Result<Vec<_>>>()?,
     );
-    let mut planned = vec![json!({"kind":"add","id":source_id,"body":body,"as_of":report.date,"into":collection})];
+    let mut planned = vec![
+        json!({"kind":"add","id":source_id,"body":body,"as_of":report.date,"into":collection}),
+    ];
     let mut source_bodies = vec![Some(ordered_source)];
     let mut ordered = report.updates.clone();
     ordered.sort_by_key(|u| u["kind"] != "set");
@@ -369,7 +380,13 @@ fn actions(
         planned.push(update);
         source_bodies.push(None);
     }
-    Ok((planned.iter().map(V::from_json).collect::<Result<Vec<_>>>()?, source_bodies))
+    Ok((
+        planned
+            .iter()
+            .map(V::from_json)
+            .collect::<Result<Vec<_>>>()?,
+        source_bodies,
+    ))
 }
 
 fn graph(
@@ -791,9 +808,15 @@ fn private_reason(report: &Report) -> Result<Option<&'static str>> {
             _ => true,
         })
     {
-        return Ok(Some("private or unclear original source permission; report retained privately"));
+        return Ok(Some(
+            "private or unclear original source permission; report retained privately",
+        ));
     }
-    if report.raw.get("scope").and_then(|v| v.get("kind")).and_then(J::as_str)
+    if report
+        .raw
+        .get("scope")
+        .and_then(|v| v.get("kind"))
+        .and_then(J::as_str)
         == Some("unclear")
     {
         return Ok(Some("unclear report scope; retained privately"));
@@ -867,16 +890,32 @@ fn run_with_probe(
     }
 
     let retained_report = F::read(&journal_path)?;
-    if retained_report.is_some() && let Some(reason) = private_reason(&report)?
+    if retained_report.is_some()
+        && let Some(reason) = private_reason(&report)?
     {
         let (answer, signals) = receipt(
-            &report, &record, &root, &event, &source_path, &envelope_sha,
-            "needs_primary", Some(reason), false, None, None, supplied_runtime,
+            &report,
+            &record,
+            &root,
+            &event,
+            &source_path,
+            &envelope_sha,
+            "needs_primary",
+            Some(reason),
+            false,
+            None,
+            None,
+            supplied_runtime,
         )?;
         save(&receipt_path, &answer)?;
-        save(&root.join("results").join(format!("{event}.json")),
-            &json!({"receipt":answer,"signals":signals}))?;
-        return Ok(Output { text: format!("{}\n", serde_json::to_string(&answer)?), code: 1 });
+        save(
+            &root.join("results").join(format!("{event}.json")),
+            &json!({"receipt":answer,"signals":signals}),
+        )?;
+        return Ok(Output {
+            text: format!("{}\n", serde_json::to_string(&answer)?),
+            code: 1,
+        });
     }
     if let Some(raw) = retained_report {
         let mut journal =
@@ -897,8 +936,13 @@ fn run_with_probe(
                 probe(phase)
             };
             crate::direct_history::recover_expected(
-                &original, cwd, supplied_runtime, &mutation, &mut committed,
-            ).map(|_| ())
+                &original,
+                cwd,
+                supplied_runtime,
+                &mutation,
+                &mut committed,
+            )
+            .map(|_| ())
         } else if crate::legacy_authoring::recovery_pending(&original, cwd)? {
             crate::legacy_authoring::recover_expected(&original, cwd, &mutation).map(|_| ())
         } else if journal["phase"] == "prepared" {
@@ -906,25 +950,56 @@ fn run_with_probe(
                 journal["phase"] = json!("committed");
                 save(&journal_path, &journal)
             };
-            crate::legacy_authoring::publish_expected(
-                &original, cwd, &mutation, &mut committed,
-            )
+            crate::legacy_authoring::publish_expected(&original, cwd, &mutation, &mut committed)
         } else {
             Ok(())
         };
         if let Err(failure) = recovery {
             if failure.0.starts_with("report_preparation_stale:") {
                 let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
+                let layout = crate::history_transaction::Layout::for_entry(
+                    record
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .ok_or_else(|| error("invalid_path"))?,
+                )?;
+                let writer_pending = F::read(&record.parent().unwrap().join(&layout.journal))?
+                    .is_some()
+                    || F::read(
+                        &record
+                            .parent()
+                            .unwrap()
+                            .join(format!("{}.history", layout.journal)),
+                    )?
+                    .is_some();
+                if writer_pending {
+                    return Err(failure);
+                }
                 let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
                 let reason = failure.0.trim_start_matches("report_preparation_stale: ");
                 let (answer, signals) = receipt(
-                    &report, &record, &root, &event, &source_path, &envelope_sha,
-                    "needs_primary", Some(reason), true, None, None, supplied_runtime,
+                    &report,
+                    &record,
+                    &root,
+                    &event,
+                    &source_path,
+                    &envelope_sha,
+                    "needs_primary",
+                    Some(reason),
+                    true,
+                    None,
+                    None,
+                    supplied_runtime,
                 )?;
                 save(&receipt_path, &answer)?;
-                save(&root.join("results").join(format!("{event}.json")),
-                    &json!({"receipt":answer,"signals":signals}))?;
-                return Ok(Output { text: format!("{}\n", serde_json::to_string(&answer)?), code: 1 });
+                save(
+                    &root.join("results").join(format!("{event}.json")),
+                    &json!({"receipt":answer,"signals":signals}),
+                )?;
+                return Ok(Output {
+                    text: format!("{}\n", serde_json::to_string(&answer)?),
+                    code: 1,
+                });
             }
             return Err(failure);
         }
@@ -1031,9 +1106,17 @@ fn run_with_probe(
             )?;
             let collection = source_collection(&document, &report)?;
             let (planned, source_bodies) = actions(&report, &event, &source_path, &collection)?;
-            let prepared = legacy_batch::prepare(&planned, &route, &legacy_batch::Options {
-                operation: format!("report-{event}"), context,
-            }, inventory, None, &source_bodies)?;
+            let prepared = legacy_batch::prepare(
+                &planned,
+                &route,
+                &legacy_batch::Options {
+                    operation: format!("report-{event}"),
+                    context,
+                },
+                inventory,
+                None,
+                &source_bodies,
+            )?;
             let mutation = prepared.mutation.clone();
             verify_requested_profile(&report, &mutation, supplied_runtime)?;
             let graphs = mutation_graphs(&mutation, &report, supplied_runtime)?;
@@ -1265,18 +1348,35 @@ mod tests {
             let report = json!({"event_id":format!("prepared-{changed}"),"date":"2026-09-20",
                 "source_quote":"x is 2","updates":[{"kind":"set","id":"p.x","value":2}]});
             let bytes = serde_json::to_vec(&report).unwrap();
-            let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
-            let stopped = run_with_probe(&options, temp.path(), Some(&bytes), None,
-                &mut |phase| if phase == "prepared" { Err(error("injected before writer journal")) } else { Ok(()) });
+            let options = Options {
+                file: "-".into(),
+                record: None,
+                state_dir: Some(state.clone()),
+            };
+            let stopped = run_with_probe(&options, temp.path(), Some(&bytes), None, &mut |phase| {
+                if phase == "prepared" {
+                    Err(error("injected before writer journal"))
+                } else {
+                    Ok(())
+                }
+            });
             assert_eq!(stopped.unwrap_err().0, "injected before writer journal");
-            assert!(fs::read_dir(state.join("receipts")).unwrap().next().is_none());
+            assert!(
+                fs::read_dir(state.join("receipts"))
+                    .unwrap()
+                    .next()
+                    .is_none()
+            );
             if changed {
                 fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 99, from: s.old, of: 2026-09-01}\n").unwrap();
             }
             let resumed = run(&options, temp.path(), Some(&bytes)).unwrap();
             let receipt: J = serde_json::from_str(&resumed.text).unwrap();
             assert_eq!(resumed.code, if changed { 1 } else { 0 });
-            assert_eq!(receipt["state"], if changed { "needs_primary" } else { "applied" });
+            assert_eq!(
+                receipt["state"],
+                if changed { "needs_primary" } else { "applied" }
+            );
             if !changed {
                 assert_eq!(receipt["recovered"], true);
                 assert!(fs::read_to_string(&entry).unwrap().contains("v: 2"));
@@ -1294,22 +1394,41 @@ mod tests {
         fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n").unwrap();
         let state = temp.path().join("state");
         let raw = serde_json::to_vec(&json!({"event_id":"receipt-race","date":"2026-09-20",
-            "source_quote":"x is 2","updates":[{"kind":"set","id":"p.x","value":2}]})).unwrap();
-        let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
-        assert!(run_with_probe(&options, temp.path(), Some(&raw), None, &mut |phase| {
-            if phase == "committed" { Err(error("injected completion failure")) } else { Ok(()) }
-        }).is_err());
+            "source_quote":"x is 2","updates":[{"kind":"set","id":"p.x","value":2}]}))
+        .unwrap();
+        let options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(state.clone()),
+        };
+        assert!(
+            run_with_probe(&options, temp.path(), Some(&raw), None, &mut |phase| {
+                if phase == "committed" {
+                    Err(error("injected completion failure"))
+                } else {
+                    Ok(())
+                }
+            })
+            .is_err()
+        );
         let parsed = parse(&raw).unwrap();
         let id = event_id(&entry.canonicalize().unwrap(), &parsed).unwrap();
         let receipt_path = state.join("receipts").join(format!("{id}.json"));
         let result = run_with_probe(&options, temp.path(), Some(&raw), None, &mut |phase| {
             if phase == "recovered" {
-                save(&receipt_path, &json!({"state":"needs_primary","reason":"concurrent finisher"}))?;
+                save(
+                    &receipt_path,
+                    &json!({"state":"needs_primary","reason":"concurrent finisher"}),
+                )?;
             }
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(result.code, 1);
-        assert_eq!(serde_json::from_str::<J>(&result.text).unwrap()["state"], "needs_primary");
+        assert_eq!(
+            serde_json::from_str::<J>(&result.text).unwrap()["state"],
+            "needs_primary"
+        );
     }
 
     #[test]
@@ -1321,18 +1440,45 @@ mod tests {
         let public = json!({"event_id":"old-private","date":"2026-09-20","source_quote":"x is 2",
             "updates":[{"kind":"set","id":"p.x","value":2}]});
         let public_bytes = serde_json::to_vec(&public).unwrap();
-        let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
-        assert!(run_with_probe(&options, temp.path(), Some(&public_bytes), None,
-            &mut |phase| if phase == "prepared" { Err(error("old writer stopped")) } else { Ok(()) }).is_err());
+        let options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(state.clone()),
+        };
+        assert!(
+            run_with_probe(
+                &options,
+                temp.path(),
+                Some(&public_bytes),
+                None,
+                &mut |phase| if phase == "prepared" {
+                    Err(error("old writer stopped"))
+                } else {
+                    Ok(())
+                }
+            )
+            .is_err()
+        );
         let private = json!({"event_id":"old-private","date":"2026-09-20","source_quote":"x is 2",
             "shareability":"personal","updates":[{"kind":"set","id":"p.x","value":2}]});
         let mut private_bytes = serde_json::to_vec(&private).unwrap();
         private_bytes.push(b'\n');
-        let id = event_id(&entry.canonicalize().unwrap(), &parse(&private_bytes).unwrap()).unwrap();
-        F::replace(&state.join("envelopes").join(format!("{id}.json")), Some(&private_bytes)).unwrap();
+        let id = event_id(
+            &entry.canonicalize().unwrap(),
+            &parse(&private_bytes).unwrap(),
+        )
+        .unwrap();
+        F::replace(
+            &state.join("envelopes").join(format!("{id}.json")),
+            Some(&private_bytes),
+        )
+        .unwrap();
         let retained = run(&options, temp.path(), Some(&private_bytes)).unwrap();
         assert_eq!(retained.code, 1);
-        assert_eq!(serde_json::from_str::<J>(&retained.text).unwrap()["state"], "needs_primary");
+        assert_eq!(
+            serde_json::from_str::<J>(&retained.text).unwrap()["state"],
+            "needs_primary"
+        );
         assert!(fs::read_to_string(entry).unwrap().contains("v: 1"));
         assert!(state.join("journals").join(format!("{id}.json")).is_file());
     }
@@ -1446,25 +1592,50 @@ mod tests {
         let receipt: J = serde_json::from_str(&output.text).unwrap();
         assert_eq!(receipt["state"], "applied");
         assert_eq!(receipt["newly_fired_judgments"], json!(["d.x"]));
-        let initial_event = event_id(&entry.canonicalize().unwrap(), &parse(&bytes).unwrap()).unwrap();
+        let initial_event =
+            event_id(&entry.canonicalize().unwrap(), &parse(&bytes).unwrap()).unwrap();
         let initial_journal: J = crate::json_ingress::parse_slice(
-            &fs::read(temp.path().join("state/journals").join(format!("{initial_event}.json"))).unwrap(),
+            &fs::read(
+                temp.path()
+                    .join("state/journals")
+                    .join(format!("{initial_event}.json")),
+            )
+            .unwrap(),
             crate::json_ingress::DuplicateKeys::Reject,
-        ).unwrap();
+        )
+        .unwrap();
         let initial_mutation = journal_mutation(&initial_journal).unwrap();
         let store = crate::history_store::Store::new(&entry).unwrap();
         let general = store.root.join(&store.layout.journal);
         fs::create_dir_all(general.parent().unwrap()).unwrap();
         fs::write(&general, bootstrap.to_bytes().unwrap()).unwrap();
-        assert_eq!(crate::direct_history::recover_expected(
-            std::slice::from_ref(&entry), temp.path(), Some(&runtime), &initial_mutation,
-            &mut |_| Ok(())).unwrap_err().0, "history report recovery journal mismatch");
+        assert_eq!(
+            crate::direct_history::recover_expected(
+                std::slice::from_ref(&entry),
+                temp.path(),
+                Some(&runtime),
+                &initial_mutation,
+                &mut |_| Ok(())
+            )
+            .unwrap_err()
+            .0,
+            "history report recovery journal mismatch"
+        );
         fs::remove_file(&general).unwrap();
         let adoption = store.root.join(format!("{}.history", store.layout.journal));
         fs::write(&adoption, "kind: history-adoption/v1\n").unwrap();
-        assert_eq!(crate::direct_history::recover_expected(
-            std::slice::from_ref(&entry), temp.path(), Some(&runtime), &initial_mutation,
-            &mut |_| Ok(())).unwrap_err().0, "history report recovery journal mismatch");
+        assert_eq!(
+            crate::direct_history::recover_expected(
+                std::slice::from_ref(&entry),
+                temp.path(),
+                Some(&runtime),
+                &initial_mutation,
+                &mut |_| Ok(())
+            )
+            .unwrap_err()
+            .0,
+            "history report recovery journal mismatch"
+        );
         fs::remove_file(&adoption).unwrap();
         let captured = crate::history_store::Store::new(&entry)
             .unwrap()
@@ -1484,23 +1655,57 @@ mod tests {
                 "updates":[{"kind":"set","id":"p.x","value":value}]});
             let bytes = serde_json::to_vec(&report).unwrap();
             let state = temp.path().join(format!("state-{value}"));
-            let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
-            let stopped = run_with_probe(&options, temp.path(), Some(&bytes), Some(&runtime),
-                &mut |phase| if phase == interrupted { Err(error("injected history interruption")) } else { Ok(()) });
+            let options = Options {
+                file: "-".into(),
+                record: None,
+                state_dir: Some(state.clone()),
+            };
+            let stopped = run_with_probe(
+                &options,
+                temp.path(),
+                Some(&bytes),
+                Some(&runtime),
+                &mut |phase| {
+                    if phase == interrupted {
+                        Err(error("injected history interruption"))
+                    } else {
+                        Ok(())
+                    }
+                },
+            );
             assert_eq!(stopped.unwrap_err().0, "injected history interruption");
-            assert!(fs::read_dir(state.join("receipts")).unwrap().next().is_none());
+            assert!(
+                fs::read_dir(state.join("receipts"))
+                    .unwrap()
+                    .next()
+                    .is_none()
+            );
             let store = crate::history_store::Store::new(&entry).unwrap();
             let writer_journal = store.root.join(format!("{}.history", store.layout.journal));
             assert_eq!(writer_journal.is_file(), interrupted == "committed");
             if interrupted == "committed" {
-                assert_eq!(crate::direct_history::recover_expected(
-                    std::slice::from_ref(&entry), temp.path(), Some(&runtime),
-                    &initial_mutation, &mut |_| Ok(())).unwrap_err().0,
-                    "history report recovery journal mismatch");
+                assert_eq!(
+                    crate::direct_history::recover_expected(
+                        std::slice::from_ref(&entry),
+                        temp.path(),
+                        Some(&runtime),
+                        &initial_mutation,
+                        &mut |_| Ok(())
+                    )
+                    .unwrap_err()
+                    .0,
+                    "history report recovery journal mismatch"
+                );
                 assert!(writer_journal.is_file());
             }
-            let resumed = run_with_probe(&options, temp.path(), Some(&bytes), Some(&runtime),
-                &mut |_| Ok(())).unwrap();
+            let resumed = run_with_probe(
+                &options,
+                temp.path(),
+                Some(&bytes),
+                Some(&runtime),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
             let receipt: J = serde_json::from_str(&resumed.text).unwrap();
             assert_eq!(resumed.code, 0);
             assert_eq!(receipt["state"], "applied");
@@ -1510,44 +1715,105 @@ mod tests {
         let final_report = json!({"event_id":"history-after-recovery","date":"2026-09-23",
             "source_quote":"x is 5","updates":[{"kind":"set","id":"p.x","value":5}]});
         let final_bytes = serde_json::to_vec(&final_report).unwrap();
-        let final_write = run_with_probe(&Options { file:"-".into(), record:None,
-            state_dir:Some(temp.path().join("state-final")) }, temp.path(), Some(&final_bytes),
-            Some(&runtime), &mut |_| Ok(())).unwrap();
+        let final_write = run_with_probe(
+            &Options {
+                file: "-".into(),
+                record: None,
+                state_dir: Some(temp.path().join("state-final")),
+            },
+            temp.path(),
+            Some(&final_bytes),
+            Some(&runtime),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(final_write.code, 0, "{}", final_write.text);
 
         let stale_report = json!({"event_id":"history-stale-preimage","date":"2026-09-24",
             "source_quote":"x is 6","updates":[{"kind":"set","id":"p.x","value":6}]});
         let stale_bytes = serde_json::to_vec(&stale_report).unwrap();
-        let stale_options = Options { file:"-".into(), record:None,
-            state_dir:Some(temp.path().join("state-stale")) };
-        assert!(run_with_probe(&stale_options, temp.path(), Some(&stale_bytes), Some(&runtime),
-            &mut |phase| if phase == "prepared" { Err(error("stop before history journal")) } else { Ok(()) }).is_err());
+        let stale_options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(temp.path().join("state-stale")),
+        };
+        assert!(
+            run_with_probe(
+                &stale_options,
+                temp.path(),
+                Some(&stale_bytes),
+                Some(&runtime),
+                &mut |phase| if phase == "prepared" {
+                    Err(error("stop before history journal"))
+                } else {
+                    Ok(())
+                }
+            )
+            .is_err()
+        );
         let valid = fs::read(&entry).unwrap();
         let mut changed = valid.clone();
         changed.extend_from_slice(b"# concurrent edit\n");
         fs::write(&entry, &changed).unwrap();
-        let stale = run_with_probe(&stale_options, temp.path(), Some(&stale_bytes), Some(&runtime),
-            &mut |_| Ok(())).unwrap();
+        let stale = run_with_probe(
+            &stale_options,
+            temp.path(),
+            Some(&stale_bytes),
+            Some(&runtime),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(stale.code, 1);
-        assert_eq!(serde_json::from_str::<J>(&stale.text).unwrap()["state"], "needs_primary");
+        assert_eq!(
+            serde_json::from_str::<J>(&stale.text).unwrap()["state"],
+            "needs_primary"
+        );
         assert_eq!(fs::read(&entry).unwrap(), changed);
         fs::write(&entry, valid).unwrap();
 
         let route_report = json!({"event_id":"history-route-change","date":"2026-09-25",
             "source_quote":"x is 7","updates":[{"kind":"set","id":"p.x","value":7}]});
         let route_bytes = serde_json::to_vec(&route_report).unwrap();
-        let route_options = Options { file:"-".into(), record:None,
-            state_dir:Some(temp.path().join("state-route")) };
-        assert!(run_with_probe(&route_options, temp.path(), Some(&route_bytes), Some(&runtime),
-            &mut |phase| if phase == "prepared" { Err(error("stop before history journal")) } else { Ok(()) }).is_err());
+        let route_options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(temp.path().join("state-route")),
+        };
+        assert!(
+            run_with_probe(
+                &route_options,
+                temp.path(),
+                Some(&route_bytes),
+                Some(&runtime),
+                &mut |phase| if phase == "prepared" {
+                    Err(error("stop before history journal"))
+                } else {
+                    Ok(())
+                }
+            )
+            .is_err()
+        );
         let project = crate::project_modes::Project::open(temp.path()).unwrap();
         fs::create_dir_all(project.config_path.parent().unwrap()).unwrap();
-        fs::write(&project.config_path,
-            r#"{"version":1,"mode":"advanced","generation":1,"record":"GROUNDING.yaml"}"#).unwrap();
-        let changed_route = run_with_probe(&route_options, temp.path(), Some(&route_bytes), Some(&runtime),
-            &mut |_| Ok(())).unwrap();
+        fs::write(
+            &project.config_path,
+            r#"{"version":1,"mode":"advanced","generation":1,"record":"GROUNDING.yaml"}"#,
+        )
+        .unwrap();
+        let changed_route = run_with_probe(
+            &route_options,
+            temp.path(),
+            Some(&route_bytes),
+            Some(&runtime),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(changed_route.code, 1);
-        assert!(serde_json::from_str::<J>(&changed_route.text).unwrap()["reason"]
-            .as_str().unwrap().contains("project"));
+        assert!(
+            serde_json::from_str::<J>(&changed_route.text).unwrap()["reason"]
+                .as_str()
+                .unwrap()
+                .contains("project")
+        );
     }
 }

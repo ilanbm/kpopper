@@ -148,9 +148,11 @@ fn default_dates_follow_the_local_timezone_for_set_review_and_first_add() {
 }
 
 #[test]
-fn arrangement_replacement_is_an_explicit_unsupported_operation() {
+fn arrangement_replacement_matches_python_for_both_collection_routes() {
     let before = "meta:\n  updated: 2026-09-01\nsources:\n  s.q: {asked: Inspect this record}\nknown:\n  p.a: {v: 1}\njudgments:\n  d.arr:\n    verdict: continue\n    rests_on: [s.q, graph.entries]\n    seen: {s.q: Inspect this record, graph.entries: 1}\n    wrong_if: graph.entries > 0\n";
-    for collection in [None, Some("known")] {
+    let cases: serde_json::Value =
+        serde_json::from_slice(include_bytes!("fixtures/legacy-recheck-arrangement.json")).unwrap();
+    for (index, collection) in [None, Some("known")].into_iter().enumerate() {
         let temp = tempfile::tempdir().unwrap();
         let record = temp.path().join("GROUNDING.yaml");
         fs::write(&record, before).unwrap();
@@ -169,12 +171,34 @@ fn arrangement_replacement_is_an_explicit_unsupported_operation() {
             args.extend(["--in", collection]);
         }
         let output = command(temp.path(), &args, "UTC");
-        assert_eq!(output.status.code(), Some(1));
+        let expected = &cases[index];
+        assert_eq!(
+            output.status.code().map(i64::from),
+            expected["code"].as_i64()
+        );
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            expected["stdout"]
+        );
         assert_eq!(
             String::from_utf8(output.stderr).unwrap(),
-            "ordinary arrangement replacement is not supported yet\n"
+            expected["stderr"]
         );
-        assert_eq!(fs::read_to_string(&record).unwrap(), before);
-        assert!(!temp.path().join(".kpopper/replaced.yaml").exists());
+        for (path, bytes) in expected["files"].as_object().unwrap() {
+            assert_eq!(
+                fs::read_to_string(temp.path().join(path)).unwrap(),
+                bytes.as_str().unwrap()
+            );
+        }
+        assert!(
+            !temp
+                .path()
+                .join(
+                    kpop_native::history_transaction::Layout::for_entry("GROUNDING.yaml")
+                        .unwrap()
+                        .journal
+                )
+                .exists()
+        );
     }
 }
