@@ -104,17 +104,34 @@ fn absent_predicates_mixed_scalar_keys_and_bom_match_python() {
             "--apply",
         ],
     );
-    let mixed = b"known:\n  p.z: {v: 2}\n  p.a: {v: 3, 2: 5}\njudgments:\n  d.x: {rests_on: [p.z], wrong_if: p.z > 40, seen: {p.z: 2}, verdict: Fine}\n";
-    compare(
-        Some(mixed),
-        &[
-            "expressions",
-            "migrate",
-            "--record",
-            "GROUNDING.yaml",
-            "--apply",
-        ],
-    );
+    for fields in [
+        "v: 3, 2: 5",
+        "2: 5, v: 3",
+        "v: 3, true: 5",
+        "true: 5, v: 3",
+        "v: 3, 2.5: 5",
+        "2.5: 5, v: 3",
+        "v: 3, null: 5",
+        "null: 5, v: 3",
+        "v: 3, 2026-01-02: 5",
+        "2026-01-02: 5, v: 3",
+        "v: 3, 2026-01-02T03:04:05Z: 5",
+        "2026-01-02T03:04:05Z: 5, v: 3",
+    ] {
+        let mixed = format!(
+            "known:\n  p.z: {{v: 2}}\n  p.a: {{{fields}}}\njudgments:\n  d.x: {{rests_on: [p.z], wrong_if: p.z > 40, seen: {{p.z: 2}}, verdict: Fine}}\n"
+        );
+        compare(
+            Some(mixed.as_bytes()),
+            &[
+                "expressions",
+                "migrate",
+                "--record",
+                "GROUNDING.yaml",
+                "--apply",
+            ],
+        );
+    }
     let mut bom = b"\xef\xbb\xbf".to_vec();
     bom.extend_from_slice(b"known:\n  p.a: {v: 2}\n  p.b: {rule: p.a + 1}\njudgments:\n  d.x: {rests_on: [p.b], wrong_if: p.b > 4, seen: {p.b: 3}, verdict: Fine}\n");
     compare(

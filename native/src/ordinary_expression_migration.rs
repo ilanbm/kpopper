@@ -41,17 +41,37 @@ fn source(value: &O) -> Result<S> {
         ),
     })
 }
-fn python_sorted_mapping_error(value: &O) -> Option<&'static str> {
+fn python_sorted_mapping_error(value: &O) -> Option<String> {
     match value {
         O::Map(values) => {
-            let has_text = values
+            fn kind(value: &V) -> &'static str {
+                match value {
+                    V::Text(_) => "str",
+                    V::Bool(_) => "bool",
+                    V::Integer(_) => "int",
+                    V::Float(_) => "float",
+                    V::Null => "NoneType",
+                    V::Date(_) => "datetime.date",
+                    V::DateTime(_) => "datetime.datetime",
+                    V::List(_) | V::Map(_) => unreachable!(),
+                }
+            }
+            let first_text = values
                 .iter()
-                .any(|(key, _)| matches!(key.scalar(), V::Text(_)));
-            let has_integer = values
+                .position(|(key, _)| matches!(key.scalar(), V::Text(_)));
+            let first_other = values
                 .iter()
-                .any(|(key, _)| matches!(key.scalar(), V::Integer(_)));
-            if has_text && has_integer {
-                return Some("'<' not supported between instances of 'int' and 'str'");
+                .position(|(key, _)| !matches!(key.scalar(), V::Text(_)));
+            if let (Some(text), Some(other)) = (first_text, first_other) {
+                let nontext = kind(values[other].0.scalar());
+                let (left, right) = if text < other {
+                    (nontext, "str")
+                } else {
+                    ("str", nontext)
+                };
+                return Some(format!(
+                    "'<' not supported between instances of '{left}' and '{right}'"
+                ));
             }
             values
                 .iter()
@@ -361,7 +381,7 @@ pub(super) fn migrate(cwd: &Path, record: &Path, apply: bool, compact: bool) -> 
         .collect::<BTreeSet<_>>();
     let mut errors = failures(after_document, brief.as_ref(), runtime.as_ref())?;
     let sorted_mapping_error = python_sorted_mapping_error(captured.source());
-    if let (Some(reason), Some(predicate_field)) = (sorted_mapping_error, predicate_field) {
+    if let (Some(reason), Some(predicate_field)) = (&sorted_mapping_error, predicate_field) {
         errors.extend(judgments.iter().filter_map(|id| {
             map(&all[id].1)
                 .ok()
