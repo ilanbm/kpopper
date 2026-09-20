@@ -1405,6 +1405,12 @@ mod tests {
         let receipt: J = serde_json::from_str(&output.text).unwrap();
         assert_eq!(receipt["state"], "applied");
         assert_eq!(receipt["newly_fired_judgments"], json!(["d.x"]));
+        let initial_event = event_id(&entry.canonicalize().unwrap(), &parse(&bytes).unwrap()).unwrap();
+        let initial_journal: J = crate::json_ingress::parse_slice(
+            &fs::read(temp.path().join("state/journals").join(format!("{initial_event}.json"))).unwrap(),
+            crate::json_ingress::DuplicateKeys::Reject,
+        ).unwrap();
+        let initial_mutation = journal_mutation(&initial_journal).unwrap();
         let captured = crate::history_store::Store::new(&entry)
             .unwrap()
             .capture()
@@ -1431,6 +1437,13 @@ mod tests {
             let store = crate::history_store::Store::new(&entry).unwrap();
             let writer_journal = store.root.join(format!("{}.history", store.layout.journal));
             assert_eq!(writer_journal.is_file(), interrupted == "committed");
+            if interrupted == "committed" {
+                assert_eq!(crate::direct_history::recover_expected(
+                    std::slice::from_ref(&entry), temp.path(), Some(&runtime),
+                    &initial_mutation, &mut |_| Ok(())).unwrap_err().0,
+                    "history report recovery journal mismatch");
+                assert!(writer_journal.is_file());
+            }
             let resumed = run_with_probe(&options, temp.path(), Some(&bytes), Some(&runtime),
                 &mut |_| Ok(())).unwrap();
             let receipt: J = serde_json::from_str(&resumed.text).unwrap();
