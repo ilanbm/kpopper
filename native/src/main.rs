@@ -78,6 +78,8 @@ enum Command {
     Followups(kpop_native::public_followups::Args),
     /// Check branch compatibility and coordinate local observation delivery.
     Watch(kpop_native::public_watch::Args),
+    /// Request an initial map from the current host agent.
+    Map(kpop_native::public_map::Options),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -263,6 +265,10 @@ fn session() -> Result<()> {
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {
+    if let Command::Map(options) = &args.command {
+        let root = args.workspace.clone().ok_or_else(|| kpop_native::Error("workspace_required".into()))?;
+        return kpop_native::public_map::run(options, &root);
+    }
     if let Command::Watch(options) = &args.command {
         let root = args
             .workspace
@@ -425,6 +431,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Config(_)
         | Command::Followups(_)
         | Command::Watch(_)
+        | Command::Map(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
