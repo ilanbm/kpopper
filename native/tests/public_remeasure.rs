@@ -59,3 +59,19 @@ fn invalid_allowlist_recipe_name_is_refused() {
     let err = public_remeasure::run(&Options { run: false, record: Some(record) }, temp.path(), true).unwrap_err();
     assert!(err.to_string().contains("not a recipe name"));
 }
+
+#[test]
+fn no_measures_is_a_clean_noop() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(temp.path().join("GROUNDING.yaml"), "known:\n  p.a:\n    v: 1\n").unwrap();
+    let out = public_remeasure::run(&Options { run: false, record: Some(temp.path().join("GROUNDING.yaml")) }, temp.path(), true).unwrap();
+    assert_eq!(out, "no measures beside the record - nothing to re-measure\n");
+}
+
+#[test]
+fn invalid_scalar_for_numeric_record_is_a_hole() {
+    let (temp, record) = fixture("hello", 0, "", "1", "echo: [./recipe]\n");
+    let out = public_remeasure::run(&Options { run: true, record: Some(record) }, temp.path(), true).unwrap();
+    assert!(out.contains("printed \"hello\" where the record holds a number"));
+    assert!(out.contains("not clean: a hole"));
+}
