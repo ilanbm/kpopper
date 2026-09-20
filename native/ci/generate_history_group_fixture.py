@@ -4,6 +4,8 @@
 import argparse
 import copy
 import json
+import os
+import posixpath
 import sys
 from pathlib import Path
 
@@ -35,18 +37,27 @@ def main() -> None:
     # group entries still use the real host's Path.resolve and all validation,
     # receipts, blobs and hashes come from the pinned Python implementation.
     layout_adapter = None
-    if sys.platform == "win32":
+    if sys.platform == "win32" or os.environ.get("KPOP_FORCE_SYNTHETIC_WINDOWS_LAYOUT") == "1":
         from scripts import provenance
         original_layout = provenance.layout
 
         def portable_layout(path):
-            return {
-                key: value.replace(chr(92), "/") if isinstance(value, str) else value
-                for key, value in original_layout(path).items()
-            }
+            # PreparedMutation validates its synthetic source fixture with
+            # layout('/GROUNDING.yaml'). On Windows os.path.abspath inserts
+            # the runner drive, while this detached oracle intentionally uses
+            # POSIX fixture paths. Temporarily use posixpath for this exact
+            # synthetic call; real Windows paths never enter this adapter.
+            if str(path) != "/GROUNDING.yaml":
+                return original_layout(path)
+            original_path = provenance.os.path
+            provenance.os.path = posixpath
+            try:
+                return original_layout(path)
+            finally:
+                provenance.os.path = original_path
 
         provenance.layout = portable_layout
-        layout_adapter = "synthetic-posix-layout-separators/v1"
+        layout_adapter = "synthetic-posix-layout/v2"
 
     source = json.loads(args.source_transaction_fixture.read_text(encoding="utf-8"))
     cases = []
