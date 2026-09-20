@@ -73,6 +73,28 @@ jobs:
           set -o pipefail
           cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
           cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
+      - name: Compare ingestion and branch commands with the pinned Python reference
+        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          oracle_commit=f480ea68f6dfd36c397388bb01844459cc578d81
+          git fetch --no-tags --depth=1 origin "$oracle_commit"
+          git worktree add --detach "$RUNNER_TEMP/native-python-oracle" "$oracle_commit"
+          python -m venv "$RUNNER_TEMP/native-oracle-python"
+          "$RUNNER_TEMP/native-oracle-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          export KPOP_SESSION_ORACLE_PYTHON="$RUNNER_TEMP/native-oracle-python/bin/python"
+          export KPOP_SESSION_ORACLE_ROOT="$RUNNER_TEMP/native-python-oracle"
+          export KPOPPER_NATIVE_RESOURCES="$RUNNER_TEMP/native-oracle-resources"
+          export KPOP_CONSOLIDATION_RESOURCES="$KPOPPER_NATIVE_RESOURCES"
+          export KPOPPER_NATIVE_CACHE="$RUNNER_TEMP/native-oracle-cache"
+          mkdir -p "$KPOPPER_NATIVE_RESOURCES/reasoning" "$KPOPPER_NATIVE_RESOURCES/ordinary"
+          cp scripts/reasoning/native/linux-x86_64.kpopper-runtime "$KPOPPER_NATIVE_RESOURCES/reasoning/"
+          cp -R "$KPOP_TEST_ORDINARY_PROGRAM" "$KPOPPER_NATIVE_RESOURCES/ordinary/linux-x86_64"
+          printf '%s\n' "$oracle_commit" > "$RUNNER_TEMP/native-evidence/python-oracle-commit.txt"
+          cargo test --manifest-path native/Cargo.toml --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' \
+            --test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation \
+            -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
       - name: Copy the executable and its verified native resources
         shell: python
         env:
