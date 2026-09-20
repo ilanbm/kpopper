@@ -210,9 +210,9 @@ pub(crate) fn inventory(root: &Path) -> Result<A::Files> {
                 path.is_file() && result.len() < MAX_OBJECTS,
                 "history_limit",
             )?;
-            let relative = name(path.strip_prefix(&root).unwrap())?;
+            let relative = S::posix(path.strip_prefix(&root).unwrap())?;
             require(
-                F::target(&root, relative)? == path,
+                F::target(&root, &relative)? == path,
                 "invalid_migration_path",
             )?;
             let file = fs::File::open(&path)?;
@@ -225,7 +225,7 @@ pub(crate) fn inventory(root: &Path) -> Result<A::Files> {
                 .read_to_end(&mut raw)?;
             total = total.saturating_add(raw.len());
             require(total <= T::MAX_TRANSACTION_BYTES, "history_limit")?;
-            result.insert(relative.into(), raw);
+            result.insert(relative, raw);
         }
     }
     Ok(result)
@@ -624,6 +624,15 @@ pub fn replay_from_copy(copied: &Path) -> Result<Snapshot> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn sealed_inventory_uses_portable_relative_names() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir(temp.path().join("nested")).unwrap();
+        fs::write(temp.path().join("nested").join("reading.yaml"), b"known: {}\n").unwrap();
+        let files = inventory(temp.path()).unwrap();
+        assert_eq!(files, A::Files::from([("nested/reading.yaml".into(), b"known: {}\n".to_vec())]));
+    }
+
     #[test]
     fn publication_never_replaces_a_destination_created_during_validation() {
         let temp = tempfile::tempdir().unwrap();

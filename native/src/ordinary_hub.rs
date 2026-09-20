@@ -237,7 +237,13 @@ fn href(body: &Map, root: &Path, page: &Path) -> Option<String> {
     };
     let source = crate::project_modes::resolved(&source).ok()?;
     let parent = page.parent()?;
-    Some(url_path(&pathdiff(&source, parent).to_string_lossy()))
+    let relative = pathdiff(&source, parent);
+    let url = relative
+        .iter()
+        .map(|part| part.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+    Some(url_path(&url))
 }
 fn js_safe(v: &J) -> Result<String> {
     Ok(serde_json::to_string(v)?.replace('<', "\\u003c"))

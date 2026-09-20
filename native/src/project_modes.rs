@@ -179,7 +179,7 @@ impl Project {
             if let Some(path) = field.strip_prefix(b"worktree ") {
                 let path = PathBuf::from(string(path.to_vec())?);
                 if path.is_dir() {
-                    paths.push(path);
+                    paths.push(resolved(&path)?);
                 }
             }
         }
