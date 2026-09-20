@@ -29,6 +29,25 @@ def main() -> None:
     from scripts import history_transaction as T
     from scripts.pending_grounding import _encode, identity, json_bytes
 
+    # Transaction member names are portable POSIX paths. Python 1.8's layout
+    # helper emits host separators on Windows even for the synthetic '/' root
+    # used by its detached validator. Adapt only that pure layout observation;
+    # group entries still use the real host's Path.resolve and all validation,
+    # receipts, blobs and hashes come from the pinned Python implementation.
+    layout_adapter = None
+    if sys.platform == "win32":
+        from scripts import provenance
+        original_layout = provenance.layout
+
+        def portable_layout(path):
+            return {
+                key: value.replace(chr(92), "/") if isinstance(value, str) else value
+                for key, value in original_layout(path).items()
+            }
+
+        provenance.layout = portable_layout
+        layout_adapter = "synthetic-posix-layout-separators/v1"
+
     source = json.loads(args.source_transaction_fixture.read_text(encoding="utf-8"))
     cases = []
 
@@ -111,8 +130,14 @@ def main() -> None:
         keep(f"different-{field}", rawdata(data))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    reference = args.source_transaction_fixture.with_name("history-group.json")
+    if reference.is_file():
+        old = json.loads(reference.read_text(encoding="utf-8"))["cases"]
+        categories = lambda values: {case["name"]: ("output" in case, case.get("error")) for case in values}
+        if categories(old) != categories(cases):
+            raise RuntimeError("platform group oracle changed the source cases or refusal categories")
     args.output.write_text(
-        json.dumps({"oracle": args.oracle_root.name, "cases": cases}, indent=2) + "\n",
+        json.dumps({"oracle": args.oracle_root.name, "layout_adapter": layout_adapter, "cases": cases}, indent=2) + "\n",
         encoding="utf-8",
     )
     print(f"group cases {len(cases)}")
