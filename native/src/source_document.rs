@@ -119,7 +119,7 @@ fn validate_structure(value: &S) -> Result<()> {
     }
     Ok(())
 }
-fn merge(
+pub(crate) fn merge(
     target: &mut S,
     incoming: &S,
     path: &Path,
