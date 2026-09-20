@@ -133,7 +133,7 @@ fn ordinary_report_persists_declared_scope_in_python_order() {
         fs::read_to_string(entry).unwrap(),
         format!(
             "meta:\n  updated: 2026-09-20\nsources:\n  s.ingest_{event}:\n    name: \"Captured report\"\n    file: \"{}\"\n    read: \"2026-09-20\"\n    recorded_for: \"Update p.price from this captured report.\"\n  s.old:\n    url: https://example.test/old\n    read: 2026-09-01\nknown:\n  p.price:\n    v: 12\n    from: s.ingest_{event}\n    of: \"2026-09-20\"\n    at: \"entire captured report\"\n    scope: {{environment: example, kind: feature}}\njudgments:\n  d.price:\n    rests_on: [p.price]\n    verdict: price is acceptable\n    wrong_if: p.price > 11\n    seen: {{p.price: 10}}\n",
-            source_file.display()
+            source_file.display().to_string().replace('\\', "\\\\")
         )
     );
 }
@@ -176,7 +176,7 @@ fn captured_source_at_requires_an_explicit_cited_source() {
             fs::read_to_string(&entry).unwrap(),
             format!(
                 "meta:\n  updated: 2026-09-20\nsources:\n  s.ingest_{event}:\n    name: \"Captured report\"\n    file: \"{}\"\n    read: \"2026-09-20\"\n    recorded_for: \"Update p.price from this captured report.\"\n{source_metadata}  s.old:\n    url: https://example.test/old\n    read: 2026-09-01\nknown:\n  p.price:\n    v: 12\n    from: {target_source}\n    of: 2026-09-20\n    at: \"page 7\"\njudgments:\n  d.price:\n    rests_on: [p.price]\n    verdict: price is acceptable\n    wrong_if: p.price > 11\n    seen: {{p.price: 10}}\n",
-                source_file.display()
+                source_file.display().to_string().replace('\\', "\\\\")
             ),
             "{event_id}"
         );
@@ -249,7 +249,7 @@ fn advanced_cli_routes_project_private_and_local_reports_and_replays_success() {
                 after,
                 format!(
                     "meta:\n  updated: 2026-09-20\nsources:\n  s.ingest_{event}:\n    name: \"Captured report\"\n    file: \"{}\"\n    read: \"2026-09-20\"\n    recorded_for: \"Update p.price from this captured report.\"\n  s.old:\n    url: https://example.test/old\n    read: 2026-09-01\nknown:\n  p.price:\n    v: 12\n    from: s.ingest_{event}\n    of: \"2026-09-20\"\n    at: \"entire captured report\"\n    scope: {{environment: example, kind: feature}}\njudgments:\n  d.price:\n    rests_on: [p.price]\n    verdict: price is acceptable\n    wrong_if: p.price > 11\n    seen: {{p.price: 10}}\n",
-                    source_file.display()
+                    source_file.display().to_string().replace('\\', "\\\\")
                 )
             );
         } else {
