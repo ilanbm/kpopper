@@ -8,6 +8,17 @@ pub struct Options {
     pub record: Option<PathBuf>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct Output {
+    pub text: String,
+    pub stderr: String,
+    pub code: i32,
+}
+
+fn output(lines: Vec<String>, code: i32) -> Output {
+    Output { text: lines.join("\n") + "\n", stderr: String::new(), code }
+}
+
 fn recipe_path(record: &Path) -> PathBuf { record.parent().unwrap_or(Path::new(".")).join(".kpopper/measure.yaml") }
 fn scalar(v: &V) -> String { crate::source_text::ordinary_python_str(v) }
 fn resolve(exe: &str, root: &Path) -> Option<PathBuf> {
@@ -30,7 +41,7 @@ fn allowlist(path: &Path) -> Result<BTreeMap<String, Vec<String>>> {
     let map = map(&value)?;
     let mut out = BTreeMap::new();
     for (name, argv) in map {
-        require(regex::Regex::new(r"^[A-Za-z][A-Za-z0-9_-]*$").unwrap().is_match(name), &format!("refused - {} is not a recipe name", name))?;
+        require(regex::Regex::new(r"^[A-Za-z][A-Za-z0-9_-]*$").unwrap().is_match(name), &format!("refused - .kpopper/measure.yaml:\n  '{name}' is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else"))?;
         let values = list(argv)?.iter().map(|v| text(v).map(str::to_owned)).collect::<Result<Vec<_>>>()?;
         require(!values.is_empty() && values.iter().all(|v| !v.is_empty() && !v.contains('\0')), &format!("refused - {name}: a recipe is a non-empty list of non-empty strings - the executable and its arguments - never a line for a shell"))?;
         out.insert(name.clone(), values);
@@ -70,15 +81,15 @@ fn parse_reading(out: &str, recorded: &V) -> Result<V> {
     let line = lines[0];
     match recorded {
         V::Bool(_) => match line { "true" => Ok(V::Bool(true)), "false" => Ok(V::Bool(false)), _ => Err(Error(format!("printed {line:?} where the record holds true or false"))) },
-        V::Integer(_) => line.parse::<i64>().map(|n| V::Integer(crate::value::Integer::new(&n.to_string()).unwrap())).map_err(|_| Error(format!("printed {line:?} where the record holds a number"))),
-        V::Float(_) => line.parse::<f64>().map_err(|_| Error(format!("printed {line:?} where the record holds a number"))).and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float)),
+        V::Integer(_) => line.parse::<i64>().map(|n| V::Integer(crate::value::Integer::new(&n.to_string()).unwrap())).map_err(|_| Error(format!("printed '{}' where the record holds a number", line.replace('\'', "\\'")))),
+        V::Float(_) => line.parse::<f64>().map_err(|_| Error(format!("printed '{}' where the record holds a number", line.replace('\'', "\\'")))).and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float)),
         _ => Ok(V::Text(line.into())),
     }
 }
 fn agrees(a: &V, b: &V) -> bool {
     match (a,b) { (V::Integer(x), V::Integer(y)) => x.as_str() == y.as_str(), (V::Float(x), V::Float(y)) => x.get() == y.get(), (V::Integer(x), V::Float(y)) => x.as_str().parse::<f64>().ok() == Some(y.get()), (V::Float(x), V::Integer(y)) => Some(x.get()) == y.as_str().parse::<f64>().ok(), _ => a == b }
 }
-pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<String> {
+pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     let record = options.record.clone().unwrap_or_else(|| cwd.join("GROUNDING.yaml"));
     let runtime = public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None)?;
     let capture = source_capture::capture_source_with_runtime(std::slice::from_ref(&record), cwd, if frozen { ReadMode::Frozen } else { ReadMode::Live }, None, runtime.as_ref())?;
@@ -92,8 +103,18 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<String> {
             }
         }
     }
-    let recipes = allowlist(&recipe_path(&record))?;
-    if named.is_empty() { return Ok("no measures beside the record - nothing to re-measure\n".into()); }
+    let recipes = match allowlist(&recipe_path(&record)) {
+        Ok(recipes) => recipes,
+        Err(error) => return Ok(Output { text: String::new(), stderr: format!("{error}\n"), code: 1 }),
+    };
+    if named.is_empty() {
+        let lines = if recipes.is_empty() {
+            vec!["no measures beside the record - nothing to re-measure".into()]
+        } else {
+            vec![format!(".kpopper/measure.yaml holds {} recipe{}, and no entry names one - nothing to re-measure", recipes.len(), if recipes.len() == 1 { "" } else { "s" })]
+        };
+        return Ok(output(lines, 0));
+    }
     let root = record.parent().unwrap_or(cwd);
     let cited = named.keys().cloned().collect::<Vec<_>>();
     for name in &cited { require(recipes.contains_key(name), &format!("refused - the record names recipe .kpopper/measure.yaml does not hold: {name} - a measurement nothing takes is a hole, and a falsifier reading it tests nothing"))?; }
@@ -101,16 +122,25 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<String> {
     let mut out = vec![format!("{} recipe{} named by {} entr{}, from .kpopper/measure.yaml, run from {}:", cited.len(), if cited.len()==1{""}else{"s"}, entries, if entries==1{"y"}else{"ies"}, root.display())];
     for name in &cited { let ids = &named[name]; let argv = &recipes[name]; let exe = resolve(&argv[0], root).map(|p| p.display().to_string()).unwrap_or_else(|| format!("{} (not found)", argv[0])); let args = argv[1..].iter().map(|v| shell_quote(v)).collect::<Vec<_>>().join(" "); out.push(format!("  {} <- {}: {} {}", ids.join(", "), name, exe, args)); }
     for name in recipes.keys().filter(|name| !named.contains_key(name.as_str())) { out.push(format!("  named by no entry, never run: {name}")); }
-    if !options.run { out.extend(["".into(), "nothing ran - add --run to measure this tree".into()]); return Ok(out.join("\n")+"\n"); }
+    if !options.run { out.extend(["".into(), "nothing ran - add --run to measure this tree".into()]); return Ok(output(out, 0)); }
     out.push("".into());
     out.push(format!("measured on {} (UTC): {} entr{} by {} recipe{}", utc_day(), entries, if entries==1{"y"}else{"ies"}, cited.len(), if cited.len()==1{""}else{"s"}));
     let mut changed = false;
-    let mut failed = false;
+    let mut failed = 0usize;
     for (name, ids) in named {
-        let (text, _) = match run_recipe(recipes.get(&name).unwrap(), root) { Ok(v) => v, Err(e) => { failed = true; out.push(format!("  FAIL {name} ({}): {}", ids.join(", "), e)); continue; } };
-        for id in ids { let body = collections.values().find_map(|m|m.get(&id)).unwrap(); let body=map(body)?; let field=body.get("v").or_else(||body.get("quoted")).ok_or_else(||Error(format!("{id} has no stored reading")))?; match parse_reading(&text, field) { Ok(measured) if agrees(field, &measured) => out.push(format!("  {id}: {} - as recorded ({name})", scalar(field))), Ok(measured) => { changed=true; out.push(format!("  {id}: {} -> {} measured by {name}", scalar(field), scalar(&measured))); }, Err(e) => { failed=true; out.push(format!("  FAIL {name} ({id}): {}", e)); } } }
+        let (text, _) = match run_recipe(recipes.get(&name).unwrap(), root) { Ok(v) => v, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({}): {}", ids.join(", "), e)); continue; } };
+        for id in ids { let body = collections.values().find_map(|m|m.get(&id)).unwrap(); let body=map(body)?; let field=body.get("v").or_else(||body.get("quoted")).ok_or_else(||Error(format!("{id} has no stored reading")))?; match parse_reading(&text, field) { Ok(measured) if agrees(field, &measured) => out.push(format!("  {id}: {} - as recorded ({name})", scalar(field))), Ok(measured) => { changed=true; out.push(format!("  {id}: {} -> {} measured by {name}", scalar(field), scalar(&measured))); }, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({id}): {}", e)); } } }
     }
-    out.push("".into()); out.push(if failed { "not clean: a hole - a recipe failed or printed an invalid reading".into() } else if changed { "the tree reads entries differently, none across a line - refresh them".into() } else { "the record holds what this tree measures".into() }); Ok(out.join("\n")+"\n")
+    out.push("".into());
+    let code = if failed != 0 || changed { 1 } else { 0 };
+    out.push(if failed != 0 {
+        format!("not clean: a hole - {failed} recipe{} failed, and a measurement nothing takes is a hole", if failed == 1 { "" } else { "s" })
+    } else if changed {
+        "the tree reads entries differently, none across a line - refresh them".into()
+    } else {
+        "the record holds what this tree measures".into()
+    });
+    Ok(output(out, code))
 }
 fn shell_quote(value: &str) -> String {
     if value.chars().all(|c| c.is_ascii_alphanumeric() || "._/-".contains(c)) { value.into() } else { format!("'{}'", value.replace('\'', "'\\''")) }
