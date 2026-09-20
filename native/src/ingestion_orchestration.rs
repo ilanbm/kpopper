@@ -207,26 +207,22 @@ fn lease_active(value: Option<&J>) -> bool {
 
 #[cfg(windows)]
 fn windows_process_alive(pid: u32) -> Option<bool> {
-    use std::ffi::c_void;
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
-        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
-        fn CloseHandle(handle: *mut c_void) -> i32;
-        fn GetLastError() -> u32;
+    // Keep the crate's safe-Rust boundary and avoid relying on PATH. Query only
+    // this PID through the standard Windows utility, under a bounded deadline.
+    let executable = PathBuf::from(std::env::var_os("SystemRoot")?)
+        .join("System32").join("tasklist.exe");
+    let mut command = Command::new(executable);
+    command.args(["/FO", "CSV", "/NH", "/FI", &format!("PID eq {pid}")]);
+    let output = crate::reasoning_runtime::run_command_capture(
+        &mut command, vec![], Duration::from_secs(2), 64 * 1024,
+    ).ok()?;
+    if !output.status.success() {
+        return None;
     }
-    // SYNCHRONIZE permits a zero-time process wait without inspecting its memory.
-    let handle = unsafe { OpenProcess(0x0010_0000, 0, pid) };
-    if handle.is_null() {
-        return (unsafe { GetLastError() } == 87).then_some(false);
-    }
-    let status = unsafe { WaitForSingleObject(handle, 0) };
-    unsafe { CloseHandle(handle) };
-    match status {
-        0 => Some(false),
-        258 => Some(true),
-        _ => None,
-    }
+    let row = regex::Regex::new(r#"^"(?:[^"]|"")*","([0-9]+)","#).ok()?;
+    Some(String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        row.captures(line).and_then(|row| row[1].parse::<u32>().ok()) == Some(pid)
+    }))
 }
 
 fn record_writer_journal(record: &Path) -> bool {
