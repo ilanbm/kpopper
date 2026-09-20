@@ -79,7 +79,6 @@ pub mod public_annotated_document;
 pub mod public_assessment;
 pub mod public_authoring;
 pub mod public_checked_session;
-pub mod public_config;
 pub mod public_consolidation;
 pub mod public_export;
 pub mod public_followups;
