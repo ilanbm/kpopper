@@ -61,6 +61,34 @@ fn image(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     visit(root, root, &mut out);
     out
 }
+fn canonicalize_commit_objects(mut body: String) -> String {
+    let Some(start) = body.find("objects:\n") else {
+        return body;
+    };
+    let rows = start + "objects:\n".len();
+    let Some(relative_end) = body[rows..].find("\noperation:") else {
+        return body;
+    };
+    let end = rows + relative_end + 1;
+    let mut blocks = body[rows..end]
+        .split("- id: ")
+        .skip(1)
+        .map(|value| format!("- id: {value}"))
+        .collect::<Vec<_>>();
+    blocks.sort();
+    body.replace_range(rows..end, &blocks.concat());
+    body
+}
+
+#[test]
+fn generated_object_row_normalization_is_order_independent() {
+    let a = "objects:\n- id: $OBJECT-2\n  subject: p.b\n- id: kept\n  subject: p.a\n- id: $OBJECT-1\n  subject: p.c\noperation: $OP\n";
+    let b = "objects:\n- id: $OBJECT-1\n  subject: p.c\n- id: $OBJECT-2\n  subject: p.b\n- id: kept\n  subject: p.a\noperation: $OP\n";
+    assert_eq!(
+        canonicalize_commit_objects(a.into()),
+        canonicalize_commit_objects(b.into())
+    );
+}
 
 #[test]
 fn ordinary_branch_preview_and_fold_keep_source_ref_and_write_only_destination() {
@@ -355,18 +383,7 @@ print(json.dumps({'source':source,'head':head}))
                         "$GENERATED".into()
                     }
                 });
-                let mut body = body.into_owned();
-                if let Some((prefix, rest)) = body.split_once("objects:\n")
-                    && let Some((objects, suffix)) = rest.split_once("operation:\n")
-                {
-                    let mut blocks = objects
-                        .split("- id: ")
-                        .skip(1)
-                        .map(|v| format!("- id: {v}"))
-                        .collect::<Vec<_>>();
-                    blocks.sort();
-                    body = format!("{prefix}objects:\n{}operation:\n{suffix}", blocks.concat());
-                }
+                let body = canonicalize_commit_objects(body.into_owned());
                 (
                     PathBuf::from(
                         path.to_string_lossy()
