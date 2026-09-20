@@ -284,43 +284,6 @@ fn watch_requests_are_injected_and_fail_without_blocking_daily_claim() {
 }
 
 #[test]
-fn configured_watch_is_explicitly_unavailable_until_native_processor_exists() {
-    let (_temp, workspace, state) = fixture();
-    assert!(
-        std::process::Command::new("git")
-            .arg("-C")
-            .arg(&workspace)
-            .args(["init", "--quiet"])
-            .status()
-            .unwrap()
-            .success()
-    );
-    let now = Utc.with_ymd_and_hms(2026, 9, 11, 22, 0, 0).unwrap();
-    // Setup belongs to the Git identity for this independent disposable fixture.
-    let store = Store::at_in_state(&workspace, &state, now).unwrap();
-    store.setup(None, "UTC", None, true).unwrap();
-    let folder = workspace.join(".git/kpopper-watch");
-    fs::create_dir_all(&folder).unwrap();
-    fs::write(
-        folder.join("fixture.json"),
-        br#"{"entry":"PROVENANCE.yaml","enabled":false}"#,
-    )
-    .unwrap();
-    let disabled = followup_daily::start(&store, "owner").unwrap();
-    assert!(disabled["packet"].get("watch").is_none());
-    followup_daily::finish(&store, disabled["claim"]["token"].as_str().unwrap(), "Done").unwrap();
-    fs::write(
-        folder.join("fixture.json"),
-        br#"{"entry":"PROVENANCE.yaml","enabled":true}"#,
-    )
-    .unwrap();
-    let tomorrow = Store::at_in_state(&workspace, &state, now + Duration::days(1)).unwrap();
-    let enabled = followup_daily::start(&tomorrow, "owner").unwrap();
-    assert_eq!(enabled["packet"]["watch"]["state"], "unavailable");
-    assert!(!state.join("kpopper/watch").exists());
-}
-
-#[test]
 fn one_owner_reserves_one_installation_under_a_race() {
     let (_temp, workspace, state) = fixture();
     let now = Utc.with_ymd_and_hms(2026, 9, 11, 22, 0, 0).unwrap();

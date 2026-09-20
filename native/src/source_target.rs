@@ -85,7 +85,7 @@ fn byte_value(raw: &[u8]) -> V {
         ("sha256", s(&sha256(raw))),
     ])
 }
-fn history_evidence(capture: &crate::history_capture::Capture) -> Result<V> {
+pub(crate) fn history_evidence(capture: &crate::history_capture::Capture) -> Result<V> {
     let mut files = Files::from([
         ("entry.yaml".into(), capture.entry_bytes.clone()),
         ("authority.yaml".into(), capture.authority_bytes.clone()),

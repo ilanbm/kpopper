@@ -610,83 +610,9 @@ pub fn install_reconcile(store: &Store, token: &str, report: Value) -> Result<Va
         data["daily"]["installation"]["state"]=json!("reconciled");data["daily"]["installation"]["reconciliation"]=report;data["daily"]["installation"]["finished_at"]=json!(stamp(store.now()));Ok(json!({"state":"reconciled","action":"inspect_again","requested_options":{"time":job["time"],"resume":job["resume"],"timezone":job["workspace_config"]["timezone"]},"instruction":"The previous host operation is resolved. Invoke install again with the user's requested options and inspect fresh host state before applying anything."}))})
 }
 
-// The complete watch processor is a separate adapter dependency. Detect its actual
-// configuration and report that boundary; do not create requests nobody can process.
+// Watch construction can fail outside a Git project; the Python adapter treats
+// that as unconfigured. Once constructed, request failures become packet evidence.
 fn default_watch_request(workspace: &Path) -> Result<Option<Value>> {
-    use std::process::Command;
-    let git = |arg: &str| -> Option<std::path::PathBuf> {
-        let out = Command::new("git")
-            .arg("-C")
-            .arg(workspace)
-            .args(["rev-parse", arg])
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        let path = std::path::PathBuf::from(String::from_utf8(out.stdout).ok()?.trim());
-        workspace.join(path).canonicalize().ok()
-    };
-    let Some(tree) = git("--show-toplevel") else {
-        return Ok(None);
-    };
-    let Some(common) = git("--git-common-dir") else {
-        return Ok(None);
-    };
-    let found = crate::public_workspace::locate(workspace, crate::source_capture::ReadMode::Live)?;
-    let Ok(entry) = found.record.strip_prefix(&tree) else {
-        return Ok(None);
-    };
-    let mut entries = vec![entry.to_owned()];
-    if entry
-        .file_name()
-        .is_some_and(|name| name == "GROUNDING.yaml" || name == "PROVENANCE.yaml")
-    {
-        for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
-            let alternate = entry.with_file_name(name);
-            if !entries.contains(&alternate) {
-                entries.push(alternate);
-            }
-        }
-    }
-    let folder = common.join("kpopper-watch");
-    if !folder.is_dir() {
-        return Ok(None);
-    }
-    // The complete watch adapter will own its PyYAML filename identity. Until
-    // then inspect the configuration's own entry, including supported renames.
-    let mut configured = Vec::new();
-    for item in fs::read_dir(folder)? {
-        let path = item?.path();
-        if path.extension().is_none_or(|extension| extension != "json") {
-            continue;
-        }
-        let config: Value = serde_json::from_slice(&fs::read(&path)?)?;
-        if config
-            .get("entry")
-            .and_then(Value::as_str)
-            .is_some_and(|entry| {
-                entries
-                    .iter()
-                    .any(|candidate| candidate == Path::new(entry))
-            })
-        {
-            configured.push(path);
-        }
-    }
-    if configured.len() > 1 {
-        return Err(error(
-            "multiple watch configurations exist for supported record names; reconcile their configuration and retained state before using watch",
-        ));
-    }
-    let Some(path) = configured.first() else {
-        return Ok(None);
-    };
-    let config: Value = serde_json::from_slice(&fs::read(path)?)?;
-    if config.get("enabled").and_then(Value::as_bool) == Some(true) {
-        return Err(error(
-            "Native watch processing is unavailable; the configured compatibility request was not queued",
-        ));
-    }
-    Ok(None)
+    let Ok(watch) = crate::watch_store::Watch::open(workspace) else { return Ok(None); };
+    if watch.enabled()? { watch.request_all().map(Some) } else { Ok(None) }
 }
