@@ -1,4 +1,6 @@
-//! Public named-hypothesis consolidation over active native history.
+//! Public named-hypothesis consolidation over ordinary records and active history.
+#[path = "ordinary_consolidation.rs"]
+mod ordinary;
 use crate::{
     Result, direct_history,
     history_authoring::{empty, obj, s},
@@ -226,8 +228,96 @@ fn privacy_guard(
     Ok(())
 }
 
+/// A supplied ordinary proposal; previewing it never reads or writes source files.
+pub struct PreviewHypothesis {
+    pub name: String,
+    pub document: V,
+    pub head: V,
+}
+pub struct PreviewRequest<'a> {
+    pub document: &'a V,
+    pub hypotheses: &'a Map,
+    pub proposals: &'a [PreviewHypothesis],
+    pub context: Option<&'a V>,
+    pub as_of: Option<&'a str>,
+    pub runtime: Option<&'a Runtime>,
+}
+pub struct Preview {
+    pub report: String,
+    /// The ordinary dry-run status; movement alone does not make a dry-run red.
+    pub exit_code: i32,
+    /// Includes movement and unnamed dropped dependencies that prevent a fold.
+    pub blocked: bool,
+    pub candidate_document: Option<V>,
+}
+pub fn preview(request: &PreviewRequest<'_>) -> Result<Preview> {
+    ordinary::preview(request)
+}
+
+pub struct CommandOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub code: i32,
+}
+pub fn dispatch(options: &Options, cwd: &Path) -> CommandOutput {
+    match dispatch_with_runtime(options, cwd, None, &mut |_| Ok(())) {
+        Ok(output) => output,
+        Err(error) => CommandOutput {
+            stdout: String::new(),
+            stderr: format!("{error}\n"),
+            code: 1,
+        },
+    }
+}
+fn active_history(entry: &Path) -> Result<bool> {
+    Ok(crate::legacy_authoring::authority_route(entry)?
+        == crate::legacy_authoring::AuthorityRoute::History)
+}
+fn dispatch_with_runtime(
+    options: &Options,
+    cwd: &Path,
+    runtime: Option<&Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<CommandOutput> {
+    let mut validation = options.clone();
+    if validation.refute.is_some() {
+        validation.take.clear();
+        validation.drops.clear();
+    }
+    validate(&validation)?;
+    let cwd = cwd.canonicalize()?;
+    let paths = options
+        .record
+        .as_ref()
+        .map(|p| Ok(vec![cwd.join(p)]))
+        .unwrap_or_else(|| public_workspace::records(&cwd))?;
+    let route = WriteRoute::capture(&paths, &cwd)?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
+    let lock = F::DirectoryGuard::acquire(
+        route.paths()[0]
+            .parent()
+            .ok_or_else(|| error("invalid_path"))?,
+        true,
+    )?;
+    if !active_history(&route.paths()[0])? {
+        drops(&options.drops)?;
+        return ordinary::run(options, &route, runtime, probe);
+    }
+    drop(lock);
+    drop(route);
+    run_with_runtime(options, &cwd, runtime, probe).map(|stdout| CommandOutput {
+        stdout,
+        stderr: String::new(),
+        code: 0,
+    })
+}
 pub fn run(options: &Options, cwd: &Path) -> Result<String> {
-    run_with_runtime(options, cwd, None, &mut |_| Ok(()))
+    let output = dispatch_with_runtime(options, cwd, None, &mut |_| Ok(()))?;
+    if output.code == 0 {
+        Ok(output.stdout)
+    } else {
+        Err(error(output.stderr.trim_end()))
+    }
 }
 
 fn run_with_runtime(
@@ -558,3 +648,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ordinary_consolidation_tests.rs"]
+mod ordinary_tests;
