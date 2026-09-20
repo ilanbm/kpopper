@@ -72,6 +72,8 @@ enum Command {
     Pending(kpop_native::public_pending::Options),
     /// Manage durable local followups.
     Followups(kpop_native::public_followups::Args),
+    /// Check branch compatibility and coordinate local observation delivery.
+    Watch(kpop_native::public_watch::Args),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -257,6 +259,14 @@ fn session() -> Result<()> {
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {
+    if let Command::Watch(options) = &args.command {
+        let root = args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)?;
+        return kpop_native::public_watch::run(options, &root);
+    }
     if let Command::Followups(options) = &args.command {
         let root = args
             .workspace
@@ -408,6 +418,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Pending(_)
         | Command::Expressions(_)
         | Command::Followups(_)
+        | Command::Watch(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
