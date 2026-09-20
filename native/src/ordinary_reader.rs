@@ -899,12 +899,14 @@ impl<'a> Reader<'a> {
                         a.get("into").and_then(|v| text(v).ok()),
                     )
                 })?;
-            map_mut(
-                map_mut(&mut doc)?
-                    .entry(collection)
-                    .or_insert_with(|| V::Map(Map::new())),
-            )?
-            .insert(id.into(), body.clone());
+            let members = map_mut(&mut doc)?
+                .entry(collection)
+                .or_insert_with(|| V::Map(Map::new()));
+            // A bare collection header is YAML null until its first entry.
+            if *members == V::Null {
+                *members = V::Map(Map::new());
+            }
+            map_mut(members)?.insert(id.into(), body.clone());
         } else if kind == "set" {
             let (collection, body) = existing
                 .get(id)

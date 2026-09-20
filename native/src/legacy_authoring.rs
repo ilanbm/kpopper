@@ -1131,6 +1131,13 @@ fn verify_untouched_document(before: &V, after: &V, collection: &str, id: &str) 
             meta.remove("updated");
         }
     }
+    if map(&expected)?.get(collection) == Some(&V::Null)
+        && map(&actual)?
+            .get(collection)
+            .is_some_and(|v| matches!(v, V::Map(m) if m.is_empty()))
+    {
+        map_mut(&mut expected)?.insert(collection.into(), V::Map(Map::new()));
+    }
     // An add may open its collection, and every write may create meta.updated.
     for key in [collection, "meta"] {
         if !map(before)?.contains_key(key)
