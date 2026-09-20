@@ -1,4 +1,5 @@
 use kpop_native::public_consolidation::{self, Options};
+use serde_json::Value as J;
 use std::{
     collections::BTreeMap,
     fs,
@@ -198,4 +199,185 @@ fn ordinary_public_cli_matches_python_complete_output_and_files() {
     assert_eq!(actual.stdout, expected.stdout, "stdout");
     assert_eq!(actual.stderr, expected.stderr, "stderr");
     assert_eq!(image(&native), image(&python), "complete after image");
+}
+
+#[test]
+#[ignore = "requires immutable Python 1.8 oracle"]
+fn history_public_cli_preview_and_adoption_match_complete_outputs_and_images() {
+    let oracle_python =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle Python"));
+    let oracle_root =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let setup = r#"
+from pathlib import Path
+import json,sys
+from scripts import history_migration as M, history_authoring as A, history_store as H, project_modes as G
+b=Path(sys.argv[1]); l=b/'legacy'; l.mkdir(); e=l/'GROUNDING.yaml'; e.write_text('known:\n  p.value: {v: 1}\n')
+r=b/'source'; M.prepare(e,operation='import',recorded_at='2026-09-17',record_id='branch-record').publish(r)
+G.git(r,'init','-b','main'); G.git(r,'config','user.name','Fixture'); G.git(r,'config','user.email','fixture@example.invalid'); G.git(r,'add','.'); G.git(r,'-c','commit.gpgsign=false','commit','-m','source')
+source=G.git(r,'rev-parse','HEAD').stdout.decode().strip(); head=H.Store(r/'GROUNDING.yaml').state()['subjects']['p.value']['head']
+A.commit(r/'GROUNDING.yaml',A.prepare(r/'GROUNDING.yaml',{'kind':'set','id':'p.value','value':3}),verify=lambda d:None)
+G.git(r,'add','.'); G.git(r,'-c','commit.gpgsign=false','commit','-m','current')
+print(json.dumps({'source':source,'head':head}))
+"#;
+    let setup = Command::new(&oracle_python)
+        .args(["-c", setup])
+        .arg(&base)
+        .env("PYTHONPATH", &oracle_root)
+        .output()
+        .unwrap();
+    assert!(
+        setup.status.success(),
+        "{}",
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    let ids: J = serde_json::from_slice(&setup.stdout).unwrap();
+    let source = ids["source"].as_str().unwrap();
+    let head = ids["head"].as_str().unwrap();
+    let native = base.join("native");
+    let python = base.join("python");
+    for target in [&native, &python] {
+        let out = Command::new("git")
+            .args(["clone", "-q", "--no-hardlinks"])
+            .arg(base.join("source"))
+            .arg(target)
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+    }
+    let call = |program: &Path, oracle: bool, root: &Path, args: &[&str]| {
+        let mut c = Command::new(program);
+        if oracle {
+            c.arg(oracle_root.join("scripts/cli.py"));
+        }
+        c.current_dir(root)
+            .args(args)
+            .env("KPOPPER_SESSION_DISABLE", "1")
+            .env(
+                "XDG_STATE_HOME",
+                base.join(if oracle {
+                    "python-state"
+                } else {
+                    "native-state"
+                }),
+            )
+            .output()
+            .unwrap()
+    };
+    let preview_args = ["consolidate", "--dry-run", "--from", source];
+    let a = call(
+        Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+        false,
+        &native,
+        &preview_args,
+    );
+    let p = call(&oracle_python, true, &python, &preview_args);
+    assert_eq!(
+        (a.status.code(), &a.stdout, &a.stderr),
+        (p.status.code(), &p.stdout, &p.stderr)
+    );
+    assert_eq!(image(&native), image(&python));
+    let baseline = image(&native);
+    let hex = regex::Regex::new(r"[0-9a-f]{64}").unwrap();
+    let baseline_ids = baseline
+        .values()
+        .flat_map(|raw| {
+            let text = String::from_utf8_lossy(raw);
+            hex.find_iter(&text)
+                .map(|m| m.as_str().to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let choose = format!("p.value={head}");
+    let args = [
+        "consolidate",
+        "--from",
+        source,
+        "--by",
+        "reviewer",
+        "--choose",
+        &choose,
+    ];
+    let a = call(
+        Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+        false,
+        &native,
+        &args,
+    );
+    let p = call(&oracle_python, true, &python, &args);
+    assert_eq!(
+        a.status.code(),
+        p.status.code(),
+        "{}{}",
+        String::from_utf8_lossy(&a.stdout),
+        String::from_utf8_lossy(&a.stderr)
+    );
+    fn operation(raw: &[u8]) -> String {
+        String::from_utf8_lossy(raw)
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("operation: "))
+            .unwrap()
+            .to_owned()
+    }
+    let ao = operation(&a.stdout);
+    let po = operation(&p.stdout);
+    let normalize = |raw: &[u8], op: &str| String::from_utf8_lossy(raw).replace(op, "$OP");
+    assert_eq!(normalize(&a.stdout, &ao), normalize(&p.stdout, &po));
+    assert_eq!(a.stderr, p.stderr);
+    let native_raw = image(&native);
+    let python_raw = image(&python);
+    let object_id =
+        |mine: &BTreeMap<PathBuf, Vec<u8>>, other: &BTreeMap<PathBuf, Vec<u8>>, op: &str| {
+            mine.keys()
+                .filter(|p| !other.contains_key(*p) && !p.to_string_lossy().contains(op))
+                .filter_map(|p| p.file_stem().and_then(|v| v.to_str()))
+                .find(|v| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
+                .unwrap()
+                .to_owned()
+        };
+    let aid = object_id(&native_raw, &python_raw, &ao);
+    let pid = object_id(&python_raw, &native_raw, &po);
+    let normalize_image = |files: BTreeMap<PathBuf, Vec<u8>>, op: &str, id: &str| {
+        let timestamp = regex::Regex::new(r"20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9:.+\-Z]+").unwrap();
+        let digest = regex::Regex::new(r"(committed_set_digest: )[0-9a-f]{64}").unwrap();
+        files
+            .into_iter()
+            .map(|(path, raw)| {
+                let body = normalize(&raw, op).replace(id, "$OBJECT");
+                let body = timestamp.replace_all(&body, "$TIME");
+                let body = digest.replace_all(&body, "${1}$SET");
+                let body = hex.replace_all(&body, |caps: &regex::Captures<'_>| {
+                    if baseline_ids.contains(&caps[0]) {
+                        caps[0].to_owned()
+                    } else {
+                        "$GENERATED".into()
+                    }
+                });
+                (
+                    PathBuf::from(
+                        path.to_string_lossy()
+                            .replace(op, "$OP")
+                            .replace(id, "$OBJECT"),
+                    ),
+                    body.as_bytes().to_vec(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+    let ai = normalize_image(native_raw, &ao, &aid);
+    let pi = normalize_image(python_raw, &po, &pid);
+    assert_eq!(ai.keys().collect::<Vec<_>>(), pi.keys().collect::<Vec<_>>());
+    for (path, left) in &ai {
+        let right = &pi[path];
+        assert_eq!(
+            left,
+            right,
+            "image differs: {}\nnative: {}\npython: {}",
+            path.display(),
+            String::from_utf8_lossy(left),
+            String::from_utf8_lossy(right)
+        );
+    }
 }

@@ -111,8 +111,10 @@ fn verify_report_route(
 }
 fn receipt_family(mutation: &PreparedMutation) -> Result<ReceiptFamily> {
     let data = mutation.to_data();
-    let before = map(&map(&map(&data)?["receipt"])?["before"])?;
-    Ok(if before.contains_key("history_branch_adoption") {
+    let receipt = map(&map(&data)?["receipt"])?;
+    let before = map(&receipt["before"])?;
+    let after = map(&receipt["after"])?;
+    Ok(if after.contains_key("history_branch_adoption") {
         ReceiptFamily::Branch
     } else if before.contains_key("identity_authoring") {
         ReceiptFamily::Identity
