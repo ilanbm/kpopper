@@ -26,6 +26,7 @@ const MAX_EVIDENCE_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) enum Outcome {
     Local(V),
     Handled(V),
+    HandledWithNotice(V, String),
 }
 
 fn s(value: &str) -> V {
@@ -88,6 +89,19 @@ fn today() -> String {
         .date_naive()
         .max(chrono::Local::now().date_naive())
         .to_string()
+}
+
+fn human_notice(output: &str, diagnostics: &[String]) -> String {
+    output
+        .lines()
+        .take_while(|line| {
+            !line.starts_with("add ")
+                && !line.starts_with("set ")
+                && !line.starts_with("review ")
+        })
+        .filter(|line| !line.trim().is_empty() && !diagnostics.iter().any(|item| item == line))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn preliminary(document: &V, action: &V) -> Result<V> {
@@ -408,7 +422,9 @@ pub(crate) fn route(
         .event_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
-    let (candidate, inventory, diagnostics, history_prepared) = if let Some(captured) = history {
+    let (candidate, inventory, diagnostics, notice, history_prepared) = if let Some(captured) =
+        history
+    {
         let store = crate::history_store::Store::new(&route.paths()[0])?;
         let mut runtime_document = document.clone();
         if let Some(meta) = map_mut(&mut runtime_document)?.get_mut("meta") {
@@ -441,6 +457,7 @@ pub(crate) fn route(
             document,
             initial_inventory,
             Vec::new(),
+            String::new(),
             Some((captured, mutation, recorded_at)),
         )
     } else {
@@ -450,25 +467,20 @@ pub(crate) fn route(
                 return Err(Error(output.trim().into()));
             }
             Preparation::Mutation(prepared) => {
-                let mut diagnostics = prepared.diagnostics;
-                diagnostics.extend(
-                    prepared
-                        .output
-                        .lines()
-                        .take_while(|line| {
-                            !line.starts_with("add ")
-                                && !line.starts_with("set ")
-                                && !line.starts_with("review ")
-                        })
-                        .filter(|line| !line.trim().is_empty())
-                        .map(str::to_owned),
-                );
+                let notice = human_notice(&prepared.output, &prepared.diagnostics);
+                let diagnostics = prepared.diagnostics;
                 let mut inventory = prepared.inventory;
                 for image in prepared.mutation.files() {
                     inventory.stage(&prepared.root.join(&image.path), image.after.clone())?;
                 }
                 let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
-                (document.source.projected(), inventory, diagnostics, None)
+                (
+                    document.source.projected(),
+                    inventory,
+                    diagnostics,
+                    notice,
+                    None,
+                )
             }
         }
     };
@@ -494,8 +506,11 @@ pub(crate) fn route(
             "private source locator needs explicit portable evidence reconciliation",
         )?));
     }
-    let (mut files, evidence_observations) =
-        evidence(&selection, options.evidence_root.as_deref())?;
+    let (mut files, mut evidence_observations) = if history_prepared.is_some() {
+        (Files::new(), BTreeMap::new())
+    } else {
+        evidence(&selection, options.evidence_root.as_deref())?
+    };
     let bundle = if let Some((captured, mutation, recorded_at)) = history_prepared {
         let disclosures = map(&action)?
             .get("disclosed_locators")
@@ -516,6 +531,17 @@ pub(crate) fn route(
             &mutation,
         )
         .map_err(|e| Error(format!("history contribution subset: {e}")))?;
+        let subset = crate::history_bundle::validate_artifact(
+            field(map(&artifact)?, "manifest")?,
+            field(map(&artifact)?, "revision")?,
+            &history_files,
+        )?;
+        let subset_document = crate::history_adapter::from_store_capture(&subset)?
+            .document()
+            .clone();
+        let captured_evidence = evidence(&subset_document, options.evidence_root.as_deref())?;
+        files = captured_evidence.0;
+        evidence_observations = captured_evidence.1;
         let wrapped = crate::history_contribution_prepare::wrap(&artifact, &history_files, &files)
             .map_err(|e| Error(format!("history contribution wrapper: {e}")))?;
         files = wrapped.1;
@@ -558,5 +584,26 @@ pub(crate) fn route(
             V::List(diagnostics.iter().map(|value| s(value)).collect()),
         );
     }
-    Ok(Outcome::Handled(receipt))
+    Ok(if notice.is_empty() {
+        Outcome::Handled(receipt)
+    } else {
+        Outcome::HandledWithNotice(receipt, format!("{notice}\n"))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::human_notice;
+
+    #[test]
+    fn notice_excludes_canonical_diagnostics() {
+        let diagnostic = "d.new.wrong_if: stored as a readable expression".to_owned();
+        let output = format!(
+            "nearest existing:\n  d.old: rests on p.base too - verdicts differ\n{diagnostic}\nadd d.new\n"
+        );
+        assert_eq!(
+            human_notice(&output, std::slice::from_ref(&diagnostic)),
+            "nearest existing:\n  d.old: rests on p.base too - verdicts differ"
+        );
+    }
 }

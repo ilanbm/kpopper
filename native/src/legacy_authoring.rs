@@ -1791,7 +1791,12 @@ fn prepare_with_inventory_mode(
                         .get(&collection)
                         .and_then(|members| members.get(&id))
                         .ok_or_else(|| error("scoped set candidate is incomplete"))?;
-                    let mut body = preserve_order(body, None);
+                    let prior = document
+                        .source
+                        .get(&collection)
+                        .and_then(|members| members.get(&id))
+                        .and_then(ordinary_template);
+                    let mut body = preserve_order(body, prior.as_ref());
                     if let Source::Map(fields) = &mut body
                         && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
                     {

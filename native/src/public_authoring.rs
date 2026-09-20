@@ -298,6 +298,12 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
                     crate::public_core_readers::json_value(&value)?
                 ));
             }
+            contribution_routing::Outcome::HandledWithNotice(value, notice) => {
+                return Ok(format!(
+                    "{notice}{}\n",
+                    crate::public_core_readers::json_value(&value)?
+                ));
+            }
             contribution_routing::Outcome::Local(action) => action,
         };
     let route = WriteRoute::capture(&original, &cwd)?;
