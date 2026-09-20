@@ -201,12 +201,13 @@ fn advanced_history_add_captures_a_version_three_contribution() {
     git(&root, &["config", "user.email", "fixture@example.test"]);
     success(run(&root, &["add", "p.base", "v=1"]));
     let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let args = [
+        "add", "p.history", "v=2", "--shareability", "project", "--scope", "external",
+        "--environment", "vendor", "--event-id", "history-authoring",
+    ];
     let receipt: Value = serde_json::from_str(&success(run(
         &root,
-        &[
-            "add", "p.history", "v=2", "--shareability", "project", "--scope", "external",
-            "--environment", "vendor", "--event-id", "history-authoring",
-        ],
+        &args,
     )))
     .unwrap();
     assert_eq!(receipt["state"], "captured");
@@ -215,6 +216,22 @@ fn advanced_history_add_captures_a_version_three_contribution() {
     let V::Map(manifest) = manifest else { panic!("manifest") };
     assert_eq!(manifest["version"], V::Integer(kpop_native::value::Integer::new("3").unwrap()));
     assert!(manifest.contains_key("history"));
+    let replay: Value = serde_json::from_str(&success(run(&root, &args))).unwrap();
+    assert_eq!(replay["replay"], true);
+    assert_eq!(replay["revision"], receipt["revision"]);
+
+    let set: Value = serde_json::from_str(&success(run(
+        &root,
+        &[
+            "set", "p.base", "1", "--shareability", "project", "--scope", "project",
+            "--environment", "workspace", "--event-id", "history-set",
+        ],
+    )))
+    .unwrap();
+    let set_manifest = pending_manifest(&root, set["revision"].as_str().unwrap());
+    let V::Map(set_manifest) = set_manifest else { panic!("manifest") };
+    assert_eq!(set_manifest["version"], V::Integer(kpop_native::value::Integer::new("3").unwrap()));
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
 }
 
 #[test]

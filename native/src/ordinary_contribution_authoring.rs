@@ -404,6 +404,10 @@ pub(crate) fn route(
         "a project contribution requires a complete add or set, not a review refresh",
     )?;
 
+    let event_id = options
+        .event_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
     let (candidate, inventory, diagnostics, history_prepared) = if let Some(captured) = history {
         let store = crate::history_store::Store::new(&route.paths()[0])?;
         let mut runtime_document = document.clone();
@@ -411,15 +415,16 @@ pub(crate) fn route(
             map_mut(meta)?.remove("history");
         }
         let runtime = crate::public_workspace::runtime_for_document(&runtime_document)?;
-        let now = chrono::Utc::now();
+        let day = options.as_of.clone().unwrap_or_else(today);
+        let recorded_at = format!("{day}T00:00:00Z");
         let mutation = crate::history_authoring::prepare(
             &store,
             &captured,
             &action,
             &crate::history_authoring::Options {
-                operation: crate::public_history::fresh_id("contribution")?,
-                recorded_at: now.to_rfc3339(),
-                recording_day: chrono::Local::now().date_naive().to_string(),
+                operation: format!("contribution-{event_id}"),
+                recorded_at: recorded_at.clone(),
+                recording_day: day,
                 by: V::Null,
                 strict: true,
                 paths: Scheme::Hashed,
@@ -432,7 +437,6 @@ pub(crate) fn route(
         let document = crate::history_adapter::from_store_capture(&candidate)?
             .document()
             .clone();
-        let recorded_at = now.to_rfc3339();
         (
             document,
             initial_inventory,
@@ -490,10 +494,6 @@ pub(crate) fn route(
             "private source locator needs explicit portable evidence reconciliation",
         )?));
     }
-    let event_id = options
-        .event_id
-        .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
     let (mut files, evidence_observations) =
         evidence(&selection, options.evidence_root.as_deref())?;
     let bundle = if let Some((captured, mutation, recorded_at)) = history_prepared {
