@@ -302,7 +302,7 @@ fn advanced_scoped_flow_set_matches_python_field_order() {
     );
     success(run_unbundled(
         &root,
-        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x"],
+        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
@@ -317,7 +317,7 @@ fn advanced_scoped_block_set_quotes_multiword_name_like_python() {
     );
     success(run_unbundled(
         &root,
-        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x"],
+        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
@@ -332,7 +332,7 @@ fn advanced_scoped_block_set_quotes_multiword_at_like_python() {
     );
     success(run_unbundled(
         &root,
-        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x"],
+        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
