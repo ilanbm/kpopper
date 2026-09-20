@@ -40,9 +40,30 @@ fn invoke(program: &Path, oracle_root: Option<&Path>, root: &Path, args: &[Strin
         .arg("config")
         .args(args)
         .env("XDG_STATE_HOME", root.join("state"))
+        .env("KPOPPER_NATIVE_CACHE", root.join("native-cache"))
         .env("KPOPPER_SESSION_DISABLE", "1")
         .output()
         .unwrap()
+}
+fn migrate_with_python(python: &Path, oracle_root: &Path, root: &Path) {
+    let output = Command::new(python)
+        .arg(oracle_root.join("scripts/cli.py"))
+        .arg("--workspace")
+        .arg(root.join("repo"))
+        .args(["expressions", "migrate", "--record"])
+        .arg(root.join("repo/GROUNDING.yaml"))
+        .args(["--profile", "core/v1", "--destination"])
+        .arg(root.join("migrated"))
+        .args(["--apply", "--json"])
+        .env("XDG_STATE_HOME", root.join("state"))
+        .env("KPOPPER_SESSION_DISABLE", "1")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "migration setup: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 fn normalized(raw: &[u8], root: &Path) -> Vec<u8> {
     String::from_utf8_lossy(raw)
@@ -120,6 +141,15 @@ fn images(root: &Path) -> BTreeMap<String, Vec<u8>> {
     let mut result = BTreeMap::new();
     visit(root, &root.join("state/kpopper/first-use"), &mut result);
     visit(root, &root.join("repo/.git/kpopper"), &mut result);
+    result
+}
+fn migration_images(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    let mut result = images(root);
+    visit(root, &root.join("migrated"), &mut result);
+    result.insert(
+        "repo/GROUNDING.yaml".into(),
+        fs::read(root.join("repo/GROUNDING.yaml")).unwrap(),
+    );
     result
 }
 
@@ -323,6 +353,195 @@ fn python_and_native_config_match_cli_and_durable_images() {
             images(&native_root),
             images(&oracle_fixture),
             "durable images repository={repository}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires immutable Python oracle and KPOPPER_NATIVE_RESOURCES"]
+fn python_core_migration_forward_and_rollback_match_native_config() {
+    assert!(
+        std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_some(),
+        "set KPOPPER_NATIVE_RESOURCES"
+    );
+    let python =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
+    let oracle_root =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native_temp = tempfile::tempdir().unwrap();
+    let oracle_temp = tempfile::tempdir().unwrap();
+    let native_root = native_temp.path().canonicalize().unwrap();
+    let oracle_fixture = oracle_temp.path().canonicalize().unwrap();
+    fixture(&native_root, true);
+    fixture(&oracle_fixture, true);
+    migrate_with_python(&python, &oracle_root, &native_root);
+    migrate_with_python(&python, &oracle_root, &oracle_fixture);
+    let receipt = "$ROOT/migrated/.kpopper-migration/receipt.json";
+    let migrated = "$ROOT/migrated/GROUNDING.yaml";
+    for args in [
+        vec![
+            "--mode",
+            "simple",
+            "--record",
+            migrated,
+            "--migration-receipt",
+            receipt,
+            "--check",
+            "--json",
+        ],
+        vec![
+            "--mode",
+            "simple",
+            "--record",
+            migrated,
+            "--migration-receipt",
+            receipt,
+            "--json",
+        ],
+        vec![
+            "--mode",
+            "advanced",
+            "--record",
+            "GROUNDING.yaml",
+            "--migration-receipt",
+            receipt,
+            "--rollback",
+            "--check",
+            "--json",
+        ],
+        vec![
+            "--mode",
+            "advanced",
+            "--record",
+            "GROUNDING.yaml",
+            "--migration-receipt",
+            receipt,
+            "--rollback",
+            "--json",
+        ],
+    ] {
+        compare(
+            &native,
+            &python,
+            &oracle_root,
+            &native_root,
+            &oracle_fixture,
+            &args,
+        );
+    }
+    assert_eq!(
+        migration_images(&native_root),
+        migration_images(&oracle_fixture)
+    );
+}
+
+#[test]
+#[ignore = "requires immutable Python oracle and KPOPPER_NATIVE_RESOURCES"]
+fn python_core_migration_tampering_refusals_match_native_config() {
+    assert!(std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_some());
+    let python =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
+    let oracle_root =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    for kind in ["receipt", "inventory", "source", "authorship"] {
+        let native_temp = tempfile::tempdir().unwrap();
+        let oracle_temp = tempfile::tempdir().unwrap();
+        let native_root = native_temp.path().canonicalize().unwrap();
+        let oracle_fixture = oracle_temp.path().canonicalize().unwrap();
+        fixture(&native_root, true);
+        fixture(&oracle_fixture, true);
+        migrate_with_python(&python, &oracle_root, &native_root);
+        migrate_with_python(&python, &oracle_root, &oracle_fixture);
+        let receipt = "$ROOT/migrated/.kpopper-migration/receipt.json";
+        let migrated = "$ROOT/migrated/GROUNDING.yaml";
+        if kind == "authorship" {
+            compare(
+                &native,
+                &python,
+                &oracle_root,
+                &native_root,
+                &oracle_fixture,
+                &[
+                    "--mode",
+                    "simple",
+                    "--record",
+                    migrated,
+                    "--migration-receipt",
+                    receipt,
+                    "--json",
+                ],
+            );
+        }
+        for root in [&native_root, &oracle_fixture] {
+            match kind {
+                "receipt" => {
+                    use std::io::Write;
+                    writeln!(
+                        fs::OpenOptions::new()
+                            .append(true)
+                            .open(root.join("migrated/.kpopper-migration/receipt.json"))
+                            .unwrap()
+                    )
+                    .unwrap();
+                }
+                "inventory" => fs::write(root.join("migrated/unexpected"), b"extra").unwrap(),
+                "source" => fs::write(
+                    root.join("repo/GROUNDING.yaml"),
+                    b"known: {changed: {v: true}}\n",
+                )
+                .unwrap(),
+                "authorship" => {
+                    use std::io::Write;
+                    writeln!(
+                        fs::OpenOptions::new()
+                            .append(true)
+                            .open(root.join("migrated/GROUNDING.yaml"))
+                            .unwrap(),
+                        "# further core authorship"
+                    )
+                    .unwrap();
+                }
+                _ => unreachable!(),
+            }
+        }
+        let args = if kind == "authorship" {
+            vec![
+                "--mode",
+                "advanced",
+                "--record",
+                "GROUNDING.yaml",
+                "--migration-receipt",
+                receipt,
+                "--rollback",
+                "--check",
+                "--json",
+            ]
+        } else {
+            vec![
+                "--mode",
+                "simple",
+                "--record",
+                migrated,
+                "--migration-receipt",
+                receipt,
+                "--check",
+                "--json",
+            ]
+        };
+        compare(
+            &native,
+            &python,
+            &oracle_root,
+            &native_root,
+            &oracle_fixture,
+            &args,
+        );
+        assert_eq!(
+            migration_images(&native_root),
+            migration_images(&oracle_fixture),
+            "tamper case {kind}"
         );
     }
 }

@@ -476,8 +476,21 @@ impl Plan {
         mode: ReadMode,
         runtime: Option<&Runtime>,
     ) -> Result<Self> {
+        Self::prepare_routed(record, cwd, mode, runtime, true)
+    }
+    fn prepare_routed(
+        record: &Path,
+        cwd: &Path,
+        mode: ReadMode,
+        runtime: Option<&Runtime>,
+        route: bool,
+    ) -> Result<Self> {
         let record = P::resolved(&cwd.join(record))?;
-        let record = P::write_paths(&[record], cwd)?[0].clone();
+        let record = if route {
+            P::write_paths(&[record], cwd)?[0].clone()
+        } else {
+            record
+        };
         let project = P::project_for(std::slice::from_ref(&record), cwd)?;
         let source =
             capture_source_with_runtime(std::slice::from_ref(&record), cwd, mode, None, runtime)?;
@@ -1041,6 +1054,192 @@ impl Plan {
         result["backup"] = json!(backup);
         Ok(result)
     }
+}
+
+/// Exact read-only proof used by project-mode configuration. It exposes only
+/// captured file images; callers cannot materialize or mutate a migration.
+pub(super) struct ConfigurationProof {
+    pub(super) snapshots: BTreeMap<PathBuf, Vec<u8>>,
+    pub(super) receipt_sha256: String,
+    pub(super) source_signature: String,
+}
+
+pub(super) fn validate_configuration_transition(
+    original: &Path,
+    candidate: &Path,
+    receipt: &Path,
+    rollback: bool,
+    cwd: &Path,
+    runtime: Option<&Runtime>,
+) -> Result<ConfigurationProof> {
+    let plan = Plan::prepare_routed(
+        original,
+        cwd,
+        if rollback {
+            ReadMode::Frozen
+        } else {
+            ReadMode::Live
+        },
+        runtime,
+        false,
+    )?;
+    require(
+        candidate
+            == candidate
+                .parent()
+                .ok_or_else(|| Error("invalid migration destination".into()))?
+                .join(&plan.mapping[&plan.record]),
+        "migration destination must be the complete mapped entry record",
+    )?;
+    let receipt_bytes = fs::read(receipt)?;
+    let expected_receipt = &plan.files[&format!("{ARTIFACTS}/receipt.json")];
+    if rollback {
+        let manifest_json: J = serde_json::from_slice(&receipt_bytes)
+            .map_err(|_| Error("invalid rollback migration evidence".into()))?;
+        let manifest = V::from_json(&manifest_json)
+            .map_err(|_| Error("invalid rollback migration evidence".into()))?;
+        let retained =
+            map(&manifest).map_err(|_| Error("invalid rollback migration evidence".into()))?;
+        let recomputed = map(&plan.manifest)?;
+        for key in [
+            "version",
+            "transformation",
+            "state",
+            "publication_authority",
+            "record",
+            "complete",
+        ] {
+            require(
+                retained.get(key) == recomputed.get(key),
+                "rollback migration contract differs",
+            )?;
+        }
+        let retained_source = crate::history_view::list(
+            retained
+                .get("source")
+                .ok_or_else(|| Error("invalid rollback migration evidence".into()))?,
+        )?;
+        let mut originals = BTreeMap::new();
+        for row in retained_source {
+            let row = map(row)?;
+            require(
+                originals
+                    .insert(
+                        text(&row["path"])?.to_owned(),
+                        text(&row["sha256"])?.to_owned(),
+                    )
+                    .is_none(),
+                "rollback original closure changed",
+            )?;
+        }
+        let expected = plan
+            .inventory
+            .files
+            .iter()
+            .map(|(path, data)| (plan.mapping[path].clone(), sha256(data)))
+            .collect::<BTreeMap<_, _>>();
+        require(originals == expected, "rollback original closure changed")?;
+        let inventory = map(retained
+            .get("destination")
+            .ok_or_else(|| Error("invalid rollback migration evidence".into()))?)?;
+        let destination = candidate.parent().unwrap();
+        fn walk(root: &Path, path: &Path, out: &mut BTreeMap<String, PathBuf>) -> Result<()> {
+            for item in fs::read_dir(path)? {
+                let path = item?.path();
+                if path.is_symlink() || path.is_file() {
+                    out.insert(name(path.strip_prefix(root).unwrap())?.to_owned(), path);
+                } else if path.is_dir() {
+                    walk(root, &path, out)?;
+                }
+            }
+            Ok(())
+        }
+        let mut actual = BTreeMap::new();
+        walk(destination, destination, &mut actual)?;
+        let mut expected_names = inventory.keys().cloned().collect::<BTreeSet<_>>();
+        expected_names.insert(format!("{ARTIFACTS}/receipt.json"));
+        require(
+            actual.keys().cloned().collect::<BTreeSet<_>>() == expected_names,
+            "rollback candidate inventory changed",
+        )?;
+        require(
+            fs::read(&actual[&format!("{ARTIFACTS}/receipt.json")])? == receipt_bytes,
+            "rollback receipt differs from the candidate receipt",
+        )?;
+        for (path, expected) in inventory {
+            require(
+                !actual[path].is_symlink() && sha256(&fs::read(&actual[path])?) == text(expected)?,
+                "rollback candidate bytes changed",
+            )?;
+        }
+        for (path, data) in &plan.inventory.files {
+            require(
+                fs::read(
+                    destination
+                        .join(ARTIFACTS)
+                        .join("originals")
+                        .join(&plan.mapping[path]),
+                )? == *data,
+                "rollback original evidence changed",
+            )?;
+        }
+        for (path, data) in &plan.files {
+            if !path.starts_with(&format!("{ARTIFACTS}/")) {
+                require(
+                    fs::read(destination.join(path))? == *data,
+                    "rollback is unavailable after further core authoring",
+                )?;
+            }
+        }
+        let retained_original = Snapshot::from_json(&fs::read(
+            destination.join(ARTIFACTS).join("original.json"),
+        )?)?;
+        let retained_candidate = Snapshot::from_json(&fs::read(
+            destination.join(ARTIFACTS).join("candidate.json"),
+        )?)?;
+        require(
+            retained.get("source_snapshot_id") == Some(&s(retained_original.snapshot_id()))
+                && retained.get("candidate_snapshot_id")
+                    == Some(&s(retained_candidate.snapshot_id())),
+            "rollback snapshot identity differs",
+        )?;
+        for (old, now) in [
+            (&retained_original, &plan.original),
+            (&retained_candidate, &plan.candidate),
+        ] {
+            let old = old.to_data();
+            let now = now.to_data();
+            require(
+                get(&old, "document").digest()? == get(&now, "document").digest()?
+                    && get(&old, "hypotheses").digest()? == get(&now, "hypotheses").digest()?,
+                "rollback snapshots differ from recomputed conversion",
+            )?;
+        }
+        plan.verify()?;
+    } else {
+        require(
+            receipt_bytes == *expected_receipt,
+            "migration receipt does not match recomputed source conversion",
+        )?;
+        plan.validate(candidate.parent().unwrap())?;
+    }
+    let mut snapshots = plan.inventory.files.clone();
+    for path in plan.files.keys() {
+        let path = candidate.parent().unwrap().join(path);
+        snapshots.insert(path.clone(), fs::read(path)?);
+    }
+    Ok(ConfigurationProof {
+        snapshots,
+        receipt_sha256: sha256(&receipt_bytes),
+        source_signature: V::Map(
+            plan.inventory
+                .files
+                .iter()
+                .map(|(path, bytes)| (plan.mapping[path].clone(), s(&sha256(bytes))))
+                .collect(),
+        )
+        .digest()?,
+    })
 }
 
 #[cfg(test)]

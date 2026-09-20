@@ -15,9 +15,38 @@ use crate::{
 use clap::Subcommand;
 use serde_json::{Map, Value, json};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
+
+pub(crate) struct ConfigurationMigrationProof {
+    pub snapshots: BTreeMap<PathBuf, Vec<u8>>,
+    pub receipt_sha256: String,
+    pub source_signature: String,
+}
+
+pub(crate) fn validate_configuration_migration(
+    original: &Path,
+    candidate: &Path,
+    receipt: &Path,
+    rollback: bool,
+    cwd: &Path,
+) -> Result<ConfigurationMigrationProof> {
+    let runtime = crate::public_workspace::runtime()?;
+    let proof = core_expression_migration::validate_configuration_transition(
+        original,
+        candidate,
+        receipt,
+        rollback,
+        cwd,
+        runtime.as_ref(),
+    )?;
+    Ok(ConfigurationMigrationProof {
+        snapshots: proof.snapshots,
+        receipt_sha256: proof.receipt_sha256,
+        source_signature: proof.source_signature,
+    })
+}
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct Args {

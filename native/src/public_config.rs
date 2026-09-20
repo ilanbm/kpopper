@@ -213,24 +213,6 @@ fn pending_ref_exists(project: &Project) -> Result<bool> {
     Ok(status.success())
 }
 
-fn find_text<'a>(value: &'a J, key: &str, found: &mut BTreeSet<&'a str>) {
-    match value {
-        J::Object(map) => {
-            if let Some(value) = map.get(key).and_then(J::as_str) {
-                found.insert(value);
-            }
-            for value in map.values() {
-                find_text(value, key, found);
-            }
-        }
-        J::Array(values) => {
-            for value in values {
-                find_text(value, key, found);
-            }
-        }
-        _ => {}
-    }
-}
 fn migration_evidence(
     project: &Project,
     current: &J,
@@ -238,29 +220,6 @@ fn migration_evidence(
     receipt: &Path,
     rollback: bool,
 ) -> Result<(J, BTreeMap<String, Option<String>>)> {
-    if rollback {
-        return Err(Error(
-            "native configuration rollback validation is unavailable".into(),
-        ));
-    }
-    let receipt_bytes = fs::read(receipt)?;
-    let receipt_tagged: J = serde_json::from_slice(&receipt_bytes)
-        .map_err(|_| Error("invalid migration receipt".into()))?;
-    let receipt_json = V::from_tagged(&receipt_tagged)
-        .and_then(|value| value.to_json())
-        .map_err(|_| Error("invalid migration receipt".into()))?;
-    let operation = receipt_json
-        .get("operation")
-        .and_then(J::as_str)
-        .ok_or_else(|| Error("invalid migration receipt".into()))?;
-    let record_id = receipt_json
-        .get("record_id")
-        .and_then(J::as_str)
-        .ok_or_else(|| Error("invalid migration receipt".into()))?;
-    let mut recorded_at = BTreeSet::new();
-    find_text(&receipt_json, "recorded_at", &mut recorded_at);
-    require(recorded_at.len() == 1, "invalid migration receipt")?;
-    let recorded_at = recorded_at.into_iter().next().unwrap();
     let mut snapshots = BTreeMap::new();
     let mut receipts = Vec::new();
     let mut signatures = BTreeSet::new();
@@ -276,61 +235,26 @@ fn migration_evidence(
             original.is_file() && candidate.is_file(),
             "migration destination is unavailable in a participating worktree",
         )?;
-        let plan = crate::history_migration::Plan::prepare(
+        let witness = if root == project.root {
+            receipt.to_owned()
+        } else {
+            candidate
+                .parent()
+                .unwrap()
+                .join(".kpopper-migration/receipt.json")
+        };
+        let proof = crate::public_expressions::validate_configuration_migration(
             original,
-            original.parent().unwrap(),
-            crate::history_migration::Options {
-                operation: operation.into(),
-                recorded_at: recorded_at.into(),
-                record_id: Some(record_id.into()),
-                read_mode: ReadMode::Live,
-                route: false,
-                as_of: None,
-            },
-            None,
+            candidate,
+            &witness,
+            rollback,
+            &project.root,
         )?;
-        let expected_entry = plan
-            .manifest()
-            .to_json()?
-            .get("record")
-            .and_then(J::as_str)
-            .map(|name| candidate.parent().unwrap().join(name))
-            .ok_or_else(|| Error("invalid migration receipt".into()))?;
-        require(
-            candidate == &expected_entry,
-            "migration destination must be the complete mapped entry record",
-        )?;
-        let manifest = plan.manifest().to_json()?;
-        let artifact_root = manifest
-            .get("artifact_root")
-            .and_then(J::as_str)
-            .unwrap_or(crate::history_migration::ARTIFACTS);
-        let witness = candidate
-            .parent()
-            .unwrap()
-            .join(artifact_root)
-            .join("receipt.json");
-        require(
-            fs::read(&witness)? == receipt_bytes,
-            "migration receipt differs",
-        )?;
-        plan.validate_destination(candidate.parent().unwrap())?;
-        let source_signature = crate::history_contract::map(plan.manifest())?
-            .get("originals")
-            .ok_or_else(|| Error("invalid migration receipt".into()))?
-            .digest()?;
-        signatures.insert(source_signature);
-        for (path, bytes) in &plan.inventory().files {
-            snapshots.insert(path_string(path)?, Some(sha256(bytes)));
+        signatures.insert(proof.source_signature);
+        for (path, bytes) in proof.snapshots {
+            snapshots.insert(path_string(&path)?, Some(sha256(&bytes)));
         }
-        for (path, bytes) in plan.files() {
-            snapshots.insert(
-                path_string(&candidate.parent().unwrap().join(path))?,
-                Some(sha256(bytes)),
-            );
-        }
-        receipts.push(J::String(sha256(&receipt_bytes)));
-        plan.verify_source()?;
+        receipts.push(J::String(proof.receipt_sha256));
     }
     require(
         signatures.len() == 1,
@@ -536,7 +460,7 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
         .as_deref()
         .or_else(|| current.get("mode").and_then(J::as_str))
         .unwrap();
-    let paths = project
+    let mut paths = project
         .worktrees()?
         .into_iter()
         .flat_map(|root| {
@@ -547,6 +471,23 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
             paths
         })
         .collect::<Vec<_>>();
+    if options.migration_receipt.is_some() {
+        let preliminary = transition_report(
+            project,
+            &current,
+            mode,
+            options.record.as_deref(),
+            options.migration_receipt.as_deref(),
+            options.rollback,
+        )?;
+        paths.extend(
+            preliminary["snapshots"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(PathBuf::from),
+        );
+    }
     let mut directories = paths
         .iter()
         .filter_map(|p| p.parent())
@@ -984,68 +925,6 @@ mod tests {
             .unwrap_err()
             .0,
             "rollback requires a verified migration receipt"
-        );
-    }
-    #[test]
-    fn migration_receipt_is_recomputed_for_forward_route_and_rollback_fails_closed() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("repo");
-        fs::create_dir(&root).unwrap();
-        assert!(
-            Command::new("git")
-                .args(["init", "-q", "-b", "main"])
-                .current_dir(&root)
-                .status()
-                .unwrap()
-                .success()
-        );
-        fs::write(root.join("GROUNDING.yaml"), b"known: {fact: {v: 1}}\n").unwrap();
-        let plan = crate::history_migration::Plan::prepare(
-            &root.join("GROUNDING.yaml"),
-            &root,
-            crate::history_migration::Options {
-                operation: "config-migration-test".into(),
-                recorded_at: "2026-09-20T00:00:00+00:00".into(),
-                record_id: Some("config-migration-record".into()),
-                read_mode: ReadMode::Live,
-                route: false,
-                as_of: None,
-            },
-            None,
-        )
-        .unwrap();
-        let destination = dir.path().join("migrated");
-        plan.publish(&destination).unwrap();
-        let receipt = destination.join(".kpopper-history-migration/receipt.json");
-        let project = Project::open(&root).unwrap();
-        let current = project.config().unwrap().to_json().unwrap();
-        let forward = transition_report(
-            &project,
-            &current,
-            "simple",
-            Some(destination.join("GROUNDING.yaml").to_str().unwrap()),
-            Some(&receipt),
-            false,
-        )
-        .unwrap();
-        assert_eq!(forward["blockers"], json!([]));
-        assert_eq!(forward["migration"]["rollback"], false);
-        let mut routed = current;
-        routed["mode"] = json!("simple");
-        routed["record"] = json!(destination.join("GROUNDING.yaml"));
-        routed["generation"] = json!(1);
-        let reverse = transition_report(
-            &project,
-            &routed,
-            "advanced",
-            Some("GROUNDING.yaml"),
-            Some(&receipt),
-            true,
-        )
-        .unwrap_err();
-        assert_eq!(
-            reverse.0,
-            "native configuration rollback validation is unavailable"
         );
     }
 }
