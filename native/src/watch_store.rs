@@ -114,7 +114,36 @@ pub(crate) fn json_files(folder: &Path) -> Result<Vec<PathBuf>> {
     Ok(paths)
 }
 pub(crate) fn git(cwd: &Path, args: &[&str]) -> Result<String> {
-    let out = Command::new("git").arg("-C").arg(cwd).args(args).output()?;
+    git_with_program("git", cwd, args, std::time::Duration::from_secs(10))
+}
+
+fn git_with_program(
+    program: &str,
+    cwd: &Path,
+    args: &[&str],
+    timeout: std::time::Duration,
+) -> Result<String> {
+    let mut command = Command::new(program);
+    command.arg("-C").arg(cwd).args(args);
+    command.stdout(std::process::Stdio::piped());
+    command.stderr(std::process::Stdio::piped());
+    let mut child = command.spawn()?;
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if child.try_wait()?.is_some() {
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error(format!(
+                "Git command timed out after {} seconds",
+                timeout.as_secs()
+            )));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let out = child.wait_with_output()?;
     require(
         out.status.success(),
         &format!(
@@ -131,6 +160,26 @@ pub(crate) fn git(cwd: &Path, args: &[&str]) -> Result<String> {
         .map_err(|e| error(e.to_string()))?
         .trim()
         .into())
+}
+
+#[cfg(all(test, unix))]
+mod git_tests {
+    use super::git_with_program;
+    use std::{fs, os::unix::fs::PermissionsExt, path::Path, time::Duration};
+
+    #[test]
+    fn wedged_git_is_bounded_without_a_repository() {
+        let temp = tempfile::tempdir().unwrap();
+        let fake = temp.path().join("git");
+        fs::write(&fake, b"#!/bin/sh\nsleep 1\n").unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(
+            git_with_program(&fake.to_string_lossy(), Path::new("."), &["status"], Duration::from_millis(20))
+                .unwrap_err()
+                .0,
+            "Git command timed out after 0 seconds"
+        );
+    }
 }
 fn absolute(path: &Path) -> Result<PathBuf> {
     if path.exists() {

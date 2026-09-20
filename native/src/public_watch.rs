@@ -62,7 +62,7 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
     let watch = Watch::open(workspace)?;
     let notify = match &args.command {
         Command::Scan { notify_task, .. } | Command::Share { notify_task, .. } => {
-            notify_task.as_deref()
+            notify_task.as_deref().filter(|task| !task.is_empty())
         }
         _ => None,
     };

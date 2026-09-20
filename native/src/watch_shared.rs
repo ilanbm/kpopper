@@ -31,6 +31,11 @@ pub fn load_report(path: &str) -> Result<J> {
     crate::json_ingress::parse_slice_bounded(&raw, crate::json_ingress::DuplicateKeys::Reject, 128)
         .map_err(|e| {
             let message = e.to_string();
+            if raw.windows(3).any(|part| part == b"NaN")
+                || raw.windows(8).any(|part| part == b"Infinity")
+            {
+                return error("shared observations need a finite scalar value");
+            }
             if let Some(key) = message.strip_prefix("Duplicate JSON key: ") {
                 let key = key
                     .rsplit_once(" at line ")
@@ -41,6 +46,22 @@ pub fn load_report(path: &str) -> Result<J> {
                 error(message)
             }
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_report;
+    use std::fs;
+
+    #[test]
+    fn nonfinite_json_reports_the_shared_scalar_contract() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        fs::write(temp.path(), br#"{"id":"e","value":NaN}"#).unwrap();
+        assert_eq!(
+            load_report(temp.path().to_str().unwrap()).unwrap_err().0,
+            "shared observations need a finite scalar value"
+        );
+    }
 }
 fn layout(watch: &Watch, enabled: bool) -> Result<(PathBuf, PathBuf)> {
     let config = watch.config()?.unwrap_or(J::Null);

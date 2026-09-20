@@ -51,6 +51,63 @@ fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
     );
     (temp, root, base.join("state"))
 }
+
+#[test]
+fn cli_watch_uses_python_stream_and_pretty_json_contract() {
+    let (_temp, root, state) = fixture();
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .args(["--workspace", root.to_str().unwrap(), "watch", "status"])
+        .env("XDG_STATE_HOME", &state)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stderr, b"");
+    assert_eq!(
+        output.stdout,
+br#"{
+  "state": "disabled"
+}
+"#
+    );
+
+    let refused = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .args([
+            "--workspace",
+            root.to_str().unwrap(),
+            "watch",
+            "setup",
+            "--base-ref",
+            "refs/heads/does-not-exist",
+        ])
+        .env("XDG_STATE_HOME", &state)
+        .output()
+        .unwrap();
+    assert_eq!(refused.status.code(), Some(2));
+    assert_eq!(refused.stdout, b"");
+    let envelope: Value = serde_json::from_slice(&refused.stderr).unwrap();
+    assert!(envelope.get("error").is_some());
+    assert!(envelope.get("status").is_none());
+}
+
+#[test]
+fn empty_notify_task_is_falsey_and_does_not_reserve_delivery() {
+    let (_temp, root, state) = fixture();
+    let setup = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .args(["--workspace", root.to_str().unwrap(), "watch", "setup"])
+        .env("XDG_STATE_HOME", &state)
+        .output()
+        .unwrap();
+    assert!(setup.status.success());
+    let scan = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .args(["--workspace", root.to_str().unwrap(), "watch", "scan", "--all", "--notify-task", ""])
+        .env("XDG_STATE_HOME", &state)
+        .output()
+        .unwrap();
+    assert!(scan.status.success());
+    let value: Value = serde_json::from_slice(&scan.stdout).unwrap();
+    assert!(value.get("delivery_job").is_none());
+}
+
 fn watch(root: &Path, state: &Path) -> Watch {
     Watch::in_state(root, state, Clock::at(1_700_000_000.0)).unwrap()
 }

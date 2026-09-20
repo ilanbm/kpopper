@@ -1022,10 +1022,16 @@ fn main() {
         }
         return;
     }
+    let is_watch = matches!(&args.command, Command::Watch(_));
     match run(args) {
+        Ok(value) if is_watch => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
         Ok(value) => println!("{}", value),
         Err(error) => {
-            eprintln!("{}", json!({"status":"refused","error":error.to_string()}));
+            if is_watch {
+                eprintln!("{}", json!({"error":error.to_string()}));
+            } else {
+                eprintln!("{}", json!({"status":"refused","error":error.to_string()}));
+            }
             std::process::exit(2);
         }
     }

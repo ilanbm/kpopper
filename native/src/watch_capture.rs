@@ -36,11 +36,9 @@ fn safe(path: &Path) -> Result<String> {
             std::path::Component::Normal(p) => parts.push(p.to_string_lossy().into_owned()),
             std::path::Component::CurDir => {}
             std::path::Component::ParentDir => {
-                require(
-                    !parts.is_empty(),
+                return Err(error(
                     "record pointer must use a portable path inside its checkout",
-                )?;
-                parts.pop();
+                ));
             }
             _ => {
                 return Err(error(
@@ -54,6 +52,20 @@ fn safe(path: &Path) -> Result<String> {
         "record pointer must use a portable path inside its checkout",
     )?;
     Ok(parts.join("/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe;
+    use std::path::Path;
+
+    #[test]
+    fn parent_components_are_refused_even_when_they_would_normalize_inside() {
+        assert_eq!(
+            safe(Path::new("sub/../other.yaml")).unwrap_err().0,
+            "record pointer must use a portable path inside its checkout"
+        );
+    }
 }
 fn tree_files(root: &Path, folder: &str) -> Result<Vec<String>> {
     fn visit(root: &Path, path: &Path, out: &mut Vec<String>) -> Result<()> {
