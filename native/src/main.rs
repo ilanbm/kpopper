@@ -64,6 +64,8 @@ enum Command {
     Review(WriteArgs),
     /// Apply one source report atomically and return its durable receipt.
     Update(kpop_native::public_update::Options),
+    /// Capture, process and inspect durable asynchronous source reports.
+    Ingest(kpop_native::public_ingestion::CommandOptions),
     /// Preview, fold or refute named hypotheses in active history.
     Consolidate(ConsolidateArgs),
     /// Record that two subjects refer to the same thing.
@@ -496,6 +498,7 @@ fn run(args: Args) -> Result<Value> {
         }
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
         Command::Update(_)
+        | Command::Ingest(_)
         | Command::Assess(_)
         | Command::Where
         | Command::Session(_)
@@ -943,6 +946,19 @@ fn main() {
                 std::process::exit(2);
             }
         }
+    }
+    if let Command::Ingest(options) = &args.command {
+        let cwd = args.workspace.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let input = matches!(&options.command, kpop_native::public_ingestion::Command::Capture(capture) if capture.file == "-")
+            .then(stdin_bytes)
+            .transpose();
+        let output = match input {
+            Ok(input) => kpop_native::public_ingestion::dispatch(options, &cwd, input.as_deref()),
+            Err(error) => kpop_native::public_ingestion::Output { stdout: format!("{}\n", json!({"error":error.to_string()})), stderr: String::new(), code: 2 },
+        };
+        print!("{}", output.stdout);
+        eprint!("{}", output.stderr);
+        std::process::exit(output.code);
     }
     let write = match &args.command {
         Command::Add(o) => Some(("add", o)),
