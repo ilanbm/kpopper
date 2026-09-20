@@ -976,7 +976,7 @@ mod tests {
             });
             let error = result.unwrap_err().0;
             assert!(error.starts_with("concurrent_edit:"));
-            assert!(error.contains(path.to_str().unwrap()));
+            assert!(error.replace('\\', "/").contains(&path.to_string_lossy().replace('\\', "/")));
             assert_eq!(fs::read(&path).unwrap(), expected);
             assert!(recover(std::slice::from_ref(&entry), cwd, false).is_err());
             assert_eq!(fs::read(&path).unwrap(), expected);

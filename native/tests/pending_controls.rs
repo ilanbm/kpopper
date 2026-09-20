@@ -29,7 +29,8 @@ fn named<'a>(value: &'a Value, name: &str) -> &'a Value {
 fn expected_output(entry: &Value, replacements: &[(&str, &Path)]) -> Value {
     let mut text = entry["actual"]["stdout"].as_str().unwrap().to_owned();
     for (token, path) in replacements {
-        text = text.replace(token, path.to_str().unwrap());
+        let quoted = serde_json::to_string(path.to_str().unwrap()).unwrap();
+        text = text.replace(token, &quoted[1..quoted.len() - 1]);
     }
     serde_json::from_str(&text).unwrap()
 }
@@ -59,7 +60,8 @@ fn expected_files(entry: &Value, remote: Option<&Path>) -> BTreeMap<String, Stri
         .map(|(name, value)| {
             let mut text = value.as_str().unwrap().to_owned();
             if let Some(remote) = remote {
-                text = text.replace("$REMOTE", remote.to_str().unwrap());
+                let quoted = serde_json::to_string(remote.to_str().unwrap()).unwrap();
+                text = text.replace("$REMOTE", &quoted[1..quoted.len() - 1]);
             }
             (name.clone(), text)
         })

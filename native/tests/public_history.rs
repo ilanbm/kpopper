@@ -30,7 +30,8 @@ fn tree(root: &Path) -> BTreeMap<String, String> {
                 walk(root, &path, out);
             } else {
                 out.insert(
-                    path.strip_prefix(root).unwrap().to_str().unwrap().into(),
+                    path.strip_prefix(root).unwrap().iter()
+                        .map(|part| part.to_str().unwrap()).collect::<Vec<_>>().join("/"),
                     kpop_native::identity::sha256(&fs::read(path).unwrap()),
                 );
             }

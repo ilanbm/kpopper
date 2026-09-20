@@ -44,7 +44,11 @@ fn expected(entry: &Value, replacements: &[(&str, &Path)]) -> Value {
         match value {
             Value::String(text) => {
                 for (token, path) in replacements {
-                    *text = text.replace(token, path);
+                    if let Some(suffix) = text.strip_prefix(&format!("{token}/")) {
+                        *text = Path::new(path).join(suffix).to_string_lossy().into_owned();
+                    } else {
+                        *text = text.replace(token, path);
+                    }
                 }
             }
             Value::Array(values) => {

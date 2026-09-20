@@ -121,7 +121,12 @@ pub(crate) fn routing_observation(paths: &[PathBuf], cwd: &Path) -> Result<V> {
 fn origin(base: &Path, path: &Path) -> Result<String> {
     let path = absolute(path)?;
     Ok(match path.strip_prefix(base) {
-        Ok(relative) => format!("origin:{}", name(relative)?),
+        Ok(relative) => {
+            let components = relative.components()
+                .map(|part| part.as_os_str().to_str().ok_or_else(|| error("invalid_path")))
+                .collect::<Result<Vec<_>>>()?;
+            format!("origin:{}", components.join("/"))
+        }
         Err(_) => format!(
             "external:{}/{}",
             &sha256(name(&path)?.as_bytes())[..24],
