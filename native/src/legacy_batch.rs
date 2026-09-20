@@ -43,14 +43,45 @@ fn with_batch_context(
     Ok(V::Map(value))
 }
 
+fn satisfied(action: &V, route: &WriteRoute, inventory: &mut Inventory) -> Result<bool> {
+    let document = crate::source_document::load(route.paths(), inventory, false)?;
+    let entries = crate::reasoning_snapshot::entries(&document.source.projected())?;
+    let action = map(action)?;
+    let id = text(field(action, "id")?)?;
+    let Some((_, body)) = entries.get(id) else { return Ok(false) };
+    let kind = text(field(action, "kind")?)?;
+    if kind == "set" {
+        let body = map(body)?;
+        let actual = body.get("v").or_else(|| body.get("quoted"));
+        if actual != Some(field(action, "value")?) { return Ok(false) }
+        for (action_field, body_field) in [("source", "from"), ("at", "at"), ("as_of", "of")] {
+            if let Some(expected) = action.get(action_field).filter(|v| **v != V::Null)
+                && body.get(body_field).map(V::to_json).transpose()?
+                    != Some(expected.to_json()?)
+            { return Ok(false) }
+        }
+        return Ok(true);
+    }
+    if kind == "add" {
+        let wanted = map(field(action, "body")?)?;
+        if let Some(value) = wanted.get("v").or_else(|| wanted.get("quoted")) {
+            let body = map(body)?;
+            return Ok(body.get("v").or_else(|| body.get("quoted")) == Some(value)
+                && wanted.get("from").is_none_or(|v| body.get("from") == Some(v)));
+        }
+        return Ok(matches!(body, V::Map(_)));
+    }
+    Ok(false)
+}
+
 /// Prepare all actions against one captured preimage.
 pub(crate) fn prepare(
     actions: &[V],
     route: &WriteRoute,
     options: &Options,
+    mut inventory: Inventory,
 ) -> Result<Prepared> {
     crate::require(!actions.is_empty() && actions.len() <= 33, "invalid_batch")?;
-    let mut inventory = Inventory::default();
     let mut images = BTreeMap::<String, FileImage>::new();
     let mut outputs = Vec::new();
     let mut receipts = Vec::new();
@@ -63,8 +94,12 @@ pub(crate) fn prepare(
     for (index, action) in actions.iter().enumerate() {
         let prepared = match A::prepare_with_inventory(action, route, None, inventory)
             .map_err(|e| error(&format!("batch action {index}: {e}")))? {
-            Preparation::Draft(_) => {
-                return Err(error("report operation was not applied"));
+            Preparation::Draft { output, inventory: mut staged } => {
+                crate::require(satisfied(action, route, &mut staged)?,
+                    "report operation was not applied")?;
+                outputs.push(output.trim_end().to_owned());
+                inventory = staged;
+                continue;
             }
             Preparation::Mutation(prepared) => prepared,
         };
@@ -170,7 +205,7 @@ mod tests {
         ];
         let prepared = prepare(&actions, &route, &Options {
             operation: "report-recovery".into(), context: V::Map(BTreeMap::new()),
-        }).unwrap();
+        }, Inventory::default()).unwrap();
         assert_eq!(prepared.mutation.files().len(), 2);
         (temp, entry, route, prepared)
     }
@@ -197,5 +232,24 @@ mod tests {
                     if before { image.before } else { image.after });
             }
         }
+    }
+
+    #[test]
+    fn satisfied_draft_step_does_not_discard_the_other_report_actions() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1}\n").unwrap();
+        let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+        let actions = [
+            V::from_json(&serde_json::json!({"kind":"add","id":"s.report","into":"sources","body":{"file":"report.txt","read":"2026-09-20"},"as_of":"2026-09-20"})).unwrap(),
+            V::from_json(&serde_json::json!({"kind":"set","id":"p.x","value":1})).unwrap(),
+        ];
+        let prepared = prepare(&actions, &route, &Options {
+            operation: "report-noop".into(), context: V::Map(BTreeMap::new()),
+        }, Inventory::default()).unwrap();
+        assert_eq!(prepared.mutation.files().len(), 1);
+        assert!(prepared.output.contains("nothing written"));
+        assert!(String::from_utf8(prepared.mutation.files()[0].after.clone().unwrap())
+            .unwrap().contains("s.report:"));
     }
 }

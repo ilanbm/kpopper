@@ -276,10 +276,10 @@ pub(super) fn prepare(
     if let Some(draft) =
         Privacy::candidate_draft(route.project(), &V::Map(action.clone()), &candidate)?
     {
-        return Ok(Preparation::Draft(format!(
-            "{}\n",
-            crate::public_core_readers::json_value(&draft)?
-        )));
+        return Ok(Preparation::Draft {
+            output: format!("{}\n", crate::public_core_readers::json_value(&draft)?),
+            inventory,
+        });
     }
     if kind == "set"
         && original_entries.contains_key(&id)
@@ -288,10 +288,13 @@ pub(super) fn prepare(
         && reader.value(&id)? != V::Null
         && same_legacy(&reader.value(&id)?, field(&action, "value")?)
     {
-        return Ok(Preparation::Draft(format!(
-            "{id} is already {} in hypothesis {group}; nothing written\n",
-            scalar(field(&action, "value")?, Style::Bare)?
-        )));
+        return Ok(Preparation::Draft {
+            output: format!(
+                "{id} is already {} in hypothesis {group}; nothing written\n",
+                scalar(field(&action, "value")?, Style::Bare)?
+            ),
+            inventory,
+        });
     }
     let initial = before
         .as_ref()

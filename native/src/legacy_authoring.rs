@@ -1320,7 +1320,7 @@ pub(crate) struct Prepared {
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Preparation {
-    Draft(String),
+    Draft { output: String, inventory: Inventory },
     Mutation(Prepared),
 }
 
@@ -1498,20 +1498,23 @@ pub(crate) fn prepare_with_inventory(
     if let Some(draft) =
         Privacy::candidate_draft(route.project(), &V::Map(action.clone()), &candidate)?
     {
-        return Ok(Preparation::Draft(format!(
-            "{}\n",
-            crate::public_core_readers::json_value(&draft)?
-        )));
+        return Ok(Preparation::Draft {
+            output: format!("{}\n", crate::public_core_readers::json_value(&draft)?),
+            inventory,
+        });
     }
     if kind == "set"
         && action.get("as_of").is_none_or(|value| *value == V::Null)
         && action.get("source").is_none_or(|value| *value == V::Null)
         && same_legacy(&reader.value(&id)?, field(&action, "value")?)
     {
-        return Ok(Preparation::Draft(format!(
-            "{id} is already {}; nothing written\n",
-            scalar(field(&action, "value")?, Style::Bare)?
-        )));
+        return Ok(Preparation::Draft {
+            output: format!(
+                "{id} is already {}; nothing written\n",
+                scalar(field(&action, "value")?, Style::Bare)?
+            ),
+            inventory,
+        });
     }
     let mut replaced_before = None::<Vec<u8>>;
     let mut replaced_after = None::<Vec<u8>>;
@@ -2146,7 +2149,7 @@ pub(crate) fn write(
         prepare(action, route, source_body)?
     };
     match prepared {
-        Preparation::Draft(output) => Ok(output),
+        Preparation::Draft { output, .. } => Ok(output),
         Preparation::Mutation(prepared) => publish(prepared, route),
     }
 }
