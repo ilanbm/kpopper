@@ -105,11 +105,12 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<String> {
     out.push("".into());
     out.push(format!("measured on {} (UTC): {} entr{} by {} recipe{}", utc_day(), entries, if entries==1{"y"}else{"ies"}, cited.len(), if cited.len()==1{""}else{"s"}));
     let mut changed = false;
+    let mut failed = false;
     for (name, ids) in named {
-        let (text, _) = match run_recipe(recipes.get(&name).unwrap(), root) { Ok(v) => v, Err(e) => { out.push(format!("  FAIL {name} ({}): {}", ids.join(", "), e)); continue; } };
-        for id in ids { let body = collections.values().find_map(|m|m.get(&id)).unwrap(); let body=map(body)?; let field=body.get("v").or_else(||body.get("quoted")).ok_or_else(||Error(format!("{id} has no stored reading")))?; match parse_reading(&text, field) { Ok(measured) if agrees(field, &measured) => out.push(format!("  {id}: {} - as recorded ({name})", scalar(field))), Ok(measured) => { changed=true; out.push(format!("  {id}: {} -> {} measured by {name}", scalar(field), scalar(&measured))); }, Err(e) => out.push(format!("  FAIL {name} ({id}): {}", e)) } }
+        let (text, _) = match run_recipe(recipes.get(&name).unwrap(), root) { Ok(v) => v, Err(e) => { failed = true; out.push(format!("  FAIL {name} ({}): {}", ids.join(", "), e)); continue; } };
+        for id in ids { let body = collections.values().find_map(|m|m.get(&id)).unwrap(); let body=map(body)?; let field=body.get("v").or_else(||body.get("quoted")).ok_or_else(||Error(format!("{id} has no stored reading")))?; match parse_reading(&text, field) { Ok(measured) if agrees(field, &measured) => out.push(format!("  {id}: {} - as recorded ({name})", scalar(field))), Ok(measured) => { changed=true; out.push(format!("  {id}: {} -> {} measured by {name}", scalar(field), scalar(&measured))); }, Err(e) => { failed=true; out.push(format!("  FAIL {name} ({id}): {}", e)); } } }
     }
-    out.push("".into()); out.push(if changed { "the tree reads entries differently, none across a line - refresh them".into() } else { "the record holds what this tree measures".into() }); Ok(out.join("\n")+"\n")
+    out.push("".into()); out.push(if failed { "not clean: a hole - a recipe failed or printed an invalid reading".into() } else if changed { "the tree reads entries differently, none across a line - refresh them".into() } else { "the record holds what this tree measures".into() }); Ok(out.join("\n")+"\n")
 }
 fn shell_quote(value: &str) -> String {
     if value.chars().all(|c| c.is_ascii_alphanumeric() || "._/-".contains(c)) { value.into() } else { format!("'{}'", value.replace('\'', "'\\''")) }
