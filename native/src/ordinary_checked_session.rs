@@ -1515,9 +1515,9 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
             .as_array()
             .ok_or_else(|| Error("profile group must list IDs".into()))?
         {
-            let id = id
-                .as_str()
-                .ok_or_else(|| Error("profile group must list IDs".into()))?;
+            let Some(id) = id.as_str() else {
+                continue;
+            };
             require(
                 assigned
                     .insert(
@@ -2057,6 +2057,10 @@ mod tests {
             graph["navigation_leaf_routes"] = json!(navigation.leaves);
             assert_eq!(graph, case["graph"], "{}", case["name"]);
         }
+        let mut numeric = fixtures["cases"][0]["authored_graph"].clone();
+        let numeric_profile = V::from_json(&json!({"groups": {"mixed": [1]}})).unwrap();
+        apply_profile(&mut numeric, Some(&numeric_profile)).unwrap();
+        assert_eq!(numeric["navigation_profile"]["unmatched_ids"], json!([]));
         for case in fixtures["invalid_profiles"].as_array().unwrap() {
             let mut graph = fixtures["cases"][0]["authored_graph"].clone();
             let profile = V::from_json(&case["profile"]).unwrap();

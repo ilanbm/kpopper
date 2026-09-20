@@ -185,6 +185,22 @@ fn date_trigger_uses_the_configured_iana_timezone() {
 
 #[test]
 fn a_core_record_without_a_runtime_retains_unavailable_evidence() {
+    if std::env::var_os("KPOP_R1_NO_RUNTIME_CHILD").is_none() {
+        let status = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "a_core_record_without_a_runtime_retains_unavailable_evidence",
+                "--nocapture",
+            ])
+            .env("KPOP_R1_NO_RUNTIME_CHILD", "1")
+            .env_remove("KPOPPER_NATIVE_RESOURCES")
+            .env_remove("KPOPPER_NATIVE_CACHE")
+            .env_remove("KPOP_TEST_ORDINARY_PROGRAM")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
     let temp = tempfile::tempdir().unwrap();
     let workspace = temp.path().join("project");
     fs::create_dir(&workspace).unwrap();
