@@ -11,6 +11,7 @@ use crate::{
     source_inventory::Inventory,
     value::TypedValue as V,
 };
+use base64::Engine as _;
 use serde_json::{Value as J, json};
 use std::path::Path;
 
@@ -22,6 +23,7 @@ pub(crate) struct Context<'a> {
     pub envelope_sha256: &'a str,
     pub expected_target: Option<&'a J>,
     pub supplied_runtime: Option<&'a crate::reasoning_runtime::Runtime>,
+    pub after_capture: &'a mut dyn FnMut() -> Result<()>,
 }
 
 fn scope(report: &Report) -> Option<Result<V>> {
@@ -138,6 +140,105 @@ fn evidence(
     Ok(files)
 }
 
+fn retained(
+    event: &str,
+    pending_event: &str,
+    source_id: &str,
+    bundle: &V,
+    files: &Files,
+    diagnostics: &[String],
+) -> Result<J> {
+    Ok(json!({
+        "version":1,
+        "kind":"native-advanced-report/v1",
+        "event_id":event,
+        "pending_event_id":pending_event,
+        "pending_revision":text(field(map(bundle)?, "revision")?)?,
+        "source_id":source_id,
+        "bundle":bundle.to_tagged()?,
+        "files":files.iter().map(|(path, raw)| (
+            path.clone(), J::String(base64::engine::general_purpose::STANDARD.encode(raw))
+        )).collect::<serde_json::Map<_,_>>(),
+        "diagnostics":diagnostics,
+    }))
+}
+
+fn retained_bundle(value: &J) -> Result<(V, Files)> {
+    require(
+        value["version"] == 1 && value["kind"] == "native-advanced-report/v1",
+        "invalid advanced report journal",
+    )?;
+    let bundle = V::from_tagged(&value["bundle"])?;
+    let mut files = Files::new();
+    let encoded = value["files"]
+        .as_object()
+        .ok_or_else(|| Error("invalid advanced report journal".into()))?;
+    for (path, raw) in encoded {
+        let raw = raw
+            .as_str()
+            .ok_or_else(|| Error("invalid advanced report journal".into()))?;
+        files.insert(
+            path.clone(),
+            base64::engine::general_purpose::STANDARD
+                .decode(raw)
+                .map_err(|_| Error("invalid advanced report journal".into()))?,
+        );
+    }
+    pending_bundle::validate(&bundle, &files)?;
+    require(
+        value["pending_revision"] == text(field(map(&bundle)?, "revision")?)?,
+        "retained advanced report revision mismatch",
+    )?;
+    Ok((bundle, files))
+}
+
+fn finish(
+    report: &Report,
+    event: &str,
+    record: &Path,
+    state_root: &Path,
+    source_path: &Path,
+    envelope_sha256: &str,
+    supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
+    source_id: &str,
+    diagnostics: Vec<String>,
+    pending: V,
+) -> Result<Output> {
+    let (mut answer, signals) = super::receipt(
+        report,
+        record,
+        state_root,
+        event,
+        source_path,
+        envelope_sha256,
+        "project_captured",
+        Some("Complete report captured in pending_grounding"),
+        false,
+        None,
+        None,
+        supplied_runtime,
+    )?;
+    answer["source"] = J::String(source_id.into());
+    answer["pending"] = pending.to_json()?;
+    answer["diagnostics"] = J::Array(diagnostics.into_iter().map(J::String).collect());
+    let _state_lock = crate::history_transaction_fs::DirectoryGuard::acquire(state_root, true)?;
+    super::save(
+        &state_root.join("receipts").join(format!("{event}.json")),
+        &answer,
+    )?;
+    super::save(
+        &state_root.join("results").join(format!("{event}.json")),
+        &json!({"receipt":answer,"signals":signals}),
+    )?;
+    crate::history_transaction_fs::remove(
+        &state_root.join("journals").join(format!("{event}.json")),
+    )?;
+    Ok(Output {
+        text: format!("{}\n", serde_json::to_string(&answer)?),
+        code: 0,
+    })
+}
+
 /// Return `None` for routes that keep the existing local/private report path.
 /// A captured result owns its complete ingestion receipt and writes no record image.
 pub(crate) fn capture(
@@ -145,6 +246,9 @@ pub(crate) fn capture(
     event: &str,
     context: Context<'_>,
 ) -> Result<Option<Output>> {
+    if let Some(reason) = super::private_reason(report)? {
+        return Err(Error(reason.into()));
+    }
     if !applies(report, &context.route)? {
         return Ok(None);
     }
@@ -245,6 +349,24 @@ pub(crate) fn capture(
     )?;
     let bundle = pending_bundle::prepare(&prepared.document, &roots, &scope, "project", &files)?;
     let pending_event = format!("report-{event}");
+    {
+        let _state_lock =
+            crate::history_transaction_fs::DirectoryGuard::acquire(context.state_root, true)?;
+        super::save(
+            &context
+                .state_root
+                .join("journals")
+                .join(format!("{event}.json")),
+            &retained(
+                event,
+                &pending_event,
+                &source_id,
+                &bundle,
+                &files,
+                &prepared.diagnostics,
+            )?,
+        )?;
+    }
     let project = context.route.project().clone();
     let expected_policy = context.route.config().clone();
     inventory.verify()?;
@@ -269,43 +391,19 @@ pub(crate) fn capture(
             )
         },
     )?;
-    let (mut answer, signals) = super::receipt(
+    (context.after_capture)()?;
+    Ok(Some(finish(
         report,
+        event,
         context.record,
         context.state_root,
-        event,
         context.source_path,
         context.envelope_sha256,
-        "project_captured",
-        Some("Complete report captured in pending_grounding"),
-        false,
-        None,
-        None,
         context.supplied_runtime,
-    )?;
-    answer["source"] = J::String(source_id);
-    answer["pending"] = pending.to_json()?;
-    answer["diagnostics"] = J::Array(prepared.diagnostics.into_iter().map(J::String).collect());
-    let _state_lock =
-        crate::history_transaction_fs::DirectoryGuard::acquire(context.state_root, true)?;
-    super::save(
-        &context
-            .state_root
-            .join("receipts")
-            .join(format!("{event}.json")),
-        &answer,
-    )?;
-    super::save(
-        &context
-            .state_root
-            .join("results")
-            .join(format!("{event}.json")),
-        &json!({"receipt":answer,"signals":signals}),
-    )?;
-    Ok(Some(Output {
-        text: format!("{}\n", serde_json::to_string(&answer)?),
-        code: 0,
-    }))
+        &source_id,
+        prepared.diagnostics,
+        pending,
+    )?))
 }
 
 fn preliminary_document(document: &V, actions: &[V]) -> Result<V> {
@@ -328,6 +426,79 @@ fn preliminary_document(document: &V, actions: &[V]) -> Result<V> {
         }
     }
     Ok(candidate)
+}
+
+/// Resume an exact retained Advanced report bundle before the generic direct-write
+/// journal decoder runs. Recovery uses only the durable bundle and current policy;
+/// it never reconstructs authority from changed source files.
+pub(crate) fn recover(
+    report: &Report,
+    event: &str,
+    context: Context<'_>,
+) -> Result<Option<Output>> {
+    let journal_path = context
+        .state_root
+        .join("journals")
+        .join(format!("{event}.json"));
+    let Some(raw) = crate::history_transaction_fs::read(&journal_path)? else {
+        return Ok(None);
+    };
+    let journal =
+        crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?;
+    if journal.get("kind") != Some(&J::String("native-advanced-report/v1".into())) {
+        return Ok(None);
+    }
+    require(
+        journal["event_id"] == event,
+        "advanced report journal event mismatch",
+    )?;
+    let (bundle, files) = retained_bundle(&journal)?;
+    let pending_event = journal["pending_event_id"]
+        .as_str()
+        .ok_or_else(|| Error("invalid advanced report journal".into()))?;
+    let source_id = journal["source_id"]
+        .as_str()
+        .ok_or_else(|| Error("invalid advanced report journal".into()))?;
+    let diagnostics = journal["diagnostics"]
+        .as_array()
+        .ok_or_else(|| Error("invalid advanced report journal".into()))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| Error("invalid advanced report journal".into()))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let project = context.route.project().clone();
+    let expected_policy = context.route.config().clone();
+    context.route.verify()?;
+    drop(context.route);
+    let pending = crate::public_knowledge::import_helper::capture_pending(
+        &project,
+        &bundle,
+        &files,
+        pending_event,
+        pending_event,
+        &mut || {
+            require(
+                project.config()? == expected_policy,
+                "project policy or destination changed before capture; retry",
+            )
+        },
+    )?;
+    Ok(Some(finish(
+        report,
+        event,
+        context.record,
+        context.state_root,
+        context.source_path,
+        context.envelope_sha256,
+        context.supplied_runtime,
+        source_id,
+        diagnostics,
+        pending,
+    )?))
 }
 
 #[cfg(test)]
@@ -388,7 +559,8 @@ mod tests {
         });
         let encoded = serde_json::to_vec(&raw).unwrap();
         let report = super::super::parse(&encoded).unwrap();
-        let invoke = || {
+        let mut stop = || Err(Error("stop after capture".into()));
+        assert_eq!(
             capture(
                 &report,
                 event,
@@ -400,18 +572,50 @@ mod tests {
                     envelope_sha256: "envelope",
                     expected_target: None,
                     supplied_runtime: None,
+                    after_capture: &mut stop,
+                },
+            )
+            .unwrap_err()
+            .0,
+            "stop after capture"
+        );
+        assert_eq!(fs::read(&record).unwrap(), before);
+        assert!(
+            state
+                .join("journals")
+                .join(format!("{event}.json"))
+                .is_file()
+        );
+        fs::remove_file(&source_path).unwrap();
+        let mut after_capture = || Ok(());
+        let first: J = serde_json::from_str(
+            &recover(
+                &report,
+                event,
+                Context {
+                    route: WriteRoute::capture(std::slice::from_ref(&record), &root).unwrap(),
+                    record: &record,
+                    state_root: &state,
+                    source_path: &source_path,
+                    envelope_sha256: "envelope",
+                    expected_target: None,
+                    supplied_runtime: None,
+                    after_capture: &mut after_capture,
                 },
             )
             .unwrap()
             .unwrap()
-        };
-        let first: J = serde_json::from_str(&invoke().text).unwrap();
+            .text,
+        )
+        .unwrap();
         assert_eq!(first["state"], "project_captured");
-        assert_eq!(first["pending"]["replay"], false);
+        assert_eq!(first["pending"]["replay"], true);
         assert_eq!(fs::read(&record).unwrap(), before);
-        let replay: J = serde_json::from_str(&invoke().text).unwrap();
-        assert_eq!(replay["pending"]["replay"], true);
-        assert_eq!(replay["pending"]["revision"], first["pending"]["revision"]);
-        assert_eq!(fs::read(&record).unwrap(), before);
+        assert!(
+            !state
+                .join("journals")
+                .join(format!("{event}.json"))
+                .exists()
+        );
     }
 }

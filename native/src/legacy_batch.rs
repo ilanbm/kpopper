@@ -262,6 +262,17 @@ pub(crate) fn prepare_pending(
     })
 }
 
+pub(crate) fn prepare_advanced_local(
+    actions: &[V],
+    route: &WriteRoute,
+    options: &Options,
+    inventory: Inventory,
+    page: Option<crate::ordinary_page_capture::PageCapture>,
+    source_bodies: &[Option<Source>],
+) -> Result<Prepared> {
+    prepare_mode(actions, route, options, inventory, page, source_bodies, true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
