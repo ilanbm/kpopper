@@ -590,25 +590,6 @@ pub fn complete(
     Ok(public(&job, None))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn attention_message_bounds_target_and_affected_text() {
-        let notice = json!({
-            "id": "a", "category": "attention",
-            "target": "t".repeat(MAX_TARGET_CHARS + 20),
-            "affected_judgments": ["a".repeat(MAX_AFFECTED_CHARS + 20)],
-            "reason": "reason", "source_quote": "quote"
-        });
-        let rendered = message(&[notice], Path::new("GROUNDING.yaml"));
-        assert!(rendered.contains(&format!("target={}", "t".repeat(MAX_TARGET_CHARS))));
-        assert!(!rendered.contains(&"t".repeat(MAX_TARGET_CHARS + 1)));
-        assert!(rendered.contains(&"a".repeat(MAX_AFFECTED_CHARS)));
-    }
-}
-
 /// Suppress fallback-hook notices only while a valid native reservation or
 /// claim owns them, or after this recipient's current epoch already offered
 /// the exact signals.
@@ -649,3 +630,23 @@ pub fn hook_visible(layout: &S::Layout, to: &str, notices: Vec<J>, epoch: &str) 
     }
     Ok(visible)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attention_message_bounds_target_and_affected_text() {
+        let notice = json!({
+            "id": "a", "category": "attention",
+            "target": "t".repeat(MAX_TARGET_CHARS + 20),
+            "affected_judgments": ["a".repeat(MAX_AFFECTED_CHARS + 20)],
+            "reason": "reason", "source_quote": "quote"
+        });
+        let rendered = message(&[notice], Path::new("GROUNDING.yaml"));
+        assert!(rendered.contains(&format!("target={}", "t".repeat(MAX_TARGET_CHARS))));
+        assert!(!rendered.contains(&"t".repeat(MAX_TARGET_CHARS + 1)));
+        assert!(rendered.contains(&"a".repeat(MAX_AFFECTED_CHARS)));
+    }
+}
+
