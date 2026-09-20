@@ -1,5 +1,10 @@
 use kpop_native::public_consolidation::{self, Options};
-use std::{fs, path::Path, process::Command};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn git(root: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -33,6 +38,27 @@ fn commit(root: &Path, message: &str) -> String {
         ],
     );
     git(root, &["rev-parse", "HEAD"])
+}
+fn image(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn visit(root: &Path, at: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        for item in fs::read_dir(at).unwrap() {
+            let path = item.unwrap().path();
+            if path.file_name().and_then(|v| v.to_str()) == Some(".git") {
+                continue;
+            }
+            if path.is_dir() {
+                visit(root, &path, out);
+            } else {
+                out.insert(
+                    path.strip_prefix(root).unwrap().into(),
+                    fs::read(path).unwrap(),
+                );
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    visit(root, root, &mut out);
+    out
 }
 
 #[test]
@@ -81,4 +107,65 @@ fn ordinary_branch_preview_and_fold_keep_source_ref_and_write_only_destination()
         git(&root, &["show", &format!("{source}:GROUNDING.yaml")]),
         "known:\n  p.value:\n    v: 1\n    of: 2026-09-19"
     );
+}
+
+#[test]
+#[ignore = "requires immutable Python 1.8 oracle"]
+fn ordinary_public_cli_matches_python_complete_output_and_files() {
+    let source = tempfile::tempdir().unwrap();
+    let repository = source.path().join("source");
+    fs::create_dir(&repository).unwrap();
+    git(&repository, &["init", "-q", "-b", "main"]);
+    fs::write(
+        repository.join("GROUNDING.yaml"),
+        "known:\n  p.value:\n    v: 1\n    of: 2026-09-19\n",
+    )
+    .unwrap();
+    let oid = commit(&repository, "source");
+    fs::write(
+        repository.join("GROUNDING.yaml"),
+        "known:\n  p.value:\n    v: 3\n    of: 2026-09-18\n",
+    )
+    .unwrap();
+    commit(&repository, "current");
+    let native = source.path().join("native");
+    let python = source.path().join("python");
+    for target in [&native, &python] {
+        let out = Command::new("git")
+            .args(["clone", "-q", "--no-hardlinks"])
+            .arg(&repository)
+            .arg(target)
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+    }
+    let args = [
+        "consolidate",
+        "--from",
+        oid.as_str(),
+        "--as-of",
+        "2026-09-20",
+    ];
+    let actual = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .current_dir(&native)
+        .args(args)
+        .env("KPOPPER_SESSION_DISABLE", "1")
+        .env("XDG_STATE_HOME", source.path().join("native-state"))
+        .output()
+        .unwrap();
+    let oracle_python = std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle Python");
+    let oracle_root =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
+    let expected = Command::new(oracle_python)
+        .arg(oracle_root.join("scripts/cli.py"))
+        .current_dir(&python)
+        .args(args)
+        .env("KPOPPER_SESSION_DISABLE", "1")
+        .env("XDG_STATE_HOME", source.path().join("python-state"))
+        .output()
+        .unwrap();
+    assert_eq!(actual.status.code(), expected.status.code());
+    assert_eq!(actual.stdout, expected.stdout, "stdout");
+    assert_eq!(actual.stderr, expected.stderr, "stderr");
+    assert_eq!(image(&native), image(&python), "complete after image");
 }

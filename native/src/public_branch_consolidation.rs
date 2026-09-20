@@ -277,5 +277,26 @@ fn ordinary(
     selected
         .names
         .extend(supplied.iter().map(|h| h.name.clone()));
-    crate::public_consolidation::ordinary::run_supplied(&selected, route, &supplied, runtime, probe)
+    let mut output = crate::public_consolidation::ordinary::run_supplied(
+        &selected, route, &supplied, runtime, probe,
+    )?;
+    if !options.dry_run && output.code == 0 {
+        let kept =
+            format!("  nothing to delete for {reference}: another branch keeps its own record\n");
+        if let Some(at) = output.stdout.find("next: git add ") {
+            output.stdout.insert_str(at, &kept);
+            let after_kept = at + kept.len();
+            let end = output.stdout[after_kept..]
+                .find('\n')
+                .map(|n| after_kept + n + 1)
+                .unwrap_or(output.stdout.len());
+            output.stdout.insert_str(
+                end,
+                &format!(
+                    "  then merge {reference} as you would - its record is folded here, and the merge carries only its code\n"
+                ),
+            );
+        }
+    }
+    Ok(output)
 }
