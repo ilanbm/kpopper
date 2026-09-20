@@ -188,7 +188,6 @@ pub(crate) fn prepare_subset(
         &n("1"),
         Map::new(),
     )?;
-    let adapted = history_adapter::from_store_capture(&candidate)?;
     let mut template = obj([
         (
             "schema",
@@ -199,7 +198,7 @@ pub(crate) fn prepare_subset(
         ),
         ("meta", obj([("history_subset", origin.clone())])),
     ]);
-    if let Some(reasoning) = map(adapted.document())?
+    if let Some(reasoning) = map(&candidate.document)?
         .get("meta")
         .and_then(|m| map(m).ok())
         .and_then(|m| m.get("reasoning"))
@@ -213,6 +212,14 @@ pub(crate) fn prepare_subset(
             map_mut(&mut template)?
                 .entry(text(&map(&m["authored"])?["collection"])?.into())
                 .or_insert_with(|| V::Map(Map::new()));
+            if let Some(scope) = map(&m["body"]).ok()
+                .and_then(|body| body.get("collection_scope"))
+                .and_then(|scope| map(scope).ok())
+            {
+                map_mut(&mut template)?
+                    .entry(text(field(scope, "collection")?)?.into())
+                    .or_insert_with(|| V::Map(Map::new()));
+            }
         }
     }
     let mut plain = template.clone();
