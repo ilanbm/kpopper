@@ -158,3 +158,33 @@ fn actual_configured_managed_launcher_is_probed() {
         proof["launchers"].as_array().unwrap().len()
     );
 }
+
+#[test]
+fn packaged_python_181_suffix_keeps_the_v1_contract() {
+    let mut value: J =
+        serde_json::from_str(include_str!("fixtures/history-runtime-packaged.json")).unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let root = root.path().canonicalize().unwrap();
+    setup(
+        &mut value,
+        &root,
+        &std::env::current_exe().unwrap().canonicalize().unwrap(),
+    );
+    let nonce = value["nonce"].as_str().unwrap().to_owned();
+    validate_declaration(&value, &nonce).unwrap();
+    let original = value["native"]["archive"].as_str().unwrap().to_owned();
+    assert!(original.ends_with(".kpopper-runtime"));
+    for suffix in [".ZIP", ".kpopper-runtime.zip", ".exe"] {
+        let mut bad = value.clone();
+        bad["native"]["archive"] = json!(format!(
+            "reasoning/native/{}{}",
+            bad["native"]["target"].as_str().unwrap(),
+            suffix
+        ));
+        bad["native"].as_object_mut().unwrap().remove("digest");
+        bad["native"]["digest"] = json!(kpop_native::identity::sha256(
+            &serde_json::to_vec(&bad["native"]).unwrap()
+        ));
+        assert!(validate_declaration(&bad, &nonce).is_err());
+    }
+}

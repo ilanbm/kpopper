@@ -34,6 +34,9 @@ pub struct Options {
     pub because: Option<String>,
     #[arg(long)]
     pub by: Option<String>,
+    /// Fresh challenge token for a native deployment declaration.
+    #[arg(long)]
+    pub nonce: Option<String>,
     /// Retained pending contribution revision to adopt.
     #[arg(long)]
     pub revision: Option<String>,
@@ -59,6 +62,7 @@ impl Options {
             || !self.over.is_empty()
             || self.because.is_some()
             || self.by.is_some()
+            || self.nonce.is_some()
             || self.revision.is_some()
             || !self.choose.is_empty()
             || self.preview
@@ -116,10 +120,23 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             "propose",
             "retire",
             "adopt",
+            "capabilities",
         ]
         .contains(&operation),
         "history operation unsupported",
     )?;
+    if operation == "capabilities" {
+        require(
+            options.record.is_none() && options.to.is_none(),
+            "a runtime declaration does not select or migrate a record",
+        )?;
+        return crate::history_native_declaration::describe(
+            options
+                .nonce
+                .as_deref()
+                .ok_or_else(|| error("invalid_runtime_nonce"))?,
+        );
+    }
     require(
         options.to.is_none() || operation == "migrate",
         "--to belongs to history migrate",

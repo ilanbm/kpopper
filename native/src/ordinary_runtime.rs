@@ -98,6 +98,37 @@ pub struct Program {
     bounds: OperationalBounds,
 }
 impl Program {
+    /// Describe the selected ordinary program without executing it. Only its
+    /// consumed build manifest and binary are covered, not system libraries.
+    pub(crate) fn inspect(root: &Path, directory: &str) -> Result<J> {
+        let manifest_name = format!("{directory}/build.json");
+        let raw = crate::reasoning_runtime::resource_read(root, &manifest_name, 16384)?;
+        let manifest =
+            crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?;
+        require(
+            manifest.is_object()
+                && manifest["source_sha256"] == env!("KPOP_ORDINARY_SOURCE_SHA256"),
+            "ordinary_source_changed",
+        )?;
+        let name = if cfg!(windows) {
+            "epistemic-core.exe"
+        } else {
+            "epistemic-core"
+        };
+        let hash = crate::reasoning_runtime::resource_hash(
+            root,
+            &format!("{directory}/{name}"),
+            128 * 1024 * 1024,
+        )?;
+        require(
+            manifest["binary_sha256"] == hash,
+            "ordinary_program_changed",
+        )?;
+        Ok(
+            serde_json::json!({"status":"files_validated", "directory":directory, "manifest":manifest,
+            "files":{"build.json":sha256(&raw),name:hash}}),
+        )
+    }
     fn valid_bundle(bundle: &J, judgment: &str) -> bool {
         bundle.is_object()
             && bundle["id"] == judgment

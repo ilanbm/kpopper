@@ -102,19 +102,79 @@ pub fn runtime_for_document(document: &crate::value::TypedValue) -> Result<Optio
         runtime()
     }
 }
-fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
-    let configured = std::env::var_os("KPOPPER_NATIVE_RESOURCES").map(PathBuf::from);
-    let root = configured.clone().unwrap_or(
-        std::env::current_exe()?
+/// One resource selection is shared by execution and native declarations.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ResourceSelection {
+    pub root: Option<PathBuf>,
+    pub target: String,
+    pub core: Option<String>,
+    pub ordinary: Option<String>,
+}
+pub(crate) fn select_resources(
+    executable: &Path,
+    configured: Option<&Path>,
+    ordinary_required: bool,
+) -> Result<ResourceSelection> {
+    let root = configured.map(Path::to_path_buf).unwrap_or(
+        executable
             .parent()
             .ok_or_else(|| error("native executable has no parent"))?
             .join("resources"),
     );
-    if configured.is_none() && !root.exists() {
-        return Ok(None);
+    let target = crate::reasoning_runtime::target_name()?;
+    if configured.is_none()
+        && std::fs::symlink_metadata(&root).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+    {
+        return Ok(ResourceSelection {
+            root: None,
+            target,
+            core: None,
+            ordinary: None,
+        });
     }
     crate::require(root.is_dir(), "native resources directory is unavailable")?;
-    let target = crate::reasoning_runtime::target_name()?;
+    let root = root.canonicalize()?;
+    let paths = [
+        format!("reasoning/{target}.kpopper-runtime"),
+        format!("reasoning/{target}.zip"),
+    ];
+    let mut available = Vec::new();
+    for name in &paths {
+        let path = crate::reasoning_runtime::resource_path(&root, name)?;
+        if path.try_exists()? {
+            crate::require(path.is_file(), "invalid_runtime_resource")?;
+            available.push(name.clone());
+        }
+    }
+    crate::require(available.len() <= 1, "ambiguous_runtime_archive")?;
+    let directory = format!("ordinary/{target}");
+    let ordinary = if ordinary_required {
+        let path = crate::reasoning_runtime::resource_path(&root, &directory)?;
+        if path.try_exists()? {
+            crate::require(path.is_dir(), "invalid_runtime_resource")?;
+            Some(directory)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    Ok(ResourceSelection {
+        root: Some(root),
+        target,
+        core: available.pop(),
+        ordinary,
+    })
+}
+fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
+    let configured = std::env::var_os("KPOPPER_NATIVE_RESOURCES").map(PathBuf::from);
+    let selection = select_resources(&std::env::current_exe()?, configured.as_deref(), ordinary)?;
+    let Some(root) = selection.root else {
+        return Ok(None);
+    };
+    let core = selection
+        .core
+        .ok_or_else(|| error("native core archive is unavailable"))?;
     let cache = if let Some(path) = std::env::var_os("KPOPPER_NATIVE_CACHE") {
         PathBuf::from(path)
     } else {
@@ -128,13 +188,12 @@ fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
             .ok_or_else(|| error("set KPOPPER_NATIVE_CACHE for the packaged runtime"))?
             .join("kpopper/native")
     };
-    let runtime = Runtime::open(
-        &root.join("reasoning").join(format!("{target}.zip")),
-        &cache,
-        OperationalBounds::default(),
-    )?;
+    let runtime = Runtime::open(&root.join(core), &cache, OperationalBounds::default())?;
     if ordinary {
-        let program = crate::ordinary_runtime::Program::open(&root.join("ordinary").join(target))?;
+        let directory = selection
+            .ordinary
+            .ok_or_else(|| error("native ordinary program is unavailable"))?;
+        let program = crate::ordinary_runtime::Program::open(&root.join(directory))?;
         Ok(Some(runtime.with_ordinary_program(program)))
     } else {
         Ok(Some(runtime))

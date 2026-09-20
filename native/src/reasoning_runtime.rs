@@ -259,6 +259,127 @@ fn hash_file(path: &Path) -> Result<String> {
     }
     Ok(format!("{:x}", h.finalize()))
 }
+/// Resolve only regular resource files beneath an already selected root. Missing
+/// paths are allowed for diagnostics, but symlinks and non-directory ancestors
+/// never select another deployment implicitly.
+pub(crate) fn resource_path(root: &Path, name: &str) -> Result<PathBuf> {
+    relative(name)?;
+    let parts = name.split('/').collect::<Vec<_>>();
+    let mut path = root.to_path_buf();
+    for (index, part) in parts.iter().enumerate() {
+        path.push(part);
+        match fs::symlink_metadata(&path) {
+            Ok(meta) => require(
+                !meta.file_type().is_symlink() && (index + 1 == parts.len() || meta.is_dir()),
+                "runtime_symlink",
+            )?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(path)
+}
+pub(crate) fn resource_read(root: &Path, name: &str, maximum: usize) -> Result<Vec<u8>> {
+    let path = resource_path(root, name)?;
+    let meta = fs::metadata(&path)?;
+    require(
+        meta.is_file() && meta.len() <= maximum as u64,
+        "runtime_size_limit",
+    )?;
+    let mut raw = Vec::new();
+    File::open(&path)?
+        .take(maximum as u64 + 1)
+        .read_to_end(&mut raw)?;
+    require(raw.len() <= maximum, "runtime_size_limit")?;
+    resource_path(root, name)?;
+    Ok(raw)
+}
+pub(crate) fn resource_hash(root: &Path, name: &str, maximum: usize) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    let path = resource_path(root, name)?;
+    let meta = fs::metadata(&path)?;
+    require(
+        meta.is_file() && meta.len() <= maximum as u64,
+        "runtime_size_limit",
+    )?;
+    let mut file = File::open(&path)?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0; 65536];
+    let mut total = 0usize;
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        total = total.saturating_add(n);
+        require(total <= maximum, "runtime_size_limit")?;
+        digest.update(&buffer[..n]);
+    }
+    resource_path(root, name)?;
+    Ok(format!("{:x}", digest.finalize()))
+}
+/// Validate the existing archive contract without extracting, executing or
+/// creating a cache. Declarations re-read this observation before returning.
+pub(crate) fn inspect_archive(root: &Path, name: &str, target: &str) -> Result<J> {
+    let raw = resource_read(root, name, 32 * 1024 * 1024)?;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&raw))
+        .map_err(|_| Error("invalid_runtime_archive".into()))?;
+    require(zip.len() <= 1024, "runtime_size_limit")?;
+    let mut names = BTreeSet::new();
+    let mut expanded = 0u64;
+    for i in 0..zip.len() {
+        let file = zip
+            .by_index(i)
+            .map_err(|_| Error("invalid_runtime_archive".into()))?;
+        relative(file.name())?;
+        expanded = expanded.saturating_add(file.size());
+        require(
+            names.insert(file.name().to_owned())
+                && !file.is_dir()
+                && !file.unix_mode().is_some_and(|m| m & 0o170000 == 0o120000)
+                && file.size() <= MAX_ARCHIVE_MEMBER
+                && expanded <= 256 * 1024 * 1024,
+            "invalid_runtime_archive",
+        )?;
+    }
+    require(names.contains("manifest.json"), "invalid_runtime_archive")?;
+    let mut manifest_bytes = Vec::new();
+    zip.by_name("manifest.json")
+        .map_err(|_| Error("invalid_runtime_archive".into()))?
+        .take(1024 * 1024 + 1)
+        .read_to_end(&mut manifest_bytes)?;
+    require(manifest_bytes.len() <= 1024 * 1024, "runtime_size_limit")?;
+    let manifest = crate::json_ingress::parse_slice(
+        &manifest_bytes,
+        crate::json_ingress::DuplicateKeys::Reject,
+    )
+    .map_err(|_| Error("invalid_runtime_json".into()))?;
+    Runtime::validate_manifest(&manifest, target)?;
+    let files = manifest["files"].as_object().unwrap();
+    require(
+        names
+            == files
+                .keys()
+                .cloned()
+                .chain(["manifest.json".into()])
+                .collect(),
+        "invalid_runtime_archive",
+    )?;
+    for (name, hash) in files {
+        let mut bytes = Vec::new();
+        zip.by_name(name)
+            .map_err(|_| Error("invalid_runtime_archive".into()))?
+            .take(MAX_ARCHIVE_MEMBER + 1)
+            .read_to_end(&mut bytes)?;
+        require(
+            bytes.len() as u64 <= MAX_ARCHIVE_MEMBER && hash == &J::String(sha256(&bytes)),
+            "runtime_archive_checksum_mismatch",
+        )?;
+    }
+    Ok(
+        json!({"status":"archive_validated", "path":name, "sha256":sha256(&raw), "manifest":manifest}),
+    )
+}
 #[derive(Debug)]
 pub struct Runtime {
     ordinary: Option<crate::ordinary_runtime::Program>,
@@ -413,7 +534,7 @@ impl Runtime {
         runtime.implementation = json!({"protocol":"KP2","lean_version":runtime.manifest["lean_version"],"adapter_source_sha256":env!("KPOP_REASONING_ADAPTER_SHA256"),"source_sha256":runtime.manifest["source_sha256"],"archive_sha256":archive_digest,"binary_sha256":runtime.observed[runtime.manifest["executable"].as_str().unwrap()],"target":target,"libraries":library_hashes,"modified_libraries":modified});
         Ok(runtime)
     }
-    fn validate_manifest(d: &J, target: &str) -> Result<()> {
+    pub(crate) fn validate_manifest(d: &J, target: &str) -> Result<()> {
         let required = [
             "version",
             "protocols",

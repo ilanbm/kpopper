@@ -370,6 +370,11 @@ pub(crate) fn probe(selection: &Selection) -> Result<V> {
             }),
         "history_transition_runtime_unsupported",
     )?;
+    for launcher in proof["launchers"].as_array().unwrap() {
+        if launcher["declaration"]["version"] == 2 {
+            crate::history_native_declaration::require_complete(&launcher["declaration"])?;
+        }
+    }
     V::from_json(&proof)
 }
 fn deployment(selection: &Selection) -> Result<V> {

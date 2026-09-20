@@ -1,4 +1,4 @@
-//! Bounded probes of explicitly selected managed Python launchers during cutover.
+//! Bounded probes of explicitly selected Python and native launchers during cutover.
 //! A declaration binds resolved sources. Excluding writers remains the caller's duty.
 use crate::{Result, history_contract::error, identity::sha256, require};
 use serde_json::{Value as J, json};
@@ -57,7 +57,11 @@ fn required(applications: bool) -> Vec<&'static str> {
     names.sort();
     names
 }
-fn exact<'a>(v: &'a J, keys: &[&str], code: &str) -> Result<&'a serde_json::Map<String, J>> {
+pub(crate) fn exact<'a>(
+    v: &'a J,
+    keys: &[&str],
+    code: &str,
+) -> Result<&'a serde_json::Map<String, J>> {
     let m = v.as_object().ok_or_else(|| error(code))?;
     require(
         m.len() == keys.len() && keys.iter().all(|k| m.contains_key(*k)),
@@ -65,36 +69,42 @@ fn exact<'a>(v: &'a J, keys: &[&str], code: &str) -> Result<&'a serde_json::Map<
     )?;
     Ok(m)
 }
-fn text<'a>(v: &'a J, code: &str) -> Result<&'a str> {
+pub(crate) fn text<'a>(v: &'a J, code: &str) -> Result<&'a str> {
     v.as_str().ok_or_else(|| error(code))
 }
-fn hex(v: &J) -> bool {
+pub(crate) fn hex(v: &J) -> bool {
     v.as_str().is_some_and(|s| {
         s.len() == 64
             && s.bytes()
                 .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
     })
 }
-fn nonce_valid(nonce: &str) -> bool {
+pub(crate) fn nonce_valid(nonce: &str) -> bool {
     (16..=128).contains(&nonce.len())
         && nonce
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
 }
-fn digest(value: &J) -> Result<String> {
+pub(crate) fn digest(value: &J) -> Result<String> {
     Ok(sha256(&serde_json::to_vec(value)?))
 }
-fn resolved(path: &J) -> Result<bool> {
+pub(crate) fn resolved(path: &J) -> Result<bool> {
     let path = text(path, "invalid_runtime_resolution")?;
     Ok(Path::new(path).is_absolute()
         && crate::project_modes::resolved(Path::new(path))? == Path::new(path))
 }
-fn history_schemas() -> J {
+pub(crate) fn history_schemas() -> J {
     json!({"authority":[1,2],"baseline":[1],"commit":[1],"typed_object":[2],"prepared_mutation":[1,2],"projection":[1],"import":[1,2],"authoring_receipt":[1,2,3,4,5,6,7,8,9],"identity_receipt":[1,2],"history_auxiliary":[1],"group_transition":[1],"named_hypotheses":[1],"physical_hypothesis_import":[1],"branch_capture":[1,2],"branch_adoption":[1,2],"bundle":[1,2,3],"contribution":[1,2,3],"retained_generations":[1],"cancellation":[1],"commit_capabilities":["explicit-root-disposition/v1","subject-paths/v2","temporal-applicability/v1"],"bundle_capabilities":["generation-cancellation/v1","history-closure/v1","history-generations/v1","history-subset/v1","subject-paths/v2"],"act_kinds":["accept","correct","propose","refute","retire","review"]})
 }
-/// Validate the retained v1 managed-Python contract; it does not attest bytecode
-/// or claim the experimental native executable has this complete public surface.
+/// Dispatch strictly between retained Python v1 and native v2 declarations.
+/// Neither declaration attests loaded code or proves execution readiness.
 pub fn validate_declaration(value: &J, nonce: &str) -> Result<()> {
+    if value["version"] == json!(2) {
+        return crate::history_native_declaration::validate(value, nonce);
+    }
+    validate_python_declaration(value, nonce)
+}
+fn validate_python_declaration(value: &J, nonce: &str) -> Result<()> {
     exact(
         value,
         &[
@@ -268,7 +278,12 @@ pub fn validate_declaration(value: &J, nonce: &str) -> Result<()> {
         let target = text(&native["target"], "unsupported_native_manifest")?;
         require(
             native["status"] == "archive_validated"
-                && native["archive"] == format!("reasoning/native/{target}.zip")
+                && [
+                    format!("reasoning/native/{target}.zip"),
+                    format!("reasoning/native/{target}.kpopper-runtime"),
+                ]
+                .iter()
+                .any(|p| native["archive"] == *p)
                 && hex(&native["archive_sha256"])
                 && native["manifest"].is_object(),
             "unsupported_native_manifest",
@@ -296,11 +311,22 @@ pub fn probe_launchers(inventory: &J, expected: &J, nonce: &str, timeout: Durati
     require(nonce_valid(nonce), "invalid_runtime_nonce")?;
     let mut ids = BTreeSet::new();
     for item in launchers {
+        let native = item.get("kind").is_some();
         exact(
             item,
-            &["id", "argv", "package_root", "executable"],
+            if native {
+                &["id", "kind", "argv", "resource_root", "executable"]
+            } else {
+                &["id", "argv", "package_root", "executable"]
+            },
             "invalid_launcher_inventory",
         )?;
+        if native {
+            require(
+                item["kind"] == crate::history_native_declaration::KIND,
+                "invalid_launcher_inventory",
+            )?;
+        }
         let id = text(&item["id"], "invalid_launcher_inventory")?;
         require(
             (1..=80).contains(&id.len())
@@ -327,20 +353,38 @@ pub fn probe_launchers(inventory: &J, expected: &J, nonce: &str, timeout: Durati
             executable.is_absolute() && executable.is_file(),
             "absolute_launcher_required",
         )?;
-        for key in ["package_root", "executable"] {
-            require(resolved(&item[key])?, "invalid_launcher_inventory")?;
+        if native {
+            require(
+                resolved(&item["executable"])?
+                    && Path::new(item["executable"].as_str().unwrap()).is_file(),
+                "invalid_launcher_inventory",
+            )?;
+            let root = &item["resource_root"];
+            require(
+                root.is_null() || resolved(root)? && Path::new(root.as_str().unwrap()).is_dir(),
+                "invalid_launcher_inventory",
+            )?;
+        } else {
+            // Preserve v1 validation order as well as accepted values.
+            for key in ["package_root", "executable"] {
+                require(resolved(&item[key])?, "invalid_launcher_inventory")?;
+            }
+            require(
+                Path::new(item["package_root"].as_str().unwrap()).is_dir()
+                    && Path::new(item["executable"].as_str().unwrap()).is_file(),
+                "invalid_launcher_inventory",
+            )?;
         }
-        require(
-            Path::new(item["package_root"].as_str().unwrap()).is_dir()
-                && Path::new(item["executable"].as_str().unwrap()).is_file(),
-            "invalid_launcher_inventory",
-        )?;
         let expected = expected
             .get(id)
             .ok_or_else(|| error("invalid_expected_digests"))?;
         exact(
             expected,
-            &["sources", "schemas", "native"],
+            if native {
+                &["artifact", "schemas", "resources"]
+            } else {
+                &["sources", "schemas", "native"]
+            },
             "invalid_expected_digests",
         )?;
         require(
@@ -353,7 +397,10 @@ pub fn probe_launchers(inventory: &J, expected: &J, nonce: &str, timeout: Durati
         "invalid_launcher_inventory",
     )?;
     let mut proof = vec![];
+    let mut has_native = false;
     for item in launchers {
+        let native = item.get("kind").is_some();
+        has_native |= native;
         let id = item["id"].as_str().unwrap();
         let mut argv = item["argv"]
             .as_array()
@@ -364,6 +411,13 @@ pub fn probe_launchers(inventory: &J, expected: &J, nonce: &str, timeout: Durati
         argv.extend(["history", "capabilities", "--nonce", nonce, "--json"].map(str::to_string));
         let mut command = Command::new(&argv[0]);
         command.args(&argv[1..]);
+        if native {
+            if let Some(root) = item["resource_root"].as_str() {
+                command.env("KPOPPER_NATIVE_RESOURCES", root);
+            } else {
+                command.env_remove("KPOPPER_NATIVE_RESOURCES");
+            }
+        }
         let raw = crate::reasoning_runtime::run_command_bounded(
             &mut command,
             vec![],
@@ -376,23 +430,34 @@ pub fn probe_launchers(inventory: &J, expected: &J, nonce: &str, timeout: Durati
                 .map_err(|_| error("invalid_runtime_json"))?;
         validate_declaration(&value, nonce)?;
         let resolution = &value["resolved"];
-        require(
-            resolution["package_root"] == item["package_root"]
-                && resolution["executable"] == item["executable"]
-                && resolution["cli"]
-                    == Path::new(item["package_root"].as_str().unwrap())
-                        .join("cli.py")
-                        .to_string_lossy()
-                        .as_ref(),
-            "runtime_root_mismatch",
-        )?;
-        let digests = json!({"sources":value["sources"]["digest"],"schemas":value["schemas"]["digest"],"native":value["native"]["digest"]});
+        let digests = if native {
+            require(value["version"] == 2, "runtime_kind_mismatch")?;
+            require(
+                resolution["resource_root"] == item["resource_root"]
+                    && resolution["executable"] == item["executable"],
+                "runtime_root_mismatch",
+            )?;
+            json!({"artifact":value["artifact"]["digest"],"schemas":value["schemas"]["digest"],"resources":value["resources"]["digest"]})
+        } else {
+            require(value["version"] == 1, "runtime_kind_mismatch")?;
+            require(
+                resolution["package_root"] == item["package_root"]
+                    && resolution["executable"] == item["executable"]
+                    && resolution["cli"]
+                        == Path::new(item["package_root"].as_str().unwrap())
+                            .join("cli.py")
+                            .to_string_lossy()
+                            .as_ref(),
+                "runtime_root_mismatch",
+            )?;
+            json!({"sources":value["sources"]["digest"],"schemas":value["schemas"]["digest"],"native":value["native"]["digest"]})
+        };
         require(digests == expected[id], "runtime_digest_mismatch")?;
         proof.push(
             json!({"id":id,"argv":argv,"declaration_digest":digest(&value)?,"declaration":value}),
         );
     }
     Ok(
-        json!({"version":1,"kind":"managed-launcher-probe/v1","nonce":nonce,"scope":"selected_managed_launchers","complete":true,"launchers":proof,"assurance":"fresh_nonce_correlation_not_attestation","deployment_stability":"caller_responsibility","unlisted_launchers":"not_covered"}),
+        json!({"version":if has_native {2} else {1},"kind":if has_native {"managed-launcher-probe/v2"} else {"managed-launcher-probe/v1"},"nonce":nonce,"scope":"selected_managed_launchers","complete":true,"launchers":proof,"assurance":"fresh_nonce_correlation_not_attestation","deployment_stability":"caller_responsibility","unlisted_launchers":"not_covered"}),
     )
 }

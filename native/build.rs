@@ -30,6 +30,13 @@ fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
     }
 }
 fn main() {
+    for schema in [
+        "../scripts/assessment.schema.json",
+        "../scripts/reasoning/assessment.schema.json",
+        "../scripts/reasoning/history_assessment.schema.json",
+    ] {
+        println!("cargo:rerun-if-changed={schema}");
+    }
     let ordinary_source = "../scripts/session/lean/Main.lean";
     println!("cargo:rerun-if-changed={ordinary_source}");
     println!(
