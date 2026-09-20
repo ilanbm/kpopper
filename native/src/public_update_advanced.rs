@@ -35,6 +35,7 @@ pub(crate) struct PreparedHistory {
     pub bundle: V,
     pub files: Files,
     pub diagnostics: Vec<String>,
+    pub source_capture: crate::history_capture::Capture,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -65,8 +66,7 @@ pub(crate) fn prepare_history(
         if name == portable {
             evidence.insert(name, report.quote.as_bytes().to_vec());
         } else {
-            let path = record.parent().ok_or_else(||Error("invalid_path".into()))?.join(&name).canonicalize()?;
-            evidence.insert(name, std::fs::read(path)?);
+            evidence.insert(name.clone(), captured_evidence(captured, &name)?);
         }
     }
     require(evidence.get(&portable).is_some_and(|raw|raw==report.quote.as_bytes()), "scoped report source bytes differ from retained quote")?;
@@ -86,7 +86,26 @@ pub(crate) fn prepare_history(
     ]);
     let bundle=obj([("revision",s(&manifest.digest()?)),("manifest",manifest)]);
     pending_bundle::validate(&bundle,&files)?;
-    Ok(PreparedHistory{bundle,files,diagnostics})
+    Ok(PreparedHistory{bundle,files,diagnostics,source_capture:captured.clone()})
+}
+
+fn captured_evidence(captured: &crate::history_capture::Capture, name: &str) -> Result<Vec<u8>> {
+    crate::history_authority::relative_path(name)?;
+    let expected = captured.inventory.get(&("bytes".into(), name.into()))
+        .ok_or_else(|| Error(format!("uncaptured report contribution evidence: {name}")))?;
+    let crate::history_capture::Observation::Bytes { sha256, maximum } = expected else {
+        return Err(Error(format!("uncaptured report contribution evidence: {name}")));
+    };
+    let mut path = captured.root.clone();
+    for part in name.split('/') {
+        path.push(part);
+        require(!std::fs::symlink_metadata(&path)?.file_type().is_symlink(), "symlink_path")?;
+    }
+    let metadata=path.metadata()?;
+    require(metadata.is_file() && metadata.len() <= *maximum as u64, "history_limit")?;
+    let raw=std::fs::read(path)?;
+    require(raw.len() <= *maximum && crate::identity::sha256(&raw)==*sha256, "snapshot_changed")?;
+    Ok(raw)
 }
 
 fn obj(items: impl IntoIterator<Item=(&'static str,V)>) -> V {
@@ -107,6 +126,7 @@ pub(crate) fn capture_prepared_history(
     }
     require(applies(report, &context.route)?, "advanced history report is not project scoped")?;
     pending_bundle::validate(&prepared.bundle, &prepared.files)?;
+    prepared.source_capture.verify_current()?;
     let manifest = map(field(map(&prepared.bundle)?, "manifest")?)?;
     require(
         crate::history_contract::is_int(field(manifest, "version")?, "3"),
@@ -144,6 +164,7 @@ pub(crate) fn capture_prepared_history(
         &pending_event,
         &pending_event,
         &mut || {
+            prepared.source_capture.verify_current()?;
             require(
                 project.config()? == expected_policy,
                 "project policy or destination changed before capture; retry",
@@ -606,17 +627,6 @@ pub(crate) fn recover(
         journal["event_id"] == event,
         "advanced report journal event mismatch",
     )?;
-    require(
-        journal["pending_event_id"] == format!("report-{event}")
-            && journal["source_id"] == format!("s.ingest_{event}")
-            && journal["record"] == json!(context.record)
-            && journal["envelope_sha256"] == context.envelope_sha256
-            && journal["policy"] == context.route.config().to_json()?
-            && journal["routing"] == crate::source_capture::routing_observation(
-                context.route.paths(), &context.route.project().root
-            )?.to_json()?,
-        "advanced report journal context mismatch",
-    )?;
     let (bundle, files) = retained_bundle(&journal)?;
     let pending_event = journal["pending_event_id"]
         .as_str()
@@ -624,6 +634,11 @@ pub(crate) fn recover(
     let source_id = journal["source_id"]
         .as_str()
         .ok_or_else(|| Error("invalid advanced report journal".into()))?;
+    require(
+        pending_event == format!("report-{event}")
+            && source_id == format!("s.ingest_{event}"),
+        "advanced report journal context mismatch",
+    )?;
     let diagnostics = journal["diagnostics"]
         .as_array()
         .ok_or_else(|| Error("invalid advanced report journal".into()))?
@@ -637,6 +652,25 @@ pub(crate) fn recover(
         .collect::<Result<Vec<_>>>()?;
     let project = context.route.project().clone();
     let expected_policy = context.route.config().clone();
+    let revision = text(field(map(&bundle)?, "revision")?)?;
+    let already_captured = crate::pending_state::Ledger::capture(&project)?.events.iter().any(|item| {
+        map(item).is_ok_and(|fields| {
+            fields.get("event_id") == Some(&V::Text(pending_event.into()))
+                && fields.get("contribution_id") == Some(&V::Text(pending_event.into()))
+                && fields.get("revision") == Some(&V::Text(revision.into()))
+        })
+    });
+    if !already_captured {
+        require(
+            journal["record"] == json!(context.record)
+                && journal["envelope_sha256"] == context.envelope_sha256
+                && journal["policy"] == context.route.config().to_json()?
+                && journal["routing"] == crate::source_capture::routing_observation(
+                    context.route.paths(), &context.route.project().root
+                )?.to_json()?,
+            "advanced report journal context mismatch",
+        )?;
+    }
     context.route.verify()?;
     drop(context.route);
     let pending = crate::public_knowledge::import_helper::capture_pending(
@@ -645,12 +679,10 @@ pub(crate) fn recover(
         &files,
         pending_event,
         pending_event,
-        &mut || {
-            require(
-                project.config()? == expected_policy,
-                "project policy or destination changed before capture; retry",
-            )
-        },
+        &mut || if already_captured { Ok(()) } else { require(
+            project.config()? == expected_policy,
+            "project policy or destination changed before capture; retry",
+        ) },
     )?;
     Ok(Some(finish(
         report,
