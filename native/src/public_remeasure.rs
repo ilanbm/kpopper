@@ -1,6 +1,6 @@
 //! Read-only ordinary `remeasure` plan and bounded local recipe execution.
-use crate::{Error, Result, history_contract::*, history_view::list, history_yaml, public_workspace, require, source_capture::{self, ReadMode}, value::TypedValue as V};
-use std::{collections::BTreeMap, path::{Path, PathBuf}, process::{Command, Stdio}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use crate::{Error, Result, history_contract::*, history_view::{list, map_mut}, history_yaml, public_workspace, require, source_capture::{self, ReadMode}, value::TypedValue as V};
+use std::{collections::BTreeMap, path::{Path, PathBuf}, process::{Command, Stdio}, time::Duration};
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct Options {
@@ -67,12 +67,7 @@ fn run_recipe(argv: &[String], root: &Path) -> Result<(String, String)> {
     Ok((stdout, stderr))
 }
 fn utc_day() -> String {
-    // Gregorian conversion without a dependency; the CLI only needs UTC's calendar date.
-    let days = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() / 86400) as i64;
-    let z = days + 719468; let era = if z >= 0 { z } else { z - 146096 } / 146097; let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); let mp = (5 * doy + 2) / 153; let d = doy - (153 * mp + 2) / 5 + 1; let m = mp + if mp < 10 { 3 } else { -9 };
-    format!("{:04}-{:02}-{:02}", y + if m <= 2 { 1 } else { 0 }, m, d)
+    chrono::Utc::now().date_naive().to_string()
 }
 fn parse_reading(out: &str, recorded: &V) -> Result<V> {
     let lines = out.lines().map(str::trim).filter(|s| !s.is_empty()).collect::<Vec<_>>();
@@ -81,7 +76,16 @@ fn parse_reading(out: &str, recorded: &V) -> Result<V> {
     let line = lines[0];
     match recorded {
         V::Bool(_) => match line { "true" => Ok(V::Bool(true)), "false" => Ok(V::Bool(false)), _ => Err(Error(format!("printed {line:?} where the record holds true or false"))) },
-        V::Integer(_) => line.parse::<i64>().map(|n| V::Integer(crate::value::Integer::new(&n.to_string()).unwrap())).map_err(|_| Error(format!("printed '{}' where the record holds a number", line.replace('\'', "\\'")))),
+        V::Integer(_) => {
+            let number = regex::Regex::new(r"^-?\d+(?:\.\d+)?$").unwrap();
+            if !number.is_match(line) {
+                Err(Error(format!("printed '{}' where the record holds a number", line.replace('\'', "\\'"))))
+            } else if line.contains('.') {
+                line.parse::<f64>().map_err(|_| Error("nonfinite_float".into())).and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float))
+            } else {
+                crate::value::Integer::new(line).map(V::Integer)
+            }
+        }
         V::Float(_) => line.parse::<f64>().map_err(|_| Error(format!("printed '{}' where the record holds a number", line.replace('\'', "\\'")))).and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float)),
         _ => Ok(V::Text(line.into())),
     }
@@ -89,20 +93,77 @@ fn parse_reading(out: &str, recorded: &V) -> Result<V> {
 fn agrees(a: &V, b: &V) -> bool {
     match (a,b) { (V::Integer(x), V::Integer(y)) => x.as_str() == y.as_str(), (V::Float(x), V::Float(y)) => x.get() == y.get(), (V::Integer(x), V::Float(y)) => x.as_str().parse::<f64>().ok() == Some(y.get()), (V::Float(x), V::Integer(y)) => Some(x.get()) == y.as_str().parse::<f64>().ok(), _ => a == b }
 }
+
+fn measurement_declarations(
+    base: &V,
+    hypotheses: &V,
+) -> Result<(BTreeMap<String, Vec<String>>, V, Vec<String>)> {
+    let mut declarations = BTreeMap::<String, BTreeMap<String, Vec<Option<String>>>>::new();
+    let mut base_measures = BTreeMap::<String, String>::new();
+    let mut current = base.clone();
+    for (_section, members) in crate::reasoning_fields::collections(base)? {
+        for (id, body) in members {
+            if let Ok(body) = map(&body)
+                && let Some(name) = body.get("measure").and_then(|value| text(value).ok())
+            {
+                declarations.entry(id.clone()).or_default().entry(name.into()).or_default().push(None);
+                base_measures.insert(id, name.into());
+            }
+        }
+    }
+    let mut problems = Vec::new();
+    for (hypothesis_name, hypothesis) in map(hypotheses)? {
+        let hypothesis = map(hypothesis)?;
+        if hypothesis.get("error").is_some_and(|value| *value != V::Null) {
+            continue;
+        }
+        let document = hypothesis.get("doc").or_else(|| hypothesis.get("document")).ok_or_else(|| Error("invalid_snapshot".into()))?;
+        for (section, members) in crate::reasoning_fields::collections(document)? {
+            let target = map(&current)?.get(&section).cloned().unwrap_or_else(|| V::Map(BTreeMap::new()));
+            let mut target = map(&target)?.clone();
+            for (id, body) in members {
+                if let Ok(body_map) = map(&body) {
+                    if let Some(name) = body_map.get("measure").and_then(|value| text(value).ok()) {
+                        declarations.entry(id.clone()).or_default().entry(name.into()).or_default().push(Some(hypothesis_name.clone()));
+                    } else if let Some(name) = base_measures.get(&id) {
+                        problems.push(format!("{id}: {hypothesis_name} replaces it without measure: {name} - the fold carries the block over whole, so the recipe would be dropped and nothing would take this reading again; carry measure: {name} into {hypothesis_name}, or drop it from the base first"));
+                    }
+                }
+                target.insert(id, body);
+            }
+            map_mut(&mut current)?.insert(section, V::Map(target));
+        }
+    }
+    for (id, by_recipe) in &declarations {
+        if by_recipe.len() > 1 {
+            let said = by_recipe.iter().map(|(recipe, holders)| {
+                let holders = holders.iter().map(|holder| holder.as_deref().unwrap_or("the base")).collect::<Vec<_>>().join(", ");
+                format!("{recipe} by {holders}")
+            }).collect::<Vec<_>>().join("; ");
+            problems.push(format!("{id}: two recipes named for one entry - {said} - a contested recipe; one of them, or neither"));
+        }
+    }
+    let mut named = BTreeMap::<String, Vec<String>>::new();
+    for (id, by_recipe) in declarations {
+        for recipe in by_recipe.into_keys() {
+            named.entry(recipe).or_default().push(id.clone());
+        }
+    }
+    Ok((named, current, problems))
+}
+
 pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     let record = options.record.clone().unwrap_or_else(|| cwd.join("GROUNDING.yaml"));
     let runtime = public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None)?;
     let capture = source_capture::capture_source_with_runtime(std::slice::from_ref(&record), cwd, if frozen { ReadMode::Frozen } else { ReadMode::Live }, None, runtime.as_ref())?;
     let doc = capture.ordinary_document();
-    let collections = crate::reasoning_fields::collections(doc)?;
-    let mut named = BTreeMap::<String, Vec<String>>::new();
-    for (_section, members) in &collections {
-        for (id, body) in members {
-            if let Ok(body) = map(&body) {
-                if let Some(name) = body.get("measure").and_then(|v| text(v).ok()) { named.entry(name.to_owned()).or_default().push(id.clone()); }
-            }
-        }
+    let (named, current, problems) = measurement_declarations(doc, capture.hypotheses())?;
+    if !problems.is_empty() {
+        let mut lines = vec!["refused - the record names recipes it cannot: ".into()];
+        lines.extend(problems.into_iter().map(|problem| format!("  {problem}")));
+        return Ok(output(lines, 1));
     }
+    let collections = crate::reasoning_fields::collections(&current)?;
     let recipes = match allowlist(&recipe_path(&record)) {
         Ok(recipes) => recipes,
         Err(error) => return Ok(Output { text: String::new(), stderr: format!("{error}\n"), code: 1 }),
@@ -129,7 +190,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     let mut failed = 0usize;
     for (name, ids) in named {
         let (text, _) = match run_recipe(recipes.get(&name).unwrap(), root) { Ok(v) => v, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({}): {}", ids.join(", "), e)); continue; } };
-        for id in ids { let body = collections.values().find_map(|m|m.get(&id)).unwrap(); let body=map(body)?; let field=body.get("v").or_else(||body.get("quoted")).ok_or_else(||Error(format!("{id} has no stored reading")))?; match parse_reading(&text, field) { Ok(measured) if agrees(field, &measured) => out.push(format!("  {id}: {} - as recorded ({name})", scalar(field))), Ok(measured) => { changed=true; out.push(format!("  {id}: {} -> {} measured by {name}", scalar(field), scalar(&measured))); }, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({id}): {}", e)); } } }
+        for id in ids { let body = collections.values().find_map(|m|m.get(&id)).unwrap(); let body=map(body)?; let field=body.get("v").or_else(||body.get("quoted")).ok_or_else(||Error(format!("{id} has no stored reading")))?; match parse_reading(&text, field) { Ok(measured) if agrees(field, &measured) => out.push(format!("  {id}: {} - as recorded ({name})", scalar(&measured))), Ok(measured) => { changed=true; out.push(format!("  {id}: {} -> {} measured by {name}", scalar(field), scalar(&measured))); }, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({id}): {}", e)); } } }
     }
     out.push("".into());
     let code = if failed != 0 || changed { 1 } else { 0 };

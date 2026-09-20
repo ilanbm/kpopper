@@ -1,9 +1,6 @@
 use kpop_native::public_remeasure::{self, Options};
 use std::{fs, path::{Path, PathBuf}, process::Command};
 
-const ORACLE_PYTHON: &str = "/Users/ilanbm/.local/share/kpopper/runtimes/bf4942511207a39e/bin/python";
-const ORACLE_ROOT: &str = "/Users/ilanbm/docs/kpopper/rust-runtime-spike/baseline-f480ea6";
-
 #[derive(Debug, PartialEq, Eq)]
 struct ProcessOutput {
     code: i32,
@@ -12,19 +9,13 @@ struct ProcessOutput {
 }
 
 fn oracle(record: &Path, run: bool) -> ProcessOutput {
-    let program = r#"import pathlib, sys
-sys.path.insert(0, sys.argv[1])
-import remeasure
-try:
-    lines, code = remeasure.measure([sys.argv[2]], run=(sys.argv[3] == "1"))
-    sys.stdout.write("\n".join(lines) + "\n")
-except Exception as error:
-    sys.stderr.write(str(error) + "\n")
-    code = 2
-sys.exit(code)
-"#;
-    let output = Command::new(ORACLE_PYTHON)
-        .args(["-c", program, &format!("{ORACLE_ROOT}/scripts"), record.to_str().unwrap(), if run { "1" } else { "0" }])
+    let python = std::env::var("KPOP_SESSION_ORACLE_PYTHON").expect("set KPOP_SESSION_ORACLE_PYTHON to the Python 1.8 runtime");
+    let root = PathBuf::from(std::env::var("KPOP_SESSION_ORACLE_ROOT").expect("set KPOP_SESSION_ORACLE_ROOT to the Python 1.8 source root"));
+    let mut command = Command::new(python);
+    command.arg(root.join("scripts/remeasure.py"));
+    if run { command.arg("--run"); }
+    let output = command
+        .arg(record)
         .current_dir(record.parent().unwrap())
         .output()
         .unwrap();
@@ -36,13 +27,14 @@ sys.exit(code)
 }
 
 fn native(record: &Path, run: bool) -> ProcessOutput {
-    match public_remeasure::run(
-        &Options { run, record: Some(record.to_path_buf()) },
-        record.parent().unwrap(),
-        true,
-    ) {
-        Ok(output) => ProcessOutput { code: output.code, stdout: output.text, stderr: output.stderr },
-        Err(error) => ProcessOutput { code: 2, stdout: String::new(), stderr: format!("{error}\n") },
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    command.args(["--frozen", "remeasure"]);
+    if run { command.arg("--run"); }
+    let output = command.arg(record).current_dir(record.parent().unwrap()).output().unwrap();
+    ProcessOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).unwrap(),
+        stderr: String::from_utf8(output.stderr).unwrap(),
     }
 }
 
@@ -132,12 +124,16 @@ fn invalid_scalar_for_numeric_record_is_a_hole() {
 }
 
 #[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
 fn python_18_oracle_matches_complete_plan_output() {
     let (_temp, record) = fixture("1", 0, "", "1", "echo: [./recipe]\nspare: [./recipe]\n");
     assert_oracle(&record, false);
 }
 
 #[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
 fn python_18_oracle_matches_complete_no_measures_output() {
     let temp = tempfile::tempdir().unwrap();
     let record = temp.path().canonicalize().unwrap().join("GROUNDING.yaml");
@@ -146,25 +142,75 @@ fn python_18_oracle_matches_complete_no_measures_output() {
 }
 
 #[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
 fn python_18_oracle_matches_complete_unchanged_output() {
     let (_temp, record) = fixture("1", 0, "", "1", "echo: [./recipe]\n");
     assert_oracle(&record, true);
 }
 
 #[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
 fn python_18_oracle_matches_complete_recipe_failure_output() {
     let (_temp, record) = fixture("1", 7, "bad recipe", "1", "echo: [./recipe]\n");
     assert_oracle(&record, true);
 }
 
 #[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
 fn python_18_oracle_matches_complete_scalar_failure_output() {
     let (_temp, record) = fixture("hello", 0, "", "1", "echo: [./recipe]\n");
     assert_oracle(&record, true);
 }
 
 #[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
 fn python_18_oracle_matches_complete_invalid_allowlist_output() {
     let (_temp, record) = fixture("1", 0, "", "1", "bad.name: [./recipe]\n");
     assert_oracle(&record, false);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_hypothesis_owned_reading() {
+    let (temp, record) = fixture("2", 0, "", "1", "echo: [./recipe]\n");
+    fs::create_dir_all(temp.path().join(".kpopper/hypotheses")).unwrap();
+    fs::write(temp.path().join(".kpopper/hypotheses/proposal.yaml"), "hypothesis:\n  claim: later reading\n  born: 2026-09-19\nknown:\n  p.a:\n    v: 2\n    measure: echo\n").unwrap();
+    assert_oracle(&record, true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_hypothesis_recipe_drop_refusal() {
+    let (temp, record) = fixture("2", 0, "", "1", "echo: [./recipe]\n");
+    fs::create_dir_all(temp.path().join(".kpopper/hypotheses")).unwrap();
+    fs::write(temp.path().join(".kpopper/hypotheses/proposal.yaml"), "hypothesis:\n  claim: later reading\n  born: 2026-09-19\nknown:\n  p.a:\n    v: 2\n").unwrap();
+    assert_oracle(&record, true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_changed_reading_evaluation() {
+    let (_temp, record) = fixture("2", 0, "", "1", "echo: [./recipe]\n");
+    fs::write(&record, "known:\n  p.a:\n    v: 1\n    of: 2026-09-01\n    measure: echo\n").unwrap();
+    assert_oracle(&record, true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_arbitrary_integer_and_decimal_readings() {
+    let huge = "12345678901234567890123456789012345678901234567890";
+    let (_temp, record) = fixture(huge, 0, "", huge, "echo: [./recipe]\n");
+    assert_oracle(&record, true);
+
+    fs::write(&record, "known:\n  p.a:\n    v: 1\n    measure: echo\n").unwrap();
+    fs::write(record.parent().unwrap().join("recipe"), "#!/bin/sh\nprintf '1.0\\n'\n").unwrap();
+    assert_oracle(&record, true);
 }
