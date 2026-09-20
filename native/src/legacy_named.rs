@@ -302,7 +302,7 @@ pub(super) fn prepare(
     let hyp_source = crate::history_yaml::decode_ordinary_source_value(initial.as_bytes())?;
     let mut lines = initial.split('\n').map(str::to_owned).collect::<Vec<_>>();
     let mut output = notice.text.lines().map(str::to_owned).collect::<Vec<_>>();
-    output.extend(notes);
+    output.extend(notes.clone());
     let collection;
     match kind.as_str() {
         "set" => {
@@ -534,6 +534,7 @@ pub(super) fn prepare(
         root,
         journal: entry_layout(Path::new(&entry_relative))?.journal,
         subject: id,
+        diagnostics: notes,
     }))
 }
 

@@ -19,7 +19,13 @@ pub(crate) struct Options {
     pub context: V,
 }
 
-fn with_batch_context(value: &V, context: &V, actions: &[V], steps: &[V]) -> Result<V> {
+fn with_batch_context(
+    value: &V,
+    context: &V,
+    actions: &[V],
+    steps: &[V],
+    diagnostics: &[String],
+) -> Result<V> {
     let mut value = map(value)?.clone();
     value.insert(
         "batch".into(),
@@ -28,6 +34,10 @@ fn with_batch_context(value: &V, context: &V, actions: &[V], steps: &[V]) -> Res
             ("context".into(), context.clone()),
             ("actions".into(), V::List(actions.to_vec())),
             ("steps".into(), V::List(steps.to_vec())),
+            (
+                "diagnostics".into(),
+                V::List(diagnostics.iter().cloned().map(V::Text).collect()),
+            ),
         ])),
     );
     Ok(V::Map(value))
@@ -48,6 +58,7 @@ pub(crate) fn prepare(
     let mut root = None;
     let mut journal = None;
     let mut subjects = Vec::new();
+    let mut diagnostics = Vec::new();
 
     for (index, action) in actions.iter().enumerate() {
         let prepared = match A::prepare_with_inventory(action, route, None, inventory)
@@ -68,6 +79,7 @@ pub(crate) fn prepare(
         receipts.push(field(map(&data)?, "receipt")?.clone());
         outputs.push(prepared.output.trim_end().to_owned());
         subjects.push(prepared.subject);
+        diagnostics.extend(prepared.diagnostics);
         inventory = prepared.inventory;
         for image in prepared.mutation.files() {
             let path = image.path.clone();
@@ -96,12 +108,14 @@ pub(crate) fn prepare(
         &options.context,
         actions,
         &step_digests,
+        &diagnostics,
     )?;
     let after = with_batch_context(
         field(last_receipt, "after")?,
         &options.context,
         actions,
         &step_digests,
+        &diagnostics,
     )?;
     let capabilities = V::Map(BTreeMap::from([
         (
@@ -135,6 +149,7 @@ pub(crate) fn prepare(
         root: root.unwrap(),
         journal: journal.unwrap(),
         subject: subjects.join(","),
+        diagnostics,
     })
 }
 

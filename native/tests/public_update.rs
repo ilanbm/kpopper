@@ -54,6 +54,8 @@ fn source_and_two_dependent_writes_publish_once_and_retry_exactly() {
     assert_eq!(receipt["state"], "applied");
     assert_eq!(receipt["newly_fired_judgments"], json!(["d.price"]));
     assert_eq!(receipt["reach"]["judgments"], json!(["d.price"]));
+    assert!(receipt["diagnostics"].as_array().is_some_and(|v| !v.is_empty()));
+    assert_eq!(receipt["target_after_sha256"].as_str().unwrap().len(), 64);
     assert!(state.join("signals").join(format!("{}.json", receipt["signal_ids"][0].as_str().unwrap())).is_file());
     assert!(receipt["mutation"]["receipt"]["before"]["batch"].is_object());
     let after = fs::read(&entry).unwrap();
@@ -100,5 +102,26 @@ fn stale_primary_hash_retains_report_without_writing() {
         "date":"2026-09-20", "source_quote":"new fact", "updates":[{"kind":"add","id":"p.new","body":{"v":2}}]
     }));
     assert_eq!(output.status.code(), Some(1));
+    assert_eq!(fs::read(entry).unwrap(), before);
+}
+
+#[test]
+fn private_dependency_closure_is_retained_without_a_shared_write() {
+    let temp = tempfile::tempdir().unwrap();
+    record(temp.path());
+    let entry = temp.path().join("GROUNDING.yaml");
+    let private = fs::read_to_string(&entry).unwrap().replace(
+        "    read: 2026-09-01\nknown:",
+        "    read: 2026-09-01\n    private: true\nknown:",
+    );
+    fs::write(&entry, private).unwrap();
+    let before = fs::read(&entry).unwrap();
+    let output = run(temp.path(), &temp.path().join("state"), &json!({
+        "event_id":"private-closure", "date":"2026-09-20", "source_quote":"price 12",
+        "updates":[{"kind":"set","id":"p.price","value":12}]
+    }));
+    assert_eq!(output.status.code(), Some(1));
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(receipt["reason"].as_str().unwrap().contains("private"));
     assert_eq!(fs::read(entry).unwrap(), before);
 }

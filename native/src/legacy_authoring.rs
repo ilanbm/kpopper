@@ -1315,8 +1315,10 @@ pub(crate) struct Prepared {
     pub(crate) root: PathBuf,
     pub(crate) journal: String,
     pub(crate) subject: String,
+    pub(crate) diagnostics: Vec<String>,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Preparation {
     Draft(String),
     Mutation(Prepared),
@@ -1564,6 +1566,7 @@ pub(crate) fn prepare_with_inventory(
         let _ = old;
     }
     let mut output = notice.text.lines().map(str::to_owned).collect::<Vec<_>>();
+    let diagnostics = notes.clone();
     output.extend(notes);
     match kind.as_str() {
         "add" => {
@@ -1914,6 +1917,7 @@ pub(crate) fn prepare_with_inventory(
         root,
         journal,
         subject: id,
+        diagnostics,
     }))
 }
 

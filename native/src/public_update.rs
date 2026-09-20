@@ -271,6 +271,41 @@ fn mutation_graphs(mutation: &crate::history_transaction::PreparedMutation, repo
     Ok((graph(before, &seeds)?, graph(after, &seeds)?))
 }
 
+fn verify_requested_profile(
+    report: &Report,
+    mutation: &crate::history_transaction::PreparedMutation,
+) -> Result<()> {
+    if let Some(requested) = report.raw.get("profile").and_then(J::as_str) {
+        let (_, after) = mutation_graphs(mutation, report)?;
+        crate::require(after["assessment_profile"] == requested,
+            "requested writer profile requires explicit record migration")?;
+    }
+    Ok(())
+}
+
+fn target_after_sha256(
+    mutation: &crate::history_transaction::PreparedMutation,
+    report: &Report,
+) -> Result<String> {
+    let raw = mutation.files().iter().find(|f| f.role == "record")
+        .and_then(|f| f.after.as_deref()).ok_or_else(|| error("report mutation has no record result"))?;
+    let document = crate::history_yaml::decode_ordinary_source_value(raw)?.projected();
+    let entries = crate::reasoning_snapshot::entries(&document)?;
+    let value = if report.batch {
+        V::Map(report.updates.iter().map(|item| {
+            let id = item["id"].as_str().unwrap();
+            (id.to_owned(), entries.get(id).map(|(_, body)| body.clone()).unwrap_or(V::Null))
+        }).collect())
+    } else {
+        entries.get(report.updates[0]["id"].as_str().unwrap())
+            .map(|(_, body)| body.clone()).unwrap_or(V::Null)
+    };
+    let ordinary = crate::history_yaml::OrdinaryValue::from_typed(&value);
+    Ok(crate::identity::sha256(
+        &crate::public_ordinary_readers::python_safe_dump_unicode(&ordinary)?,
+    ))
+}
+
 fn classification(before: &J, after: &J) -> (Vec<String>, Vec<String>) {
     let mut fired = Vec::new();
     let mut actionable = Vec::new();
@@ -292,9 +327,15 @@ fn signal_id(event: &str, category: &str, names: &[String]) -> String {
     crate::identity::sha256(format!("{event}\0{category}\0{}", names.join("\0")).as_bytes())[..32].into()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn receipt(report: &Report, record: &Path, root: &Path, event: &str, source: &Path,
-           envelope_sha: &str, state: &str, reason: Option<&str>, mutation: Option<&crate::history_transaction::PreparedMutation>) -> Result<(J, Vec<J>)> {
+           envelope_sha: &str, state: &str, reason: Option<&str>, recovered: bool,
+           mutation: Option<&crate::history_transaction::PreparedMutation>) -> Result<(J, Vec<J>)> {
     let source_id = format!("s.ingest_{event}");
+    let diagnostics = mutation.and_then(|mutation| {
+        mutation.to_data().to_json().ok()
+            .and_then(|v| v["receipt"]["after"]["batch"]["diagnostics"].as_array().cloned())
+    }).unwrap_or_default();
     let (before, after, fired, actionable) = if let Some(mutation) = mutation {
         let (before, after) = mutation_graphs(mutation, report)?;
         let (fired, actionable) = classification(&before, &after);
@@ -330,7 +371,7 @@ fn receipt(report: &Report, record: &Path, root: &Path, event: &str, source: &Pa
         "envelope_sha256": envelope_sha, "signal_ids": signals.iter().map(|v| v["id"].clone()).collect::<Vec<_>>(),
         "reach": after.as_ref().map(|v| v["reach"].clone()).unwrap_or_else(||json!({})),
         "newly_fired_judgments": fired, "actionable_judgments": actionable,
-        "recovered": false, "diagnostics": []
+        "recovered": recovered, "diagnostics": diagnostics
     });
     if report.batch { value["updates"] = J::Array(report.updates.clone()); }
     if let Some(cited) = report.raw.get("source") {
@@ -343,6 +384,7 @@ fn receipt(report: &Report, record: &Path, root: &Path, event: &str, source: &Pa
         value["mutation"] = json!({"operation":data["operation"],"digest":data["digest"],"receipt":data["receipt"]});
         value["graph_before"] = before.unwrap()["hash"].clone();
         value["graph_after"] = after.unwrap()["hash"].clone();
+        value["target_after_sha256"] = json!(target_after_sha256(mutation, report)?);
     }
     Ok((value, signals))
 }
@@ -413,7 +455,7 @@ pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output
         journal["phase"] = json!("committed");
         save(&journal_path, &journal)?;
         let (answer, signals) = receipt(&report, &record, &root, &event, &source_path, &envelope_sha,
-            "applied", None, Some(&mutation))?;
+            "applied", None, true, Some(&mutation))?;
         for signal in &signals {
             save(&root.join("signals").join(format!("{}.json", signal["id"].as_str().unwrap())), signal)?;
         }
@@ -441,6 +483,12 @@ pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output
             crate::require(crate::identity::sha256(&current) == expected,
                 "record changed since the primary read it; reread the premises before resubmitting")?;
         }
+        let mut privacy_inventory = Inventory::default();
+        let privacy_document = crate::source_document::load(
+            std::slice::from_ref(&record), &mut privacy_inventory, false,
+        )?.source.projected();
+        crate::require(!crate::recording_privacy::private_marker(&privacy_document),
+            "private or unclear original source permission; report retained privately")?;
         let collection = source_collection(&record, &report)?;
         route.verify()?;
         let authority = crate::legacy_authoring::route(&record, route.config())?;
@@ -456,6 +504,7 @@ pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output
                 operation: format!("report-{event}"), context,
             })?;
             let mutation = prepared.mutation.clone();
+            verify_requested_profile(&report, &mutation)?;
             save(&journal_path, &retained_journal(&mutation, false, "prepared")?)?;
             let mut committed = |_: &V| {
                 save(&journal_path, &retained_journal(&mutation, false, "committed")?)
@@ -496,6 +545,7 @@ pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output
         let mutation = crate::history_authoring_batch::prepare_batch(
             &store, &captured, &planned, &batch, runtime.as_ref(),
         )?;
+        verify_requested_profile(&report, &mutation)?;
         let authored = V::List(mutation.files().iter().filter(|f| f.role == "history_object")
             .map(|f| crate::history_yaml::decode_document(f.after.as_ref().unwrap())).collect::<Result<Vec<_>>>()?);
         crate::require(!crate::recording_privacy::private_marker(&authored),
@@ -516,7 +566,7 @@ pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output
         Err(e) => ("needs_primary", Some(e.to_string()), None, 1),
     };
     let (receipt, signals) = receipt(&report, &record, &root, &event, &source_path, &envelope_sha,
-        state, reason.as_deref(), mutation.as_ref())?;
+        state, reason.as_deref(), false, mutation.as_ref())?;
     for signal in &signals {
         save(&root.join("signals").join(format!("{}.json", signal["id"].as_str().unwrap())), signal)?;
     }
