@@ -1581,7 +1581,17 @@ fn prepare_with_inventory_mode(
     if kind == "set"
         && action.get("as_of").is_none_or(|value| *value == V::Null)
         && action.get("source").is_none_or(|value| *value == V::Null)
-        && !action.contains_key("_record_scope")
+        && action.get("_record_scope").is_none_or(|scope| {
+            entries
+                .get(&id)
+                .and_then(|(_, body)| map(body).ok())
+                .and_then(|body| body.get("scope"))
+                .map(V::digest)
+                .transpose()
+                .ok()
+                .flatten()
+                == scope.digest().ok()
+        })
         && same_legacy(&reader.value(&id)?, field(&action, "value")?)
     {
         return Ok(Preparation::Draft {
