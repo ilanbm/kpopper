@@ -91,7 +91,9 @@ fn parse(raw: &[u8]) -> Result<Report> {
     )?;
     let quote = required_text(top, "source_quote")?;
     if let Some(event) = top.get("event_id").filter(|v| !v.is_null()) {
-        let event = event.as_str().ok_or_else(|| error("event_id must be text"))?;
+        let event = event
+            .as_str()
+            .ok_or_else(|| error("event_id must be text"))?;
         crate::require(
             !event.trim().is_empty(),
             "event_id must be non-empty when supplied",
@@ -793,7 +795,7 @@ fn receipt(
         if !fired.is_empty() {
             signals.push(json!({
                 "id":signal_id(event,"contradiction",&fired), "event_id":event,
-                "category":"contradiction", "target":J::Null, "source_quote":report.quote,
+                "category":"contradiction", "target":report.raw.get("target").cloned().unwrap_or(J::Null), "source_quote":report.quote,
                 "affected_judgments":after["reach"]["judgments"], "newly_fired_judgments":fired,
                 "actionable_judgments":[], "reason":fired.iter().filter_map(|id| after["judgments"][id]["reason"].as_str()).collect::<Vec<_>>().join("; ")
             }));
@@ -811,11 +813,26 @@ fn receipt(
                 .join("; ");
             signals.push(json!({
                 "id":signal_id(event,"question",&actionable), "event_id":event,
-                "category":"question", "target":J::Null, "source_quote":report.quote,
+                "category":"question", "target":report.raw.get("target").cloned().unwrap_or(J::Null), "source_quote":report.quote,
                 "affected_judgments":after["reach"]["judgments"], "newly_fired_judgments":[],
                 "actionable_judgments":actionable, "reason":question, "question":question
             }));
         }
+    }
+    if state == "needs_primary" {
+        let reason = reason.unwrap_or("report requires primary review");
+        let question = report
+            .raw
+            .get("question")
+            .and_then(J::as_str)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(reason);
+        signals.push(json!({
+            "id":signal_id(event,"question",&[question.to_owned()]), "event_id":event,
+            "category":"question", "target":report.raw.get("target").cloned().unwrap_or(J::Null),
+            "source_quote":report.quote, "affected_judgments":[], "newly_fired_judgments":[],
+            "actionable_judgments":[], "reason":reason, "question":question,
+        }));
     }
     let mut value = json!({
         "record": record, "state_dir": root,
@@ -911,6 +928,9 @@ fn private_reason(report: &Report) -> Result<Option<&'static str>> {
         == Some("unclear")
     {
         return Ok(Some("unclear report scope; retained privately"));
+    }
+    if report.raw.get("kind").is_some_and(|kind| kind != "report") {
+        return Ok(Some("only kind=report can update an existing reading"));
     }
     Ok(None)
 }
@@ -1073,6 +1093,14 @@ fn run_bound(
             None,
             supplied_runtime,
         )?;
+        for signal in &signals {
+            save(
+                &root
+                    .join("signals")
+                    .join(format!("{}.json", signal["id"].as_str().unwrap())),
+                signal,
+            )?;
+        }
         save(&receipt_path, &answer)?;
         save(
             &root.join("results").join(format!("{event}.json")),
@@ -1573,13 +1601,29 @@ mod tests {
                 let report = json!({"date":"2026-09-20","source_quote":"new reading","target":"p.x","value":value});
                 let raw = serde_json::to_vec(&report).unwrap();
                 let snapshot = capture_target(&report, &entry, temp.path()).unwrap();
-                let options = Options { file: "-".into(), record: Some(entry.clone()), state_dir: Some(temp.path().join("state")) };
+                let options = Options {
+                    file: "-".into(),
+                    record: Some(entry.clone()),
+                    state_dir: Some(temp.path().join("state")),
+                };
                 let result = if queued {
-                    run_captured(&options, temp.path(), Some(&raw), "1234567890abcdef1234567890abcdef", &snapshot)
-                } else { run(&options, temp.path(), Some(&raw)) }.unwrap();
+                    run_captured(
+                        &options,
+                        temp.path(),
+                        Some(&raw),
+                        "1234567890abcdef1234567890abcdef",
+                        &snapshot,
+                    )
+                } else {
+                    run(&options, temp.path(), Some(&raw))
+                }
+                .unwrap();
                 let receipt: J = serde_json::from_str(&result.text).unwrap();
                 assert_eq!(receipt["state"], "needs_primary", "{receipt}");
-                assert_eq!(receipt["reason"], "the captured value does not have the target's scalar type");
+                assert_eq!(
+                    receipt["reason"],
+                    "the captured value does not have the target's scalar type"
+                );
                 assert_eq!(result.code, 1);
                 assert_eq!(fs::read_to_string(entry).unwrap(), before);
             }

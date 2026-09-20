@@ -61,39 +61,119 @@ fn hash(path: &Path) -> String {
 }
 
 #[test]
+fn explicit_question_keeps_its_target_and_never_applies_the_value() {
+    let temp = tempfile::tempdir().unwrap();
+    record(temp.path());
+    let entry = temp.path().join("GROUNDING.yaml");
+    let before = fs::read(&entry).unwrap();
+    let state = temp.path().join("state");
+    let output = run(
+        temp.path(),
+        &state,
+        &json!({
+            "event_id":"question-only", "date":"2026-09-20", "source_quote":"Please verify this reading",
+            "kind":"question", "question":"Where was the price observed?", "target":"p.price", "value":12,
+        }),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(receipt["state"], "needs_primary");
+    let signals = receipt["signal_ids"].as_array().unwrap();
+    assert_eq!(signals.len(), 1);
+    let signal: Value = serde_json::from_slice(
+        &fs::read(
+            state
+                .join("signals")
+                .join(format!("{}.json", signals[0].as_str().unwrap())),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(signal["target"], "p.price");
+    assert_eq!(signal["question"], "Where was the price observed?");
+    assert_eq!(signal["source_quote"], "Please verify this reading");
+    assert_eq!(fs::read(entry).unwrap(), before);
+}
+
+#[test]
 fn advanced_cli_routes_project_private_and_local_reports_and_replays_success() {
-    for (kind, private, expected) in [("project", false, "project_captured"), ("project", true, "needs_primary"), ("feature", false, "applied")] {
+    for (kind, private, expected) in [
+        ("project", false, "project_captured"),
+        ("project", true, "needs_primary"),
+        ("feature", false, "applied"),
+    ] {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("repo");
         fs::create_dir(&root).unwrap();
         record(&root);
         let git = |args: &[&str]| {
-            let output = Command::new("git").arg("-C").arg(&root).args(args).output().unwrap();
-            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         };
         git(&["init", "-q", "-b", "main"]);
         git(&["add", "GROUNDING.yaml"]);
-        git(&["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"]);
+        git(&[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "fixture",
+        ]);
         let entry = root.join("GROUNDING.yaml");
         let before = fs::read(&entry).unwrap();
         let state = temp.path().join("state");
         let mut report = json!({"event_id":"advanced-cli", "date":"2026-09-20", "source_quote":"price 12", "target":"p.price", "value":12,
             "shareability":"project", "scope":{"kind":kind,"environment":"example"}});
-        if private { report["privacy"] = json!(true); }
+        if private {
+            report["privacy"] = json!(true);
+        }
         let first = run(&root, &state, &report);
-        let result: Value = serde_json::from_slice(&first.stdout).unwrap_or_else(|e| panic!("{kind}/{private}: {e}; {}", String::from_utf8_lossy(&first.stderr)));
+        let result: Value = serde_json::from_slice(&first.stdout).unwrap_or_else(|e| {
+            panic!(
+                "{kind}/{private}: {e}; {}",
+                String::from_utf8_lossy(&first.stderr)
+            )
+        });
         assert_eq!(result["state"], expected, "{result}");
-        assert_eq!(first.status.code(), Some(if private {1} else {0}));
+        assert_eq!(first.status.code(), Some(if private { 1 } else { 0 }));
         if expected == "applied" {
             let after = fs::read_to_string(&entry).unwrap();
             assert!(after.contains("v: 12"));
             assert!(after.contains("kind: feature"));
-        } else { assert_eq!(fs::read(&entry).unwrap(), before); }
+        } else {
+            assert_eq!(fs::read(&entry).unwrap(), before);
+        }
         let replay = run(&root, &state, &report);
         assert_eq!(replay.status.code(), first.status.code());
         assert_eq!(replay.stdout, first.stdout);
         if private {
-            assert!(!Command::new("git").arg("-C").arg(&root).args(["rev-parse", "--verify", "--quiet", "refs/kpopper/pending_grounding"]).status().unwrap().success());
+            assert!(
+                !Command::new("git")
+                    .arg("-C")
+                    .arg(&root)
+                    .args([
+                        "rev-parse",
+                        "--verify",
+                        "--quiet",
+                        "refs/kpopper/pending_grounding"
+                    ])
+                    .status()
+                    .unwrap()
+                    .success()
+            );
         }
     }
 }
@@ -210,13 +290,20 @@ fn stale_primary_hash_retains_report_without_writing() {
 }
 
 #[test]
-fn earlier_batch_action_can_fire_and_replace_an_arrangement() {
+fn batch_arrangement_judgments_require_primary_review_and_emit_a_question() {
     let temp = tempfile::tempdir().unwrap();
-    let cases: Value = serde_json::from_slice(include_bytes!("fixtures/ordinary-page-facts.json")).unwrap();
-    let case = cases.as_array().unwrap().iter()
-        .find(|case| case["name"] == "page-arrangement-take-dry").unwrap();
+    let cases: Value =
+        serde_json::from_slice(include_bytes!("fixtures/ordinary-page-facts.json")).unwrap();
+    let case = cases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "page-arrangement-take-dry")
+        .unwrap();
     for (relative, raw) in case["files"].as_object().unwrap() {
-        if relative.contains("hypotheses/") { continue }
+        if relative.contains("hypotheses/") {
+            continue;
+        }
         let path = temp.path().join(relative);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, raw.as_str().unwrap()).unwrap();
@@ -225,20 +312,41 @@ fn earlier_batch_action_can_fire_and_replace_an_arrangement() {
     let arranged = fs::read_to_string(&entry).unwrap()
         .replace("page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0",
             "graph.judgments], seen: {s.now: read 2026-09-19, graph.judgments: 1}, wrong_if: graph.judgments > 1");
-    fs::write(&entry, arranged).unwrap();
-    let output = run(temp.path(), &temp.path().join("state"), &json!({
-        "event_id":"batch-arrangement", "record_sha256":hash(&entry), "date":"2026-09-20",
-        "source_quote":"A second request arrived and the layout was re-decided.",
-        "updates":[
-            {"kind":"add","id":"c.extra","body":{"rests_on":["p.value"],"verdict":"extra","wrong_if":"p.value > 100"}},
-            {"kind":"add","id":"v.layout","body":{"rests_on":["s.now","graph.judgments"],"verdict":"re-decided","wrong_if":"graph.judgments > 1"}}
-        ]
-    }));
-    assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-    let raw = fs::read_to_string(entry).unwrap();
-    assert!(raw.contains("born: \"2026-09-20\""));
-    assert!(raw.contains("stood 1 session"));
-    assert!(raw.contains("graph.judgments: 2"));
+    fs::write(&entry, &arranged).unwrap();
+    let output = run(
+        temp.path(),
+        &temp.path().join("state"),
+        &json!({
+            "event_id":"batch-arrangement", "record_sha256":hash(&entry), "date":"2026-09-20",
+            "source_quote":"A second request arrived and the layout was re-decided.",
+            "updates":[
+                {"kind":"add","id":"c.extra","body":{"rests_on":["p.value"],"verdict":"extra","wrong_if":"p.value > 100"}},
+                {"kind":"add","id":"v.layout","body":{"rests_on":["s.now","graph.judgments"],"verdict":"re-decided","wrong_if":"graph.judgments > 1"}}
+            ]
+        }),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(receipt["state"], "needs_primary");
+    assert_eq!(
+        receipt["reason"],
+        "batch judgments about reader/page counts require primary review; use domain entries as premises"
+    );
+    let signals = receipt["signal_ids"].as_array().unwrap();
+    assert_eq!(signals.len(), 1);
+    let signal: Value = serde_json::from_slice(
+        &fs::read(
+            temp.path()
+                .join("state/signals")
+                .join(format!("{}.json", signals[0].as_str().unwrap())),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(signal["category"], "question");
+    assert_eq!(signal["reason"], receipt["reason"]);
+    assert_eq!(signal["question"], receipt["reason"]);
+    assert_eq!(fs::read_to_string(entry).unwrap(), arranged);
 }
 
 #[test]
