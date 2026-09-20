@@ -34,6 +34,9 @@ enum Node {
     Map(Vec<(Node, Node)>),
     Merge,
     ValueKey(String),
+    /// A recursive ordinary value consumed from an ignored top-level field.
+    /// It is never projected into the finite ordinary/history value domains.
+    OpaqueCycle,
 }
 /// Source mapping order is distinct from canonical identity ordering. Some retained
 /// readers use the source's printed representation as a clock-group key.
@@ -378,7 +381,9 @@ struct Reader<'a> {
     anchors: BTreeSet<String>,
     ordinary_aliases: bool,
     completed: std::collections::BTreeMap<String, Node>,
+    active: BTreeSet<String>,
     expanded_bytes: usize,
+    quarantine_top_level_cycles: bool,
 }
 impl<'a> Reader<'a> {
     fn next(&mut self) -> Result<Event> {
@@ -395,7 +400,7 @@ impl<'a> Reader<'a> {
         }
         Ok(event)
     }
-    fn node(&mut self, event: Event, depth: usize) -> Result<Node> {
+    fn node(&mut self, event: Event, depth: usize, quarantine_cycle: bool) -> Result<Node> {
         self.nodes += 1;
         // Source keys and merge syntax count here; detached values have their own exact budget.
         require(
@@ -408,19 +413,27 @@ impl<'a> Reader<'a> {
             | Event::MappingStart { anchor, .. } => anchor.clone(),
             _ => None,
         };
+        if let Some(anchor) = &anchor {
+            self.active.insert(anchor.clone());
+        }
         let node = match event {
             Event::Alias { anchor } if self.ordinary_aliases => {
-                // Only completed anchors can be expanded: undefined and recursive
-                // aliases fail before cloning. Charge the complete expansion first.
-                let original = self.completed.get(&anchor).ok_or_else(invalid)?;
-                let (nodes, bytes) = node_cost(original, depth)?;
-                self.nodes = self.nodes.saturating_add(nodes);
-                self.expanded_bytes = self.expanded_bytes.saturating_add(bytes);
-                require(
-                    self.nodes <= MAX_VALUES * 2 && self.expanded_bytes <= MAX_DOCUMENT_BYTES,
-                    "history_limit",
-                )?;
-                Ok(original.clone())
+                if self.active.contains(&anchor) {
+                    require(quarantine_cycle, "invalid_history_yaml")?;
+                    Ok(Node::OpaqueCycle)
+                } else {
+                    // Only completed anchors can be expanded: undefined aliases
+                    // fail before cloning. Charge the complete expansion first.
+                    let original = self.completed.get(&anchor).ok_or_else(invalid)?;
+                    let (nodes, bytes) = node_cost(original, depth)?;
+                    self.nodes = self.nodes.saturating_add(nodes);
+                    self.expanded_bytes = self.expanded_bytes.saturating_add(bytes);
+                    require(
+                        self.nodes <= MAX_VALUES * 2 && self.expanded_bytes <= MAX_DOCUMENT_BYTES,
+                        "history_limit",
+                    )?;
+                    Ok(original.clone())
+                }
             }
             Event::Scalar {
                 value, style, tag, ..
@@ -451,9 +464,16 @@ impl<'a> Reader<'a> {
                     if matches!(event, Event::SequenceEnd) {
                         break;
                     }
-                    values.push(self.node(event, depth + 1)?);
+                    values.push(self.node(event, depth + 1, quarantine_cycle)?);
                 }
-                Ok(Node::List(values))
+                if values
+                    .iter()
+                    .any(|value| matches!(value, Node::OpaqueCycle))
+                {
+                    Ok(Node::OpaqueCycle)
+                } else {
+                    Ok(Node::List(values))
+                }
             }
             Event::MappingStart { tag, .. } => {
                 collection_tag(tag.as_deref(), "map")?;
@@ -463,16 +483,35 @@ impl<'a> Reader<'a> {
                     if matches!(event, Event::MappingEnd) {
                         break;
                     }
-                    let key = self.node(event, depth + 1)?;
+                    let key = self.node(event, depth + 1, quarantine_cycle)?;
                     let event = self.next()?;
-                    pairs.push((key, self.node(event, depth + 1)?));
+                    let allow = quarantine_cycle
+                        || depth == 0
+                            && self.ordinary_aliases
+                            && self.quarantine_top_level_cycles
+                            && ignored_top_level_key(&key);
+                    let value = self.node(event, depth + 1, allow)?;
+                    if depth == 0 && matches!(value, Node::OpaqueCycle) && allow {
+                        continue;
+                    }
+                    pairs.push((key, value));
                 }
-                Ok(Node::Map(pairs))
+                if pairs.iter().any(|(key, value)| {
+                    matches!(key, Node::OpaqueCycle) || matches!(value, Node::OpaqueCycle)
+                }) {
+                    Ok(Node::OpaqueCycle)
+                } else {
+                    Ok(Node::Map(pairs))
+                }
             }
             _ => Err(invalid()),
         }?;
+        if let Some(anchor) = &anchor {
+            self.active.remove(anchor);
+        }
         if self.ordinary_aliases
             && let Some(anchor) = anchor
+            && !matches!(node, Node::OpaqueCycle)
         {
             let (nodes, bytes) = node_cost(&node, depth)?;
             self.nodes = self.nodes.saturating_add(nodes);
@@ -485,6 +524,30 @@ impl<'a> Reader<'a> {
         }
         Ok(node)
     }
+}
+
+/// These fields either control how a record is loaded/interpreted or are the
+/// established ordinary record collections. Recursive values below them are
+/// semantic and must keep failing closed. An unrecognized top-level extension
+/// may be quarantined only when the recursive value itself would otherwise be
+/// projected into the finite ordinary value algebra.
+fn ignored_top_level_key(node: &Node) -> bool {
+    let Node::Scalar(TypedValue::Text(key)) = node else {
+        return false;
+    };
+    ![
+        "meta",
+        "schema",
+        "record",
+        "also",
+        "sources",
+        "known",
+        "judgments",
+        "open",
+        "questions",
+        "hypothesis",
+    ]
+    .contains(&key.as_str())
 }
 fn node_cost(node: &Node, depth: usize) -> Result<(usize, usize)> {
     require(depth <= MAX_DEPTH + 1, "history_limit")?;
@@ -511,6 +574,7 @@ fn node_cost(node: &Node, depth: usize) -> Result<(usize, usize)> {
             }
         }
         Node::Merge => {}
+        Node::OpaqueCycle => return Err(invalid()),
     }
     require(
         nodes <= MAX_VALUES * 2 && bytes <= MAX_DOCUMENT_BYTES,
@@ -752,6 +816,7 @@ fn construct(node: Node) -> Result<SourceValue> {
             }
             Ok(SourceValue::Map(values))
         }
+        Node::OpaqueCycle => Err(invalid()),
         _ => Err(invalid()),
     }
 }
@@ -843,7 +908,21 @@ pub fn decode_ordinary_source_value(raw: &[u8]) -> Result<OrdinaryValue> {
 }
 /// Read ordinary source without claiming that it is a canonical history value.
 pub fn decode_full_ordinary_source_value(raw: &[u8]) -> Result<crate::ordinary_source::Source> {
-    let (node, empty) = decode_node(raw, false, true)?;
+    decode_full_ordinary_value(raw, false)
+}
+/// Ordinary record entry points may quarantine a recursive value in an
+/// unrecognized top-level extension. Detached ordinary values retain the
+/// finite-only contract and never apply this record-specific exception.
+pub(crate) fn decode_full_ordinary_record_source_value(
+    raw: &[u8],
+) -> Result<crate::ordinary_source::Source> {
+    decode_full_ordinary_value(raw, true)
+}
+fn decode_full_ordinary_value(
+    raw: &[u8],
+    quarantine_top_level_cycles: bool,
+) -> Result<crate::ordinary_source::Source> {
+    let (node, empty) = decode_node(raw, false, true, quarantine_top_level_cycles)?;
     if empty {
         return Ok(crate::ordinary_source::Source::from_typed(
             &TypedValue::Null,
@@ -874,12 +953,13 @@ fn construct_full(node: Node) -> Result<crate::ordinary_source::Source> {
             }
             S::Map(out)
         }
+        Node::OpaqueCycle => return Err(invalid()),
         _ => return Err(invalid()),
     })
 }
 
 fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
-    let (node, empty) = decode_node(raw, mapping, false)?;
+    let (node, empty) = decode_node(raw, mapping, false, false)?;
     if empty {
         return Ok(SourceValue::Scalar(TypedValue::Null));
     }
@@ -892,7 +972,12 @@ fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
     Ok(value)
 }
 
-fn decode_node(raw: &[u8], mapping: bool, ordinary_aliases: bool) -> Result<(Option<Node>, bool)> {
+fn decode_node(
+    raw: &[u8],
+    mapping: bool,
+    ordinary_aliases: bool,
+    quarantine_top_level_cycles: bool,
+) -> Result<(Option<Node>, bool)> {
     require(raw.len() <= MAX_DOCUMENT_BYTES, "history_limit")?;
     std::str::from_utf8(raw).map_err(|_| invalid())?;
     let source = source_for_parser(raw)?;
@@ -904,7 +989,9 @@ fn decode_node(raw: &[u8], mapping: bool, ordinary_aliases: bool) -> Result<(Opt
         anchors: BTreeSet::new(),
         ordinary_aliases,
         completed: std::collections::BTreeMap::new(),
+        active: BTreeSet::new(),
         expanded_bytes: 0,
+        quarantine_top_level_cycles,
     };
     require(
         matches!(reader.next()?, Event::StreamStart { .. }),
@@ -919,7 +1006,7 @@ fn decode_node(raw: &[u8], mapping: bool, ordinary_aliases: bool) -> Result<(Opt
         "invalid_schema",
     )?;
     let event = reader.next()?;
-    let node = reader.node(event, 0)?;
+    let node = reader.node(event, 0, false)?;
     require(
         matches!(reader.next()?, Event::DocumentEnd { .. })
             && matches!(reader.next()?, Event::StreamEnd),
@@ -1149,14 +1236,35 @@ mod ordinary_alias_tests {
         assert_eq!(decode_document(raw).unwrap_err().0, "invalid_history_yaml");
     }
     #[test]
-    fn ordinary_aliases_refuse_unknown_duplicate_and_recursive_anchors() {
+    fn ordinary_aliases_quarantine_recursive_ignored_top_level_fields() {
         for raw in [
-            b"x: *missing\n".as_slice(),
-            b"x: &x {next: *x}\n",
-            b"x: &x 1\ny: &x 2\n",
+            b"known: {p.a: {v: 1}}\nx: &x {next: *x}\n".as_slice(),
+            b"known: {p.a: {v: 1}}\nx: &x [*x]\n",
         ] {
+            let value = decode_full_ordinary_record_source_value(raw)
+                .unwrap()
+                .try_finite()
+                .unwrap();
+            assert!(value.get("x").is_none());
+            assert!(value.get("known").is_some());
             assert_eq!(
                 decode_ordinary_source_value(raw).unwrap_err().0,
+                "invalid_history_yaml"
+            );
+            assert_eq!(decode_document(raw).unwrap_err().0, "invalid_history_yaml");
+        }
+    }
+    #[test]
+    fn ordinary_aliases_refuse_unknown_duplicate_and_semantic_recursive_anchors() {
+        for raw in [
+            b"x: *missing\n".as_slice(),
+            b"x: &x 1\ny: &x 2\n",
+            b"known: &x {p.a: *x}\n",
+            b"known: &x [*x]\n",
+            b"schema: &x {deps: *x}\n",
+        ] {
+            assert_eq!(
+                decode_full_ordinary_record_source_value(raw).unwrap_err().0,
                 "invalid_history_yaml"
             );
         }

@@ -29,7 +29,7 @@ fn parse(inventory: &mut Inventory, path: &Path) -> Result<S> {
     parse_bytes(&inventory.read(path)?)
 }
 fn parse_bytes(raw: &[u8]) -> Result<S> {
-    let value = Y::decode_full_ordinary_source_value(raw)?;
+    let value = Y::decode_full_ordinary_record_source_value(raw)?;
     Ok(if truth(&value.projected()) {
         value
     } else {
