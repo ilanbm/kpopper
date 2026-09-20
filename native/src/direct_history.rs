@@ -4,7 +4,7 @@ use crate::{
     Result, history_adapter,
     history_authoring::{self as A, n, obj, s},
     history_contract::*,
-    history_edits as E, history_emit, history_hypothesis_authoring as HA,
+    history_edits as E, history_emit, history_hypothesis_authoring as HA, history_identity as I,
     history_paths::Scheme,
     history_store::Store,
     history_transaction::{self as T, PreparedMutation},
@@ -87,11 +87,14 @@ enum ReceiptFamily {
     Authoring,
     Edit,
     Hypothesis,
+    Identity,
 }
 fn receipt_family(mutation: &PreparedMutation) -> Result<ReceiptFamily> {
     let data = mutation.to_data();
     let before = map(&map(&map(&data)?["receipt"])?["before"])?;
-    Ok(if before.contains_key("history_edit") {
+    Ok(if before.contains_key("identity_authoring") {
+        ReceiptFamily::Identity
+    } else if before.contains_key("history_edit") {
         ReceiptFamily::Edit
     } else if before.contains_key("hypothesis_authoring") {
         ReceiptFamily::Hypothesis
@@ -107,6 +110,7 @@ fn verify_mutation(
     match receipt_family(mutation)? {
         ReceiptFamily::Edit => E::verify_prepared(store, mutation, runtime),
         ReceiptFamily::Hypothesis => HA::verify_prepared(store, mutation, runtime),
+        ReceiptFamily::Identity => I::verify_prepared(store, mutation, runtime),
         ReceiptFamily::Authoring => A::verify_prepared(store, mutation, runtime),
     }
 }
@@ -119,6 +123,7 @@ fn commit(
     match receipt_family(mutation)? {
         ReceiptFamily::Edit => E::commit(store, mutation, runtime, verify),
         ReceiptFamily::Hypothesis => HA::commit(store, mutation, runtime, verify),
+        ReceiptFamily::Identity => I::commit(store, mutation, runtime, verify),
         ReceiptFamily::Authoring => A::commit(store, mutation, runtime, verify),
     }
 }
