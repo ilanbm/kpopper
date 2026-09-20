@@ -2066,6 +2066,23 @@ pub(crate) fn prepare_pending_candidate(
     prepare_with_inventory_mode(action, route, source_body, Inventory::default(), None, true)
 }
 
+pub(crate) fn prepare_pending_with_inventory(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+    inventory: Inventory,
+    supplied_page: Option<crate::ordinary_page_capture::PageCapture>,
+) -> Result<Preparation> {
+    prepare_with_inventory_mode(
+        action,
+        route,
+        source_body,
+        inventory,
+        supplied_page,
+        true,
+    )
+}
+
 fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Result<Preparation> {
     prepare_with_inventory(action, route, source_body, Inventory::default(), None)
 }
@@ -2149,6 +2166,18 @@ pub(crate) fn publish_prepared_with_committed(
     committed: F::Verify<'_>,
 ) -> Result<String> {
     publish_with_committed(prepared, route, Some(committed), false)
+}
+
+pub(crate) fn publish_advanced_prepared_with_committed(
+    prepared: Prepared,
+    route: &WriteRoute,
+    committed: F::Verify<'_>,
+) -> Result<String> {
+    require(
+        route.pending_required()?,
+        "legacy_authoring_requires_advanced_project",
+    )?;
+    publish_with_committed(prepared, route, Some(committed), true)
 }
 
 /// Resume a report whose private journal was durable before the ordinary

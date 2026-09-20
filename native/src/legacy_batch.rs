@@ -76,13 +76,14 @@ fn satisfied(action: &V, route: &WriteRoute, inventory: &mut Inventory) -> Resul
 }
 
 /// Prepare all actions against one captured preimage.
-pub(crate) fn prepare(
+fn prepare_mode(
     actions: &[V],
     route: &WriteRoute,
     options: &Options,
     mut inventory: Inventory,
     mut page: Option<crate::ordinary_page_capture::PageCapture>,
     source_bodies: &[Option<Source>],
+    pending: bool,
 ) -> Result<Prepared> {
     crate::require(!actions.is_empty() && actions.len() <= 33, "invalid_batch")?;
     let mut images = BTreeMap::<String, FileImage>::new();
@@ -95,7 +96,12 @@ pub(crate) fn prepare(
     let mut diagnostics = Vec::new();
 
     for (index, action) in actions.iter().enumerate() {
-        let prepared = match A::prepare_with_inventory(
+        let prepare = if pending {
+            A::prepare_pending_with_inventory
+        } else {
+            A::prepare_with_inventory
+        };
+        let prepared = match prepare(
             action, route, source_bodies.get(index).and_then(Option::as_ref), inventory, page.clone(),
         )
             .map_err(|e| error(&format!("batch action {index}: {e}")))? {
@@ -213,6 +219,46 @@ pub(crate) fn prepare(
         subject: subjects.join(","),
         diagnostics,
         page,
+    })
+}
+
+pub(crate) fn prepare(
+    actions: &[V],
+    route: &WriteRoute,
+    options: &Options,
+    inventory: Inventory,
+    page: Option<crate::ordinary_page_capture::PageCapture>,
+    source_bodies: &[Option<Source>],
+) -> Result<Prepared> {
+    prepare_mode(actions, route, options, inventory, page, source_bodies, false)
+}
+
+pub(crate) struct PendingPrepared {
+    pub document: V,
+    pub inventory: Inventory,
+    pub diagnostics: Vec<String>,
+}
+
+/// Prepare an atomic Advanced contribution in memory without publishing any
+/// canonical record image.
+pub(crate) fn prepare_pending(
+    actions: &[V],
+    route: &WriteRoute,
+    options: &Options,
+    inventory: Inventory,
+    page: Option<crate::ordinary_page_capture::PageCapture>,
+    source_bodies: &[Option<Source>],
+) -> Result<PendingPrepared> {
+    let prepared = prepare_mode(actions, route, options, inventory, page, source_bodies, true)?;
+    let mut inventory = prepared.inventory;
+    for image in prepared.mutation.files() {
+        inventory.stage(&prepared.root.join(&image.path), image.after.clone())?;
+    }
+    let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
+    Ok(PendingPrepared {
+        document: document.source.projected(),
+        inventory,
+        diagnostics: prepared.diagnostics,
     })
 }
 
