@@ -439,17 +439,34 @@ pub fn wait(
             value["message"] = json!(message(&notices, &record));
             return Ok(value);
         }
-        let state = O::status(
+        let state = match O::status(
             Some(job["event_id"].as_str().unwrap()),
             Some(&record),
             Some(&layout.root),
             cwd,
-        )?;
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                release(&layout, id, &token, "inspection failed")?;
+                let mut value = public(&job, None);
+                value["status"] = json!("waiting");
+                value["reason"] = json!(format!("delivery inspection failed: {error}"));
+                return Ok(value);
+            }
+        };
         if state
             .as_ref()
             .and_then(|value| value["state"].as_str())
             .is_some_and(|state| S::TERMINAL.contains(&state))
         {
+            // Signal publication and receipt publication are consecutive but
+            // separately durable. Recheck once at the terminal boundary.
+            let terminal_notices = O::pending(Some(&record), Some(&layout.root), cwd, false)?
+                .into_iter()
+                .any(|notice| notice["event_id"] == job["event_id"]);
+            if terminal_notices {
+                continue;
+            }
             if state
                 .as_ref()
                 .is_some_and(|value| value["state"] == "error")
