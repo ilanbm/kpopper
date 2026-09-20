@@ -582,13 +582,13 @@ pub(super) fn verify_recovery(
 // closure before creating it, then retain that exact directory observation for the
 // locked publication check. Hypothesis membership is checked again separately.
 pub(super) fn prepare_directories(prepared: &Prepared) -> Result<Inventory> {
-    prepared.inventory.verify()?;
     let mut inventory = prepared.inventory.clone();
     let data = prepared.mutation.to_data();
     let baseline = map(field(map(&data)?, "baseline")?)?;
     let Some(directory) = baseline.get("hypotheses_directory") else {
         return Ok(inventory);
     };
+    prepared.inventory.verify()?;
     let checked_directory = F::target(&prepared.root, text(directory)?)?;
     let directory = absolute(&prepared.root.join(text(directory)?))?;
     for image in prepared.mutation.files() {
