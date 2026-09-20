@@ -2250,8 +2250,8 @@ mod tests {
                 ("kind", s("set")), ("id", s("p.a")), ("value", n("2")),
                 ("as_of", s("2026-09-20")), ("why", V::Null), ("source", V::Null), ("at", V::Null),
             ]);
-            let Preparation::Mutation(prepared) = prepare_with_inventory(
-                &action, &route, None, Inventory::default()).unwrap() else { panic!() };
+            let Preparation::Mutation(prepared) = prepare(
+                &action, &route, None).unwrap() else { panic!() };
             (temp, entry, route, prepared)
         }
 
