@@ -61,6 +61,44 @@ fn hash(path: &Path) -> String {
 }
 
 #[test]
+fn advanced_cli_routes_project_private_and_local_reports_and_replays_success() {
+    for (kind, private, expected) in [("project", false, "project_captured"), ("project", true, "needs_primary"), ("feature", false, "applied")] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("repo");
+        fs::create_dir(&root).unwrap();
+        record(&root);
+        let git = |args: &[&str]| {
+            let output = Command::new("git").arg("-C").arg(&root).args(args).output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["add", "GROUNDING.yaml"]);
+        git(&["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"]);
+        let entry = root.join("GROUNDING.yaml");
+        let before = fs::read(&entry).unwrap();
+        let state = temp.path().join("state");
+        let mut report = json!({"event_id":"advanced-cli", "date":"2026-09-20", "source_quote":"price 12", "target":"p.price", "value":12,
+            "shareability":"project", "scope":{"kind":kind,"environment":"example"}});
+        if private { report["privacy"] = json!(true); }
+        let first = run(&root, &state, &report);
+        let result: Value = serde_json::from_slice(&first.stdout).unwrap_or_else(|e| panic!("{kind}/{private}: {e}; {}", String::from_utf8_lossy(&first.stderr)));
+        assert_eq!(result["state"], expected, "{result}");
+        assert_eq!(first.status.code(), Some(if private {1} else {0}));
+        if expected == "applied" {
+            let after = fs::read_to_string(&entry).unwrap();
+            assert!(after.contains("v: 12"));
+            assert!(after.contains("kind: feature"));
+        } else { assert_eq!(fs::read(&entry).unwrap(), before); }
+        let replay = run(&root, &state, &report);
+        assert_eq!(replay.status.code(), first.status.code());
+        assert_eq!(replay.stdout, first.stdout);
+        if private {
+            assert!(!Command::new("git").arg("-C").arg(&root).args(["rev-parse", "--verify", "--quiet", "refs/kpopper/pending_grounding"]).status().unwrap().success());
+        }
+    }
+}
+
+#[test]
 fn source_and_two_dependent_writes_publish_once_and_retry_exactly() {
     let temp = tempfile::tempdir().unwrap();
     record(temp.path());

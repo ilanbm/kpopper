@@ -241,8 +241,8 @@ fn verify_captured_target(
     report: &Report,
     expected: Option<&J>,
 ) -> Result<()> {
+    let current = crate::ingestion_target::snapshot(document, bytes, &report.raw)?;
     if let Some(expected) = expected {
-        let current = crate::ingestion_target::snapshot(document, bytes, &report.raw)?;
         crate::require(
             current["body_sha256"] == expected["body_sha256"],
             "target changed since capture; reread the premises before resubmitting",
