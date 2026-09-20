@@ -517,23 +517,26 @@ fn main() {
         std::process::exit(output.code);
     }
     if matches!(args.command, Command::Same(_) | Command::Distinct(_)) {
-        let result = (|| {
-            let cwd = args
-                .workspace
-                .clone()
-                .map(Ok)
-                .unwrap_or_else(std::env::current_dir)?;
-            match &args.command {
-                Command::Same(options) => kpop_native::public_identity::run_same(options, &cwd),
+        let output = match args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)
+        {
+            Ok(cwd) => match &args.command {
+                Command::Same(options) => {
+                    kpop_native::public_identity::dispatch_same(options, &cwd)
+                }
                 Command::Distinct(options) => {
-                    kpop_native::public_identity::run_distinct(options, &cwd)
+                    kpop_native::public_identity::dispatch_distinct(options, &cwd)
                 }
                 _ => unreachable!(),
-            }
-        })();
-        let (output, code) = match result {
-            Ok(output) => (output, 0),
-            Err(error) => (format!("refused: {error}\n"), 1),
+            },
+            Err(error) => kpop_native::public_identity::CommandOutput {
+                stdout: format!("refused: {error}\n"),
+                stderr: String::new(),
+                code: 1,
+            },
         };
         if args.json {
             let command = if matches!(args.command, Command::Same(_)) {
@@ -543,12 +546,13 @@ fn main() {
             };
             println!(
                 "{}",
-                json!({"command":command,"exit_code":code,"output":output,"error":""})
+                json!({"command":command,"exit_code":output.code,"output":output.stdout,"error":output.stderr})
             );
         } else {
-            print!("{output}");
+            print!("{}", output.stdout);
+            eprint!("{}", output.stderr);
         }
-        std::process::exit(code);
+        std::process::exit(output.code);
     }
     if matches!(args.command, Command::Knowledge(_) | Command::Pending(_)) {
         let cwd = match args
