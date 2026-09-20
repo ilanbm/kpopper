@@ -19,6 +19,7 @@ pub fn project_key(workspace: &Path) -> String {
     format!("{:x}", h.finalize())
 }
 pub fn project_dir(workspace: &Path) -> Result<PathBuf> { Ok(state_dir()?.join("projects").join(project_key(workspace))) }
+pub fn project_dir_key(key: &str) -> Result<PathBuf> { Ok(state_dir()?.join("projects").join(key)) }
 
 pub fn read(path: &Path) -> Result<Option<Value>> {
     let raw = match fs::read(path) { Ok(v) => v, Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None), Err(e) => return Err(e.into()) };
@@ -61,6 +62,19 @@ pub fn status(workspace: &Path, record: &Path, record_found: bool) -> Result<Val
         "guidance":guidance()?,"introduced":read(&state_dir()?.join("shown/welcome.json"))?.is_some(),
         "followups_offered":read(&dir.join("followups-offered.json"))?.is_some(),"offered":read(&dir.join("offered.json"))?.is_some() || mode.is_some(),"pending_tips":pending}))
 }
+pub fn status_at(workspace: &Path, key: &str, record: &Path, status: &str) -> Result<Value> {
+    let dir = project_dir_key(key)?;
+    let map = read(&dir.join("mapping.json"))?.or(read(&dir.join("choice.json"))?).unwrap_or(json!({}));
+    let mode = map.get("mode").and_then(Value::as_str);
+    let mapping = map.get("mapping").and_then(Value::as_str);
+    if let Some(m) = mode { require(MODES.contains(&m), "Invalid first-use choice")?; }
+    if let Some(m) = mapping { require(MAPPING_STATES.contains(&m), "Invalid first-use choice")?; }
+    let mut pending = Vec::new();
+    for event in ["record","source","decision","conflict","reuse","review"] {
+        if read(&state_dir()?.join("shown").join(format!("{event}.json")))?.is_none() { pending.push(event); }
+    }
+    Ok(json!({"workspace":workspace,"record":record,"status":status,"mode":mode,"mapping":mapping,"request":map.get("request"),"owner":map.get("owner"),"report":map.get("report"),"check":map.get("check"),"error":map.get("error"),"guidance":guidance()? ,"introduced":read(&state_dir()?.join("shown/welcome.json"))?.is_some(),"followups_offered":read(&dir.join("followups-offered.json"))?.is_some(),"offered":read(&dir.join("offered.json"))?.is_some() || mode.is_some(),"pending_tips":pending}))
+}
 
 pub fn mark(workspace: &Path, event: &str) -> Result<Value> {
     require(event == "welcome" || event == "followups" || ["record","source","decision","conflict","reuse","review"].contains(&event), "invalid event")?;
@@ -68,4 +82,11 @@ pub fn mark(workspace: &Path, event: &str) -> Result<Value> {
     write(&path, &json!({"shown":true}))?;
     if event == "welcome" { write(&project_dir(workspace)?.join("offered.json"), &json!({"shown":true}))?; }
     status(workspace, &workspace.join("GROUNDING.yaml"), workspace.join("GROUNDING.yaml").is_file())
+}
+pub fn mark_key(workspace: &Path, key: &str, record: &Path, status_value: &str, event: &str) -> Result<Value> {
+    require(event == "welcome" || event == "followups" || ["record","source","decision","conflict","reuse","review"].contains(&event), "invalid event")?;
+    let path = if event == "followups" { project_dir_key(key)?.join("followups-offered.json") } else { state_dir()?.join("shown").join(format!("{event}.json")) };
+    write(&path, &json!({"shown":true}))?;
+    if event == "welcome" { write(&project_dir_key(key)?.join("offered.json"), &json!({"shown":true}))?; }
+    status_at(workspace, key, record, status_value)
 }

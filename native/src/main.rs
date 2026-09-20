@@ -80,6 +80,8 @@ enum Command {
     Watch(kpop_native::public_watch::Args),
     /// Request an initial map from the current host agent.
     Map(kpop_native::public_map::Options),
+    #[command(name = "_agent", hide = true)]
+    Agent(kpop_native::public_map::AgentOptions),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -269,6 +271,10 @@ fn run(args: Args) -> Result<Value> {
         let root = args.workspace.clone().ok_or_else(|| kpop_native::Error("workspace_required".into()))?;
         return kpop_native::public_map::run(options, &root);
     }
+    if let Command::Agent(options) = &args.command {
+        let root = args.workspace.clone().ok_or_else(|| kpop_native::Error("workspace_required".into()))?;
+        return kpop_native::public_map::run_agent(options, &root);
+    }
     if let Command::Watch(options) = &args.command {
         let root = args
             .workspace
@@ -432,6 +438,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Followups(_)
         | Command::Watch(_)
         | Command::Map(_)
+        | Command::Agent(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
