@@ -192,7 +192,7 @@ pub(crate) fn prepare_subset(
     let mut template = obj([
         (
             "schema",
-            map(adapted.document())?
+            map(&candidate.document)?
                 .get("schema")
                 .cloned()
                 .unwrap_or_else(|| V::Map(Map::new())),
@@ -245,10 +245,7 @@ pub(crate) fn prepare_subset(
         &receipt,
         b"",
         Some(&template),
-        Some(&V::List(vec![
-            s("explicit-root-disposition/v1"),
-            s(P::CAPABILITY),
-        ])),
+        Some(&V::List(vec![s(P::CAPABILITY)])),
     )?;
     let mut commits = A::Files::from([(operation.into(), E::encode_document(&draft)?)]);
     let mut detached = Capture {
@@ -292,10 +289,7 @@ pub(crate) fn prepare_subset(
         &receipt,
         &rendered,
         Some(&template),
-        Some(&V::List(vec![
-            s("explicit-root-disposition/v1"),
-            s(P::CAPABILITY),
-        ])),
+        Some(&V::List(vec![s(P::CAPABILITY)])),
     )?;
     commits.insert(operation.into(), E::encode_document(&manifest_commit)?);
     let mut files = A::Files::from([
