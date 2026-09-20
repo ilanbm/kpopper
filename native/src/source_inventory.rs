@@ -29,24 +29,42 @@ pub(crate) fn name(path: &Path) -> Result<&str> {
 fn magic(text: &str) -> bool {
     text.contains(['*', '?', '['])
 }
-pub(crate) fn escaped(path: &Path) -> Result<PathBuf> {
-    let mut out = String::new();
-    for c in name(path)?.chars() {
-        if "[*?".contains(c) {
-            out.push('[');
-            out.push(c);
-            out.push(']');
-        } else {
-            out.push(c);
+fn pattern_magic(path: &Path) -> Result<bool> {
+    for component in path.components() {
+        if let Component::Normal(part) = component
+            && magic(part.to_str().ok_or_else(|| error("invalid_path"))?)
+        {
+            return Ok(true);
         }
     }
-    Ok(PathBuf::from(out))
+    Ok(false)
+}
+pub(crate) fn escaped(path: &Path) -> Result<PathBuf> {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        if let Component::Normal(part) = component {
+            let mut escaped = String::new();
+            for c in part.to_str().ok_or_else(|| error("invalid_path"))?.chars() {
+                if "[*?".contains(c) {
+                    escaped.push('[');
+                    escaped.push(c);
+                    escaped.push(']');
+                } else {
+                    escaped.push(c);
+                }
+            }
+            out.push(escaped);
+        } else {
+            out.push(component.as_os_str());
+        }
+    }
+    Ok(out)
 }
 /// Python glob semantics: component-local patterns, sorted results and explicit
 /// leading dots. Pointer strings are literal; only caller patterns use this.
 pub(crate) fn glob(pattern: &Path) -> Result<Vec<PathBuf>> {
     let pattern = absolute(pattern)?;
-    if !magic(name(&pattern)?) {
+    if !pattern_magic(&pattern)? {
         return Ok(if pattern.symlink_metadata().is_ok() {
             vec![pattern]
         } else {
@@ -302,5 +320,21 @@ mod tests {
         let started = std::time::Instant::now();
         assert_eq!(inventory.verify().unwrap_err().0, "snapshot_changed");
         assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn verbatim_prefix_question_mark_is_not_glob_syntax() {
+        let root = tempfile::tempdir().unwrap().path().canonicalize().unwrap();
+        assert!(root.to_string_lossy().starts_with(r"\\?\"));
+        assert!(!pattern_magic(&root).unwrap());
+        let escaped = escaped(&root).unwrap();
+        assert_eq!(escaped, root);
+        assert!(!escaped.to_string_lossy().starts_with(r"\\[?]\"));
+        assert!(pattern_magic(&escaped.join("*.yaml")).unwrap());
     }
 }
