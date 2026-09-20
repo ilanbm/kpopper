@@ -336,16 +336,47 @@ pub fn encode_document(value: &V) -> Result<Vec<u8>> {
 
 /// Preserve source mapping order while retaining the SafeDumper representation.
 pub fn encode_source(value: &S, width: usize) -> Result<Vec<u8>> {
+    require(matches!(value, S::Map(_)), "invalid_schema")?;
+    encode_source_value(value, width)
+}
+
+/// The same SafeDumper preimage for scalar/list roots and ordered mapping data.
+pub(crate) fn encode_source_value(value: &S, width: usize) -> Result<Vec<u8>> {
     let typed = value.typed();
     Y::validate_value(&typed, Y::MAX_DOCUMENT_BYTES)?;
-    require(matches!(value, S::Map(_)), "invalid_schema")?;
     let mut w = Writer::new(width);
     w.node(value, None, false, false)?;
     w.indent(0);
-    let bytes = w.out.into_bytes();
+    let mut bytes = w.out.into_bytes();
+    if matches!(value, S::Scalar(_))
+        && !matches!(bytes.first(), Some(b'\'' | b'"' | b'|' | b'>'))
+        && !bytes.ends_with(b"...\n")
+    {
+        bytes.extend_from_slice(b"...\n");
+    }
     require(
-        Y::decode_document(&bytes)?.digest()? == typed.digest()?,
+        Y::decode_ordinary_source_value(&bytes)?.strict_typed()?.digest()? == typed.digest()?,
         "serialization_changed",
     )?;
     Ok(bytes)
+}
+
+/// Sorted SafeDumper bytes for watch and retained-source identity. Unlike the
+/// record encoder this accepts scalar/list roots and preserves PyYAML endings.
+pub fn encode_value(value: &V) -> Result<Vec<u8>> {
+    encode_source_value(&S::from_typed(value), 80)
+}
+
+#[cfg(test)]
+mod watch_preimage_tests {
+    #[test]
+    fn sorted_arbitrary_root_preimages_match_python() {
+        let cases: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/watch-encoding.json")).unwrap();
+        for case in cases.as_array().unwrap() {
+            let value = crate::history_yaml::decode_ordinary_source_value(case["input"].as_str().unwrap().as_bytes()).unwrap().strict_typed().unwrap();
+            let raw = super::encode_value(&value).unwrap();
+            assert_eq!(String::from_utf8(raw.clone()).unwrap(), case["output"].as_str().unwrap(), "{}", case["input"]);
+            assert_eq!(crate::identity::sha256(&raw), case["sha256"].as_str().unwrap());
+        }
+    }
 }

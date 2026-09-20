@@ -1,0 +1,82 @@
+[
+  {
+    "input": "plain",
+    "output": "plain\n...\n",
+    "sha256": "89a699265554efa0f71b9998d3026c48c0e7dbf39362ad35d8cb502b1774a482"
+  },
+  {
+    "input": "\"null\"",
+    "output": "'null'\n",
+    "sha256": "7dbb364dd2dd4cbd59986ff77e02b06ffcbe6e1ddf0110f8ff1e9bcca1fc1d37"
+  },
+  {
+    "input": "null",
+    "output": "null\n...\n",
+    "sha256": "6a3a80ad810fe5b651341192cd493ce35ec4875dbe60d4fc51b93717445382be"
+  },
+  {
+    "input": "true",
+    "output": "true\n...\n",
+    "sha256": "5078e85342382074fb0920497907c64e37c695c8eb6a5760228bc5d54248fe69"
+  },
+  {
+    "input": "42",
+    "output": "42\n...\n",
+    "sha256": "04a071cf977c06854b62829477d7a25fe807f3733069a2381f670a379ec03a74"
+  },
+  {
+    "input": "1.25",
+    "output": "1.25\n...\n",
+    "sha256": "799c928bb95bd8008a21e372091cdf53495893e1d2c6fda5cd0325d3bdad3e1d"
+  },
+  {
+    "input": "1.0e-9",
+    "output": "1.0e-09\n...\n",
+    "sha256": "ad50ef61d12d401b3b47b7fae3a97955a709001931498a790534b11fa325aab9"
+  },
+  {
+    "input": "2020-01-02",
+    "output": "2020-01-02\n...\n",
+    "sha256": "a09d58a27cbf0d8d025383af6b5926273b2f88968becddacda22355c2b22264b"
+  },
+  {
+    "input": "2020-01-02T03:04:05+00:00",
+    "output": "2020-01-02 03:04:05+00:00\n...\n",
+    "sha256": "99789d87d7f5c158ecf1019032f8ae264e0d67a23ae70f9fa92c044d5d7463a8"
+  },
+  {
+    "input": "[]",
+    "output": "[]\n",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  {
+    "input": "{}",
+    "output": "{}\n",
+    "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+  },
+  {
+    "input": "[plain, \"null\", 42, true, 1.25]",
+    "output": "- plain\n- 'null'\n- 42\n- true\n- 1.25\n",
+    "sha256": "a7213686cbe84f1b6b9395343735b51dd4ee5056509fe629c4ed69e5852650cf"
+  },
+  {
+    "input": "{z: שלום, a: 日}",
+    "output": "a: 日\nz: שלום\n",
+    "sha256": "6436e7b17a1165aa7845deca96f7f8a80fbd00fee8ff0f278b98650d79616b96"
+  },
+  {
+    "input": "\"line one\\nline two\\n\"",
+    "output": "'line one\n\n  line two\n\n  '\n",
+    "sha256": "91d7d7cfc3a5635be0ff1d02b36eb4cc7e7e611feb8965edd9e73344a1ea5904"
+  },
+  {
+    "input": "[{z: \"one\\ntwo\\n\", a: 1}, []]",
+    "output": "- a: 1\n  z: 'one\n\n    two\n\n    '\n- []\n",
+    "sha256": "476937c59efb73ef1b3b85c8773e1cb73b5cbb1da03e47141468df0dc42110ed"
+  },
+  {
+    "input": "{\"PROVENANCE.yaml\": \"meta:\\n  name: Watch oracle\\nknown:\\n  facts.count:\\n    name: Count\\n    v: 1\\n    of: 2020-01-01\\njudgments:\\n  choice.ok:\\n    verdict: yes\\n    rests_on: [facts.count]\\n    seen: {facts.count: 1}\\n    wrong_if: facts.count < 0\\n\"}",
+    "output": "PROVENANCE.yaml: \"meta:\\n  name: Watch oracle\\nknown:\\n  facts.count:\\n    name: Count\\n\\\n  \\    v: 1\\n    of: 2020-01-01\\njudgments:\\n  choice.ok:\\n    verdict: yes\\n    rests_on:\\\n  \\ [facts.count]\\n    seen: {facts.count: 1}\\n    wrong_if: facts.count < 0\\n\"\n",
+    "sha256": "4390c8c3e25ae02afef115304540342212ba7ba14ffd035a49536e1575b78b92"
+  }
+]
