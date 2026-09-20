@@ -173,18 +173,19 @@ pub fn working(root: &Path, entry: &str, include_files: bool) -> Result<V> {
         let body = crate::history_yaml::decode_document(&raw)?;
         if active && name == entry {
             if let Some(meta) = map(&body)?.get("meta").and_then(|v| map(v).ok())
-                && let Some(import) = meta.get("history_import").and_then(|v| map(v).ok()) {
-                    for member in import.get("members").map(list).transpose()?.unwrap_or(&[]) {
-                        let name = safe(
-                            &Path::new(entry)
-                                .parent()
-                                .unwrap()
-                                .join(text(&map(member)?["path"])?),
-                        )?;
-                        raw_names.insert(name.clone());
-                        queue.push_back(name);
-                    }
+                && let Some(import) = meta.get("history_import").and_then(|v| map(v).ok())
+            {
+                for member in import.get("members").map(list).transpose()?.unwrap_or(&[]) {
+                    let name = safe(
+                        &Path::new(entry)
+                            .parent()
+                            .unwrap()
+                            .join(text(&map(member)?["path"])?),
+                    )?;
+                    raw_names.insert(name.clone());
+                    queue.push_back(name);
                 }
+            }
         } else {
             for key in ["record", "also"] {
                 let values = match map(&body)?.get(key) {
@@ -195,9 +196,10 @@ pub fn working(root: &Path, entry: &str, include_files: bool) -> Result<V> {
                 };
                 for value in values {
                     if let V::Text(value) = value
-                        && (value.ends_with(".yaml") || value.ends_with(".yml")) {
-                            queue.push_back(safe(&Path::new(&name).parent().unwrap().join(value))?);
-                        }
+                        && (value.ends_with(".yaml") || value.ends_with(".yml"))
+                    {
+                        queue.push_back(safe(&Path::new(&name).parent().unwrap().join(value))?);
+                    }
                 }
             }
         }
@@ -254,10 +256,9 @@ fn materialize(
             ),
             ("head", hyp["head"].clone()),
         ]);
-        if active
-            && let Some(kind) = hyp.get("kind").filter(|v| truth(v)) {
-                map_mut(&mut row)?.insert("kind".into(), kind.clone());
-            }
+        if active && let Some(kind) = hyp.get("kind").filter(|v| truth(v)) {
+            map_mut(&mut row)?.insert("kind".into(), kind.clone());
+        }
         hypotheses.push(row);
     }
     let hashes = V::Map(

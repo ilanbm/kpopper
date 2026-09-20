@@ -613,6 +613,12 @@ pub fn install_reconcile(store: &Store, token: &str, report: Value) -> Result<Va
 // Watch construction can fail outside a Git project; the Python adapter treats
 // that as unconfigured. Once constructed, request failures become packet evidence.
 fn default_watch_request(workspace: &Path) -> Result<Option<Value>> {
-    let Ok(watch) = crate::watch_store::Watch::open(workspace) else { return Ok(None); };
-    if watch.enabled()? { watch.request_all().map(Some) } else { Ok(None) }
+    let Ok(watch) = crate::watch_store::Watch::open(workspace) else {
+        return Ok(None);
+    };
+    if watch.enabled()? {
+        watch.request_all().map(Some)
+    } else {
+        Ok(None)
+    }
 }
