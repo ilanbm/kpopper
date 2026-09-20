@@ -61,7 +61,7 @@ fn runtime(cache: &Path) -> Runtime {
     let target = target_name().unwrap();
     let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
-        .join(format!("{target}.zip"));
+        .join(format!("{target}.kpopper-runtime"));
     let ordinary = PathBuf::from(std::env::var_os("HOME").unwrap())
         .join(".cache/kpopper/lean")
         .join(&target)

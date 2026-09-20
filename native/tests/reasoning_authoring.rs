@@ -141,7 +141,7 @@ fn run(c: &J, runtime: &Runtime) -> Result<V> {
 fn writer_values_history_normalization_and_admission_match_pinned_python() {
     let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
-        .join(format!("{}.zip", target_name().unwrap()));
+        .join(format!("{}.kpopper-runtime", target_name().unwrap()));
     let cache = tempfile::tempdir().unwrap();
     let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
     let corpus: J =

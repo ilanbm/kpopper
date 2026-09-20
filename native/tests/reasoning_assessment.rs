@@ -57,7 +57,7 @@ fn normalize(value: &mut V) {
 fn captured_assessment_preserves_independent_findings_attention_and_scope() {
     let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
-        .join(format!("{}.zip", target_name().unwrap()));
+        .join(format!("{}.kpopper-runtime", target_name().unwrap()));
     let cache = tempfile::tempdir().unwrap();
     let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
     let data: serde_json::Value =

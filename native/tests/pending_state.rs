@@ -65,7 +65,7 @@ fn pinned_git_ledgers_and_publisher_status_match_python() {
         let archive = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
             .join(format!(
-                "{}.zip",
+                "{}.kpopper-runtime",
                 kpop_native::reasoning_runtime::target_name().unwrap()
             ));
         let runtime = if case["name"] == "target_core" {

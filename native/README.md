@@ -38,7 +38,7 @@ change assessment scope. The ordinary reader and explicitly declared core record
 retain their distinct interpretation; declaring core does not translate legacy text.
 
 Explicit computations use verified Lean programs. A runtime bundle contains
-`resources/reasoning/<target>.zip` and
+`resources/reasoning/<target>.kpopper-runtime` and
 `resources/ordinary/<target>/{build.json,epistemic-core}` beside the executable
 (`epistemic-core.exe` on Windows). `KPOPPER_NATIVE_RESOURCES` can explicitly select
 that resource directory and `KPOPPER_NATIVE_CACHE` can select its extraction cache.

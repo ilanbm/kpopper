@@ -6,7 +6,7 @@ use std::{
 fn archive() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
-        .join(format!("{}.zip", target_name().unwrap()))
+        .join(format!("{}.kpopper-runtime", target_name().unwrap()))
 }
 #[test]
 fn actual_packaged_lean_matches_pinned_python_across_scalar_and_composition_requests() {

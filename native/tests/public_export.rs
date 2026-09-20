@@ -15,7 +15,7 @@ fn install_runtime(root: &Path) -> Runtime {
     let target = kpop_native::reasoning_runtime::target_name().unwrap();
     let reasoning = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
-        .join(format!("{target}.zip"));
+        .join(format!("{target}.kpopper-runtime"));
     let runtime = Runtime::open(
         &reasoning,
         &root.join("cache"),
@@ -70,7 +70,7 @@ fn public_cli_exports_core_findings_and_wraps_the_reference_exit_contract() {
     fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
-            .join(format!("{target}.zip")),
+            .join(format!("{target}.kpopper-runtime")),
         root.join("resources/reasoning")
             .join(format!("{target}.zip")),
     )

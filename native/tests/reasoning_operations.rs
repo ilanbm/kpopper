@@ -82,7 +82,7 @@ fn operational_findings_and_prospective_documents_preserve_captured_inputs() {
 fn operational_world_uses_one_assessment_and_retains_condition_envelopes() {
     let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
-        .join(format!("{}.zip", target_name().unwrap()));
+        .join(format!("{}.kpopper-runtime", target_name().unwrap()));
     let cache = tempfile::tempdir().unwrap();
     let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
     for c in data()["worlds"].as_array().unwrap() {

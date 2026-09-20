@@ -367,7 +367,7 @@ mod tests {
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../scripts/reasoning/native")
                 .join(format!(
-                    "{}.zip",
+                    "{}.kpopper-runtime",
                     crate::reasoning_runtime::target_name().unwrap()
                 )),
             cache,

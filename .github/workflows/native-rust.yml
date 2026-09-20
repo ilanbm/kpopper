@@ -92,7 +92,7 @@ jobs:
           ordinary = bundle/'resources'/'ordinary'/os.environ['KPOPPER_CI_TARGET']
           reasoning.mkdir(parents=True)
           shutil.copy2(root/'native'/'target'/'release'/os.environ['KPOPPER_CI_BINARY'], bundle/os.environ['KPOPPER_CI_BINARY'])
-          shutil.copy2(root/'scripts'/'reasoning'/'native'/(os.environ['KPOPPER_CI_TARGET'] + '.zip'), reasoning/(os.environ['KPOPPER_CI_TARGET'] + '.zip'))
+          shutil.copy2(root/'scripts'/'reasoning'/'native'/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'), reasoning/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'))
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), ordinary)
       - name: Execute copied binary through public acceptance flows
         env:

@@ -15,7 +15,7 @@ fn command(root: &Path) -> Command {
     fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
-            .join(format!("{target}.zip")),
+            .join(format!("{target}.kpopper-runtime")),
         resources.join("reasoning").join(format!("{target}.zip")),
     )
     .unwrap();
@@ -273,7 +273,7 @@ fn public_recovery_finishes_or_cancels_a_retained_first_write() {
         let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
             .join(format!(
-                "{}.zip",
+                "{}.kpopper-runtime",
                 kpop_native::reasoning_runtime::target_name().unwrap()
             ));
         let runtime = Runtime::open(

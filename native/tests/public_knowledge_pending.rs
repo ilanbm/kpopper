@@ -369,7 +369,7 @@ fn knowledge_status_passes_the_configured_runtime_to_a_computed_target() {
     std::fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
-            .join(format!("{target}.zip")),
+            .join(format!("{target}.kpopper-runtime")),
         reasoning.join(format!("{target}.zip")),
     )
     .unwrap();

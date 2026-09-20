@@ -205,7 +205,7 @@ fn actual_cli_runs_bundled_ordinary_and_core_lean_programs() {
     fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
-            .join(format!("{target}.zip")),
+            .join(format!("{target}.kpopper-runtime")),
         reasoning.join(format!("{target}.zip")),
     )
     .unwrap();

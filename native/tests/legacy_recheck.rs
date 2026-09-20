@@ -18,7 +18,7 @@ fn command(root: &Path, args: &[&str], zone: &str) -> Output {
         fs::copy(
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../scripts/reasoning/native")
-                .join(format!("{target}.zip")),
+                .join(format!("{target}.kpopper-runtime")),
             resources.join("reasoning").join(format!("{target}.zip")),
         )
         .unwrap();

@@ -96,7 +96,7 @@ fn actual_lean_temporal_replay_obeys_applicability_and_roundtrips() {
     use kpop_native::reasoning_runtime::{OperationalBounds, Runtime, target_name};
     let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
-        .join(format!("{}.zip", target_name().unwrap()));
+        .join(format!("{}.kpopper-runtime", target_name().unwrap()));
     let cache = tempfile::tempdir().unwrap();
     let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
     let data = fixtures();

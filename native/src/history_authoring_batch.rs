@@ -725,7 +725,7 @@ mod tests {
         let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
             .join(format!(
-                "{}.zip",
+                "{}.kpopper-runtime",
                 crate::reasoning_runtime::target_name().unwrap()
             ));
         Runtime::open(&archive, cache, OperationalBounds::default()).unwrap()
@@ -863,7 +863,7 @@ mod tests {
         let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
             .join(format!(
-                "{}.zip",
+                "{}.kpopper-runtime",
                 crate::reasoning_runtime::target_name().unwrap()
             ));
         let cache = tempfile::tempdir().unwrap();

@@ -12,7 +12,7 @@ fn resources() -> tempfile::TempDir {
     fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
-            .join(format!("{target}.zip")),
+            .join(format!("{target}.kpopper-runtime")),
         root.path().join("reasoning").join(format!("{target}.zip")),
     )
     .unwrap();
