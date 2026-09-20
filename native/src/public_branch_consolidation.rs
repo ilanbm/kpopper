@@ -352,19 +352,20 @@ fn ordinary(
     let mut output = crate::public_consolidation::ordinary::run_supplied(
         &selected, route, &supplied, runtime, probe,
     )?;
-    if !options.dry_run && output.code == 0 {
-        if let Some(at) = output.stdout.find("next: git add ") {
-            let end = output.stdout[at..]
-                .find('\n')
-                .map(|n| at + n + 1)
-                .unwrap_or(output.stdout.len());
-            output.stdout.insert_str(
+    if !options.dry_run
+        && output.code == 0
+        && let Some(at) = output.stdout.find("next: git add ")
+    {
+        let end = output.stdout[at..]
+            .find('\n')
+            .map(|n| at + n + 1)
+            .unwrap_or(output.stdout.len());
+        output.stdout.insert_str(
                 end,
                 &format!(
                     "  then merge {} as you would - its record is folded here, and the merge carries only its code\n", refs.join(", ")
                 ),
             );
-        }
     }
     Ok(output)
 }
