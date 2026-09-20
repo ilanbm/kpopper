@@ -355,13 +355,25 @@ print(json.dumps({'source':source,'head':head}))
                         "$GENERATED".into()
                     }
                 });
+                let mut body = body.into_owned();
+                if let Some((prefix, rest)) = body.split_once("objects:\n")
+                    && let Some((objects, suffix)) = rest.split_once("operation:\n")
+                {
+                    let mut blocks = objects
+                        .split("- id: ")
+                        .skip(1)
+                        .map(|v| format!("- id: {v}"))
+                        .collect::<Vec<_>>();
+                    blocks.sort();
+                    body = format!("{prefix}objects:\n{}operation:\n{suffix}", blocks.concat());
+                }
                 (
                     PathBuf::from(
                         path.to_string_lossy()
                             .replace(op, "$OP")
                             .replace(id, "$OBJECT"),
                     ),
-                    body.as_bytes().to_vec(),
+                    body.into_bytes(),
                 )
             })
             .collect::<BTreeMap<_, _>>()
