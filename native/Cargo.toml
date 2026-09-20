@@ -29,6 +29,7 @@ html5ever = "0.35"
 markup5ever_rcdom = "0.35"
 cssparser = "0.35"
 unicode-casefold = "0.2.0"
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1.5", features = ["fs"] }

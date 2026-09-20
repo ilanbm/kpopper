@@ -183,7 +183,7 @@ fn python_casefold(text: &str) -> String {
     folded
 }
 
-fn terms(text: &str) -> Vec<String> {
+pub(crate) fn terms(text: &str) -> Vec<String> {
     let folded = python_casefold(text);
     let mut result = Vec::new();
     let mut current = String::new();

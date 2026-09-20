@@ -1201,7 +1201,7 @@ impl<'a> Projection<'a> {
     }
 }
 
-fn display(value: &V) -> String {
+pub(crate) fn display(value: &V) -> String {
     let rational =
         match value {
             V::Integer(_) | V::Float(_) => crate::reasoning_scope::query_value(value, 0)

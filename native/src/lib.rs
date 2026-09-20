@@ -165,6 +165,7 @@ pub mod core_page;
 pub mod public_core_readers;
 pub mod public_ordinary_readers;
 pub mod public_readers;
+mod public_search_rank;
 pub mod public_session;
 
 pub mod application_cli;
