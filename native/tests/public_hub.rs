@@ -26,7 +26,8 @@ fn cli(root: &Path, args: &[&str]) -> std::process::Output {
                     .join(&target)
                     .join(env!("KPOP_ORDINARY_SOURCE_SHA256"))
             });
-        for name in ["build.json", "epistemic-core"] {
+        let executable = if cfg!(windows) { "epistemic-core.exe" } else { "epistemic-core" };
+        for name in ["build.json", executable] {
             fs::copy(program.join(name), ordinary.join(name)).unwrap();
         }
     }
