@@ -1,0 +1,201 @@
+[
+  {
+    "name": "no-query",
+    "argv": [
+      "search",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"query must contain 1..2000 characters\"}\n"
+  },
+  {
+    "name": "read-no-revision",
+    "argv": [
+      "search",
+      "--read",
+      "node:p.a",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"--read requires --revision and no query\"}\n"
+  },
+  {
+    "name": "read-and-query",
+    "argv": [
+      "search",
+      "Alpha",
+      "--read",
+      "node:p.a",
+      "--revision",
+      "$REVISION",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"--read requires --revision and no query\"}\n"
+  },
+  {
+    "name": "revision-no-read",
+    "argv": [
+      "search",
+      "Alpha",
+      "--revision",
+      "$REVISION",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"--revision and --offset require --read\"}\n"
+  },
+  {
+    "name": "offset-no-read",
+    "argv": [
+      "search",
+      "Alpha",
+      "--offset",
+      "1",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"--revision and --offset require --read\"}\n"
+  },
+  {
+    "name": "limit-low",
+    "argv": [
+      "search",
+      "Alpha",
+      "--limit",
+      "0",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"limit must be 1..50; chars must be 500..100000\"}\n"
+  },
+  {
+    "name": "limit-high",
+    "argv": [
+      "search",
+      "Alpha",
+      "--limit",
+      "51",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"limit must be 1..50; chars must be 500..100000\"}\n"
+  },
+  {
+    "name": "chars-low",
+    "argv": [
+      "search",
+      "Alpha",
+      "--chars",
+      "499",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"limit must be 1..50; chars must be 500..100000\"}\n"
+  },
+  {
+    "name": "stale-read",
+    "argv": [
+      "search",
+      "--read",
+      "node:p.a",
+      "--revision",
+      "stale",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"record, capture state or source changed; search again\"}\n"
+  },
+  {
+    "name": "unknown-ref",
+    "argv": [
+      "search",
+      "--read",
+      "no-such-ref",
+      "--revision",
+      "$REVISION",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"unknown search reference\"}\n"
+  },
+  {
+    "name": "negative-offset",
+    "argv": [
+      "search",
+      "--read",
+      "node:p.a",
+      "--revision",
+      "$REVISION",
+      "--offset",
+      "-1",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"offset must address this text; length must be 1..100000\"}\n"
+  },
+  {
+    "name": "empty-page",
+    "argv": [
+      "search",
+      "--read",
+      "node:p.a",
+      "--revision",
+      "$REVISION",
+      "--length",
+      "0",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"offset must address this text; length must be 1..100000\"}\n"
+  },
+  {
+    "name": "negative-query",
+    "argv": [
+      "search",
+      "-1",
+      "--record",
+      "$ROOT/source/GROUNDING.yaml",
+      "--json"
+    ],
+    "exit": 0,
+    "stdout": "{\"conflicts\": {}, \"contributions\": [], \"omitted\": 0, \"query\": \"-1\", \"read_mode\": \"live\", \"record\": \"$ROOT/source/GROUNDING.yaml\", \"record_sha256\": \"f8bdc12351f451bfb307c0545d457535686c608cd85afe46cd17d029781009a5\", \"results\": [], \"revision\": \"$REVISION\", \"revision_kind\": \"search-corpus\", \"scope\": \"Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.\", \"target_unavailable\": null, \"unindexed\": [], \"unindexed_count\": 0, \"unindexed_omitted\": 0}\n",
+    "stderr": ""
+  }
+]

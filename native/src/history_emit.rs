@@ -330,6 +330,79 @@ impl Writer {
         Ok(())
     }
 }
+/// Identity from a separately verified source graph, never inferred by equality.
+#[derive(Clone, Debug)]
+pub(crate) struct OrdinaryIdentity {
+    pub id: Option<usize>,
+    pub children: Vec<OrdinaryIdentity>,
+}
+#[derive(Default)]
+struct Aliases {
+    anchors: std::collections::BTreeMap<usize, String>,
+    emitted: std::collections::BTreeSet<usize>,
+}
+fn identity_plan(value: &Y::OrdinaryValue, identity: &OrdinaryIdentity) -> Result<Aliases> {
+    fn validate(value: &Y::OrdinaryValue, id: &OrdinaryIdentity, depth: usize) -> Result<()> {
+        require(depth <= crate::value::MAX_DEPTH + 1, "history_limit")?;
+        let children = match value {
+            Y::OrdinaryValue::Map(m) => m.len() * 2,
+            Y::OrdinaryValue::List(a) => a.len(),
+            _ => 0,
+        };
+        require(id.children.len() == children, "invalid_source_identity")?;
+        if id.id.is_some() {
+            require(
+                matches!(
+                    value,
+                    Y::OrdinaryValue::Map(_)
+                        | Y::OrdinaryValue::List(_)
+                        | Y::OrdinaryValue::Scalar(V::Date(_) | V::DateTime(_))
+                ),
+                "invalid_source_identity",
+            )?;
+        }
+        match value {
+            Y::OrdinaryValue::Map(m) => {
+                for (i, (key, value)) in m.iter().enumerate() {
+                    validate(
+                        &Y::OrdinaryValue::Scalar(key.scalar().clone()),
+                        &id.children[i * 2],
+                        depth + 1,
+                    )?;
+                    validate(value, &id.children[i * 2 + 1], depth + 1)?;
+                }
+            }
+            Y::OrdinaryValue::List(a) => {
+                for (value, id) in a.iter().zip(&id.children) {
+                    validate(value, id, depth + 1)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    fn plan(
+        id: &OrdinaryIdentity,
+        seen: &mut std::collections::BTreeSet<usize>,
+        anchors: &mut std::collections::BTreeMap<usize, String>,
+    ) {
+        if let Some(key) = id.id
+            && !seen.insert(key)
+        {
+            if !anchors.contains_key(&key) {
+                anchors.insert(key, format!("id{:03}", anchors.len() + 1));
+            }
+            return;
+        }
+        for child in &id.children {
+            plan(child, seen, anchors);
+        }
+    }
+    validate(value, identity, 0)?;
+    let mut aliases = Aliases::default();
+    plan(identity, &mut Default::default(), &mut aliases.anchors);
+    Ok(aliases)
+}
 impl Writer {
     fn ordinary_node(
         &mut self,
@@ -337,12 +410,24 @@ impl Writer {
         parent: Option<usize>,
         mapping: bool,
         key: bool,
+        identity: Option<&OrdinaryIdentity>,
+        aliases: &mut Aliases,
     ) -> Result<()> {
         use Y::OrdinaryValue as O;
+        if let Some(id) = identity.and_then(|v| v.id)
+            && let Some(anchor) = aliases.anchors.get(&id)
+        {
+            if !aliases.emitted.insert(id) {
+                self.indicator(&format!("*{anchor}"), true, false);
+                return Ok(());
+            }
+            self.indicator(&format!("&{anchor}"), true, false);
+        }
+        let child = |i| identity.and_then(|v| v.children.get(i));
         match value {
             O::Map(fields) if !fields.is_empty() => {
                 let indent = parent.map_or(0, |i| i + 2);
-                for (name, value) in fields {
+                for (index, (name, value)) in fields.iter().enumerate() {
                     self.indent(indent);
                     let (raw, tag) = match name.scalar() {
                         V::Text(v) => (v.clone(), 5),
@@ -360,26 +445,35 @@ impl Writer {
                     if !simple {
                         self.indicator("?", true, true);
                     }
-                    self.node(
-                        &S::Scalar(name.scalar().clone()),
+                    self.ordinary_node(
+                        &O::Scalar(name.scalar().clone()),
                         Some(indent),
                         true,
                         simple,
+                        child(index * 2),
+                        aliases,
                     )?;
                     if !simple {
                         self.indent(indent);
                     }
                     self.indicator(":", !simple, !simple);
-                    self.ordinary_node(value, Some(indent), true, false)?;
+                    self.ordinary_node(
+                        value,
+                        Some(indent),
+                        true,
+                        false,
+                        child(index * 2 + 1),
+                        aliases,
+                    )?;
                 }
             }
             O::List(items) if !items.is_empty() => {
                 let indent =
                     parent.map_or(0, |i| if mapping && !self.indention { i } else { i + 2 });
-                for value in items {
+                for (index, value) in items.iter().enumerate() {
                     self.indent(indent);
                     self.indicator("-", true, true);
-                    self.ordinary_node(value, Some(indent), false, false)?;
+                    self.ordinary_node(value, Some(indent), false, false, child(index), aliases)?;
                 }
             }
             O::Map(_) => self.node(&S::Map(vec![]), parent, mapping, key)?,
@@ -393,10 +487,21 @@ impl Writer {
 /// Ordinary scalar keys retain their types and source order. Strict history
 /// encoders remain restricted to their original finite, text-keyed algebra.
 pub(crate) fn encode_ordinary_source(value: &Y::OrdinaryValue, width: usize) -> Result<Vec<u8>> {
+    encode_ordinary_source_identity(value, width, None)
+}
+pub(crate) fn encode_ordinary_source_identity(
+    value: &Y::OrdinaryValue,
+    width: usize,
+    identity: Option<&OrdinaryIdentity>,
+) -> Result<Vec<u8>> {
+    let mut aliases = identity
+        .map(|id| identity_plan(value, id))
+        .transpose()?
+        .unwrap_or_default();
     let projected = value.projected();
     Y::validate_value(&projected, Y::MAX_DOCUMENT_BYTES)?;
     let mut writer = Writer::new(width);
-    writer.ordinary_node(value, None, false, false)?;
+    writer.ordinary_node(value, None, false, false, identity, &mut aliases)?;
     writer.indent(0);
     let mut bytes = writer.out.into_bytes();
     if matches!(value, Y::OrdinaryValue::Scalar(_))

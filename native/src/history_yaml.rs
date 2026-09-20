@@ -296,6 +296,22 @@ pub(crate) fn strict_ordinary_projection(value: &TypedValue) -> Result<TypedValu
         _ => value.clone(),
     })
 }
+/// Scalar construction shared by read-only source identity observers. This does
+/// not alter the strict decoder or broaden its value algebra.
+pub(crate) fn ordinary_scalar(
+    value: &str,
+    style: ScalarStyle,
+    tag: Option<&str>,
+) -> Result<TypedValue> {
+    match scalar(value, style, tag)? {
+        Node::Scalar(v) => Ok(v),
+        Node::ValueKey(v) => Ok(TypedValue::Text(v)),
+        _ => Err(invalid()),
+    }
+}
+pub(crate) fn ordinary_key(value: TypedValue) -> Result<OrdinaryKey> {
+    OrdinaryKey::new(value)
+}
 struct Reader<'a> {
     parser: Parser<&'a [u8]>,
     nodes: usize,
