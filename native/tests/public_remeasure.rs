@@ -30,6 +30,7 @@ fn oracle(record: &Path, run: bool) -> ProcessOutput {
     let output = command
         .arg(record)
         .current_dir(record.parent().unwrap())
+        .env("KPOPPER_READ_MODE", "frozen")
         .output()
         .unwrap();
     ProcessOutput {
@@ -43,6 +44,9 @@ fn oracle(record: &Path, run: bool) -> ProcessOutput {
 fn native(record: &Path, run: bool) -> ProcessOutput {
     let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
     command.args(["--frozen", "remeasure"]);
+    if let Some(resources) = std::env::var_os("KPOP_SESSION_NATIVE_RESOURCES") {
+        command.env("KPOPPER_NATIVE_RESOURCES", resources);
+    }
     if run {
         command.arg("--run");
     }
@@ -461,14 +465,40 @@ fn python_18_oracle_matches_legacy_allowlist_layout() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     let record = root.join("PROVENANCE.yaml");
-    fs::write(
-        &record,
-        "known:\n  p.a:\n    v: 1\n    measure: echo\n",
-    )
-    .unwrap();
+    fs::write(&record, "known:\n  p.a:\n    v: 1\n    measure: echo\n").unwrap();
     fs::write(root.join("PROVENANCE.measure.yaml"), "echo: [./recipe]\n").unwrap();
     fs::write(root.join("recipe"), "#!/bin/sh\nprintf '1\\n'\n").unwrap();
     fs::set_permissions(root.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
     assert_oracle(&record, false);
     assert_oracle(&record, true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_core_changed_falsifier() {
+    let (temp, record) = fixture("30", 0, "", "10", "echo: [./recipe]\n");
+    fs::write(&record, "meta:\n  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.a: {v: 10, of: 2026-09-01, measure: echo}\njudgments:\n  d.limit:\n    rests_on: [p.a]\n    seen: {p.a: 10}\n    verdict: okay\n    wrong_if: {op: gt, args: [{ref: p.a}, {num: '20'}]}\n").unwrap();
+    assert_oracle(&record, true);
+    drop(temp);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_core_changed_without_crossing() {
+    let (temp, record) = fixture("15", 0, "", "10", "echo: [./recipe]\n");
+    fs::write(&record, "meta:\n  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.a: {v: 10, of: 2026-09-01, measure: echo}\njudgments:\n  d.limit:\n    rests_on: [p.a]\n    seen: {p.a: 10}\n    verdict: okay\n    wrong_if: {op: gt, args: [{ref: p.a}, {num: '20'}]}\n").unwrap();
+    assert_oracle(&record, true);
+    drop(temp);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_core_unchanged_hole() {
+    let (temp, record) = fixture("10", 0, "", "10", "echo: [./recipe]\n");
+    fs::write(&record, "meta:\n  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.a: {v: 10, measure: echo}\njudgments:\n  d.limit:\n    rests_on: [p.a]\n    seen: {p.a: 10}\n    verdict: okay\n    wrong_if: {op: gt, args: [{ref: missing.x}, {num: '20'}]}\n").unwrap();
+    assert_oracle(&record, true);
+    drop(temp);
 }

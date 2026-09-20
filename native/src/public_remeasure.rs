@@ -6,7 +6,9 @@ use crate::{
     history_yaml,
     ordinary_value::{Map, Value as V, map, map_mut, text},
     public_consolidation::{PreviewHypothesis, PreviewRequest},
-    public_workspace, require,
+    public_workspace,
+    reasoning_runtime::OperationalBounds,
+    require,
     source_capture::{self, ReadMode},
     value::TypedValue as CV,
 };
@@ -182,12 +184,12 @@ fn reading_day(body: &Map, raw: &BTreeMap<String, V>) -> Option<(String, String)
     }
     None
 }
-fn remeasure_report(report: &str) -> Vec<String> {
+fn remeasure_report(report: &str, core: bool) -> Vec<String> {
     let mut lines = report
         .lines()
         .filter(|line| {
             !line.starts_with("clean - and nothing here folds:")
-                && !line.starts_with("not clean:")
+                && (core || !line.starts_with("not clean:"))
                 && !line.starts_with("re-read against the merged tree:")
                 && !line.starts_with("  read again on a later day")
         })
@@ -197,6 +199,184 @@ fn remeasure_report(report: &str) -> Vec<String> {
         lines.pop();
     }
     lines
+}
+fn typed_layer(base: &CV, layer: &CV) -> Result<CV> {
+    let mut result = base.clone();
+    for (section, members) in crate::reasoning_fields::collections(layer)? {
+        let target = crate::history_view::map_mut(
+            crate::history_view::map_mut(&mut result)?
+                .entry(section)
+                .or_insert_with(|| CV::Map(BTreeMap::new())),
+        )?;
+        target.extend(members);
+    }
+    Ok(result)
+}
+fn core_preview(
+    capture: &source_capture::OrdinaryCapture,
+    current: &CV,
+    hypotheses: &CV,
+    tree: &PreviewHypothesis,
+    differing: &BTreeMap<String, (String, V, V, String)>,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+    today: &str,
+) -> Result<(String, i32)> {
+    let candidate = typed_layer(current, &tree.document)?;
+    let mut selection = hmap(hypotheses)?.keys().cloned().collect::<Vec<_>>();
+    selection.push(tree.name.clone());
+    selection.sort();
+    let mut proposals = Vec::new();
+    for (name, hypothesis) in hmap(hypotheses)? {
+        let hypothesis = hmap(hypothesis)?;
+        if hypothesis
+            .get("error")
+            .is_some_and(|value| *value != CV::Null)
+        {
+            continue;
+        }
+        proposals.push(CV::Map(BTreeMap::from([
+            ("name".into(), CV::Text(name.clone())),
+            (
+                "doc".into(),
+                hypothesis
+                    .get("doc")
+                    .or_else(|| hypothesis.get("document"))
+                    .ok_or_else(|| Error("invalid_snapshot".into()))?
+                    .clone(),
+            ),
+            (
+                "head".into(),
+                hypothesis
+                    .get("head")
+                    .cloned()
+                    .unwrap_or_else(|| CV::Map(BTreeMap::new())),
+            ),
+        ])));
+    }
+    proposals.push(CV::Map(BTreeMap::from([
+        ("name".into(), CV::Text(tree.name.clone())),
+        ("doc".into(), tree.document.clone()),
+        ("head".into(), tree.head.clone()),
+    ])));
+    let base = crate::reasoning_operations::OperationDocument::from_snapshot(
+        capture.snapshot()?.clone(),
+        false,
+    )?;
+    let derived = base.derive(&candidate, &selection, &proposals)?;
+    let world = crate::reasoning_operations::OperationWorld::new(
+        &derived,
+        runtime,
+        OperationalBounds::default(),
+    )?;
+    let findings = crate::reasoning_operations::findings(world.context())?;
+    let findings = hmap(&findings)?;
+    let falsified = hlist(&findings["falsified"])?
+        .iter()
+        .map(|v| htext(v).map(str::to_owned))
+        .collect::<Result<Vec<_>>>()?;
+    let holes = hlist(&findings["holes"])?
+        .iter()
+        .map(|v| htext(v).map(str::to_owned))
+        .collect::<Result<Vec<_>>>()?;
+    let moved = hlist(&findings["moved"])?
+        .iter()
+        .map(|v| htext(v).map(str::to_owned))
+        .collect::<Result<Vec<_>>>()?;
+    let names = selection.join(", ");
+    let mut out = vec![
+        format!(
+            "core/v1 prospective snapshot {}; findings {}",
+            world.context().snapshot_id(),
+            world.context().findings_revision()
+        ),
+        format!(
+            "the base with {names} laid over it{}",
+            if selection.len() > 1 {
+                ", in name order"
+            } else {
+                ""
+            }
+        ),
+    ];
+    for (name, hypothesis) in hmap(hypotheses)? {
+        let head = hmap(hypothesis)?
+            .get("head")
+            .and_then(|value| hmap(value).ok());
+        let claim = head
+            .and_then(|head| head.get("claim"))
+            .and_then(|v| htext(v).ok())
+            .unwrap_or("");
+        let born = head
+            .and_then(|head| head.get("born"))
+            .map(crate::source_text::ordinary_python_str)
+            .unwrap_or_default();
+        out.push(format!(
+            "  {name}{}: {claim}",
+            if born.is_empty() {
+                String::new()
+            } else {
+                format!(" (born {born})")
+            }
+        ));
+    }
+    out.push(format!(
+        "  {} (born {today}, today, never folds): {}",
+        tree.name,
+        htext(&hmap(&tree.head)?["claim"])?
+    ));
+    out.push(String::new());
+    out.push("arrived (0): what the fold would add".into());
+    out.push(format!(
+        "updates ({}): what the base holds that a hypothesis replaces, and what rests on each",
+        differing.len()
+    ));
+    for (id, (_recipe, body, measured, _section)) in differing {
+        let body = map(body)?;
+        let old = body.get("v").or_else(|| body.get("quoted")).unwrap();
+        out.push(format!(
+            "  {id}: {} -> {}, from {}",
+            scalar(old),
+            scalar(measured),
+            tree.name
+        ));
+        out.push(format!(
+            "    a reading from {today} that is newer than the base's"
+        ));
+        for line in &falsified {
+            out.push(format!("    FIRED     {line}"));
+        }
+        if falsified.is_empty() {
+            for line in &moved {
+                let id = line.split(':').next().unwrap_or(line);
+                out.push(format!("    MOVED     {id}: dependency value, rule or computational basis changed since review"));
+            }
+        }
+    }
+    out.push("reversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one".into());
+    out.push(format!(
+        "moved / falsified ({}): what the union moves or breaks",
+        moved.len() + falsified.len()
+    ));
+    out.extend(falsified.iter().map(|line| format!("  FALSIFIED {line}")));
+    out.extend(moved.iter().map(|line| format!("  MOVED {line}")));
+    out.push("contested (0)".into());
+    out.push("candidates (0): pairs for a person to judge as the same subject or distinct".into());
+    out.push("new subjects (0): prefixes the base does not hold".into());
+    out.push(String::new());
+    if !falsified.is_empty() || !holes.is_empty() {
+        out.push("not clean: a falsifier holds - nothing folds until it is read again".into());
+    } else if !moved.is_empty() {
+        out.push(format!(
+            "moved: {} judgment{} to re-review before the fold - a premise moved under {}",
+            moved.len(),
+            if moved.len() == 1 { "" } else { "s" },
+            if moved.len() == 1 { "it" } else { "them" }
+        ));
+    }
+    Ok((
+        out.join("\n") + "\n",
+        i32::from(!falsified.is_empty() || !holes.is_empty()),
+    ))
 }
 fn allowlist(path: &Path, display_name: &str) -> Result<BTreeMap<String, Vec<String>>> {
     if !path.is_file() {
@@ -633,6 +813,25 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     }
     out.extend(agreed);
     out.extend(failed_lines);
+    let finite_document = doc.finite_projection()?;
+    let is_core = crate::reasoning_operations::selected(&finite_document)?;
+    if is_core {
+        let operation = crate::reasoning_operations::OperationDocument::from_snapshot(
+            capture.snapshot()?.clone(),
+            true,
+        )?;
+        let world = crate::reasoning_operations::OperationWorld::new(
+            &operation,
+            runtime.as_ref(),
+            OperationalBounds::default(),
+        )?;
+        let findings = crate::reasoning_operations::findings(world.context())?;
+        let holes = hlist(&hmap(&findings)?["holes"])?;
+        failed += holes.len();
+        for hole in holes {
+            out.push(format!("  FAIL core assessment: {}", htext(hole)?));
+        }
+    }
     if differing.is_empty() {
         out.push("".into());
         out.push(if failed != 0 {
@@ -680,22 +879,33 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
             ("folds".into(), CV::Text("never".into())),
         ])),
     };
-    let finite_document = doc.finite_projection()?;
     let finite_hypotheses = capture.hypotheses().finite_projection()?;
-    let proposals = [tree_proposal];
-    let preview = crate::public_consolidation::preview(&PreviewRequest {
-        document: &finite_document,
-        hypotheses: hmap(&finite_hypotheses)?,
-        proposals: &proposals,
-        context: None,
-        as_of: Some(&today),
-        runtime: runtime.as_ref(),
-    })?;
+    let (preview_report, preview_code) = if is_core {
+        core_preview(
+            &capture,
+            &current.finite_projection()?,
+            &finite_hypotheses,
+            &tree_proposal,
+            &differing,
+            runtime.as_ref(),
+            &today,
+        )?
+    } else {
+        let proposals = [tree_proposal];
+        let preview = crate::public_consolidation::preview(&PreviewRequest {
+            document: &finite_document,
+            hypotheses: hmap(&finite_hypotheses)?,
+            proposals: &proposals,
+            context: None,
+            as_of: Some(&today),
+            runtime: runtime.as_ref(),
+        })?;
+        (preview.report, preview.exit_code)
+    };
     out.push("".into());
-    out.extend(remeasure_report(&preview.report));
+    out.extend(remeasure_report(&preview_report, is_core));
     out.push("".into());
-    let contested = preview
-        .report
+    let contested = preview_report
         .lines()
         .any(|line| line.starts_with("contested (") && line != "contested (0)");
     for (id, (recipe, body, measured, _section)) in &differing {
@@ -724,7 +934,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         }
     }
     out.push("".into());
-    let code = if preview.exit_code != 0 || failed != 0 {
+    let code = if preview_code != 0 || failed != 0 {
         1
     } else {
         0
@@ -734,10 +944,10 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         if contested {
             causes.push("a reading the tree contests");
         }
-        if preview.report.contains("  FALSIFIED ") {
+        if preview_report.contains("  FALSIFIED ") {
             causes.push("a falsifier that holds on what the tree measures");
         }
-        if failed != 0 || preview.report.contains("  HOLE ") {
+        if failed != 0 || preview_report.contains("  HOLE ") {
             causes.push("a hole");
         }
         format!(
