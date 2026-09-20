@@ -414,9 +414,9 @@ fn actions(
     ]);
     if let Some(source) = report.raw.get("source") {
         body.insert("from".into(), source.clone());
-    }
-    if let Some(at) = report.raw.get("at") {
-        body.insert("at".into(), at.clone());
+        if let Some(at) = report.raw.get("at") {
+            body.insert("at".into(), at.clone());
+        }
     }
     let scope = report
         .raw
@@ -1418,7 +1418,7 @@ fn run_bound(
             let advanced_local = route.pending_required()?;
             let collection = source_collection(&document, &report)?;
             let (planned, source_bodies) =
-                actions(&report, &event, &source_path, &collection, advanced_local)?;
+                actions(&report, &event, &source_path, &collection, false)?;
             let prepare = if advanced_local {
                 legacy_batch::prepare_advanced_local
             } else {

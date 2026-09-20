@@ -60,6 +60,13 @@ fn hash(path: &Path) -> String {
     kpop_native::identity::sha256(&fs::read(path).unwrap())
 }
 
+fn captured_id(entry: &Path, event_id: &str) -> String {
+    kpop_native::identity::sha256(
+        format!("{}\0{event_id}", entry.canonicalize().unwrap().display()).as_bytes(),
+    )[..32]
+        .into()
+}
+
 #[test]
 fn explicit_question_keeps_its_target_and_never_applies_the_value() {
     let temp = tempfile::tempdir().unwrap();
@@ -99,6 +106,7 @@ fn explicit_question_keeps_its_target_and_never_applies_the_value() {
 fn ordinary_report_persists_declared_scope_in_python_order() {
     let temp = tempfile::tempdir().unwrap();
     record(temp.path());
+    let entry = temp.path().join("GROUNDING.yaml");
     let state = temp.path().join("state");
     let output = run(
         temp.path(),
@@ -115,11 +123,64 @@ fn ordinary_report_persists_declared_scope_in_python_order() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let after = fs::read_to_string(temp.path().join("GROUNDING.yaml")).unwrap();
-    assert!(
-        after.contains("scope: {environment: example, kind: feature}"),
-        "{after}"
+    let event = captured_id(&entry, "scoped-ordinary");
+    let source_file = state
+        .join("sources")
+        .join(format!("{event}.txt"))
+        .canonicalize()
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(entry).unwrap(),
+        format!(
+            "meta:\n  updated: 2026-09-20\nsources:\n  s.ingest_{event}:\n    name: \"Captured report\"\n    file: \"{}\"\n    read: \"2026-09-20\"\n    recorded_for: \"Update p.price from this captured report.\"\n  s.old:\n    url: https://example.test/old\n    read: 2026-09-01\nknown:\n  p.price:\n    v: 12\n    from: s.ingest_{event}\n    of: \"2026-09-20\"\n    at: \"entire captured report\"\n    scope: {{environment: example, kind: feature}}\njudgments:\n  d.price:\n    rests_on: [p.price]\n    verdict: price is acceptable\n    wrong_if: p.price > 11\n    seen: {{p.price: 10}}\n",
+            source_file.display()
+        )
     );
+}
+
+#[test]
+fn captured_source_at_requires_an_explicit_cited_source() {
+    for (event_id, source, source_metadata, target_source) in [
+        ("at-without-source", None, "", None),
+        (
+            "at-with-cited-source",
+            Some("s.old"),
+            "    from: s.old\n    at: \"page 7\"\n",
+            Some("s.old"),
+        ),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        record(temp.path());
+        let entry = temp.path().join("GROUNDING.yaml");
+        let state = temp.path().join("state");
+        let mut report = json!({
+            "event_id":event_id, "date":"2026-09-20", "source_quote":"price 12",
+            "target":"p.price", "value":12, "at":"page 7",
+        });
+        if let Some(source) = source {
+            report["source"] = json!(source);
+            report["record_sha256"] = json!(hash(&entry));
+        }
+        let output = run(temp.path(), &state, &report);
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let event = captured_id(&entry, event_id);
+        let source_file = state
+            .join("sources")
+            .join(format!("{event}.txt"))
+            .canonicalize()
+            .unwrap();
+        let target_source = target_source
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("s.ingest_{event}"));
+        assert_eq!(
+            fs::read_to_string(&entry).unwrap(),
+            format!(
+                "meta:\n  updated: 2026-09-20\nsources:\n  s.ingest_{event}:\n    name: \"Captured report\"\n    file: \"{}\"\n    read: \"2026-09-20\"\n    recorded_for: \"Update p.price from this captured report.\"\n{source_metadata}  s.old:\n    url: https://example.test/old\n    read: 2026-09-01\nknown:\n  p.price:\n    v: 12\n    from: {target_source}\n    of: 2026-09-20\n    at: \"page 7\"\njudgments:\n  d.price:\n    rests_on: [p.price]\n    verdict: price is acceptable\n    wrong_if: p.price > 11\n    seen: {{p.price: 10}}\n",
+                source_file.display()
+            ),
+            "{event_id}"
+        );
+    }
 }
 
 #[test]
@@ -178,10 +239,18 @@ fn advanced_cli_routes_project_private_and_local_reports_and_replays_success() {
         assert_eq!(first.status.code(), Some(if private { 1 } else { 0 }));
         if expected == "applied" {
             let after = fs::read_to_string(&entry).unwrap();
-            assert!(after.contains("v: 12"));
-            assert!(
-                after.contains("scope: {environment: example, kind: feature}"),
-                "{after}"
+            let event = captured_id(&entry, "advanced-cli");
+            let source_file = state
+                .join("sources")
+                .join(format!("{event}.txt"))
+                .canonicalize()
+                .unwrap();
+            assert_eq!(
+                after,
+                format!(
+                    "meta:\n  updated: 2026-09-20\nsources:\n  s.ingest_{event}:\n    name: \"Captured report\"\n    file: \"{}\"\n    read: \"2026-09-20\"\n    recorded_for: \"Update p.price from this captured report.\"\n  s.old:\n    url: https://example.test/old\n    read: 2026-09-01\nknown:\n  p.price:\n    v: 12\n    from: s.ingest_{event}\n    of: \"2026-09-20\"\n    at: \"entire captured report\"\n    scope: {{environment: example, kind: feature}}\njudgments:\n  d.price:\n    rests_on: [p.price]\n    verdict: price is acceptable\n    wrong_if: p.price > 11\n    seen: {{p.price: 10}}\n",
+                    source_file.display()
+                )
             );
         } else {
             assert_eq!(fs::read(&entry).unwrap(), before);
