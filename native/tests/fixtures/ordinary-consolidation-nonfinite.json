@@ -1,0 +1,612 @@
+{
+  "oracle_revision": "f480ea6",
+  "cases": [
+    {
+      "name": ".nan-base",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".nan-arriving",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: .nan}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: nan - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".nan-update",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: .nan, of: 2026-09-19}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (1): what the base holds that a hypothesis replaces, and what rests on each\n  p.value: 1 -> nan, from trial\n    a reading from 2026-09-19 that is newer than the base's\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".nan-reversal-False",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan, of: 2026-09-18}\njudgments:\n  d.go: {verdict: go, rests_on: [p.value], seen: {p.value: .nan}, wrong_if: p.value != p.value}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  d.go: {verdict: stop, rests_on: [p.value], seen: {p.value: .nan}, wrong_if: p.value > 10}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  d.go: go -> stop, from trial\n    by its own condition - its wrong_if holds (p.value != p.value)\n    base: rests_on: [p.value]\n    base: wrong_if: p.value != p.value\n    trial: rests_on: [p.value]\n    trial: wrong_if: p.value > 10\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".nan-reversal-True",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan, of: 2026-09-18}\njudgments:\n  d.go: {verdict: go, rests_on: [p.value], seen: {p.value: .nan}, wrong_if: p.value != p.value}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  d.go: {verdict: stop, rests_on: [p.value], seen: {p.value: .nan}, wrong_if: p.value > 10}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19",
+        "--take",
+        "d.go"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  d.go: go -> stop, from trial\n    by its own condition - its wrong_if holds (p.value != p.value)\n    base: rests_on: [p.value]\n    base: wrong_if: p.value != p.value\n    trial: rests_on: [p.value]\n    trial: wrong_if: p.value > 10\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".nan-formula",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.result: {rule: {expr: p.value + 1}}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.result: = p.value + 1 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (1): what the union moves or breaks\n  FAIL p.result: rule cannot be computed: unavailable\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: a hole - nothing folds until it is read again\n",
+      "stderr": ""
+    },
+    {
+      "name": ".nan-head-fired",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "hypothesis: {wrong_if: p.value != p.value}\nknown:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (1): what the union moves or breaks\n  FALSIFIED trial: its own wrong_if holds (p.value != p.value)\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: a falsifier holds - nothing folds until it is read again\n",
+      "stderr": ""
+    },
+    {
+      "name": ".nan-nested",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: [.nan], of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: [.nan], of: 2026-09-18}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean - and nothing to write: the base already holds everything trial proposes; consolidate trial removes the file\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-base",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .inf, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-arriving",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: .inf}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: inf - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-update",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: .inf, of: 2026-09-19}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (1): what the base holds that a hypothesis replaces, and what rests on each\n  p.value: 1 -> inf, from trial\n    a reading from 2026-09-19 that is newer than the base's\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-reversal-False",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .inf, of: 2026-09-18}\njudgments:\n  d.go: {verdict: go, rests_on: [p.value], seen: {p.value: .inf}, wrong_if: p.value != p.value}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  d.go: {verdict: stop, rests_on: [p.value], seen: {p.value: .inf}, wrong_if: p.value > 10}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  d.go: go -> stop, from trial\n    the standing judgment holds, and its wrong_if has not fired - take it by name: consolidate trial --take d.go\n    base: rests_on: [p.value]\n    base: wrong_if: p.value != p.value\n    trial: rests_on: [p.value]\n    trial: wrong_if: p.value > 10\nmoved / falsified (1): what the union moves or breaks\n  FALSIFIED d.go: wrong_if holds (p.value > 10) - broken by its own condition\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: a falsifier holds, 1 reversal to take by name - nothing folds until it is read again\n  consolidate trial --take d.go\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-reversal-True",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .inf, of: 2026-09-18}\njudgments:\n  d.go: {verdict: go, rests_on: [p.value], seen: {p.value: .inf}, wrong_if: p.value != p.value}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  d.go: {verdict: stop, rests_on: [p.value], seen: {p.value: .inf}, wrong_if: p.value > 10}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19",
+        "--take",
+        "d.go"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  d.go: go -> stop, from trial\n    taken by name - the standing judgment holds, and a person takes this over it by name\n    base: rests_on: [p.value]\n    base: wrong_if: p.value != p.value\n    trial: rests_on: [p.value]\n    trial: wrong_if: p.value > 10\nmoved / falsified (1): what the union moves or breaks\n  FALSIFIED d.go: wrong_if holds (p.value > 10) - broken by its own condition\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: a falsifier holds - nothing folds until it is read again\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-formula",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .inf, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.result: {rule: {expr: p.value + 1}}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.result: = p.value + 1 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (1): what the union moves or breaks\n  FAIL p.result: rule cannot be computed: unavailable\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: a hole - nothing folds until it is read again\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-head-fired",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .inf, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "hypothesis: {wrong_if: p.value != p.value}\nknown:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": ".inf-nested",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: [.inf], of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: [.inf], of: 2026-09-18}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean - and nothing to write: the base already holds everything trial proposes; consolidate trial removes the file\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-base",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: -.inf, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-arriving",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: -.inf}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: -inf - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-update",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: -.inf, of: 2026-09-19}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (1): what the base holds that a hypothesis replaces, and what rests on each\n  p.value: 1 -> -inf, from trial\n    a reading from 2026-09-19 that is newer than the base's\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-reversal-False",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: -.inf, of: 2026-09-18}\njudgments:\n  d.go: {verdict: go, rests_on: [p.value], seen: {p.value: -.inf}, wrong_if: p.value != p.value}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  d.go: {verdict: stop, rests_on: [p.value], seen: {p.value: -.inf}, wrong_if: p.value > 10}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  d.go: go -> stop, from trial\n    the standing judgment holds, and its wrong_if has not fired - take it by name: consolidate trial --take d.go\n    base: rests_on: [p.value]\n    base: wrong_if: p.value != p.value\n    trial: rests_on: [p.value]\n    trial: wrong_if: p.value > 10\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: 1 reversal to take by name - a verdict the base's own condition has not broken folds only when a person names it\n  consolidate trial --take d.go\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-reversal-True",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: -.inf, of: 2026-09-18}\njudgments:\n  d.go: {verdict: go, rests_on: [p.value], seen: {p.value: -.inf}, wrong_if: p.value != p.value}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  d.go: {verdict: stop, rests_on: [p.value], seen: {p.value: -.inf}, wrong_if: p.value > 10}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19",
+        "--take",
+        "d.go"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  d.go: go -> stop, from trial\n    taken by name - the standing judgment holds, and a person takes this over it by name\n    base: rests_on: [p.value]\n    base: wrong_if: p.value != p.value\n    trial: rests_on: [p.value]\n    trial: wrong_if: p.value > 10\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-formula",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: -.inf, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.result: {rule: {expr: p.value + 1}}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.result: = p.value + 1 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (1): what the union moves or breaks\n  FAIL p.result: rule cannot be computed: unavailable\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: a hole - nothing folds until it is read again\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-head-fired",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: -.inf, of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "hypothesis: {wrong_if: p.value != p.value}\nknown:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "-.inf-nested",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: [-.inf], of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: [-.inf], of: 2026-09-18}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean - and nothing to write: the base already holds everything trial proposes; consolidate trial removes the file\n",
+      "stderr": ""
+    },
+    {
+      "name": "fresh-nan-container",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: [!!float nan], of: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: [!!float nan], of: 2026-09-18}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (1): what the base holds that a hypothesis replaces, and what rests on each\n  p.value: [nan] -> [nan], from trial\n    a reading of the same day - the base keeps what it holds\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (1): the door refuses the reading, so the base keeps what it holds\n  p.value: a reading of the same day\n    the base holds p.value: [nan] as of 2026-09-18\n    trial says p.value: [nan] as of 2026-09-18\n  read again on a later day - set it in the base or in the hypothesis with --as-of - or refute the hypothesis\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: a contested reading - nothing folds until it is read again\n",
+      "stderr": ""
+    },
+    {
+      "name": "nan-key",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1, .nan: note}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "nonfinite-of-source-date",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: 1, of: 2026-09-18}\nsources:\n  s.now: {read: 2026-09-19}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.value: {v: 2, of: .nan, from: s.now}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (1): what the base holds that a hypothesis replaces, and what rests on each\n  p.value: 1 -> 2, from trial\n    a reading from 2026-09-19 that is newer than the base's\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "rule-overrides",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan, quoted: 99, rule: {num: \"42\"}}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "page-arrangement-take-dry-nonfinite",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.nonfinite: {v: .nan}\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {v: 2, of: 2026-09-18}\nsources:\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0, born: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+        ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--take",
+        "v.layout",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  v.layout: current -> replacement, from trial\n    taken by name - the standing judgment holds, and a person takes this over it by name\n    base: rests_on: [s.now, page.unserved]\n    base: wrong_if: page.unserved > 0\n    trial: rests_on: [s.now, page.unserved]\n    trial: wrong_if: page.unserved > 2\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "page-arrangement-untaken-dry-nonfinite",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.nonfinite: {v: .nan}\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {v: 2, of: 2026-09-18}\nsources:\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0, born: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+        ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  v.layout: current -> replacement, from trial\n    the standing judgment holds, and its wrong_if has not fired - take it by name: consolidate trial --take v.layout\n    base: rests_on: [s.now, page.unserved]\n    base: wrong_if: page.unserved > 0\n    trial: rests_on: [s.now, page.unserved]\n    trial: wrong_if: page.unserved > 2\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: 1 reversal to take by name - a verdict the base's own condition has not broken folds only when a person names it\n  consolidate trial --take v.layout\n",
+      "stderr": ""
+    },
+    {
+      "name": "page-arrangement-cut-dry-nonfinite",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.nonfinite: {v: .nan}\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {v: 2, of: 2026-09-18}\nsources:\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0, born: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+        ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.absent]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--take",
+        "v.layout",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 1,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  v.layout: current -> replacement, from trial\n    the brief no longer carries what it decided - no tab's sections earn s.now - restore the tab, then re-decide - take it by name: consolidate trial --take v.layout\n    base: rests_on: [s.now, page.unserved]\n    base: wrong_if: page.unserved > 0\n    trial: rests_on: [s.now, page.unserved]\n    trial: wrong_if: page.unserved > 2\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nnot clean: 1 reversal to take by name - a verdict the base's own condition has not broken folds only when a person names it\n  consolidate trial --take v.layout\n",
+      "stderr": ""
+    },
+    {
+      "name": "page-arrangement-fired-dry-nonfinite",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.nonfinite: {v: .nan}\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {from: s.extra, v: 2, of: 2026-09-18}\nsources:\n  s.extra: {asked: Other request, read: 2026-09-19}\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0, born: 2026-09-18}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+        ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  v.layout: current -> replacement, from trial\n    by its own condition - its sign holds (page.unserved > 0) with its tab intact - page.unserved is 1\n    base: rests_on: [s.now, page.unserved]\n    base: wrong_if: page.unserved > 0\n    trial: rests_on: [s.now, page.unserved]\n    trial: wrong_if: page.unserved > 2\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "nf-candidate-source",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan, from: s.file, at: row}\nsources:\n  s.file: {file: report.txt}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {v: .inf, from: s.file, at: row}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: inf <- s.file, at row - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (1): pairs for a person to judge as the same subject or distinct\n  p.next (trial) and p.value: same from and at (s.file, row) - certain\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "nf-candidate-verdict",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {v: .nan}\njudgments:\n  d.one: {verdict: .nan, rests_on: [p.value], seen: {p.value: .nan}, wrong_if: p.value > 1}\n",
+        ".kpopper/hypotheses/trial.yaml": "judgments:\n  d.two: {verdict: .nan, rests_on: [p.value], seen: {p.value: .nan}, wrong_if: p.value > 1}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  + d.two: nan - from trial\n    HOLDS     d.two: wrong_if does not hold (p.value > 1)\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (1): pairs for a person to judge as the same subject or distinct\n  d.two (trial) and d.one: rests on p.value too, with the same verdict - a duplicate\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    },
+    {
+      "name": "nf-named-role",
+      "files": {
+        "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: .inf, v: .nan}\n",
+        ".kpopper/hypotheses/trial.yaml": "known:\n  p.next: {name: .nan, v: 2}\n"
+      },
+      "args": [
+        "consolidate",
+        "--dry-run",
+        "trial",
+        "--as-of",
+        "2026-09-19"
+      ],
+      "exit": 0,
+      "stdout": "the base with trial laid over it\n  trial\n\narrived (1): what the fold would add\n  p.next: 2 (nan) - from trial\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: trial may fold - consolidate trial\n",
+      "stderr": ""
+    }
+  ]
+}

@@ -1,6 +1,10 @@
 //! Public named-hypothesis consolidation over ordinary records and active history.
+#[path = "ordinary_consolidation_full.rs"]
+mod full;
 #[path = "ordinary_consolidation.rs"]
 mod ordinary;
+#[path = "consolidation_supersession.rs"]
+pub(crate) mod supersession;
 use crate::{
     Result, direct_history,
     history_authoring::{empty, obj, s},
@@ -254,6 +258,30 @@ pub fn preview(request: &PreviewRequest<'_>) -> Result<Preview> {
     ordinary::preview(request)
 }
 
+/// Read-only ordinary preview. Its source values never enter a finite writer.
+pub struct OrdinaryPreviewHypothesis {
+    pub name: String,
+    pub document: crate::ordinary_value::Value,
+    pub head: crate::ordinary_value::Value,
+}
+pub struct OrdinaryPreviewRequest<'a> {
+    pub document: &'a crate::ordinary_value::Value,
+    pub hypotheses: &'a crate::ordinary_value::Map,
+    pub proposals: &'a [OrdinaryPreviewHypothesis],
+    pub context: Option<&'a crate::ordinary_value::Value>,
+    pub as_of: Option<&'a str>,
+    pub runtime: Option<&'a Runtime>,
+}
+pub struct OrdinaryPreview {
+    pub report: String,
+    pub exit_code: i32,
+    pub blocked: bool,
+    pub candidate_document: Option<crate::ordinary_value::Value>,
+}
+pub fn preview_ordinary(request: &OrdinaryPreviewRequest<'_>) -> Result<OrdinaryPreview> {
+    full::preview(request)
+}
+
 pub struct CommandOutput {
     pub stdout: String,
     pub stderr: String,
@@ -301,6 +329,9 @@ fn dispatch_with_runtime(
     )?;
     if !active_history(&route.paths()[0])? {
         drops(&options.drops)?;
+        if options.dry_run {
+            return full::run(options, &route, runtime);
+        }
         return ordinary::run(options, &route, runtime, probe);
     }
     drop(lock);

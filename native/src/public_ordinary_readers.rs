@@ -1,5 +1,7 @@
 //! Ordinary reader projections retain the legacy interpretation of authored text.
 use crate::history_yaml::{OrdinaryKey, OrdinaryValue};
+use crate::ordinary_counts::flags as hub_flags;
+use crate::reasoning_authoring_guards::arrangement as hub_arrangement;
 use crate::source_text::ordinary_python_str as py;
 use crate::{
     Result,
@@ -321,29 +323,7 @@ pub struct OrdinarySessionData {
     pub knowledge_conflicts: serde_json::Value,
 }
 
-/// Immutable ordinary semantics needed by the optional Hub presentation.
-///
-/// This deliberately contains no layout choices: the Hub owns the brief and maps
-/// these already-assessed facts onto tabs without reimplementing Reader semantics.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct HubArrangement {
-    pub id: String,
-    pub sources: Vec<String>,
-    pub born: Option<String>,
-    pub request: Option<String>,
-    pub predicate: String,
-    pub fired: bool,
-    pub reading: Option<String>,
-    pub moved: Vec<(String, V, V, &'static str)>,
-    pub contested: Vec<(String, String)>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct HubData {
-    pub arrangements: Vec<HubArrangement>,
-    pub flags: BTreeMap<String, BTreeSet<String>>,
-    pub reader_lines: Vec<String>,
-}
+include!("ordinary_hub_semantics.rs");
 
 fn source_body<'a>(source: &'a OrdinaryValue, id: &str) -> Option<&'a OrdinaryValue> {
     let OrdinaryValue::Map(collections) = source else {
@@ -869,99 +849,6 @@ impl<'a> Projection<'a> {
 
     pub fn gate_data(&self) -> Result<GateData> {
         self.gate_data_inner(None, &BTreeSet::new())
-    }
-
-    pub(crate) fn hub_data(&self) -> Result<HubData> {
-        let flags: BTreeMap<String, BTreeSet<String>> = self
-            .base
-            .judgments
-            .iter()
-            .map(|(id, body)| {
-                Ok((
-                    id.clone(),
-                    crate::ordinary_counts::flags(&self.base.reader, body)?
-                        .into_iter()
-                        .map(str::to_owned)
-                        .collect(),
-                ))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()?;
-        let mut arrangements = Vec::new();
-        for (id, body) in &self.base.judgments {
-            if !crate::reasoning_authoring_guards::arrangement(&self.base.reader, body) {
-                continue;
-            }
-            let sources: Vec<String> = self
-                .base
-                .deps(id)?
-                .into_iter()
-                .filter(|source| {
-                    self.base
-                        .reader
-                        .raw
-                        .get(source)
-                        .and_then(|body| map(body).ok())
-                        .and_then(|body| body.get("asked"))
-                        .is_some_and(truth)
-                })
-                .collect();
-            let b = map(body)?;
-            let request = b
-                .get("request")
-                .and_then(|value| text(value).ok())
-                .filter(|request| {
-                    sources.iter().any(|source| source == request)
-                        && self.base.reader.raw.get(*request).is_some_and(|body| {
-                            map(body)
-                                .ok()
-                                .and_then(|body| body.get("asked"))
-                                .is_some_and(truth)
-                        })
-                })
-                .map(str::to_owned);
-            let contested = self
-                .disputed
-                .get(id)
-                .into_iter()
-                .flatten()
-                .map(|(name, claim)| (name.clone(), short(claim, 120)))
-                .collect();
-            let predicate = self.base.pred(id);
-            let comparison_ref = if matches!(predicate, V::Map(_)) {
-                L::legacy_expression(&predicate, true)
-                    .ok()
-                    .and_then(|tree| {
-                        let args = map(&tree).ok()?.get("args")?;
-                        let args = list(args).ok()?;
-                        let left = map(args.first()?).ok()?;
-                        if left.len() != 1 || map(args.get(1)?).ok()?.contains_key("op") {
-                            return None;
-                        }
-                        text(left.get("ref")?).ok().map(str::to_owned)
-                    })
-            } else {
-                R::CMP.captures(&py(&predicate)).map(|m| m[1].to_owned())
-            };
-            arrangements.push(HubArrangement {
-                id: id.clone(),
-                sources,
-                born: b.get("born").filter(|v| truth(v)).map(py),
-                request,
-                predicate: predicate_text(&self.base.pred(id)),
-                fired: flags[id].contains("falsified"),
-                reading: comparison_ref.and_then(|dependency| {
-                    let value = self.base.reader.value(&dependency).ok()?;
-                    (value != V::Null).then(|| format!("{dependency} is {}", py(&value)))
-                }),
-                moved: self.base.moved(id)?,
-                contested,
-            });
-        }
-        Ok(HubData {
-            arrangements,
-            flags,
-            reader_lines: self.knowledge.clone(),
-        })
     }
 
     pub fn gate_data_with_source(&self, source: Option<&OrdinaryValue>) -> Result<GateData> {
