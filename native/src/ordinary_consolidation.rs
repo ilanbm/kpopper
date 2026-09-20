@@ -44,6 +44,7 @@ struct Hypothesis {
     ids: BTreeSet<String>,
     source: O,
     text: String,
+    source_record: V,
 }
 pub(crate) struct SuppliedHypothesis {
     pub name: String,
@@ -51,6 +52,7 @@ pub(crate) struct SuppliedHypothesis {
     pub head: V,
     pub source: O,
     pub text: String,
+    pub source_record: V,
 }
 impl Hypothesis {
     fn path(&self) -> Result<&PathBuf> {
@@ -128,11 +130,19 @@ fn read_hypotheses(
                 text: std::str::from_utf8(raw)
                     .map_err(|_| error("invalid_utf8"))?
                     .into(),
+                source_record: V::Map(Map::new()),
             },
         );
     }
     for h in supplied {
-        require(!pool.contains_key(&h.name), "duplicate_branch_hypothesis")?;
+        require(
+            !pool.contains_key(&h.name),
+            &format!(
+                "refused - {} names both a hypothesis beside the record and what {} holds; rename the file, or consolidate them one at a time",
+                h.name,
+                h.name.split(':').next().unwrap_or(&h.name)
+            ),
+        )?;
         let raw = entries(&h.document)?;
         pool.insert(
             h.name.clone(),
@@ -145,6 +155,7 @@ fn read_hypotheses(
                 raw,
                 source: h.source.clone(),
                 text: h.text.clone(),
+                source_record: h.source_record.clone(),
             },
         );
     }
@@ -217,11 +228,16 @@ fn privacy(
     let original_entries = entries(base)?;
     for h in hyps {
         let context = layer(&combined, &h.doc)?;
+        let record_metadata = if h.path.is_none() && h.source_record != V::Map(Map::new()) {
+            metadata(&h.source_record)
+        } else {
+            metadata(&context)
+        };
         let heads = obj([
             ("hypothesis", h.head.clone()),
-            ("record", metadata(&context)),
+            ("record", record_metadata.clone()),
             ("original_record", metadata(base)),
-            ("source_record", V::Map(Map::new())),
+            ("source_record", h.source_record.clone()),
         ]);
         let present = entries(&context)?;
         let mut roots = h
@@ -269,8 +285,8 @@ fn privacy(
             let mut retained = map(&selected)?.clone();
             retained.extend(Map::from([
                 ("hypothesis".into(), h.head.clone()),
-                ("source_record_metadata".into(), V::Map(Map::new())),
-                ("record_metadata".into(), metadata(&context)),
+                ("source_record_metadata".into(), h.source_record.clone()),
+                ("record_metadata".into(), record_metadata),
                 ("original_record_metadata".into(), metadata(base)),
                 ("original_record_closure".into(), original),
             ]));
@@ -321,6 +337,7 @@ fn one_hypothesis(capture: &CapturedSource, name: &str) -> Result<Hypothesis> {
         text: std::str::from_utf8(raw)
             .map_err(|_| error("invalid_utf8"))?
             .into(),
+        source_record: V::Map(Map::new()),
     })
 }
 pub(super) fn run(
@@ -330,6 +347,63 @@ pub(super) fn run(
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<CommandOutput> {
     run_supplied(options, route, &[], runtime_override, probe)
+}
+fn require_committed_branch_base(
+    capture: &CapturedSource,
+    route: &WriteRoute,
+    replaced: &Path,
+) -> Result<()> {
+    let root = &route.project().root;
+    let mut relative = Vec::new();
+    for path in capture
+        .members()
+        .iter()
+        .map(PathBuf::as_path)
+        .chain(std::iter::once(replaced))
+    {
+        if !path.exists() {
+            continue;
+        }
+        let path = crate::project_modes::resolved(path)?;
+        let item = path
+            .strip_prefix(root)
+            .map_err(|_| error("branch_target_outside_checkout"))?;
+        relative.push(item.to_string_lossy().replace('\\', "/"));
+    }
+    let mut args = vec![
+        "--literal-pathspecs",
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--ignored=matching",
+        "--",
+    ];
+    args.extend(relative.iter().map(String::as_str));
+    let dirty = crate::public_readers::branch_read::git(root, &args, false)?
+        .ok_or_else(|| error("branch_git_unavailable"))?;
+    if !dirty.is_empty() {
+        let names = dirty
+            .split(|b| *b == 0)
+            .filter(|v| !v.is_empty())
+            .filter_map(|row| {
+                std::str::from_utf8(row)
+                    .ok()
+                    .and_then(|row| row.get(3..))
+                    .map(str::to_owned)
+            })
+            .collect::<Vec<_>>();
+        let named = if names.is_empty() {
+            relative.join(", ")
+        } else {
+            names.join(", ")
+        };
+        return Err(error(&format!(
+            "refused - {named} {} uncommitted changes: a branch's record folds onto a committed base, so the fold is a commit of its own - commit first, then consolidate again",
+            if names.len() == 1 { "carries" } else { "carry" }
+        )));
+    }
+    Ok(())
 }
 pub(crate) fn run_supplied(
     options: &Options,
@@ -386,6 +460,13 @@ pub(crate) fn run_supplied(
         .unwrap_or_else(|| chrono::Local::now().date_naive().to_string());
     let mut inventory = Inventory::default();
     let side = edit::ancillary(entry, &mut inventory)?;
+    if !options.dry_run && !supplied.is_empty() {
+        require_committed_branch_base(
+            &capture,
+            route,
+            &entry.parent().unwrap().join(&layout.replaced),
+        )?;
+    }
     if let Some(name) = &options.refute {
         let write = edit::WriteContext {
             capture: &capture,
@@ -564,6 +645,7 @@ pub(super) fn preview(
                 raw,
                 source: O::from_typed(doc),
                 text: String::new(),
+                source_record: V::Map(Map::new()),
             },
         );
     }
@@ -587,6 +669,7 @@ pub(super) fn preview(
                 raw,
                 source: O::from_typed(&proposal.document),
                 text: String::new(),
+                source_record: V::Map(Map::new()),
             },
         );
     }

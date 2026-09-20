@@ -740,6 +740,14 @@ pub(super) fn fold(
             shown.join(", ")
         }
     ));
+    for h in &c.hyps {
+        if h.path.is_none() {
+            out.push(format!(
+                "  nothing to delete for {}: another branch keeps its own record",
+                h.name
+            ));
+        }
+    }
     if route.project().is_git() && entry.starts_with(&route.project().root) && !commit.is_empty() {
         out.push(format!("next: git add {} && git commit", commit.join(" ")));
     }
@@ -751,6 +759,9 @@ pub(super) fn fold(
             if n == "1" { "" } else { "s" }
         ),
     ]);
+    if images.is_empty() {
+        return Ok(out.join("\n") + "\n");
+    }
     publish(context, images, &after_doc, probe)?;
     Ok(out.join("\n") + "\n")
 }

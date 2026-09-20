@@ -30,9 +30,9 @@ fn choices(values: &[String]) -> Result<V> {
 }
 fn yaml(value: &V) -> Result<String> {
     String::from_utf8(crate::public_ordinary_readers::python_safe_dump(
-            &crate::history_yaml::OrdinaryValue::from_typed(value),
-        )?)
-        .map_err(|_| error("invalid_branch_output"))
+        &crate::history_yaml::OrdinaryValue::from_typed(value),
+    )?)
+    .map_err(|_| error("invalid_branch_output"))
 }
 fn evidence(
     store: &crate::history_store::Store,
@@ -65,6 +65,55 @@ fn evidence(
     }
     Ok(files)
 }
+fn require_clean_history_target(
+    route: &WriteRoute,
+    target: &crate::history_capture::Capture,
+) -> Result<()> {
+    let mut paths = std::collections::BTreeSet::new();
+    paths.insert(route.paths()[0].clone());
+    let view = if route.paths()[0]
+        .file_name()
+        .is_some_and(|name| name == "GROUNDING.yaml")
+    {
+        target.root.join(".kpopper/view.yaml")
+    } else {
+        target.root.join("PROVENANCE.view.yaml")
+    };
+    paths.insert(view);
+    paths.extend(
+        target
+            .inventory
+            .iter()
+            .filter(|((kind, _), _)| kind == "file" || kind == "bytes")
+            .map(|((_, path), _)| target.root.join(path)),
+    );
+    let mut relative = Vec::new();
+    for path in paths {
+        let path = crate::project_modes::resolved(&path)?;
+        relative.push(
+            path.strip_prefix(&route.project().root)
+                .map_err(|_| error("branch_target_outside_checkout"))?
+                .to_string_lossy()
+                .replace('\\', "/"),
+        );
+    }
+    let mut args = vec![
+        "--literal-pathspecs",
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--ignored=matching",
+        "--",
+    ];
+    args.extend(relative.iter().map(String::as_str));
+    let status = crate::public_readers::branch_read::git(&route.project().root, &args, false)?
+        .ok_or_else(|| error("branch_git_unavailable"))?;
+    require(
+        status.is_empty(),
+        "branch_target_uncommitted: commit the target record and its history before adopting a branch",
+    )
+}
 pub(super) fn run(
     options: &Options,
     route: &WriteRoute,
@@ -87,8 +136,16 @@ pub(super) fn run(
     let store = crate::history_store::Store::new(entry)?;
     let _lock = crate::history_transaction_fs::DirectoryGuard::acquire(&store.root, true)?;
     let target = store.capture()?;
+    if !options.dry_run {
+        require_clean_history_target(route, &target)?;
+    }
+    require(
+        (1..=16).contains(&options.from_refs.len()),
+        "invalid_branch_source_set",
+    )?;
     let mut observations = Vec::new();
     let mut pinned = BTreeMap::new();
+    let mut total = 0usize;
     for reference in &options.from_refs {
         let (_, root, relative, oid, _) = crate::public_readers::branch_read::context(
             route.paths(),
@@ -99,9 +156,13 @@ pub(super) fn run(
             pinned.insert(oid.clone(), reference).is_none(),
             "duplicate_branch_source",
         )?;
-        observations.push(crate::history_branch_git::capture(
-            &root, &oid, &relative, None,
-        )?);
+        let observation = crate::history_branch_git::capture(&root, &oid, &relative, None)?;
+        total = total.saturating_add(observation.files.values().map(Vec::len).sum::<usize>());
+        require(
+            total <= crate::history_branch::MAX_BYTES,
+            "branch_capture_limit",
+        )?;
+        observations.push(observation);
     }
     let mut preview = if observations.len() == 1 {
         crate::history_branch_preview::preview(&target, &observations[0], None)?
@@ -214,86 +275,93 @@ fn ordinary(
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<CommandOutput> {
     require(
-        options.from_refs.len() == 1,
-        "ordinary branch consolidation accepts one --from ref",
-    )?;
-    require(
         options.by.is_none() && options.choices.is_empty() && options.source_revision.is_none(),
         "--by, --choose and --source-revision require active-history --from",
     )?;
-    let reference = &options.from_refs[0];
-    let (_, root, relative, oid, day) = crate::public_readers::branch_read::context(
-        route.paths(),
-        &route.project().root,
-        reference,
-    )?;
-    let captured = crate::source_target::records(&root, &relative, &oid, runtime)?;
-    let data = map(&captured)?;
-    let files = map(&data["files"])?;
-    let raw = text(
-        files
-            .get(&relative)
-            .ok_or_else(|| error("target_record_unavailable"))?,
-    )?;
-    let mut supplied = vec![crate::public_consolidation::ordinary::SuppliedHypothesis {
-        name: reference.clone(),
-        document: data["doc"].clone(),
-        head: V::Map(Map::from([
-            (
-                "claim".into(),
-                V::Text(format!(
-                    "what {reference} committed ({}), read as a hypothesis",
-                    &oid[..7]
-                )),
-            ),
-            ("born".into(), V::Text(day)),
-        ])),
-        source: crate::history_yaml::decode_ordinary_source_value(raw.as_bytes())?,
-        text: raw.into(),
-    }];
-    let layout = crate::history_transaction::Layout::for_entry(&relative)?;
-    for item in list(&data["hypotheses"])? {
-        let item = map(item)?;
-        let name = text(&item["name"])?;
-        let qualified = format!("{reference}:{name}");
-        let suffixes = [
-            format!("{}/{}.yaml", layout.hypotheses, name),
-            format!("{}/{}.yml", layout.hypotheses, name),
-        ];
-        let raw = suffixes
-            .iter()
-            .find_map(|path| files.get(path))
-            .and_then(|v| text(v).ok())
-            .unwrap_or("");
+    let mut supplied = Vec::new();
+    let mut refs = Vec::new();
+    for reference in &options.from_refs {
+        if refs.contains(reference) {
+            continue;
+        }
+        refs.push(reference.clone());
+        let (_, root, relative, oid, day) = crate::public_readers::branch_read::context(
+            route.paths(),
+            &route.project().root,
+            reference,
+        )?;
+        let captured = crate::source_target::records(&root, &relative, &oid, runtime)?;
+        let data = map(&captured)?;
+        let files = map(&data["files"])?;
+        let raw = text(
+            files
+                .get(&relative)
+                .ok_or_else(|| error("target_record_unavailable"))?,
+        )?;
+        let source_document = crate::history_yaml::decode_ordinary_source_value(raw.as_bytes())?;
+        let source_value = source_document.projected();
+        let source_map = map(&source_value)?;
+        let source_record = V::Map(
+            ["meta", "hypothesis"]
+                .into_iter()
+                .filter_map(|key| source_map.get(key).map(|value| (key.into(), value.clone())))
+                .collect(),
+        );
         supplied.push(crate::public_consolidation::ordinary::SuppliedHypothesis {
-            name: qualified,
-            document: item["doc"].clone(),
-            head: item["head"].clone(),
-            source: crate::history_yaml::OrdinaryValue::from_typed(&item["doc"]),
+            name: reference.clone(),
+            document: data["doc"].clone(),
+            source_record: source_record.clone(),
+            head: V::Map(Map::from([
+                (
+                    "claim".into(),
+                    V::Text(format!(
+                        "what {reference} committed ({}), read as a hypothesis",
+                        &oid[..7]
+                    )),
+                ),
+                ("born".into(), V::Text(day)),
+            ])),
+            source: source_document,
             text: raw.into(),
         });
+        let layout = crate::history_transaction::Layout::for_entry(&relative)?;
+        for item in list(&data["hypotheses"])? {
+            let item = map(item)?;
+            let name = text(&item["name"])?;
+            let qualified = format!("{reference}:{name}");
+            let suffixes = [
+                format!("{}/{}.yaml", layout.hypotheses, name),
+                format!("{}/{}.yml", layout.hypotheses, name),
+            ];
+            let raw = suffixes
+                .iter()
+                .find_map(|path| files.get(path))
+                .and_then(|v| text(v).ok())
+                .unwrap_or("");
+            supplied.push(crate::public_consolidation::ordinary::SuppliedHypothesis {
+                name: qualified,
+                document: item["doc"].clone(),
+                head: item["head"].clone(),
+                source_record: source_record.clone(),
+                source: crate::history_yaml::OrdinaryValue::from_typed(&item["doc"]),
+                text: raw.into(),
+            });
+        }
     }
-    let mut selected = options.clone();
-    selected
-        .names
-        .extend(supplied.iter().map(|h| h.name.clone()));
+    let selected = options.clone();
     let mut output = crate::public_consolidation::ordinary::run_supplied(
         &selected, route, &supplied, runtime, probe,
     )?;
     if !options.dry_run && output.code == 0 {
-        let kept =
-            format!("  nothing to delete for {reference}: another branch keeps its own record\n");
         if let Some(at) = output.stdout.find("next: git add ") {
-            output.stdout.insert_str(at, &kept);
-            let after_kept = at + kept.len();
-            let end = output.stdout[after_kept..]
+            let end = output.stdout[at..]
                 .find('\n')
-                .map(|n| after_kept + n + 1)
+                .map(|n| at + n + 1)
                 .unwrap_or(output.stdout.len());
             output.stdout.insert_str(
                 end,
                 &format!(
-                    "  then merge {reference} as you would - its record is folded here, and the merge carries only its code\n"
+                    "  then merge {} as you would - its record is folded here, and the merge carries only its code\n", refs.join(", ")
                 ),
             );
         }

@@ -25,7 +25,7 @@ fn os(value: &str) -> OV {
     OV::Text(value.into())
 }
 
-fn git(root: &Path, args: &[&str], missing: bool) -> Result<Option<Vec<u8>>> {
+pub(crate) fn git(root: &Path, args: &[&str], missing: bool) -> Result<Option<Vec<u8>>> {
     crate::pending_state::git(root, args, OUTPUT_LIMIT, missing)
 }
 
@@ -219,7 +219,11 @@ fn history_pull(
     oid: &str,
     current: &OrdinaryCapture,
 ) -> Result<C::Output> {
-    let PullQuery { reference, seeds, budget } = query;
+    let PullQuery {
+        reference,
+        seeds,
+        budget,
+    } = query;
     let observed = crate::history_branch_git::capture(root, oid, relative, None)?;
     let branch = crate::history_branch::validate(&observed.envelope, &observed.files)?;
     let branch_snapshot =
@@ -347,7 +351,11 @@ fn ordinary_pull(
     current: &OrdinaryCapture,
     runtime: Option<&Runtime>,
 ) -> Result<C::Output> {
-    let PullQuery { reference, seeds, budget } = query;
+    let PullQuery {
+        reference,
+        seeds,
+        budget,
+    } = query;
     let branch =
         crate::source_target::records_ordinary(root, relative, oid, runtime).map_err(|e| {
             if e.0 == "target_record_unavailable" {
@@ -435,11 +443,30 @@ pub(super) fn pull(
     }
     if current.history_capture().is_some() {
         history_pull(
-            PullQuery { reference, seeds, budget }, &entry, &root, &relative, &oid, current,
+            PullQuery {
+                reference,
+                seeds,
+                budget,
+            },
+            &entry,
+            &root,
+            &relative,
+            &oid,
+            current,
         )
     } else {
         ordinary_pull(
-            PullQuery { reference, seeds, budget }, &root, &relative, &oid, &day, current, runtime,
+            PullQuery {
+                reference,
+                seeds,
+                budget,
+            },
+            &root,
+            &relative,
+            &oid,
+            &day,
+            current,
+            runtime,
         )
     }
 }
