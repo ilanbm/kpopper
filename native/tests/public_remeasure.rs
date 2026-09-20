@@ -96,7 +96,7 @@ fn plan_and_run_use_only_the_allowlisted_recipe_and_leave_record_bytes() {
     }
     fs::write(root.join(".kpopper/measure.yaml"), "echo: [./recipe]\n").unwrap();
     let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
-    let record = PathBuf::from(root.join("GROUNDING.yaml"));
+    let record = root.join("GROUNDING.yaml");
     let plan = public_remeasure::run(
         &Options {
             run: false,
