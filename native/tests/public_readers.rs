@@ -14,21 +14,10 @@ fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
 const ORDINARY: &str = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.load: {v: 61, from: s.note}\n  s.note: {name: source}\njudgments:\n  d.work:\n    verdict: continue\n    rests_on: [p.load]\n    seen: {p.load: 44}\n    wrong_if: p.load > 80\n";
 
 #[test]
-fn recursive_aliases_are_quarantined_only_in_ignored_top_level_fields() {
+fn recursive_aliases_fail_closed_in_core_and_custom_collections() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     let private = root.join("private");
-    let base = concat!(
-        "sources:\n",
-        "  booking: {name: Venue, quoted: Confirmed, read: '2026-09-09'}\n",
-        "known:\n",
-        "  venue.status: {v: confirmed, from: booking, as_of: '2026-09-09'}\n",
-        "judgments:\n",
-        "  launch.announcement:\n",
-        "    rests_on: [venue.status]\n",
-        "    verdict: Ready\n",
-        "    wrong_if: 'venue.status != \"confirmed\"'\n",
-    );
     let commands = [
         vec!["--json", "--frozen", "--no-cache", "open"],
         vec!["--json", "--frozen", "--no-cache", "check"],
@@ -42,46 +31,13 @@ fn recursive_aliases_are_quarantined_only_in_ignored_top_level_fields() {
         ],
         vec!["--json", "--frozen", "--no-cache", "export", "venue.status"],
     ];
-    fs::write(root.join("GROUNDING.yaml"), base).unwrap();
-    let expected = commands
-        .iter()
-        .map(|args| cli(root, args, &private))
-        .collect::<Vec<_>>();
-    assert!(String::from_utf8_lossy(&expected[0].stdout).starts_with("3 entries, 1 judgments"));
-    for extension in ["x: &x {next: *x}\n", "x: &x [*x]\n"] {
-        fs::write(root.join("GROUNDING.yaml"), format!("{base}{extension}")).unwrap();
-        for (args, expected) in commands.iter().zip(&expected) {
-            let output = cli(root, args, &private);
-            assert!(
-                output.status.success(),
-                "{args:?}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            assert_eq!(output.stdout, expected.stdout, "{args:?}");
-            if args.contains(&"export") {
-                serde_json::from_slice::<J>(&output.stdout).unwrap_or_else(|error| {
-                    panic!(
-                        "{args:?}: non-JSON export ({error}): {}",
-                        String::from_utf8_lossy(&output.stdout)
-                    )
-                });
-            }
-        }
-        let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
-        let write = cli(root, &["add", "p.new", "v=1"], &private);
-        assert!(!write.status.success());
-        assert!(
-            String::from_utf8_lossy(&write.stderr).contains("invalid_history_yaml"),
-            "{}",
-            String::from_utf8_lossy(&write.stderr)
-        );
-        assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
-    }
-
     for semantic_cycle in [
+        "x: &x {next: *x}\n",
+        "x: &x [*x]\n",
         "known: &x {venue.status: *x}\n",
         "known: &x [*x]\n",
         "schema: &x {deps: *x}\n",
+        "parameters: &x {p.value: *x}\n",
     ] {
         fs::write(root.join("GROUNDING.yaml"), semantic_cycle).unwrap();
         for args in &commands {

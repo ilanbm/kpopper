@@ -29,7 +29,7 @@ fn parse(inventory: &mut Inventory, path: &Path) -> Result<S> {
     parse_bytes(&inventory.read(path)?)
 }
 fn parse_bytes(raw: &[u8]) -> Result<S> {
-    let value = Y::decode_full_ordinary_record_source_value(raw)?;
+    let value = Y::decode_full_ordinary_source_value(raw)?;
     Ok(if truth(&value.projected()) {
         value
     } else {
@@ -552,5 +552,27 @@ impl Document {
             members: self.members,
             history: self.history,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recursive_alias_in_custom_hypothesis_collection_stays_diagnostic() {
+        let temp = tempfile::tempdir().unwrap();
+        let directory = temp.path().join("hypotheses");
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(
+            directory.join("cycle.yaml"),
+            b"parameters: &loop {p.value: *loop}\n",
+        )
+        .unwrap();
+
+        let hypotheses = physical(&directory, &mut Inventory::default()).unwrap();
+        let item = map(&map(&hypotheses).unwrap()["cycle"]).unwrap();
+        assert_eq!(text(&item["error"]).unwrap(), "invalid_history_yaml");
+        assert_eq!(item["doc"], V::Map(Map::new()));
     }
 }
