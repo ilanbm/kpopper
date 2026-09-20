@@ -557,16 +557,139 @@ fn participants(m: &PreparedMutation) -> Result<BTreeSet<String>> {
             result.extend(map(v)?.keys().cloned());
         }
     }
-    // A legacy replacement publishes the mutable record and its retained
-    // sidecar together.  Include the sidecar in the participant fence so a
-    // concurrent edit cannot slip between preflight and journal publication.
+    // Mutable replacement and brief sidecars publish with the record. Include
+    // their directories in the participant fence and retained recovery replicas.
     result.extend(
         m.files()
             .iter()
-            .filter(|item| item.role == "replaced")
+            .filter(|item| matches!(item.role.as_str(), "replaced" | "view"))
             .map(|item| item.path.clone()),
     );
     Ok(result)
+}
+
+#[cfg(test)]
+mod view_participant_tests {
+    use super::*;
+    use crate::history_authoring::{n, obj, s};
+
+    fn retained_view_write() -> (tempfile::TempDir, PreparedMutation, String) {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        fs::create_dir_all(root.join(".kpopper")).unwrap();
+        let record_before = b"known: {p.x: {v: 1}}\n".to_vec();
+        let record_after = b"known: {p.x: {v: 2}}\n".to_vec();
+        let view_before = b"sections: [{title: Before}]\n".to_vec();
+        let view_after = b"sections: [{title: After}]\n".to_vec();
+        fs::write(root.join("GROUNDING.yaml"), &record_before).unwrap();
+        fs::write(root.join(".kpopper/view.yaml"), &view_before).unwrap();
+        let baseline = obj([
+            ("kind", s("direct/v1")),
+            ("transaction_root", s(root.to_str().unwrap())),
+            (
+                "record_members",
+                obj([("GROUNDING.yaml", s(&sha256(&record_before)))]),
+            ),
+        ]);
+        let receipt = crate::history_transaction::semantic_receipt(
+            "ordinary-reader/v1",
+            &obj([]),
+            &obj([]),
+            &obj([]),
+        )
+        .unwrap();
+        let mutation = PreparedMutation::prepare(
+            "identity-view",
+            &A::authority("record", "legacy", &n("0"), Map::new()).unwrap(),
+            &baseline,
+            vec![
+                FileImage {
+                    path: "GROUNDING.yaml".into(),
+                    role: "record".into(),
+                    before: Some(record_before),
+                    after: Some(record_after),
+                },
+                FileImage {
+                    path: ".kpopper/view.yaml".into(),
+                    role: "view".into(),
+                    before: Some(view_before),
+                    after: Some(view_after),
+                },
+            ],
+            &receipt,
+            "GROUNDING.yaml",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            participant_directories(&root, &mutation).unwrap(),
+            vec![root.clone(), root.join(".kpopper")]
+        );
+        let journal = Layout::for_entry("GROUNDING.yaml").unwrap().journal;
+        assert_eq!(replicas(&root, &journal, &mutation).unwrap().len(), 1);
+        let stopped = publish_legacy(
+            &root,
+            &journal,
+            &mutation,
+            &mut |_| Ok(()),
+            Some(&mut |_| Err(error("interrupted"))),
+        );
+        assert_eq!(stopped.unwrap_err().0, "interrupted");
+        assert!(root.join(&journal).is_file());
+        (temporary, mutation, journal)
+    }
+
+    #[test]
+    fn partial_identity_view_publication_is_fenced_and_recovers_both_directions() {
+        for direction in [Direction::Before, Direction::After] {
+            let (temporary, mutation, journal) = retained_view_write();
+            let root = temporary.path().canonicalize().unwrap();
+            let view = root.join(".kpopper/view.yaml");
+            let view_image = mutation.files().iter().find(|f| f.role == "view").unwrap();
+            // Model a stopped apply with the record published and the brief still before.
+            fs::write(&view, view_image.before.as_ref().unwrap()).unwrap();
+            let record = mutation
+                .files()
+                .iter()
+                .find(|f| f.role == "record")
+                .unwrap();
+            assert_eq!(read(&root.join("GROUNDING.yaml")).unwrap(), record.after);
+            assert_eq!(
+                check_member_journals(std::slice::from_ref(&view))
+                    .unwrap_err()
+                    .0,
+                "recovery_required"
+            );
+            recover_legacy(&root, &journal, direction, &mut |_| Ok(()), None, None).unwrap();
+            for file in mutation.files() {
+                assert_eq!(
+                    read(&root.join(&file.path)).unwrap().as_deref(),
+                    image(file, direction)
+                );
+            }
+            assert!(!root.join(&journal).exists());
+            check_member_journals(std::slice::from_ref(&view)).unwrap();
+        }
+    }
+
+    #[test]
+    fn retained_identity_view_refuses_a_concurrent_brief_edit() {
+        let (temporary, _, journal) = retained_view_write();
+        let root = temporary.path().canonicalize().unwrap();
+        let view = root.join(".kpopper/view.yaml");
+        fs::write(&view, b"sections: [{title: Concurrent}]\n").unwrap();
+        for direction in [Direction::Before, Direction::After] {
+            let result = recover_legacy(&root, &journal, direction, &mut |_| Ok(()), None, None);
+            assert_eq!(result.unwrap_err().0, "concurrent_edit");
+            assert!(root.join(&journal).is_file());
+            assert_eq!(
+                check_member_journals(std::slice::from_ref(&view))
+                    .unwrap_err()
+                    .0,
+                "recovery_required"
+            );
+        }
+    }
 }
 pub fn participant_directories(root: &Path, m: &PreparedMutation) -> Result<Vec<PathBuf>> {
     let mut paths = participants(m)?;
