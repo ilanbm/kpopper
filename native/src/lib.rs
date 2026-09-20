@@ -68,6 +68,7 @@ pub mod identity;
 pub mod ingestion_orchestration;
 pub mod ingestion_delivery;
 pub mod ingestion_state;
+pub mod ingestion_hooks;
 pub mod json_ingress;
 pub mod legacy_authoring;
 mod legacy_batch;

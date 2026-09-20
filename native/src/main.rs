@@ -66,6 +66,8 @@ enum Command {
     Update(kpop_native::public_update::Options),
     /// Capture, process and inspect durable asynchronous source reports.
     Ingest(kpop_native::public_ingestion::CommandOptions),
+    /// Deliver bounded ingestion attention through a host hook payload.
+    IngestionHook(kpop_native::ingestion_hooks::Options),
     /// Preview, fold or refute named hypotheses in active history.
     Consolidate(ConsolidateArgs),
     /// Record that two subjects refer to the same thing.
@@ -499,6 +501,7 @@ fn run(args: Args) -> Result<Value> {
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
         Command::Update(_)
         | Command::Ingest(_)
+        | Command::IngestionHook(_)
         | Command::Assess(_)
         | Command::Where
         | Command::Session(_)
@@ -944,6 +947,27 @@ fn main() {
             Err(error) => {
                 println!("{}", json!({"error":error.to_string()}));
                 std::process::exit(2);
+            }
+        }
+    }
+    if let Command::IngestionHook(options) = &args.command {
+        let result = (|| -> Result<kpop_native::ingestion_hooks::Output> {
+            let payload: Value = serde_json::from_slice(&stdin_bytes()?)?;
+            let cwd = args.workspace.clone()
+                .or_else(|| payload.get("cwd").and_then(Value::as_str)
+                    .filter(|path| !path.is_empty()).map(PathBuf::from))
+                .map(Ok).unwrap_or_else(std::env::current_dir)?;
+            kpop_native::ingestion_hooks::run(options, payload, &cwd)
+        })();
+        match result {
+            Ok(output) => {
+                print!("{}", output.stdout);
+                eprint!("{}", output.stderr);
+                std::process::exit(output.code);
+            }
+            Err(error) => {
+                eprintln!("ingestion-hook: {error}");
+                std::process::exit(1);
             }
         }
     }
