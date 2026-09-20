@@ -786,6 +786,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         cwd.join(record)
     }
     .canonicalize()?;
+    let observed_day = utc_day();
     let runtime = public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None)?;
     let capture = source_capture::capture_ordinary_source_with_runtime(
         std::slice::from_ref(&record),
@@ -798,6 +799,21 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         None,
         runtime.as_ref(),
     )?;
+    let capture = if capture.history_capture().is_some() {
+        source_capture::capture_ordinary_source_with_runtime(
+            std::slice::from_ref(&record),
+            cwd,
+            if frozen {
+                ReadMode::Frozen
+            } else {
+                ReadMode::Live
+            },
+            Some(CV::Text(observed_day.clone())),
+            runtime.as_ref(),
+        )?
+    } else {
+        capture
+    };
     let mut history_candidate = None;
     let mut history_document = None;
     let mut history_heads = Vec::new();
@@ -994,7 +1010,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         return Ok(output(out, 0));
     }
     out.push("".into());
-    let today = utc_day();
+    let today = observed_day;
     let (commit, said) = tree_identity(&root);
     out.push(format!(
         "measured on {today} (UTC){}: {} entr{} by {} recipe{}",
@@ -1197,9 +1213,69 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
                 return Ok(output(out, 1));
             }
         };
-        let assessment =
-            crate::history_prospective::assess(history, &mutation, None, None, runtime.as_ref())?;
-        let findings = crate::reasoning_operations::findings(&assessment.after)?;
+        let original = hmap(capture.snapshot()?.data())?;
+        let mut context = original["context"].clone();
+        let context_digest = crate::reasoning_snapshot::digest(&context)?;
+        let context_map = crate::history_view::map_mut(&mut context)?;
+        let history_view = context_map.remove("history_view").unwrap_or(CV::Null);
+        for key in ["history", "history_hypotheses", "operation"] {
+            context_map.remove(key);
+        }
+        context_map.insert(
+            "operation_source".into(),
+            hobj([
+                ("snapshot_id", hs(capture.snapshot()?.snapshot_id())),
+                ("context_digest", hs(&context_digest)),
+                ("history_view", history_view),
+            ]),
+        );
+        context_map.insert(
+            "remeasure".into(),
+            hobj([
+                ("version", CV::Integer(crate::value::Integer::new("1")?)),
+                ("phase", hs("prospective")),
+                ("observation_date", hs(&today)),
+                (
+                    "folded_hypotheses",
+                    CV::List(history_heads.iter().map(|(name, _)| hs(name)).collect()),
+                ),
+            ]),
+        );
+        let remaining = CV::Map(
+            hmap(&original["hypotheses"])?
+                .iter()
+                .filter(|(_, hypothesis)| {
+                    !hmap(hypothesis).is_ok_and(|hypothesis| {
+                        hypothesis.get("kind").is_some_and(|value| {
+                            crate::history_contract::string_is(
+                                value,
+                                crate::history_hypotheses::KIND,
+                            )
+                        })
+                    })
+                })
+                .map(|(name, hypothesis)| (name.clone(), hypothesis.clone()))
+                .collect(),
+        );
+        let snapshot = crate::history_prospective::snapshot_after(
+            history,
+            &mutation,
+            crate::reasoning_snapshot::CaptureOptions {
+                context: Some(context),
+                hypotheses: Some(remaining),
+                as_of: Some(original["as_of"].clone()),
+                ..Default::default()
+            },
+        )?;
+        let assessment = crate::reasoning_context::CapturedAssessment::from_snapshot(
+            snapshot,
+            None,
+            "focused-review/v1",
+            runtime.as_ref(),
+            OperationalBounds::default(),
+            None,
+        )?;
+        let findings = crate::reasoning_operations::findings(&assessment)?;
         let findings = hmap(&findings)?;
         for (label, key) in [
             ("FALSIFIED", "falsified"),
@@ -1212,7 +1288,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
             }
         }
         let (head_lines, head_bad) = history_head_lines(
-            assessment.after.snapshot().clone(),
+            assessment.snapshot().clone(),
             &history_heads,
             runtime.as_ref(),
         )?;
