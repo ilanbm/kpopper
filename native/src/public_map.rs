@@ -2,7 +2,7 @@
 use crate::{Error, Result, require, onboarding, public_workspace};
 use clap::Args;
 use serde_json::{Value, json};
-use std::{fs, path::{Path, PathBuf}};
+use std::{fs, io::Read, path::{Path, PathBuf}, process::{Command, Stdio}, thread, time::{Duration, Instant}};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, Args)]
@@ -67,15 +67,30 @@ pub fn transition(workspace: &Path, request: &str, action: &str, report: Option<
         match action {
             "accept" => { require(["ready","running"].contains(&state), "This mapping cannot be accepted in its current state.")?; job["mapping"] = json!("running"); }
             "fail" => { require(["ready","running"].contains(&state) && reason.is_some_and(|s| !s.trim().is_empty()), "An active mapping and a failure reason are required.")?; job["mapping"]=json!("failed"); job["error"]=json!(reason.unwrap().trim()); }
-            "complete" => { require(state == "running", "Accept the mapping before completing it.")?; let raw=report.unwrap_or(""); let expanded=if let Some(rest)=raw.strip_prefix("~/") { std::env::var_os("HOME").map(|h|PathBuf::from(h).join(rest)).ok_or_else(||Error("home_directory_unavailable".into()))? } else { PathBuf::from(raw) }; let p=expanded.canonicalize().map_err(|_| Error("Completion requires the actual, nonempty report or knowledge record.".into()))?; require(p.is_file() && fs::metadata(&p)?.len()>0, "Completion requires the actual, nonempty report or knowledge record.")?; if loc.record.is_file() { let check=run_record_check(&loc.workspace)?; if check.get("exit_code").is_none() { job["check"]=check; onboarding::write(&onboarding::project_dir_key(&loc.key)?.join("mapping.json"), &job)?; return Err(Error("The record check could not finish; mapping remains running.".into())); } job["check"]=check; } job["mapping"]=json!("complete"); job["report"]=json!(p); }
+            "complete" => { require(state == "running", "Accept the mapping before completing it.")?; let raw=report.unwrap_or(""); let expanded=if let Some(rest)=raw.strip_prefix("~/") { std::env::var_os("HOME").map(|h|PathBuf::from(h).join(rest)).ok_or_else(||Error("home_directory_unavailable".into()))? } else { PathBuf::from(raw) }; let p=expanded.canonicalize().map_err(|_| Error("Completion requires the actual, nonempty report or knowledge record.".into()))?; require(p.is_file() && fs::metadata(&p)?.len()>0, "Completion requires the actual, nonempty report or knowledge record.")?; if loc.record.is_file() { let check=run_record_check(&loc.workspace); if check.get("exit_code").is_none() { job["check"]=check; onboarding::write(&onboarding::project_dir_key(&loc.key)?.join("mapping.json"), &job)?; return Err(Error("The record check could not finish; mapping remains running.".into())); } job["check"]=check; } job["mapping"]=json!("complete"); job["report"]=json!(p); }
             _ => return Err(Error("unknown mapping transition".into()))
         }
         onboarding::write(&onboarding::project_dir_key(&loc.key)?.join("mapping.json"), &job)?; Ok(job)
     })
 }
-fn run_record_check(workspace: &Path) -> Result<Value> {
-    let exe=std::env::current_exe()?.canonicalize()?; let mut child=std::process::Command::new(exe).args(["--workspace",workspace.to_string_lossy().as_ref(),"--json","check"]).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn()?;
-    let started=std::time::Instant::now(); loop { if let Some(status)=child.try_wait()? { let out=child.wait_with_output()?; return Ok(json!({"exit_code":status.code(),"output":String::from_utf8_lossy(&out.stdout),"error":String::from_utf8_lossy(&out.stderr)})); } if started.elapsed()>std::time::Duration::from_secs(60) { child.kill()?; return Ok(json!({"exit_code":null,"error":"record check timed out"})); } std::thread::sleep(std::time::Duration::from_millis(20)); }
+fn drain(mut stream: impl Read + Send + 'static) -> thread::JoinHandle<Vec<u8>> {
+    thread::spawn(move || { let mut out=Vec::new(); let mut buf=[0u8;8192]; while let Ok(n)=stream.read(&mut buf) { if n==0 { break; } if out.len()<1_048_576 { let take=(1_048_576-out.len()).min(n); out.extend_from_slice(&buf[..take]); } } out })
+}
+fn run_command_check(program: &Path, args: &[String], timeout: Duration) -> Value {
+    let mut child=match Command::new(program).args(args).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() { Ok(v)=>v, Err(e)=>return json!({"exit_code":null,"error":e.to_string()}) };
+    let stdout=drain(child.stdout.take().unwrap()); let stderr=drain(child.stderr.take().unwrap()); let started=Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => { let out=stdout.join().unwrap_or_default(); let err=stderr.join().unwrap_or_default(); return json!({"exit_code":status.code(),"output":String::from_utf8_lossy(&out),"error":String::from_utf8_lossy(&err)}); }
+            Ok(None) if started.elapsed() <= timeout => thread::sleep(Duration::from_millis(10)),
+            Ok(None) => { let _=child.kill(); let _=child.wait(); let out=stdout.join().unwrap_or_default(); let err=stderr.join().unwrap_or_default(); return json!({"exit_code":Value::Null,"error":"record check timed out","output":String::from_utf8_lossy(&out),"stderr":String::from_utf8_lossy(&err)}); }
+            Err(_) => { let _=child.kill(); let _=child.wait(); let out=stdout.join().unwrap_or_default(); let err=stderr.join().unwrap_or_default(); return json!({"exit_code":Value::Null,"error":"record check failed while polling","output":String::from_utf8_lossy(&out),"stderr":String::from_utf8_lossy(&err)}); }
+        }
+    }
+}
+fn run_record_check(workspace: &Path) -> Value {
+    let exe=match std::env::current_exe().and_then(|p| p.canonicalize()) { Ok(v)=>v, Err(e)=>return json!({"exit_code":null,"error":e.to_string()}) };
+    run_command_check(&exe, &["--workspace".into(),workspace.to_string_lossy().into_owned(),"--json".into(),"check".into()], Duration::from_secs(60))
 }
 pub fn run(options: &Options, workspace: &Path) -> Result<Value> { request(workspace, options.deep) }
 pub fn run_agent(options: &AgentOptions, workspace: &Path) -> Result<Value> {
@@ -94,4 +109,6 @@ pub fn run_agent(options: &AgentOptions, workspace: &Path) -> Result<Value> {
 mod tests {
     use super::*; use tempfile::TempDir;
     #[test] fn project_location_is_stable() { let t=TempDir::new().unwrap(); let loc=public_workspace::locate(t.path(), crate::source_capture::ReadMode::Live).unwrap(); assert_eq!(loc.status, "missing"); assert_eq!(loc.key.len(), 64); }
+    #[test] fn record_check_drains_large_pipe() { let v=run_command_check(Path::new("/bin/sh"), &["-c".into(),"yes x | head -c 2000000".into()], Duration::from_secs(5)); assert_eq!(v["exit_code"],0); assert!(v["output"].as_str().unwrap().len() <= 1_048_576); }
+    #[test] fn record_check_timeout_reaps_child() { let v=run_command_check(Path::new("/bin/sh"), &["-c".into(),"sleep 2".into()], Duration::from_millis(30)); assert!(v["exit_code"].is_null()); assert_eq!(v["error"],"record check timed out"); }
 }
