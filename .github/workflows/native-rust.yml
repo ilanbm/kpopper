@@ -154,6 +154,14 @@ jobs:
           cargo test --manifest-path native/Cargo.toml --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' \
             --test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation \
             -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
+      - name: Retain test diagnostics before release compilation
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-test-evidence-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-evidence
+          if-no-files-found: error
+          retention-days: 7
       - name: Build the platform release
         id: native-release
         if: ${{ !cancelled() }}
