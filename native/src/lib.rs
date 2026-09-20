@@ -166,6 +166,7 @@ pub mod public_ordinary_readers;
 pub mod public_readers;
 pub mod public_session;
 
+pub mod application_cli;
 pub mod followup_daily;
 pub mod history_contribution_adoption;
 pub mod public_expressions;

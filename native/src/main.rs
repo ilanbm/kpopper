@@ -54,7 +54,6 @@ enum Command {
     /// Compatibility alias for experimental hub.
     Page(kpop_native::public_hub::Options),
     /// Compatibility alias for experimental annotated-doc.
-    #[command(alias = "annotated-doc")]
     Document(kpop_native::public_annotated_document::Options),
     Add(WriteArgs),
     Set(WriteArgs),
@@ -65,7 +64,7 @@ enum Command {
     Same(kpop_native::public_identity::SameOptions),
     /// Record why two similar subjects are distinct.
     Distinct(kpop_native::public_identity::DistinctOptions),
-    /// Export a bounded core assessment as Markdown or Mermaid.
+    /// Export a bounded record assessment as Markdown or Mermaid.
     Export(kpop_native::public_export::CommandOptions),
     /// Inspect or materialize captured knowledge contributions.
     Knowledge(kpop_native::public_knowledge::Options),
@@ -127,8 +126,10 @@ enum Command {
 #[derive(Subcommand)]
 enum Application {
     /// Build or verify the optional record Hub.
+    #[command(alias = "page")]
     Hub(kpop_native::public_hub::Options),
     /// Standalone HTML documents with embedded evidence and source checks.
+    #[command(alias = "document")]
     AnnotatedDoc(kpop_native::public_annotated_document::Options),
 }
 #[derive(Clone, clap::ValueEnum)]
@@ -419,6 +420,15 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let argv = std::env::args_os().collect::<Vec<_>>();
+    let application = kpop_native::application_cli::inspect(&argv);
+    if let Some(output) = &application.early {
+        print!("{}", output.stdout);
+        eprint!("{}", output.stderr);
+        std::process::exit(output.code);
+    }
+    if let Some(notice) = &application.notice {
+        eprint!("{notice}");
+    }
     let args = match Args::try_parse_from(&argv) {
         Ok(args) => args,
         Err(error) => {
@@ -709,16 +719,24 @@ fn main() {
                 };
             kpop_native::public_hub::run(options, &cwd, mode)
         })();
-        match result {
-            Ok(output) => {
-                print!("{}", output.text);
-                std::process::exit(output.code);
-            }
-            Err(error) => {
-                eprintln!("kpop-native experimental hub: {error}");
-                std::process::exit(2);
-            }
+        let (output, error, code) = match result {
+            Ok(output) => (output.text, String::new(), output.code),
+            Err(error) => (
+                String::new(),
+                format!("kpop-native experimental hub: {error}\n"),
+                2,
+            ),
+        };
+        if args.json {
+            println!(
+                "{}",
+                json!({"command":application.requested.as_deref().unwrap_or("hub"),"exit_code":code,"output":output,"error":error})
+            );
+        } else {
+            print!("{output}");
+            eprint!("{error}");
         }
+        std::process::exit(code);
     }
     if let Command::Document(options)
     | Command::Experimental {
@@ -733,14 +751,20 @@ fn main() {
                 .unwrap_or_else(std::env::current_dir)?;
             kpop_native::public_annotated_document::run(options, &cwd)
         })();
-        match result {
-            Ok(text) => print!("{text}"),
-            Err(error) => {
-                eprintln!("document: {error}");
-                std::process::exit(2);
-            }
+        let (output, error, code) = match result {
+            Ok(text) => (text, String::new(), 0),
+            Err(error) => (String::new(), format!("document: {error}\n"), 2),
+        };
+        if args.json {
+            println!(
+                "{}",
+                json!({"command":application.requested.as_deref().unwrap_or("annotated-doc"),"exit_code":code,"output":output,"error":error})
+            );
+        } else {
+            print!("{output}");
+            eprint!("{error}");
         }
-        return;
+        std::process::exit(code);
     }
     let write = match &args.command {
         Command::Add(o) => Some(("add", o)),
