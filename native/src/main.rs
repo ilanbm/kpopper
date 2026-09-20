@@ -716,13 +716,22 @@ fn main() {
                 } else {
                     kpop_native::source_capture::ReadMode::Live
                 };
-            kpop_native::public_checked_session::run(options, &cwd, mode)
+            if kpop_native::session_admin::handles(&options.operation) {
+                kpop_native::session_admin::run(options, &cwd)
+            } else {
+                kpop_native::public_checked_session::run(options, &cwd, mode)
+                    .map(|text| kpop_native::session_admin::Output { text, code: 0 })
+            }
         })();
         match result {
-            Ok(text) => {
+            Ok(output) => {
+                let text = output.text;
                 print!("{text}");
                 if !text.is_empty() && !text.ends_with('\n') {
                     println!();
+                }
+                if output.code != 0 {
+                    std::process::exit(output.code);
                 }
             }
             Err(error) => {

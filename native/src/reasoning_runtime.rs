@@ -611,10 +611,18 @@ impl Runtime {
         )
     }
     fn verify_files(&self) -> Result<BTreeMap<String, String>> {
-        let libraries = self.manifest["libraries"].as_array().unwrap();
+        Self::inspect_cache_files(&self.root, &self.manifest)
+    }
+    /// Validate an existing cache without creating or repairing it.
+    pub(crate) fn inspect_cache_files(
+        root: &Path,
+        manifest: &J,
+    ) -> Result<BTreeMap<String, String>> {
+        Self::validate_manifest(manifest, &target_name()?)?;
+        let libraries = manifest["libraries"].as_array().unwrap();
         let mut observed = BTreeMap::new();
-        for (name, expected) in self.manifest["files"].as_object().unwrap() {
-            let path = self.root.join(name);
+        for (name, expected) in manifest["files"].as_object().unwrap() {
+            let path = root.join(name);
             require(
                 path.is_file() && !fs::symlink_metadata(&path)?.file_type().is_symlink(),
                 &format!("runtime member is unavailable: {name}"),

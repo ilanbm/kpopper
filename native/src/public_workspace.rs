@@ -166,15 +166,7 @@ pub(crate) fn select_resources(
         ordinary,
     })
 }
-fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
-    let configured = std::env::var_os("KPOPPER_NATIVE_RESOURCES").map(PathBuf::from);
-    let selection = select_resources(&std::env::current_exe()?, configured.as_deref(), ordinary)?;
-    let Some(root) = selection.root else {
-        return Ok(None);
-    };
-    let core = selection
-        .core
-        .ok_or_else(|| error("native core archive is unavailable"))?;
+pub(crate) fn runtime_cache() -> Result<PathBuf> {
     let cache = if let Some(path) = std::env::var_os("KPOPPER_NATIVE_CACHE") {
         PathBuf::from(path)
     } else {
@@ -188,6 +180,19 @@ fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
             .ok_or_else(|| error("set KPOPPER_NATIVE_CACHE for the packaged runtime"))?
             .join("kpopper/native")
     };
+    Ok(cache)
+}
+
+fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
+    let configured = std::env::var_os("KPOPPER_NATIVE_RESOURCES").map(PathBuf::from);
+    let selection = select_resources(&std::env::current_exe()?, configured.as_deref(), ordinary)?;
+    let Some(root) = selection.root else {
+        return Ok(None);
+    };
+    let core = selection
+        .core
+        .ok_or_else(|| error("native core archive is unavailable"))?;
+    let cache = runtime_cache()?;
     let runtime = Runtime::open(&root.join(core), &cache, OperationalBounds::default())?;
     if ordinary {
         let directory = selection

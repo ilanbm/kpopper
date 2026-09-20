@@ -164,8 +164,18 @@ assertion grammar on `core/v1`; its callers must read the bound core finding.
 Proposals retain their base revision, recorded references and unverified external
 locators without changing the canonical record. Repeated identical proposals retain
 their first bytes and timestamp; `pending` and `proposal:ID` reads show stale bases.
-Ordinary checked sessions, setup and hook
-activation are still unconnected. Session-state storage has been exercised on Unix
+`session status` validates the packaged programs without creating a cache. `session setup`
+prepares the verified native runtime cache from the bundled programs. `--rebuild` retains
+the previous cache and extracts a fresh verified copy. Both commands require
+the complete native distribution; they do not download or compile code.
+
+`session enable [--tokens N]` saves native preferences for the current project; `--global`
+applies a machine default. `session disable` stores an explicit disabled preference.
+Native preferences live beside existing Python preferences, which remain a read-only
+fallback. Project preferences take precedence over machine defaults. `KPOPPER_SESSION_CONFIG`
+selects an explicit settings file; `KPOPPER_SESSION_DISABLE=1` disables inherited settings.
+Enablement records the native executable and validates declared navigation profiles.
+These commands do not install or modify host hooks. Session-state storage has been exercised on Unix
 and Windows, including physical identity, no-clobber creation and changed-source checks.
 
 ### Author an active history record

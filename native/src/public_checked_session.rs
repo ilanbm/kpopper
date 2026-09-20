@@ -4,8 +4,7 @@ use crate::{
     checked_session::{ContextDirection, ContextOptions},
     checked_session_store::{CheckedSessionStore, ProposalRequest},
     history_contract::*,
-    project_modes::{self, Project},
-    public_workspace as W,
+    project_modes, public_workspace as W,
     reasoning_context::CapturedAssessment,
     reasoning_runtime::OperationalBounds,
     session_search::{SearchMode, SearchRequest},
@@ -19,6 +18,10 @@ use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum Operation {
+    Setup,
+    Status,
+    Enable,
+    Disable,
     Open,
     HookOpen,
     Read,
@@ -36,6 +39,10 @@ pub struct Options {
     pub input: Option<PathBuf>,
     #[arg(long)]
     pub no_settings: bool,
+    #[arg(long = "global")]
+    pub global_scope: bool,
+    #[arg(long)]
+    pub rebuild: bool,
     #[arg(long)]
     pub project: Option<String>,
     #[arg(long)]
@@ -103,57 +110,8 @@ fn json_file(inventory: &mut Inventory, path: &Path) -> Result<J> {
         crate::json_ingress::DuplicateKeys::LastWins,
     )?)
 }
-fn settings_file(inventory: &mut Inventory, path: &Path) -> Result<J> {
-    if !inventory.exists(path)? {
-        return Ok(J::Object(Default::default()));
-    }
-    let value = json_file(inventory, path)?;
-    crate::require(
-        value.is_object() && value["schema"] == 1 && value["enabled"].is_boolean(),
-        "invalid checked-session settings",
-    )?;
-    if value["enabled"] == true {
-        crate::require(
-            value["python"]
-                .as_str()
-                .is_some_and(|s| Path::new(s).is_absolute()),
-            "session settings need an absolute Python executable",
-        )?;
-        crate::require(
-            value["tokens"]
-                .as_u64()
-                .is_some_and(|n| (64..=65_536).contains(&n)),
-            "session token budget must be 64..65536",
-        )?;
-    }
-    Ok(value)
-}
 fn settings(inventory: &mut Inventory, directory: &Path, cwd: &Path) -> Result<J> {
-    if std::env::var("KPOPPER_SESSION_DISABLE").as_deref() == Ok("1") {
-        return Ok(serde_json::json!({"enabled":false}));
-    }
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or(home()?.join(".config"))
-        .join("kpopper");
-    let local =
-        if let Some(p) = std::env::var_os("KPOPPER_SESSION_CONFIG").filter(|p| !p.is_empty()) {
-            path(cwd, Path::new(&p))?
-        } else if let Some(common) = Project::open(directory)?.common {
-            common.join("kpopper-session.json")
-        } else {
-            base.join("projects").join(format!(
-                "{}.json",
-                crate::identity::sha256(directory.to_string_lossy().as_bytes())
-            ))
-        };
-    let value = settings_file(inventory, &local)?;
-    if value.as_object().is_some_and(|m| !m.is_empty()) {
-        Ok(value)
-    } else {
-        settings_file(inventory, &base.join("session.json"))
-    }
+    crate::session_settings::current(inventory, directory, cwd)
 }
 
 pub struct Service {
@@ -590,6 +548,9 @@ impl Service {
 pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
     let service = Service::new(options, cwd, mode)?;
     match options.operation {
+        Operation::Setup | Operation::Status | Operation::Enable | Operation::Disable => Err(
+            error("session management uses the explicit admin dispatcher"),
+        ),
         Operation::Open => service.opening(options.tokens.unwrap_or(700)),
         Operation::HookOpen => service.hook_open(options.tokens.unwrap_or(1000)),
         Operation::Read => service.reading(
