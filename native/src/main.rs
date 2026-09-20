@@ -62,6 +62,8 @@ enum Command {
     Add(WriteArgs),
     Set(WriteArgs),
     Review(WriteArgs),
+    /// Apply one source report atomically and return its durable receipt.
+    Update(kpop_native::public_update::Options),
     /// Preview, fold or refute named hypotheses in active history.
     Consolidate(ConsolidateArgs),
     /// Record that two subjects refer to the same thing.
@@ -423,7 +425,8 @@ fn run(args: Args) -> Result<Value> {
             unreachable!()
         }
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
-        Command::Assess(_)
+        Command::Update(_)
+        | Command::Assess(_)
         | Command::Where
         | Command::Session(_)
         | Command::Consolidate(_)
@@ -836,6 +839,27 @@ fn main() {
             eprint!("{error}");
         }
         std::process::exit(code);
+    }
+    if let Command::Update(options) = &args.command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            let input = (options.file == "-").then(stdin_bytes).transpose()?;
+            kpop_native::public_update::run(options, &cwd, input.as_deref())
+        })();
+        match result {
+            Ok(output) => {
+                print!("{}", output.text);
+                std::process::exit(output.code);
+            }
+            Err(error) => {
+                println!("{}", json!({"error":error.to_string()}));
+                std::process::exit(2);
+            }
+        }
     }
     let write = match &args.command {
         Command::Add(o) => Some(("add", o)),
