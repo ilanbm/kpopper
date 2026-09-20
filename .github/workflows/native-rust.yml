@@ -168,6 +168,7 @@ jobs:
           shutil.copy2(root/'scripts'/'reasoning'/'native'/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'), reasoning/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'))
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), ordinary)
       - name: Execute copied binary through public acceptance flows
+        id: native-acceptance
         if: ${{ !cancelled() && steps.native-bundle.outcome == 'success' }}
         env:
           KPOPPER_CI_BINARY: ${{ matrix.binary }}
@@ -175,6 +176,14 @@ jobs:
           python native/ci/platform_acceptance.py
           --binary "${{ runner.temp }}/native-bundle/${{ matrix.binary }}"
           --output "${{ runner.temp }}/native-evidence"
+      - name: Retain the exercised native bundle
+        if: ${{ !cancelled() && steps.native-acceptance.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-bundle-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-bundle
+          if-no-files-found: error
+          retention-days: 7
       - name: Archive platform evidence
         if: always()
         uses: actions/upload-artifact@v4
