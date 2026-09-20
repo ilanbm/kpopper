@@ -308,6 +308,10 @@ fn rename_absent(source: &Path, destination: &Path) -> Result<()> {
     }
     #[cfg(windows)]
     {
+        require(
+            destination.symlink_metadata().is_err(),
+            "migration_destination_exists",
+        )?;
         fs::rename(source, destination)?;
         Ok(())
     }

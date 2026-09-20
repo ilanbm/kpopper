@@ -448,7 +448,16 @@ mod tests {
     use serde_json::{Value as J, json};
     fn replace(v: &mut J, root: &str) {
         match v {
-            J::String(s) => *s = s.replace("$ROOT", root),
+            J::String(s) => {
+                *s = if let Some(relative) = s.strip_prefix("$ROOT/") {
+                    Path::new(root)
+                        .join(relative)
+                        .to_string_lossy()
+                        .into_owned()
+                } else {
+                    s.replace("$ROOT", root)
+                }
+            }
             J::Array(a) => a.iter_mut().for_each(|v| replace(v, root)),
             J::Object(m) => m.values_mut().for_each(|v| replace(v, root)),
             _ => {}

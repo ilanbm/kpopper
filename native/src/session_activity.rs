@@ -807,6 +807,8 @@ mod tests {
         #[cfg(unix)]
         std::os::unix::fs::symlink(tmp.path(), tmp.path().join("kpopper-session-ok/state.lock"))
             .unwrap();
+        #[cfg(windows)]
+        fs::create_dir(tmp.path().join("kpopper-session-ok/state.lock")).unwrap();
         assert!(deliver_stop(tmp.path(), "ok", &issue, std::slice::from_ref(&path)).is_empty());
     }
 
