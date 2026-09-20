@@ -712,14 +712,18 @@ impl Plan {
         let report = C::compare(&self.original, &self.candidate, runtime, &order)?;
         self.report(&self.record.clone(), report)?;
         for (path, edited) in transformed {
-            self.files.insert(
-                self.mapping[&path].clone(),
-                Y::patch(
-                    &self.inventory.files[&path],
-                    &docs[&path],
-                    &pointers(&edited, &path, &self.mapping)?,
-                )?,
-            );
+            let raw = &self.inventory.files[&path];
+            let (bom, body) = raw
+                .strip_prefix(b"\xef\xbb\xbf")
+                .map(|body| (&b"\xef\xbb\xbf"[..], body))
+                .unwrap_or((&b""[..], raw.as_slice()));
+            let mut patched = bom.to_vec();
+            patched.extend(Y::patch(
+                body,
+                &docs[&path],
+                &pointers(&edited, &path, &self.mapping)?,
+            )?);
+            self.files.insert(self.mapping[&path].clone(), patched);
         }
         Ok(())
     }

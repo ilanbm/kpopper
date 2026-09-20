@@ -41,6 +41,26 @@ fn source(value: &O) -> Result<S> {
         ),
     })
 }
+fn python_sorted_mapping_error(value: &O) -> Option<&'static str> {
+    match value {
+        O::Map(values) => {
+            let has_text = values
+                .iter()
+                .any(|(key, _)| matches!(key.scalar(), V::Text(_)));
+            let has_integer = values
+                .iter()
+                .any(|(key, _)| matches!(key.scalar(), V::Integer(_)));
+            if has_text && has_integer {
+                return Some("'<' not supported between instances of 'int' and 'str'");
+            }
+            values
+                .iter()
+                .find_map(|(_, value)| python_sorted_mapping_error(value))
+        }
+        O::List(values) => values.iter().find_map(python_sorted_mapping_error),
+        O::Scalar(_) => None,
+    }
+}
 fn expression_source(value: &V) -> S {
     match value {
         V::Map(m) => {
@@ -160,7 +180,7 @@ pub(super) fn migrate(cwd: &Path, record: &Path, apply: bool, compact: bool) -> 
     let reader = Reader::new(document, runtime.as_ref())?;
     let fields = reader.fields();
     let deps_field = text(&fields["deps"])?;
-    let predicate_field = text(&fields["predicate"])?;
+    let predicate_field = fields.get("predicate").and_then(|value| text(value).ok());
     let all = crate::reasoning_snapshot::entries(document)?;
     let ids = reader.ids.clone();
     let judgments = all
@@ -178,7 +198,13 @@ pub(super) fn migrate(cwd: &Path, record: &Path, apply: bool, compact: bool) -> 
         };
         let Ok(body) = map(body) else { continue };
         let predicate = judgments.contains(&id);
-        let mut fields = vec![(if predicate { predicate_field } else { "rule" }, predicate)];
+        let mut fields = if predicate {
+            predicate_field
+                .map(|field| vec![(field, true)])
+                .unwrap_or_default()
+        } else {
+            vec![("rule", false)]
+        };
         if !predicate && !body.contains_key("rule") && C::implicit(body, &ids) {
             fields.push(("v", false));
         }
@@ -333,11 +359,23 @@ pub(super) fn migrate(cwd: &Path, record: &Path, apply: bool, compact: bool) -> 
     let baseline = failures(document, brief.as_ref(), runtime.as_ref())?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    let errors = failures(after_document, brief.as_ref(), runtime.as_ref())?;
+    let mut errors = failures(after_document, brief.as_ref(), runtime.as_ref())?;
+    let sorted_mapping_error = python_sorted_mapping_error(captured.source());
+    if let (Some(reason), Some(predicate_field)) = (sorted_mapping_error, predicate_field) {
+        errors.extend(judgments.iter().filter_map(|id| {
+            map(&all[id].1)
+                .ok()
+                .filter(|body| body.contains_key(predicate_field))
+                .map(|_| format!("{id}: condition cannot be computed: {reason}"))
+        }));
+    }
     let mut problems = vec![];
     let mut fired = BTreeSet::new();
     let mut discovered = BTreeSet::new();
     for id in &judgments {
+        let Some(predicate_field) = predicate_field else {
+            continue;
+        };
         let before_pred = get(&all[id].1, predicate_field);
         let after_body = after_reader
             .raw()
@@ -345,7 +383,11 @@ pub(super) fn migrate(cwd: &Path, record: &Path, apply: bool, compact: bool) -> 
             .ok_or_else(|| Error("judgment missing after migration".into()))?;
         let after_pred = get(after_body, predicate_field);
         let old = reader.predicate(before_pred)?;
-        let new = after_reader.predicate(after_pred)?;
+        let new = if sorted_mapping_error.is_some() {
+            None
+        } else {
+            after_reader.predicate(after_pred)?
+        };
         if old.is_some() && new != old {
             let py = |v: Option<bool>| match v {
                 None => "None",

@@ -16,8 +16,48 @@ use clap::Subcommand;
 use serde_json::{Map, Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ffi::OsString,
     path::{Path, PathBuf},
 };
+
+const LEADING_EXPRESSION: &str = "\u{1f}kpopper-leading-expression:";
+
+fn leading_expression_argument(value: &str) -> bool {
+    value.starts_with('-')
+        && !value.starts_with("--")
+        && (value.chars().any(char::is_whitespace) || value.starts_with("-("))
+}
+
+/// Preserve argparse's acceptance of one positional expression beginning with
+/// a dash. Clap classifies these composite values as options before its value
+/// parser runs, so main applies this lossless marker before `try_parse_from`.
+pub fn preprocess_argv(argv: &[OsString]) -> Vec<OsString> {
+    let Some(args) = argv
+        .iter()
+        .map(|value| value.to_str())
+        .collect::<Option<Vec<_>>>()
+    else {
+        return argv.to_vec();
+    };
+    let Some(expressions) = args.iter().position(|value| *value == "expressions") else {
+        return argv.to_vec();
+    };
+    if args.get(expressions + 1) != Some(&"convert") {
+        return argv.to_vec();
+    }
+    let candidates = args
+        .iter()
+        .enumerate()
+        .skip(expressions + 2)
+        .filter(|(_, value)| !["--predicate", "--readable", "--json"].contains(value))
+        .collect::<Vec<_>>();
+    if candidates.len() != 1 || !leading_expression_argument(candidates[0].1) {
+        return argv.to_vec();
+    }
+    let mut result = argv.to_vec();
+    result[candidates[0].0] = format!("{LEADING_EXPRESSION}{}", candidates[0].1).into();
+    result
+}
 
 pub(crate) struct ConfigurationMigrationProof {
     pub snapshots: BTreeMap<PathBuf, Vec<u8>>,
@@ -142,11 +182,24 @@ fn explicit_syntax(source: &str) -> Result<()> {
         "legacy expression must be text within 4000 characters",
     )?;
     let ast = ast::Expr::parse(source, "<unknown>").map_err(|_| {
-        Error(if source.starts_with([' ', '\t']) {
+        let leading_zero = regex::Regex::new(r"(?m)(?:^|[^A-Za-z0-9_.])0[0-9]+(?:$|[^A-Za-z0-9_.])")
+            .unwrap();
+        let message = if source.is_empty() {
+            "invalid syntax (<unknown>, line 0)".into()
+        } else if source.starts_with([' ', '\t']) {
             "unexpected indent (<unknown>, line 1)".into()
+        } else if leading_zero.is_match(source) {
+            "leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers (<unknown>, line 1)".into()
+        } else if source.matches('(').count() > source.matches(')').count() {
+            "'(' was never closed (<unknown>, line 1)".into()
+        } else if source.matches('[').count() > source.matches(']').count() {
+            "'[' was never closed (<unknown>, line 1)".into()
+        } else if source.matches('{').count() > source.matches('}').count() {
+            "'{' was never closed (<unknown>, line 1)".into()
         } else {
             "invalid syntax (<unknown>, line 1)".into()
-        })
+        };
+        Error(message)
     })?;
     fn calls(node: &ast::Expr) -> bool {
         match node {
@@ -163,6 +216,17 @@ fn explicit_syntax(source: &str) -> Result<()> {
     )
 }
 fn authored_expression(source: &str, predicate: bool) -> Result<TypedValue> {
+    require(
+        source.chars().count() <= 4000,
+        "expression must be text within 4000 characters",
+    )?;
+    if !predicate {
+        let date = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
+        require(
+            !date.is_match(source.trim()),
+            "date-like text is not implicitly arithmetic",
+        )?;
+    }
     explicit_syntax(source)?;
     let input = TypedValue::from_json(&json!({"expr":source}))?;
     let tree = reasoning_language::legacy_expression_detailed(&input, predicate)?;
@@ -170,6 +234,7 @@ fn authored_expression(source: &str, predicate: bool) -> Result<TypedValue> {
     Ok(tree)
 }
 fn convert(text: &str, predicate: bool, readable: bool) -> Result<Value> {
+    let text = text.strip_prefix(LEADING_EXPRESSION).unwrap_or(text);
     explicit_syntax(text)?;
     let input = TypedValue::from_json(&json!({"expr": text}))?;
     let tree = reasoning_language::legacy_expression_detailed(&input, predicate)?.to_json()?;
@@ -495,16 +560,23 @@ pub fn parse_failure(argv: &[std::ffi::OsString], error: &clap::Error) -> Option
                     positional.push(*arg);
                 }
             }
-            let reason = if positional.is_empty() {
-                "the following arguments are required: text".into()
+            if positional.is_empty() {
+                (
+                    "kpop expressions convert",
+                    usage,
+                    "the following arguments are required: text".into(),
+                )
             } else {
                 unknown.extend(positional.into_iter().skip(1));
                 if unknown.is_empty() {
                     return None;
                 }
-                format!("unrecognized arguments: {}", unknown.join(" "))
-            };
-            ("kpop expressions convert", usage, reason)
+                (
+                    "kpop expressions",
+                    root_usage,
+                    format!("unrecognized arguments: {}", unknown.join(" ")),
+                )
+            }
         }
         "migrate" => {
             let usage = "usage: kpop expressions migrate [-h] [--record RECORD] [--apply] [--readable]\n                                [--profile {core/v1}]\n                                [--destination DESTINATION] [--json]\n";
