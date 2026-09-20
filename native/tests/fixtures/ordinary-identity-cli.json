@@ -1,0 +1,1336 @@
+[
+  {
+    "name": "GROUNDING.yaml:same",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-keep-b",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--keep",
+      "b",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.keep retired into p.old (kept p.old)\n  rewritten - rests_on: d.ready · seen: d.ready · wrong_if: d.ready\n  1 mention in GROUNDING.yaml\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.old > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.old: {v: 1, of: \"2026-09-01\", name: Old, also: [p.keep]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.old]\n    seen: {p.old: 1}\n    wrong_if: p.old > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-bad-keep",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--keep",
+      "other",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - --keep names the id that survives: p.keep or p.old\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-id",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.keep",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep and p.keep are one id already\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-missing",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.missing",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.missing is not an entry of the record or of any hypothesis beside it\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-builtin",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "judgments.count",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - judgments.count is not an entry of the record or of any hypothesis beside it\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-undated-conflict",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 3, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep holds 1 as of 2026-09-01 and p.old holds 3 as of 2026-09-01 - a reading of the same day: two readings that disagree are a contradiction, not one subject twice; set the one that is right, or open a hypothesis, then same\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 3, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different subjects",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.keep from p.old: different subjects\n  the pair returns as no candidate; p.keep carries distinct_from: p.old\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n    # distinct 2026-09-20: different subjects\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-normalize-why",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "  different\n  subjects  ",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "the why is one line: a second line would be a line of the record\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-id",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.keep",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep and p.keep are one id: distinct needs two\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-empty-why",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      " ",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - distinct takes the why: distinct <a> <b> \"<why>\"\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-already",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "p.keep and p.old are already declared distinct; nothing written\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-distinct",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep and p.old were declared distinct; remove the distinct_from that says so before saying otherwise\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-hypothesis",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known:\n  p.old: {v: 1, name: Other}\n  p.extra: {v: 2}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known:\n  p.extra: {v: 2}\n\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-hypothesis",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known:\n  p.future: {v: 1}\n"
+    },
+    "args": [
+      "distinct",
+      "p.future",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.future from p.old: different (in hypothesis alpha)\n  the pair returns as no candidate; p.future carries distinct_from: p.old\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known:\n  p.future: {v: 1, distinct_from: p.old}\n    # distinct 2026-09-20: different\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-unreadable-hypothesis",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known: [broken"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - hypothesis alpha could not be read (while parsing a flow sequence in \"<unicode string>\", line 1, column 8: known: [broken ^ expected ',' or ']', but got '<s), so the migration could not reach what it holds\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known: [broken"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-unreadable-hypothesis",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known: [broken"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.keep from p.old: different\n  the pair returns as no candidate; p.keep carries distinct_from: p.old\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n    # distinct 2026-09-20: different\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/hypotheses/alpha.yaml": "known: [broken"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:core-same",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "unsupported_capability: use core/v1 consumer\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:core-distinct",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "unsupported_capability: use core/v1 consumer\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-arrangement-into-judgment",
+    "before": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nsources:\n  s.ask: {asked: Decide this}\nknown:\n  p.x: {v: 1}\njudgments:\n  p.keep: {rests_on: [s.ask, graph.entries], verdict: Old, wrong_if: graph.entries > 0}\n  p.old: {rests_on: [p.x], verdict: New, seen: {p.x: 1}, wrong_if: p.x > 3}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  p.keep takes p.old's verdict - its wrong_if holds (graph.entries > 0)\n  check: 1 judgments, 3 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nsources:\n  s.ask: {asked: Decide this}\nknown:\n  p.x: {v: 1}\njudgments:\n  p.keep:\n    rests_on: [p.x]\n    verdict: New\n    seen: {p.x: 1}\n    wrong_if: \"p.x > 3\"\n    also: [p.old]\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-split",
+    "before": {
+      "GROUNDING.yaml": "record: parts.yaml\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1}\n",
+      "parts.yaml": "meta: {updated: 2026-09-01}\nknown:\n  p.old: {v: 1}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  check: 0 judgments, 1 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "record: parts.yaml\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, also: [p.old]}\n",
+      "parts.yaml": "meta: {updated: 2026-09-20}"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-brief",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/view.yaml": "sections:\n  - title: Summary\n    text: \"{{p.old}} / {{p.keep}}\"\n    seen: {p.keep: 1, p.old: 2}\n    pick: [p.keep, p.old]\nlabels:\n  p.keep: Kept\n  p.old: Old\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready · the brief: section 'Summary' (text, seen, pick), groups and labels\n  2 mentions in .kpopper/view.yaml\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\ntext that saw it:\n  'Summary' saw p.keep = 1 - read it again, then: review \"Summary\"\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n",
+      ".kpopper/view.yaml": "sections:\n  - title: Summary\n    text: \"{{p.keep}} / {{p.keep}}\"\n    seen: {p.keep: 1}\n    pick: [p.keep]\nlabels:\n  p.keep: Kept\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-newer",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 3, of: 2026-09-02, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  p.keep takes p.old's reading: 1 -> 3 - a reading from 2026-09-02 that is newer than the base's\n  rewritten - rests_on: d.ready · seen: d.ready\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  MUTED     d.ready: p.keep moved 1 -> 3, inside wrong_if (p.keep > 10) - nothing is asked\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 3, of: \"2026-09-02\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-new-check-failure",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 30, of: 2026-09-02, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - check would fail after the migration, so nothing was changed:\n  d.ready: wrong_if holds (p.keep > 10) - broken by its own condition\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 30, of: 2026-09-02, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-existing-check-failure",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.old > 0\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready · wrong_if: d.ready\n  1 mention in GROUNDING.yaml\n  check: 1 judgments, 3 entries, 1 problems\nrests on it:\n  FIRED     d.ready: wrong_if holds (p.keep > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (0 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 0\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-tabs-why",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      " \tdifferent  subjects\t ",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.keep from p.old: different subjects\n  the pair returns as no candidate; p.keep carries distinct_from: p.old\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n    # distinct 2026-09-20: different subjects\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-scalar",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: Open question\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.old is a line, not an entry with fields - an open question is closed by answering it, not folded into another\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: Open question\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-scalar",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: Open question\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep is a line, not an entry with fields; distinct is written on a field\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: Open question\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-retired",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.was",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.was is not an entry of the record or of any hypothesis beside it - it was retired into p.keep\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:distinct-retired",
+    "before": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.was",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.was is not an entry of the record or of any hypothesis beside it - it was retired into p.keep\n",
+    "files": {
+      "GROUNDING.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-aliased-values",
+    "before": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: {first: &items [1, 2], second: *items}}\n  p.old: {v: {first: [1, 2], second: [1, 2]}}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  check: 0 judgments, 1 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep:\n    v:\n      first: &id001\n      - 1\n      - 2\n      second: *id001\n    also: [p.old]\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:same-donor-aliased-values",
+    "before": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 0, of: 2026-09-01}\n  p.old: {v: {first: &items [1, 2], second: *items}, of: 2026-09-02}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  p.keep takes p.old's reading: 0 -> {'first': [1, 2], 'second': [1, 2]} - a reading from 2026-09-02 that is newer than the base's\n  check: 0 judgments, 1 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep:\n    v:\n      first: &id001\n      - 1\n      - 2\n      second: *id001\n    of: \"2026-09-02\"\n    also: [p.old]\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-keep-b",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--keep",
+      "b",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.keep retired into p.old (kept p.old)\n  rewritten - rests_on: d.ready · seen: d.ready · wrong_if: d.ready\n  1 mention in PROVENANCE.yaml\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.old > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.old: {v: 1, of: \"2026-09-01\", name: Old, also: [p.keep]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.old]\n    seen: {p.old: 1}\n    wrong_if: p.old > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-bad-keep",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--keep",
+      "other",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - --keep names the id that survives: p.keep or p.old\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-id",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.keep",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep and p.keep are one id already\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-missing",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.missing",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.missing is not an entry of the record or of any hypothesis beside it\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-builtin",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "judgments.count",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - judgments.count is not an entry of the record or of any hypothesis beside it\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-undated-conflict",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 3, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep holds 1 as of 2026-09-01 and p.old holds 3 as of 2026-09-01 - a reading of the same day: two readings that disagree are a contradiction, not one subject twice; set the one that is right, or open a hypothesis, then same\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 3, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different subjects",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.keep from p.old: different subjects\n  the pair returns as no candidate; p.keep carries distinct_from: p.old\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n    # distinct 2026-09-20: different subjects\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-normalize-why",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "  different\n  subjects  ",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "the why is one line: a second line would be a line of the record\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-id",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.keep",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep and p.keep are one id: distinct needs two\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-empty-why",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      " ",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - distinct takes the why: distinct <a> <b> \"<why>\"\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-already",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "p.keep and p.old are already declared distinct; nothing written\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-distinct",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep and p.old were declared distinct; remove the distinct_from that says so before saying otherwise\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-hypothesis",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known:\n  p.old: {v: 1, name: Other}\n  p.extra: {v: 2}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known:\n  p.extra: {v: 2}\n\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-hypothesis",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known:\n  p.future: {v: 1}\n"
+    },
+    "args": [
+      "distinct",
+      "p.future",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.future from p.old: different (in hypothesis alpha)\n  the pair returns as no candidate; p.future carries distinct_from: p.old\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known:\n  p.future: {v: 1, distinct_from: p.old}\n    # distinct 2026-09-20: different\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-unreadable-hypothesis",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known: [broken"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - hypothesis alpha could not be read (while parsing a flow sequence in \"<unicode string>\", line 1, column 8: known: [broken ^ expected ',' or ']', but got '<s), so the migration could not reach what it holds\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known: [broken"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-unreadable-hypothesis",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known: [broken"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.keep from p.old: different\n  the pair returns as no candidate; p.keep carries distinct_from: p.old\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n    # distinct 2026-09-20: different\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.d/alpha.yaml": "known: [broken"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:core-same",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "unsupported_capability: use core/v1 consumer\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:core-distinct",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "unsupported_capability: use core/v1 consumer\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-arrangement-into-judgment",
+    "before": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nsources:\n  s.ask: {asked: Decide this}\nknown:\n  p.x: {v: 1}\njudgments:\n  p.keep: {rests_on: [s.ask, graph.entries], verdict: Old, wrong_if: graph.entries > 0}\n  p.old: {rests_on: [p.x], verdict: New, seen: {p.x: 1}, wrong_if: p.x > 3}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  p.keep takes p.old's verdict - its wrong_if holds (graph.entries > 0)\n  check: 1 judgments, 3 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nsources:\n  s.ask: {asked: Decide this}\nknown:\n  p.x: {v: 1}\njudgments:\n  p.keep:\n    rests_on: [p.x]\n    verdict: New\n    seen: {p.x: 1}\n    wrong_if: \"p.x > 3\"\n    also: [p.old]\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-split",
+    "before": {
+      "PROVENANCE.yaml": "record: parts.yaml\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1}\n",
+      "parts.yaml": "meta: {updated: 2026-09-01}\nknown:\n  p.old: {v: 1}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  check: 0 judgments, 1 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "record: parts.yaml\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, also: [p.old]}\n",
+      "parts.yaml": "meta: {updated: 2026-09-20}"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-brief",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.view.yaml": "sections:\n  - title: Summary\n    text: \"{{p.old}} / {{p.keep}}\"\n    seen: {p.keep: 1, p.old: 2}\n    pick: [p.keep, p.old]\nlabels:\n  p.keep: Kept\n  p.old: Old\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready · the brief: section 'Summary' (text, seen, pick), groups and labels\n  2 mentions in PROVENANCE.view.yaml\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\ntext that saw it:\n  'Summary' saw p.keep = 1 - read it again, then: review \"Summary\"\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n",
+      "PROVENANCE.view.yaml": "sections:\n  - title: Summary\n    text: \"{{p.keep}} / {{p.keep}}\"\n    seen: {p.keep: 1}\n    pick: [p.keep]\nlabels:\n  p.keep: Kept\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-newer",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 3, of: 2026-09-02, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  p.keep takes p.old's reading: 1 -> 3 - a reading from 2026-09-02 that is newer than the base's\n  rewritten - rests_on: d.ready · seen: d.ready\n  check: 1 judgments, 3 entries, 0 problems\nrests on it:\n  MUTED     d.ready: p.keep moved 1 -> 3, inside wrong_if (p.keep > 10) - nothing is asked\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 3, of: \"2026-09-02\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-new-check-failure",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 30, of: 2026-09-02, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - check would fail after the migration, so nothing was changed:\n  d.ready: wrong_if holds (p.keep > 10) - broken by its own condition\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 30, of: 2026-09-02, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-existing-check-failure",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.old > 0\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  rewritten - rests_on: d.ready · seen: d.ready · wrong_if: d.ready\n  1 mention in PROVENANCE.yaml\n  check: 1 judgments, 3 entries, 1 problems\nrests on it:\n  FIRED     d.ready: wrong_if holds (p.keep > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (0 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: \"2026-09-01\", name: Kept, also: [p.old]}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    wrong_if: p.keep > 0\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-tabs-why",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      " \tdifferent  subjects\t ",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "distinct p.keep from p.old: different subjects\n  the pair returns as no candidate; p.keep carries distinct_from: p.old\nrests on it:\n  HOLDS     d.ready: wrong_if does not hold (p.keep > 10)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-20}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, distinct_from: p.old}\n    # distinct 2026-09-20: different subjects\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-scalar",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: Open question\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.old is a line, not an entry with fields - an open question is closed by answering it, not folded into another\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept}\n  p.old: Open question\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-scalar",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: Open question\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.old",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.keep is a line, not an entry with fields; distinct is written on a field\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: Open question\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-retired",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.was",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.was is not an entry of the record or of any hypothesis beside it - it was retired into p.keep\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:distinct-retired",
+    "before": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    },
+    "args": [
+      "distinct",
+      "p.keep",
+      "p.was",
+      "different",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.was is not an entry of the record or of any hypothesis beside it - it was retired into p.keep\n",
+    "files": {
+      "PROVENANCE.yaml": "meta: {updated: 2026-09-01}\nschema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1, of: 2026-09-01, name: Kept, also: [p.was]}\n  p.old: {v: 1, of: 2026-09-01, name: Old}\n  p.extra: {v: 2}\njudgments:\n  d.ready:\n    verdict: ready\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    wrong_if: p.keep > 10\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-aliased-values",
+    "before": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: {first: &items [1, 2], second: *items}}\n  p.old: {v: {first: [1, 2], second: [1, 2]}}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  check: 0 judgments, 1 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep:\n    v:\n      first: &id001\n      - 1\n      - 2\n      second: *id001\n    also: [p.old]\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:same-donor-aliased-values",
+    "before": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 0, of: 2026-09-01}\n  p.old: {v: {first: &items [1, 2], second: *items}, of: 2026-09-02}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "same p.keep p.old: p.old retired into p.keep\n  p.keep takes p.old's reading: 0 -> {'first': [1, 2], 'second': [1, 2]} - a reading from 2026-09-02 that is newer than the base's\n  check: 0 judgments, 1 entries, 0 problems\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep:\n    v:\n      first: &id001\n      - 1\n      - 2\n      second: *id001\n    of: \"2026-09-02\"\n    also: [p.old]\n"
+    }
+  }
+]

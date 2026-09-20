@@ -1,8 +1,8 @@
 //! Public `same` and `distinct` commands over an active history record.
-#[path = "ordinary_sameness.rs"]
-pub(crate) mod ordinary_sameness;
 #[path = "ordinary_identity.rs"]
 pub(crate) mod ordinary_identity;
+#[path = "ordinary_sameness.rs"]
+pub(crate) mod ordinary_sameness;
 use crate::{
     Result, direct_history,
     history_authoring::{self as A, obj, s},
@@ -51,6 +51,62 @@ struct Request {
     action: I::Action,
     as_of: Option<String>,
     record: Option<PathBuf>,
+}
+
+pub struct CommandOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub code: i32,
+}
+
+fn dispatch(request: Request, cwd: &Path) -> CommandOutput {
+    let mut ordinary = false;
+    let result = run_routed(request, cwd, None, &mut |_| Ok(()), &mut ordinary);
+    match result {
+        Ok(stdout) => CommandOutput {
+            stdout,
+            stderr: String::new(),
+            code: 0,
+        },
+        Err(error) if ordinary => CommandOutput {
+            stdout: String::new(),
+            stderr: format!("{error}\n"),
+            code: 1,
+        },
+        Err(error) => CommandOutput {
+            stdout: format!("refused: {error}\n"),
+            stderr: String::new(),
+            code: 1,
+        },
+    }
+}
+pub fn dispatch_same(options: &SameOptions, cwd: &Path) -> CommandOutput {
+    dispatch(
+        Request {
+            a: options.a.clone(),
+            b: options.b.clone(),
+            action: I::Action::Same {
+                keep: options.keep.clone(),
+            },
+            as_of: options.as_of.clone(),
+            record: options.record.clone(),
+        },
+        cwd,
+    )
+}
+pub fn dispatch_distinct(options: &DistinctOptions, cwd: &Path) -> CommandOutput {
+    dispatch(
+        Request {
+            a: options.a.clone(),
+            b: options.b.clone(),
+            action: I::Action::Distinct {
+                because: options.why.clone(),
+            },
+            as_of: options.as_of.clone(),
+            record: options.record.clone(),
+        },
+        cwd,
+    )
 }
 
 fn authoring_options(prefix: &str) -> Result<A::Options> {
@@ -135,10 +191,6 @@ pub fn run_same(options: &SameOptions, cwd: &Path) -> Result<String> {
 }
 
 pub fn run_distinct(options: &DistinctOptions, cwd: &Path) -> Result<String> {
-    require(
-        !options.why.contains('\n'),
-        "the why is one line: a second line would be a line of the record",
-    )?;
     run(
         Request {
             a: options.a.clone(),
@@ -163,6 +215,16 @@ fn run_with_runtime(
     runtime_override: Option<&Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<String> {
+    run_routed(request, cwd, runtime_override, probe, &mut false)
+}
+
+fn run_routed(
+    request: Request,
+    cwd: &Path,
+    runtime_override: Option<&Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+    ordinary: &mut bool,
+) -> Result<String> {
     let cwd = cwd.canonicalize()?;
     let original = request
         .record
@@ -175,11 +237,18 @@ fn run_with_runtime(
     let entry = &route.paths()[0];
     let _lock =
         F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
-    require(
-        crate::legacy_authoring::route(entry, route.config())?
-            == crate::legacy_authoring::AuthorityRoute::History,
-        "legacy identity commands require the Python adapter",
-    )?;
+    if crate::legacy_authoring::route(entry, route.config())?
+        == crate::legacy_authoring::AuthorityRoute::Legacy
+    {
+        *ordinary = true;
+        return ordinary_identity::run(&request, &route, runtime_override, probe);
+    }
+    if let I::Action::Distinct { because } = &request.action {
+        require(
+            !because.contains('\n'),
+            "the why is one line: a second line would be a line of the record",
+        )?;
+    }
     let store = Store::new(entry)?;
     let journal = format!("{}.history", store.layout.journal);
     require(
