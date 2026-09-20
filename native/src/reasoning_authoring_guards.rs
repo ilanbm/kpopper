@@ -489,6 +489,22 @@ fn page_text(facts: &Map, key: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+fn validate_page_facts(facts: &Map) -> Result<(bool, bool)> {
+    let linked = page_bool(facts, "linked")?;
+    let fired = page_bool(facts, "fired")?;
+    for key in ["cut", "reading"] {
+        if let Some(value) = facts.get(key) {
+            text(value).map_err(|_| Error("invalid_page_facts".into()))?;
+        }
+    }
+    if let Some(value) = facts.get("stood")
+        && !matches!(value, V::Integer(_))
+    {
+        return Err(Error("invalid_page_facts".into()));
+    }
+    Ok((linked, fired))
+}
+
 /// Apply the single same-id replacement door used by ordinary authoring and
 /// identity operations. `page` is already-captured arrangement evidence; this
 /// function never rereads a brief or source to obtain it.
@@ -524,8 +540,7 @@ pub(crate) fn may_supersede(
             .or_else(|| world.as_of().and_then(day))
             .ok_or_else(|| Error("write requires an explicitly captured day".into()))?;
         if let Some(facts) = facts {
-            let linked = page_bool(facts, "linked")?;
-            let fired = page_bool(facts, "fired")?;
+            let (linked, fired) = validate_page_facts(facts)?;
             if let Some(born) = map(existing)?.get("born").and_then(day)
                 && born >= stamp
             {
@@ -1431,6 +1446,29 @@ mod supersession_tests {
         let malformed = V::Map(Map::from([(
             "d.keep".into(),
             V::Map(Map::from([("linked".into(), V::Bool(true))])),
+        )]));
+        assert!(
+            may_supersede(
+                &world,
+                "d.keep",
+                &existing,
+                &replacement,
+                Some("2026-09-20"),
+                Some(&malformed),
+                false
+            )
+            .is_err()
+        );
+        let malformed = V::Map(Map::from([(
+            "d.keep".into(),
+            V::Map(Map::from([
+                ("linked".into(), V::Bool(true)),
+                ("fired".into(), V::Bool(true)),
+                (
+                    "reading".into(),
+                    V::Integer(crate::value::Integer::new("4").unwrap()),
+                ),
+            ])),
         )]));
         assert!(
             may_supersede(
