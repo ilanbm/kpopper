@@ -783,6 +783,24 @@ fn journal_mutation(value: &J) -> Result<crate::history_transaction::PreparedMut
     crate::history_transaction::PreparedMutation::from_bytes(&raw)
 }
 
+fn private_reason(report: &Report) -> Result<Option<&'static str>> {
+    if crate::recording_privacy::private_marker(&V::from_json(&report.raw)?)
+        || report.raw.get("privacy").is_some_and(|v| match v {
+            J::Null | J::Bool(false) => false,
+            J::String(s) => !s.is_empty(),
+            _ => true,
+        })
+    {
+        return Ok(Some("private or unclear original source permission; report retained privately"));
+    }
+    if report.raw.get("scope").and_then(|v| v.get("kind")).and_then(J::as_str)
+        == Some("unclear")
+    {
+        return Ok(Some("unclear report scope; retained privately"));
+    }
+    Ok(None)
+}
+
 pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output> {
     run_with_probe(options, cwd, stdin, None, &mut |_| Ok(()))
 }
@@ -848,7 +866,19 @@ fn run_with_probe(
         F::replace(&envelope_path, Some(&canonical))?;
     }
 
-    if let Some(raw) = F::read(&journal_path)? {
+    let retained_report = F::read(&journal_path)?;
+    if retained_report.is_some() && let Some(reason) = private_reason(&report)?
+    {
+        let (answer, signals) = receipt(
+            &report, &record, &root, &event, &source_path, &envelope_sha,
+            "needs_primary", Some(reason), false, None, None, supplied_runtime,
+        )?;
+        save(&receipt_path, &answer)?;
+        save(&root.join("results").join(format!("{event}.json")),
+            &json!({"receipt":answer,"signals":signals}))?;
+        return Ok(Output { text: format!("{}\n", serde_json::to_string(&answer)?), code: 1 });
+    }
+    if let Some(raw) = retained_report {
         let mut journal =
             crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?;
         let mutation = journal_mutation(&journal)?;
@@ -870,7 +900,7 @@ fn run_with_probe(
                 &original, cwd, supplied_runtime, &mutation, &mut committed,
             ).map(|_| ())
         } else if crate::legacy_authoring::recovery_pending(&original, cwd)? {
-            crate::legacy_authoring::recover(&original, cwd, false).map(|_| ())
+            crate::legacy_authoring::recover_expected(&original, cwd, &mutation).map(|_| ())
         } else if journal["phase"] == "prepared" {
             let mut committed = |_: &V| {
                 journal["phase"] = json!("committed");
@@ -953,25 +983,8 @@ fn run_with_probe(
     drop(_state_lock);
 
     let outcome = (|| {
-        if crate::recording_privacy::private_marker(&V::from_json(&report.raw)?)
-            || report.raw.get("privacy").is_some_and(|v| match v {
-                J::Null | J::Bool(false) => false,
-                J::String(s) => !s.is_empty(),
-                _ => true,
-            })
-        {
-            return Err(error(
-                "private or unclear original source permission; report retained privately",
-            ));
-        }
-        if report
-            .raw
-            .get("scope")
-            .and_then(|v| v.get("kind"))
-            .and_then(J::as_str)
-            == Some("unclear")
-        {
-            return Err(error("unclear report scope; retained privately"));
+        if let Some(reason) = private_reason(&report)? {
+            return Err(error(reason));
         }
         route.verify()?;
         let authority = crate::legacy_authoring::route(&record, route.config())?;
@@ -979,7 +992,10 @@ fn run_with_probe(
             "kind":"source-report/v1", "event_id":event,
             "source_sha256":crate::identity::sha256(report.quote.as_bytes()),
             "envelope_sha256":envelope_sha, "record":record, "state_dir":root,
-            "policy":route.config().to_json()?
+            "policy":route.config().to_json()?,
+            "routing":crate::source_capture::routing_observation(
+                route.paths(), &route.project().root,
+            )?.to_json()?
         }))?;
         if authority == crate::legacy_authoring::AuthorityRoute::Legacy {
             let mut inventory = Inventory::default();
@@ -1297,6 +1313,31 @@ mod tests {
     }
 
     #[test]
+    fn retained_prepared_private_envelope_is_never_republished() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n").unwrap();
+        let state = temp.path().join("state");
+        let public = json!({"event_id":"old-private","date":"2026-09-20","source_quote":"x is 2",
+            "updates":[{"kind":"set","id":"p.x","value":2}]});
+        let public_bytes = serde_json::to_vec(&public).unwrap();
+        let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
+        assert!(run_with_probe(&options, temp.path(), Some(&public_bytes), None,
+            &mut |phase| if phase == "prepared" { Err(error("old writer stopped")) } else { Ok(()) }).is_err());
+        let private = json!({"event_id":"old-private","date":"2026-09-20","source_quote":"x is 2",
+            "shareability":"personal","updates":[{"kind":"set","id":"p.x","value":2}]});
+        let mut private_bytes = serde_json::to_vec(&private).unwrap();
+        private_bytes.push(b'\n');
+        let id = event_id(&entry.canonicalize().unwrap(), &parse(&private_bytes).unwrap()).unwrap();
+        F::replace(&state.join("envelopes").join(format!("{id}.json")), Some(&private_bytes)).unwrap();
+        let retained = run(&options, temp.path(), Some(&private_bytes)).unwrap();
+        assert_eq!(retained.code, 1);
+        assert_eq!(serde_json::from_str::<J>(&retained.text).unwrap()["state"], "needs_primary");
+        assert!(fs::read_to_string(entry).unwrap().contains("v: 1"));
+        assert!(state.join("journals").join(format!("{id}.json")).is_file());
+    }
+
+    #[test]
     fn captured_hash_privacy_and_collection_reads_are_rechecked_before_publish() {
         let temp = tempfile::tempdir().unwrap();
         let entry = temp.path().join("GROUNDING.yaml");
@@ -1411,6 +1452,20 @@ mod tests {
             crate::json_ingress::DuplicateKeys::Reject,
         ).unwrap();
         let initial_mutation = journal_mutation(&initial_journal).unwrap();
+        let store = crate::history_store::Store::new(&entry).unwrap();
+        let general = store.root.join(&store.layout.journal);
+        fs::create_dir_all(general.parent().unwrap()).unwrap();
+        fs::write(&general, bootstrap.to_bytes().unwrap()).unwrap();
+        assert_eq!(crate::direct_history::recover_expected(
+            std::slice::from_ref(&entry), temp.path(), Some(&runtime), &initial_mutation,
+            &mut |_| Ok(())).unwrap_err().0, "history report recovery journal mismatch");
+        fs::remove_file(&general).unwrap();
+        let adoption = store.root.join(format!("{}.history", store.layout.journal));
+        fs::write(&adoption, "kind: history-adoption/v1\n").unwrap();
+        assert_eq!(crate::direct_history::recover_expected(
+            std::slice::from_ref(&entry), temp.path(), Some(&runtime), &initial_mutation,
+            &mut |_| Ok(())).unwrap_err().0, "history report recovery journal mismatch");
+        fs::remove_file(&adoption).unwrap();
         let captured = crate::history_store::Store::new(&entry)
             .unwrap()
             .capture()
@@ -1459,5 +1514,40 @@ mod tests {
             state_dir:Some(temp.path().join("state-final")) }, temp.path(), Some(&final_bytes),
             Some(&runtime), &mut |_| Ok(())).unwrap();
         assert_eq!(final_write.code, 0, "{}", final_write.text);
+
+        let stale_report = json!({"event_id":"history-stale-preimage","date":"2026-09-24",
+            "source_quote":"x is 6","updates":[{"kind":"set","id":"p.x","value":6}]});
+        let stale_bytes = serde_json::to_vec(&stale_report).unwrap();
+        let stale_options = Options { file:"-".into(), record:None,
+            state_dir:Some(temp.path().join("state-stale")) };
+        assert!(run_with_probe(&stale_options, temp.path(), Some(&stale_bytes), Some(&runtime),
+            &mut |phase| if phase == "prepared" { Err(error("stop before history journal")) } else { Ok(()) }).is_err());
+        let valid = fs::read(&entry).unwrap();
+        let mut changed = valid.clone();
+        changed.extend_from_slice(b"# concurrent edit\n");
+        fs::write(&entry, &changed).unwrap();
+        let stale = run_with_probe(&stale_options, temp.path(), Some(&stale_bytes), Some(&runtime),
+            &mut |_| Ok(())).unwrap();
+        assert_eq!(stale.code, 1);
+        assert_eq!(serde_json::from_str::<J>(&stale.text).unwrap()["state"], "needs_primary");
+        assert_eq!(fs::read(&entry).unwrap(), changed);
+        fs::write(&entry, valid).unwrap();
+
+        let route_report = json!({"event_id":"history-route-change","date":"2026-09-25",
+            "source_quote":"x is 7","updates":[{"kind":"set","id":"p.x","value":7}]});
+        let route_bytes = serde_json::to_vec(&route_report).unwrap();
+        let route_options = Options { file:"-".into(), record:None,
+            state_dir:Some(temp.path().join("state-route")) };
+        assert!(run_with_probe(&route_options, temp.path(), Some(&route_bytes), Some(&runtime),
+            &mut |phase| if phase == "prepared" { Err(error("stop before history journal")) } else { Ok(()) }).is_err());
+        let project = crate::project_modes::Project::open(temp.path()).unwrap();
+        fs::create_dir_all(project.config_path.parent().unwrap()).unwrap();
+        fs::write(&project.config_path,
+            r#"{"version":1,"mode":"advanced","generation":1,"record":"GROUNDING.yaml"}"#).unwrap();
+        let changed_route = run_with_probe(&route_options, temp.path(), Some(&route_bytes), Some(&runtime),
+            &mut |_| Ok(())).unwrap();
+        assert_eq!(changed_route.code, 1);
+        assert!(serde_json::from_str::<J>(&changed_route.text).unwrap()["reason"]
+            .as_str().unwrap().contains("project"));
     }
 }

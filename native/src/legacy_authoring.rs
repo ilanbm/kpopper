@@ -2094,12 +2094,28 @@ pub(crate) fn publish_expected(
     let root = PathBuf::from(text(field(baseline, "transaction_root")?)?);
     let entry = entry_path(&root, mutation)?;
     require(entry == route.paths()[0], "project_route_changed")?;
+    verify_report_route(&route, mutation)?;
     verify_recovery(&route, &root, mutation)
         .map_err(|e| error(&format!("report_preparation_stale: {e}")))?;
     let journal = entry_layout(Path::new(text(field(map(&data)?, "entry")?)?))?.journal;
     let mut verify = |_: &V| verify_recovery(&route, &root, mutation);
     F::publish_legacy(&root, &journal, mutation, &mut verify, Some(committed))?;
     Ok(())
+}
+
+fn verify_report_route(route: &WriteRoute, mutation: &PreparedMutation) -> Result<()> {
+    let data = mutation.to_data();
+    let receipt = map(field(map(&data)?, "receipt")?)?;
+    let before = map(field(receipt, "before")?)?;
+    let batch = map(before.get("batch").ok_or_else(|| error("invalid report journal"))?)?;
+    let context = map(batch.get("context").ok_or_else(|| error("invalid report journal"))?)?;
+    require(context.get("policy") == Some(route.config()),
+        "report_preparation_stale: project policy changed")?;
+    let routing = crate::source_capture::routing_observation(
+        route.paths(), &route.project().root,
+    )?;
+    require(context.get("routing") == Some(&routing),
+        "report_preparation_stale: project routing changed")
 }
 
 fn entry_path(root: &Path, mutation: &PreparedMutation) -> Result<PathBuf> {
@@ -2207,6 +2223,23 @@ pub fn recovery_pending(original: &[PathBuf], cwd: &Path) -> Result<bool> {
 }
 
 pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
+    recover_inner(original, cwd, before, None)
+}
+
+pub(crate) fn recover_expected(
+    original: &[PathBuf],
+    cwd: &Path,
+    mutation: &PreparedMutation,
+) -> Result<V> {
+    recover_inner(original, cwd, false, Some(mutation))
+}
+
+fn recover_inner(
+    original: &[PathBuf],
+    cwd: &Path,
+    before: bool,
+    expected: Option<&PreparedMutation>,
+) -> Result<V> {
     let route = WriteRoute::capture(original, cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];
@@ -2218,6 +2251,11 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
     let local_journal = entry.parent().unwrap().join(&local_layout.journal);
     let raw = F::read(&local_journal)?.ok_or_else(|| error("no_recovery_pending"))?;
     let mutation = PreparedMutation::from_bytes(&raw)?;
+    if let Some(expected) = expected {
+        require(mutation.to_bytes()? == expected.to_bytes()?,
+            "report recovery journal mismatch")?;
+        verify_report_route(&route, expected)?;
+    }
     let data = mutation.to_data();
     let baseline = map(field(map(&data)?, "baseline")?)?;
     require(

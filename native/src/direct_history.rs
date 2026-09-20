@@ -90,6 +90,24 @@ enum ReceiptFamily {
     Identity,
 }
 type RecoveryProbe<'a> = Option<&'a mut dyn FnMut(&str) -> Result<()>>;
+
+fn verify_report_route(
+    route: &WriteRoute,
+    expected: &PreparedMutation,
+) -> Result<()> {
+    let data = expected.to_data();
+    let receipt = map(&map(&data)?["receipt"])?;
+    let before = map(&receipt["before"])?;
+    let authoring = map(before.get("authoring").ok_or_else(|| error("invalid report journal"))?)?;
+    let context = map(authoring.get("context").ok_or_else(|| error("invalid report journal"))?)?;
+    require(context.get("policy") == Some(route.config()),
+        "report_preparation_stale: project policy changed")?;
+    let routing = crate::source_capture::routing_observation(
+        route.paths(), &route.project().root,
+    )?;
+    require(context.get("routing") == Some(&routing),
+        "report_preparation_stale: project routing changed")
+}
 fn receipt_family(mutation: &PreparedMutation) -> Result<ReceiptFamily> {
     let data = mutation.to_data();
     let before = map(&map(&map(&data)?["receipt"])?["before"])?;
@@ -518,9 +536,13 @@ fn recover_inner(
 ) -> Result<V> {
     let route = WriteRoute::capture(original, cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
+    if let Some(expected) = expected {
+        verify_report_route(&route, expected)?;
+    }
     let store = Store::new(&route.paths()[0])?;
     let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
     if let Some(raw) = F::read(&F::target(&store.root, &store.layout.journal)?)? {
+        require(expected.is_none(), "history report recovery journal mismatch")?;
         let mutation = PreparedMutation::from_bytes(&raw)?;
         let data = mutation.to_data();
         let baseline = map(&map(&data)?["baseline"])?;
@@ -560,7 +582,8 @@ fn recover_inner(
         let expected = expected.ok_or_else(|| error("no_recovery_pending"))?;
         let data = expected.to_data();
         let operation = text(&map(&data)?["operation"])?;
-        let capture = store.capture()?;
+        let capture = store.capture()
+            .map_err(|e| error(&format!("report_preparation_stale: {e}")))?;
         let manifest = expected.files().iter().find(|file| file.role == "history_commit")
             .and_then(|file| file.after.as_ref()).ok_or_else(|| error("invalid_history_journal"))?;
         let mut completed = capture.commits.get(operation) == Some(manifest);
@@ -576,7 +599,7 @@ fn recover_inner(
             for file in expected.files() {
                 require(
                     F::read(&F::target(&store.root, &file.path)?)? == file.before,
-                    "history report preparation changed before publication",
+                    "report_preparation_stale: history report preparation changed before publication",
                 )?;
             }
             let loaded_runtime;
@@ -620,6 +643,7 @@ fn recover_inner(
         .get("kind")
         .is_some_and(|kind| string_is(kind, crate::public_history_adopt::KIND))
     {
+        require(expected.is_none(), "history report recovery journal mismatch")?;
         return crate::public_history_adopt::recover(&store, &route, original, &path, &raw, before);
     }
     let (mutation, retained) = decode(&raw)?;
