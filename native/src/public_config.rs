@@ -110,6 +110,7 @@ fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
         file.sync_all()?;
         drop(file);
         fs::rename(&temporary, path)?;
+        #[cfg(unix)]
         File::open(parent)?.sync_all()?;
         Ok(())
     })();
