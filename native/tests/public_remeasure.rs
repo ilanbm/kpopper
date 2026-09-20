@@ -109,40 +109,45 @@ fn assert_core_oracle(record: &Path, run: bool) {
         "actual={actual:?}\nexpected={expected:?}"
     );
     assert_eq!(actual.stderr, expected.stderr);
-    let revision = regex::Regex::new(r"findings [0-9a-f]{64}").unwrap();
-    let basis = regex::Regex::new(r"\[[0-9a-f]{16}\]").unwrap();
-    let actual = revision.replace_all(&actual.stdout, "findings <runtime-provenance>");
-    let expected = revision.replace_all(&expected.stdout, "findings <runtime-provenance>");
+    let revision = regex::Regex::new(
+        r"(?m)^(core/v1 prospective snapshot [0-9a-f]{64}; findings )[0-9a-f]{64}$",
+    )
+    .unwrap();
+    let basis = regex::Regex::new(
+        r"(?m)^(  MOVED [^\n]+ value/rule/basis changed )\[[0-9a-f]{16}\]$",
+    )
+    .unwrap();
+    let actual = revision.replace_all(&actual.stdout, "$1<runtime-provenance>");
+    let expected = revision.replace_all(&expected.stdout, "$1<runtime-provenance>");
     assert_eq!(
-        basis.replace_all(&actual, "[runtime-provenance]"),
-        basis.replace_all(&expected, "[runtime-provenance]")
+        basis.replace_all(&actual, "$1[runtime-provenance]"),
+        basis.replace_all(&expected, "$1[runtime-provenance]")
     );
 }
 
 #[cfg(unix)]
 fn review_case(name: &str) -> (tempfile::TempDir, PathBuf) {
     use std::os::unix::fs::PermissionsExt;
-    let source = PathBuf::from(
-        std::env::var("KPOP_SESSION_REMEASURE_CASES").expect("set KPOP_SESSION_REMEASURE_CASES"),
-    )
-    .join(name);
+    let (record_text, hypothesis, view, measured) = match name {
+        "flatbody" => ("known:\n  heat.loss_kw: {v: 28, of: 2026-09-01, measure: echo}\n", Some("hypothesis: {claim: the loss is a bare number, born: 2026-09-19}\nknown:\n  heat.loss_kw: 28\n"), None, "31"),
+        "helpval" => ("known:\n  note.label: {v: \"old\", name: the label, of: 2026-09-01, measure: echo}\n", None, None, "--help"),
+        "retyped" => ("known:\n  p.a: {v: \"one\", of: 2026-09-01, measure: echo}\n", None, None, "42"),
+        "negvalue" => ("known:\n  p.a: {v: 1, of: 2026-09-01, measure: echo}\n", None, None, "-5"),
+        "hyponly" => ("known:\n  p.base: {v: 1, of: 2026-09-01}\n", Some("hypothesis: {claim: a reading only the hypothesis holds, born: 2026-09-19}\nknown:\n  p.only: {v: 1, of: 2026-09-19, measure: echo}\n"), None, "7"),
+        "reversal" => ("known:\n  p.a: {v: 1, of: 2026-09-01, measure: echo}\njudgments:\n  d.go: {rests_on: [p.a], verdict: go, wrong_if: p.a > 100, seen: {p.a: 1}, because: the base decided to go}\n", Some("hypothesis: {claim: the decision should be reversed, born: 2026-09-19}\njudgments:\n  d.go: {rests_on: [p.a], verdict: stop, wrong_if: p.a > 100, seen: {p.a: 1}, because: a person should take this by name}\n"), None, "2"),
+        "twoids" => ("known:\n  p.a: {v: 1, of: 2026-09-01, measure: echo}\n  p.b: {v: 1, of: 2026-09-01, measure: echo}\n", Some("hypothesis: {claim: the hypothesis disagrees about p.b only, born: 2026-09-19}\nknown:\n  p.b: {v: 5, of: 2026-09-19, measure: echo}\n"), None, "9"),
+        "movedonly" => ("known:\n  p.a: {v: 1, of: 2026-09-01, measure: echo}\njudgments:\n  d.plain: {rests_on: [p.a], verdict: go, wrong_if: p.a > 100, seen: {p.a: 1}, because: a plain judgment with a stale snapshot}\n", None, None, "2"),
+        "pagebound" => ("known:\n  p.a: {v: 1, of: 2026-09-01, measure: echo}\nsources:\n  s.q: {asked: Inspect this record}\njudgments:\n  d.page: {rests_on: [p.a, s.q, page.unserved], verdict: go, wrong_if: page.unserved > 0 or p.a > 100, seen: {p.a: 1, s.q: Inspect this record, page.unserved: 0}, because: the page decides this sign}\n", None, Some("tabs:\n- title: Decision\n  serves: [s.q]\n  sections:\n  - {title: d.page, pick: judgments, as: cards}\n"), "2"),
+        _ => panic!("unknown review case"),
+    };
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
-    for relative in [
-        "GROUNDING.yaml",
-        ".kpopper/measure.yaml",
-        ".kpopper/view.yaml",
-        ".kpopper/hypotheses/proposal.yaml",
-    ] {
-        let from = source.join(relative);
-        if from.is_file() {
-            let to = root.join(relative);
-            fs::create_dir_all(to.parent().unwrap()).unwrap();
-            fs::copy(from, to).unwrap();
-        }
-    }
-    fs::copy(source.join("recipe"), root.join("recipe")).unwrap();
+    fs::write(root.join("GROUNDING.yaml"), record_text).unwrap();
+    fs::write(root.join(".kpopper/measure.yaml"), "echo: [./recipe]\n").unwrap();
+    if let Some(hypothesis) = hypothesis { fs::write(root.join(".kpopper/hypotheses/proposal.yaml"), hypothesis).unwrap(); }
+    if let Some(view) = view { fs::write(root.join(".kpopper/view.yaml"), view).unwrap(); }
+    fs::write(root.join("recipe"), format!("#!/bin/sh\nprintf %s\\\\n \"{measured}\"\n")).unwrap();
     fs::set_permissions(root.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
     (temp, root.join("GROUNDING.yaml"))
 }
