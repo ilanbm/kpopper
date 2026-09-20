@@ -148,12 +148,11 @@ fn normalize_runtime(case: &mut J, root: &Path) {
     let mut episodes = std::collections::BTreeMap::new();
     if let V::Map(subjects) = &report["history_subjects"] {
         for (id, subject) in subjects {
-            if let V::Map(s) = subject {
-                if let Some(V::Map(t)) = s.get("temporal") {
-                    if let Some(episode) = t.get("episodes") {
-                        episodes.insert(id.clone(), episode.clone());
-                    }
-                }
+            if let V::Map(s) = subject
+                && let Some(V::Map(t)) = s.get("temporal")
+                && let Some(episode) = t.get("episodes")
+            {
+                episodes.insert(id.clone(), episode.clone());
             }
         }
     }

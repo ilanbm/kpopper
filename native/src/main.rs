@@ -28,6 +28,10 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Search captured local evidence or read a revision-bound result.
+    Search(kpop_native::public_search::Options),
+    /// Inspect the project mode or change local preferences.
+    Config(kpop_native::public_config::Options),
     /// Convert formulas or preview an explicit expression migration.
     Expressions(kpop_native::public_expressions::Args),
     /// Read versioned assessment findings and scoped attention from actual records.
@@ -417,6 +421,8 @@ fn run(args: Args) -> Result<Value> {
         | Command::Knowledge(_)
         | Command::Pending(_)
         | Command::Expressions(_)
+        | Command::Search(_)
+        | Command::Config(_)
         | Command::Followups(_)
         | Command::Watch(_)
         | Command::Check(_)
@@ -451,6 +457,41 @@ fn main() {
             error.exit();
         }
     };
+    if matches!(args.command, Command::Search(_) | Command::Config(_)) {
+        let cwd = match args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)
+        {
+            Ok(cwd) => cwd,
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(2);
+            }
+        };
+        let (stdout, stderr, code) = match &args.command {
+            Command::Search(options) => {
+                let mode = if args.frozen
+                    || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen")
+                {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+                let output = kpop_native::public_search::dispatch(options, &cwd, mode, args.json);
+                (output.stdout, output.stderr, output.code)
+            }
+            Command::Config(options) => {
+                let output = kpop_native::public_config::dispatch(options, &cwd, args.json);
+                (output.stdout, output.stderr, output.code)
+            }
+            _ => unreachable!(),
+        };
+        print!("{stdout}");
+        eprint!("{stderr}");
+        std::process::exit(code);
+    }
     if let Command::Expressions(options) = &args.command {
         let cwd = match args
             .workspace

@@ -79,6 +79,7 @@ pub mod public_annotated_document;
 pub mod public_assessment;
 pub mod public_authoring;
 pub mod public_checked_session;
+pub mod public_config;
 pub mod public_consolidation;
 pub mod public_export;
 pub mod public_followups;
@@ -165,6 +166,7 @@ pub mod core_page;
 pub mod public_core_readers;
 pub mod public_ordinary_readers;
 pub mod public_readers;
+pub mod public_search;
 mod public_search_rank;
 pub mod public_session;
 
