@@ -500,7 +500,7 @@ fn locator_disclosures(captured: &Capture, origin: &Map) -> Result<()> {
     }
     require(used == allowed, "unused_locator_disclosure")
 }
-fn subset_subjects(captured: &Capture, roots: &V) -> Result<BTreeSet<String>> {
+pub(crate) fn subset_subjects(captured: &Capture, roots: &V) -> Result<BTreeSet<String>> {
     use std::sync::LazyLock;
     static ID: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+").unwrap());

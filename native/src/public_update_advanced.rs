@@ -15,6 +15,11 @@ use base64::Engine as _;
 use serde_json::{Value as J, json};
 use std::path::Path;
 
+#[path = "history_contribution_prepare.rs"]
+mod history_prepare;
+
+fn s(value: &str) -> V { V::Text(value.into()) }
+
 pub(crate) struct Context<'a> {
     pub route: WriteRoute,
     pub record: &'a Path,
@@ -30,6 +35,62 @@ pub(crate) struct PreparedHistory {
     pub bundle: V,
     pub files: Files,
     pub diagnostics: Vec<String>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prepare_history(
+    report: &Report,
+    event: &str,
+    captured: &crate::history_capture::Capture,
+    mutation: &crate::history_transaction::PreparedMutation,
+    recorded_at: &str,
+    source_entry: &str,
+    record: &Path,
+    diagnostics: Vec<String>,
+) -> Result<PreparedHistory> {
+    let scope = scope(report).transpose()?.ok_or_else(|| Error("missing report scope".into()))?;
+    let source_id = format!("s.ingest_{event}");
+    let roots = roots(report, &source_id);
+    let disclosures = report.raw.get("disclosed_locators").map(V::from_json).transpose()?.unwrap_or_else(||V::List(vec![]));
+    let (artifact, history_files) = history_prepare::prepare_subset(
+        captured, &roots, &scope, &format!("report-subset-{event}"), recorded_at,
+        source_entry, &disclosures, mutation,
+    )?;
+    let historical = crate::pending_bundle::contribution_history(&artifact, &history_files)?;
+    let adapted = crate::history_adapter::from_store_capture(&historical)?;
+    let document = adapted.document().clone();
+    let portable = portable_source(record, event)?;
+    let mut evidence = Files::new();
+    for name in pending_bundle::required_files(&document)? {
+        if name == portable {
+            evidence.insert(name, report.quote.as_bytes().to_vec());
+        } else {
+            let path = record.parent().ok_or_else(||Error("invalid_path".into()))?.join(&name).canonicalize()?;
+            evidence.insert(name, std::fs::read(path)?);
+        }
+    }
+    require(evidence.get(&portable).is_some_and(|raw|raw==report.quote.as_bytes()), "scoped report source bytes differ from retained quote")?;
+    let mut files=evidence;
+    for (path,raw) in &history_files { files.insert(format!("history-closure/{path}"),raw.clone()); }
+    let mut plain=document.clone();
+    if let Some(meta)=map_mut(&mut plain)?.get_mut("meta") { map_mut(meta)?.remove("history"); }
+    let reasoning=crate::reasoning_capabilities::document_capabilities(&plain)?;
+    let artifact_fields=map(&artifact)?;
+    let manifest=obj([
+        ("version",V::Integer(crate::value::Integer::new("3")?)),
+        ("requires",map(field(artifact_fields,"manifest")?)?["requires"].clone()),
+        ("roots",map(field(artifact_fields,"manifest")?)?["roots"].clone()),
+        ("document",document),("scope",scope),("reasoning",reasoning),
+        ("history",obj([("revision",artifact_fields["revision"].clone()),("manifest",artifact_fields["manifest"].clone())])),
+        ("evidence",V::Map(files.iter().map(|(p,b)|(p.clone(),s(&crate::identity::sha256(b)))).collect())),
+    ]);
+    let bundle=obj([("revision",s(&manifest.digest()?)),("manifest",manifest)]);
+    pending_bundle::validate(&bundle,&files)?;
+    Ok(PreparedHistory{bundle,files,diagnostics})
+}
+
+fn obj(items: impl IntoIterator<Item=(&'static str,V)>) -> V {
+    V::Map(items.into_iter().map(|(k,v)|(k.into(),v)).collect())
 }
 
 /// Finalize the existing history report pipeline after its batch, graph and
@@ -65,6 +126,10 @@ pub(crate) fn capture_prepared_history(
                 &prepared.bundle,
                 &prepared.files,
                 &prepared.diagnostics,
+                context.record,
+                context.route.config(),
+                &crate::source_capture::routing_observation(context.route.paths(), &context.route.project().root)?,
+                context.envelope_sha256,
             )?,
         )?;
     }
@@ -226,6 +291,10 @@ fn retained(
     bundle: &V,
     files: &Files,
     diagnostics: &[String],
+    record: &Path,
+    policy: &V,
+    routing: &V,
+    envelope_sha256: &str,
 ) -> Result<J> {
     Ok(json!({
         "version":1,
@@ -239,6 +308,8 @@ fn retained(
             path.clone(), J::String(base64::engine::general_purpose::STANDARD.encode(raw))
         )).collect::<serde_json::Map<_,_>>(),
         "diagnostics":diagnostics,
+        "record":record, "policy":policy.to_json()?, "routing":routing.to_json()?,
+        "envelope_sha256":envelope_sha256,
     }))
 }
 
@@ -443,6 +514,10 @@ pub(crate) fn capture(
                 &bundle,
                 &files,
                 &prepared.diagnostics,
+                context.record,
+                context.route.config(),
+                &crate::source_capture::routing_observation(context.route.paths(), &context.route.project().root)?,
+                context.envelope_sha256,
             )?,
         )?;
     }
@@ -530,6 +605,17 @@ pub(crate) fn recover(
     require(
         journal["event_id"] == event,
         "advanced report journal event mismatch",
+    )?;
+    require(
+        journal["pending_event_id"] == format!("report-{event}")
+            && journal["source_id"] == format!("s.ingest_{event}")
+            && journal["record"] == json!(context.record)
+            && journal["envelope_sha256"] == context.envelope_sha256
+            && journal["policy"] == context.route.config().to_json()?
+            && journal["routing"] == crate::source_capture::routing_observation(
+                context.route.paths(), &context.route.project().root
+            )?.to_json()?,
+        "advanced report journal context mismatch",
     )?;
     let (bundle, files) = retained_bundle(&journal)?;
     let pending_event = journal["pending_event_id"]
