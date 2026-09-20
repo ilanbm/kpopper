@@ -370,34 +370,20 @@ fn require_committed_branch_base(
             .map_err(|_| error("branch_target_outside_checkout"))?;
         relative.push(item.to_string_lossy().replace('\\', "/"));
     }
-    let mut args = vec![
-        "--literal-pathspecs",
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--ignored=matching",
-        "--",
-    ];
-    args.extend(relative.iter().map(String::as_str));
-    let dirty = crate::public_readers::branch_read::git(root, &args, false)?
-        .ok_or_else(|| error("branch_git_unavailable"))?;
-    if !dirty.is_empty() {
-        let names = dirty
-            .split(|b| *b == 0)
-            .filter(|v| !v.is_empty())
-            .filter_map(|row| {
-                std::str::from_utf8(row)
-                    .ok()
-                    .and_then(|row| row.get(3..))
-                    .map(str::to_owned)
-            })
-            .collect::<Vec<_>>();
-        let named = if names.is_empty() {
-            relative.join(", ")
-        } else {
-            names.join(", ")
-        };
+    // Ordinary folds follow Git's normal ignore rules, as the legacy reader does.
+    // Query each captured member so rename records cannot become extra filenames
+    // in the diagnostic. History adoption has a separate, stricter guard.
+    let mut names = Vec::new();
+    for path in &relative {
+        let args = ["--literal-pathspecs", "status", "--porcelain", "--", path];
+        let dirty = crate::public_readers::branch_read::git(root, &args, false)?
+            .ok_or_else(|| error("branch_git_unavailable"))?;
+        if !dirty.iter().all(u8::is_ascii_whitespace) {
+            names.push(path.clone());
+        }
+    }
+    if !names.is_empty() {
+        let named = names.join(", ");
         return Err(error(&format!(
             "refused - {named} {} uncommitted changes: a branch's record folds onto a committed base, so the fold is a commit of its own - commit first, then consolidate again",
             if names.len() == 1 { "carries" } else { "carry" }

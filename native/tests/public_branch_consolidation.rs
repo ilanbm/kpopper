@@ -222,6 +222,38 @@ fn ordinary_branch_fold_requires_a_committed_record_and_sidecar() {
 }
 
 #[test]
+fn ordinary_branch_fold_accepts_ignored_replaced_sidecar() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    fs::write(root.join(".gitignore"), ".kpopper/\n").unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  p.value: {v: 1, of: 2026-09-19}\n",
+    )
+    .unwrap();
+    let source = commit(&root, "source");
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  p.value: {v: 3, of: 2026-09-18}\n",
+    )
+    .unwrap();
+    commit(&root, "current");
+    fs::create_dir_all(root.join(".kpopper")).unwrap();
+    fs::write(root.join(".kpopper/replaced.yaml"), "{}\n").unwrap();
+    let result = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec![source],
+            as_of: Some("2026-09-20".into()),
+            ..Default::default()
+        },
+        &root,
+    );
+    assert_eq!(result.code, 0, "{}{}", result.stdout, result.stderr);
+    assert!(fs::read_to_string(root.join("GROUNDING.yaml")).unwrap().contains("v: 1"));
+}
+
+#[test]
 fn ordinary_branch_fold_is_idempotent_and_accepts_multiple_refs() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
