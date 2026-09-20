@@ -528,12 +528,6 @@ pub(crate) fn may_supersede(
                 ),
             });
         }
-        if arrangement(world, existing) && !arrangement(world, new) {
-            return Ok(SupersessionDecision {
-                allowed: false,
-                reason: "what replaces an arrangement is an arrangement - rest on the session sources of the occasion it decides and give it a sign over a count; an occasion read elsewhere is re-decided as that, never dropped".into(),
-            });
-        }
         let facts = page_facts(page, id)?;
         let stamp = captured_day
             .map(str::to_owned)
