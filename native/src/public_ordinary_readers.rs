@@ -446,7 +446,7 @@ fn python_finish(mut emitter: Emitter<'_>) -> Result<()> {
     Ok(())
 }
 
-fn python_safe_dump(value: &OrdinaryValue) -> Result<Vec<u8>> {
+pub(crate) fn python_safe_dump(value: &OrdinaryValue) -> Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut emitter = python_emitter(&mut output)?;
     python_emit(value, &mut emitter, None)?;

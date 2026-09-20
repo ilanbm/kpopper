@@ -1,4 +1,6 @@
 //! Source capture and public read command routing.
+#[path = "public_branch_read.rs"]
+mod branch_read;
 use crate::{
     Result,
     history_contract::*,
@@ -23,6 +25,9 @@ pub struct Options {
     pub host: Option<String>,
     #[arg(long)]
     pub history: bool,
+    /// Read a pinned committed branch beside the current record.
+    #[arg(long = "from", value_name = "REF")]
+    pub from_ref: Option<String>,
 }
 fn files(options: &Options, cwd: &Path, command: &str) -> Result<(Vec<PathBuf>, Vec<String>)> {
     let mut paths = vec![];
@@ -320,6 +325,26 @@ pub fn run(
     }
     let capture =
         source_capture::capture_ordinary_source_with_runtime(&paths, &cwd, mode, None, runtime)?;
+    if let Some(reference) = options.from_ref.as_deref() {
+        crate::require(command == "pull", "--from is available only with pull")?;
+        crate::require(!options.history, "--from cannot be combined with --history")?;
+        let output = branch_read::pull(
+            reference,
+            &seeds,
+            options.budget.unwrap_or(40),
+            &cwd,
+            &paths,
+            &capture,
+            runtime,
+        )?;
+        capture.verify()?;
+        inventory.verify()?;
+        crate::require(
+            W::locate(&cwd, mode)? == location,
+            "workspace changed while reading it; retry",
+        )?;
+        return Ok(output);
+    }
     let capabilities = crate::ordinary_fields::capabilities(
         capture.ordinary_document(),
         options.profile.as_deref(),

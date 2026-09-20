@@ -10,7 +10,7 @@ use crate::{
     reasoning_runtime::{OperationalBounds, Runtime},
     reasoning_snapshot::{CaptureOptions, Snapshot},
     require,
-    source_capture::{ReadMode, capture_source_with_runtime},
+    source_capture::{ReadMode, capture_ordinary_source_with_runtime},
     value::{Integer, TypedValue as V},
 };
 use std::{
@@ -167,12 +167,43 @@ pub(crate) fn records(
             .map_err(|_| error("target_replay_failed"))?
     })
 }
-fn records_isolated(
+pub(crate) struct OrdinaryRecords {
+    pub document: crate::ordinary_value::Value,
+    pub hypotheses: crate::ordinary_value::Map,
+}
+pub(crate) fn records_ordinary(
     root: &Path,
     entry: &str,
     revision: &str,
     runtime: Option<&Runtime>,
-) -> Result<V> {
+) -> Result<OrdinaryRecords> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let materialized = materialize(root, entry, revision, runtime)?;
+                Ok(OrdinaryRecords {
+                    document: materialized.captured.ordinary_document().clone(),
+                    hypotheses: crate::ordinary_value::map(materialized.captured.hypotheses())?
+                        .clone(),
+                })
+            })
+            .join()
+            .map_err(|_| error("target_replay_failed"))?
+    })
+}
+struct Materialized {
+    _temp: tempfile::TempDir,
+    captured: crate::source_capture::OrdinaryCapture,
+    files: Files,
+    raw_names: BTreeSet<String>,
+    active: bool,
+}
+fn materialize(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<Materialized> {
     require(
         [40, 64].contains(&revision.len())
             && revision
@@ -278,7 +309,7 @@ fn records_isolated(
         if raw_names.contains(&path) {
             continue;
         }
-        let body = Y::decode_ordinary_source_value(&raw)?;
+        let body = Y::decode_full_ordinary_source_value(&raw)?;
         if active && path == entry {
             if let Some(imported) = body.get("meta").and_then(|v| v.get("history_import")) {
                 let value = imported.strict_typed()?;
@@ -296,13 +327,18 @@ fn records_isolated(
         } else {
             for key in ["record", "also"] {
                 let values = match body.get(key) {
-                    Some(v @ Y::OrdinaryValue::Scalar(V::Text(_))) => vec![v],
-                    Some(Y::OrdinaryValue::List(a)) => a.iter().collect(),
-                    Some(Y::OrdinaryValue::Map(m)) => m.iter().map(|(_, v)| v).collect(),
+                    Some(v @ crate::ordinary_source::Source::Scalar(
+                        crate::ordinary_value::Scalar::Finite(V::Text(_)),
+                    )) => vec![v],
+                    Some(crate::ordinary_source::Source::List(a)) => a.iter().collect(),
+                    Some(crate::ordinary_source::Source::Map(m)) =>
+                        m.iter().map(|(_, v)| v).collect(),
                     _ => vec![],
                 };
                 for value in values {
-                    if let Y::OrdinaryValue::Scalar(V::Text(p)) = value
+                    if let crate::ordinary_source::Source::Scalar(
+                        crate::ordinary_value::Scalar::Finite(V::Text(p)),
+                    ) = value
                         && (p.ends_with(".yaml") || p.ends_with(".yml"))
                     {
                         queue.push_back(pointer(&Path::new(&path).parent().unwrap().join(p))?);
@@ -318,7 +354,7 @@ fn records_isolated(
         std::fs::create_dir_all(path.parent().unwrap())?;
         std::fs::write(path, raw)?;
     }
-    let captured = capture_source_with_runtime(
+    let captured = capture_ordinary_source_with_runtime(
         &[scratch.join(&entry)],
         &scratch,
         if active {
@@ -329,6 +365,28 @@ fn records_isolated(
         None,
         runtime,
     )?;
+    Ok(Materialized {
+        _temp: temp,
+        captured,
+        files,
+        raw_names,
+        active,
+    })
+}
+fn records_isolated(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<V> {
+    let Materialized {
+        _temp,
+        captured,
+        files,
+        raw_names,
+        active,
+    } = materialize(root, entry, revision, runtime)?;
+    let captured = captured.try_finite()?;
     let document = captured.strict_document()?;
     let mut hypotheses = vec![];
     for (name, hyp) in map(captured.hypotheses())? {
