@@ -539,28 +539,16 @@ pub(crate) fn load(
 }
 
 impl Document {
-    pub(crate) fn from_finite(doc: &crate::source_document::Document) -> Self {
-        Self {
-            source: S::from_finite(&doc.source),
-            hypotheses: V::from_finite_projection(&doc.hypotheses),
-            origins: doc.origins.clone(),
-            members: doc.members.clone(),
-            history: doc.history.clone(),
-            history_projection: doc.history_projection.clone(),
-            history_view: doc.history_view.clone(),
-            overlay: None,
-        }
-    }
     pub(crate) fn try_finite(self) -> Result<crate::source_document::Document> {
+        // Canonical consumers discard overlay display metadata, but must still
+        // refuse an overlay snapshot outside their finite value domain.
+        self.overlay.map(|overlay| overlay.try_finite()).transpose()?;
         Ok(crate::source_document::Document {
             source: self.source.try_finite()?,
             hypotheses: self.hypotheses.finite_projection()?,
             origins: self.origins,
             members: self.members,
             history: self.history,
-            history_projection: self.history_projection,
-            history_view: self.history_view,
-            overlay: self.overlay.map(|v| v.try_finite()).transpose()?,
         })
     }
 }

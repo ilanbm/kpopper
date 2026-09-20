@@ -456,9 +456,6 @@ impl<'a> Reader<'a> {
     pub fn raw(&self) -> &Map {
         &self.raw
     }
-    pub fn document(&self) -> &V {
-        &self.document
-    }
     pub fn value(&self, key: &str) -> Result<V> {
         value_of(&self.raw, &self.ids, key, self.program())
     }

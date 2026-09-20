@@ -14,9 +14,6 @@ pub(crate) struct Document {
     pub origins: BTreeMap<String, BTreeMap<String, PathBuf>>,
     pub members: Vec<PathBuf>,
     pub history: Option<crate::history_capture::Capture>,
-    pub history_projection: Option<V>,
-    pub history_view: Option<V>,
-    pub overlay: Option<crate::source_overlay::Overlay>,
 }
 pub(crate) fn members(entries: &[PathBuf], inventory: &mut Inventory) -> Result<Vec<PathBuf>> {
     crate::ordinary_document::members(entries, inventory)

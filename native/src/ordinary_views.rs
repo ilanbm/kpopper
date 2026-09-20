@@ -1347,14 +1347,6 @@ impl Projection<'_> {
         (held, judgments, prefixes, loose)
     }
 
-    pub fn opening(
-        &self,
-        budget: i64,
-        brief: Option<&V>,
-        prefix_order: &[String],
-    ) -> Result<String> {
-        self.opening_with_orientation(budget, brief, prefix_order, &[])
-    }
     pub fn opening_with_orientation(
         &self,
         budget: i64,
