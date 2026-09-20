@@ -303,6 +303,7 @@ fn options(case: &J) -> Options {
     }
 }
 #[test]
+#[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
 fn complete_corpora_and_revisions_match_python() {
     if std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_none() {
         eprintln!("set KPOPPER_NATIVE_RESOURCES for complete search corpus oracles");
@@ -347,10 +348,8 @@ fn complete_corpora_and_revisions_match_python() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 #[test]
+#[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
 fn actual_search_and_paged_read_cli_match_python() {
-    if std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_none() {
-        return;
-    }
     let fixture: J = serde_json::from_str(include_str!("fixtures/search-corpus.json")).unwrap();
     let mut failures = vec![];
     for original in fixture["cases"].as_array().unwrap() {
@@ -397,10 +396,8 @@ fn actual_search_and_paged_read_cli_match_python() {
 }
 
 #[test]
+#[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
 fn reads_rebuild_corpus_and_refuse_changed_records_sources_captures_or_grants() {
-    if std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_none() {
-        return;
-    }
     let fixture: J = serde_json::from_str(include_str!("fixtures/search-corpus.json")).unwrap();
     for mutation in ["record", "source", "capture", "grant"] {
         let name = match mutation {
@@ -461,10 +458,8 @@ fn reads_rebuild_corpus_and_refuse_changed_records_sources_captures_or_grants() 
 }
 
 #[test]
+#[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
 fn source_size_utf8_and_binary_bounds_are_explicit() {
-    if std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_none() {
-        return;
-    }
     let fixture: J = serde_json::from_str(include_str!("fixtures/search-corpus.json")).unwrap();
     for (raw, reason) in [
         (
@@ -572,10 +567,8 @@ fn live_python_ordinary_cli_matches_without_normalization() {
 }
 
 #[test]
+#[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
 fn cli_errors_and_negative_query_match_python() {
-    if std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_none() {
-        return;
-    }
     let corpus: J = serde_json::from_str(include_str!("fixtures/search-corpus.json")).unwrap();
     let basic = corpus["cases"]
         .as_array()
