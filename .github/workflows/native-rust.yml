@@ -81,6 +81,32 @@ jobs:
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), resources/'ordinary'/target)
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
+      - name: Generate Windows history group vectors with the pinned Python reference
+        if: matrix.target == 'windows-x86_64'
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          oracle = temporary/'native-python-oracle'
+          commit = 'f480ea68f6dfd36c397388bb01844459cc578d81'
+          subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', commit], check=True)
+          subprocess.run(['git', 'worktree', 'add', '--detach', str(oracle), commit], check=True)
+          environment = temporary/'native-oracle-python'
+          subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True)
+          python = environment/'Scripts'/'python.exe'
+          subprocess.run([str(python), '-m', 'pip', 'install', 'PyYAML==6.0.3'], check=True)
+          fixture = temporary/'native-history-group.json'
+          fixture_root = str(temporary/'native-history-group-source')
+          prefix = chr(92)*2 + '?' + chr(92)
+          if not fixture_root.startswith(prefix):
+              fixture_root = prefix + fixture_root
+          subprocess.run([str(python), 'native/ci/generate_history_group_fixture.py',
+              '--oracle-root', str(oracle), '--output', str(fixture),
+              '--source-transaction-fixture', 'native/tests/fixtures/history-transactions.json',
+              '--fixture-root', fixture_root], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_HISTORY_GROUP_FIXTURE=' + str(fixture) + '\n')
+          (temporary/'native-evidence'/'python-group-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
       - name: Test the native implementation and build the platform release
         working-directory: native
         shell: bash

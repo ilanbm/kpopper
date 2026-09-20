@@ -29,7 +29,7 @@ def main() -> None:
     from scripts import history_transaction as T
     from scripts.pending_grounding import _encode, identity, json_bytes
 
-    source = json.loads(args.source_transaction_fixture.read_text())
+    source = json.loads(args.source_transaction_fixture.read_text(encoding="utf-8"))
     cases = []
 
     def rawdata(data):
@@ -112,7 +112,8 @@ def main() -> None:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
-        json.dumps({"oracle": args.oracle_root.name, "cases": cases}, indent=2) + "\n"
+        json.dumps({"oracle": args.oracle_root.name, "cases": cases}, indent=2) + "\n",
+        encoding="utf-8",
     )
     print(f"group cases {len(cases)}")
 

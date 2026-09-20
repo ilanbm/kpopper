@@ -43,6 +43,7 @@ def main():
             text=True,
             encoding="utf-8",
             capture_output=True,
+            timeout=120,
         )
         (output / f"{name}.stdout").write_text(result.stdout, encoding="utf-8")
         (output / f"{name}.stderr").write_text(result.stderr, encoding="utf-8")
