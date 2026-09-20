@@ -456,12 +456,148 @@ pub(crate) fn read_on(body: &V, world: &impl Admission) -> Option<String> {
     }
     None
 }
-fn clock_day(world: &impl Admission, a: &Map) -> Result<String> {
-    a.get("as_of")
-        .and_then(day)
-        .or_else(|| world.as_of().and_then(day))
-        .ok_or_else(|| Error("write requires an explicitly captured day".into()))
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SupersessionDecision {
+    pub allowed: bool,
+    pub reason: String,
 }
+
+fn page_facts<'a>(page: Option<&'a V>, id: &str) -> Result<Option<&'a Map>> {
+    let Some(page) = page else { return Ok(None) };
+    let page = map(page).map_err(|_| Error("invalid_page_facts".into()))?;
+    let Some(facts) = page.get(id) else {
+        return Ok(None);
+    };
+    Ok(Some(
+        map(facts).map_err(|_| Error("invalid_page_facts".into()))?,
+    ))
+}
+
+fn page_bool(facts: &Map, key: &str) -> Result<bool> {
+    match facts.get(key) {
+        Some(V::Bool(value)) => Ok(*value),
+        Some(_) => Err(Error("invalid_page_facts".into())),
+        None => Err(Error("invalid_page_facts".into())),
+    }
+}
+
+fn page_text(facts: &Map, key: &str) -> Option<String> {
+    facts
+        .get(key)
+        .and_then(|value| text(value).ok())
+        .map(str::to_owned)
+}
+
+/// Apply the single same-id replacement door used by ordinary authoring and
+/// identity operations. `page` is already-captured arrangement evidence; this
+/// function never rereads a brief or source to obtain it.
+pub(crate) fn may_supersede(
+    world: &impl Admission,
+    id: &str,
+    existing: &V,
+    new: &V,
+    captured_day: Option<&str>,
+    page: Option<&V>,
+    by_hand: bool,
+) -> Result<SupersessionDecision> {
+    if judgment(world, id) || shaped(existing, world.role("deps")) {
+        let deps = world.role("deps");
+        if !shaped(new, deps) {
+            return Ok(SupersessionDecision {
+                allowed: false,
+                reason: format!(
+                    "what replaces a judgment must rest on something, and this carries no {}",
+                    deps
+                ),
+            });
+        }
+        if arrangement(world, existing) && !arrangement(world, new) {
+            return Ok(SupersessionDecision {
+                allowed: false,
+                reason: "what replaces an arrangement is an arrangement - rest on the session sources of the occasion it decides and give it a sign over a count; an occasion read elsewhere is re-decided as that, never dropped".into(),
+            });
+        }
+        let facts = page_facts(page, id)?;
+        let stamp = captured_day
+            .map(str::to_owned)
+            .or_else(|| world.as_of().and_then(day))
+            .ok_or_else(|| Error("write requires an explicitly captured day".into()))?;
+        if let Some(facts) = facts {
+            let linked = page_bool(facts, "linked")?;
+            let fired = page_bool(facts, "fired")?;
+            if let Some(born) = map(existing)?.get("born").and_then(day)
+                && born >= stamp
+            {
+                return Ok(SupersessionDecision {
+                    allowed: false,
+                    reason: format!(
+                        "it was decided on {born} - a second decision on the same day is a contradiction, not a change"
+                    ),
+                });
+            }
+            if !linked {
+                let cut =
+                    page_text(facts, "cut").ok_or_else(|| Error("invalid_page_facts".into()))?;
+                return Ok(SupersessionDecision {
+                    allowed: false,
+                    reason: format!(
+                        "the brief no longer carries what it decided - {cut} - restore the tab, then re-decide"
+                    ),
+                });
+            }
+            if fired {
+                let pred = map(existing)?
+                    .get(world.role("predicate"))
+                    .unwrap_or(&V::Null);
+                let reading = page_text(facts, "reading");
+                return Ok(SupersessionDecision {
+                    allowed: true,
+                    reason: format!(
+                        "its sign holds ({}) with its tab intact{}",
+                        short(pred, 60),
+                        reading
+                            .map(|value| format!(" - {value}"))
+                            .unwrap_or_default()
+                    ),
+                });
+            }
+        }
+        let pred = map(existing)?
+            .get(world.role("predicate"))
+            .unwrap_or(&V::Null);
+        let fired = world.standing_predicate(id, pred)? == Some(true);
+        let reason = if fired {
+            format!("its wrong_if holds ({})", short(pred, 60))
+        } else if by_hand {
+            "the standing judgment holds, and a person takes this over it by name".into()
+        } else {
+            "the standing judgment holds, and its wrong_if has not fired".into()
+        };
+        return Ok(SupersessionDecision {
+            allowed: fired || by_hand,
+            reason,
+        });
+    }
+
+    let old_value = existing;
+    let when = read_on(old_value, world);
+    let stamp = captured_day
+        .map(str::to_owned)
+        .or_else(|| world.as_of().and_then(day))
+        .ok_or_else(|| Error("write requires an explicitly captured day".into()))?;
+    let allowed = when.as_ref().is_none_or(|day| stamp > *day);
+    let reason = match &when {
+        None => "nothing dates the reading the base holds".into(),
+        Some(day) if stamp > *day => {
+            format!("a reading from {stamp} that is newer than the base's")
+        }
+        Some(day) if stamp == *day => "a reading of the same day".into(),
+        Some(_day) => format!("a reading from {stamp} that is older than the base's"),
+    };
+    Ok(SupersessionDecision { allowed, reason })
+}
+
 struct Disagreement {
     kind: &'static str,
     old: V,
@@ -514,19 +650,21 @@ fn disagreement(world: &mut impl Admission, a: &Map) -> Result<Option<Disagreeme
         } else {
             "verdict"
         };
-        let pred = map(&body)?.get(world.role("predicate")).unwrap_or(&V::Null);
-        let may = world.standing_predicate(id, pred)? == Some(true);
-        let why = if may {
-            format!("its wrong_if holds ({})", short(pred, 60))
-        } else {
-            "the standing judgment holds, and its wrong_if has not fired".into()
-        };
+        let decision = may_supersede(
+            world,
+            id,
+            &body,
+            new_body,
+            a.get("as_of").and_then(day).as_deref(),
+            None,
+            false,
+        )?;
         return Ok(Some(Disagreement {
             kind,
             old: old.clone(),
             new: new.clone(),
-            may,
-            why,
+            may: decision.allowed,
+            why: decision.reason,
             when: None,
         }));
     }
@@ -560,21 +698,26 @@ fn disagreement(world: &mut impl Admission, a: &Map) -> Result<Option<Disagreeme
     if world.same_value(id, new)? {
         return Ok(None);
     }
+    let decision = may_supersede(
+        world,
+        id,
+        &body,
+        if kind == "set" {
+            get(a, "value")
+        } else {
+            new_body
+        },
+        a.get("as_of").and_then(day).as_deref(),
+        None,
+        false,
+    )?;
     let when = read_on(&body, world);
-    let stamp = clock_day(world, a)?;
-    let may = when.as_ref().is_none_or(|w| stamp > *w);
-    let why = match &when {
-        None => "nothing dates the reading the base holds".into(),
-        Some(w) if stamp > *w => format!("a reading from {stamp} that is newer than the base's"),
-        Some(w) if stamp == *w => "a reading of the same day".into(),
-        _ => format!("a reading from {stamp} that is older than the base's"),
-    };
     Ok(Some(Disagreement {
         kind: "value",
         old,
         new: new.clone(),
-        may,
-        why,
+        may: decision.allowed,
+        why: decision.reason,
         when,
     }))
 }
@@ -1092,4 +1235,281 @@ pub(crate) fn validate(world: &mut impl Admission, action: &V) -> Result<Vec<Str
         out.push("unsupported_core_builtin: page arrangement/section review requires its own declared inputs".into())
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod supersession_tests {
+    use super::*;
+    use serde_json::json;
+
+    struct Fake {
+        fields: Map,
+        raw: BTreeMap<String, V>,
+        fired: Option<bool>,
+        as_of: Option<V>,
+    }
+
+    impl Admission for Fake {
+        fn fields(&self) -> &Map {
+            &self.fields
+        }
+        fn raw(&self) -> &BTreeMap<String, V> {
+            &self.raw
+        }
+        fn document(&self) -> &V {
+            &V::Null
+        }
+        fn hypotheses(&self) -> Result<&Map> {
+            Err(Error("unused".into()))
+        }
+        fn as_of(&self) -> Option<&V> {
+            self.as_of.as_ref()
+        }
+        fn core(&self) -> bool {
+            false
+        }
+        fn value(&mut self, _id: &str) -> Result<V> {
+            Ok(V::Null)
+        }
+        fn result(&mut self, _id: &str) -> Result<J> {
+            Ok(json!({"status":"ok"}))
+        }
+        fn same_value(&mut self, _id: &str, _candidate: &V) -> Result<bool> {
+            Ok(false)
+        }
+        fn standing_predicate(&self, _id: &str, _expression: &V) -> Result<Option<bool>> {
+            Ok(self.fired)
+        }
+    }
+
+    fn s(value: &str) -> V {
+        V::Text(value.into())
+    }
+    fn fields() -> Map {
+        Map::from([
+            ("deps".into(), s("rests_on")),
+            ("predicate".into(), s("wrong_if")),
+            ("snapshot".into(), s("seen")),
+        ])
+    }
+    fn list(values: &[&str]) -> V {
+        V::List(values.iter().map(|value| s(value)).collect())
+    }
+    fn judgment(predicate: &str) -> V {
+        V::Map(Map::from([
+            ("verdict".into(), s("continue")),
+            ("rests_on".into(), list(&["p.input"])),
+            ("wrong_if".into(), s(predicate)),
+        ]))
+    }
+    fn fake(existing: V, fired: Option<bool>) -> Fake {
+        Fake {
+            fields: fields(),
+            raw: BTreeMap::from([(String::from("d.keep"), existing)]),
+            fired,
+            as_of: None,
+        }
+    }
+
+    #[test]
+    fn judgment_shape_is_enforced_by_the_shared_door() {
+        let existing = judgment("p.input > 9");
+        let world = fake(existing.clone(), Some(true));
+        let decision = may_supersede(
+            &world,
+            "d.keep",
+            &existing,
+            &s("stop"),
+            Some("2026-09-20"),
+            None,
+            false,
+        )
+        .unwrap();
+        assert!(!decision.allowed);
+        assert!(decision.reason.contains("must rest on something"));
+    }
+
+    #[test]
+    fn fired_and_by_hand_judgment_replacements_are_admitted() {
+        let existing = judgment("p.input > 9");
+        let replacement = V::Map(Map::from([
+            ("verdict".into(), s("stop")),
+            ("rests_on".into(), list(&["p.input"])),
+        ]));
+        let fired = fake(existing.clone(), Some(true));
+        assert!(
+            may_supersede(
+                &fired,
+                "d.keep",
+                &existing,
+                &replacement,
+                Some("2026-09-20"),
+                None,
+                false
+            )
+            .unwrap()
+            .allowed
+        );
+        let holding = fake(existing.clone(), Some(false));
+        assert!(
+            !may_supersede(
+                &holding,
+                "d.keep",
+                &existing,
+                &replacement,
+                Some("2026-09-20"),
+                None,
+                false
+            )
+            .unwrap()
+            .allowed
+        );
+        assert!(
+            may_supersede(
+                &holding,
+                "d.keep",
+                &existing,
+                &replacement,
+                Some("2026-09-20"),
+                None,
+                true
+            )
+            .unwrap()
+            .allowed
+        );
+    }
+
+    #[test]
+    fn page_facts_are_used_only_when_present_and_cut_tabs_refuse() {
+        let existing = judgment("p.input > 9");
+        let replacement = V::Map(Map::from([
+            ("verdict".into(), s("stop")),
+            ("rests_on".into(), list(&["p.input"])),
+        ]));
+        let world = fake(existing.clone(), Some(false));
+        let cut = V::Map(Map::from([(
+            "d.keep".into(),
+            V::Map(Map::from([
+                ("linked".into(), V::Bool(false)),
+                ("fired".into(), V::Bool(false)),
+                ("cut".into(), s("the tab was removed")),
+            ])),
+        )]));
+        let decision = may_supersede(
+            &world,
+            "d.keep",
+            &existing,
+            &replacement,
+            Some("2026-09-20"),
+            Some(&cut),
+            false,
+        )
+        .unwrap();
+        assert!(!decision.allowed);
+        assert!(decision.reason.contains("restore the tab"));
+        let fired = V::Map(Map::from([(
+            "d.keep".into(),
+            V::Map(Map::from([
+                ("linked".into(), V::Bool(true)),
+                ("fired".into(), V::Bool(true)),
+                ("reading".into(), s("count 4")),
+            ])),
+        )]));
+        let decision = may_supersede(
+            &world,
+            "d.keep",
+            &existing,
+            &replacement,
+            Some("2026-09-20"),
+            Some(&fired),
+            false,
+        )
+        .unwrap();
+        assert!(decision.allowed);
+        assert!(decision.reason.contains("count 4"));
+
+        let malformed = V::Map(Map::from([(
+            "d.keep".into(),
+            V::Map(Map::from([("linked".into(), V::Bool(true))])),
+        )]));
+        assert!(
+            may_supersede(
+                &world,
+                "d.keep",
+                &existing,
+                &replacement,
+                Some("2026-09-20"),
+                Some(&malformed),
+                false
+            )
+            .is_err()
+        );
+
+        let born = V::Map(Map::from([
+            ("verdict".into(), s("continue")),
+            ("rests_on".into(), list(&["p.input"])),
+            ("wrong_if".into(), s("p.input > 9")),
+            ("born".into(), s("2026-09-20")),
+        ]));
+        let world = fake(born.clone(), Some(true));
+        let decision = may_supersede(
+            &world,
+            "d.keep",
+            &born,
+            &replacement,
+            Some("2026-09-20"),
+            Some(&fired),
+            false,
+        )
+        .unwrap();
+        assert!(!decision.allowed);
+        assert!(decision.reason.contains("same day"));
+    }
+
+    #[test]
+    fn dated_value_replacement_uses_captured_day() {
+        let existing = V::Map(Map::from([
+            (
+                "v".into(),
+                V::Integer(crate::value::Integer::new("1").unwrap()),
+            ),
+            ("of".into(), s("2026-09-19")),
+        ]));
+        let mut world = fake(existing.clone(), None);
+        world.as_of = Some(s("2026-09-20"));
+        let new = V::Map(Map::from([(
+            "v".into(),
+            V::Integer(crate::value::Integer::new("2").unwrap()),
+        )]));
+        assert!(
+            may_supersede(
+                &world,
+                "p.input",
+                &existing,
+                &new,
+                Some("2026-09-20"),
+                None,
+                false
+            )
+            .unwrap()
+            .allowed
+        );
+        assert!(
+            may_supersede(&world, "p.input", &existing, &new, None, None, false)
+                .unwrap()
+                .allowed
+        );
+        let decision = may_supersede(
+            &world,
+            "p.input",
+            &existing,
+            &new,
+            Some("2026-09-19"),
+            None,
+            false,
+        )
+        .unwrap();
+        assert!(!decision.allowed);
+        assert!(decision.reason.contains("same day"));
+    }
 }
