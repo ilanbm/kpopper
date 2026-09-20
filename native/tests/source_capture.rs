@@ -35,23 +35,15 @@ fn source_snapshots_match_pinned_python() {
                     let expected = V::from_tagged(expected).unwrap();
                     let actual = capture.snapshot().unwrap().to_data();
                     if actual != expected {
-                        let a = actual.to_json().unwrap();
-                        let b = expected.to_json().unwrap();
-                        let differing = a
-                            .as_object()
-                            .unwrap()
-                            .keys()
-                            .filter(|k| a[*k] != b[*k])
-                            .collect::<Vec<_>>();
-                        failures.push(format!("{} differs: {:?}", case["name"], differing));
-                        for key in differing {
-                            if key != "snapshot_id" {
-                                eprintln!(
-                                    "{} {key}: actual={} expected={}",
-                                    case["name"], a[key], b[key]
-                                );
-                            }
-                        }
+                        let actual = actual.to_tagged().unwrap();
+                        let expected = expected.to_tagged().unwrap();
+                        failures.push(format!("{} differs", case["name"]));
+                        eprintln!(
+                            "{} tagged actual={} expected={}",
+                            case["name"],
+                            serde_json::to_string(&actual).unwrap(),
+                            serde_json::to_string(&expected).unwrap()
+                        );
                     }
                     assert_eq!(
                         capture.strict_document().unwrap(),

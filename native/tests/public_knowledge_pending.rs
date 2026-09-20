@@ -28,8 +28,7 @@ fn ledger_case<'a>(ledgers: &'a Value, name: &str) -> &'a Value {
 }
 
 fn expected(entry: &Value, replacements: &[(&str, &Path)]) -> Value {
-    let mut text = entry["actual"]["stdout"].as_str().unwrap().to_owned();
-    for (token, path) in replacements {
+    fn resolved(path: &Path) -> String {
         let path = if path.exists() {
             path.canonicalize().unwrap()
         } else {
@@ -39,9 +38,36 @@ fn expected(entry: &Value, replacements: &[(&str, &Path)]) -> Value {
                 .unwrap()
                 .join(path.file_name().unwrap())
         };
-        text = text.replace(token, path.to_str().unwrap());
+        path.to_string_lossy().into_owned()
     }
-    serde_json::from_str(&text).unwrap()
+    fn replace(value: &mut Value, replacements: &[(&str, String)]) {
+        match value {
+            Value::String(text) => {
+                for (token, path) in replacements {
+                    *text = text.replace(token, path);
+                }
+            }
+            Value::Array(values) => {
+                for value in values {
+                    replace(value, replacements);
+                }
+            }
+            Value::Object(values) => {
+                for value in values.values_mut() {
+                    replace(value, replacements);
+                }
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) => {}
+        }
+    }
+    let mut expected: Value = serde_json::from_str(entry["actual"]["stdout"].as_str().unwrap())
+        .unwrap();
+    let replacements = replacements
+        .iter()
+        .map(|(token, path)| (*token, resolved(path)))
+        .collect::<Vec<_>>();
+    replace(&mut expected, &replacements);
+    expected
 }
 
 #[test]
