@@ -4,7 +4,7 @@ use crate::{
     Error, Result, require,
     value::{Date, DateTime, FiniteFloat, Integer, MAX_DEPTH, MAX_VALUES, TypedValue},
 };
-use libyaml_safer::{EventData as Event, Parser, ScalarStyle, Scanner, TokenData};
+use libyaml_safer::{EventData as Event, Mark, Parser, ScalarStyle, Scanner, TokenData};
 use num_bigint::BigInt;
 use regex::Regex;
 use std::{collections::BTreeSet, sync::LazyLock};
@@ -24,6 +24,13 @@ static TIMESTAMP: LazyLock<Regex> = LazyLock::new(|| {
 });
 fn invalid() -> Error {
     Error("invalid_history_yaml".into())
+}
+fn recursive_alias(anchor: &str, mark: Mark) -> Error {
+    Error(format!(
+        "recursive_yaml_alias: anchor={anchor} at line {} column {}; records are acyclic; recursive YAML aliases cannot be represented",
+        mark.line + 1,
+        mark.column + 1
+    ))
 }
 // Merge/value tags are meaningful only as mapping keys, before flattening.
 #[derive(Clone, Debug)]
@@ -381,21 +388,23 @@ struct Reader<'a> {
     expanded_bytes: usize,
 }
 impl<'a> Reader<'a> {
-    fn next(&mut self) -> Result<Event> {
-        let event = self.parser.parse().map_err(|_| invalid())?.data;
+    fn next(&mut self) -> Result<(Event, Mark)> {
+        let parsed = self.parser.parse().map_err(|_| invalid())?;
+        let mark = parsed.start_mark;
+        let event = parsed.data;
         let anchor = match &event {
             Event::Scalar { anchor, .. }
             | Event::SequenceStart { anchor, .. }
             | Event::MappingStart { anchor, .. } => anchor,
             Event::Alias { .. } if !self.ordinary_aliases => return Err(invalid()),
-            _ => return Ok(event),
+            _ => return Ok((event, mark)),
         };
         if let Some(anchor) = anchor {
             require(self.anchors.insert(anchor.clone()), "invalid_history_yaml")?;
         }
-        Ok(event)
+        Ok((event, mark))
     }
-    fn node(&mut self, event: Event, depth: usize) -> Result<Node> {
+    fn node(&mut self, (event, mark): (Event, Mark), depth: usize) -> Result<Node> {
         self.nodes += 1;
         // Source keys and merge syntax count here; detached values have their own exact budget.
         require(
@@ -412,7 +421,13 @@ impl<'a> Reader<'a> {
             Event::Alias { anchor } if self.ordinary_aliases => {
                 // Only completed anchors can be expanded: undefined and recursive
                 // aliases fail before cloning. Charge the complete expansion first.
-                let original = self.completed.get(&anchor).ok_or_else(invalid)?;
+                let original = self.completed.get(&anchor).ok_or_else(|| {
+                    if self.anchors.contains(&anchor) {
+                        recursive_alias(&anchor, mark)
+                    } else {
+                        invalid()
+                    }
+                })?;
                 let (nodes, bytes) = node_cost(original, depth)?;
                 self.nodes = self.nodes.saturating_add(nodes);
                 self.expanded_bytes = self.expanded_bytes.saturating_add(bytes);
@@ -448,7 +463,7 @@ impl<'a> Reader<'a> {
                 let mut values = Vec::new();
                 loop {
                     let event = self.next()?;
-                    if matches!(event, Event::SequenceEnd) {
+                    if matches!(event.0, Event::SequenceEnd) {
                         break;
                     }
                     values.push(self.node(event, depth + 1)?);
@@ -460,7 +475,7 @@ impl<'a> Reader<'a> {
                 let mut pairs = Vec::new();
                 loop {
                     let event = self.next()?;
-                    if matches!(event, Event::MappingEnd) {
+                    if matches!(event.0, Event::MappingEnd) {
                         break;
                     }
                     let key = self.node(event, depth + 1)?;
@@ -907,22 +922,22 @@ fn decode_node(raw: &[u8], mapping: bool, ordinary_aliases: bool) -> Result<(Opt
         expanded_bytes: 0,
     };
     require(
-        matches!(reader.next()?, Event::StreamStart { .. }),
+        matches!(reader.next()?.0, Event::StreamStart { .. }),
         "invalid_history_yaml",
     )?;
     let start = reader.next()?;
-    if !mapping && matches!(start, Event::StreamEnd) {
+    if !mapping && matches!(start.0, Event::StreamEnd) {
         return Ok((None, true));
     }
     require(
-        matches!(start, Event::DocumentStart { .. }),
+        matches!(start.0, Event::DocumentStart { .. }),
         "invalid_schema",
     )?;
     let event = reader.next()?;
     let node = reader.node(event, 0)?;
     require(
-        matches!(reader.next()?, Event::DocumentEnd { .. })
-            && matches!(reader.next()?, Event::StreamEnd),
+        matches!(reader.next()?.0, Event::DocumentEnd { .. })
+            && matches!(reader.next()?.0, Event::StreamEnd),
         "invalid_history_yaml",
     )?;
     Ok((Some(node), false))
@@ -1150,19 +1165,27 @@ mod ordinary_alias_tests {
     }
     #[test]
     fn ordinary_aliases_refuse_unknown_duplicate_and_recursive_anchors() {
-        for raw in [
-            b"x: *missing\n".as_slice(),
-            b"x: &x {next: *x}\n",
-            b"x: &x 1\ny: &x 2\n",
-            b"known: &x {p.a: *x}\n",
-            b"known: &x [*x]\n",
-            b"schema: &x {deps: *x}\n",
-            b"parameters: &x {p.value: *x}\n",
-        ] {
+        for raw in [b"x: *missing\n".as_slice(), b"x: &x 1\ny: &x 2\n"] {
             assert_eq!(
                 decode_ordinary_source_value(raw).unwrap_err().0,
                 "invalid_history_yaml"
             );
+        }
+        for (raw, expected) in [
+            (
+                b"x: &x {next: *x}\n".as_slice(),
+                "recursive_yaml_alias: anchor=x at line 1 column 14; records are acyclic; recursive YAML aliases cannot be represented",
+            ),
+            (
+                b"x: &x [*x]\n",
+                "recursive_yaml_alias: anchor=x at line 1 column 8; records are acyclic; recursive YAML aliases cannot be represented",
+            ),
+            (
+                b"parameters: &loop {p.value: *loop}\n",
+                "recursive_yaml_alias: anchor=loop at line 1 column 29; records are acyclic; recursive YAML aliases cannot be represented",
+            ),
+        ] {
+            assert_eq!(decode_ordinary_source_value(raw).unwrap_err().0, expected);
         }
     }
     #[test]

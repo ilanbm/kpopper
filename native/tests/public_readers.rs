@@ -45,7 +45,11 @@ fn recursive_aliases_fail_closed_in_core_and_custom_collections() {
             assert!(!output.status.success(), "{args:?}");
             let diagnostic = [output.stdout, output.stderr].concat();
             assert!(
-                String::from_utf8_lossy(&diagnostic).contains("invalid_history_yaml"),
+                String::from_utf8_lossy(&diagnostic).contains("recursive_yaml_alias: anchor=x")
+                    && String::from_utf8_lossy(&diagnostic).contains("line 1 column")
+                    && String::from_utf8_lossy(&diagnostic).contains(
+                        "records are acyclic; recursive YAML aliases cannot be represented"
+                    ),
                 "{args:?}: {}",
                 String::from_utf8_lossy(&diagnostic)
             );

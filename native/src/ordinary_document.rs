@@ -572,7 +572,10 @@ mod tests {
 
         let hypotheses = physical(&directory, &mut Inventory::default()).unwrap();
         let item = map(&map(&hypotheses).unwrap()["cycle"]).unwrap();
-        assert_eq!(text(&item["error"]).unwrap(), "invalid_history_yaml");
+        assert_eq!(
+            text(&item["error"]).unwrap(),
+            "recursive_yaml_alias: anchor=loop at line 1 column 29; records are acyclic; recursive YAML aliases cannot be represented"
+        );
         assert_eq!(item["doc"], V::Map(Map::new()));
     }
 }
