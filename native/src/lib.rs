@@ -44,6 +44,7 @@ mod history_identity_text;
 pub mod history_migration;
 mod history_migration_copy;
 mod history_migration_source;
+pub mod history_native_declaration;
 pub mod history_paths;
 pub mod history_preparation;
 pub mod history_projection;

@@ -850,6 +850,9 @@ fn main() {
                 .clone()
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
+            if options.operation.as_deref() == Some("capabilities") {
+                return kpop_native::public_history::run(options, &cwd);
+            }
             if cwd.join(".kpopper/native-feasibility.json").is_file() {
                 require(
                     !options.selects_public_operation(),
