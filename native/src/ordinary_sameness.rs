@@ -9,6 +9,7 @@ use crate::{
     reasoning_fields as F, reasoning_language as L,
     value::TypedValue as V,
 };
+#[cfg(test)]
 use serde_json::{Value as J, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
@@ -224,6 +225,7 @@ pub(crate) struct Candidate {
     pub score: f64,
 }
 impl Candidate {
+    #[cfg(test)]
     pub(crate) fn json(&self) -> J {
         json!({"id":self.id,"rank":self.rank,"reasons":self.reasons,"score":self.score})
     }
@@ -349,6 +351,7 @@ pub(crate) struct Sources<'a> {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Notice {
     pub refusals: Vec<String>,
+    #[cfg(test)]
     pub candidates: Vec<Candidate>,
     pub text: String,
 }
@@ -466,12 +469,10 @@ pub(crate) fn nearest_existing_from_sources(
     }
     Ok(Notice {
         refusals: vec![],
+        #[cfg(test)]
         candidates,
         text,
     })
-}
-pub(crate) fn nearest_existing(reader: &Reader<'_>, action: &V) -> Result<Notice> {
-    nearest_existing_from_sources(reader, action, &Sources::default())
 }
 
 #[cfg(test)]
