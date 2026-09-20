@@ -12,6 +12,8 @@ const RESERVATION_SECONDS: f64 = 180.0;
 const SEND_GRACE_SECONDS: f64 = 90.0;
 const MAX_RECIPIENT_CHARS: usize = 512;
 const MAX_NOTICES: usize = 8;
+const MAX_AFFECTED_CHARS: usize = 1000;
+const MAX_TARGET_CHARS: usize = 256;
 const FINAL: &[&str] = &["sent", "quiet", "failed", "unknown"];
 
 fn hex(value: &str, length: usize) -> bool {
@@ -197,7 +199,7 @@ pub fn capture(
 ) -> Result<J> {
     recipient(to)?;
     let (record, _, _) = O::selected_record(record, cwd)?;
-    let layout = S::Layout::create(&record, state_dir)?;
+    let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let now = S::now();
     let (captured, job, dispatch) = {
         let _lock = S::FileLock::acquire(&layout.root.join("delivery.lock"))?;
@@ -295,11 +297,18 @@ fn message(notices: &[J], record: &Path) -> String {
                     .join(", ")
             })
             .unwrap_or_default();
+        let target = notice["target"]
+            .as_str()
+            .unwrap_or("unspecified")
+            .chars()
+            .take(MAX_TARGET_CHARS)
+            .collect::<String>();
+        let affected = affected.chars().take(MAX_AFFECTED_CHARS).collect::<String>();
         lines.push(format!(
             "- signal {} [{}] target={}; affected={}: {} | source: {}",
             notice["id"].as_str().unwrap_or(""),
             notice["category"].as_str().unwrap_or("attention"),
-            notice["target"].as_str().unwrap_or("unspecified"),
+            target,
             if affected.is_empty() {
                 "unresolved"
             } else {
@@ -336,7 +345,7 @@ pub fn wait(
         "timeout must be between 0 and 3600 seconds",
     )?;
     let (record, _, _) = O::selected_record(record, cwd)?;
-    let layout = S::Layout::create(&record, state_dir)?;
+    let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let token = uuid::Uuid::new_v4().simple().to_string();
     let mut job = {
         let _lock = S::FileLock::acquire(&layout.root.join("delivery.lock"))?;
@@ -528,7 +537,7 @@ pub fn complete(
         "outcome must be sent, failed, or unknown",
     )?;
     let (record, _, _) = O::selected_record(record, cwd)?;
-    let layout = S::Layout::create(&record, state_dir)?;
+    let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let _lock = S::FileLock::acquire(&layout.root.join("delivery.lock"))?;
     let path = job_path(&layout, id);
     let mut job = validated_job(
@@ -579,6 +588,25 @@ pub fn complete(
     }
     S::save_json(&path, &job)?;
     Ok(public(&job, None))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attention_message_bounds_target_and_affected_text() {
+        let notice = json!({
+            "id": "a", "category": "attention",
+            "target": "t".repeat(MAX_TARGET_CHARS + 20),
+            "affected_judgments": ["a".repeat(MAX_AFFECTED_CHARS + 20)],
+            "reason": "reason", "source_quote": "quote"
+        });
+        let rendered = message(&[notice], Path::new("GROUNDING.yaml"));
+        assert!(rendered.contains(&format!("target={}", "t".repeat(MAX_TARGET_CHARS))));
+        assert!(!rendered.contains(&"t".repeat(MAX_TARGET_CHARS + 1)));
+        assert!(rendered.contains(&"a".repeat(MAX_AFFECTED_CHARS)));
+    }
 }
 
 /// Suppress fallback-hook notices only while a valid native reservation or

@@ -154,7 +154,7 @@ fn commit(
         ReceiptFamily::Authoring => A::commit(store, mutation, runtime, verify),
     }
 }
-fn journal(store: &Store) -> String {
+pub(crate) fn journal(store: &Store) -> String {
     format!("{}.history", store.layout.journal)
 }
 fn retained_journal(error: crate::Error, journal: &Path) -> crate::Error {

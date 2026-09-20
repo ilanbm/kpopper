@@ -17,6 +17,7 @@ pub const TERMINAL: &[&str] = &[
     "error",
 ];
 pub const ACTIVE: &[&str] = &["captured", "processing", "recovery_required"];
+pub const AUTO_STATES: &[&str] = &["captured", "processing"];
 pub const DIRECTORIES: &[&str] = &[
     "envelopes",
     "sources",
@@ -38,12 +39,16 @@ pub fn now() -> f64 {
 }
 
 pub fn resolve_root(record: &Path, selected: Option<&Path>) -> Result<PathBuf> {
+    resolve_root_from(record, selected, &std::env::current_dir()?)
+}
+
+pub fn resolve_root_from(record: &Path, selected: Option<&Path>, cwd: &Path) -> Result<PathBuf> {
     let record = record.canonicalize()?;
     let root = if let Some(path) = selected {
         if path.is_absolute() {
             path.to_path_buf()
         } else {
-            std::env::current_dir()?.join(path)
+            cwd.join(path)
         }
     } else {
         let base = std::env::var_os("XDG_STATE_HOME")
@@ -120,8 +125,11 @@ impl Drop for FileLock {
 
 impl Layout {
     pub fn create(record: &Path, state_dir: Option<&Path>) -> Result<Self> {
+        Self::create_from(record, state_dir, &std::env::current_dir()?)
+    }
+    pub fn create_from(record: &Path, state_dir: Option<&Path>, cwd: &Path) -> Result<Self> {
         let record = record.canonicalize()?;
-        let root = resolve_root(&record, state_dir)?;
+        let root = resolve_root_from(&record, state_dir, cwd)?;
         require(
             !root.exists() || root.is_dir(),
             "state path exists and is not a directory",
@@ -164,8 +172,11 @@ impl Layout {
     }
 
     pub fn existing(record: &Path, state_dir: Option<&Path>) -> Result<Option<Self>> {
+        Self::existing_from(record, state_dir, &std::env::current_dir()?)
+    }
+    pub fn existing_from(record: &Path, state_dir: Option<&Path>, cwd: &Path) -> Result<Option<Self>> {
         let record = record.canonicalize()?;
-        let root = resolve_root(&record, state_dir)?;
+        let root = resolve_root_from(&record, state_dir, cwd)?;
         let root = if root.exists() {
             root.canonicalize()?
         } else {
@@ -233,4 +244,23 @@ pub fn canonical_json(value: &J) -> Result<Vec<u8>> {
     let mut raw = serde_json::to_vec(value)?;
     raw.push(b'\n');
     Ok(raw)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_state_dir_uses_supplied_workspace_cwd() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        let elsewhere = temp.path().join("elsewhere");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let record = workspace.join("GROUNDING.yaml");
+        std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
+        let root = resolve_root_from(&record, Some(Path::new("relstate")), &workspace).unwrap();
+        assert_eq!(root, workspace.join("relstate"));
+        assert_ne!(root, elsewhere.join("relstate"));
+    }
 }

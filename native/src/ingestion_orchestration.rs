@@ -125,6 +125,12 @@ fn bound_target(
 fn receipt_id(event: &str) -> String {
     crate::identity::sha256(format!("receipt\0{event}").as_bytes())[..32].into()
 }
+
+fn validated_handled(value: J) -> Result<J> {
+    require(value.is_object(), "invalid handled state")?;
+    require(value.get("signals").is_some_and(J::is_object), "invalid handled state")?;
+    Ok(value)
+}
 fn signal_id(event: &str, question: &str) -> String {
     crate::identity::sha256(format!("{event}\0question\0{question}").as_bytes())[..32].into()
 }
@@ -170,15 +176,42 @@ fn has_work(layout: &S::Layout) -> Result<bool> {
         event
             .get("state")
             .and_then(J::as_str)
-            .is_some_and(|state| S::ACTIVE.contains(&state))
+            .is_some_and(|state| S::AUTO_STATES.contains(&state))
     }))
 }
 
 fn lease_active(value: Option<&J>) -> bool {
-    value
-        .and_then(|lease| lease.get("expires_at"))
-        .and_then(J::as_f64)
-        .is_some_and(|deadline| deadline > S::now())
+    let Some(lease) = value else { return false };
+    let Some(pid) = lease.get("pid").and_then(J::as_u64) else {
+        return lease.get("expires_at").and_then(J::as_f64).is_some_and(|d| d > S::now());
+    };
+    if pid == 0 { return false; }
+    #[cfg(unix)]
+    let alive = match nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(pid.min(i32::MAX as u64) as i32),
+        None,
+    ) {
+        Ok(()) => true,
+        Err(nix::errno::Errno::ESRCH) => false,
+        Err(nix::errno::Errno::EPERM) => true,
+        Err(_) => true,
+    };
+    #[cfg(windows)]
+    let alive = std::env::var_os("SystemRoot")
+        .map(std::path::PathBuf::from)
+        .map(|root| root.join("System32/tasklist.exe"))
+        .and_then(|exe| std::process::Command::new(exe).args(["/FO", "CSV", "/NH", "/FI", &format!("PID eq {pid}")]).output().ok())
+        .is_some_and(|output| String::from_utf8_lossy(&output.stdout).lines().any(|line| line.split(',').nth(1).and_then(|v| v.trim_matches('"').parse::<u64>().ok()) == Some(pid)));
+    #[cfg(not(any(unix, windows)))]
+    let alive = false;
+    alive || lease.get("expires_at").and_then(J::as_f64).is_some_and(|d| d > S::now() && lease.get("pid").is_none())
+}
+
+fn record_writer_journal(record: &Path) -> bool {
+    let Ok(store) = crate::history_store::Store::new(record) else { return false };
+    let primary = store.root.join(&store.layout.journal);
+    let shared = store.root.join(crate::direct_history::journal(&store));
+    primary.is_file() || shared.is_file()
 }
 
 fn reserve_worker(layout: &S::Layout) -> Result<Option<String>> {
@@ -241,7 +274,7 @@ pub fn capture(
 ) -> Result<J> {
     let envelope = validate_envelope(raw)?;
     let (record, policy, project_root) = selected_record(record, cwd)?;
-    let layout = S::Layout::create(&record, state_dir)?;
+    let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let record = layout.record.clone();
     let (target_snapshot, capture_issue) =
         match crate::public_update::capture_target(&envelope, &record, cwd) {
@@ -262,7 +295,7 @@ pub fn capture(
             && event
                 .get("state")
                 .and_then(J::as_str)
-                .is_some_and(|state| S::ACTIVE.contains(&state))
+                .is_some_and(|state| S::AUTO_STATES.contains(&state))
         {
             start_worker_locked(&layout)?;
         }
@@ -314,7 +347,7 @@ pub fn process(
     maximum: usize,
 ) -> Result<Vec<J>> {
     let (record, captured_policy, _) = selected_record(record, cwd)?;
-    let layout = S::Layout::create(&record, state_dir)?;
+    let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let record = layout.record.clone();
     let _processor = S::FileLock::acquire(&layout.root.join("processor.lock"))?;
     let mut output = Vec::new();
@@ -393,8 +426,7 @@ pub fn process(
                 output.push(receipt);
             }
             Err(error) => {
-                let journal = layout.path("journals", &id);
-                if journal.is_file() {
+                if record_writer_journal(&record) {
                     event["state"] = json!("recovery_required");
                     event["reason"] = json!(error.to_string());
                     S::save_json(&layout.path("events", &id), &event)?;
@@ -415,7 +447,7 @@ pub fn status(
     cwd: &Path,
 ) -> Result<Option<J>> {
     let (record, _, _) = selected_record(record, cwd)?;
-    let Some(layout) = S::Layout::existing(&record, state_dir)? else {
+    let Some(layout) = S::Layout::existing_from(&record, state_dir, cwd)? else {
         return Ok(event_id.map(|_| J::Null).or(Some(J::Array(vec![]))));
     };
     if let Some(id) = event_id {
@@ -443,11 +475,13 @@ pub fn pending(
     include_handled: bool,
 ) -> Result<Vec<J>> {
     let (record, _, _) = selected_record(record, cwd)?;
-    let Some(layout) = S::Layout::existing(&record, state_dir)? else {
+    let Some(layout) = S::Layout::existing_from(&record, state_dir, cwd)? else {
         return Ok(vec![]);
     };
-    let handled =
-        S::read_json(&layout.root.join("handled.json"))?.unwrap_or_else(|| json!({"signals":{}}));
+    let handled = validated_handled(
+        S::read_json(&layout.root.join("handled.json"))?
+            .unwrap_or_else(|| json!({"signals":{}})),
+    )?;
     let mut signals = Vec::new();
     let raw = std::fs::read(&record);
     for entry in std::fs::read_dir(layout.root.join("signals"))? {
@@ -552,7 +586,9 @@ pub fn acknowledge(
         require(layout.path("signals", id).is_file(), "unknown signal ID")?;
     }
     let path = layout.root.join("handled.json");
-    let mut handled = S::read_json(&path)?.unwrap_or_else(|| json!({"signals":{}}));
+    let mut handled = validated_handled(
+        S::read_json(&path)?.unwrap_or_else(|| json!({"signals":{}})),
+    )?;
     for id in ids {
         handled["signals"][id] = json!(S::now());
     }
@@ -646,5 +682,54 @@ mod tests {
         assert!(start_worker_with(&layout, &missing).is_err());
         assert!(!layout.root.join("worker.lease").exists());
         assert!(reserve_worker(&layout).unwrap().is_some());
+    }
+
+    #[test]
+    fn recovery_required_is_not_automatic_work() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("GROUNDING.yaml");
+        std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
+        let layout = S::Layout::create(&record, Some(&temp.path().join("state"))).unwrap();
+        S::save_json(&layout.path("events", "e"), &json!({"event_id":"e","state":"recovery_required","order":1})).unwrap();
+        assert!(!has_work(&layout).unwrap());
+    }
+
+    #[test]
+    fn dead_worker_pid_does_not_hold_lease() {
+        let value = json!({"pid": 4_294_967_295u64, "expires_at": S::now() + 300.0});
+        assert!(!lease_active(Some(&value)));
+    }
+
+    #[test]
+    fn malformed_handled_state_is_rejected_without_indexing() {
+        assert!(validated_handled(json!({"signals": 5})).is_err());
+        assert!(validated_handled(json!(5)).is_err());
+    }
+
+    #[test]
+    fn writer_journal_detection_uses_primary_and_shared_layouts() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("GROUNDING.yaml");
+        std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
+        let store = crate::history_store::Store::new(&record).unwrap();
+        assert!(!record_writer_journal(&record));
+        std::fs::create_dir_all(store.root.join(&store.layout.journal).parent().unwrap()).unwrap();
+        std::fs::write(store.root.join(&store.layout.journal), b"pending").unwrap();
+        assert!(record_writer_journal(&record));
+        std::fs::remove_file(store.root.join(&store.layout.journal)).unwrap();
+        std::fs::create_dir_all(
+            store
+                .root
+                .join(crate::direct_history::journal(&store))
+                .parent()
+                .unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            store.root.join(crate::direct_history::journal(&store)),
+            b"pending",
+        )
+        .unwrap();
+        assert!(record_writer_journal(&record));
     }
 }
