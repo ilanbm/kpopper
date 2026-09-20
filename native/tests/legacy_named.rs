@@ -72,6 +72,13 @@ fn named_writes_match_complete_python_commands_and_record_images() {
             case["before"].as_str().unwrap(),
         )
         .unwrap();
+        if let Some(extra) = case["extra_files"].as_object() {
+            for (path, content) in extra {
+                let path = root.join(path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, content.as_str().unwrap()).unwrap();
+            }
+        }
         if let Some(hyp) = case["hypothesis"].as_str() {
             let path = root.join(case["hypothesis_path"].as_str().unwrap());
             fs::create_dir_all(path.parent().unwrap()).unwrap();

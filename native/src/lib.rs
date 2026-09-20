@@ -70,6 +70,7 @@ mod ordinary_counts;
 pub mod ordinary_hub;
 pub mod ordinary_reader;
 pub mod ordinary_runtime;
+pub(crate) mod ordinary_write_report;
 pub mod pending_bundle;
 pub mod pending_control;
 pub mod pending_publication;

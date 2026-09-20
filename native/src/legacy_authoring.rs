@@ -1795,7 +1795,18 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
         vec![],
         runtime.as_ref(),
     )?;
-    output.extend(report_lines(&kind, &id, &after_projection.base)?);
+    let report_sources = if kind == "review" {
+        crate::ordinary_write_report::Ancillary::default()
+    } else {
+        crate::ordinary_write_report::Ancillary::capture(entry, &mut inventory)?
+    };
+    output.extend(crate::ordinary_write_report::render(
+        &kind,
+        &id,
+        &after_projection.base,
+        None,
+        &report_sources,
+    )?);
 
     let root = common_root(entry, &document.members)?;
     let entry_relative = relative(&root, entry)?;
@@ -1819,6 +1830,22 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
         ("kind", s("direct/v1")),
         ("transaction_root", s(name(&absolute(&root)?)?)),
         ("record_members", V::Map(record_members)),
+        ("policy", route.config().clone()),
+        (
+            "input_files",
+            V::Map(
+                report_sources
+                    .inputs
+                    .iter()
+                    .map(|(path, digest)| {
+                        Ok((
+                            relative(&root, path)?,
+                            digest.as_deref().map(s).unwrap_or(V::Null),
+                        ))
+                    })
+                    .collect::<Result<Map>>()?,
+            ),
+        ),
     ]);
     let capabilities = crate::reasoning_fields::capabilities(&source, None)?;
     let receipt = T::semantic_receipt(
@@ -1891,79 +1918,6 @@ impl IntoList for V {
     }
 }
 
-fn report_lines(
-    kind: &str,
-    id: &str,
-    world: &crate::public_ordinary_readers::World<'_>,
-) -> Result<Vec<String>> {
-    let after = &world.reader;
-    let deps = text(&after.fields()["deps"])?;
-    if kind == "review" {
-        let (state, why) = world.state(id)?;
-        return Ok(vec![format!(
-            "  {id} {}: {why}",
-            state.to_ascii_lowercase()
-        )]);
-    }
-    let mut out = Vec::new();
-    let mut reached = Vec::new();
-    for (candidate, body) in after.raw() {
-        if let Ok(body) = map(body)
-            && let Some(V::List(values)) = body.get(deps)
-            && values.iter().any(|value| string_is(value, id))
-        {
-            reached.push(candidate.clone());
-        }
-    }
-    if kind == "add"
-        && after
-            .raw()
-            .get(id)
-            .and_then(|body| map(body).ok())
-            .is_some_and(|body| body.contains_key(deps))
-    {
-        let (state, why) = world.state(id)?;
-        out.push(format!(
-            "the new judgment {}: {why}",
-            state.to_ascii_lowercase()
-        ));
-        reached.retain(|candidate| candidate != id);
-    }
-    if !reached.is_empty() {
-        out.push("rests on it:".into());
-        reached.sort();
-        for candidate in reached {
-            let (state, why) = world.state(&candidate)?;
-            out.push(format!("  {state:<9} {candidate}: {why}"));
-        }
-    } else if kind == "set" {
-        out.push("nothing rests on it".into());
-    }
-    let mut moved = 0;
-    let mut falsified = 0;
-    let mut flagged = 0;
-    for body in after.raw().values() {
-        if map(body).is_ok_and(|body| body.contains_key(deps)) {
-            let flags = crate::ordinary_counts::flags(after, body)?;
-            moved += usize::from(flags.contains("moved"));
-            falsified += usize::from(flags.contains("falsified"));
-            flagged += usize::from(!flags.is_empty());
-        }
-    }
-    let suffix = if flagged == 0 {
-        String::new()
-    } else {
-        format!(" ({moved} moved, {falsified} falsified)")
-    };
-    out.push(String::new());
-    out.push(format!(
-        "the record needs a person on {flagged} judgment{}{} - check says the rest",
-        if flagged == 1 { "" } else { "s" },
-        suffix
-    ));
-    Ok(out)
-}
-
 fn verify_prepared(prepared: &Prepared, route: &WriteRoute, inventory: &Inventory) -> Result<()> {
     route.verify()?;
     inventory.verify()?;
@@ -2017,6 +1971,9 @@ fn verify_recovery(route: &WriteRoute, root: &Path, mutation: &PreparedMutation)
     )?;
     let data = mutation.to_data();
     let baseline = map(field(map(&data)?, "baseline")?)?;
+    if let Some(policy) = baseline.get("policy") {
+        require(policy == route.config(), "project_route_changed")?;
+    }
     legacy_named::verify_recovery(route, root, mutation, baseline)?;
     require(
         baseline
@@ -2024,6 +1981,23 @@ fn verify_recovery(route: &WriteRoute, root: &Path, mutation: &PreparedMutation)
             .is_some_and(|kind| string_is(kind, "direct/v1")),
         "unsupported public recovery journal",
     )?;
+    if let Some(inputs) = baseline.get("input_files") {
+        for (path, digest) in map(inputs)? {
+            let current = F::read(&F::target(root, path)?)?;
+            let matches =
+                if let Some(image) = mutation.files().iter().find(|image| image.path == *path) {
+                    current == image.before || current == image.after
+                } else {
+                    current
+                        .as_deref()
+                        .map(crate::identity::sha256)
+                        .map(|value| s(&value))
+                        .unwrap_or(V::Null)
+                        == *digest
+                };
+            require(matches, "concurrent_edit: captured report input changed")?;
+        }
+    }
     let expected = map(field(baseline, "record_members")?)?;
     let mut inventory = Inventory::default();
     let actual = source_document::members(route.paths(), &mut inventory)?;
@@ -2297,6 +2271,74 @@ mod tests {
             fs::read_to_string(entry).unwrap(),
             "known:\n  p.a: {v: 7}\n"
         );
+    }
+
+    #[test]
+    fn report_inputs_are_bound_before_publication_and_during_recovery() {
+        for existing in [false, true] {
+            for before_publication in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                let entry = temp.path().join("GROUNDING.yaml");
+                let brief = temp.path().join(".kpopper/view.yaml");
+                fs::write(&entry, "known:\n  p.a: {v: 1}\n").unwrap();
+                if existing {
+                    fs::create_dir_all(brief.parent().unwrap()).unwrap();
+                    fs::write(&brief, "sections: []\n").unwrap();
+                }
+                let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+                let action = object([
+                    ("kind", s("set")),
+                    ("id", s("p.a")),
+                    ("value", n("2")),
+                    ("as_of", s("2026-09-19")),
+                    ("why", V::Null),
+                    ("into", V::Null),
+                    ("hypothesis", V::Null),
+                    ("source", V::Null),
+                    ("at", V::Null),
+                ]);
+                let Preparation::Mutation(prepared) = prepare(&action, &route, None).unwrap()
+                else {
+                    panic!("expected mutation")
+                };
+                let record_before = fs::read(&entry).unwrap();
+                if !before_publication {
+                    let inventory = legacy_named::prepare_directories(&prepared).unwrap();
+                    let mut verify = |_: &V| verify_prepared(&prepared, &route, &inventory);
+                    let mut stop = |_: &V| Err(error("retained_after_write"));
+                    assert_eq!(
+                        F::publish_legacy(
+                            &prepared.root,
+                            &prepared.journal,
+                            &prepared.mutation,
+                            &mut verify,
+                            Some(&mut stop)
+                        )
+                        .unwrap_err()
+                        .0,
+                        "retained_after_write"
+                    );
+                }
+                fs::create_dir_all(brief.parent().unwrap()).unwrap();
+                fs::write(&brief, "sections: [{title: changed, text: preserve}]\n").unwrap();
+                if before_publication {
+                    assert!(publish(prepared, &route).is_err());
+                    assert_eq!(fs::read(&entry).unwrap(), record_before);
+                } else {
+                    let journal = prepared.root.join(&prepared.journal);
+                    let retained = fs::read(&journal).unwrap();
+                    let record_after = fs::read(&entry).unwrap();
+                    drop(route);
+                    assert!(recover(std::slice::from_ref(&entry), temp.path(), false).is_err());
+                    assert_eq!(fs::read(&entry).unwrap(), record_after);
+                    assert_eq!(fs::read(journal).unwrap(), retained);
+                }
+                assert_eq!(
+                    fs::read_to_string(brief).unwrap(),
+                    "sections: [{title: changed, text: preserve}]\n"
+                );
+            }
+        }
     }
 
     #[test]

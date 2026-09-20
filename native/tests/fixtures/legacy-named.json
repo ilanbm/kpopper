@@ -584,5 +584,191 @@
       "PROVENANCE.yaml": "meta:\n  updated: 2026-09-19\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 4\n    of: 2026-09-19\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
       "PROVENANCE.d/alpha.yaml": "known: [invalid yaml"
     }
+  },
+  {
+    "name": "GROUNDING.yaml:report-derived",
+    "record": "GROUNDING.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+    "hypothesis": null,
+    "extra_files": {},
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 2 (as of 2026-09-19)\nworked out from it: m.total\nrests on it:\n  HOLDS     d.flag: wrong_if does not hold (p.y > 100)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "known:\n  p.x: {v: 2, of: 2026-09-19}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:report-brief",
+    "record": "GROUNDING.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+    "hypothesis": null,
+    "extra_files": {
+      ".kpopper/view.yaml": "sections:\n  - title: Direct\n    text: 'saw {{ p.x }} and {{ m.total }}'\n    seen: {p.x: {b: 2, a: 1}}\ntabs:\n  - sections:\n      - title: Tab copy\n        text: preserved\n        seen: {m.total: 2}\n"
+    },
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 2 (as of 2026-09-19)\nworked out from it: m.total\nrests on it:\n  HOLDS     d.flag: wrong_if does not hold (p.y > 100)\ntext that saw it:\n  'Direct' saw p.x = {'b': 2, 'a': 1}, m.total (never read against it) - read it again, then: review \"Direct\"\n  'Tab copy' saw m.total = 2 - read it again, then: review \"Tab copy\"\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "known:\n  p.x: {v: 2, of: 2026-09-19}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+      ".kpopper/view.yaml": "sections:\n  - title: Direct\n    text: 'saw {{ p.x }} and {{ m.total }}'\n    seen: {p.x: {b: 2, a: 1}}\ntabs:\n  - sections:\n      - title: Tab copy\n        text: preserved\n        seen: {m.total: 2}\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:report-retained",
+    "record": "GROUNDING.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n",
+    "hypothesis": null,
+    "extra_files": {
+      ".kpopper/replaced.yaml": "d.old:\n  - verdict: old\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    day: 2026-09-17\n  - same_as: 1\n    day: 2026-09-18\n  - verdict: new\n    rests_on: [p.y]\n    day: 2026-09-19\n"
+    },
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 2 (as of 2026-09-19)\nnothing rests on it\n  listened to by nothing standing - d.old listened until 2026-09-18: pull d.old --history\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "known:\n  p.x: {v: 2, of: 2026-09-19}\n",
+      ".kpopper/replaced.yaml": "d.old:\n  - verdict: old\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    day: 2026-09-17\n  - same_as: 1\n    day: 2026-09-18\n  - verdict: new\n    rests_on: [p.y]\n    day: 2026-09-19\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:report-named-derived",
+    "record": "GROUNDING.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+    "hypothesis": null,
+    "extra_files": {},
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "--hypothesis",
+      "alpha",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "carry p.x into known, its first entry of hypothesis alpha\nset p.x in hypothesis alpha: 1 -> 2 (as of 2026-09-19)\nworked out from it: m.total\nrests on it, under alpha:\n  HOLDS     d.flag: wrong_if does not hold (p.y > 100)\n\nthe base is untouched; alpha holds 1 entry and 0 judgments\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.x: {v: 2, of: 2026-09-19}\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:report-derived",
+    "record": "PROVENANCE.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+    "hypothesis": null,
+    "extra_files": {},
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 2 (as of 2026-09-19)\nworked out from it: m.total\nrests on it:\n  HOLDS     d.flag: wrong_if does not hold (p.y > 100)\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "known:\n  p.x: {v: 2, of: 2026-09-19}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:report-brief",
+    "record": "PROVENANCE.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+    "hypothesis": null,
+    "extra_files": {
+      "PROVENANCE.view.yaml": "sections:\n  - title: Direct\n    text: 'saw {{ p.x }} and {{ m.total }}'\n    seen: {p.x: {b: 2, a: 1}}\ntabs:\n  - sections:\n      - title: Tab copy\n        text: preserved\n        seen: {m.total: 2}\n"
+    },
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 2 (as of 2026-09-19)\nworked out from it: m.total\nrests on it:\n  HOLDS     d.flag: wrong_if does not hold (p.y > 100)\ntext that saw it:\n  'Direct' saw p.x = {'b': 2, 'a': 1}, m.total (never read against it) - read it again, then: review \"Direct\"\n  'Tab copy' saw m.total = 2 - read it again, then: review \"Tab copy\"\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "known:\n  p.x: {v: 2, of: 2026-09-19}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+      "PROVENANCE.view.yaml": "sections:\n  - title: Direct\n    text: 'saw {{ p.x }} and {{ m.total }}'\n    seen: {p.x: {b: 2, a: 1}}\ntabs:\n  - sections:\n      - title: Tab copy\n        text: preserved\n        seen: {m.total: 2}\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:report-retained",
+    "record": "PROVENANCE.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n",
+    "hypothesis": null,
+    "extra_files": {
+      "PROVENANCE.replaced.yaml": "d.old:\n  - verdict: old\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    day: 2026-09-17\n  - same_as: 1\n    day: 2026-09-18\n  - verdict: new\n    rests_on: [p.y]\n    day: 2026-09-19\n"
+    },
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 2 (as of 2026-09-19)\nnothing rests on it\n  listened to by nothing standing - d.old listened until 2026-09-18: pull d.old --history\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "known:\n  p.x: {v: 2, of: 2026-09-19}\n",
+      "PROVENANCE.replaced.yaml": "d.old:\n  - verdict: old\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    day: 2026-09-17\n  - same_as: 1\n    day: 2026-09-18\n  - verdict: new\n    rests_on: [p.y]\n    day: 2026-09-19\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:report-named-derived",
+    "record": "PROVENANCE.yaml",
+    "before": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+    "hypothesis": null,
+    "extra_files": {},
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--as-of",
+      "2026-09-19",
+      "--hypothesis",
+      "alpha",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "carry p.x into known, its first entry of hypothesis alpha\nset p.x in hypothesis alpha: 1 -> 2 (as of 2026-09-19)\nworked out from it: m.total\nrests on it, under alpha:\n  HOLDS     d.flag: wrong_if does not hold (p.y > 100)\n\nthe base is untouched; alpha holds 1 entry and 0 judgments\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "known:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 6, of: 2026-09-01}\n  m.total: {rule: p.x + 1}\njudgments:\n  d.flag:\n    verdict: keep\n    rests_on: [p.y, m.total]\n    seen: {p.y: 0, m.total: 2}\n    wrong_if: p.y > 100\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.x: {v: 2, of: 2026-09-19}\n"
+    }
   }
 ]

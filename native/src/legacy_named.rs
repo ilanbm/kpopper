@@ -447,16 +447,13 @@ pub(super) fn prepare(
         vec![],
         runtime.as_ref(),
     )?;
-    let mut report = report_lines(&kind, &id, &projected.base)?;
-    if kind != "review" {
-        report.truncate(report.len().saturating_sub(2));
-    }
-    for line in &mut report {
-        if line == "rests on it:" {
-            *line = format!("rests on it, under {group}:");
-        }
-    }
-    output.extend(report);
+    output.extend(crate::ordinary_write_report::render(
+        &kind,
+        &id,
+        &projected.base,
+        Some(&group),
+        &crate::ordinary_write_report::Ancillary::default(),
+    )?);
     let judgments = after_entries
         .values()
         .filter(|(_, b)| map(b).is_ok_and(|m| m.contains_key(deps)))
