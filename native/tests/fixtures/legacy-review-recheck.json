@@ -67,5 +67,68 @@
     "stdout": "set p.alpha: \"the quarterly retention figure measured by the analytics pipeline on the second cohort\" -> \"the quarterly retention figure measured by the analytics pipeline on the third cohort\" (as of 2026-09-19)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.alpha > 9) - broken by its own condition\n\nthe record needs a person on 1 judgment (0 moved, 1 falsified) - check says the rest\n",
     "stderr": "",
     "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"the quarterly retention figure measured by the analytics pipeline on the third cohort\"\n    of: 2026-09-19\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.alpha]\n    seen: {p.alpha: \"the quarterly retention figure measured by the analytics pipeline on the first cohort\"}\n    wrong_if: p.alpha > 9\n    reviewed: 2026-09-01\n"
+  },
+  {
+    "name": "flow-without-date",
+    "before": "known:\n  p.a: {v: 1, note: keep}\njudgments:\n  d.x: {verdict: keep, rests_on: [p.a], seen: {p.a: 1}, wrong_if: p.a == 9}\n",
+    "args": [
+      "set",
+      "p.a",
+      "7",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "set p.a: 1 -> 7 (as of 2026-09-19)\nrests on it:\n  MUTED     d.x: p.a moved 1 -> 7, inside wrong_if (p.a == 9) - nothing is asked\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "after": "known:\n  p.a: {v: 7, of: \"2026-09-19\", note: keep}\njudgments:\n  d.x: {verdict: keep, rests_on: [p.a], seen: {p.a: 1}, wrong_if: p.a == 9}\n"
+  },
+  {
+    "name": "long-never-seen",
+    "before": "known:\n  p.a: {v: 1}\n  p.b: {v: the quarterly retention figure measured by the analytics pipeline on the first cohort}\njudgments:\n  d.x:\n    verdict: keep\n    rests_on: [p.a,p.b]\n    seen: {p.a: 1}\n    wrong_if: p.a == 9\n",
+    "args": [
+      "review",
+      "d.x",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "review d.x: seen rewritten from what the record holds (2026-09-19)\n  p.b: the quarterly retention figure measured… (never checked against it before)\n  d.x holds: wrong_if does not hold (p.a == 9)\n",
+    "stderr": "",
+    "after": "known:\n  p.a: {v: 1}\n  p.b: {v: the quarterly retention figure measured by the analytics pipeline on the first cohort}\njudgments:\n  d.x:\n    verdict: keep\n    rests_on: [p.a,p.b]\n    seen:\n      p.a: 1\n      p.b: \"the quarterly retention figure measured by the analytics pipeline on the first cohort\"\n    wrong_if: p.a == 9\n"
+  },
+  {
+    "name": "missing-predicate",
+    "before": "known:\n  p.a: {v: 1}\njudgments:\n  d.x: {verdict: keep, rests_on: [p.a], seen: {p.a: 1}}\n",
+    "args": [
+      "set",
+      "p.a",
+      "7",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "set p.a: 1 -> 7 (as of 2026-09-19)\nrests on it:\n  MOVED     d.x: p.a moved 1 -> 7 since it was reviewed - if it still holds: review d.x\n\nthe record needs a person on 1 judgment (1 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "after": "known:\n  p.a: {v: 7, of: \"2026-09-19\"}\njudgments:\n  d.x: {verdict: keep, rests_on: [p.a], seen: {p.a: 1}}\n"
+  },
+  {
+    "name": "unreviewed-dependency",
+    "before": "known:\n  p.a: {v: 1}\n  p.b: {v: 2}\njudgments:\n  d.x:\n    verdict: keep\n    rests_on: [p.a,p.b]\n    seen: {p.a: 1}\n    wrong_if: p.a == 9\n",
+    "args": [
+      "set",
+      "p.a",
+      "7",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "set p.a: 1 -> 7 (as of 2026-09-19)\nrests on it:\n  UNCHECKED d.x: never checked against p.b - if it holds: review d.x\n\nthe record needs a person on 1 judgment (0 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "after": "known:\n  p.a: {v: 7, of: \"2026-09-19\"}\n  p.b: {v: 2}\njudgments:\n  d.x:\n    verdict: keep\n    rests_on: [p.a,p.b]\n    seen: {p.a: 1}\n    wrong_if: p.a == 9\n"
   }
 ]

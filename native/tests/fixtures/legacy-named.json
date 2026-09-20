@@ -1,0 +1,588 @@
+[
+  {
+    "name": "GROUNDING.yaml:add-entry",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "add",
+      "p.new",
+      "name=New reading",
+      "v=3",
+      "from=s.ref",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "add p.new into known, its first entry of hypothesis alpha\n\nthe base is untouched; alpha holds 1 entry and 0 judgments\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.new:\n    name: \"New reading\"\n    v: 3\n    from: s.ref\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:carry-set",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "carry p.x into known, its first entry of hypothesis alpha\nset p.x in hypothesis alpha: 1 -> 2 (as of 2026-09-19)\nrests on it, under alpha:\n  MUTED     d.keep: p.x moved 1 -> 2, inside wrong_if (p.x > 4) - nothing is asked\n\nthe base is untouched; alpha holds 1 entry and 0 judgments\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.x:\n    v: 2\n    of: 2026-09-19\n    note: keep this comment\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:add-judgment",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "add",
+      "d.other",
+      "verdict=keep",
+      "rests_on=[p.y,p.x]",
+      "wrong_if=p.x > 8",
+      "because=observed",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "nearest existing:\n  d.keep: rests on p.x too - verdicts differ, a pair to judge\n  one subject: same <id> d.other folds it in · two: distinct d.other <id> \"why\" keeps them apart\nd.other.wrong_if: stored as a readable expression\nadd d.other into judgments, its first entry of hypothesis alpha\nthe new judgment holds: wrong_if does not hold (p.x > 8)\n\nthe base is untouched; alpha holds 0 entries and 1 judgment\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\njudgments:\n  d.other:\n    verdict: keep\n    rests_on: [p.y, p.x]\n    wrong_if: {expr: \"p.x > 8\"}\n    because: observed\n    seen: {p.y: 2, p.x: 1}\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:propose-standing",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=other",
+      "rests_on=[p.x]",
+      "wrong_if=p.x > 9",
+      "because=alternative",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nadd d.keep into judgments, its first entry of hypothesis alpha\nthe new judgment holds: wrong_if does not hold (p.x > 9)\n\nthe base is untouched; alpha holds 0 entries and 1 judgment\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\njudgments:\n  d.keep:\n    verdict: other\n    rests_on: [p.x]\n    wrong_if: {expr: \"p.x > 9\"}\n    because: alternative\n    seen: {p.x: 1}\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:review-base-only",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "review",
+      "d.keep",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - d.keep is not in hypothesis alpha - review it in the base, or propose it here with add\n",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:continue-set",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "4",
+      "--why",
+      "new observation",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x in hypothesis alpha: 3 -> 4 (as of 2026-09-19)\nrests on it, under alpha:\n  MUTED     d.hyp: p.x moved 1 -> 4, inside wrong_if (p.x > 5) - nothing is asked\n  MUTED     d.keep: p.x moved 1 -> 4, inside wrong_if (p.x > 4) - nothing is asked\n\nthe base is untouched; alpha holds 1 entry and 1 judgment, and never folds\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 4, of: 2026-09-19}\n    # set 2026-09-19: new observation\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:review-under",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "review",
+      "d.hyp",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "review d.hyp in hypothesis alpha: seen rewritten from what the record holds under it (2026-09-19)\n  p.x: 1 -> 3\n  d.hyp holds: wrong_if does not hold (p.x > 5)\n\nthe base is untouched; alpha holds 1 entry and 1 judgment, and never folds\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 3}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-19\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:duplicate-hyp-entry",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "add",
+      "p.x",
+      "v=4",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.x is already in hypothesis alpha - set changes its value there, review its snapshot\n",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:add-to-existing",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "add",
+      "p.aaaa",
+      "v=2",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "add p.aaaa into known, before p.x of hypothesis alpha\n\nthe base is untouched; alpha holds 2 entries and 1 judgment, and never folds\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.aaaa: {v: 2}\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:unknown-ref",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "add",
+      "d.bad",
+      "verdict=bad",
+      "rests_on=[p.missing]",
+      "wrong_if=p.missing > 1",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - rests on p.missing, which is not an entry - add it first, or declare it missing with blocked_on\n",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:base-hypothesis-id",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.foreign: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "add",
+      "p.foreign",
+      "v=4",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "add p.foreign into known, before p.x\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-19\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.foreign:\n    v: 4\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.foreign: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "GROUNDING.yaml:base-invalid-hypothesis",
+    "record": "GROUNDING.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "known: [invalid yaml",
+    "hypothesis_path": ".kpopper/hypotheses/alpha.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "4",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 4 (as of 2026-09-19)\nrests on it:\n  MUTED     d.keep: p.x moved 1 -> 4, inside wrong_if (p.x > 4) - nothing is asked\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-19\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 4\n    of: 2026-09-19\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      ".kpopper/hypotheses/alpha.yaml": "known: [invalid yaml"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:add-entry",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "add",
+      "p.new",
+      "name=New reading",
+      "v=3",
+      "from=s.ref",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "add p.new into known, its first entry of hypothesis alpha\n\nthe base is untouched; alpha holds 1 entry and 0 judgments\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.new:\n    name: \"New reading\"\n    v: 3\n    from: s.ref\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:carry-set",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "2",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "carry p.x into known, its first entry of hypothesis alpha\nset p.x in hypothesis alpha: 1 -> 2 (as of 2026-09-19)\nrests on it, under alpha:\n  MUTED     d.keep: p.x moved 1 -> 2, inside wrong_if (p.x > 4) - nothing is asked\n\nthe base is untouched; alpha holds 1 entry and 0 judgments\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.x:\n    v: 2\n    of: 2026-09-19\n    note: keep this comment\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:add-judgment",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "add",
+      "d.other",
+      "verdict=keep",
+      "rests_on=[p.y,p.x]",
+      "wrong_if=p.x > 8",
+      "because=observed",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "nearest existing:\n  d.keep: rests on p.x too - verdicts differ, a pair to judge\n  one subject: same <id> d.other folds it in · two: distinct d.other <id> \"why\" keeps them apart\nd.other.wrong_if: stored as a readable expression\nadd d.other into judgments, its first entry of hypothesis alpha\nthe new judgment holds: wrong_if does not hold (p.x > 8)\n\nthe base is untouched; alpha holds 0 entries and 1 judgment\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\njudgments:\n  d.other:\n    verdict: keep\n    rests_on: [p.y, p.x]\n    wrong_if: {expr: \"p.x > 8\"}\n    because: observed\n    seen: {p.y: 2, p.x: 1}\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:propose-standing",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=other",
+      "rests_on=[p.x]",
+      "wrong_if=p.x > 9",
+      "because=alternative",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nadd d.keep into judgments, its first entry of hypothesis alpha\nthe new judgment holds: wrong_if does not hold (p.x > 9)\n\nthe base is untouched; alpha holds 0 entries and 1 judgment\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis: {born: \"2026-09-19\"}\n\njudgments:\n  d.keep:\n    verdict: other\n    rests_on: [p.x]\n    wrong_if: {expr: \"p.x > 9\"}\n    because: alternative\n    seen: {p.x: 1}\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:review-base-only",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": null,
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "review",
+      "d.keep",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - d.keep is not in hypothesis alpha - review it in the base, or propose it here with add\n",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:continue-set",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "4",
+      "--why",
+      "new observation",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x in hypothesis alpha: 3 -> 4 (as of 2026-09-19)\nrests on it, under alpha:\n  MUTED     d.hyp: p.x moved 1 -> 4, inside wrong_if (p.x > 5) - nothing is asked\n  MUTED     d.keep: p.x moved 1 -> 4, inside wrong_if (p.x > 4) - nothing is asked\n\nthe base is untouched; alpha holds 1 entry and 1 judgment, and never folds\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 4, of: 2026-09-19}\n    # set 2026-09-19: new observation\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:review-under",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "review",
+      "d.hyp",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "review d.hyp in hypothesis alpha: seen rewritten from what the record holds under it (2026-09-19)\n  p.x: 1 -> 3\n  d.hyp holds: wrong_if does not hold (p.x > 5)\n\nthe base is untouched; alpha holds 1 entry and 1 judgment, and never folds\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 3}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-19\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:duplicate-hyp-entry",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "add",
+      "p.x",
+      "v=4",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - p.x is already in hypothesis alpha - set changes its value there, review its snapshot\n",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:add-to-existing",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "add",
+      "p.aaaa",
+      "v=2",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "add p.aaaa into known, before p.x of hypothesis alpha\n\nthe base is untouched; alpha holds 2 entries and 1 judgment, and never folds\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.aaaa: {v: 2}\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:unknown-ref",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "add",
+      "d.bad",
+      "verdict=bad",
+      "rests_on=[p.missing]",
+      "wrong_if=p.missing > 1",
+      "--hypothesis",
+      "alpha",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "stderr": "refused - rests on p.missing, which is not an entry - add it first, or declare it missing with blocked_on\n",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.x: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:base-hypothesis-id",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.foreign: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n",
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "add",
+      "p.foreign",
+      "v=4",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "add p.foreign into known, before p.x\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-19\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.foreign:\n    v: 4\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "hypothesis:\n  born: \"2026-09-01\"\n  claim: keep the complete header\n  wrong_if: p.y > 10\n  folds: never\nknown:\n  p.foreign: {v: 3, of: 2026-09-01}\njudgments:\n  d.hyp:\n    verdict: maybe\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 5\n    reviewed: 2026-09-01\n"
+    }
+  },
+  {
+    "name": "PROVENANCE.yaml:base-invalid-hypothesis",
+    "record": "PROVENANCE.yaml",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 1\n    of: 2026-09-01\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+    "hypothesis": "known: [invalid yaml",
+    "hypothesis_path": "PROVENANCE.d/alpha.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "4",
+      "--as-of",
+      "2026-09-19",
+      "PROVENANCE.yaml"
+    ],
+    "code": 0,
+    "stdout": "set p.x: 1 -> 4 (as of 2026-09-19)\nrests on it:\n  MUTED     d.keep: p.x moved 1 -> 4, inside wrong_if (p.x > 4) - nothing is asked\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "PROVENANCE.yaml": "meta:\n  updated: 2026-09-19\nsources:\n  s.ref: {name: A source, read: 2026-09-01}\nknown:\n  p.x:\n    v: 4\n    of: 2026-09-19\n    note: keep this comment\n  p.y: {v: 2, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    wrong_if: p.x > 4\n    reviewed: 2026-09-01\n",
+      "PROVENANCE.d/alpha.yaml": "known: [invalid yaml"
+    }
+  }
+]

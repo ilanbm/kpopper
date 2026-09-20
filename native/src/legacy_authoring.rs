@@ -19,6 +19,8 @@ use std::{
     sync::LazyLock,
 };
 
+#[path = "legacy_named.rs"]
+mod legacy_named;
 #[path = "legacy_replaced.rs"]
 mod legacy_replaced;
 
@@ -648,7 +650,7 @@ fn replace_date_field(
     }
 }
 
-fn replace_scalar_in_flow(block: &str, field: &str, value: &V) -> Result<(String, String)> {
+fn flow_scalar_span(block: &str, field: &str) -> Result<(usize, usize)> {
     use libyaml_safer::{Scanner, TokenData};
     let mut input = block.as_bytes();
     let mut scanner = Scanner::new();
@@ -684,17 +686,22 @@ fn replace_scalar_in_flow(block: &str, field: &str, value: &V) -> Result<(String
                 let start =
                     usize::try_from(old.start_mark.index).map_err(|_| error("source_limit"))?;
                 let end = usize::try_from(old.end_mark.index).map_err(|_| error("source_limit"))?;
-                let before = &block[start..end];
-                let replacement = scalar(value, style(before))?;
-                return Ok((
-                    format!("{}{}{}", &block[..start], replacement, &block[end..]),
-                    before.into(),
-                ));
+                return Ok((start, end));
             }
             _ => {}
         }
     }
     Err(error(&format!("field_not_found:{field}")))
+}
+
+fn replace_scalar_in_flow(block: &str, field: &str, value: &V) -> Result<(String, String)> {
+    let (start, end) = flow_scalar_span(block, field)?;
+    let before = &block[start..end];
+    let replacement = scalar(value, style(before))?;
+    Ok((
+        format!("{}{}{}", &block[..start], replacement, &block[end..]),
+        before.into(),
+    ))
 }
 
 fn upsert_scalar_in_flow(block: &str, field: &str, value: &V) -> Result<String> {
@@ -745,10 +752,9 @@ fn set_entry(
         block = match replace_scalar_in_flow(&block, "of", &date) {
             Ok((block, _)) => block,
             Err(_) => {
-                let close = block
-                    .rfind('}')
-                    .ok_or_else(|| error("invalid_history_yaml"))?;
-                format!("{}, of: \"{stamp}\"{}", &block[..close], &block[close..])
+                let (_, end) = flow_scalar_span(&block, "v")
+                    .or_else(|_| flow_scalar_span(&block, "quoted"))?;
+                format!("{}, of: \"{stamp}\"{}", &block[..end], &block[end..])
             }
         };
         if source.is_some() || at.is_some() {
@@ -1309,6 +1315,40 @@ enum Preparation {
     Mutation(Prepared),
 }
 
+fn nearest_notice(
+    reader: &Reader<'_>,
+    action: &V,
+    document: &source_document::Document,
+    inventory: &Inventory,
+) -> Result<crate::public_identity::ordinary_sameness::Notice> {
+    use crate::public_identity::ordinary_sameness::{Sources, nearest_existing_from_sources};
+    let mut hypotheses = std::collections::BTreeMap::new();
+    for (name, hypothesis) in map(&document.hypotheses)? {
+        if map(hypothesis)?
+            .get("error")
+            .is_some_and(crate::history_view::truth)
+        {
+            continue;
+        }
+        if let Some(path) = map(hypothesis)?.get("path").and_then(|v| text(v).ok())
+            && let Some(raw) = inventory.files.get(Path::new(path))
+        {
+            hypotheses.insert(
+                name.clone(),
+                crate::history_yaml::decode_ordinary_source_value(raw)?,
+            );
+        }
+    }
+    nearest_existing_from_sources(
+        reader,
+        action,
+        &Sources {
+            base: Some(&document.source),
+            hypotheses: hypotheses.iter().map(|(k, v)| (k.clone(), v)).collect(),
+        },
+    )
+}
+
 fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Result<Preparation> {
     let a = map(action)?;
     require(
@@ -1331,9 +1371,12 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
     )?;
     let source = projected_document(&document.source);
     let runtime = crate::public_workspace::runtime_for_document(&source)?;
-    let mut reader = Reader::new(&source, runtime.as_ref())?;
+    let groups = legacy_named::normalize_groups(&document.hypotheses)?;
+    let mut reader =
+        Reader::new(&source, runtime.as_ref())?.with_layers(groups.clone(), BTreeSet::new())?;
     reader.for_action(action)?;
     let (normalized, notes) = reader.normalize(action)?;
+    let notice = nearest_notice(&reader, &normalized, &document, &inventory)?;
     let mut action = map(&normalized)?.clone();
     let stamp = action_stamp(&action);
     // The clock is captured once for guards and the candidate. Keep the original
@@ -1345,7 +1388,8 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
     {
         dated_action.insert("as_of".into(), s(&stamp));
     }
-    let refusals = reader.validate(&V::Map(dated_action))?;
+    let mut refusals = reader.validate(&V::Map(dated_action))?;
+    refusals.extend(notice.refusals);
     require(
         refusals.is_empty(),
         &format!("refused - {}", refusals.join("\n          ")),
@@ -1508,7 +1552,8 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
         return_to = back;
         let _ = old;
     }
-    let mut output = notes;
+    let mut output = notice.text.lines().map(str::to_owned).collect::<Vec<_>>();
+    output.extend(notes);
     match kind.as_str() {
         "add" => {
             let mut body = preserve_order(field(&action, "body")?, source_body);
@@ -1695,7 +1740,7 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
                     }
                     (None, Some(now)) => output.push(format!(
                         "  {dependency}: {} (never checked against it before)",
-                        new_text(now)
+                        crate::public_ordinary_readers::short(&s(&new_text(now)), 40)
                     )),
                     _ => {}
                 }
@@ -1743,8 +1788,14 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
         authored_equal(&after_body, &candidate_body),
         "the write broke the record and was undone: entry changed meaning",
     )?;
-    let after_reader = Reader::new(&candidate, runtime.as_ref())?;
-    output.extend(report_lines(&kind, &id, &after_reader)?);
+    let after_projection = crate::public_ordinary_readers::Projection::new(
+        &candidate,
+        &groups,
+        &Map::new(),
+        vec![],
+        runtime.as_ref(),
+    )?;
+    output.extend(report_lines(&kind, &id, &after_projection.base)?);
 
     let root = common_root(entry, &document.members)?;
     let entry_relative = relative(&root, entry)?;
@@ -1840,70 +1891,15 @@ impl IntoList for V {
     }
 }
 
-fn judgment_state(reader: &Reader<'_>, id: &str) -> Result<(String, String)> {
-    let body = map(reader
-        .raw()
-        .get(id)
-        .ok_or_else(|| error("unknown judgment"))?)?;
-    let deps = text(&reader.fields()["deps"])?;
-    let snapshot = text(&reader.fields()["snapshot"])?;
-    let predicate = text(&reader.fields()["predicate"])?;
-    let pred = body.get(predicate).unwrap_or(&V::Null);
-    let predicate_text = crate::public_ordinary_readers::predicate_text(pred);
-    if reader.predicate(pred)? == Some(true) {
-        return Ok((
-            "FIRED".into(),
-            format!("wrong_if holds ({predicate_text}) - broken by its own condition"),
-        ));
-    }
-    let seen = body.get(snapshot).and_then(|value| map(value).ok());
-    let mut moved = Vec::new();
-    if let Some(V::List(dependencies)) = body.get(deps) {
-        for dependency in dependencies {
-            let dependency = text(dependency)?;
-            let now = snapshot_value(reader, dependency, deps)?;
-            match seen.and_then(|seen| seen.get(dependency)) {
-                Some(old) if !same_legacy(old, &now) => {
-                    let (old, now) = crate::public_ordinary_readers::apart(
-                        &s(&display(old)?),
-                        &s(&display(&now)?),
-                        40,
-                    );
-                    moved.push(format!(
-                        "{dependency} moved {old} -> {now} since it was reviewed"
-                    ));
-                }
-                None => moved.push(format!("{dependency} was never reviewed")),
-                _ => {}
-            }
-        }
-    }
-    if !moved.is_empty() {
-        return Ok((
-            "MOVED".into(),
-            format!("{} - if it still holds: review {id}", moved.join(", ")),
-        ));
-    }
-    Ok(match reader.predicate(pred)? {
-        Some(true) => (
-            "FALSIFIED".into(),
-            format!("{predicate} holds ({predicate_text})"),
-        ),
-        Some(false) => (
-            "HOLDS".into(),
-            format!("{predicate} does not hold ({predicate_text})"),
-        ),
-        None => (
-            "UNKNOWN".into(),
-            format!("{predicate} is undecidable ({predicate_text})"),
-        ),
-    })
-}
-
-fn report_lines(kind: &str, id: &str, after: &Reader<'_>) -> Result<Vec<String>> {
+fn report_lines(
+    kind: &str,
+    id: &str,
+    world: &crate::public_ordinary_readers::World<'_>,
+) -> Result<Vec<String>> {
+    let after = &world.reader;
     let deps = text(&after.fields()["deps"])?;
     if kind == "review" {
-        let (state, why) = judgment_state(after, id)?;
+        let (state, why) = world.state(id)?;
         return Ok(vec![format!(
             "  {id} {}: {why}",
             state.to_ascii_lowercase()
@@ -1926,7 +1922,7 @@ fn report_lines(kind: &str, id: &str, after: &Reader<'_>) -> Result<Vec<String>>
             .and_then(|body| map(body).ok())
             .is_some_and(|body| body.contains_key(deps))
     {
-        let (state, why) = judgment_state(after, id)?;
+        let (state, why) = world.state(id)?;
         out.push(format!(
             "the new judgment {}: {why}",
             state.to_ascii_lowercase()
@@ -1937,7 +1933,7 @@ fn report_lines(kind: &str, id: &str, after: &Reader<'_>) -> Result<Vec<String>>
         out.push("rests on it:".into());
         reached.sort();
         for candidate in reached {
-            let (state, why) = judgment_state(after, &candidate)?;
+            let (state, why) = world.state(&candidate)?;
             out.push(format!("  {state:<9} {candidate}: {why}"));
         }
     } else if kind == "set" {
@@ -1968,21 +1964,31 @@ fn report_lines(kind: &str, id: &str, after: &Reader<'_>) -> Result<Vec<String>>
     Ok(out)
 }
 
+fn verify_prepared(prepared: &Prepared, route: &WriteRoute, inventory: &Inventory) -> Result<()> {
+    route.verify()?;
+    inventory.verify()?;
+    let data = prepared.mutation.to_data();
+    legacy_named::verify_recovery(
+        route,
+        &prepared.root,
+        &prepared.mutation,
+        map(field(map(&data)?, "baseline")?)?,
+    )?;
+    require(
+        self::route(
+            &entry_path(&prepared.root, &prepared.mutation)?,
+            route.config(),
+        )? == AuthorityRoute::Legacy,
+        "project_route_changed",
+    )
+}
+
 fn publish(prepared: Prepared, route: &WriteRoute) -> Result<String> {
     if prepared.journal.is_empty() {
         return Ok(prepared.output);
     }
-    let mut verify = |_: &V| {
-        route.verify()?;
-        prepared.inventory.verify()?;
-        require(
-            self::route(
-                &entry_path(&prepared.root, &prepared.mutation)?,
-                route.config(),
-            )? == AuthorityRoute::Legacy,
-            "project_route_changed",
-        )
-    };
+    let inventory = legacy_named::prepare_directories(&prepared)?;
+    let mut verify = |_: &V| verify_prepared(&prepared, route, &inventory);
     F::publish_legacy(
         &prepared.root,
         &prepared.journal,
@@ -2011,6 +2017,7 @@ fn verify_recovery(route: &WriteRoute, root: &Path, mutation: &PreparedMutation)
     )?;
     let data = mutation.to_data();
     let baseline = map(field(map(&data)?, "baseline")?)?;
+    legacy_named::verify_recovery(route, root, mutation, baseline)?;
     require(
         baseline
             .get("kind")
@@ -2115,7 +2122,15 @@ pub(crate) fn write(
     route: &WriteRoute,
     source_body: Option<&Source>,
 ) -> Result<String> {
-    match prepare(action, route, source_body)? {
+    let prepared = if map(action)?
+        .get("hypothesis")
+        .is_some_and(|v| *v != V::Null)
+    {
+        legacy_named::prepare(action, route, source_body)?
+    } else {
+        prepare(action, route, source_body)?
+    };
+    match prepared {
         Preparation::Draft(output) => Ok(output),
         Preparation::Mutation(prepared) => publish(prepared, route),
     }

@@ -264,7 +264,7 @@ fn nontext_metadata_keys_remain_exact_and_never_leak_projection_prefixes() {
 }
 
 #[test]
-fn named_hypotheses_and_bad_or_pending_authority_fail_closed() {
+fn named_hypotheses_keep_the_base_and_bad_or_pending_authority_fails_closed() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     let before = fixture("simple-before.yaml");
@@ -280,11 +280,12 @@ fn named_hypotheses_and_bad_or_pending_authority_fail_closed() {
             "GROUNDING.yaml",
         ],
     );
-    assert!(!named.status.success());
     assert!(
+        named.status.success(),
+        "{}",
         String::from_utf8_lossy(&named.stderr)
-            .contains("legacy_named_hypothesis_authoring_requires_history")
     );
+    assert!(root.join(".kpopper/hypotheses/proposal.yaml").is_file());
     assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
 
     write(
