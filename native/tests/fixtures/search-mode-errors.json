@@ -1,0 +1,51 @@
+[
+  {
+    "args": [
+      "search",
+      "  "
+    ],
+    "code": 2,
+    "stdout": "",
+    "stderr": "query must contain 1..2000 characters\n"
+  },
+  {
+    "args": [
+      "search",
+      "Alpha",
+      "--limit",
+      "999"
+    ],
+    "code": 2,
+    "stdout": "",
+    "stderr": "limit must be 1..50; chars must be 500..100000\n"
+  },
+  {
+    "args": [
+      "search",
+      "Alpha"
+    ],
+    "code": 2,
+    "stdout": "",
+    "stderr": "read mode must be live or frozen\n"
+  },
+  {
+    "args": [
+      "search",
+      "--read",
+      "x"
+    ],
+    "code": 2,
+    "stdout": "",
+    "stderr": "--read requires --revision and no query\n"
+  },
+  {
+    "args": [
+      "--json",
+      "search",
+      "  "
+    ],
+    "code": 2,
+    "stdout": "",
+    "stderr": "{\"error\": \"query must contain 1..2000 characters\"}\n"
+  }
+]

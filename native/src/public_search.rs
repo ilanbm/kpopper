@@ -97,21 +97,13 @@ pub struct Output {
 pub fn corpus(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
     search_corpus::corpus(options, cwd, mode)
 }
-pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
-    if let Some(reference) = options.reference.as_deref().filter(|r| !r.is_empty()) {
+fn validate(options: &Options) -> Result<()> {
+    if options.reference.as_deref().is_some_and(|r| !r.is_empty()) {
         crate::require(
             options.query.as_deref().is_none_or(str::is_empty)
                 && options.revision.as_deref().is_some_and(|r| !r.is_empty()),
             "--read requires --revision and no query",
         )?;
-        let data = corpus(options, cwd, mode)?;
-        Ok(crate::public_search_rank::read(
-            &data,
-            reference,
-            options.revision.as_deref().unwrap(),
-            options.offset,
-            options.length,
-        )?)
     } else {
         crate::require(
             options.revision.as_deref().is_none_or(str::is_empty) && options.offset == 0,
@@ -126,24 +118,42 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
             (1..=50).contains(&options.limit) && (500..=100000).contains(&options.chars),
             "limit must be 1..50; chars must be 500..100000",
         )?;
-        let data = corpus(options, cwd, mode)?;
+    }
+    Ok(())
+}
+fn run_validated(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
+    let data = corpus(options, cwd, mode)?;
+    if let Some(reference) = options.reference.as_deref().filter(|r| !r.is_empty()) {
+        Ok(crate::public_search_rank::read(
+            &data,
+            reference,
+            options.revision.as_deref().unwrap(),
+            options.offset,
+            options.length,
+        )?)
+    } else {
         Ok(crate::public_search_rank::search(
             data,
-            query,
+            options.query.as_deref().unwrap_or(""),
             options.limit,
             options.chars,
         )?)
     }
 }
+pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
+    validate(options)?;
+    run_validated(options, cwd, mode)
+}
 pub fn dispatch(options: &Options, cwd: &Path, mode: ReadMode, as_json: bool) -> Output {
-    let result = if mode == ReadMode::Live
-        && std::env::var("KPOPPER_READ_MODE")
-            .is_ok_and(|m| !["live", "frozen"].contains(&m.as_str()))
-    {
-        Err(crate::Error("read mode must be live or frozen".into()).into())
-    } else {
-        run(options, cwd, mode)
-    };
+    let result = validate(options).and_then(|_| {
+        if mode == ReadMode::Live
+            && std::env::var("KPOPPER_READ_MODE")
+                .is_ok_and(|m| !["live", "frozen"].contains(&m.as_str()))
+        {
+            return Err(crate::Error("read mode must be live or frozen".into()).into());
+        }
+        run_validated(options, cwd, mode)
+    });
     match result {
         Ok(result) => match crate::public_search_rank::encode(&result) {
             Ok(text) => Output {

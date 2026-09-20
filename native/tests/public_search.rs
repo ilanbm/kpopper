@@ -4,6 +4,31 @@ use kpop_native::{
 };
 use serde_json::{Value as J, json};
 use std::{fs, path::Path, process::Command};
+
+#[test]
+fn invalid_read_mode_preserves_python_argument_error_precedence() {
+    let cases: J =
+        serde_json::from_slice(include_bytes!("fixtures/search-mode-errors.json")).unwrap();
+    for case in cases.as_array().unwrap() {
+        let root = tempfile::tempdir().unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            .args(
+                case["args"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_str().unwrap()),
+            )
+            .current_dir(root.path())
+            .env("KPOPPER_READ_MODE", "bogus")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code().map(i64::from), case["code"].as_i64());
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), case["stdout"]);
+        assert_eq!(String::from_utf8(output.stderr).unwrap(), case["stderr"]);
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+}
 fn expand(v: &mut J, from: &str, to: &str) {
     match v {
         J::String(s) => *s = s.replace(from, to),
