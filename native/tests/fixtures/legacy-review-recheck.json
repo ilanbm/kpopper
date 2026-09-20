@@ -1,0 +1,71 @@
+[
+  {
+    "name": "citation-order",
+    "before": "meta:\n  updated: 2026-09-01\nsources:\n  s.new:\n    name: a document\n    read: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n    note: keep this\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "3",
+      "--source",
+      "s.new",
+      "--at",
+      "page-2",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "set p.alpha: 2 -> 3 (as of 2026-09-19)\nsource: s.new, at page-2\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "after": "meta:\n  updated: 2026-09-19\nsources:\n  s.new:\n    name: a document\n    read: 2026-09-01\nknown:\n  p.alpha:\n    v: 3\n    of: 2026-09-19\n    at: page-2\n    from: s.new\n    note: keep this\n"
+  },
+  {
+    "name": "deep-comment",
+    "before": "meta:\n    updated: 2026-09-01\nknown:\n    p.alpha:\n        v: 2\n        of: 2026-09-01\n        note: keep this\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "7",
+      "--why",
+      "a reason",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "set p.alpha: 2 -> 7 (as of 2026-09-19)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "after": "meta:\n    updated: 2026-09-19\nknown:\n    p.alpha:\n        v: 7\n        # set 2026-09-19: a reason\n        of: 2026-09-19\n        note: keep this\n"
+  },
+  {
+    "name": "long-review",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: \"the quarterly retention figure measured by the analytics pipeline on the second cohort\"\n    of: 2026-09-01\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.alpha]\n    seen: {p.alpha: \"the quarterly retention figure measured by the analytics pipeline on the first cohort\"}\n    wrong_if: p.alpha > 9\n    reviewed: 2026-09-01\n",
+    "args": [
+      "review",
+      "d.keep",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "review d.keep: seen rewritten from what the record holds (2026-09-19)\n  p.alpha: …first cohort -> …second cohort\n  d.keep fired: wrong_if holds (p.alpha > 9) - broken by its own condition\n",
+    "stderr": "",
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"the quarterly retention figure measured by the analytics pipeline on the second cohort\"\n    of: 2026-09-01\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.alpha]\n    seen:\n      p.alpha: \"the quarterly retention figure measured by the analytics pipeline on the second\n                cohort\"\n    wrong_if: p.alpha > 9\n    reviewed: 2026-09-19\n"
+  },
+  {
+    "name": "long-moved",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: \"the quarterly retention figure measured by the analytics pipeline on the second cohort\"\n    of: 2026-09-01\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.alpha]\n    seen: {p.alpha: \"the quarterly retention figure measured by the analytics pipeline on the first cohort\"}\n    wrong_if: p.alpha > 9\n    reviewed: 2026-09-01\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "the quarterly retention figure measured by the analytics pipeline on the third cohort",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "status": 0,
+    "stdout": "set p.alpha: \"the quarterly retention figure measured by the analytics pipeline on the second cohort\" -> \"the quarterly retention figure measured by the analytics pipeline on the third cohort\" (as of 2026-09-19)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.alpha > 9) - broken by its own condition\n\nthe record needs a person on 1 judgment (0 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"the quarterly retention figure measured by the analytics pipeline on the third cohort\"\n    of: 2026-09-19\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.alpha]\n    seen: {p.alpha: \"the quarterly retention figure measured by the analytics pipeline on the first cohort\"}\n    wrong_if: p.alpha > 9\n    reviewed: 2026-09-01\n"
+  }
+]

@@ -833,7 +833,14 @@ fn set_entry(
         for (name, value) in [("from", source), ("at", at)] {
             let value = value.ok_or_else(|| error("--source and --at go together"))?;
             let (_, member) = locate(lines, id).unwrap();
-            replace_field(lines, &member, name, &s(value))?;
+            if field_span(lines, &member, name).is_some() {
+                replace_field(lines, &member, name, &s(value))?;
+            } else {
+                let date = field_span(lines, &member, "of")
+                    .ok_or_else(|| error("set date field is unavailable"))?;
+                let added = field_lines_ordered(name, &Source::Scalar(s(value)), date.indent)?;
+                lines.splice(date.end..date.end, added);
+            }
         }
     }
     if let Some(why) = why {
@@ -845,7 +852,7 @@ fn set_entry(
         };
         lines.insert(
             insertion,
-            format!("{}# set {stamp}: {why}", " ".repeat(member.indent + 2)),
+            format!("{}# set {stamp}: {why}", " ".repeat(field.indent)),
         );
     }
     Ok(old)
@@ -923,12 +930,7 @@ fn action_stamp(action: &Map) -> String {
         .get("as_of")
         .and_then(|value| text(value).ok())
         .map(str::to_owned)
-        .unwrap_or_else(|| {
-            chrono::Utc::now()
-                .date_naive()
-                .max(chrono::Local::now().date_naive())
-                .to_string()
-        })
+        .unwrap_or_else(|| chrono::Local::now().date_naive().to_string())
 }
 
 fn snapshot_value(reader: &Reader<'_>, dependency: &str, deps_field: &str) -> Result<V> {
@@ -1366,9 +1368,12 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
             && let Ok(old_map) = map(old)
             && let Ok(deps) = text(&reader.fields()["deps"])
             && old_map.contains_key(deps)
-            && !crate::reasoning_authoring_guards::arrangement(&reader, old)
             && map(field(&action, "body")?).is_ok_and(|body| body.contains_key(deps))
         {
+            require(
+                !crate::reasoning_authoring_guards::arrangement(&reader, old),
+                "ordinary arrangement replacement is not supported yet",
+            )?;
             let predicate = text(&reader.fields()["predicate"])?;
             if let Some(pred) = old_map.get(predicate)
                 && reader.predicate(pred)? == Some(true)
@@ -1673,11 +1678,14 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
                     ))
                 };
                 match (old_seen.get(dependency), seen.get(dependency)) {
-                    (Some(old), Some(now)) if !same_legacy(old, now) => output.push(format!(
-                        "  {dependency}: {} -> {}",
-                        old_text(old),
-                        new_text(now)
-                    )),
+                    (Some(old), Some(now)) if !same_legacy(old, now) => {
+                        let (old, now) = crate::public_ordinary_readers::apart(
+                            &s(&old_text(old)),
+                            &s(&new_text(now)),
+                            40,
+                        );
+                        output.push(format!("  {dependency}: {old} -> {now}"));
+                    }
                     (None, Some(now)) => output.push(format!(
                         "  {dependency}: {} (never checked against it before)",
                         new_text(now)
@@ -1848,11 +1856,16 @@ fn judgment_state(reader: &Reader<'_>, id: &str) -> Result<(String, String)> {
             let dependency = text(dependency)?;
             let now = snapshot_value(reader, dependency, deps)?;
             match seen.and_then(|seen| seen.get(dependency)) {
-                Some(old) if !same_legacy(old, &now) => moved.push(format!(
-                    "{dependency} moved {} -> {} since it was reviewed",
-                    display(old)?,
-                    display(&now)?
-                )),
+                Some(old) if !same_legacy(old, &now) => {
+                    let (old, now) = crate::public_ordinary_readers::apart(
+                        &s(&display(old)?),
+                        &s(&display(&now)?),
+                        40,
+                    );
+                    moved.push(format!(
+                        "{dependency} moved {old} -> {now} since it was reviewed"
+                    ));
+                }
                 None => moved.push(format!("{dependency} was never reviewed")),
                 _ => {}
             }

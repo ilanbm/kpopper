@@ -8,6 +8,6 @@ known:
   p.alpha:
     v: 3
     of: 2026-09-19
-    from: s.new
     at: page-2
+    from: s.new
     note: keep this

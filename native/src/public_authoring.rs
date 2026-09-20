@@ -290,10 +290,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
         &B::BootstrapOptions {
             operation: fresh_id("first")?,
             recorded_at: now.to_rfc3339(),
-            recording_day: now
-                .date_naive()
-                .max(chrono::Local::now().date_naive())
-                .to_string(),
+            recording_day: chrono::Local::now().date_naive().to_string(),
             record_id: fresh_id("record")?,
             by: V::Null,
         },

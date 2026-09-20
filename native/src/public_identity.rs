@@ -54,10 +54,7 @@ fn authoring_options(prefix: &str) -> Result<A::Options> {
     Ok(A::Options {
         operation: fresh_id(prefix)?,
         recorded_at: now.to_rfc3339(),
-        recording_day: now
-            .date_naive()
-            .max(chrono::Local::now().date_naive())
-            .to_string(),
+        recording_day: chrono::Local::now().date_naive().to_string(),
         by: V::Null,
         strict: true,
         paths: Scheme::Hashed,
