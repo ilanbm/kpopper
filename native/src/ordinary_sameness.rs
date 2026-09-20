@@ -84,10 +84,11 @@ fn ordered_ids(document: Option<&O>, raw: &Map) -> Vec<String> {
             }
             if let O::Map(m) = value {
                 for (id, _) in m {
-                    if let Some(id) = id.text() {
-                        if raw.contains_key(id) && !out.iter().any(|v| v == id) {
-                            out.push(id.to_owned());
-                        }
+                    if let Some(id) = id.text()
+                        && raw.contains_key(id)
+                        && !out.iter().any(|v| v == id)
+                    {
+                        out.push(id.to_owned());
                     }
                 }
             }
@@ -139,10 +140,10 @@ fn canon_rule(value: &V, retired: &BTreeMap<String, String>) -> V {
     if let Ok(mut tree) = L::legacy_rule(&input) {
         fn rewrite(value: &mut V, retired: &BTreeMap<String, String>) {
             if let V::Map(m) = value {
-                if let Some(V::Text(id)) = m.get_mut("ref") {
-                    if let Some(new) = retired.get(id) {
-                        *id = new.clone();
-                    }
+                if let Some(V::Text(id)) = m.get_mut("ref")
+                    && let Some(new) = retired.get(id)
+                {
+                    *id = new.clone();
                 }
                 if let Some(V::List(a)) = m.get_mut("args") {
                     for child in a {
@@ -230,6 +231,8 @@ impl Candidate {
         json!({"id":self.id,"rank":self.rank,"reasons":self.reasons,"score":self.score})
     }
 }
+// Keep the captured-world inputs aligned with the ordinary candidate contract.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn near(
     subject: &str,
     body: &V,
@@ -263,16 +266,16 @@ pub(crate) fn near(
         let mut rank = None;
         let other_from = field(other, "from", Some(retired));
         let other_at = field(other, "at", None);
-        if from.is_some() && from == other_from {
-            if at.is_some() && at == other_at {
+        if let Some(from) = from.as_ref().filter(|_| from == other_from) {
+            if let Some(at) = at.as_ref().filter(|_| at == other_at) {
                 reasons.push(format!(
                     "same from and at ({}, {}) - certain",
-                    from.as_ref().unwrap(),
-                    scalar_label(at.as_ref().unwrap())
+                    from,
+                    scalar_label(at)
                 ));
                 rank = Some(0);
             } else {
-                reasons.push(format!("same from ({})", from.as_ref().unwrap()));
+                reasons.push(format!("same from ({from})"));
                 rank = Some(1);
             }
         }
@@ -285,14 +288,14 @@ pub(crate) fn near(
                 rank = Some(0);
             }
         }
-        if let (Some(rule), Some(other_rule)) = (&rule, self::rule(other)) {
-            if canon_rule(&other_rule, retired) == *rule {
-                reasons.push(format!(
-                    "same rule ({})",
-                    crate::public_ordinary_readers::short(&other_rule, 60)
-                ));
-                rank = Some(rank.unwrap_or(2).min(2));
-            }
+        if let (Some(rule), Some(other_rule)) = (&rule, self::rule(other))
+            && canon_rule(&other_rule, retired) == *rule
+        {
+            reasons.push(format!(
+                "same rule ({})",
+                crate::public_ordinary_readers::short(&other_rule, 60)
+            ));
+            rank = Some(rank.unwrap_or(2).min(2));
         }
         let other_prem = premises(other, deps, raw);
         if judgment
@@ -408,15 +411,15 @@ pub(crate) fn nearest_existing_from_sources(
             }
         }
     }
-    if let Some(into) = retired.get(id) {
-        if !reader.ids.contains(id) {
-            return Ok(Notice {
-                refusals: vec![format!(
-                    "{id} was retired into {into} - write {into} instead; it carries also: [{id}]"
-                )],
-                ..Default::default()
-            });
-        }
+    if let Some(into) = retired.get(id)
+        && !reader.ids.contains(id)
+    {
+        return Ok(Notice {
+            refusals: vec![format!(
+                "{id} was retired into {into} - write {into} instead; it carries also: [{id}]"
+            )],
+            ..Default::default()
+        });
     }
     if get(action, "kind") != &s("add") || !matches!(get(action, "body"), V::Map(_)) {
         return Ok(Notice::default());
