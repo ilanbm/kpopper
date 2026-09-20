@@ -276,6 +276,13 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
 }
 
 pub fn refusal(error: &crate::Error) -> Value {
+    if error.0 == "invalid_history_contribution" {
+        return json!({
+            "state":"refused",
+            "code":"history_refused",
+            "detail":"stored contribution evidence failed its complete identity check",
+        });
+    }
     let code = error.0.split(':').next().unwrap_or("history_refused");
     let code = if !code.is_empty() && code.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_') {
         code
@@ -283,4 +290,132 @@ pub fn refusal(error: &crate::Error) -> Value {
         "history_refused"
     };
     json!({"state":"refused", "code":code, "detail":error.to_string()})
+}
+
+fn key_order(map: &serde_json::Map<String, Value>) -> Vec<&String> {
+    let preferred: &[&str] = if map.get("state") == Some(&json!("refused")) {
+        &["state", "code", "detail"]
+    } else if map.contains_key("artifact_revision") && map.contains_key("target_authority") {
+        &[
+            "artifact_revision",
+            "target_authority",
+            "target_baseline",
+            "subjects",
+        ]
+    } else if map.contains_key("requires_choice") && map.contains_key("combined_heads") {
+        &[
+            "requires_choice",
+            "target_heads",
+            "incoming_heads",
+            "combined_heads",
+            "claims",
+        ]
+    } else if map.get("state") == Some(&json!("captured")) && map.contains_key("authority") {
+        &[
+            "state",
+            "record",
+            "authority",
+            "commits",
+            "objects",
+            "subjects",
+        ]
+    } else if map.contains_key("acceptance") && map.contains_key("heads") {
+        &["acceptance", "heads"]
+    } else if map.contains_key("authority")
+        && map.contains_key("generation")
+        && map.contains_key("record_id")
+    {
+        &["authority", "generation", "profile", "record_id", "version"]
+    } else if map.contains_key("authority_generation") && map.contains_key("committed_set_digest") {
+        &[
+            "version",
+            "record_id",
+            "authority_generation",
+            "committed_set_digest",
+            "heads",
+            "open_acts",
+        ]
+    } else if map.get("state") == Some(&json!("adopted")) {
+        &["state", "revision", "operation"]
+    } else {
+        &[]
+    };
+    let mut keys = preferred
+        .iter()
+        .filter_map(|key| map.get_key_value(*key).map(|(key, _)| key))
+        .collect::<Vec<_>>();
+    keys.extend(map.keys().filter(|key| !preferred.contains(&key.as_str())));
+    keys
+}
+
+fn render_json(value: &Value) -> String {
+    match value {
+        Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(render_json)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Value::Object(map) => format!(
+            "{{{}}}",
+            key_order(map)
+                .into_iter()
+                .map(|key| format!(
+                    "{}: {}",
+                    serde_json::to_string(key).unwrap(),
+                    render_json(&map[key])
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        _ => value.to_string(),
+    }
+}
+
+/// Python-compatible one-line output for the public history command family.
+pub fn output(value: &Value) -> String {
+    render_json(value) + "\n"
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+
+    #[test]
+    fn status_preview_adoption_and_refusal_follow_python_field_order() {
+        let authority = json!({
+            "version":1,"record_id":"record","profile":"history/v1","generation":1,"authority":"history"
+        });
+        let baseline = json!({
+            "open_acts":{},"heads":{},"version":1,"record_id":"record",
+            "committed_set_digest":"digest","authority_generation":1
+        });
+        assert_eq!(
+            output(&json!({
+                "subjects":{"p.x":{"heads":["claim"],"acceptance":"accepted"}},
+                "objects":1,"commits":1,"authority":authority,"record":"/record","state":"captured"
+            })),
+            "{\"state\": \"captured\", \"record\": \"/record\", \"authority\": {\"authority\": \"history\", \"generation\": 1, \"profile\": \"history/v1\", \"record_id\": \"record\", \"version\": 1}, \"commits\": 1, \"objects\": 1, \"subjects\": {\"p.x\": {\"acceptance\": \"accepted\", \"heads\": [\"claim\"]}}}\n"
+        );
+        assert_eq!(
+            output(&json!({
+                "subjects":{"p.x":{"claims":["claim"],"combined_heads":["claim"],
+                    "incoming_heads":["claim"],"target_heads":[],"requires_choice":false}},
+                "target_baseline":baseline,"target_authority":authority,"artifact_revision":"revision"
+            })),
+            "{\"artifact_revision\": \"revision\", \"target_authority\": {\"authority\": \"history\", \"generation\": 1, \"profile\": \"history/v1\", \"record_id\": \"record\", \"version\": 1}, \"target_baseline\": {\"version\": 1, \"record_id\": \"record\", \"authority_generation\": 1, \"committed_set_digest\": \"digest\", \"heads\": {}, \"open_acts\": {}}, \"subjects\": {\"p.x\": {\"requires_choice\": false, \"target_heads\": [], \"incoming_heads\": [\"claim\"], \"combined_heads\": [\"claim\"], \"claims\": [\"claim\"]}}}\n"
+        );
+        assert_eq!(
+            output(&json!({"operation":"op","revision":"rev","state":"adopted"})),
+            "{\"state\": \"adopted\", \"revision\": \"rev\", \"operation\": \"op\"}\n"
+        );
+        assert_eq!(
+            output(&refusal(&crate::Error(
+                "invalid_history_contribution".into()
+            ))),
+            "{\"state\": \"refused\", \"code\": \"history_refused\", \"detail\": \"stored contribution evidence failed its complete identity check\"}\n"
+        );
+    }
 }
