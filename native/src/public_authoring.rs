@@ -17,6 +17,9 @@ use std::{
     sync::LazyLock,
 };
 
+#[path = "ordinary_contribution_authoring.rs"]
+mod contribution_routing;
+
 #[derive(Clone, Default, clap::Args)]
 pub struct Options {
     pub subject: String,
@@ -46,6 +49,22 @@ pub struct Options {
     pub on: Option<String>,
     #[arg(long)]
     pub expected_revision: Option<String>,
+    #[arg(long, value_parser = ["project", "private", "unclear"])]
+    pub shareability: Option<String>,
+    #[arg(long, value_parser = ["project", "external", "code", "feature", "unclear"])]
+    pub scope: Option<String>,
+    #[arg(long)]
+    pub environment: Option<String>,
+    #[arg(long)]
+    pub commit: Option<String>,
+    #[arg(long)]
+    pub event_id: Option<String>,
+    #[arg(long)]
+    pub contribution_id: Option<String>,
+    #[arg(long)]
+    pub evidence_root: Option<PathBuf>,
+    #[arg(long = "disclose-locator")]
+    pub disclose_locators: Vec<String>,
 }
 static NUMBER: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^-?[0-9]+(?:\.[0-9]+)?$").unwrap());
@@ -132,6 +151,39 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>, Option<Sour
     ]);
     if let Some(profile) = &options.profile {
         map_mut(&mut a)?.insert("profile".into(), s(profile));
+    }
+    for (key, value) in [
+        ("shareability", options.shareability.as_deref()),
+        ("scope", options.scope.as_deref()),
+        ("environment", options.environment.as_deref()),
+        ("commit", options.commit.as_deref()),
+        ("event_id", options.event_id.as_deref()),
+        ("contribution_id", options.contribution_id.as_deref()),
+    ] {
+        if let Some(value) = value {
+            map_mut(&mut a)?.insert(key.into(), s(value));
+        }
+    }
+    if let Some(root) = &options.evidence_root {
+        let root = root
+            .to_str()
+            .ok_or_else(|| error("invalid_evidence_root"))?;
+        map_mut(&mut a)?.insert("evidence_root".into(), s(root));
+    }
+    if !options.disclose_locators.is_empty() {
+        let mut disclosed = Vec::new();
+        for locator in &options.disclose_locators {
+            let (path, sha256) = locator
+                .rsplit_once('=')
+                .ok_or_else(|| error("--disclose-locator needs a relative PATH=SHA256"))?;
+            crate::history_authority::relative_path(path)?;
+            require(
+                sha256.len() == 64 && sha256.bytes().all(|b| b.is_ascii_hexdigit()),
+                "--disclose-locator needs a relative PATH=SHA256",
+            )?;
+            disclosed.push(obj([("path", s(path)), ("sha256", s(sha256))]));
+        }
+        map_mut(&mut a)?.insert("disclosed_locators".into(), V::List(disclosed));
     }
     if !options.drops.is_empty() {
         require(
@@ -238,14 +290,33 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     };
     let route = WriteRoute::capture(&original, &cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
+    let action = if route.paths()[0].exists() {
+        match contribution_routing::route(kind, options, action, source_body.as_ref(), route)? {
+            contribution_routing::Outcome::Handled(value) => {
+                return Ok(format!(
+                    "{}\n",
+                    crate::public_core_readers::json_value(&value)?
+                ));
+            }
+            contribution_routing::Outcome::Local(action) => action,
+        }
+    } else {
+        action
+    };
+    let route = WriteRoute::capture(&original, &cwd)?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];
     let _lock =
         F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
     if entry.exists()
-        && crate::legacy_authoring::route(entry, route.config())?
+        && crate::legacy_authoring::authority_route(entry)?
             == crate::legacy_authoring::AuthorityRoute::Legacy
     {
-        return crate::legacy_authoring::write(&action, &route, source_body.as_ref());
+        return if route.pending_required()? {
+            crate::legacy_authoring::write_advanced_local(&action, &route, source_body.as_ref())
+        } else {
+            crate::legacy_authoring::write(&action, &route, source_body.as_ref())
+        };
     }
     if entry.exists() {
         drop(_lock);

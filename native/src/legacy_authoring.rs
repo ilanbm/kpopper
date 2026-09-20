@@ -1361,12 +1361,13 @@ fn nearest_notice(
     )
 }
 
-pub(crate) fn prepare_with_inventory(
+fn prepare_with_inventory_mode(
     action: &V,
     route: &WriteRoute,
     source_body: Option<&Source>,
     mut inventory: Inventory,
     supplied_page: Option<crate::ordinary_page_capture::PageCapture>,
+    pending_candidate: bool,
 ) -> Result<Preparation> {
     let a = map(action)?;
     require(
@@ -1374,7 +1375,8 @@ pub(crate) fn prepare_with_inventory(
         "legacy_named_hypothesis_authoring_requires_history",
     )?;
     require(
-        string_is(field(map(route.config())?, "mode")?, "simple"),
+        string_is(field(map(route.config())?, "mode")?, "simple")
+            || pending_candidate && route.pending_required()?,
         "legacy_authoring_requires_simple_project",
     )?;
     let entry = route
@@ -1565,6 +1567,7 @@ pub(crate) fn prepare_with_inventory(
     if kind == "set"
         && action.get("as_of").is_none_or(|value| *value == V::Null)
         && action.get("source").is_none_or(|value| *value == V::Null)
+        && !action.contains_key("_record_scope")
         && same_legacy(&reader.value(&id)?, field(&action, "value")?)
     {
         return Ok(Preparation::Draft {
@@ -1747,6 +1750,20 @@ pub(crate) fn prepare_with_inventory(
                 action.get("source").and_then(|value| text(value).ok()),
                 action.get("at").and_then(|value| text(value).ok()),
             )?;
+            if let Some(scope) = action.get("_record_scope") {
+                let (_, member) = locate(&lines, &id).unwrap();
+                if inline(&lines[member.start]).starts_with('{') {
+                    let body = &crate::reasoning_fields::collections(&candidate)?[&collection][&id];
+                    replace_entry(&mut lines, &id, &preserve_order(body, None))?;
+                } else {
+                    replace_field_ordered(
+                        &mut lines,
+                        &member,
+                        "scope",
+                        &Source::from_typed(scope),
+                    )?;
+                }
+            }
             output.push(format!(
                 "set {id}: {old} -> {} (as of {stamp})",
                 scalar(field(&action, "value")?, Style::Bare)?
@@ -2003,6 +2020,24 @@ pub(crate) fn prepare_with_inventory(
     }))
 }
 
+pub(crate) fn prepare_with_inventory(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+    inventory: Inventory,
+    supplied_page: Option<crate::ordinary_page_capture::PageCapture>,
+) -> Result<Preparation> {
+    prepare_with_inventory_mode(action, route, source_body, inventory, supplied_page, false)
+}
+
+pub(crate) fn prepare_pending_candidate(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+) -> Result<Preparation> {
+    prepare_with_inventory_mode(action, route, source_body, Inventory::default(), None, true)
+}
+
 fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Result<Preparation> {
     prepare_with_inventory(action, route, source_body, Inventory::default(), None)
 }
@@ -2019,7 +2054,12 @@ impl IntoList for V {
     }
 }
 
-fn verify_prepared(prepared: &Prepared, route: &WriteRoute, inventory: &Inventory) -> Result<()> {
+fn verify_prepared_mode(
+    prepared: &Prepared,
+    route: &WriteRoute,
+    inventory: &Inventory,
+    advanced_local: bool,
+) -> Result<()> {
     route.verify()?;
     inventory.verify()?;
     if let Some(page) = &prepared.page {
@@ -2032,25 +2072,30 @@ fn verify_prepared(prepared: &Prepared, route: &WriteRoute, inventory: &Inventor
         &prepared.mutation,
         map(field(map(&data)?, "baseline")?)?,
     )?;
+    let entry = entry_path(&prepared.root, &prepared.mutation)?;
     require(
-        self::route(
-            &entry_path(&prepared.root, &prepared.mutation)?,
-            route.config(),
-        )? == AuthorityRoute::Legacy,
+        self::authority_route(&entry)? == AuthorityRoute::Legacy
+            && (advanced_local || self::route(&entry, route.config())? == AuthorityRoute::Legacy),
         "project_route_changed",
     )
+}
+
+#[cfg(test)]
+fn verify_prepared(prepared: &Prepared, route: &WriteRoute, inventory: &Inventory) -> Result<()> {
+    verify_prepared_mode(prepared, route, inventory, false)
 }
 
 fn publish_with_committed(
     prepared: Prepared,
     route: &WriteRoute,
     committed: Option<F::Verify<'_>>,
+    advanced_local: bool,
 ) -> Result<String> {
     if prepared.journal.is_empty() {
         return Ok(prepared.output);
     }
     let inventory = legacy_named::prepare_directories(&prepared)?;
-    let mut verify = |_: &V| verify_prepared(&prepared, route, &inventory);
+    let mut verify = |_: &V| verify_prepared_mode(&prepared, route, &inventory, advanced_local);
     F::publish_legacy(
         &prepared.root,
         &prepared.journal,
@@ -2067,7 +2112,7 @@ fn publish_with_committed(
 }
 
 fn publish(prepared: Prepared, route: &WriteRoute) -> Result<String> {
-    publish_with_committed(prepared, route, None)
+    publish_with_committed(prepared, route, None, false)
 }
 
 pub(crate) fn publish_prepared_with_committed(
@@ -2075,7 +2120,7 @@ pub(crate) fn publish_prepared_with_committed(
     route: &WriteRoute,
     committed: F::Verify<'_>,
 ) -> Result<String> {
-    publish_with_committed(prepared, route, Some(committed))
+    publish_with_committed(prepared, route, Some(committed), false)
 }
 
 /// Resume a report whose private journal was durable before the ordinary
@@ -2298,6 +2343,27 @@ pub(crate) fn write(
     match prepared {
         Preparation::Draft { output, .. } => Ok(output),
         Preparation::Mutation(prepared) => publish(prepared, route),
+    }
+}
+
+/// Advanced projects may intentionally keep an ordinary local record for
+/// unannotated, feature-scoped, and unclear-scoped work. This path retains the
+/// legacy authority guard while bypassing only the Simple-mode routing gate.
+pub(crate) fn write_advanced_local(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+) -> Result<String> {
+    require(route.pending_required()?, "legacy_authoring_requires_advanced_project")?;
+    require(
+        map(action)?
+            .get("hypothesis")
+            .is_none_or(|value| *value == V::Null),
+        "legacy_named_hypothesis_authoring_requires_history",
+    )?;
+    match prepare_pending_candidate(action, route, source_body)? {
+        Preparation::Draft { output, .. } => Ok(output),
+        Preparation::Mutation(prepared) => publish_with_committed(prepared, route, None, true),
     }
 }
 

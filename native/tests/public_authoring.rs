@@ -8,6 +8,16 @@ use std::{
 fn run(root: &Path, args: &[&str]) -> Output {
     command(root).args(args).output().unwrap()
 }
+fn run_unbundled(root: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .current_dir(root)
+        .env_remove("KPOPPER_AGENT_SESSION")
+        .env_remove("CODEX_THREAD_ID")
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .args(args)
+        .output()
+        .unwrap()
+}
 fn command(root: &Path) -> Command {
     let resources = root.join(".test-runtime");
     let target = kpop_native::reasoning_runtime::target_name().unwrap();
@@ -36,6 +46,307 @@ fn success(output: Output) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8(output.stdout).unwrap()
+}
+
+fn git(root: &Path, args: &[&str]) -> Output {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output
+}
+
+fn advanced_ordinary(source: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    fs::create_dir(&root).unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    git(&root, &["config", "user.name", "Fixture"]);
+    git(&root, &["config", "user.email", "fixture@example.test"]);
+    fs::write(root.join("GROUNDING.yaml"), source).unwrap();
+    git(&root, &["add", "GROUNDING.yaml"]);
+    git(
+        &root,
+        &["-c", "commit.gpgsign=false", "commit", "-qm", "fixture"],
+    );
+    (temp, root)
+}
+
+fn pending_manifest(root: &Path, revision: &str) -> kpop_native::value::TypedValue {
+    let path = format!("refs/kpopper/pending_grounding:contributions/{revision}/manifest.json");
+    let output = git(root, &["show", &path]);
+    let tagged: Value = serde_json::from_slice(&output.stdout).unwrap();
+    kpop_native::value::TypedValue::from_tagged(&tagged).unwrap()
+}
+
+#[test]
+fn advanced_explicit_add_captures_without_mutating_the_record_and_replays() {
+    use kpop_native::value::TypedValue as V;
+    let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let args = [
+        "add",
+        "p.new",
+        "v=2",
+        "--shareability",
+        "project",
+        "--scope",
+        "external",
+        "--environment",
+        "vendor",
+        "--event-id",
+        "event-fixed",
+        "--contribution-id",
+        "new",
+    ];
+    let first: Value = serde_json::from_str(&success(run_unbundled(&root, &args))).unwrap();
+    assert_eq!(first["state"], "captured");
+    assert_eq!(first["replay"], false);
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    let revision = first["revision"].as_str().unwrap();
+    let manifest = pending_manifest(&root, revision);
+    let V::Map(manifest) = manifest else {
+        panic!("manifest")
+    };
+    let V::Map(document) = &manifest["document"] else {
+        panic!("document")
+    };
+    let V::Map(known) = &document["known"] else {
+        panic!("known")
+    };
+    let V::Map(body) = &known["p.new"] else {
+        panic!("body")
+    };
+    let V::Map(scope) = &body["scope"] else {
+        panic!("scope")
+    };
+    assert_eq!(scope["kind"], V::Text("external".into()));
+    let replay: Value = serde_json::from_str(&success(run_unbundled(&root, &args))).unwrap();
+    assert_eq!(replay["replay"], true);
+    let changed = run_unbundled(
+        &root,
+        &[
+            "add",
+            "p.new",
+            "v=3",
+            "--shareability",
+            "project",
+            "--scope",
+            "external",
+            "--environment",
+            "vendor",
+            "--event-id",
+            "event-fixed",
+            "--contribution-id",
+            "new",
+        ],
+    );
+    assert!(!changed.status.success());
+    assert!(String::from_utf8_lossy(&changed.stderr).contains("event ID was already used"));
+}
+
+#[test]
+fn advanced_local_scopes_are_written_and_project_review_is_refused() {
+    let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
+    success(run_unbundled(
+        &root,
+        &[
+            "add",
+            "p.feature",
+            "v=2",
+            "--shareability",
+            "project",
+            "--scope",
+            "feature",
+            "--environment",
+            "checkout",
+        ],
+    ));
+    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    assert!(record.contains("kind: feature"));
+    assert!(record.contains("environment: checkout"));
+    let review = run_unbundled(
+        &root,
+        &[
+            "review",
+            "p.feature",
+            "--shareability",
+            "project",
+            "--scope",
+            "external",
+            "--environment",
+            "vendor",
+        ],
+    );
+    assert!(!review.status.success());
+    assert!(String::from_utf8_lossy(&review.stderr).contains("not a review refresh"));
+}
+
+#[test]
+fn advanced_set_and_judgment_capture_complete_authored_bodies() {
+    use kpop_native::value::TypedValue as V;
+    let (_temp, root) = advanced_ordinary(
+        "known:\n  p.base: {v: 1}\njudgments:\n  d.old:\n    verdict: proceed\n    rests_on: [p.base]\n    reopened_by: new reading\n    seen: {p.base: 1}\n",
+    );
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let set: Value = serde_json::from_str(&success(run_unbundled(
+        &root,
+        &[
+            "set",
+            "p.base",
+            "1",
+            "--shareability",
+            "project",
+            "--scope",
+            "project",
+            "--environment",
+            "workspace",
+            "--event-id",
+            "set-event",
+        ],
+    )))
+    .unwrap();
+    let manifest = pending_manifest(&root, set["revision"].as_str().unwrap());
+    let V::Map(manifest) = manifest else {
+        panic!("manifest")
+    };
+    let V::Map(document) = &manifest["document"] else {
+        panic!("document")
+    };
+    let V::Map(known) = &document["known"] else {
+        panic!("known")
+    };
+    let V::Map(body) = &known["p.base"] else {
+        panic!("body")
+    };
+    assert!(body.contains_key("of"));
+    let V::Map(scope) = &body["scope"] else {
+        panic!("scope")
+    };
+    assert_eq!(scope["environment"], V::Text("workspace".into()));
+
+    let judgment: Value = serde_json::from_str(&success(run_unbundled(
+        &root,
+        &[
+            "add",
+            "d.new",
+            "verdict=continue",
+            "rests_on=[p.base]",
+            "reopened_by=new reading",
+            "--shareability",
+            "project",
+            "--scope",
+            "external",
+            "--environment",
+            "vendor",
+            "--event-id",
+            "judgment-event",
+        ],
+    )))
+    .unwrap();
+    let manifest = pending_manifest(&root, judgment["revision"].as_str().unwrap());
+    let V::Map(manifest) = manifest else {
+        panic!("manifest")
+    };
+    let V::Map(document) = &manifest["document"] else {
+        panic!("document")
+    };
+    let V::Map(judgments) = &document["judgments"] else {
+        panic!("judgments")
+    };
+    let V::Map(body) = &judgments["d.new"] else {
+        panic!("body")
+    };
+    let V::Map(seen) = &body["seen"] else {
+        panic!("seen")
+    };
+    assert_eq!(
+        seen["p.base"],
+        V::Integer(kpop_native::value::Integer::new("1").unwrap())
+    );
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+}
+
+#[test]
+fn advanced_private_and_code_routes_never_enter_the_pending_queue() {
+    let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
+    let private = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .current_dir(&root)
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env("KPOPPER_PRIVATE_HOME", private.path())
+        .args([
+            "add",
+            "p.secret",
+            "v=2",
+            "--shareability",
+            "private",
+            "--scope",
+            "external",
+            "--environment",
+            "vendor",
+            "--event-id",
+            "private-event",
+        ])
+        .output()
+        .unwrap();
+    let draft: Value = serde_json::from_str(&success(output)).unwrap();
+    assert_eq!(draft["state"], "private draft");
+    assert!(
+        !Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["rev-parse", "--verify", "refs/kpopper/pending_grounding"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+
+    let bad = run_unbundled(
+        &root,
+        &[
+            "add",
+            "p.code",
+            "v=2",
+            "--shareability",
+            "project",
+            "--scope",
+            "code",
+            "--environment",
+            "checkout",
+            "--commit",
+            "ABC",
+        ],
+    );
+    assert!(!bad.status.success());
+    let commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    success(run_unbundled(
+        &root,
+        &[
+            "add",
+            "p.code",
+            "v=2",
+            "--shareability",
+            "project",
+            "--scope",
+            "code",
+            "--environment",
+            "checkout",
+            "--commit",
+            commit,
+        ],
+    ));
+    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    assert!(record.contains("kind: code"));
+    assert!(record.contains(commit));
 }
 #[test]
 fn empty_tmpdir_keeps_publication_receipts_outside_the_workspace() {
