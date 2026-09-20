@@ -1,4 +1,6 @@
 //! Native synchronous application of one explicit source report.
+#[path = "public_update_advanced.rs"]
+mod advanced;
 use crate::{
     Result,
     history_contract::{error, map},
@@ -886,6 +888,13 @@ fn private_reason(report: &Report) -> Result<Option<&'static str>> {
             "private or unclear original source permission; report retained privately",
         ));
     }
+    if report.raw.get("scope").is_some()
+        && report.raw.get("shareability").and_then(J::as_str) != Some("project")
+    {
+        return Ok(Some(
+            "private or unclear report permission; retained privately",
+        ));
+    }
     if report
         .raw
         .get("scope")
@@ -896,6 +905,17 @@ fn private_reason(report: &Report) -> Result<Option<&'static str>> {
         return Ok(Some("unclear report scope; retained privately"));
     }
     Ok(None)
+}
+
+fn receipt_code(receipt: &J) -> i32 {
+    if matches!(
+        receipt["state"].as_str(),
+        Some("applied" | "project_captured")
+    ) {
+        0
+    } else {
+        1
+    }
 }
 
 pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output> {
@@ -1016,7 +1036,7 @@ fn run_bound(
                 &receipt,
                 crate::json_ingress::DuplicateKeys::Reject,
             )?;
-            let code = if value["state"] == "applied" { 0 } else { 1 };
+            let code = receipt_code(&value);
             return Ok(Output {
                 text: String::from_utf8(receipt).map_err(|_| error("invalid receipt"))?,
                 code,
@@ -1058,6 +1078,25 @@ fn run_bound(
     if let Some(raw) = retained_report {
         let mut journal =
             crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?;
+        if journal["kind"] == "native-advanced-report/v1" {
+            drop(_state_lock);
+            drop(_record_lock);
+            return advanced::recover(
+                &report,
+                &event,
+                advanced::Context {
+                    route,
+                    record: &record,
+                    state_root: &root,
+                    source_path: &source_path,
+                    envelope_sha256: &envelope_sha,
+                    expected_target,
+                    supplied_runtime,
+                    after_capture: &mut || probe("advanced_captured"),
+                },
+            )?
+            .ok_or_else(|| error("advanced report recovery unavailable"));
+        }
         let mutation = journal_mutation(&journal)?;
         let history = journal["history"]
             .as_bool()
@@ -1149,7 +1188,7 @@ fn run_bound(
                 &receipt,
                 crate::json_ingress::DuplicateKeys::Reject,
             )?;
-            let code = if value["state"] == "applied" { 0 } else { 1 };
+            let code = receipt_code(&value);
             return Ok(Output {
                 text: String::from_utf8(receipt).map_err(|_| error("invalid receipt"))?,
                 code,
@@ -1195,12 +1234,36 @@ fn run_bound(
     }
     drop(_state_lock);
 
+    if private_reason(&report)?.is_none()
+        && advanced::applies(&report, &route)?
+        && crate::legacy_authoring::authority_route(&record)?
+            == crate::legacy_authoring::AuthorityRoute::Legacy
+    {
+        drop(_record_lock);
+        return advanced::capture(
+            &report,
+            &event,
+            advanced::Context {
+                route,
+                record: &record,
+                state_root: &root,
+                source_path: &source_path,
+                envelope_sha256: &envelope_sha,
+                expected_target,
+                supplied_runtime,
+                after_capture: &mut || probe("advanced_captured"),
+            },
+        )?
+        .ok_or_else(|| error("advanced report capture unavailable"));
+    }
+
+    let mut pending_history = None;
     let outcome = (|| {
         if let Some(reason) = private_reason(&report)? {
             return Err(error(reason));
         }
         route.verify()?;
-        let authority = crate::legacy_authoring::route(&record, route.config())?;
+        let authority = crate::legacy_authoring::authority_route(&record)?;
         let mut context = json!({
             "kind":"source-report/v1", "event_id":event,
             "source_sha256":crate::identity::sha256(report.quote.as_bytes()),
@@ -1256,8 +1319,17 @@ fn run_bound(
                 "private or unclear original source permission; report retained privately",
             )?;
             let collection = source_collection(&document, &report)?;
-            let (planned, source_bodies) = actions(&report, &event, &source_path, &collection)?;
-            let prepared = legacy_batch::prepare(
+            let (mut planned, source_bodies) = actions(&report, &event, &source_path, &collection)?;
+            let advanced_local = route.pending_required()?;
+            if advanced_local {
+                advanced::apply_declared_scope(&report, &mut planned)?;
+            }
+            let prepare = if advanced_local {
+                legacy_batch::prepare_advanced_local
+            } else {
+                legacy_batch::prepare
+            };
+            let prepared = prepare(
                 &planned,
                 &route,
                 &legacy_batch::Options {
@@ -1283,11 +1355,12 @@ fn run_bound(
                 )?;
                 probe("committed")
             };
-            crate::legacy_authoring::publish_prepared_with_committed(
-                prepared,
-                &route,
-                &mut committed,
-            )?;
+            let publish = if advanced_local {
+                crate::legacy_authoring::publish_advanced_prepared_with_committed
+            } else {
+                crate::legacy_authoring::publish_prepared_with_committed
+            };
+            publish(prepared, &route, &mut committed)?;
             return Ok((mutation, graphs));
         }
         let entry_name = record
@@ -1379,6 +1452,19 @@ fn run_bound(
             !crate::recording_privacy::private_marker(&authored),
             "private or unclear prepared source permission",
         )?;
+        if advanced::applies(&report, &route)? {
+            pending_history = Some(advanced::prepare_history(
+                &report,
+                &event,
+                &captured,
+                &mutation,
+                &batch.authoring.recorded_at,
+                entry_name,
+                &record,
+                Vec::new(),
+            )?);
+            return Ok((mutation, graphs));
+        }
         save(
             &journal_path,
             &retained_journal(&mutation, true, "prepared", Some(&graphs))?,
@@ -1402,6 +1488,26 @@ fn run_bound(
         )?;
         Ok((mutation, graphs))
     })();
+    if outcome.is_ok()
+        && let Some(prepared) = pending_history
+    {
+        drop(_record_lock);
+        return advanced::capture_prepared_history(
+            &report,
+            &event,
+            advanced::Context {
+                route,
+                record: &record,
+                state_root: &root,
+                source_path: &source_path,
+                envelope_sha256: &envelope_sha,
+                expected_target,
+                supplied_runtime,
+                after_capture: &mut || probe("advanced_captured"),
+            },
+            prepared,
+        );
+    }
     let (state, reason, mutation, graphs, code) = match outcome {
         Ok((mutation, graphs)) => ("applied", None, Some(mutation), Some(graphs), 0),
         Err(e) => {
