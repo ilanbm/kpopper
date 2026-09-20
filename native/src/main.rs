@@ -1087,6 +1087,11 @@ fn main() {
                 );
             }
         }
+        Ok(Value::String(text)) if is_agent => {
+            if !text.is_empty() {
+                println!("{text}");
+            }
+        }
         Ok(value) if is_agent => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
         Ok(value) => println!("{}", value),
         Err(error) => {

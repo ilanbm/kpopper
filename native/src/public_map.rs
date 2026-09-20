@@ -18,11 +18,12 @@ pub struct Options {
 #[derive(Clone, Debug, Args)]
 pub struct AgentOptions {
     #[command(subcommand)]
-    pub command: AgentCommand,
+    pub command: Option<AgentCommand>,
 }
 #[derive(Clone, Debug, clap::Subcommand)]
 pub enum AgentCommand {
     Status,
+    Guide,
     Task,
     Shown {
         event: String,
@@ -320,16 +321,23 @@ pub fn run(options: &Options, workspace: &Path) -> Result<Value> {
     request(workspace, options.deep)
 }
 pub fn run_agent(options: &AgentOptions, workspace: &Path) -> Result<Value> {
+    if matches!(options.command, Some(AgentCommand::Guide)) {
+        return Ok(Value::String(
+            include_str!("../../scripts/start-guide.md").into(),
+        ));
+    }
     let loc = public_workspace::locate(workspace, crate::source_capture::ReadMode::Live)?;
     match &options.command {
-        AgentCommand::Status => onboarding::status_at(
+        None => Ok(Value::String(onboarding::context(&loc)?)),
+        Some(AgentCommand::Guide) => unreachable!(),
+        Some(AgentCommand::Status) => onboarding::status_at(
             &loc.workspace,
             &loc.key,
             &loc.record,
             &loc.status,
             &loc.reason,
         ),
-        AgentCommand::Task => {
+        Some(AgentCommand::Task) => {
             let job = read_job(&loc.key)?.ok_or_else(|| {
                 Error("This mapping belongs to a different request or agent session.".into())
             })?;
@@ -339,16 +347,16 @@ pub fn run_agent(options: &AgentOptions, workspace: &Path) -> Result<Value> {
             )?;
             packet(&loc, &job)
         }
-        AgentCommand::Shown { event } => {
+        Some(AgentCommand::Shown { event }) => {
             onboarding::mark_key(&loc.workspace, &loc.key, &loc.record, &loc.status, event)
         }
-        AgentCommand::Accept { request } => {
+        Some(AgentCommand::Accept { request }) => {
             transition(&loc.workspace, request, "accept", None, None)
         }
-        AgentCommand::Complete { request, report } => {
+        Some(AgentCommand::Complete { request, report }) => {
             transition(&loc.workspace, request, "complete", Some(report), None)
         }
-        AgentCommand::Fail { request, reason } => {
+        Some(AgentCommand::Fail { request, reason }) => {
             transition(&loc.workspace, request, "fail", None, Some(reason))
         }
     }

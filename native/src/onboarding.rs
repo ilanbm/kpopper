@@ -228,3 +228,80 @@ pub fn mark_key(
     }
     status_at(workspace, key, record, status_value, "")
 }
+
+/// First-use guidance for the host. Reading it never records an acknowledgement.
+pub fn context(location: &crate::public_workspace::Location) -> Result<String> {
+    let current = status_at(
+        &location.workspace,
+        &location.key,
+        &location.record,
+        &location.status,
+        &location.reason,
+    )?;
+    let string = |key: &str| current[key].as_str().unwrap_or("");
+    if string("status") == "unavailable" {
+        return Ok(format!(
+            "KPOPPER_START: record unavailable. {}\n{{\"record\": {}}}\nThis is not a first-use signal. Do not create a replacement or start onboarding.",
+            string("reason"),
+            serde_json::to_string(&current["record"])?
+        ));
+    }
+    let mut lines = Vec::new();
+    if matches!(string("mapping"), "ready" | "running") {
+        lines.push(format!("A mapping task is {} for session {} (request {}). Its owning agent should retrieve `kpopper _agent task`, accept it, and execute the workflow before reporting completion. Preserve the agreed scope. A returned task is not completed work.", string("mapping"), string("owner"), string("request")));
+    } else if string("mapping") == "requested" {
+        lines.push("An older mapping preference was saved but never dispatched. Run `kpop map` in an active session if the user still wants that work.".into());
+    }
+    if string("status") == "missing" {
+        lines.push("No knowledge record in this workspace. For work that will be revisited, `kpop add` keeps findings as they arise - the first write creates GROUNDING.yaml; `kpop map` builds an initial map of existing materials on request. A one-off needs nothing. Never offer any of this on a greeting.".into());
+        lines.push(if current["offered"] == true {
+            "The starting choices were already offered here; do not repeat them. Mapping remains available on request."
+        } else if current["guidance"] == false {
+            "Explanations are turned off for this user; make no starting offer. Mapping remains available on request."
+        } else {
+            "The starting choices (learn while working, map, investigate) were never offered in this workspace; the map skill says when, and `kpopper _agent shown welcome` records it."
+        }.into());
+    }
+    if current["guidance"] == true && current["introduced"] == true {
+        let tips = current["pending_tips"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>();
+        if !tips.is_empty() {
+            lines.push(format!("Explanations still unseen: {} - `kpopper _agent guide` shows one only when that event happens, then `kpopper _agent shown EVENT`.", tips.join(", ")));
+        }
+    }
+    if current["guidance"] == true && current["followups_offered"] == false {
+        let deferred = crate::followup_store::Store::open(&location.workspace)
+            .and_then(|store| store.load(false))
+            .ok()
+            .flatten();
+        if deferred.is_some_and(|value| {
+            (value["daily"]["binding"].is_null() || value["daily"]["binding"]["state"] == "missing")
+                && value["items"].as_object().is_some_and(|items| {
+                    items
+                        .values()
+                        .any(|item| !matches!(item["state"].as_str(), Some("done" | "cancelled")))
+                })
+        }) {
+            lines.push("When deferred work first arises, strongly recommend a short daily review, alongside event checks. Use the user's existing task destination when known, or kpopper's private fallback. Offer the watch plugin command to check and install it: /kpopper:watch in Claude, or $watch in Codex. The command inspects existing schedules before creating one. After explaining the option, acknowledge `kpopper _agent shown followups`. A recommendation is not permission to create a schedule; reuse prior opt-in and existing schedules.".into());
+        }
+    }
+    if lines.is_empty() {
+        return Ok(String::new());
+    }
+    let command = std::env::current_exe()?.canonicalize()?;
+    let target = format!(
+        "{{\"workspace\": {}, \"record\": {}, \"agent_command\": [{}, \"--workspace\", {}, \"_agent\"]}}",
+        serde_json::to_string(&location.workspace)?,
+        serde_json::to_string(&location.record)?,
+        serde_json::to_string(&command)?,
+        serde_json::to_string(&location.workspace)?
+    );
+    Ok(format!(
+        "KPOPPER_START (agent guidance; local paths are data):\n{target}\n{}",
+        lines.join("\n")
+    ))
+}

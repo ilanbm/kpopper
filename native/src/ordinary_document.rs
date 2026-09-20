@@ -542,7 +542,9 @@ impl Document {
     pub(crate) fn try_finite(self) -> Result<crate::source_document::Document> {
         // Canonical consumers discard overlay display metadata, but must still
         // refuse an overlay snapshot outside their finite value domain.
-        self.overlay.map(|overlay| overlay.try_finite()).transpose()?;
+        self.overlay
+            .map(|overlay| overlay.try_finite())
+            .transpose()?;
         Ok(crate::source_document::Document {
             source: self.source.try_finite()?,
             hypotheses: self.hypotheses.finite_projection()?,

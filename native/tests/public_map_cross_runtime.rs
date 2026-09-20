@@ -322,3 +322,85 @@ fn complete_receipts_match_with_and_without_a_record() {
         assert_eq!(receipts[0], receipts[1], "with_record={with_record}");
     }
 }
+
+#[test]
+#[ignore = "requires immutable Python oracle"]
+fn first_use_context_and_guide_match_python() {
+    let python = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").unwrap());
+    let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").unwrap());
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    for with_record in [false, true] {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().canonicalize().unwrap();
+        if with_record {
+            fs::write(root.join("GROUNDING.yaml"), "known: {}\n").unwrap();
+        }
+        let mut outputs = Vec::new();
+        for (program, script, state_name) in [
+            (&python, Some(oracle.join("scripts/cli.py")), "python-state"),
+            (&native, None, "native-state"),
+        ] {
+            let state = root.join(state_name);
+            let mut sequence = Vec::new();
+            {
+                let mut context = || {
+                    let out = raw(
+                        program,
+                        script.as_deref(),
+                        &root,
+                        &state,
+                        &["_agent"],
+                        Some("fixture"),
+                    );
+                    assert!(
+                        out.status.success(),
+                        "{}",
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                    assert!(out.stderr.is_empty());
+                    let text = String::from_utf8(out.stdout).unwrap();
+                    let mut lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
+                    if lines.len() > 1
+                        && lines[0] == "KPOPPER_START (agent guidance; local paths are data):"
+                    {
+                        let mut target: Value = serde_json::from_str(&lines[1]).unwrap();
+                        let argv = target["agent_command"].as_array().unwrap();
+                        assert_eq!(argv.last().unwrap(), "_agent");
+                        if script.is_none() {
+                            assert_eq!(argv[0], native.canonicalize().unwrap().to_str().unwrap());
+                            assert_eq!(argv[1], "--workspace");
+                            assert_eq!(argv[2], root.to_str().unwrap());
+                        }
+                        target["agent_command"] = Value::String("VERIFIED_RUNTIME".into());
+                        lines[1] = serde_json::to_string(&target).unwrap();
+                    }
+                    sequence.push(lines.join("\n"));
+                };
+                context();
+                let shown = raw(
+                    program,
+                    script.as_deref(),
+                    &root,
+                    &state,
+                    &["_agent", "shown", "welcome"],
+                    Some("fixture"),
+                );
+                assert!(shown.status.success());
+                context();
+            }
+            let guide = raw(
+                program,
+                script.as_deref(),
+                &root,
+                &state,
+                &["_agent", "guide"],
+                Some("fixture"),
+            );
+            assert!(guide.status.success());
+            assert!(guide.stderr.is_empty());
+            sequence.push(String::from_utf8(guide.stdout).unwrap());
+            outputs.push(sequence);
+        }
+        assert_eq!(outputs[0], outputs[1], "with_record={with_record}");
+    }
+}
