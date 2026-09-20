@@ -73,10 +73,12 @@ fn file_identity(metadata: &std::fs::Metadata) -> u128 {
 }
 
 #[cfg(windows)]
-fn file_identity(_metadata: &std::fs::Metadata) -> u128 {
-    // Stable Rust does not expose a portable Windows file identity. The stamp
-    // still binds canonical path, size, mtime, and (during verification) hash.
-    0
+fn file_identity(metadata: &std::fs::Metadata) -> u128 {
+    use std::os::windows::fs::MetadataExt;
+    // Stable Rust does not expose volume/file IDs here. Creation time adds a
+    // stable replacement signal to the canonical path, size, and mtime stamp;
+    // the initial load still verifies the full pinned SHA-256.
+    u128::from(metadata.creation_time())
 }
 
 fn stamp(directory: &Path) -> Result<Stamp, String> {
@@ -293,6 +295,7 @@ struct State {
 
 pub struct E5Index {
     model_dir: PathBuf,
+    unavailable_reason: Option<String>,
     state: Mutex<State>,
 }
 
@@ -300,6 +303,19 @@ impl E5Index {
     pub fn new(model_dir: impl Into<PathBuf>) -> Self {
         Self {
             model_dir: model_dir.into(),
+            unavailable_reason: None,
+            state: Mutex::new(State {
+                encoder: None,
+                stamp: None,
+                cached: None,
+            }),
+        }
+    }
+
+    pub fn unavailable(reason: impl Into<String>) -> Self {
+        Self {
+            model_dir: PathBuf::new(),
+            unavailable_reason: Some(reason.into()),
             state: Mutex::new(State {
                 encoder: None,
                 stamp: None,
@@ -309,6 +325,9 @@ impl E5Index {
     }
 
     fn ensure_runtime(&self, state: &mut State) -> Result<(), String> {
+        if let Some(reason) = &self.unavailable_reason {
+            return Err(unavailable(reason));
+        }
         if state.encoder.is_some() {
             require(
                 stamp(&self.model_dir)? == state.stamp.clone().unwrap(),
@@ -555,6 +574,15 @@ mod tests {
             .rank(&BTreeMap::from([("a".into(), "text".into())]), "query")
             .unwrap_err();
         assert!(error.contains("assets are unavailable"));
+    }
+
+    #[test]
+    fn unresolved_configured_path_is_deferred_to_search_fallback() {
+        let index = E5Index::unavailable("embedding directory could not be resolved");
+        let error = index
+            .rank(&BTreeMap::from([("a".into(), "text".into())]), "query")
+            .unwrap_err();
+        assert!(error.contains("embedding directory could not be resolved"));
     }
 
     #[test]

@@ -169,6 +169,8 @@ fn configured_missing_e5_assets_fail_closed_to_complete_lexical_search() {
     ok(command(root, "open", true).output().unwrap());
     let (revision, _) = saved(root);
     let output = ok(command(root, "search", false)
+        .env_remove("HOME")
+        .env_remove("USERPROFILE")
         .args([
             "--revision",
             &revision,
@@ -190,6 +192,43 @@ fn configured_missing_e5_assets_fail_closed_to_complete_lexical_search() {
             .unwrap()
             .contains("model assets are unavailable")
     );
+    assert!(
+        !packet["fallback"]
+            .as_str()
+            .unwrap()
+            .contains(root.to_str().unwrap())
+    );
+    assert!(
+        packet["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|hit| hit["id"] == "p.a")
+    );
+}
+
+#[test]
+fn tilde_e5_path_degrades_only_semantic_search() {
+    let temp = fixture();
+    let root = temp.path();
+    ok(command(root, "open", true).output().unwrap());
+    let (revision, _) = saved(root);
+    let output = ok(command(root, "search", false)
+        .args([
+            "--revision",
+            &revision,
+            "--query",
+            "שלום",
+            "--search-mode",
+            "semantic",
+            "--embedding-dir",
+            "~",
+        ])
+        .output()
+        .unwrap());
+    let packet: Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(packet["backend"], "lexical");
+    assert!(packet["fallback"].as_str().unwrap().contains("unavailable"));
     assert!(
         !packet["fallback"]
             .as_str()

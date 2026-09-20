@@ -226,11 +226,14 @@ impl Service {
         let profile_path = profile.clone();
         let store =
             CheckedSessionStore::open(&state, &name, &input, navigation.clone(), options.encoding)?;
-        let semantic = options
-            .embedding_dir
-            .as_ref()
-            .map(|directory| path(&cwd, directory).map(E5Index::new))
-            .transpose()?;
+        let semantic =
+            options
+                .embedding_dir
+                .as_ref()
+                .map(|directory| match path(&cwd, directory) {
+                    Ok(directory) => E5Index::new(directory),
+                    Err(_) => E5Index::unavailable("embedding directory could not be resolved"),
+                });
         inputs.verify()?;
         Ok(Self {
             cwd,
