@@ -3,7 +3,7 @@ use crate::{Result, history_contract::{error, map, text}, require, value::TypedV
 use serde_json::{Value as J, json};
 use std::collections::{BTreeMap, BTreeSet};
 
-fn basic_type(value: &V) -> Option<&'static str> {
+pub(crate) fn basic_type(value: &V) -> Option<&'static str> {
     match value {
         V::Bool(_) => Some("boolean"),
         V::Integer(_) => Some("integer"),
@@ -19,7 +19,7 @@ fn body_hash(value: &V) -> Result<String> {
 }
 struct RecordShape {
     entries: BTreeMap<String, V>,
-    homes: BTreeMap<String, String>,
+    homes: BTreeMap<String, Vec<String>>,
     source_collections: BTreeSet<String>,
     deps: String,
     snapshot: String,
@@ -32,19 +32,19 @@ fn entries(document: &V) -> Result<RecordShape> {
     let deps = text(&fields["deps"])?.to_owned();
     let snapshot = text(&fields["snapshot"])?.to_owned();
     let mut entries = BTreeMap::new();
-    let mut homes = BTreeMap::new();
+    let mut homes = BTreeMap::<String, Vec<String>>::new();
     let mut source_collections = BTreeSet::new();
     for (collection, members) in crate::reasoning_fields::collections(document)? {
         for (id, body) in &members {
             entries.insert(id.clone(), body.clone());
-            homes.insert(id.clone(), collection.clone());
+            homes.entry(id.clone()).or_default().push(collection.clone());
         }
         if members.iter().any(|(id, body)| {
             map(body).is_ok_and(|body| {
                 !body.contains_key(&deps)
                     && !["v", "quoted", "rule"].iter().any(|key| body.contains_key(*key))
                     && ["asked", "file", "url", "read"].iter().any(|key| body.get(*key).is_some_and(crate::history_view::truth))
-                    && !id.starts_with("graph.") && !id.starts_with("page.")
+                    && !crate::reasoning_fields::BUILTINS.contains(&id.as_str())
             })
         }) {
             source_collections.insert(collection);
@@ -52,27 +52,37 @@ fn entries(document: &V) -> Result<RecordShape> {
     }
     Ok(RecordShape { entries, homes, source_collections, deps, snapshot, core })
 }
-fn source_collection(entries: &BTreeMap<String, V>, homes: &BTreeMap<String, String>, deps: &str, source: &str) -> Result<String> {
+fn source_collection(entries: &BTreeMap<String, V>, homes: &BTreeMap<String, Vec<String>>, deps: &str, source: &str) -> Result<String> {
     let body = entries.get(source).ok_or_else(|| error(&format!("{source} is not a recorded source; add the source before citing it")))?;
     let body = map(body).map_err(|_| error(&format!("{source} is not a recorded source; add the source before citing it")))?;
-    let source_like = !["v", "quoted", "rule", deps].iter().any(|key| body.contains_key(*key))
+    let source_like = !crate::reasoning_fields::BUILTINS.contains(&source)
+        && !["v", "quoted", "rule", deps].iter().any(|key| body.contains_key(*key))
         && ["asked", "file", "url", "of", "read"].iter().any(|key| body.get(*key).is_some_and(crate::history_view::truth));
     require(source_like, &format!("{source} is not a recorded source; add the source before citing it"))?;
-    homes.get(source).cloned().ok_or_else(|| error("the recorded source must belong to one existing collection"))
+    let candidates = homes.get(source).map(Vec::as_slice).unwrap_or(&[]);
+    require(candidates.len() == 1, "the recorded source must belong to one existing collection")?;
+    Ok(candidates[0].clone())
 }
 fn target(shape: &RecordShape, id: &str, source_home: Option<&str>) -> Result<J> {
     let body = shape.entries.get(id).ok_or_else(|| error(&format!("{id} is not an existing stored entry")))?;
     let body_map = map(body).map_err(|_| error(&format!("{id} is not an existing stored entry")))?;
     require(!body_map.contains_key(&shape.deps), &format!("{id} is a judgment and cannot be rewritten by ingestion"))?;
-    require(!body_map.contains_key("rule"), &format!("{id} is worked out by a rule and cannot be rewritten"))?;
+    require(body_map.get("rule").is_none_or(|value| value == &V::Null), &format!("{id} is worked out by a rule and cannot be rewritten"))?;
     let values = ["v", "quoted"].into_iter().filter_map(|field| body_map.get(field)).collect::<Vec<_>>();
     require(values.len() == 1, &format!("{id} does not have one stored scalar value"))?;
     let kind = basic_type(values[0]).ok_or_else(|| error(&format!("{id} is not a scalar reading")))?;
-    if !shape.core && matches!(values[0], V::Text(value) if regex::Regex::new(r"[<>=!+\-*/()]").unwrap().is_match(value)
-        && regex::Regex::new(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+").unwrap().find_iter(value).any(|found| shape.entries.contains_key(found.as_str()))) {
+    if !shape.core && matches!(values[0], V::Text(value) if crate::ordinary_semantics::EXPR.is_match(value)
+        && crate::ordinary_semantics::ID.find_iter(value).any(|found| shape.entries.contains_key(found.as_str()))) {
         return Err(error(&format!("{id} is worked out by an inline expression and cannot be rewritten")));
     }
-    let cited_home = body_map.get("from").and_then(|value| text(value).ok()).and_then(|source| source_collection(&shape.entries, &shape.homes, &shape.deps, source).ok());
+    let cited_home = body_map.get("from").and_then(|value| text(value).ok()).and_then(|source| {
+        let candidate = shape.entries.get(source).and_then(|body| map(body).ok())?;
+        let homes = shape.homes.get(source)?;
+        (!crate::reasoning_fields::BUILTINS.contains(&source)
+            && !candidate.contains_key(&shape.deps)
+            && !["v", "quoted", "rule"].iter().any(|key| candidate.contains_key(*key))
+            && homes.len() == 1).then(|| homes[0].clone())
+    });
     let home = source_home.map(str::to_owned).or(cited_home).or_else(|| (shape.source_collections.len() == 1).then(|| shape.source_collections.iter().next().unwrap().clone()))
         .ok_or_else(|| error("the record does not identify one existing source collection"))?;
     Ok(json!({"id":id,"value":values[0].to_json()?,"type":kind,"body_sha256":body_hash(body)?,"source_collection":home,"source":body_map.get("from").map(V::to_json).transpose()?.unwrap_or(J::Null)}))
@@ -94,9 +104,13 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
     }
     if explicit_source.is_some() && object.get("at").is_none() {
         let operations = updates.map(Vec::as_slice).unwrap_or(&[]);
-        let needs_at = if updates.is_none() { true } else { operations.iter().any(|operation| operation["kind"] == "set" || operation.get("body").and_then(J::as_object).is_some_and(|body| body.contains_key("v") || body.contains_key("quoted"))) };
-        let located = updates.is_some() && operations.iter().all(|operation| operation.get("at").and_then(J::as_str).is_some_and(|at| !at.trim().is_empty()));
-        require(!needs_at || located, "an existing source citation requires at for each reading, or a shared envelope.at")?;
+        let located = updates.is_some() && operations.iter().all(|operation| {
+            let needs_at = operation["kind"] == "set" || operation.get("body").and_then(J::as_object)
+                .is_some_and(|body| body.contains_key("v") || body.contains_key("quoted"));
+            !needs_at || operation.get("at").and_then(|value| V::from_json(value).ok())
+                .is_some_and(|value| crate::history_view::truth(&value))
+        });
+        require(located, "an existing source citation requires at for each reading, or a shared envelope.at")?;
     }
     let Some(updates) = updates else {
         return target(&shape, object.get("target").and_then(J::as_str).unwrap_or(""), source_home.as_deref());
@@ -119,8 +133,16 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
             let stored = ["v", "quoted"].iter().filter(|field| body.contains_key(**field)).count();
             let derived = usize::from(body.contains_key("rule"));
             let judgment = usize::from(body.contains_key(&shape.deps));
+            if judgment == 1 && body.get(&shape.deps).is_some_and(|deps| matches!(deps, V::List(values)
+                if values.iter().any(|dep| matches!(dep, V::Text(dep)
+                    if crate::reasoning_fields::BUILTINS.contains(&dep.as_str()))))) {
+                return Err(error("batch judgments about reader/page counts require primary review; use domain entries as premises"));
+            }
             require(stored + derived + judgment == 1, "add one stored reading, rule, or judgment per entry")?;
-            if let Some(home) = shape.homes.get(id) { source_homes.insert(home.clone()); }
+            if stored == 1 {
+                let value = ["v", "quoted"].iter().find_map(|field| body.get(*field)).unwrap();
+                require(basic_type(value).is_some(), "new stored readings must be scalar")?;
+            }
         }
         bodies.insert(id.into(), shape.entries.get(id).cloned().unwrap_or(V::Null));
     }
@@ -129,8 +151,9 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
             if let Ok(body) = map(body)
                 && !["v", "quoted", "rule", shape.deps.as_str()].iter().any(|key| body.contains_key(*key))
                 && ["asked", "file", "url", "read"].iter().any(|key| body.get(*key).is_some_and(crate::history_view::truth))
-                && let Some(home) = shape.homes.get(id)
-            { source_homes.insert(home.clone()); }
+                && !crate::reasoning_fields::BUILTINS.contains(&id.as_str())
+                && let Some(homes) = shape.homes.get(id)
+            { source_homes.extend(homes.iter().cloned()); }
         }
     }
     require(source_homes.len() == 1, "the batch needs one unambiguous existing source collection")?;
