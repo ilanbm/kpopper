@@ -324,7 +324,10 @@ pub(super) fn lines(c: &Union<'_>, today: chrono::NaiveDate) -> Result<Vec<Strin
             sources(c, &u.id, u.hyp)?
         ));
     }
-    if !c.refused.is_empty() {
+    if c.refused
+        .iter()
+        .any(|index| !c.sourced.contains(&c.updates[*index].id))
+    {
         out.push("  read again on a later day - set it in the base or in the hypothesis with --as-of - or refute the hypothesis".into());
     }
     out.push(format!(
@@ -447,6 +450,14 @@ pub(super) fn stray(c: &Union<'_>, take: &[String]) -> Option<String> {
         .reversed
         .iter()
         .map(|r| r.id.as_str())
+        .chain(
+            c.updates
+                .iter()
+                .filter(|u| {
+                    !c.base.base.judgments.contains_key(&u.id) && u.why.contains("taken by name")
+                })
+                .map(|u| u.id.as_str()),
+        )
         .collect::<BTreeSet<_>>();
     let stray = take
         .iter()

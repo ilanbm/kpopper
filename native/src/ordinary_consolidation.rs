@@ -230,6 +230,7 @@ struct Union<'a> {
     updates: Vec<Update>,
     reversed: Vec<Reversal>,
     refused: Vec<usize>,
+    sourced: BTreeSet<String>,
     untaken: Vec<usize>,
     untakeable: BTreeSet<String>,
     drops_needed: BTreeMap<String, Vec<String>>,
@@ -391,6 +392,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         updates: vec![],
         reversed: vec![],
         refused: vec![],
+        sourced: BTreeSet::new(),
         untaken: vec![],
         untakeable: BTreeSet::new(),
         drops_needed: BTreeMap::new(),
@@ -524,6 +526,30 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
                     "a reading dated {}, after today ({stamp}) - a day is the record's clock, and a day ahead is not read",
                     read.as_ref().unwrap()
                 );
+            } else if h.path.is_none()
+                && matches!((old, new), (V::Map(_), V::Map(_)))
+                && truth(get(new, "from"))
+                && truth(get(old, "from"))
+                && py(get(new, "from")) != py(get(old, "from"))
+                && !same
+            {
+                if take.contains(id) {
+                    allowed = true;
+                    why = format!(
+                        "a reading from {} where the base reads from {} - taken by name",
+                        py(get(new, "from")),
+                        py(get(old, "from"))
+                    );
+                } else {
+                    allowed = false;
+                    why = format!(
+                        "a reading from {} where the base reads from {} - one id follows one source; take it by name: consolidate {} --take {id}",
+                        py(get(new, "from")),
+                        py(get(old, "from")),
+                        h.name
+                    );
+                    c.sourced.insert(id.clone());
+                }
             } else if read.is_none()
                 && let Some(old_day) = old_day
             {
@@ -795,7 +821,7 @@ pub(super) fn run(
     };
     let capture = crate::source_capture::capture_source_with_runtime(
         route.paths(),
-        entry.parent().unwrap(),
+        &route.project().root,
         ReadMode::Live,
         None,
         runtime,
@@ -822,15 +848,17 @@ pub(super) fn run(
         .unwrap_or_else(|| chrono::Local::now().date_naive().to_string());
     let mut inventory = Inventory::default();
     let side = edit::ancillary(entry, &mut inventory)?;
-    let write = edit::WriteContext {
-        capture: &capture,
-        route,
-        side: &side,
-        inventory: &inventory,
-        stamp: &stamp,
-        runtime,
-    };
     if let Some(name) = &options.refute {
+        let write = edit::WriteContext {
+            capture: &capture,
+            route,
+            side: &side,
+            inventory: &inventory,
+            stamp: &stamp,
+            runtime,
+            page_capture: None,
+        };
+
         let h = one_hypothesis(&capture, name)?;
         let out = edit::refute(
             &write,
@@ -865,7 +893,17 @@ pub(super) fn run(
         });
     }
     let drops = map(&super::drops(&options.drops)?)?.clone();
-    let page = edit::page(&capture, &hyps, &side, &inventory, runtime)?;
+    let page_capture = edit::page(&capture, &hyps, route, &inventory, runtime)?;
+    let page = page_capture.as_ref().map(|capture| &capture.facts);
+    let write = edit::WriteContext {
+        capture: &capture,
+        route,
+        side: &side,
+        inventory: &inventory,
+        stamp: &stamp,
+        runtime,
+        page_capture: page_capture.as_ref(),
+    };
     let c = union(UnionInput {
         doc: capture.ordinary_document(),
         all: map(capture.hypotheses())?,
@@ -876,12 +914,15 @@ pub(super) fn run(
         take: &options.take,
         drops: &drops,
         brief: Some(&side.brief.projected()),
-        page: Some(&page),
+        page,
     })?;
     let mut output = report::lines(&c, chrono::Local::now().date_naive())?.join("\n") + "\n";
     capture.verify()?;
     inventory.verify()?;
     route.verify()?;
+    if let Some(page) = &page_capture {
+        page.verify()?;
+    }
     if options.dry_run {
         let stray = report::stray(&c, &options.take);
         if let Some(why) = &stray {
@@ -903,7 +944,7 @@ pub(super) fn run(
             code: 1,
         });
     }
-    match edit::fold(&c, &write, &drops, Some(&page), probe) {
+    match edit::fold(&c, &write, &drops, page, probe) {
         Ok(done) => {
             output.push_str(&done);
             Ok(CommandOutput {
@@ -922,10 +963,11 @@ pub(super) fn run(
 
 pub(super) fn preview(request: &super::PreviewRequest<'_>) -> Result<super::Preview> {
     let empty = Map::new();
-    let context = request.context.and_then(|v| map(v).ok());
+    let context = request.context.map(map).transpose()?;
     let conflicts = context
         .and_then(|m| m.get("conflicts"))
-        .and_then(|v| map(v).ok())
+        .map(map)
+        .transpose()?
         .unwrap_or(&empty);
     let base = Projection::new(
         request.document,
@@ -935,20 +977,79 @@ pub(super) fn preview(request: &super::PreviewRequest<'_>) -> Result<super::Prev
         request.runtime,
     )
     .map_err(|e| ordinary_error(request.document, e))?;
-    let mut proposals = Vec::new();
-    for proposal in request.proposals {
-        let raw = entries(&proposal.document)?;
-        proposals.push(Hypothesis {
-            name: proposal.name.clone(),
-            path: None,
-            doc: proposal.document.clone(),
-            head: proposal.head.clone(),
-            ids: raw.keys().cloned().collect(),
-            raw,
-            source: O::from_typed(&proposal.document),
-            text: String::new(),
-        });
+    let mut pool = BTreeMap::new();
+    for (name, h) in request.hypotheses {
+        if get(h, "kind") == &s("contribution") {
+            continue;
+        }
+        require(
+            !truth(get(h, "error")),
+            &format!(
+                "refused - hypothesis {name} could not be read: {}",
+                py(get(h, "error"))
+            ),
+        )?;
+        let doc = if get(h, "doc") != &V::Null {
+            get(h, "doc")
+        } else {
+            get(h, "document")
+        };
+        let merged = layer(request.document, doc)?;
+        Reader::new(&merged, request.runtime).map_err(|e| {
+            error(&format!(
+                "refused - hypothesis {name} cannot be read over the base: {}",
+                ordinary_error(&merged, e)
+                    .0
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .chars()
+                    .take(160)
+                    .collect::<String>()
+            ))
+        })?;
+        let raw = entries(doc)?;
+        pool.insert(
+            name.clone(),
+            Hypothesis {
+                name: name.clone(),
+                path: text(get(h, "path"))
+                    .ok()
+                    .filter(|p| !p.is_empty())
+                    .map(PathBuf::from),
+                doc: doc.clone(),
+                head: get(h, "head").clone(),
+                ids: raw.keys().cloned().collect(),
+                raw,
+                source: O::from_typed(doc),
+                text: String::new(),
+            },
+        );
     }
+    for proposal in request.proposals {
+        require(
+            !pool.contains_key(&proposal.name),
+            &format!(
+                "refused - {} names both an existing and a supplied hypothesis",
+                proposal.name
+            ),
+        )?;
+        let raw = entries(&proposal.document)?;
+        pool.insert(
+            proposal.name.clone(),
+            Hypothesis {
+                name: proposal.name.clone(),
+                path: None,
+                doc: proposal.document.clone(),
+                head: proposal.head.clone(),
+                ids: raw.keys().cloned().collect(),
+                raw,
+                source: O::from_typed(&proposal.document),
+                text: String::new(),
+            },
+        );
+    }
+    let proposals = pool.into_values().collect();
     let stamp = request
         .as_of
         .map(str::to_owned)

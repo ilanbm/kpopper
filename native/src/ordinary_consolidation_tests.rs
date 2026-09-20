@@ -256,3 +256,90 @@ fn supplied_preview_uses_the_same_union_and_report_without_source_files() {
     assert_eq!(preview.blocked, fixture["blocked"].as_bool().unwrap());
     assert!(preview.candidate_document.is_some());
 }
+
+#[test]
+fn retained_routing_refuses_a_changed_target_before_recovery() {
+    let (_temp, root, entry, _hypothesis) = setup();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args([
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "core.hooksPath=/dev/null",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    git(&["init", "-q"]);
+    git(&["add", "GROUNDING.yaml"]);
+    git(&["commit", "-qm", "base"]);
+    let first = git(&["rev-parse", "HEAD"]);
+    let tree = git(&["rev-parse", "HEAD^{tree}"]);
+    git(&["update-ref", "refs/remotes/origin/main", &first]);
+    let project = crate::project_modes::Project::open(&root).unwrap();
+    fs::create_dir_all(project.config_path.parent().unwrap()).unwrap();
+    fs::write(&project.config_path,r#"{"version":1,"mode":"advanced","generation":1,"record":"GROUNDING.yaml","publication":{"remote":"origin","repository":"test/test","target":"main","branch":"pending_grounding","standing_permission":false}}"#).unwrap();
+    let result = dispatch_with_runtime(&options(&entry), &root, None, &mut |stage| {
+        if stage == "published" {
+            return Err(error("interrupted"));
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(result.code, 1);
+    assert!(journal(&root).exists());
+    let second = git(&["commit-tree", &tree, "-p", &first, "-m", "new target"]);
+    git(&["update-ref", "refs/remotes/origin/main", &second]);
+    let error =
+        crate::legacy_authoring::recover(std::slice::from_ref(&entry), &root, false).unwrap_err();
+    assert_eq!(error.0, "project_route_changed");
+    assert!(journal(&root).exists());
+    git(&["update-ref", "refs/remotes/origin/main", &first]);
+    crate::legacy_authoring::recover(std::slice::from_ref(&entry), &root, true).unwrap();
+    assert_eq!(fs::read_to_string(entry).unwrap(), BASE);
+}
+
+#[test]
+fn supplied_preview_includes_existing_hypotheses_in_the_same_union() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../tests/fixtures/ordinary-consolidation-preview-existing.json"
+    ))
+    .unwrap();
+    let document =
+        crate::history_yaml::decode_document(fixture["record"].as_str().unwrap().as_bytes())
+            .unwrap();
+    let proposal =
+        crate::history_yaml::decode_document(fixture["proposal"].as_str().unwrap().as_bytes())
+            .unwrap();
+    let hypotheses = V::from_json(&fixture["hypotheses"]).unwrap();
+    let proposals = vec![PreviewHypothesis {
+        name: "tree/here".into(),
+        document: proposal,
+        head: V::from_json(&fixture["head"]).unwrap(),
+    }];
+    let preview = super::preview(&PreviewRequest {
+        document: &document,
+        hypotheses: map(&hypotheses).unwrap(),
+        proposals: &proposals,
+        context: None,
+        as_of: Some("2026-09-19"),
+        runtime: None,
+    })
+    .unwrap();
+    assert_eq!(preview.report, fixture["report"].as_str().unwrap());
+    assert_eq!(preview.exit_code, 1);
+    assert!(preview.blocked);
+    assert!(preview.candidate_document.is_none());
+}

@@ -434,6 +434,7 @@ pub(super) struct WriteContext<'a> {
     pub inventory: &'a Inventory,
     pub stamp: &'a str,
     pub runtime: Option<&'a Runtime>,
+    pub page_capture: Option<&'a crate::ordinary_page_capture::PageCapture>,
 }
 pub(super) fn fold(
     c: &Union<'_>,
@@ -448,7 +449,7 @@ pub(super) fn fold(
         side,
         inventory,
         stamp,
-        runtime: _,
+        ..
     } = *context;
     let entry = &route.paths()[0];
     let layout = T::Layout::for_entry(
@@ -735,7 +736,7 @@ pub(super) fn fold(
             shown.join(", ")
         }
     ));
-    if route.project().is_git() && !commit.is_empty() {
+    if route.project().is_git() && entry.starts_with(&route.project().root) && !commit.is_empty() {
         out.push(format!("next: git add {} && git commit", commit.join(" ")));
     }
     let n = count_flagged(&after_doc, all, c.runtime)?;
@@ -746,18 +747,23 @@ pub(super) fn fold(
             if n == "1" { "" } else { "s" }
         ),
     ]);
-    publish(capture, route, side, inventory, images, &after_doc, probe)?;
+    publish(context, images, &after_doc, probe)?;
     Ok(out.join("\n") + "\n")
 }
 fn publish(
-    capture: &CapturedSource,
-    route: &WriteRoute,
-    side: &Ancillary,
-    inventory: &Inventory,
+    context: &WriteContext<'_>,
     mut files: Vec<FileImage>,
     after: &V,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<()> {
+    let WriteContext {
+        capture,
+        route,
+        side,
+        inventory,
+        page_capture,
+        ..
+    } = *context;
     let entry = &route.paths()[0];
     let local = T::Layout::for_entry(
         entry
@@ -813,8 +819,13 @@ fn publish(
         .iter()
         .map(|(p, d)| Ok((relative(&root, p)?, d.as_deref().map(s).unwrap_or(V::Null))))
         .collect::<Result<Map>>()?;
+    let routing = crate::source_capture::routing_observation(route.paths(), &route.project().root)?;
+    if let Some(page) = page_capture {
+        require(page.routing == routing, "snapshot_changed")?;
+    }
     let baseline = obj([
         ("kind", s("direct/v1")),
+        ("routing", routing.clone()),
         (
             "transaction_root",
             s(root.to_str().ok_or_else(|| error("invalid_path"))?),
@@ -867,6 +878,14 @@ fn publish(
         route.verify()?;
         capture.verify()?;
         inventory.verify()?;
+        if let Some(page) = page_capture {
+            page.verify()?;
+        }
+        require(
+            crate::source_capture::routing_observation(route.paths(), &route.project().root)?
+                == routing,
+            "snapshot_changed",
+        )?;
         require(
             !crate::public_consolidation::active_history(entry)?,
             "project_route_changed",
@@ -896,9 +915,9 @@ pub(super) fn refute(
         capture,
         route,
         side,
-        inventory,
         stamp,
         runtime,
+        ..
     } = *context;
     let base = captured_projection(capture, runtime)?;
     let world = &base.base;
@@ -1078,7 +1097,7 @@ pub(super) fn refute(
             .collect::<Vec<_>>()
             .join(", ")
     ));
-    publish(capture, route, side, inventory, images, &after, probe)?;
+    publish(context, images, &after, probe)?;
     Ok(out.join("\n") + "\n")
 }
 /// Only an explicit layout contribution needs the optional Hub's captured facts.
@@ -1086,12 +1105,11 @@ pub(super) fn refute(
 pub(super) fn page(
     capture: &CapturedSource,
     hyps: &[Hypothesis],
-    side: &Ancillary,
+    route: &WriteRoute,
     inventory: &Inventory,
     runtime: Option<&Runtime>,
-) -> Result<V> {
-    let empty = || V::Map(Map::new());
-    let entry = &capture.members()[0];
+) -> Result<Option<crate::ordinary_page_capture::PageCapture>> {
+    let entry = &route.paths()[0];
     let layout = T::Layout::for_entry(
         entry
             .file_name()
@@ -1100,7 +1118,7 @@ pub(super) fn page(
     )?;
     let view_path = entry.parent().unwrap().join(layout.view);
     let Some(raw) = inventory.files.get(&view_path) else {
-        return Ok(empty());
+        return Ok(None);
     };
     let base = captured_projection(capture, runtime)?;
     let mut candidate = capture.ordinary_document().clone();
@@ -1127,27 +1145,20 @@ pub(super) fn page(
             && (reads_page(body, &candidate.fields) || reads_page(old, &base.base.reader.fields))
     });
     if !relevant {
-        return Ok(empty());
+        return Ok(None);
     }
-    let result = (|| {
-        let report = crate::ordinary_assessment::from_capture(
-            capture,
-            runtime,
-            crate::ordinary_assessment::POLICY,
-        )?;
-        crate::ordinary_hub::build(
-            capture,
-            &report,
-            Some(raw),
-            entry,
-            &view_path,
-            16 * 1024 * 1024,
-            runtime,
-        )
-        .map(|page| page.arrangement_facts)
-    })();
-    let _ = side;
-    result.map_err(|e| error(&format!("presentation contribution cannot be checked: {e}")))
+    let page = crate::ordinary_page_capture::PageCapture::capture(
+        route.paths(),
+        &route.project().root,
+        None,
+        runtime,
+    )
+    .map_err(|e| error(&format!("presentation contribution cannot be checked: {e}")))?;
+    require(
+        page.view_path == view_path && page.view_before.as_deref() == Some(raw.as_slice()),
+        "snapshot_changed",
+    )?;
+    Ok(Some(page))
 }
 /// An incidental malformed brief is still bound by bytes, but is only interpreted
 /// when this consolidation actually crosses into the optional page application.
