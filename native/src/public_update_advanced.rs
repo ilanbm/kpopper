@@ -329,9 +329,18 @@ fn scoped_actions(actions: &mut [V], scope: &V) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn apply_declared_scope(report: &Report, actions: &mut [V]) -> Result<()> {
+pub(crate) fn apply_declared_scope(
+    report: &Report,
+    actions: &mut [V],
+    include_source: bool,
+) -> Result<()> {
     if let Some(scope) = scope(report).transpose()? {
-        scoped_actions(actions, &scope)?;
+        let updates = if include_source {
+            actions
+        } else {
+            actions.get_mut(1..).unwrap_or_default()
+        };
+        scoped_actions(updates, &scope)?;
     }
     Ok(())
 }
@@ -570,9 +579,8 @@ pub(crate) fn capture(
     let collection = super::source_collection(&document, report)?;
     let source_id = format!("s.ingest_{event}");
     let portable = portable_source(context.record, event)?;
-    let (mut actions, source_bodies) =
-        super::actions(report, event, Path::new(&portable), &collection)?;
-    scoped_actions(&mut actions, &scope)?;
+    let (actions, source_bodies) =
+        super::actions(report, event, Path::new(&portable), &collection, true)?;
     let roots = roots(report, &source_id);
 
     let selected = pending_bundle::closure(&preliminary_document(&document, &actions)?, &roots)?;

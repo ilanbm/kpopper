@@ -383,6 +383,7 @@ fn actions(
     event: &str,
     source_file: &Path,
     collection: &str,
+    include_source_scope: bool,
 ) -> Result<(Vec<V>, Vec<Option<Source>>)> {
     let source_id = format!("s.ingest_{event}");
     let cited = report
@@ -417,15 +418,32 @@ fn actions(
     if let Some(at) = report.raw.get("at") {
         body.insert("at".into(), at.clone());
     }
+    let scope = report
+        .raw
+        .get("scope")
+        .map(V::from_json)
+        .transpose()?
+        .map(|scope| Source::from_typed(&scope));
     let ordered_source = Source::Map(
-        ["name", "file", "read", "recorded_for", "from", "at"]
-            .into_iter()
-            .filter_map(|key| {
-                body.get(key).map(|value| {
-                    V::from_json(value).map(|value| (key.into(), Source::from_typed(&value)))
-                })
+        [
+            "name",
+            "file",
+            "read",
+            "recorded_for",
+            "scope",
+            "from",
+            "at",
+        ]
+        .into_iter()
+        .filter_map(|key| {
+            if key == "scope" && include_source_scope {
+                return scope.clone().map(|value| Ok((key.into(), value)));
+            }
+            body.get(key).map(|value| {
+                V::from_json(value).map(|value| (key.into(), Source::from_typed(&value)))
             })
-            .collect::<Result<Vec<_>>>()?,
+        })
+        .collect::<Result<Vec<_>>>()?,
     );
     let mut planned = vec![
         json!({"kind":"add","id":source_id,"body":body,"as_of":report.date,"into":collection}),
@@ -458,13 +476,56 @@ fn actions(
         planned.push(update);
         source_bodies.push(None);
     }
-    Ok((
-        planned
-            .iter()
-            .map(V::from_json)
-            .collect::<Result<Vec<_>>>()?,
-        source_bodies,
-    ))
+    let mut planned = planned
+        .iter()
+        .map(V::from_json)
+        .collect::<Result<Vec<_>>>()?;
+    advanced::apply_declared_scope(report, &mut planned, include_source_scope)?;
+    if let Some(scope) = scope {
+        for (index, action) in planned.iter().enumerate().skip(1) {
+            let action = map(action)?;
+            source_bodies[index] = if action.get("kind") == Some(&V::Text("set".into())) {
+                Some(Source::Map(vec![("scope".into(), scope.clone())]))
+            } else {
+                let body = map(action
+                    .get("body")
+                    .ok_or_else(|| error("add body must be a mapping"))?)?;
+                let original = report
+                    .updates
+                    .iter()
+                    .find(|update| {
+                        update["id"].as_str()
+                            == action.get("id").and_then(|id| match id {
+                                V::Text(id) => Some(id.as_str()),
+                                _ => None,
+                            })
+                    })
+                    .and_then(|update| update["body"].as_object())
+                    .ok_or_else(|| error("add body must be a mapping"))?;
+                let mut fields = Vec::new();
+                for key in original
+                    .keys()
+                    .map(String::as_str)
+                    .chain(["scope", "from", "at", "of"])
+                {
+                    if !fields.iter().any(|(existing, _)| existing == key)
+                        && let Some(value) = body.get(key)
+                    {
+                        fields.push((
+                            key.into(),
+                            if key == "scope" {
+                                scope.clone()
+                            } else {
+                                Source::from_typed(value)
+                            },
+                        ));
+                    }
+                }
+                Some(Source::Map(fields))
+            };
+        }
+    }
+    Ok((planned, source_bodies))
 }
 
 fn graph(
@@ -1354,12 +1415,10 @@ fn run_bound(
                 !crate::recording_privacy::private_marker(&document),
                 "private or unclear original source permission; report retained privately",
             )?;
-            let collection = source_collection(&document, &report)?;
-            let (mut planned, source_bodies) = actions(&report, &event, &source_path, &collection)?;
             let advanced_local = route.pending_required()?;
-            if advanced_local {
-                advanced::apply_declared_scope(&report, &mut planned)?;
-            }
+            let collection = source_collection(&document, &report)?;
+            let (planned, source_bodies) =
+                actions(&report, &event, &source_path, &collection, advanced_local)?;
             let prepare = if advanced_local {
                 legacy_batch::prepare_advanced_local
             } else {
@@ -1427,9 +1486,8 @@ fn run_bound(
         )?;
         let collection = source_collection(&document, &report)
             .map_err(|e| error(&format!("history source collection: {e}")))?;
-        let (mut planned, _) = actions(&report, &event, Path::new(&portable), &collection)
+        let (planned, _) = actions(&report, &event, Path::new(&portable), &collection, true)
             .map_err(|e| error(&format!("history report actions: {e}")))?;
-        advanced::apply_declared_scope(&report, &mut planned)?;
         let owned_runtime = if supplied_runtime.is_none() {
             crate::public_workspace::runtime_for_document(&document)?
         } else {

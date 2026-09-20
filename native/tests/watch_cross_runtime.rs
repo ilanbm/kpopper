@@ -222,7 +222,7 @@ impl H {
             Ok(v) => json!({"ok":v}),
             Err(e) => json!({"error":e.to_string()}),
         };
-        let mut py_all = json!({"result":py,"config":image(&py_config),"state":image(&py_state)});
+        let py_all = json!({"result":py,"config":image(&py_config),"state":image(&py_state)});
         let mut rs_all =
             json!({"result":native,"config":image(&files(&config)),"state":image(&files(&state))});
         if let Ok(debug) = std::env::var("KPOP_WATCH_ORACLE_DEBUG_DIR") {
@@ -240,8 +240,6 @@ impl H {
             )
             .unwrap();
         }
-        normalize_shared_journals(&mut py_all);
-        normalize_shared_journals(&mut rs_all);
         normalize_native_audit(&mut rs_all, oracle_adapter, "");
         let mut cmp = Compare {
             forward: BTreeMap::new(),
@@ -346,77 +344,6 @@ fn normalize_native_audit(value: &mut J, oracle_adapter: &str, path: &str) {
         J::Array(rows) => {
             for (index, value) in rows.iter_mut().enumerate() {
                 normalize_native_audit(value, oracle_adapter, &format!("{path}/{index}"));
-            }
-        }
-        _ => {}
-    }
-}
-// The implementations preserve their own YAML serialization bytes. Their typed
-// documents are equal, but map insertion order can differ, so the file blob
-// checksum and enclosing mutation digest differ too. Verify raw checksums, then
-// compare this implementation detail by semantic file image and its digest.
-fn normalize_shared_journals(value: &mut J) {
-    match value {
-        J::Object(object) => {
-            if let (Some(prepared), Some(mutation_digest)) = (
-                object.get("prepared").and_then(J::as_str),
-                object.get("mutation_digest").and_then(J::as_str),
-            ) {
-                use base64::{engine::general_purpose::STANDARD, Engine};
-                use kpop_native::{history_transaction::PreparedMutation, value::TypedValue as V};
-                use std::collections::BTreeMap;
-                let raw = STANDARD.decode(prepared).expect("prepared mutation encoding");
-                let mutation = PreparedMutation::from_bytes(&raw).expect("prepared mutation");
-                let data = mutation.to_data();
-                let V::Map(fields) = &data else { panic!("prepared mutation map") };
-                assert_eq!(
-                    fields.get("digest").and_then(|v| match v {
-                        V::Text(s) => Some(s.as_str()),
-                        _ => None,
-                    }),
-                    Some(mutation_digest),
-                    "raw mutation digest"
-                );
-                let mut semantic = data.clone();
-                let V::Map(fields) = &mut semantic else { unreachable!() };
-                let V::List(files) = fields.get_mut("files").expect("mutation files") else {
-                    panic!("mutation files list")
-                };
-                for file in files {
-                    let V::Map(file) = file else { panic!("mutation file") };
-                    for key in ["before", "after"] {
-                        let Some(blob) = file.get_mut(key) else { continue };
-                        let V::Map(blob) = blob else { panic!("mutation blob") };
-                        let (V::Text(encoded), V::Text(expected)) = (
-                            blob.get("data").expect("blob data"),
-                            blob.get("sha256").expect("blob sha256"),
-                        ) else { panic!("mutation blob fields") };
-                        let bytes = STANDARD.decode(encoded).expect("blob encoding");
-                        assert_eq!(
-                            kpop_native::identity::sha256(&bytes),
-                            expected.as_str(),
-                            "raw file image checksum"
-                        );
-                        let document = kpop_native::history_yaml::decode_document(&bytes)
-                            .expect("YAML image");
-                        let mut semantic_blob = BTreeMap::new();
-                        semantic_blob.insert("document".into(), document);
-                        *blob = semantic_blob;
-                    }
-                }
-                let V::Map(fields) = &mut semantic else { unreachable!() };
-                fields.remove("digest");
-                let semantic_digest = semantic.digest().expect("semantic mutation digest");
-                object.insert("prepared".into(), json!(format!("semantic:{semantic_digest}")));
-                object.insert("mutation_digest".into(), json!(semantic_digest));
-            }
-            for child in object.values_mut() {
-                normalize_shared_journals(child);
-            }
-        }
-        J::Array(values) => {
-            for child in values {
-                normalize_shared_journals(child);
             }
         }
         _ => {}

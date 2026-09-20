@@ -297,14 +297,16 @@ fn advanced_local_scopes_are_written_and_project_review_is_refused() {
 
 #[test]
 fn advanced_scoped_flow_set_matches_python_field_order() {
-    let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
+    let (_temp, root) = advanced_ordinary(
+        "known:\n  p.base: {name: Package count, v: 1, at: line 2}\n",
+    );
     success(run_unbundled(
         &root,
         &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x"],
     ));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
-        "known:\n  p.base:\n    v: 5\n    of: \"2026-09-20\"\n    scope: {kind: feature, environment: x}\n"
+        "known:\n  p.base:\n    name: \"Package count\"\n    v: 5\n    at: \"line 2\"\n    of: \"2026-09-20\"\n    scope: {kind: feature, environment: x}\n"
     );
 }
 

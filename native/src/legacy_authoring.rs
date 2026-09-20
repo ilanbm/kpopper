@@ -1670,7 +1670,10 @@ fn prepare_with_inventory_mode(
                     }
                 }
                 if let Some(scope) = authored.get("scope") {
-                    let scope = ordered_scope(scope)?;
+                    let scope = source_body
+                        .and_then(|body| body.get("scope"))
+                        .cloned()
+                        .unwrap_or(ordered_scope(scope)?);
                     if let Some((_, value)) = fields.iter_mut().find(|(field, _)| field == "scope") {
                         *value = scope;
                     } else {
@@ -1783,6 +1786,10 @@ fn prepare_with_inventory_mode(
                 action.get("at").and_then(|value| text(value).ok()),
             )?;
             if let Some(scope) = action.get("_record_scope") {
+                let rendered_scope = source_body
+                    .and_then(|body| body.get("scope"))
+                    .cloned()
+                    .unwrap_or(ordered_scope(scope)?);
                 let (_, member) = locate(&lines, &id)
                     .ok_or_else(|| error("scoped set target disappeared during preparation"))?;
                 if inline(&lines[member.start]).starts_with('{') {
@@ -1800,16 +1807,11 @@ fn prepare_with_inventory_mode(
                     if let Source::Map(fields) = &mut body
                         && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
                     {
-                        *value = ordered_scope(scope)?;
+                        *value = rendered_scope.clone();
                     }
                     replace_entry(&mut lines, &id, &body)?;
                 } else {
-                    replace_field_ordered(
-                        &mut lines,
-                        &member,
-                        "scope",
-                        &ordered_scope(scope)?,
-                    )?;
+                    replace_field_ordered(&mut lines, &member, "scope", &rendered_scope)?;
                 }
             }
             output.push(format!(

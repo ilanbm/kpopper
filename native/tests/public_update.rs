@@ -96,6 +96,33 @@ fn explicit_question_keeps_its_target_and_never_applies_the_value() {
 }
 
 #[test]
+fn ordinary_report_persists_declared_scope_in_python_order() {
+    let temp = tempfile::tempdir().unwrap();
+    record(temp.path());
+    let state = temp.path().join("state");
+    let output = run(
+        temp.path(),
+        &state,
+        &json!({
+            "event_id":"scoped-ordinary", "date":"2026-09-20", "source_quote":"price 12",
+            "target":"p.price", "value":12,
+            "shareability":"project",
+            "scope":{"kind":"feature","environment":"example"},
+        }),
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let after = fs::read_to_string(temp.path().join("GROUNDING.yaml")).unwrap();
+    assert!(
+        after.contains("scope: {environment: example, kind: feature}"),
+        "{after}"
+    );
+}
+
+#[test]
 fn advanced_cli_routes_project_private_and_local_reports_and_replays_success() {
     for (kind, private, expected) in [
         ("project", false, "project_captured"),
@@ -152,7 +179,10 @@ fn advanced_cli_routes_project_private_and_local_reports_and_replays_success() {
         if expected == "applied" {
             let after = fs::read_to_string(&entry).unwrap();
             assert!(after.contains("v: 12"));
-            assert!(after.contains("kind: feature"));
+            assert!(
+                after.contains("scope: {environment: example, kind: feature}"),
+                "{after}"
+            );
         } else {
             assert_eq!(fs::read(&entry).unwrap(), before);
         }
@@ -186,6 +216,7 @@ fn source_and_two_dependent_writes_publish_once_and_retry_exactly() {
     let state = temp.path().join("state");
     let report = json!({
         "event_id":"batch-one", "record_sha256":hash(&entry), "date":"2026-09-20", "source_quote":"price 12, fee 3",
+        "shareability":"project", "scope":{"kind":"feature","environment":"example"},
         "updates":[
             {"kind":"set","id":"p.price","value":12},
             {"kind":"add","id":"p.fee","body":{"v":3}},
@@ -203,6 +234,12 @@ fn source_and_two_dependent_writes_publish_once_and_retry_exactly() {
     assert_eq!(receipt["state"], "applied");
     assert_eq!(receipt["newly_fired_judgments"], json!(["d.price"]));
     assert_eq!(receipt["reach"]["judgments"], json!(["d.price"]));
+    let after = fs::read_to_string(&entry).unwrap();
+    assert!(
+        after.contains("scope: {environment: example, kind: feature}"),
+        "{after}"
+    );
+    assert_eq!(after.matches("scope: {environment: example, kind: feature}").count(), 3);
     assert!(
         receipt["diagnostics"]
             .as_array()
