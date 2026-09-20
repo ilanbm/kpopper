@@ -9,6 +9,7 @@ use crate::{
     legacy_authoring::{self as A, Preparation, Prepared},
     project_modes::WriteRoute,
     source_inventory::Inventory,
+    history_yaml::SourceValue as Source,
     value::TypedValue as V,
 };
 use std::{collections::BTreeMap, path::Path};
@@ -81,6 +82,7 @@ pub(crate) fn prepare(
     options: &Options,
     mut inventory: Inventory,
     mut page: Option<crate::ordinary_page_capture::PageCapture>,
+    source_bodies: &[Option<Source>],
 ) -> Result<Prepared> {
     crate::require(!actions.is_empty() && actions.len() <= 33, "invalid_batch")?;
     let mut images = BTreeMap::<String, FileImage>::new();
@@ -93,7 +95,9 @@ pub(crate) fn prepare(
     let mut diagnostics = Vec::new();
 
     for (index, action) in actions.iter().enumerate() {
-        let prepared = match A::prepare_with_inventory(action, route, None, inventory, page.clone())
+        let prepared = match A::prepare_with_inventory(
+            action, route, source_bodies.get(index).and_then(Option::as_ref), inventory, page.clone(),
+        )
             .map_err(|e| error(&format!("batch action {index}: {e}")))? {
             Preparation::Draft { output, inventory: mut staged } => {
                 crate::require(satisfied(action, route, &mut staged)?,
@@ -136,6 +140,25 @@ pub(crate) fn prepare(
 
     let first = first_data.ok_or_else(|| error("invalid_batch"))?;
     let first = map(&first)?;
+    let mut baseline = map(field(first, "baseline")?)?.clone();
+    if let Some(page) = &page {
+        baseline.insert("routing".into(), page.routing.clone());
+        baseline.insert(
+            "arrangement_inputs".into(),
+            crate::legacy_authoring::legacy_arrangement::recovery_guard(
+                root.as_ref().ok_or_else(|| error("invalid_batch"))?, page,
+            )?,
+        );
+        let inputs = baseline.entry("input_files".into()).or_insert_with(|| V::Map(BTreeMap::new()));
+        let inputs = match inputs { V::Map(inputs) => inputs, _ => return Err(error("invalid_batch")) };
+        inputs.insert(
+            super::legacy_authoring::relative(
+                root.as_ref().ok_or_else(|| error("invalid_batch"))?, &page.view_path,
+            )?,
+            page.view_before.as_deref().map(crate::identity::sha256)
+                .map(V::Text).unwrap_or(V::Null),
+        );
+    }
     let first_receipt = map(receipts.first().ok_or_else(|| error("invalid_batch"))?)?;
     let last_receipt = map(receipts.last().ok_or_else(|| error("invalid_batch"))?)?;
     let step_digests = receipts
@@ -175,7 +198,7 @@ pub(crate) fn prepare(
     let mutation = PreparedMutation::prepare(
         &options.operation,
         field(first, "authority")?,
-        field(first, "baseline")?,
+        &V::Map(baseline),
         images.into_values().collect(),
         &receipt,
         text(field(first, "entry")?)?,
@@ -210,7 +233,7 @@ mod tests {
         ];
         let prepared = prepare(&actions, &route, &Options {
             operation: "report-recovery".into(), context: V::Map(BTreeMap::new()),
-        }, Inventory::default(), None).unwrap();
+        }, Inventory::default(), None, &[None, None]).unwrap();
         assert_eq!(prepared.mutation.files().len(), 2);
         (temp, entry, route, prepared)
     }
@@ -251,7 +274,7 @@ mod tests {
         ];
         let prepared = prepare(&actions, &route, &Options {
             operation: "report-noop".into(), context: V::Map(BTreeMap::new()),
-        }, Inventory::default(), None).unwrap();
+        }, Inventory::default(), None, &[None, None]).unwrap();
         assert_eq!(prepared.mutation.files().len(), 1);
         assert!(prepared.output.contains("nothing written"));
         assert!(String::from_utf8(prepared.mutation.files()[0].after.clone().unwrap())

@@ -24,7 +24,7 @@ mod legacy_named;
 #[path = "legacy_replaced.rs"]
 pub(crate) mod legacy_replaced;
 #[path = "legacy_arrangement.rs"]
-mod legacy_arrangement;
+pub(crate) mod legacy_arrangement;
 
 static TOP: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*):(?: |$)").unwrap());
@@ -1269,7 +1269,7 @@ fn common_root(entry: &Path, members: &[PathBuf]) -> Result<PathBuf> {
     Ok(root)
 }
 
-fn relative(root: &Path, path: &Path) -> Result<String> {
+pub(crate) fn relative(root: &Path, path: &Path) -> Result<String> {
     let path = absolute(path)?;
     // Resolve directory aliases (including macOS /var) without resolving a
     // final file symlink, which publication must still reject.
@@ -2382,6 +2382,17 @@ mod tests {
         fs::write(temp.path().join(".kpopper/view.yaml"), "tabs: []\n").unwrap();
         assert_eq!(publish(prepared, &route).unwrap_err().0, "snapshot_changed");
         assert_eq!(fs::read(&entry).unwrap(), before);
+
+        let (temp, entry, route, prepared) = page_arrangement_replacement();
+        let mut verify = |_: &V| verify_prepared(&prepared, &route, &prepared.inventory);
+        let mut stop = |_: &V| Err(error("retained_after_write"));
+        assert_eq!(F::publish_legacy(&prepared.root, &prepared.journal,
+            &prepared.mutation, &mut verify, Some(&mut stop)).unwrap_err().0,
+            "retained_after_write");
+        fs::write(temp.path().join(".kpopper/view.yaml"), "tabs: []\n").unwrap();
+        drop(route);
+        assert!(recover(std::slice::from_ref(&entry), temp.path(), false).is_err());
+        assert!(prepared.root.join(&prepared.journal).is_file());
 
         for rollback in [false, true] {
             let (temp, entry, route, prepared) = page_arrangement_replacement();

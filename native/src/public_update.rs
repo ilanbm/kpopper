@@ -5,6 +5,7 @@ use crate::{
     history_transaction_fs as F, legacy_batch,
     project_modes::WriteRoute,
     source_inventory::Inventory,
+    history_yaml::SourceValue as Source,
     value::TypedValue as V,
 };
 use base64::Engine as _;
@@ -198,9 +199,7 @@ fn save(path: &Path, value: &J) -> Result<()> {
 }
 
 fn state_root(record: &Path, selected: Option<&Path>) -> Result<PathBuf> {
-    if let Some(path) = selected {
-        return Ok(std::path::absolute(path)?);
-    }
+    if let Some(path) = selected { return crate::project_modes::resolved(path); }
     let base = std::env::var_os("XDG_STATE_HOME")
         .filter(|p| Path::new(p).is_absolute())
         .map(PathBuf::from)
@@ -298,7 +297,12 @@ fn source_collection(document: &V, report: &Report) -> Result<String> {
     Ok(candidates[0].clone())
 }
 
-fn actions(report: &Report, event: &str, source_file: &Path, collection: &str) -> Result<Vec<V>> {
+fn actions(
+    report: &Report,
+    event: &str,
+    source_file: &Path,
+    collection: &str,
+) -> Result<(Vec<V>, Vec<Option<Source>>)> {
     let source_id = format!("s.ingest_{event}");
     let cited = report
         .raw
@@ -326,15 +330,18 @@ fn actions(report: &Report, event: &str, source_file: &Path, collection: &str) -
             )),
         ),
     ]);
-    if let Some(source) = report.raw.get("source") {
-        body.insert("from".into(), source.clone());
-    }
-    if let Some(at) = report.raw.get("at") {
-        body.insert("at".into(), at.clone());
-    }
-    let mut planned = vec![
-        json!({"kind":"add","id":source_id,"body":body,"as_of":report.date,"into":collection}),
-    ];
+    if let Some(source) = report.raw.get("source") { body.insert("from".into(), source.clone()); }
+    if let Some(at) = report.raw.get("at") { body.insert("at".into(), at.clone()); }
+    let ordered_source = Source::Map(
+        ["name", "file", "read", "recorded_for", "from", "at"]
+            .into_iter()
+            .filter_map(|key| body.get(key).map(|value| {
+                V::from_json(value).map(|value| (key.into(), Source::from_typed(&value)))
+            }))
+            .collect::<Result<Vec<_>>>()?,
+    );
+    let mut planned = vec![json!({"kind":"add","id":source_id,"body":body,"as_of":report.date,"into":collection})];
+    let mut source_bodies = vec![Some(ordered_source)];
     let mut ordered = report.updates.clone();
     ordered.sort_by_key(|u| u["kind"] != "set");
     for mut update in ordered {
@@ -360,8 +367,9 @@ fn actions(report: &Report, event: &str, source_file: &Path, collection: &str) -
             }
         }
         planned.push(update);
+        source_bodies.push(None);
     }
-    planned.iter().map(V::from_json).collect()
+    Ok((planned.iter().map(V::from_json).collect::<Result<Vec<_>>>()?, source_bodies))
 }
 
 fn graph(
@@ -972,10 +980,10 @@ fn run_with_probe(
                 "private or unclear original source permission; report retained privately",
             )?;
             let collection = source_collection(&document, &report)?;
-            let planned = actions(&report, &event, &source_path, &collection)?;
+            let (planned, source_bodies) = actions(&report, &event, &source_path, &collection)?;
             let prepared = legacy_batch::prepare(&planned, &route, &legacy_batch::Options {
                 operation: format!("report-{event}"), context,
-            }, inventory, None)?;
+            }, inventory, None, &source_bodies)?;
             let mutation = prepared.mutation.clone();
             verify_requested_profile(&report, &mutation, supplied_runtime)?;
             let graphs = mutation_graphs(&mutation, &report, supplied_runtime)?;
@@ -1025,7 +1033,7 @@ fn run_with_probe(
         )?;
         let collection = source_collection(&document, &report)
             .map_err(|e| error(&format!("history source collection: {e}")))?;
-        let planned = actions(&report, &event, Path::new(&portable), &collection)
+        let (planned, _) = actions(&report, &event, Path::new(&portable), &collection)
             .map_err(|e| error(&format!("history report actions: {e}")))?;
         let owned_runtime = if supplied_runtime.is_none() {
             crate::public_workspace::runtime_for_document(&document)?
