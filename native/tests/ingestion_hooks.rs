@@ -40,6 +40,31 @@ fn real_pending_findings_are_offered_once_per_epoch_in_bounded_batches() {
 }
 
 #[test]
+fn live_reservation_suppresses_fallback_but_corrupt_job_does_not_hide_attention() {
+    use kpop_native::{ingestion_delivery as delivery, ingestion_orchestration as ingestion};
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let record = root.join("GROUNDING.yaml");
+    let state = root.join("state");
+    std::fs::write(&record, "known: {p.value: {v: 1}}\n").unwrap();
+    let envelope = serde_json::to_vec(&json!({"event_id":"attention", "kind":"report",
+        "source_quote":"Captured fixture", "target":"p.missing", "value":4,
+        "date":"2026-09-20"})).unwrap();
+    let captured = delivery::capture(&envelope, "fixture", Some(&record), Some(&state), root, false).unwrap();
+    ingestion::process(Some(&record), Some(&state), root, None, 32).unwrap();
+    let options = Options { host:"codex".into(), mode:"start".into(),
+        record:Some(record), state_dir:Some(state.clone()), wait_seconds:0.0 };
+    let suppressed = run(&options, json!({"session_id":"fixture"}), root).unwrap();
+    assert!(suppressed.stdout.is_empty());
+    let job = state.join("delivery-jobs").join(format!("{}.json",
+        captured["delivery_job"]["id"].as_str().unwrap()));
+    std::fs::write(job, "{").unwrap();
+    let visible = run(&options, json!({"session_id":"fixture","source":"compact"}), root).unwrap();
+    assert_eq!(visible.code, 0);
+    assert!(visible.stdout.contains("KPOPPER_ATTENTION"));
+}
+
+#[test]
 fn native_cli_hook_consumes_payload_cwd_without_python() {
     use std::io::Write;
     use std::process::{Command, Stdio};

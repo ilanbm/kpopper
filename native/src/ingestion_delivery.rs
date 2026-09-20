@@ -604,7 +604,8 @@ pub fn hook_visible(layout: &S::Layout, to: &str, notices: Vec<J>, epoch: &str) 
             continue;
         };
         let id = job_id(to, event);
-        let job = S::read_json(&job_path(layout, &id))?
+        // A corrupt job cannot establish ownership of an otherwise valid notice.
+        let job = S::read_json(&job_path(layout, &id)).ok().flatten()
             .and_then(|value| validated_job(value, Some(&id)).ok());
         let hidden = job.as_ref().is_some_and(|job| {
             if job["recipient"] != to || job["event_id"] != event {
@@ -649,4 +650,3 @@ mod tests {
         assert!(rendered.contains(&"a".repeat(MAX_AFFECTED_CHARS)));
     }
 }
-
