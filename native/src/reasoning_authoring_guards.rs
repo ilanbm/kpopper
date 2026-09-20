@@ -547,7 +547,7 @@ pub(crate) fn may_supersede(
                     stamp,
                     page,
                     born: map(existing)?.get("born").and_then(day),
-                    predicate: short(pred, 60),
+                    predicate: short(&V::Text(crate::public_ordinary_readers::predicate_text(pred)), 60),
                 })
             },
             || {
