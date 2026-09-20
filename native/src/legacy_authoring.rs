@@ -1308,16 +1308,16 @@ fn authority(entry: &Path) -> Result<V> {
     }
 }
 
-struct Prepared {
-    inventory: Inventory,
-    mutation: PreparedMutation,
-    output: String,
-    root: PathBuf,
-    journal: String,
-    subject: String,
+pub(crate) struct Prepared {
+    pub(crate) inventory: Inventory,
+    pub(crate) mutation: PreparedMutation,
+    pub(crate) output: String,
+    pub(crate) root: PathBuf,
+    pub(crate) journal: String,
+    pub(crate) subject: String,
 }
 
-enum Preparation {
+pub(crate) enum Preparation {
     Draft(String),
     Mutation(Prepared),
 }
@@ -1356,7 +1356,12 @@ fn nearest_notice(
     )
 }
 
-fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Result<Preparation> {
+pub(crate) fn prepare_with_inventory(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+    mut inventory: Inventory,
+) -> Result<Preparation> {
     let a = map(action)?;
     require(
         a.get("hypothesis").is_none_or(|value| *value == V::Null),
@@ -1370,7 +1375,6 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
         .paths()
         .first()
         .ok_or_else(|| error("missing_record_path"))?;
-    let mut inventory = Inventory::default();
     let document = source_document::load(route.paths(), &mut inventory, false)?;
     require(
         document.history.is_none(),
@@ -1913,6 +1917,10 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
     }))
 }
 
+fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Result<Preparation> {
+    prepare_with_inventory(action, route, source_body, Inventory::default())
+}
+
 trait IntoList {
     fn into_list(self) -> Result<Vec<V>>;
 }
@@ -1944,7 +1952,11 @@ fn verify_prepared(prepared: &Prepared, route: &WriteRoute, inventory: &Inventor
     )
 }
 
-fn publish(prepared: Prepared, route: &WriteRoute) -> Result<String> {
+fn publish_with_committed(
+    prepared: Prepared,
+    route: &WriteRoute,
+    committed: Option<F::Verify<'_>>,
+) -> Result<String> {
     if prepared.journal.is_empty() {
         return Ok(prepared.output);
     }
@@ -1955,7 +1967,7 @@ fn publish(prepared: Prepared, route: &WriteRoute) -> Result<String> {
         &prepared.journal,
         &prepared.mutation,
         &mut verify,
-        None,
+        committed,
     )?;
     crate::session_activity::published(
         &prepared.root,
@@ -1963,6 +1975,18 @@ fn publish(prepared: Prepared, route: &WriteRoute) -> Result<String> {
         Some(&BTreeSet::from([prepared.subject.clone()])),
     );
     Ok(prepared.output)
+}
+
+fn publish(prepared: Prepared, route: &WriteRoute) -> Result<String> {
+    publish_with_committed(prepared, route, None)
+}
+
+pub(crate) fn publish_prepared_with_committed(
+    prepared: Prepared,
+    route: &WriteRoute,
+    committed: F::Verify<'_>,
+) -> Result<String> {
+    publish_with_committed(prepared, route, Some(committed))
 }
 
 fn entry_path(root: &Path, mutation: &PreparedMutation) -> Result<PathBuf> {
@@ -2338,7 +2362,10 @@ mod tests {
             panic!("expected mutation")
         };
         fs::write(&entry, "known:\n  p.a: {v: 7}\n").unwrap();
-        assert_eq!(publish(prepared, &route).unwrap_err().0, "concurrent_edit");
+        assert_eq!(
+            publish(prepared, &route).unwrap_err().0,
+            "concurrent_edit"
+        );
         assert_eq!(
             fs::read_to_string(entry).unwrap(),
             "known:\n  p.a: {v: 7}\n"

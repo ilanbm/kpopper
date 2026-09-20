@@ -104,6 +104,7 @@ pub(crate) enum Observation {
 pub(crate) struct Inventory {
     pub events: BTreeMap<(String, PathBuf), Observation>,
     pub files: BTreeMap<PathBuf, Vec<u8>>,
+    staged: BTreeMap<PathBuf, Option<Vec<u8>>>,
     total: usize,
 }
 fn failure(error: &std::io::Error) -> &'static str {
@@ -154,6 +155,25 @@ fn bytes(path: &Path) -> std::io::Result<Vec<u8>> {
     Ok(raw)
 }
 impl Inventory {
+    /// Overlay an exact prepared image for bounded, in-memory authoring. Live
+    /// observations remain unchanged so `verify` still binds publication to
+    /// the original filesystem preimage.
+    pub(crate) fn stage(&mut self, path: &Path, raw: Option<Vec<u8>>) -> Result<()> {
+        if let Some(bytes) = &raw {
+            require(bytes.len() <= MAX_FILE, "source_limit")?;
+        }
+        let path = absolute(path)?;
+        match &raw {
+            Some(bytes) => {
+                self.files.insert(path.clone(), bytes.clone());
+            }
+            None => {
+                self.files.remove(&path);
+            }
+        }
+        self.staged.insert(path, raw);
+        Ok(())
+    }
     pub fn event(&mut self, kind: &str, path: &Path, value: Observation) -> Result<()> {
         let key = (kind.into(), absolute(path)?);
         require(
@@ -164,16 +184,25 @@ impl Inventory {
         require(self.events.len() <= MAX_MEMBERS, "source_limit")
     }
     pub fn exists(&mut self, path: &Path) -> Result<bool> {
+        if let Some(value) = self.staged.get(&absolute(path)?) {
+            return Ok(value.is_some());
+        }
         let value = path.exists();
         self.event("exists", path, Observation::Exists(value))?;
         Ok(value)
     }
     pub fn file(&mut self, path: &Path) -> Result<bool> {
+        if let Some(value) = self.staged.get(&absolute(path)?) {
+            return Ok(value.is_some());
+        }
         let value = path.is_file();
         self.event("file", path, Observation::File(value))?;
         Ok(value)
     }
     pub fn directory(&mut self, path: &Path) -> Result<bool> {
+        if self.staged.contains_key(&absolute(path)?) {
+            return Ok(false);
+        }
         let value = path.is_dir();
         self.event("directory", path, Observation::Directory(value))?;
         Ok(value)
@@ -195,6 +224,9 @@ impl Inventory {
         Ok(())
     }
     pub fn read(&mut self, path: &Path) -> Result<Vec<u8>> {
+        if let Some(raw) = self.staged.get(&absolute(path)?) {
+            return raw.clone().ok_or_else(|| error("FileNotFoundError"));
+        }
         match bytes(path) {
             Ok(raw) => {
                 self.retain(path, raw.clone())?;
