@@ -182,7 +182,7 @@ impl PublisherLock {
         options.mode(0o600);
         let file = options.open(path)?;
         file.try_lock_exclusive().map_err(|error| {
-            if error.kind() == std::io::ErrorKind::WouldBlock {
+            if lock_contended(&error) {
                 Error("another local publisher is active".into())
             } else {
                 error.into()
@@ -190,6 +190,10 @@ impl PublisherLock {
         })?;
         Ok(Self { _file: file })
     }
+}
+fn lock_contended(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::WouldBlock
+        || (cfg!(windows) && error.raw_os_error() == Some(33))
 }
 
 pub struct Configure<'a> {
@@ -480,4 +484,22 @@ pub fn action_at(
     policy.verify()?;
     save(&path, &state)?;
     pending_state::publication_status(Some(&canonical_json(&state)?), &ledger)
+}
+
+#[cfg(test)]
+mod locking_tests {
+    use super::*;
+
+    #[test]
+    fn would_block_is_publisher_contention() {
+        assert!(lock_contended(&std::io::Error::from(
+            std::io::ErrorKind::WouldBlock
+        )));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_lock_violation_is_publisher_contention() {
+        assert!(lock_contended(&std::io::Error::from_raw_os_error(33)));
+    }
 }

@@ -97,11 +97,36 @@ pub(crate) fn lock(path: &Path, blocking: bool) -> Result<Option<File>> {
     } else {
         match file.try_lock_exclusive() {
             Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(None),
+            Err(e) if lock_contended(&e) => return Ok(None),
             Err(e) => return Err(e.into()),
         }
     }
     Ok(Some(file))
+}
+fn lock_contended(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::WouldBlock
+        || (cfg!(windows) && error.raw_os_error() == Some(33))
+}
+
+#[cfg(test)]
+mod locking_tests {
+    use super::*;
+
+    #[test]
+    fn nonblocking_watch_lock_reports_contention_and_recovers_after_drop() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("watch.lock");
+        let first = lock(&path, true).unwrap().unwrap();
+        assert!(lock(&path, false).unwrap().is_none());
+        drop(first);
+        assert!(lock(&path, false).unwrap().is_some());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_lock_violation_is_contention() {
+        assert!(lock_contended(&std::io::Error::from_raw_os_error(33)));
+    }
 }
 pub(crate) fn json_files(folder: &Path) -> Result<Vec<PathBuf>> {
     if !folder.is_dir() {
@@ -432,8 +457,8 @@ impl Watch {
         shared_private: bool,
     ) -> Result<J> {
         require(
-            cfg!(unix),
-            "watch configuration requires POSIX file locking",
+            cfg!(any(unix, windows)),
+            "watch configuration requires file locking",
         )?;
         require(
             self.record.is_file(),

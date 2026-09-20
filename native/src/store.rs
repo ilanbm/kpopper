@@ -7,6 +7,8 @@ use crate::{
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
@@ -143,6 +145,34 @@ pub struct Store {
 }
 
 impl Store {
+    #[cfg(windows)]
+    fn windows_lock_file(root: &Path) -> Result<File> {
+        // Windows cannot open a directory with std::fs::File. Use one stable
+        // regular lock file outside the workspace so init can still prove the
+        // workspace is empty. Lowercasing may add harmless contention for rare
+        // case-sensitive directories, but cannot split one Windows path lock.
+        let mut key = Vec::new();
+        for unit in root
+            .as_os_str()
+            .to_string_lossy()
+            .to_lowercase()
+            .encode_utf16()
+        {
+            key.extend_from_slice(&unit.to_le_bytes());
+        }
+        let home = std::env::temp_dir().join("kpopper-native-locks");
+        fs::create_dir_all(&home)?;
+        let path = home.join(format!("store-{}.lock", sha256(&key)));
+        let mut options = OpenOptions::new();
+        options
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .share_mode(0x0000_0001 | 0x0000_0002); // deny FILE_SHARE_DELETE
+        Ok(options.open(path)?)
+    }
+
     fn acquire(root: &Path, exclusive: bool) -> Result<Self> {
         require(root.is_absolute(), "absolute_workspace_required")?;
         let mut prefix = PathBuf::new();
@@ -158,15 +188,18 @@ impl Store {
         }
         require(root.is_dir(), "workspace_missing")?;
         let root = root.canonicalize()?;
-        let lock = File::open(&root)?;
-        // Same directory-flock protocol as history_transaction._lock on POSIX.
         #[cfg(unix)]
+        let lock = File::open(&root)?;
+        #[cfg(windows)]
+        let lock = Self::windows_lock_file(&root)?;
+        // Same directory-flock protocol as history_transaction._lock on POSIX.
+        #[cfg(any(unix, windows))]
         if exclusive {
             FileExt::try_lock_exclusive(&lock)?;
         } else {
             FileExt::try_lock_shared(&lock)?;
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = exclusive;
             return Err(Error("platform_locking_unverified".into()));
@@ -720,4 +753,29 @@ fn failpoint(name: &str) -> Result<()> {
         std::env::var("KPOP_NATIVE_FAIL_AFTER").ok().as_deref() != Some(name),
         &format!("injected_after_{name}"),
     )
+}
+
+#[cfg(test)]
+mod locking_tests {
+    use super::*;
+
+    #[test]
+    fn workspace_lock_serializes_and_does_not_pollute_an_empty_workspace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let first = Store::acquire(&root, true).unwrap();
+        assert!(fs::read_dir(&root).unwrap().next().is_none());
+        assert!(Store::acquire(&root, false).is_err());
+        drop(first);
+        Store::acquire(&root, false).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_uses_a_regular_lock_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let file = Store::windows_lock_file(&root).unwrap();
+        assert!(file.metadata().unwrap().is_file());
+    }
 }
