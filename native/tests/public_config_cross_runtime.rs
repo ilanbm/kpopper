@@ -3,6 +3,7 @@
 use std::{
     collections::BTreeMap,
     fs,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -65,6 +66,38 @@ fn migrate_with_python(python: &Path, oracle_root: &Path, root: &Path) {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+fn materialize_incomplete_with_python(python: &Path, oracle_root: &Path, root: &Path) {
+    fs::write(
+        root.join("repo/GROUNDING.yaml"),
+        b"known:\n  p.a: {v: 2}\n  p.b: {rule: missing.input + 1}\njudgments:\n  d.x: {rests_on: [p.b], wrong_if: p.b > 4, seen: {p.b: 3}, verdict: Fine}\n",
+    )
+    .unwrap();
+    let script = r#"
+import pathlib, sys
+from scripts import core_migration as C
+root = pathlib.Path(sys.argv[1])
+plan = C.prepare(root / 'repo' / 'GROUNDING.yaml', route=False)
+assert plan.problems
+destination = root / 'migrated'
+for name, data in plan.files.items():
+    path = destination / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+"#;
+    let output = Command::new(python)
+        .args(["-c", script])
+        .arg(root)
+        .current_dir(root.join("repo"))
+        .env("PYTHONPATH", oracle_root)
+        .env("KPOPPER_SESSION_DISABLE", "1")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
 fn normalized(raw: &[u8], root: &Path) -> Vec<u8> {
     String::from_utf8_lossy(raw)
         .replace(root.canonicalize().unwrap().to_str().unwrap(), "$ROOT")
@@ -95,15 +128,7 @@ fn compare(
     );
     let actual_stdout = normalized(&actual.stdout, native_root);
     let expected_stdout = normalized(&expected.stdout, oracle_fixture);
-    if args.contains(&"--json") {
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&actual_stdout).unwrap(),
-            serde_json::from_slice::<serde_json::Value>(&expected_stdout).unwrap(),
-            "JSON stdout: {args:?}"
-        );
-    } else {
-        assert_eq!(actual_stdout, expected_stdout, "stdout: {args:?}");
-    }
+    assert_eq!(actual_stdout, expected_stdout, "stdout: {args:?}");
     assert_eq!(
         normalized(&actual.stderr, native_root),
         normalized(&expected.stderr, oracle_fixture),
@@ -151,6 +176,59 @@ fn migration_images(root: &Path) -> BTreeMap<String, Vec<u8>> {
         fs::read(root.join("repo/GROUNDING.yaml")).unwrap(),
     );
     result
+}
+
+#[test]
+#[ignore = "requires KPOP_SESSION_ORACLE_PYTHON and immutable KPOP_SESSION_ORACLE_ROOT"]
+fn empty_and_relative_xdg_state_home_match_python() {
+    let python =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
+    let oracle_root =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    for state in ["", "relative-state"] {
+        let native_temp = tempfile::tempdir().unwrap();
+        let oracle_temp = tempfile::tempdir().unwrap();
+        let native_root = native_temp.path().canonicalize().unwrap();
+        let oracle_fixture = oracle_temp.path().canonicalize().unwrap();
+        fixture(&native_root, false);
+        fixture(&oracle_fixture, false);
+        let call = |program: &Path, oracle: Option<&Path>, root: &Path| {
+            let mut command = Command::new(program);
+            if let Some(oracle) = oracle {
+                command.arg(oracle.join("scripts/cli.py"));
+            }
+            command
+                .arg("--workspace")
+                .arg(root.join("repo"))
+                .args(["config", "--guidance", "off", "--json"])
+                .current_dir(root.join("repo"))
+                .env("XDG_STATE_HOME", state)
+                .env("HOME", root.join("home"))
+                .env("KPOPPER_SESSION_DISABLE", "1")
+                .output()
+                .unwrap()
+        };
+        fs::create_dir(native_root.join("home")).unwrap();
+        fs::create_dir(oracle_fixture.join("home")).unwrap();
+        let actual = call(&native, None, &native_root);
+        let expected = call(&python, Some(&oracle_root), &oracle_fixture);
+        assert_eq!(actual.status.code(), expected.status.code());
+        assert_eq!(
+            normalized(&actual.stdout, &native_root),
+            normalized(&expected.stdout, &oracle_fixture)
+        );
+        assert_eq!(actual.stderr, expected.stderr);
+        let relative = if state.is_empty() {
+            PathBuf::from("home/.local/state/kpopper/first-use/guidance.json")
+        } else {
+            PathBuf::from("repo/relative-state/kpopper/first-use/guidance.json")
+        };
+        assert_eq!(
+            fs::read(native_root.join(&relative)).unwrap(),
+            fs::read(oracle_fixture.join(relative)).unwrap()
+        );
+    }
 }
 
 #[test]
@@ -254,6 +332,20 @@ fn python_and_native_config_match_cli_and_durable_images() {
                     "--mode",
                     "simple",
                     "--record",
+                    "$ROOT/missing.yaml",
+                    "--check",
+                ],
+            );
+            compare(
+                &native,
+                &python,
+                &oracle_root,
+                &native_root,
+                &oracle_fixture,
+                &[
+                    "--mode",
+                    "simple",
+                    "--record",
                     "$ROOT/different.yaml",
                     "--check",
                     "--json",
@@ -295,6 +387,14 @@ fn python_and_native_config_match_cli_and_durable_images() {
                 &native_root,
                 &oracle_fixture,
                 &[],
+            );
+            compare(
+                &native,
+                &python,
+                &oracle_root,
+                &native_root,
+                &oracle_fixture,
+                &["--json"],
             );
             compare(
                 &native,
@@ -477,7 +577,6 @@ fn python_core_migration_tampering_refusals_match_native_config() {
         for root in [&native_root, &oracle_fixture] {
             match kind {
                 "receipt" => {
-                    use std::io::Write;
                     writeln!(
                         fs::OpenOptions::new()
                             .append(true)
@@ -493,7 +592,6 @@ fn python_core_migration_tampering_refusals_match_native_config() {
                 )
                 .unwrap(),
                 "authorship" => {
-                    use std::io::Write;
                     writeln!(
                         fs::OpenOptions::new()
                             .append(true)
@@ -542,6 +640,88 @@ fn python_core_migration_tampering_refusals_match_native_config() {
             migration_images(&native_root),
             migration_images(&oracle_fixture),
             "tamper case {kind}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires immutable Python oracle and KPOPPER_NATIVE_RESOURCES"]
+fn incomplete_core_plan_precedes_receipt_checks_in_both_directions() {
+    assert!(std::env::var_os("KPOPPER_NATIVE_RESOURCES").is_some());
+    let python =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
+    let oracle_root =
+        PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    for rollback in [false, true] {
+        let native_temp = tempfile::tempdir().unwrap();
+        let oracle_temp = tempfile::tempdir().unwrap();
+        let native_root = native_temp.path().canonicalize().unwrap();
+        let oracle_fixture = oracle_temp.path().canonicalize().unwrap();
+        fixture(&native_root, true);
+        fixture(&oracle_fixture, true);
+        materialize_incomplete_with_python(&python, &oracle_root, &native_root);
+        materialize_incomplete_with_python(&python, &oracle_root, &oracle_fixture);
+        fs::OpenOptions::new()
+            .append(true)
+            .open(native_root.join("migrated/.kpopper-migration/receipt.json"))
+            .unwrap()
+            .write_all(b"\n")
+            .unwrap();
+        fs::OpenOptions::new()
+            .append(true)
+            .open(oracle_fixture.join("migrated/.kpopper-migration/receipt.json"))
+            .unwrap()
+            .write_all(b"\n")
+            .unwrap();
+        if rollback {
+            for root in [&native_root, &oracle_fixture] {
+                let project = root.join("repo/.git/kpopper/project");
+                fs::create_dir_all(&project).unwrap();
+                fs::write(
+                    project.join("project.json"),
+                    format!(
+                        "{{\"generation\":1,\"mode\":\"simple\",\"publication\":null,\"record\":{},\"version\":1}}\n",
+                        serde_json::to_string(
+                            &root.join("migrated/GROUNDING.yaml").to_string_lossy()
+                        )
+                        .unwrap()
+                    ),
+                )
+                .unwrap();
+            }
+        }
+        let args = if rollback {
+            vec![
+                "--mode",
+                "advanced",
+                "--record",
+                "GROUNDING.yaml",
+                "--migration-receipt",
+                "$ROOT/migrated/.kpopper-migration/receipt.json",
+                "--rollback",
+                "--check",
+                "--json",
+            ]
+        } else {
+            vec![
+                "--mode",
+                "simple",
+                "--record",
+                "$ROOT/migrated/GROUNDING.yaml",
+                "--migration-receipt",
+                "$ROOT/migrated/.kpopper-migration/receipt.json",
+                "--check",
+                "--json",
+            ]
+        };
+        compare(
+            &native,
+            &python,
+            &oracle_root,
+            &native_root,
+            &oracle_fixture,
+            &args,
         );
     }
 }

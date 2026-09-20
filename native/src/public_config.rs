@@ -4,7 +4,7 @@ use crate::{
     history_contract::map,
     history_transaction_fs::DirectoryGuard,
     identity::sha256,
-    project_modes::{Project, resolved},
+    project_modes::{PolicyGuard, Project, resolved},
     require,
     source_capture::{ReadMode, capture_source},
     value::TypedValue as V,
@@ -40,6 +40,7 @@ pub struct Options {
 
 fn state_dir() -> Result<PathBuf> {
     let root = std::env::var_os("XDG_STATE_HOME")
+        .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/state")))
         .ok_or_else(|| Error("state directory is unavailable".into()))?;
@@ -445,6 +446,28 @@ fn verify_snapshots(report: &J) -> Result<()> {
     }
     Ok(())
 }
+fn persist_transition(
+    project: &Project,
+    guard: &PolicyGuard,
+    current: &J,
+    report: &J,
+) -> Result<J> {
+    // Verify before retaining history. Python writes its backup first, but a
+    // losing race can then leave a backup whose bytes disagree with the hashes
+    // in that same artifact. Native deliberately leaves no misleading recovery
+    // evidence until every captured file image is still current.
+    verify_snapshots(report)?;
+    if report["changed"] == true {
+        save_history(project, current, report)?;
+    }
+    let mut next = current.clone();
+    next["mode"] = report["mode"].clone();
+    next["record"] = report["record"].clone();
+    next["generation"] = (generation(current)? + 1).into();
+    guard.verify()?;
+    atomic_bytes(&project.config_path, &canonical_json_line(&next)?)?;
+    Ok(next)
+}
 
 fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     let guard = project.lock()?;
@@ -521,16 +544,7 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     if options.check {
         return Ok((current, Some(report)));
     }
-    verify_snapshots(&report)?;
-    if report["changed"] == true {
-        save_history(project, &current, &report)?;
-    }
-    let mut next = current.clone();
-    next["mode"] = report["mode"].clone();
-    next["record"] = report["record"].clone();
-    next["generation"] = (generation(&current)? + 1).into();
-    guard.verify()?;
-    atomic_bytes(&project.config_path, &canonical_json_line(&next)?)?;
+    let next = persist_transition(project, &guard, &current, &report)?;
     drop(directory_guards);
     Ok((next, None))
 }
@@ -561,14 +575,22 @@ pub fn run(options: &Options, cwd: &Path) -> Result<V> {
     V::from_json(&J::Object(output))
 }
 
-fn object_order<'a>(map: &'a JMap<String, J>, current_record: Option<&str>) -> Vec<&'a str> {
+fn object_order<'a>(
+    map: &'a JMap<String, J>,
+    config_loaded: bool,
+    snapshot_order: &[String],
+) -> Vec<&'a str> {
     let preferred: &[&str] = if map.contains_key("guidance") && map.contains_key("project") {
         &["guidance", "project", "record", "transition"]
     } else if map.contains_key("version")
         && map.contains_key("mode")
         && map.contains_key("generation")
     {
-        &["version", "mode", "record", "publication", "generation"]
+        if config_loaded {
+            &[]
+        } else {
+            &["version", "mode", "record", "publication", "generation"]
+        }
     } else if map.contains_key("from") && map.contains_key("changed") {
         &[
             "from",
@@ -588,12 +610,15 @@ fn object_order<'a>(map: &'a JMap<String, J>, current_record: Option<&str>) -> V
             .values()
             .all(|value| value.is_null() || value.is_string())
     {
-        let mut result = map.keys().map(String::as_str).collect::<Vec<_>>();
-        if let Some(current) = current_record
-            && let Some(index) = result.iter().position(|key| *key == current)
-        {
-            result.swap(0, index);
-        }
+        let mut result = snapshot_order
+            .iter()
+            .filter_map(|key| map.get_key_value(key).map(|(key, _)| key.as_str()))
+            .collect::<Vec<_>>();
+        result.extend(
+            map.keys()
+                .map(String::as_str)
+                .filter(|key| !snapshot_order.iter().any(|ordered| ordered == key)),
+        );
         return result;
     }
     let mut result = preferred
@@ -612,7 +637,8 @@ fn render_pretty(
     value: &J,
     indent: usize,
     output: &mut String,
-    current_record: Option<&str>,
+    config_loaded: bool,
+    snapshot_order: &[String],
 ) -> Result<()> {
     match value {
         J::Array(values) if values.is_empty() => output.push_str("[]"),
@@ -620,7 +646,7 @@ fn render_pretty(
             output.push_str("[\n");
             for (index, value) in values.iter().enumerate() {
                 output.push_str(&" ".repeat(indent + 2));
-                render_pretty(value, indent + 2, output, current_record)?;
+                render_pretty(value, indent + 2, output, config_loaded, snapshot_order)?;
                 output.push_str(if index + 1 == values.len() {
                     "\n"
                 } else {
@@ -633,12 +659,18 @@ fn render_pretty(
         J::Object(map) if map.is_empty() => output.push_str("{}"),
         J::Object(map) => {
             output.push_str("{\n");
-            let keys = object_order(map, current_record);
+            let keys = object_order(map, config_loaded, snapshot_order);
             for (index, key) in keys.iter().enumerate() {
                 output.push_str(&" ".repeat(indent + 2));
                 output.push_str(&serde_json::to_string(key)?);
                 output.push_str(": ");
-                render_pretty(&map[*key], indent + 2, output, current_record)?;
+                render_pretty(
+                    &map[*key],
+                    indent + 2,
+                    output,
+                    config_loaded,
+                    snapshot_order,
+                )?;
                 output.push_str(if index + 1 == keys.len() { "\n" } else { ",\n" });
             }
             output.push_str(&" ".repeat(indent));
@@ -648,12 +680,75 @@ fn render_pretty(
     }
     Ok(())
 }
-fn pretty(value: &J) -> Result<String> {
+fn pretty(value: &J, config_loaded: bool, snapshot_order: &[String]) -> Result<String> {
     let mut output = String::new();
-    let current_record = value.get("record").and_then(J::as_str);
-    render_pretty(value, 0, &mut output, current_record)?;
+    render_pretty(value, 0, &mut output, config_loaded, snapshot_order)?;
     output.push('\n');
     Ok(output)
+}
+fn rendered_snapshot_order(value: &J, cwd: &Path) -> Vec<String> {
+    let Some(transition) = value.get("transition") else {
+        return vec![];
+    };
+    let Ok(project) = Project::open(cwd) else {
+        return vec![];
+    };
+    let Ok(worktrees) = project.worktrees() else {
+        return vec![];
+    };
+    let Some(current) = transition
+        .get("from")
+        .and_then(|value| value.get("record"))
+        .and_then(J::as_str)
+    else {
+        return vec![];
+    };
+    let Some(destination) = transition.get("record").and_then(J::as_str) else {
+        return vec![];
+    };
+    let mut order = worktrees
+        .iter()
+        .filter_map(|root| resolved(&root.join(current)).ok())
+        .filter_map(|path| path_string(&path).ok())
+        .collect::<Vec<_>>();
+    let mut targets = worktrees
+        .iter()
+        .filter_map(|root| resolved(&root.join(destination)).ok())
+        .filter_map(|path| path_string(&path).ok())
+        .collect::<Vec<_>>();
+    targets.sort();
+    targets.dedup();
+    for path in targets {
+        if !order.contains(&path) {
+            order.push(path);
+        }
+    }
+    let Some(snapshots) = transition.get("snapshots").and_then(J::as_object) else {
+        return order;
+    };
+    let mut remaining = snapshots
+        .keys()
+        .filter(|path| !order.contains(path))
+        .cloned()
+        .collect::<Vec<_>>();
+    remaining.sort_by_key(|path| {
+        let marker = "/.kpopper-migration/";
+        let Some((_, tail)) = path.split_once(marker) else {
+            return (0, path.clone());
+        };
+        let rank = match tail {
+            "original.json" => 1,
+            "candidate.json" => 2,
+            value if value.starts_with("originals/") => 3,
+            "pending.json" => 4,
+            value if value.starts_with("pending/") => 5,
+            "receipt.json" => 6,
+            _ => 7,
+        };
+        (rank, path.clone())
+    });
+    order.extend(remaining);
+    order
 }
 fn public_error(error: Error) -> Error {
     Error(
@@ -681,8 +776,10 @@ pub fn dispatch(
     cwd: &Path,
     json_output: bool,
 ) -> crate::public_pending::CommandOutput {
+    let config_loaded = Project::open(cwd).is_ok_and(|project| project.config_path.is_file());
     match run(options, cwd).and_then(|value| value.to_json()) {
         Ok(value) => {
+            let snapshot_order = rendered_snapshot_order(&value, cwd);
             let blockers = value
                 .get("transition")
                 .and_then(|v| v.get("blockers"))
@@ -693,7 +790,7 @@ pub fn dispatch(
                 0
             };
             let stdout = if json_output {
-                pretty(&value).unwrap()
+                pretty(&value, config_loaded, &snapshot_order).unwrap()
             } else {
                 let mut text = format!(
                     "Mode: {}\nRecord: {}\nGuidance: {}",
@@ -722,14 +819,27 @@ pub fn dispatch(
                 text.push('\n');
                 text
             };
-            crate::public_pending::CommandOutput {
-                stdout,
-                stderr: String::new(),
-                code,
+            if code == 0 || json_output {
+                crate::public_pending::CommandOutput {
+                    stdout,
+                    stderr: String::new(),
+                    code,
+                }
+            } else {
+                crate::public_pending::CommandOutput {
+                    stdout: String::new(),
+                    stderr: stdout,
+                    code,
+                }
             }
         }
         Err(error) if json_output => crate::public_pending::CommandOutput {
-            stdout: pretty(&json!({"error":public_error(error).to_string()})).unwrap(),
+            stdout: pretty(
+                &json!({"error":public_error(error).to_string()}),
+                config_loaded,
+                &[],
+            )
+            .unwrap(),
             stderr: String::new(),
             code: 2,
         },
@@ -888,22 +998,29 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let record = dir.path().join("GROUNDING.yaml");
         fs::write(&record, b"known: {}\n").unwrap();
+        let other = dir.path().join("other.yaml");
+        fs::write(&other, b"known: {}\n").unwrap();
         let project = Project::open(dir.path()).unwrap();
         let current = project.config().unwrap().to_json().unwrap();
         let report = transition_report(
             &project,
             &current,
             "simple",
-            current["record"].as_str(),
+            Some(other.to_str().unwrap()),
             None,
             false,
         )
         .unwrap();
         fs::write(&record, b"known: {changed: {v: true}}\n").unwrap();
+        let guard = project.lock().unwrap();
         assert_eq!(
-            verify_snapshots(&report).unwrap_err().0,
+            persist_transition(&project, &guard, &current, &report)
+                .unwrap_err()
+                .0,
             "record closure changed before configuration commit"
         );
+        assert!(!project.config_path.exists());
+        assert!(!project.state.join("mode-history").exists());
     }
     #[test]
     fn rollback_requires_a_receipt() {

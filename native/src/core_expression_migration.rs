@@ -1087,6 +1087,16 @@ pub(super) fn validate_configuration_transition(
         runtime,
         false,
     )?;
+    if !plan.problems.is_empty() {
+        return Err(Error(format!(
+            "migration cannot be validated: {}",
+            plan.problems
+                .iter()
+                .map(crate::source_text::ordinary_python_str)
+                .collect::<Vec<_>>()
+                .join("; ")
+        )));
+    }
     require(
         candidate
             == candidate
