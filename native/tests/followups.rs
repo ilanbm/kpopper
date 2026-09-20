@@ -185,20 +185,25 @@ fn date_trigger_uses_the_configured_iana_timezone() {
 
 #[test]
 fn a_core_record_without_a_runtime_retains_unavailable_evidence() {
-    if std::env::var_os("KPOP_R1_NO_RUNTIME_CHILD").is_none() {
-        let status = Command::new(std::env::current_exe().unwrap())
+    if std::env::var_os("KPOP_TEST_NO_RUNTIME_CHILD").is_none() {
+        let output = Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
                 "a_core_record_without_a_runtime_retains_unavailable_evidence",
                 "--nocapture",
             ])
-            .env("KPOP_R1_NO_RUNTIME_CHILD", "1")
+            .env("KPOP_TEST_NO_RUNTIME_CHILD", "1")
             .env_remove("KPOPPER_NATIVE_RESOURCES")
             .env_remove("KPOPPER_NATIVE_CACHE")
             .env_remove("KPOP_TEST_ORDINARY_PROGRAM")
-            .status()
+            .output()
             .unwrap();
-        assert!(status.success());
+        assert!(
+            output.status.success(),
+            "child failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
         return;
     }
     let temp = tempfile::tempdir().unwrap();

@@ -1506,6 +1506,8 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
         .cloned()
         .collect::<BTreeSet<_>>();
     let mut assigned = BTreeMap::new();
+    let mut assigned_values = Vec::new();
+    let mut unmatched_ids = Vec::new();
     for (path, ids) in groups {
         require(
             !path.is_empty() && !path.split('/').any(str::is_empty),
@@ -1515,7 +1517,12 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
             .as_array()
             .ok_or_else(|| Error("profile group must list IDs".into()))?
         {
+            if assigned_values.iter().any(|assigned| assigned == id) {
+                return Err(Error("profile assigns an ID more than once".into()));
+            }
+            assigned_values.push(id.clone());
             let Some(id) = id.as_str() else {
+                unmatched_ids.push(id.clone());
                 continue;
             };
             require(
@@ -1578,7 +1585,22 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
         .get("orientation")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    graph["navigation_profile"] = json!({"description":profile["description"].as_str().unwrap_or("Declared navigation."),"sha256":sha256(canonical(&profile)?.as_bytes()),"unmatched_ids":assigned.keys().filter(|id|!node_ids.contains(*id)).collect::<Vec<_>>(),"opening_depth":depth});
+    unmatched_ids.extend(
+        assigned
+            .keys()
+            .filter(|id| !node_ids.contains(*id))
+            .map(|id| J::String(id.clone())),
+    );
+    let mixed_unmatched = unmatched_ids.iter().any(|value| {
+        let string = value.is_string();
+        unmatched_ids.iter().any(|other| other.is_string() != string)
+    });
+    require(
+        !mixed_unmatched,
+        "'<' not supported between instances of 'str' and 'int'",
+    )?;
+    unmatched_ids.sort_by(|left, right| left.to_string().cmp(&right.to_string()));
+    graph["navigation_profile"] = json!({"description":profile["description"].as_str().unwrap_or("Declared navigation."),"sha256":sha256(canonical(&profile)?.as_bytes()),"unmatched_ids":unmatched_ids,"opening_depth":depth});
     Ok(())
 }
 
@@ -2060,7 +2082,12 @@ mod tests {
         let mut numeric = fixtures["cases"][0]["authored_graph"].clone();
         let numeric_profile = V::from_json(&json!({"groups": {"mixed": [1]}})).unwrap();
         apply_profile(&mut numeric, Some(&numeric_profile)).unwrap();
-        assert_eq!(numeric["navigation_profile"]["unmatched_ids"], json!([]));
+        assert_eq!(numeric["navigation_profile"]["unmatched_ids"], json!([1]));
+        let mixed = V::from_json(&json!({"groups": {"mixed": [1, "1"]}})).unwrap();
+        assert_eq!(
+            apply_profile(&mut numeric, Some(&mixed)).unwrap_err().0,
+            "'<' not supported between instances of 'str' and 'int'"
+        );
         for case in fixtures["invalid_profiles"].as_array().unwrap() {
             let mut graph = fixtures["cases"][0]["authored_graph"].clone();
             let profile = V::from_json(&case["profile"]).unwrap();
