@@ -81,6 +81,7 @@ pub fn hook_opening(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result
         branch: None,
         search_mode: crate::session_search::SearchMode::Hybrid,
         cursor: None,
+        embedding_dir: None,
         kind: None,
         text: None,
         basis: Vec::new(),

@@ -415,6 +415,19 @@ impl CheckedSession {
     where
         F: Fn(&str) -> usize,
     {
+        self.search_with_semantic(revision, request, count, None)
+    }
+
+    pub fn search_with_semantic<F>(
+        &self,
+        revision: &str,
+        request: &crate::session_search::SearchRequest,
+        count: F,
+        semantic: Option<&dyn crate::session_search::SemanticProvider>,
+    ) -> Result<String>
+    where
+        F: Fn(&str) -> usize,
+    {
         require(
             revision == self.revision,
             "unknown core session revision; reopen",
@@ -431,7 +444,7 @@ impl CheckedSession {
             &self.groups,
             request,
             count,
-            None,
+            semantic,
         )
         .map(|response| response.text)
         .map_err(|e| Error(e.0))

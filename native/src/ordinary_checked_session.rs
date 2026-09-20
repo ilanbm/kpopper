@@ -667,6 +667,19 @@ impl OrdinarySession {
     where
         F: Fn(&str) -> usize,
     {
+        self.search_with_semantic(revision, request, count, None)
+    }
+
+    pub fn search_with_semantic<F>(
+        &self,
+        revision: &str,
+        request: &crate::session_search::SearchRequest,
+        count: F,
+        semantic: Option<&dyn crate::session_search::SemanticProvider>,
+    ) -> Result<String>
+    where
+        F: Fn(&str) -> usize,
+    {
         require(
             revision == self.revision,
             "project record changed or revision belongs elsewhere; reopen",
@@ -684,7 +697,7 @@ impl OrdinarySession {
             &self.groups,
             request,
             count,
-            None,
+            semantic,
         )
         .map(|response| response.text)
         .map_err(|error| Error(error.0))

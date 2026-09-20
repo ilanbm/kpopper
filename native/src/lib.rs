@@ -144,6 +144,7 @@ pub mod reasoning_values;
 mod recording_privacy;
 pub mod recording_receipt;
 pub mod session_activity;
+pub mod session_embeddings;
 pub mod session_gate;
 pub mod session_mcp;
 pub mod session_search;

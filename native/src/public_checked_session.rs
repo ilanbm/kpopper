@@ -7,6 +7,7 @@ use crate::{
     project_modes, public_workspace as W,
     reasoning_context::CapturedAssessment,
     reasoning_runtime::OperationalBounds,
+    session_embeddings::E5Index,
     session_search::{SearchMode, SearchRequest},
     source_capture::{self, ReadMode},
     source_inventory::Inventory,
@@ -79,6 +80,9 @@ pub struct Options {
     pub search_mode: SearchMode,
     #[arg(long)]
     pub cursor: Option<String>,
+    /// Optional directory containing the exact pinned local E5 assets.
+    #[arg(long)]
+    pub embedding_dir: Option<PathBuf>,
     #[arg(long, value_parser = ["observed", "inferred", "assumed", "question"])]
     pub kind: Option<String>,
     #[arg(long)]
@@ -126,6 +130,7 @@ pub struct Service {
     profile_path: Option<PathBuf>,
     requested_profile: Option<String>,
     state: PathBuf,
+    semantic: Option<E5Index>,
 }
 impl Service {
     pub fn new(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Self> {
@@ -221,6 +226,13 @@ impl Service {
         let profile_path = profile.clone();
         let store =
             CheckedSessionStore::open(&state, &name, &input, navigation.clone(), options.encoding)?;
+        let semantic = options.embedding_dir.as_ref().map(|directory| {
+            E5Index::new(if directory.is_absolute() {
+                directory.clone()
+            } else {
+                cwd.join(directory)
+            })
+        });
         inputs.verify()?;
         Ok(Self {
             cwd,
@@ -234,6 +246,7 @@ impl Service {
             profile_path,
             requested_profile: options.assessment_profile.clone(),
             state,
+            semantic,
         })
     }
 
@@ -437,7 +450,14 @@ impl Service {
     pub fn searching(&self, revision: &str, request: &SearchRequest) -> Result<String> {
         if self.ordinary()? {
             let (capture, _, session) = self.ordinary_session()?;
-            let result = session.search(revision, request, |s| self.store.encoding().count(s))?;
+            let result = session.search_with_semantic(
+                revision,
+                request,
+                |s| self.store.encoding().count(s),
+                self.semantic
+                    .as_ref()
+                    .map(|provider| provider as &dyn crate::session_search::SemanticProvider),
+            )?;
             capture.verify()?;
             self.inputs.verify()?;
             return Ok(result);
@@ -449,7 +469,14 @@ impl Service {
             None,
         )?;
         let session = self.store.load(revision, capture.snapshot()?)?;
-        let result = session.search(revision, request, |s| self.store.encoding().count(s))?;
+        let result = session.search_with_semantic(
+            revision,
+            request,
+            |s| self.store.encoding().count(s),
+            self.semantic
+                .as_ref()
+                .map(|provider| provider as &dyn crate::session_search::SemanticProvider),
+        )?;
         capture.verify()?;
         self.inputs.verify()?;
         Ok(result)

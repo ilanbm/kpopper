@@ -163,6 +163,49 @@ fn cli_reopens_retained_findings_without_runtime_and_rejects_stale_source() {
 }
 
 #[test]
+fn configured_missing_e5_assets_fail_closed_to_complete_lexical_search() {
+    let temp = fixture();
+    let root = temp.path();
+    ok(command(root, "open", true).output().unwrap());
+    let (revision, _) = saved(root);
+    let output = ok(command(root, "search", false)
+        .args([
+            "--revision",
+            &revision,
+            "--query",
+            "שלום",
+            "--search-mode",
+            "semantic",
+            "--embedding-dir",
+            "missing-e5-assets",
+        ])
+        .output()
+        .unwrap());
+    let packet: Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(packet["requested_mode"], "semantic");
+    assert_eq!(packet["backend"], "lexical");
+    assert!(
+        packet["fallback"]
+            .as_str()
+            .unwrap()
+            .contains("model assets are unavailable")
+    );
+    assert!(
+        !packet["fallback"]
+            .as_str()
+            .unwrap()
+            .contains(root.to_str().unwrap())
+    );
+    assert!(
+        packet["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|hit| hit["id"] == "p.a")
+    );
+}
+
+#[test]
 fn mcp_stdio_and_cli_return_the_same_retained_read_without_runtime() {
     let temp = fixture();
     let root = temp.path();
