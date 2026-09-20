@@ -1216,8 +1216,8 @@ impl Graph<'_> {
         Ok(identity)
     }
 }
-type FieldIdentity = BTreeMap<String, crate::history_emit::OrdinaryIdentity>;
-fn field_identity(
+pub(crate) type FieldIdentity = BTreeMap<String, crate::history_emit::OrdinaryIdentity>;
+pub(crate) fn field_identity(
     raw: &str,
     id: &str,
     field: &str,
@@ -1687,7 +1687,7 @@ fn field_lines_with_identity(
     )?;
     Ok(lines.into_iter().skip(1).collect())
 }
-fn entry_lines(
+pub(crate) fn entry_lines(
     id: &str,
     body: &Source,
     ind: usize,

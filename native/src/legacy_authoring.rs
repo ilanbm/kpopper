@@ -22,7 +22,7 @@ use std::{
 #[path = "legacy_named.rs"]
 mod legacy_named;
 #[path = "legacy_replaced.rs"]
-mod legacy_replaced;
+pub(crate) mod legacy_replaced;
 
 static TOP: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*):(?: |$)").unwrap());
@@ -1268,7 +1268,13 @@ fn common_root(entry: &Path, members: &[PathBuf]) -> Result<PathBuf> {
 
 fn relative(root: &Path, path: &Path) -> Result<String> {
     let path = absolute(path)?;
-    let root = absolute(root)?;
+    // Resolve directory aliases (including macOS /var) without resolving a
+    // final file symlink, which publication must still reject.
+    let path = crate::project_modes::resolved(
+        path.parent().ok_or_else(|| error("invalid_path"))?,
+    )?
+    .join(path.file_name().ok_or_else(|| error("invalid_path"))?);
+    let root = crate::project_modes::resolved(root)?;
     let relative = path
         .strip_prefix(&root)
         .map_err(|_| error("invalid_path"))?;
@@ -2338,6 +2344,33 @@ mod tests {
                     "sections: [{title: changed, text: preserve}]\n"
                 );
             }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_accepts_directory_aliases_without_following_file_symlinks() {
+        for rollback in [false, true] {
+            let (temp, entry, route, prepared) = replacement(false);
+            let inventory = legacy_named::prepare_directories(&prepared).unwrap();
+            let mut verify = |_: &V| verify_prepared(&prepared, &route, &inventory);
+            let mut stop = |_: &V| Err(error("retained_after_write"));
+            assert_eq!(F::publish_legacy(&prepared.root, &prepared.journal, &prepared.mutation,
+                &mut verify, Some(&mut stop)).unwrap_err().0, "retained_after_write");
+            drop(route);
+            let aliases = tempfile::tempdir().unwrap();
+            let directory = aliases.path().join("project-alias");
+            std::os::unix::fs::symlink(temp.path(), &directory).unwrap();
+            let alias_entry = directory.join(entry.file_name().unwrap());
+            recover(&[alias_entry], &directory, rollback).unwrap();
+            for image in prepared.mutation.files() {
+                assert_eq!(F::read(&prepared.root.join(&image.path)).unwrap(),
+                    if rollback { image.before.clone() } else { image.after.clone() });
+            }
+            let file_alias = temp.path().join("alias.yaml");
+            std::os::unix::fs::symlink(&entry, &file_alias).unwrap();
+            assert_eq!(relative(temp.path(), &file_alias).unwrap(), "alias.yaml");
+            assert!(F::target(temp.path(), "alias.yaml").is_err());
         }
     }
 

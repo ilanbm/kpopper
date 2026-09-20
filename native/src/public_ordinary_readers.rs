@@ -1596,7 +1596,7 @@ impl World<'_> {
         }
         Ok(out)
     }
-    fn said(&self, value: &V, width: usize) -> Result<Vec<String>> {
+    pub(crate) fn said(&self, value: &V, width: usize) -> Result<Vec<String>> {
         let expression =
             regex::Regex::new(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*\}\}")
                 .unwrap();
