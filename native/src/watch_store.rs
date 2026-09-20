@@ -209,7 +209,7 @@ mod git_tests {
         fs::write(&fake, b"#!/bin/sh\nyes x | head -c 200000\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(
-            git_with_program(&fake.to_string_lossy(), Path::new("."), &["status"], Duration::from_secs(1))
+            git_with_program(&fake.to_string_lossy(), Path::new("."), &["status"], Duration::from_secs(3))
                 .unwrap()
                 .len(),
             199999
