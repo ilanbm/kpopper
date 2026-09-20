@@ -204,16 +204,22 @@ fn history_side(subject: &str, capture: &Capture, snapshot: &V) -> Result<V> {
     ])))
 }
 
-fn history_pull(
-    reference: &str,
-    seeds: &[String],
+#[derive(Clone, Copy)]
+struct PullQuery<'a> {
+    reference: &'a str,
+    seeds: &'a [String],
     budget: i64,
+}
+
+fn history_pull(
+    query: PullQuery<'_>,
     entry: &Path,
     root: &Path,
     relative: &str,
     oid: &str,
     current: &OrdinaryCapture,
 ) -> Result<C::Output> {
+    let PullQuery { reference, seeds, budget } = query;
     let observed = crate::history_branch_git::capture(root, oid, relative, None)?;
     let branch = crate::history_branch::validate(&observed.envelope, &observed.files)?;
     let branch_snapshot =
@@ -333,9 +339,7 @@ fn ordinary_hypothesis(name: &str, document: OV, head: OV) -> OV {
 }
 
 fn ordinary_pull(
-    reference: &str,
-    seeds: &[String],
-    budget: i64,
+    query: PullQuery<'_>,
     root: &Path,
     relative: &str,
     oid: &str,
@@ -343,6 +347,7 @@ fn ordinary_pull(
     current: &OrdinaryCapture,
     runtime: Option<&Runtime>,
 ) -> Result<C::Output> {
+    let PullQuery { reference, seeds, budget } = query;
     let branch =
         crate::source_target::records_ordinary(root, relative, oid, runtime).map_err(|e| {
             if e.0 == "target_record_unavailable" {
@@ -430,11 +435,11 @@ pub(super) fn pull(
     }
     if current.history_capture().is_some() {
         history_pull(
-            reference, seeds, budget, &entry, &root, &relative, &oid, current,
+            PullQuery { reference, seeds, budget }, &entry, &root, &relative, &oid, current,
         )
     } else {
         ordinary_pull(
-            reference, seeds, budget, &root, &relative, &oid, &day, current, runtime,
+            PullQuery { reference, seeds, budget }, &root, &relative, &oid, &day, current, runtime,
         )
     }
 }

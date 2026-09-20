@@ -29,12 +29,10 @@ fn choices(values: &[String]) -> Result<V> {
     Ok(V::Map(out))
 }
 fn yaml(value: &V) -> Result<String> {
-    Ok(
-        String::from_utf8(crate::public_ordinary_readers::python_safe_dump(
+    String::from_utf8(crate::public_ordinary_readers::python_safe_dump(
             &crate::history_yaml::OrdinaryValue::from_typed(value),
         )?)
-        .map_err(|_| error("invalid_branch_output"))?,
-    )
+        .map_err(|_| error("invalid_branch_output"))
 }
 fn evidence(
     store: &crate::history_store::Store,
