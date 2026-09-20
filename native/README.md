@@ -78,7 +78,7 @@ kpop-native --frozen export d.decision --format markdown-mermaid --details
 
 The export uses the complete captured assessment before selecting nodes, keeps
 missing/potential/executed relationships distinct, and reports omitted nodes and
-boundary links. Ordinary export remains unconnected. `--json` wraps the text and
+boundary links for both ordinary and core/v1 records. `--json` wraps the text and
 exit status; it does not turn the excerpt into a new assessment schema.
 
 Local contribution state can be inspected or materialized without remote reads:
@@ -98,8 +98,9 @@ private draft descriptors and unavailable targets. Materialization validates the
 complete portable evidence closure and atomically creates an absent destination;
 it refuses an existing output. Pending configure/pause/resume retain local scope,
 permission and decision receipts under publisher and project locks; these commands
-do not contact a remote. Import and the remaining publication operations are still
-being connected.
+do not contact a remote. `history adopt --revision REVISION [--choose SUBJECT=VERSION]`
+is the public adoption route; migration import is exposed by `history migrate` with
+an explicit destination copy.
 
 ### Build optional HTML applications
 
@@ -156,7 +157,8 @@ and binds continuation cursors to the exact query, revision and ranking. Branch
 hints only break ties. Native term ordering is deterministic; legacy Python can
 vary its floating-point score sums across processes. Unicode folding retains the
 Python 3.14 Unicode 16 mappings. Semantic/hybrid requests explicitly report lexical
-fallback when local embeddings are unconfigured; this CLI does not yet load E5 assets.
+fallback when local embeddings are unconfigured. This CLI does not yet load optional
+local E5 assets.
 The stdio MCP server exposes `kpopper_open`, `kpopper_read`, `kpopper_context`
 and `kpopper_search`, plus `kpopper_propose` for private pending proposals.
 The compatibility `kpopper_verify_claims` tool explicitly refuses the legacy
@@ -199,8 +201,10 @@ bootstrap and on active records, including recovery of its own receipts.
 Existing Simple-mode ordinary records support byte-preserving `add`, `set` and
 `review`, including pointer/shard ownership, comments, quoted Unicode values,
 private-draft refusals and interrupted-write recovery. These writes preserve the
-existing record format. Named legacy hypotheses and advanced contribution routing
-remain unconnected.
+existing record format. Named hypotheses, legacy hypothesis files and advanced
+contribution routing are available through `add/set/review --hypothesis NAME`,
+`consolidate`, and `history adopt --revision REVISION`; their privacy, source,
+journal and recovery boundaries still apply.
 
 Named hypotheses on active native history can be previewed, folded or refuted:
 
@@ -213,8 +217,9 @@ kpop-native consolidate --refute trial "tested and refuted"
 Omitting names selects every active group. Preview preserves record and evidence
 bytes; both implementations may create the empty project coordination lock.
 Fold and refutation use the same privacy, journal and recovery boundaries as other
-public history writes. Cross-branch `--from` and legacy-record consolidation remain
-unconnected. `--json` wraps the command's text, error and exit code.
+public history writes. Cross-branch `--from` and legacy-record consolidation use
+the corresponding branch and ordinary consolidation paths, with explicit source,
+choice and evidence checks. `--json` wraps the command's text, error and exit code.
 
 For the earlier feasibility writer, supply an absolute path to an existing **empty** directory:
 
@@ -304,9 +309,9 @@ journal. Preserve that edit and inspect the transaction's verified images before
 restoring the conflicting file and retrying `recover`. An already committed
 operation cannot be rolled back; deleting its journal bypasses the recovery guard.
 
-Adoption and runtime capability declarations remain unconnected. The old
-subject-oriented `history <subject>` command is available only inside an explicitly
-marked feasibility store.
+Adoption and runtime capability declarations are public as `history adopt --revision`
+and `history capabilities --nonce NONCE`. The old subject-oriented `history <subject>`
+command is available only inside an explicitly marked feasibility store.
 
 ## Supported history boundary
 
@@ -324,7 +329,8 @@ protocol is separate from core/v1. A caller opens its selected build with
 `Runtime::with_ordinary_program`. The source hash is bound at build time, and the
 manifest and executable bytes are rechecked around each bounded request. Ordinary
 scalar reads and writes need no evaluator. These library APIs perform no program
-discovery or installation; packaging and public CLI routing remain pending.
+discovery or installation; the CLI routes explicit runtime selection and reports
+unavailable or invalid resources rather than searching PATH for a substitute.
 The ordinary conformance tests use `KPOP_TEST_ORDINARY_PROGRAM` when supplied,
 otherwise the existing ordinary Lean cache for the current platform and source hash.
 
@@ -435,6 +441,9 @@ budget. Source bytes are also limited to 16 MiB. Numeric YAML constructors cap i
 at 4,300 decimal digits and recognize Unicode 16 decimal digits, matching the pinned
 Python runtime. The CLI and experimental store retain their smaller 1 MiB file/input
 limit. These are bounded input contracts, not a claim to accept every PyYAML source.
+The strict history decoder rejects YAML aliases, including recursive aliases;
+ordinary-source decoding accepts bounded nonrecursive aliases and refuses cycles,
+including cycles in ignored extra fields.
 
 ## Library authoring
 
@@ -455,7 +464,8 @@ the per-member journals. Cancelling a started activation retains its immutable
 evidence and fences the reserved generation at a new legacy epoch. Divergent user
 edits stop recovery. A decoded mutation or group envelope cannot supply the live
 deployment and lock context. These library entry points do not select real migration
-targets or activate an installed deployment; public CLI routing remains pending.
+targets or activate an installed deployment; callers must provide the explicit
+target, launcher selection and deployment guard.
 
 ### Immutable authoring
 

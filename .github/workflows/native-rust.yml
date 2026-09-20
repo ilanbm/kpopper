@@ -3,6 +3,14 @@ name: native Rust platform acceptance
 on:
   workflow_dispatch:
     inputs:
+      validation:
+        description: Test scope (final-fixes supplements the full 1e75c2c platform run)
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - final-fixes
       target:
         description: Platform matrix target to run
         required: false
@@ -33,6 +41,7 @@ jobs:
             || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop-native"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop-native"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop-native"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop-native"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop-native.exe"}]') }}
     runs-on: ${{ matrix.runner }}
     env:
+      KPOPPER_CI_VALIDATION: ${{ inputs.validation || 'full' }}
       ELAN_TOOLCHAIN: leanprover/lean4:v4.33.1
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -82,6 +91,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/native-evidence"
           git rev-parse HEAD > "$RUNNER_TEMP/native-evidence/commit.txt"
           rustc --version --verbose > "$RUNNER_TEMP/native-evidence/rustc.txt"
+          printf '%s\n' "$KPOPPER_CI_VALIDATION" > "$RUNNER_TEMP/native-evidence/validation-scope.txt"
       - name: Prepare resources for native integration tests
         shell: python
         env:
@@ -98,7 +108,7 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
       - name: Generate Windows history group vectors with the pinned Python reference
-        if: matrix.target == 'windows-x86_64'
+        if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes'
         shell: python
         run: |
           import os, pathlib, subprocess, sys
@@ -123,7 +133,7 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_HISTORY_GROUP_FIXTURE=' + str(fixture) + '\n')
           (temporary/'native-evidence'/'python-group-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
-      - name: Test the native implementation
+      - name: Test the native implementation (${{ inputs.validation || 'full' }})
         working-directory: native
         shell: bash
         run: |
@@ -131,9 +141,25 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             export GIT_TRACE2_EVENT="$RUNNER_TEMP/native-evidence/git-trace.json"
           fi
-          cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
+          set -euo pipefail
+          {
+            case "$KPOPPER_CI_VALIDATION" in
+              full)
+                cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3'
+                ;;
+              final-fixes)
+                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib store::locking_tests
+                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib ingestion_orchestration::tests
+                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test cli --test public_update --test public_ingestion --test ingestion_hooks
+                ;;
+              *)
+                echo "Unsupported validation scope: $KPOPPER_CI_VALIDATION" >&2
+                exit 1
+                ;;
+            esac
+          } 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
       - name: Compare ingestion and branch commands with the pinned Python reference
-        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' }}
+        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' }}
         shell: bash
         run: |
           set -euo pipefail
