@@ -23,13 +23,7 @@ pub(crate) fn load(
     inventory: &mut Inventory,
     allow_missing: bool,
 ) -> Result<Document> {
-    let document = crate::ordinary_document::load(paths, inventory, allow_missing)?;
-    // Read-only projections may quarantine an opaque recursive extension, but
-    // a writer must never serialize that omission back over the source record.
-    for path in &document.members {
-        crate::history_yaml::decode_full_ordinary_source_value(&inventory.read(path)?)?;
-    }
-    document.try_finite()
+    crate::ordinary_document::load(paths, inventory, allow_missing)?.try_finite()
 }
 
 pub(crate) fn merge(
