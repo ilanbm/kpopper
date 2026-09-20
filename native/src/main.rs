@@ -249,27 +249,28 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     } else {
         kpop_native::source_capture::ReadMode::Live
     };
-    let location = kpop_native::public_workspace::locate(&cwd, mode)?;
-    let root = location.workspace.clone();
-    payload["cwd"] = json!(root);
-    let command = std::env::current_exe()?.canonicalize()?;
-    let feasibility = root.join(".kpopper/native-feasibility.json").is_file();
-    let mut output = Vec::<String>::new();
-    let first_use = if feasibility {
+    let cwd = cwd.canonicalize()?;
+    let feasibility = cwd.join(".kpopper/native-feasibility.json").is_file();
+    let location = if feasibility {
         None
     } else {
-        Some(
-            kpop_native::onboarding::context_with_host(&location, options.host.as_deref())
-                .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}")),
-        )
+        Some(kpop_native::public_workspace::locate(&cwd, mode)?)
     };
-    if location.status == "unavailable" {
+    let root = location.as_ref().map(|l| l.workspace.clone()).unwrap_or(cwd);
+    payload["cwd"] = json!(root);
+    let command = std::env::current_exe()?.canonicalize()?;
+    let mut output = Vec::<String>::new();
+    let first_use = location.as_ref().map(|location| {
+        kpop_native::onboarding::context_with_host(location, options.host.as_deref())
+            .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
+    });
+    if location.as_ref().is_some_and(|l| l.status == "unavailable") {
         return Ok(first_use.unwrap_or_default());
     }
     if feasibility {
         let result = Store::open(&root)?;
         output.push(format!("Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}", result["commits"], serde_json::to_string(&result["document"]["readings"])?));
-    } else if location.status != "missing" {
+    } else if let Some(location) = location.as_ref().filter(|l| l.status != "missing") {
         match kpop_native::session_admin::hook_opening(&root, mode) {
             Ok(Some(text)) => {
                 output.push(text.trim_end().into());
