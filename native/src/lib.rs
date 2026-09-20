@@ -190,6 +190,8 @@ pub mod history_contribution_adoption;
 pub mod public_expressions;
 mod public_history_adopt;
 pub mod public_watch;
+pub mod onboarding;
+pub mod public_map;
 pub mod watch_capture;
 pub mod watch_compare;
 pub mod watch_delivery;
