@@ -125,56 +125,13 @@ fn git_with_program(
 ) -> Result<String> {
     let mut command = Command::new(program);
     command.arg("-C").arg(cwd).args(args);
-    command.stdout(std::process::Stdio::piped());
-    command.stderr(std::process::Stdio::piped());
-    let mut child = command.spawn()?;
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-    let stdout_thread = std::thread::spawn(move || {
-        use std::io::Read;
-        let mut bytes = Vec::new();
-        stdout
-            .take(4 * 1024 * 1024 + 1)
-            .read_to_end(&mut bytes)
-            .map(|_| bytes)
-    });
-    let stderr_thread = std::thread::spawn(move || {
-        use std::io::Read;
-        let mut bytes = Vec::new();
-        stderr
-            .take(4 * 1024 * 1024 + 1)
-            .read_to_end(&mut bytes)
-            .map(|_| bytes)
-    });
-    let deadline = std::time::Instant::now() + timeout;
-    loop {
-        if child.try_wait()?.is_some() {
-            break;
-        }
-        if std::time::Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_thread.join();
-            let _ = stderr_thread.join();
-            return Err(error(format!(
-                "Git command timed out after {} seconds",
-                timeout.as_secs()
-            )));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    let status = child.wait()?;
-    let stdout = stdout_thread
-        .join()
-        .map_err(|_| error("Git output reader failed"))??;
-    let stderr = stderr_thread
-        .join()
-        .map_err(|_| error("Git error reader failed"))??;
-    let out = std::process::Output {
-        status,
-        stdout,
-        stderr,
-    };
+    let out = crate::reasoning_runtime::run_command_capture(
+        &mut command, Vec::new(), timeout, 4 * 1024 * 1024,
+    ).map_err(|e| match e.0.as_str() {
+        "runtime_timeout" => error(format!("Git command timed out after {} seconds", timeout.as_secs())),
+        "output_limit" => error("Git command output exceeded 4194304 bytes"),
+        _ => e,
+    })?;
     require(
         out.status.success(),
         &format!(
@@ -202,8 +159,9 @@ mod git_tests {
     fn wedged_git_is_bounded_without_a_repository() {
         let temp = tempfile::tempdir().unwrap();
         let fake = temp.path().join("git");
-        fs::write(&fake, b"#!/bin/sh\nsleep 1\n").unwrap();
+        fs::write(&fake, b"#!/bin/sh\n/bin/sleep 1\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+        let started = std::time::Instant::now();
         assert_eq!(
             git_with_program(
                 &fake.to_string_lossy(),
@@ -215,6 +173,43 @@ mod git_tests {
             .0,
             "Git command timed out after 0 seconds"
         );
+        assert!(started.elapsed() < Duration::from_millis(700));
+    }
+
+    #[test]
+    fn exited_git_with_inherited_pipes_still_obeys_timeout() {
+        let temp = tempfile::tempdir().unwrap();
+        let fake = temp.path().join("git");
+        fs::write(&fake, b"#!/bin/sh\ntrap '' HUP\n/bin/sleep 1 &\nexit 0\n").unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+        let started = std::time::Instant::now();
+        let result = git_with_program(&fake.to_string_lossy(), Path::new("."),
+            &["status"], Duration::from_millis(20));
+        assert!(result.is_err(), "incomplete pipe capture cannot be success");
+        assert!(started.elapsed() < Duration::from_millis(700));
+    }
+
+    #[test]
+    fn oversized_git_output_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let fake = temp.path().join("git");
+        fs::write(&fake, b"#!/bin/sh\nyes x | head -c 5000000\nexit 0\n").unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+        let result = git_with_program(&fake.to_string_lossy(), Path::new("."),
+            &["status"], Duration::from_secs(3));
+        assert!(result.is_err(), "oversized output must not be returned as a complete result");
+        assert_eq!(result.err().unwrap().0, "Git command output exceeded 4194304 bytes");
+    }
+
+    #[test]
+    fn failed_git_keeps_its_stderr_diagnostic() {
+        let temp = tempfile::tempdir().unwrap();
+        let fake = temp.path().join("git");
+        fs::write(&fake, b"#!/bin/sh\nprintf 'fixture refusal' >&2\nexit 7\n").unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+        let result = git_with_program(&fake.to_string_lossy(), Path::new("."),
+            &["status"], Duration::from_secs(3));
+        assert_eq!(result.unwrap_err().0, "Git could not read status: fixture refusal");
     }
 
     #[test]

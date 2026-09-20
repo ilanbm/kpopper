@@ -101,6 +101,18 @@ pub(crate) fn run_command_bounded_with_status(
     timeout: Duration,
     output_limit: usize,
 ) -> Result<(std::process::ExitStatus, Vec<u8>)> {
+    let output = run_command_capture(cmd, payload, timeout, output_limit)?;
+    Ok((output.status, output.stdout))
+}
+
+/// Capture both streams under one byte limit and deadline. The deadline covers
+/// inherited pipes after the direct child exits, as well as the child itself.
+pub(crate) fn run_command_capture(
+    cmd: &mut Command,
+    payload: Vec<u8>,
+    timeout: Duration,
+    output_limit: usize,
+) -> Result<std::process::Output> {
     let deadline = Instant::now() + timeout;
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -113,12 +125,14 @@ pub(crate) fn run_command_bounded_with_status(
     let mut child = cmd.spawn()?;
     struct Output {
         bytes: Vec<u8>,
+        stderr: Vec<u8>,
         used: usize,
         exceeded: bool,
         failed: bool,
     }
     let shared = Arc::new(Mutex::new(Output {
         bytes: Vec::new(),
+        stderr: Vec::new(),
         used: 0,
         exceeded: false,
         failed: false,
@@ -147,6 +161,8 @@ pub(crate) fn run_command_bounded_with_status(
                         }
                         if retain {
                             state.bytes.extend_from_slice(&buf[..n]);
+                        } else {
+                            state.stderr.extend_from_slice(&buf[..n]);
                         }
                     }
                     Err(_) => {
@@ -217,7 +233,11 @@ pub(crate) fn run_command_bounded_with_status(
     require(!timeout_hit, "runtime_timeout")?;
     require(!state.exceeded, "output_limit")?;
     require(!state.failed, "native reasoning process failed")?;
-    Ok((status, std::mem::take(&mut state.bytes)))
+    Ok(std::process::Output {
+        status,
+        stdout: std::mem::take(&mut state.bytes),
+        stderr: std::mem::take(&mut state.stderr),
+    })
 }
 pub fn target_name() -> Result<String> {
     let os = std::env::consts::OS;
