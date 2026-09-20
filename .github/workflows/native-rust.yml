@@ -107,13 +107,12 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_HISTORY_GROUP_FIXTURE=' + str(fixture) + '\n')
           (temporary/'native-evidence'/'python-group-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
-      - name: Test the native implementation and build the platform release
+      - name: Test the native implementation
         working-directory: native
         shell: bash
         run: |
           set -o pipefail
           cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
-          cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
       - name: Compare ingestion and branch commands with the pinned Python reference
         if: ${{ !cancelled() && matrix.target == 'linux-x86_64' }}
         shell: bash
@@ -136,7 +135,17 @@ jobs:
           cargo test --manifest-path native/Cargo.toml --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' \
             --test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation \
             -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
+      - name: Build the platform release
+        id: native-release
+        if: ${{ !cancelled() }}
+        working-directory: native
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
       - name: Copy the executable and its verified native resources
+        id: native-bundle
+        if: ${{ !cancelled() && steps.native-release.outcome == 'success' }}
         shell: python
         env:
           KPOPPER_CI_TARGET: ${{ matrix.target }}
@@ -152,6 +161,7 @@ jobs:
           shutil.copy2(root/'scripts'/'reasoning'/'native'/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'), reasoning/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'))
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), ordinary)
       - name: Execute copied binary through public acceptance flows
+        if: ${{ !cancelled() && steps.native-bundle.outcome == 'success' }}
         env:
           KPOPPER_CI_BINARY: ${{ matrix.binary }}
         run: >-
