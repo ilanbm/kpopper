@@ -56,7 +56,10 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
     #[cfg(unix)]
     if matches!(&args.command, Command::Process)
         && std::env::var("KPOPPER_WATCH_DETACH").as_deref() == Ok("1")
+        && nix::unistd::getpgrp() != nix::unistd::getpid()
     {
+        // Launch already gives the processor its own process group. A group
+        // leader cannot call setsid; direct invocations still need isolation.
         nix::unistd::setsid().map_err(|error| crate::Error(error.to_string()))?;
     }
     let watch = Watch::open(workspace)?;
