@@ -30,27 +30,25 @@ fn history_watch_pure_union_matches_final_python() {
         }
     }
 }
-fn retain_actual_audit(value: &mut V, expected: &V) {
+fn retain_actual_audit(value: &mut V, expected: &V, runtime: &Runtime) {
     match (value, expected) {
         (V::List(items), V::List(old)) => {
             for (item, old) in items.iter_mut().zip(old) {
-                retain_actual_audit(item, old);
+                retain_actual_audit(item, old, runtime);
             }
         }
         (V::Map(m), V::Map(old)) => {
             if let Some(V::Map(implementation)) = m.get_mut("implementation")
                 && implementation.contains_key("adapter_source_sha256")
             {
-                assert_eq!(
-                    implementation["adapter_source_sha256"],
-                    s(env!("KPOP_REASONING_ADAPTER_SHA256"))
-                );
                 let old_impl = map(&old["implementation"]).unwrap();
-                implementation.insert(
-                    "adapter_source_sha256".into(),
-                    old_impl["adapter_source_sha256"].clone(),
-                );
-                assert_eq!(*implementation, *old_impl);
+                crate::test_runtime_provenance::verify_pair(
+                    &V::Map(implementation.clone()),
+                    &V::Map(old_impl.clone()),
+                    runtime,
+                )
+                .unwrap();
+                *implementation = old_impl.clone();
                 map_mut(m.get_mut("assurance").unwrap()).unwrap().insert(
                     "implementation".into(),
                     s(&digest(&V::Map(old_impl.clone())).unwrap()),
@@ -60,7 +58,7 @@ fn retain_actual_audit(value: &mut V, expected: &V) {
                 if !["implementation", "assurance"].contains(&key.as_str())
                     && let Some(old) = old.get(key)
                 {
-                    retain_actual_audit(item, old);
+                    retain_actual_audit(item, old, runtime);
                 }
             }
             if ["fingerprint", "kind", "id", "reason"]
@@ -91,7 +89,7 @@ fn history_watch_actual_comparison_preserves_scenarios_and_attention() {
         let records = V::from_tagged(&case["input"]).unwrap();
         let expected = V::from_tagged(expected).unwrap();
         let mut got = compare(&records, Some(&runtime), OperationalBounds::default()).unwrap();
-        retain_actual_audit(&mut got, &expected);
+        retain_actual_audit(&mut got, &expected, &runtime);
         if got != expected {
             let dir = tempfile::tempdir().unwrap();
             std::fs::write(

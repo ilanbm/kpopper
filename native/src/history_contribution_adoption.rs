@@ -531,6 +531,7 @@ pub(crate) mod tests {
     }
     pub(crate) fn git(root: &Path, args: &[&str]) -> String {
         let result = Command::new("git")
+            .args(["-c", "core.longpaths=true", "-c", "core.autocrlf=false"])
             .arg("-C")
             .arg(root)
             .args(args)

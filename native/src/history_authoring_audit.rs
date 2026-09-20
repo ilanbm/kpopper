@@ -184,21 +184,54 @@ fn retain(report: &V, recorded: Option<&Map>) -> Result<V> {
     Ok(report)
 }
 
-pub(crate) struct ReplayAudit(Map);
+pub(crate) struct ReplayAudit {
+    recorded: Map,
+    #[cfg(test)]
+    oracle: bool,
+}
 impl ReplayAudit {
     #[cfg(test)]
     pub(crate) fn oracle(receipt: &V) -> Result<Self> {
-        Ok(Self(recorded(receipt)?))
+        Ok(Self {
+            recorded: recorded(receipt)?,
+            oracle: true,
+        })
     }
     pub(crate) fn from_parents(receipt: &V, parents: &history_authority::Files) -> Result<Self> {
-        Ok(Self(witnessed(
-            receipt,
-            parents,
-            env!("KPOP_REASONING_ADAPTER_SHA256"),
-        )?))
+        Ok(Self {
+            recorded: witnessed(receipt, parents, env!("KPOP_REASONING_ADAPTER_SHA256"))?,
+            #[cfg(test)]
+            oracle: false,
+        })
     }
     pub(crate) fn assessment(&self, world: &mut World<'_>) -> Result<V> {
-        retain(&world.assessment()?, Some(&self.0))
+        let report = world.assessment()?;
+        #[cfg(test)]
+        if self.oracle {
+            let mut audits = self.recorded.clone();
+            computations(&mut report.clone(), |result| {
+                if let Some(actual) = result.get("implementation").filter(|v| **v != V::Null) {
+                    let runtime = world
+                        .runtime
+                        .ok_or_else(|| error("missing_oracle_runtime"))?;
+                    let reference = self
+                        .recorded
+                        .values()
+                        .find(|reference| {
+                            crate::test_runtime_provenance::verify_pair(actual, reference, runtime)
+                                .is_ok()
+                        })
+                        .ok_or_else(|| error("oracle_platform_audit_mismatch"))?;
+                    audits.insert(
+                        hash_without(actual, "adapter_source_sha256")?,
+                        reference.clone(),
+                    );
+                }
+                Ok(())
+            })?;
+            return retain(&report, Some(&audits));
+        }
+        retain(&report, Some(&self.recorded))
     }
 }
 

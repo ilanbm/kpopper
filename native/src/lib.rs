@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+#[cfg(test)]
+mod test_runtime_provenance;
+
 pub mod annotated_document;
 mod annotated_document_html;
 pub mod authoring_source;

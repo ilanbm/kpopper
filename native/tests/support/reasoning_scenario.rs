@@ -79,17 +79,13 @@ fn scenario_assessment_uses_lean_and_keeps_computational_dimensions() {
                 }
                 let current = map_mut(comp).unwrap();
                 let implementation = map_mut(current.get_mut("implementation").unwrap()).unwrap();
-                assert_eq!(
-                    implementation["adapter_source_sha256"],
-                    s(env!("KPOP_REASONING_ADAPTER_SHA256"))
-                );
                 let old_impl = &map(old).unwrap()["implementation"];
-                let mut comparable = V::Map(implementation.clone());
-                map_mut(&mut comparable).unwrap().insert(
-                    "adapter_source_sha256".into(),
-                    map(old_impl).unwrap()["adapter_source_sha256"].clone(),
-                );
-                assert_eq!(comparable, *old_impl);
+                crate::test_runtime_provenance::verify_pair(
+                    &V::Map(implementation.clone()),
+                    old_impl,
+                    &runtime,
+                )
+                .unwrap();
                 current.insert("implementation".into(), old_impl.clone());
                 map_mut(current.get_mut("assurance").unwrap())
                     .unwrap()

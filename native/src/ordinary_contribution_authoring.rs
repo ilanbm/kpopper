@@ -304,7 +304,7 @@ pub(crate) fn route(
         let (files, observations) = evidence(&selection, options.evidence_root.as_deref())?;
         let bundle = pending_bundle::prepare(
             &candidate,
-            &[options.subject.clone()],
+        std::slice::from_ref(&options.subject),
             &scope,
             "project",
             &files,
