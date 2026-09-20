@@ -72,6 +72,7 @@ pub(crate) fn atomic(path: &Path, raw: &[u8]) -> Result<()> {
     file.write_all(raw)?;
     file.as_file().sync_all()?;
     file.persist(path).map_err(|e| error(e.error.to_string()))?;
+    #[cfg(unix)]
     File::open(parent)?.sync_all()?;
     Ok(())
 }

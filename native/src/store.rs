@@ -200,7 +200,10 @@ impl Store {
     }
 
     fn sync_dir(path: &Path) -> Result<()> {
+        #[cfg(unix)]
         File::open(path)?.sync_all()?;
+        #[cfg(not(unix))]
+        let _ = path;
         Ok(())
     }
 

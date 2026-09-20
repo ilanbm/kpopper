@@ -291,6 +291,7 @@ fn atomic(path: &Path, raw: &[u8]) -> Result<()> {
     temporary.write_all(raw)?;
     temporary.as_file().sync_all()?;
     temporary.persist(path).map_err(|e| Error::from(e.error))?;
+    #[cfg(unix)]
     File::open(parent)?.sync_all()?;
     Ok(())
 }
