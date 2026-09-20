@@ -103,6 +103,33 @@ fn capture_is_private_durable_and_idempotent() {
 }
 
 #[test]
+fn permanent_write_failure_becomes_terminal_without_automatic_retries() {
+    let temp = fixture(false);
+    let state = tempfile::tempdir().unwrap();
+    let record = temp.path().join("PROVENANCE.yaml");
+    let before = fs::read(&record).unwrap();
+    let captured = ingestion::capture(
+        &envelope("readonly", json!(4)), Some(&record), Some(state.path()), temp.path(), false,
+    ).unwrap();
+    let permissions = fs::metadata(temp.path()).unwrap().permissions();
+    fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o500)).unwrap();
+    let processed = ingestion::process(Some(&record), Some(state.path()), temp.path(), None, 32);
+    fs::set_permissions(temp.path(), permissions).unwrap();
+    let processed = processed.unwrap();
+    assert_eq!(processed.len(), 1);
+    assert_eq!(processed[0]["state"], "needs_primary", "{}", processed[0]);
+    assert_eq!(fs::read(&record).unwrap(), before);
+    assert!(ingestion::process(Some(&record), Some(state.path()), temp.path(), None, 32)
+        .unwrap().is_empty());
+    let stored = ingestion::status(captured["event_id"].as_str(), Some(&record),
+        Some(state.path()), temp.path()).unwrap().unwrap();
+    assert_eq!(stored["state"], "needs_primary");
+    let event: J = serde_json::from_slice(&fs::read(state.path().join("events")
+        .join(format!("{}.json", captured["event_id"].as_str().unwrap()))).unwrap()).unwrap();
+    assert_eq!(event["attempts"], 1);
+}
+
+#[test]
 fn process_uses_the_single_writer_and_is_idempotent() {
     let temp = fixture(false);
     let record = temp.path().join("PROVENANCE.yaml");

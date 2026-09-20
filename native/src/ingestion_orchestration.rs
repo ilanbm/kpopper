@@ -182,29 +182,51 @@ fn has_work(layout: &S::Layout) -> Result<bool> {
 
 fn lease_active(value: Option<&J>) -> bool {
     let Some(lease) = value else { return false };
+    let now = S::now();
     let Some(pid) = lease.get("pid").and_then(J::as_u64) else {
-        return lease.get("expires_at").and_then(J::as_f64).is_some_and(|d| d > S::now());
+        return lease.get("started_at").and_then(J::as_f64)
+            .is_some_and(|started| started.is_finite() && now - started < 5.0);
     };
-    if pid == 0 { return false; }
+    if pid == 0 || pid > i32::MAX as u64 { return false; }
     #[cfg(unix)]
     let alive = match nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(pid.min(i32::MAX as u64) as i32),
+        nix::unistd::Pid::from_raw(pid as i32),
         None,
     ) {
-        Ok(()) => true,
-        Err(nix::errno::Errno::ESRCH) => false,
-        Err(nix::errno::Errno::EPERM) => true,
-        Err(_) => true,
+        Ok(()) | Err(nix::errno::Errno::EPERM) => Some(true),
+        Err(nix::errno::Errno::ESRCH) => Some(false),
+        Err(_) => None,
     };
     #[cfg(windows)]
-    let alive = std::env::var_os("SystemRoot")
-        .map(std::path::PathBuf::from)
-        .map(|root| root.join("System32/tasklist.exe"))
-        .and_then(|exe| std::process::Command::new(exe).args(["/FO", "CSV", "/NH", "/FI", &format!("PID eq {pid}")]).output().ok())
-        .is_some_and(|output| String::from_utf8_lossy(&output.stdout).lines().any(|line| line.split(',').nth(1).and_then(|v| v.trim_matches('"').parse::<u64>().ok()) == Some(pid)));
+    let alive = windows_process_alive(pid as u32);
     #[cfg(not(any(unix, windows)))]
-    let alive = false;
-    alive || lease.get("expires_at").and_then(J::as_f64).is_some_and(|d| d > S::now() && lease.get("pid").is_none())
+    let alive = None;
+    alive.unwrap_or_else(|| lease.get("expires_at").and_then(J::as_f64)
+        .is_some_and(|deadline| deadline.is_finite() && deadline > now))
+}
+
+#[cfg(windows)]
+fn windows_process_alive(pid: u32) -> Option<bool> {
+    use std::ffi::c_void;
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+        fn GetLastError() -> u32;
+    }
+    // SYNCHRONIZE permits a zero-time process wait without inspecting its memory.
+    let handle = unsafe { OpenProcess(0x0010_0000, 0, pid) };
+    if handle.is_null() {
+        return (unsafe { GetLastError() } == 87).then_some(false);
+    }
+    let status = unsafe { WaitForSingleObject(handle, 0) };
+    unsafe { CloseHandle(handle) };
+    match status {
+        0 => Some(false),
+        258 => Some(true),
+        _ => None,
+    }
 }
 
 fn record_writer_journal(record: &Path) -> bool {
@@ -666,7 +688,7 @@ mod tests {
         assert!(reserve_worker(&layout).unwrap().is_none());
         let path = layout.root.join("worker.lease");
         let mut lease = S::read_json(&path).unwrap().unwrap();
-        lease["expires_at"] = json!(S::now() - 1.0);
+        lease["started_at"] = json!(S::now() - 6.0);
         S::save_json(&path, &lease).unwrap();
         let second = reserve_worker(&layout).unwrap().unwrap();
         assert_ne!(first, second);
@@ -698,6 +720,14 @@ mod tests {
     fn dead_worker_pid_does_not_hold_lease() {
         let value = json!({"pid": 4_294_967_295u64, "expires_at": S::now() + 300.0});
         assert!(!lease_active(Some(&value)));
+    }
+
+    #[test]
+    fn live_worker_and_short_spawn_handoff_are_distinct() {
+        assert!(lease_active(Some(&json!({"pid": std::process::id()}))));
+        assert!(lease_active(Some(&json!({"pid":null,"started_at":S::now()}))));
+        assert!(!lease_active(Some(&json!({"pid":null,"started_at":S::now()-6.0,
+            "expires_at":S::now()+300.0}))));
     }
 
     #[test]
