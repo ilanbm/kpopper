@@ -1,6 +1,7 @@
 //! Sorted block YAML compatible with the retained SafeDumper byte contract.
 //! Scalar writing is adapted from PyYAML (see third_party/PyYAML-LICENSE).
 use crate::{Result, history_yaml as Y, require, value::TypedValue as V};
+use crate::{ordinary_source::Source as O, ordinary_value::Scalar as Atom};
 use Y::SourceValue as S;
 
 fn linebreak(c: char) -> bool {
@@ -341,12 +342,12 @@ struct Aliases {
     anchors: std::collections::BTreeMap<usize, String>,
     emitted: std::collections::BTreeSet<usize>,
 }
-fn identity_plan(value: &Y::OrdinaryValue, identity: &OrdinaryIdentity) -> Result<Aliases> {
-    fn validate(value: &Y::OrdinaryValue, id: &OrdinaryIdentity, depth: usize) -> Result<()> {
+fn identity_plan(value: &O, identity: &OrdinaryIdentity) -> Result<Aliases> {
+    fn validate(value: &O, id: &OrdinaryIdentity, depth: usize) -> Result<()> {
         require(depth <= crate::value::MAX_DEPTH + 1, "history_limit")?;
         let children = match value {
-            Y::OrdinaryValue::Map(m) => m.len() * 2,
-            Y::OrdinaryValue::List(a) => a.len(),
+            O::Map(m) => m.len() * 2,
+            O::List(a) => a.len(),
             _ => 0,
         };
         require(id.children.len() == children, "invalid_source_identity")?;
@@ -354,25 +355,23 @@ fn identity_plan(value: &Y::OrdinaryValue, identity: &OrdinaryIdentity) -> Resul
             require(
                 matches!(
                     value,
-                    Y::OrdinaryValue::Map(_)
-                        | Y::OrdinaryValue::List(_)
-                        | Y::OrdinaryValue::Scalar(V::Date(_) | V::DateTime(_))
+                    O::Map(_) | O::List(_) | O::Scalar(Atom::Finite(V::Date(_) | V::DateTime(_)))
                 ),
                 "invalid_source_identity",
             )?;
         }
         match value {
-            Y::OrdinaryValue::Map(m) => {
+            O::Map(m) => {
                 for (i, (key, value)) in m.iter().enumerate() {
                     validate(
-                        &Y::OrdinaryValue::Scalar(key.scalar().clone()),
+                        &O::Scalar(key.scalar().clone()),
                         &id.children[i * 2],
                         depth + 1,
                     )?;
                     validate(value, &id.children[i * 2 + 1], depth + 1)?;
                 }
             }
-            Y::OrdinaryValue::List(a) => {
+            O::List(a) => {
                 for (value, id) in a.iter().zip(&id.children) {
                     validate(value, id, depth + 1)?;
                 }
@@ -406,14 +405,13 @@ fn identity_plan(value: &Y::OrdinaryValue, identity: &OrdinaryIdentity) -> Resul
 impl Writer {
     fn ordinary_node(
         &mut self,
-        value: &Y::OrdinaryValue,
+        value: &O,
         parent: Option<usize>,
         mapping: bool,
         key: bool,
         identity: Option<&OrdinaryIdentity>,
         aliases: &mut Aliases,
     ) -> Result<()> {
-        use Y::OrdinaryValue as O;
         if let Some(id) = identity.and_then(|v| v.id)
             && let Some(anchor) = aliases.anchors.get(&id)
         {
@@ -430,14 +428,17 @@ impl Writer {
                 for (index, (name, value)) in fields.iter().enumerate() {
                     self.indent(indent);
                     let (raw, tag) = match name.scalar() {
-                        V::Text(v) => (v.clone(), 5),
-                        V::Bool(v) => (v.to_string(), 6),
-                        V::Null => ("null".into(), 6),
-                        V::Integer(v) => (v.as_str().into(), 5),
-                        V::Float(v) => (crate::identity::python_float(v.get()), 7),
-                        V::Date(v) => (v.as_str().into(), 11),
-                        V::DateTime(v) => (v.as_str().replacen('T', " ", 1), 11),
-                        _ => return Err(crate::Error("invalid_yaml_key".into())),
+                        Atom::NonFinite(v) => (v.yaml().into(), 7),
+                        Atom::Finite(value) => match value {
+                            V::Text(v) => (v.clone(), 5),
+                            V::Bool(v) => (v.to_string(), 6),
+                            V::Null => ("null".into(), 6),
+                            V::Integer(v) => (v.as_str().into(), 5),
+                            V::Float(v) => (crate::identity::python_float(v.get()), 7),
+                            V::Date(v) => (v.as_str().into(), 11),
+                            V::DateTime(v) => (v.as_str().replacen('T', " ", 1), 11),
+                            _ => return Err(crate::Error("invalid_yaml_key".into())),
+                        },
                     };
                     let chars = raw.chars().collect::<Vec<_>>();
                     let simple =
@@ -478,7 +479,10 @@ impl Writer {
             }
             O::Map(_) => self.node(&S::Map(vec![]), parent, mapping, key)?,
             O::List(_) => self.node(&S::List(vec![]), parent, mapping, key)?,
-            O::Scalar(v) => self.node(&S::Scalar(v.clone()), parent, mapping, key)?,
+            O::Scalar(Atom::Finite(v)) => self.node(&S::Scalar(v.clone()), parent, mapping, key)?,
+            O::Scalar(Atom::NonFinite(v)) => {
+                self.quoted_or_plain(v.yaml(), "float", parent.map_or(2, |i| i + 2), key)
+            }
         }
         Ok(())
     }
@@ -494,27 +498,41 @@ pub(crate) fn encode_ordinary_source_identity(
     width: usize,
     identity: Option<&OrdinaryIdentity>,
 ) -> Result<Vec<u8>> {
+    let projected = value.projected();
+    Y::validate_value(&projected, Y::MAX_DOCUMENT_BYTES)?;
+    let bytes = encode_ordinary_display(&O::from_finite(value), width, identity)?;
+    require(
+        Y::decode_ordinary_source_value(&bytes)?.projected() == projected,
+        "serialization_changed",
+    )?;
+    Ok(bytes)
+}
+
+/// SafeDumper-compatible display bytes over the complete ordinary source algebra.
+/// This is not a mutation encoder: SafeDumper itself does not preserve distinct
+/// NaN key constructors when its display is parsed again. Finite mutation callers
+/// retain their separate semantic round-trip check above.
+pub(crate) fn encode_ordinary_display(
+    value: &O,
+    width: usize,
+    identity: Option<&OrdinaryIdentity>,
+) -> Result<Vec<u8>> {
+    value.projected().validate()?;
     let mut aliases = identity
         .map(|id| identity_plan(value, id))
         .transpose()?
         .unwrap_or_default();
-    let projected = value.projected();
-    Y::validate_value(&projected, Y::MAX_DOCUMENT_BYTES)?;
     let mut writer = Writer::new(width);
     writer.ordinary_node(value, None, false, false, identity, &mut aliases)?;
     writer.indent(0);
     let mut bytes = writer.out.into_bytes();
-    if matches!(value, Y::OrdinaryValue::Scalar(_))
+    if matches!(value, O::Scalar(_))
         && !matches!(bytes.first(), Some(b'\'' | b'"' | b'|' | b'>'))
         && !bytes.ends_with(b"...\n")
     {
         bytes.extend_from_slice(b"...\n");
     }
     require(bytes.len() <= Y::MAX_DOCUMENT_BYTES, "history_limit")?;
-    require(
-        Y::decode_ordinary_source_value(&bytes)?.projected() == projected,
-        "serialization_changed",
-    )?;
     Ok(bytes)
 }
 
