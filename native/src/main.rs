@@ -1090,6 +1090,10 @@ fn main() {
                     eprintln!("{error}");
                     std::process::exit(1);
                 }
+                if command == "pull" && options.from_ref.is_some() {
+                    eprintln!("{error}");
+                    std::process::exit(1);
+                }
                 if args.json {
                     eprintln!("{}", json!({"error":error.to_string()}));
                 } else {
