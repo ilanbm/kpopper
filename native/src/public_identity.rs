@@ -1,4 +1,6 @@
 //! Public `same` and `distinct` commands over an active history record.
+#[path = "ordinary_sameness.rs"]
+pub(crate) mod ordinary_sameness;
 use crate::{
     Result, direct_history,
     history_authoring::{self as A, obj, s},
