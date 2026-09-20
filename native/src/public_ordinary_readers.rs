@@ -471,18 +471,7 @@ fn python_safe_dump(value: &OrdinaryValue) -> Result<Vec<u8>> {
 
 /// SafeDumper-compatible source-order text for local evidence corpora.
 pub(crate) fn python_safe_dump_unicode(value: &OrdinaryValue) -> Result<Vec<u8>> {
-    let mut output = Vec::new();
-    let mut emitter = python_emitter(&mut output)?;
-    emitter.set_unicode(true);
-    python_emit(value, &mut emitter, None)?;
-    python_finish(emitter)?;
-    if matches!(value, OrdinaryValue::Scalar(_))
-        && !matches!(output.first(), Some(b'\'' | b'"' | b'|' | b'>'))
-        && !output.ends_with(b"...\n")
-    {
-        output.extend_from_slice(b"...\n");
-    }
-    Ok(output)
+    crate::history_emit::encode_ordinary_source(value, 80)
 }
 
 fn python_gate_shape(

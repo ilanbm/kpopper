@@ -330,6 +330,89 @@ impl Writer {
         Ok(())
     }
 }
+impl Writer {
+    fn ordinary_node(
+        &mut self,
+        value: &Y::OrdinaryValue,
+        parent: Option<usize>,
+        mapping: bool,
+        key: bool,
+    ) -> Result<()> {
+        use Y::OrdinaryValue as O;
+        match value {
+            O::Map(fields) if !fields.is_empty() => {
+                let indent = parent.map_or(0, |i| i + 2);
+                for (name, value) in fields {
+                    self.indent(indent);
+                    let (raw, tag) = match name.scalar() {
+                        V::Text(v) => (v.clone(), 5),
+                        V::Bool(v) => (v.to_string(), 6),
+                        V::Null => ("null".into(), 6),
+                        V::Integer(v) => (v.as_str().into(), 5),
+                        V::Float(v) => (crate::identity::python_float(v.get()), 7),
+                        V::Date(v) => (v.as_str().into(), 11),
+                        V::DateTime(v) => (v.as_str().replacen('T', " ", 1), 11),
+                        _ => return Err(crate::Error("invalid_yaml_key".into())),
+                    };
+                    let chars = raw.chars().collect::<Vec<_>>();
+                    let simple =
+                        chars.len() + tag < 128 && !chars.is_empty() && !analyze(&chars).multiline;
+                    if !simple {
+                        self.indicator("?", true, true);
+                    }
+                    self.node(
+                        &S::Scalar(name.scalar().clone()),
+                        Some(indent),
+                        true,
+                        simple,
+                    )?;
+                    if !simple {
+                        self.indent(indent);
+                    }
+                    self.indicator(":", !simple, !simple);
+                    self.ordinary_node(value, Some(indent), true, false)?;
+                }
+            }
+            O::List(items) if !items.is_empty() => {
+                let indent =
+                    parent.map_or(0, |i| if mapping && !self.indention { i } else { i + 2 });
+                for value in items {
+                    self.indent(indent);
+                    self.indicator("-", true, true);
+                    self.ordinary_node(value, Some(indent), false, false)?;
+                }
+            }
+            O::Map(_) => self.node(&S::Map(vec![]), parent, mapping, key)?,
+            O::List(_) => self.node(&S::List(vec![]), parent, mapping, key)?,
+            O::Scalar(v) => self.node(&S::Scalar(v.clone()), parent, mapping, key)?,
+        }
+        Ok(())
+    }
+}
+
+/// Ordinary scalar keys retain their types and source order. Strict history
+/// encoders remain restricted to their original finite, text-keyed algebra.
+pub(crate) fn encode_ordinary_source(value: &Y::OrdinaryValue, width: usize) -> Result<Vec<u8>> {
+    let projected = value.projected();
+    Y::validate_value(&projected, Y::MAX_DOCUMENT_BYTES)?;
+    let mut writer = Writer::new(width);
+    writer.ordinary_node(value, None, false, false)?;
+    writer.indent(0);
+    let mut bytes = writer.out.into_bytes();
+    if matches!(value, Y::OrdinaryValue::Scalar(_))
+        && !matches!(bytes.first(), Some(b'\'' | b'"' | b'|' | b'>'))
+        && !bytes.ends_with(b"...\n")
+    {
+        bytes.extend_from_slice(b"...\n");
+    }
+    require(bytes.len() <= Y::MAX_DOCUMENT_BYTES, "history_limit")?;
+    require(
+        Y::decode_ordinary_source_value(&bytes)?.projected() == projected,
+        "serialization_changed",
+    )?;
+    Ok(bytes)
+}
+
 pub fn encode_document(value: &V) -> Result<Vec<u8>> {
     encode_source(&S::from_typed(value), 80)
 }
@@ -355,7 +438,10 @@ pub(crate) fn encode_source_value(value: &S, width: usize) -> Result<Vec<u8>> {
         bytes.extend_from_slice(b"...\n");
     }
     require(
-        Y::decode_ordinary_source_value(&bytes)?.strict_typed()?.digest()? == typed.digest()?,
+        Y::decode_ordinary_source_value(&bytes)?
+            .strict_typed()?
+            .digest()?
+            == typed.digest()?,
         "serialization_changed",
     )?;
     Ok(bytes)
@@ -371,12 +457,26 @@ pub fn encode_value(value: &V) -> Result<Vec<u8>> {
 mod watch_preimage_tests {
     #[test]
     fn sorted_arbitrary_root_preimages_match_python() {
-        let cases: serde_json::Value = serde_json::from_str(include_str!("../tests/fixtures/watch-encoding.json")).unwrap();
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/watch-encoding.json")).unwrap();
         for case in cases.as_array().unwrap() {
-            let value = crate::history_yaml::decode_ordinary_source_value(case["input"].as_str().unwrap().as_bytes()).unwrap().strict_typed().unwrap();
+            let value = crate::history_yaml::decode_ordinary_source_value(
+                case["input"].as_str().unwrap().as_bytes(),
+            )
+            .unwrap()
+            .strict_typed()
+            .unwrap();
             let raw = super::encode_value(&value).unwrap();
-            assert_eq!(String::from_utf8(raw.clone()).unwrap(), case["output"].as_str().unwrap(), "{}", case["input"]);
-            assert_eq!(crate::identity::sha256(&raw), case["sha256"].as_str().unwrap());
+            assert_eq!(
+                String::from_utf8(raw.clone()).unwrap(),
+                case["output"].as_str().unwrap(),
+                "{}",
+                case["input"]
+            );
+            assert_eq!(
+                crate::identity::sha256(&raw),
+                case["sha256"].as_str().unwrap()
+            );
         }
     }
 }
