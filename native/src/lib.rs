@@ -198,6 +198,7 @@ pub mod public_session;
 pub mod application_cli;
 pub mod followup_daily;
 pub mod history_contribution_adoption;
+pub(crate) mod history_contribution_prepare;
 pub mod public_expressions;
 mod public_history_adopt;
 pub mod public_watch;

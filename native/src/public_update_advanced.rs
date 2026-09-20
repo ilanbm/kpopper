@@ -15,8 +15,7 @@ use base64::Engine as _;
 use serde_json::{Value as J, json};
 use std::path::Path;
 
-#[path = "history_contribution_prepare.rs"]
-mod history_prepare;
+use crate::history_contribution_prepare as history_prepare;
 
 fn s(value: &str) -> V { V::Text(value.into()) }
 
