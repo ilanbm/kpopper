@@ -33,6 +33,9 @@ pub struct Page {
     pub tabs: usize,
     pub failures: Vec<String>,
     pub notes: Vec<String>,
+    /// Captured arrangement facts consumed by guarded authoring. This is
+    /// derived from the same record assessment and brief bytes rendered here.
+    pub arrangement_facts: V,
 }
 
 #[derive(Clone)]
@@ -94,11 +97,22 @@ fn entry_date(body: &Map) -> Option<chrono::NaiveDate> {
 fn parse_date(value: &str) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
 }
-fn intent_date(body: Option<&Map>) -> Option<chrono::NaiveDate> {
+fn intent_date(id: &str, body: Option<&Map>) -> Option<chrono::NaiveDate> {
     let body = body?;
-    field(body, &["read", "of"])
-        .map(textish)
-        .and_then(|value| parse_date(&value))
+    for field in ["read", "of"] {
+        if let Some(day) = body
+            .get(field)
+            .and_then(|value| parse_date(&textish(value)))
+        {
+            return Some(day);
+        }
+    }
+    let pattern = regex::Regex::new(r"(\d{4})_(\d{2})_(\d{2})").unwrap();
+    let found = pattern.captures(id)?;
+    parse_date(&crate::history_yaml::numeric_text(&format!(
+        "{}-{}-{}",
+        &found[1], &found[2], &found[3]
+    )))
 }
 fn field<'a>(m: &'a Map, keys: &[&str]) -> Option<&'a V> {
     keys.iter().find_map(|k| m.get(*k).filter(|v| truth(v)))
@@ -440,14 +454,14 @@ pub fn build(
     let context = map(&context)?;
     let empty_conflicts = V::Map(Map::new());
     let conflicts = map(context.get("conflicts").unwrap_or(&empty_conflicts))?;
-    let projection = crate::public_ordinary_readers::Projection::new(
+    let mut projection = crate::public_ordinary_readers::Projection::new(
         document,
         map(capture.hypotheses())?,
         conflicts,
         capture.reader_lines()?,
         runtime,
     )?;
-    let hub = projection.hub_data()?;
+    let mut hub = projection.hub_data()?;
     let states = ids
         .iter()
         .map(|id| (id.clone(), hub.flags.get(id).cloned().unwrap_or_default()))
@@ -536,7 +550,7 @@ pub fn build(
     let mut notes = vec![];
     let mut panels = vec![];
     let mut selected_all = BTreeSet::new();
-    let picked_by_tab = tabs
+    let chosen_by_tab = tabs
         .iter()
         .map(|tab| {
             tab.sections
@@ -546,6 +560,23 @@ pub fn build(
                 .collect::<BTreeSet<_>>()
         })
         .collect::<Vec<_>>();
+    let references =
+        regex::Regex::new(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*\}\}").unwrap();
+    let picked_by_tab = tabs
+        .iter()
+        .zip(&chosen_by_tab)
+        .map(|(tab, chosen)| {
+            let mut picked = chosen.clone();
+            for section in &tab.sections {
+                for reference in references.captures_iter(&section.text) {
+                    if ids.contains(&reference[1]) {
+                        picked.insert(reference[1].to_owned());
+                    }
+                }
+            }
+            picked
+        })
+        .collect::<Vec<_>>();
     selected_all.extend(
         picked_by_tab
             .iter()
@@ -553,7 +584,10 @@ pub fn build(
     );
     let recorded_by = ids
         .iter()
-        .filter(|id| body(nodes, id).is_ok_and(|b| b.get("asked").is_some_and(truth)))
+        .filter(|id| {
+            !judgments.contains(*id)
+                && body(nodes, id).is_ok_and(|b| b.get("asked").is_some_and(truth))
+        })
         .map(|intent| {
             let recorded = ids
                 .iter()
@@ -603,6 +637,95 @@ pub fn build(
                 .collect::<BTreeSet<_>>()
         })
         .collect::<Vec<_>>();
+    if !brief.is_empty() {
+        let integer =
+            |count: usize| V::Integer(crate::value::Integer::new(&count.to_string()).unwrap());
+        let unserved = recorded_by
+            .iter()
+            .filter(|(intent, recorded)| {
+                !recorded.is_empty() && !earned_by_tab.iter().any(|earned| earned.contains(*intent))
+            })
+            .count();
+        let mut recent = recorded_by
+            .iter()
+            .filter(|(_, recorded)| !recorded.is_empty())
+            .map(|(intent, _)| {
+                (
+                    intent_date(intent, body(nodes, intent).ok()),
+                    intent,
+                    !earned_by_tab.iter().any(|earned| earned.contains(intent)),
+                )
+            })
+            .collect::<Vec<_>>();
+        recent.sort_by(|a, b| (&b.0, b.1).cmp(&(&a.0, a.1)));
+        let mut streak = 0;
+        let mut offset = 0;
+        while offset < recent.len() {
+            let count = recent[offset..]
+                .iter()
+                .take_while(|row| row.0 == recent[offset].0)
+                .count();
+            if recent[offset..offset + count].iter().any(|row| !row.2) {
+                break;
+            }
+            streak += count;
+            offset += count;
+        }
+        let born = judgments
+            .iter()
+            .filter_map(|id| {
+                body(nodes, id)
+                    .ok()?
+                    .get("born")
+                    .and_then(|v| parse_date(&textish(v)))
+            })
+            .max();
+        let added = recorded_by
+            .iter()
+            .filter(|(intent, _)| {
+                intent_date(intent, body(nodes, intent).ok())
+                    .is_some_and(|date| born.is_some_and(|born| date >= born))
+            })
+            .flat_map(|(_, recorded)| recorded.iter().cloned())
+            .collect::<BTreeSet<_>>();
+        let drift = born.map(|_| {
+            if added.is_empty() {
+                0.0
+            } else {
+                format!(
+                    "{:.2}",
+                    added.difference(&selected_all).count() as f64 / added.len() as f64
+                )
+                .parse()
+                .unwrap()
+            }
+        });
+        let chosen = chosen_by_tab
+            .iter()
+            .flat_map(|ids| ids.iter().cloned())
+            .collect::<BTreeSet<_>>();
+        let spill = states
+            .iter()
+            .filter(|(id, flags)| !flags.is_empty() && !chosen.contains(*id))
+            .count();
+        for (key, value) in [
+            ("page.unserved", Some(integer(unserved))),
+            ("page.recent_unserved", Some(integer(streak))),
+            ("page.covered", Some(integer(selected_all.len()))),
+            ("page.spill", Some(integer(spill))),
+            (
+                "page.drift",
+                drift.map(|v| V::Float(crate::value::FiniteFloat::new(v).unwrap())),
+            ),
+        ] {
+            if let Some(value) = value
+                && let Some(V::Map(body)) = projection.base.reader.raw.get_mut(key)
+            {
+                body.insert("v".into(), value);
+            }
+        }
+        hub = projection.hub_data()?;
+    }
     let arrangement_owns = hub
         .arrangements
         .iter()
@@ -620,6 +743,56 @@ pub fn build(
                 .collect::<BTreeSet<_>>()
         })
         .collect::<Vec<_>>();
+    let arrangement_facts = hub
+        .arrangements
+        .iter()
+        .filter(|_| !brief.is_empty())
+        .enumerate()
+        .map(|(index, arrangement)| {
+            let unearned = arrangement
+                .sources
+                .iter()
+                .filter(|source| {
+                    !arrangement_owns[index]
+                        .iter()
+                        .any(|tab| earned_by_tab[*tab].contains(*source))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            let linked = (tabs.len() == 1 && tabs[0].bare) || unearned.is_empty();
+            let born = arrangement.born.as_deref().and_then(parse_date);
+            let stood = recorded_by
+                .keys()
+                .filter(|intent| {
+                    intent_date(intent, body(nodes, intent).ok())
+                        .is_some_and(|date| born.is_some_and(|born| date > born))
+                        && arrangement_owns[index]
+                            .iter()
+                            .any(|tab| earned_by_tab[*tab].contains(*intent))
+                })
+                .count();
+            let mut fact_fields = Map::from([
+                ("linked".into(), V::Bool(linked)),
+                (
+                    "cut".into(),
+                    V::Text(if unearned.is_empty() {
+                        String::new()
+                    } else {
+                        format!("no tab's sections earn {}", unearned.join(", "))
+                    }),
+                ),
+                ("fired".into(), V::Bool(arrangement.fired)),
+                (
+                    "stood".into(),
+                    V::Integer(crate::value::Integer::new(&stood.to_string()).unwrap()),
+                ),
+            ]);
+            if let Some(reading) = &arrangement.reading {
+                fact_fields.insert("reading".into(), V::Text(reading.clone()));
+            }
+            (arrangement.id.clone(), V::Map(fact_fields))
+        })
+        .collect::<Map>();
     for left in 0..hub.arrangements.len() {
         for right in left + 1..hub.arrangements.len() {
             if !arrangement_owns[left].is_disjoint(&arrangement_owns[right])
@@ -721,7 +894,7 @@ pub fn build(
             let stood = recorded_by
                 .keys()
                 .filter(|intent| {
-                    intent_date(body(nodes, intent).ok())
+                    intent_date(intent, body(nodes, intent).ok())
                         .is_some_and(|date| born.is_some_and(|born| date > born))
                         && arrangement_owns[arrangement_index]
                             .iter()
@@ -731,7 +904,7 @@ pub fn build(
             let added = recorded_by
                 .iter()
                 .filter(|(intent, _)| {
-                    intent_date(body(nodes, intent).ok())
+                    intent_date(intent, body(nodes, intent).ok())
                         .is_some_and(|date| born.is_some_and(|born| date >= born))
                 })
                 .flat_map(|(_, recorded)| recorded.iter().cloned())
@@ -1024,6 +1197,7 @@ pub fn build(
         tabs: tabs.len() + 1,
         failures,
         notes,
+        arrangement_facts: V::Map(arrangement_facts),
     })
 }
 fn root_of(entry: &Path) -> &Path {

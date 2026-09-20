@@ -333,6 +333,7 @@ pub(crate) struct HubArrangement {
     pub request: Option<String>,
     pub predicate: String,
     pub fired: bool,
+    pub reading: Option<String>,
     pub moved: Vec<(String, V, V, &'static str)>,
     pub contested: Vec<(String, String)>,
 }
@@ -925,6 +926,22 @@ impl<'a> Projection<'a> {
                 .flatten()
                 .map(|(name, claim)| (name.clone(), short(claim, 120)))
                 .collect();
+            let predicate = self.base.pred(id);
+            let comparison_ref = if matches!(predicate, V::Map(_)) {
+                L::legacy_expression(&predicate, true)
+                    .ok()
+                    .and_then(|tree| {
+                        let args = map(&tree).ok()?.get("args")?;
+                        let args = list(args).ok()?;
+                        let left = map(args.first()?).ok()?;
+                        if left.len() != 1 || map(args.get(1)?).ok()?.contains_key("op") {
+                            return None;
+                        }
+                        text(left.get("ref")?).ok().map(str::to_owned)
+                    })
+            } else {
+                R::CMP.captures(&py(&predicate)).map(|m| m[1].to_owned())
+            };
             arrangements.push(HubArrangement {
                 id: id.clone(),
                 sources,
@@ -932,6 +949,10 @@ impl<'a> Projection<'a> {
                 request,
                 predicate: predicate_text(&self.base.pred(id)),
                 fired: flags[id].contains("falsified"),
+                reading: comparison_ref.and_then(|dependency| {
+                    let value = self.base.reader.value(&dependency).ok()?;
+                    (value != V::Null).then(|| format!("{dependency} is {}", py(&value)))
+                }),
                 moved: self.base.moved(id)?,
                 contested,
             });
