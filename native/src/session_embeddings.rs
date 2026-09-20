@@ -27,6 +27,8 @@ const MAX_TOTAL_BYTES: usize = 2 * 1024 * 1024;
 const MAX_CHUNKS: usize = 1024;
 const MAX_QUERY_BYTES: usize = 16 * 1024;
 const MAX_ID_BYTES: usize = 4096;
+const TRACT_VERSION: &str = "0.22.4";
+const TOKENIZERS_VERSION: &str = "0.23.2";
 const WEIGHTS: (&str, u64, &str) = (
     "model_quantized.onnx",
     118_308_185,
@@ -468,7 +470,7 @@ fn rank_with_encoder(
             "overlap_tokens": OVERLAP_TOKENS, "query_prefix": "query: ", "passage_prefix": "passage: ",
             "pooling": "attention-mask mean", "normalization": "L2",
             "execution": "CPU, sequential, batch 1, one thread", "aggregation": "maximum chunk cosine per document",
-            "runtime": {"tract-onnx": "0.22.4", "tokenizers": "0.23.2"}},
+            "runtime": {"tract-onnx": TRACT_VERSION, "tokenizers": TOKENIZERS_VERSION}},
         "limits": {"documents": MAX_DOCUMENTS, "document_bytes": MAX_DOCUMENT_BYTES,
             "total_document_bytes": MAX_TOTAL_BYTES, "index_chunks": MAX_CHUNKS}
     }).as_object().unwrap().clone();
@@ -596,6 +598,15 @@ mod tests {
         .unwrap();
         let error = verified_assets(directory.path()).unwrap_err();
         assert!(error.contains("pinned weights artifact mismatch"));
+    }
+
+    #[test]
+    fn reported_runtime_versions_are_exactly_pinned_in_cargo() {
+        let cargo = include_str!("../Cargo.toml");
+        assert!(cargo.contains(&format!(
+            "tokenizers = {{ version = \"={TOKENIZERS_VERSION}\""
+        )));
+        assert!(cargo.contains(&format!("tract-onnx = \"={TRACT_VERSION}\"")));
     }
 
     #[test]
