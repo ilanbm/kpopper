@@ -1,7 +1,11 @@
 use super::{CommandOutput, Options};
 use crate::{
-    Result, history_contract::*, history_view::map_mut, project_modes::WriteRoute,
-    reasoning_runtime::Runtime, require,
+    Result,
+    history_contract::*,
+    history_view::{list, map_mut},
+    project_modes::WriteRoute,
+    reasoning_runtime::Runtime,
+    require,
     value::TypedValue as V,
 };
 use std::{collections::BTreeMap, path::PathBuf};
@@ -74,14 +78,13 @@ pub(super) fn run(
         options.refute.is_none(),
         "--refute takes one hypothesis and its why, and nothing else",
     )?;
+    let entry = &route.paths()[0];
+    if !super::active_history(entry)? {
+        return ordinary(options, route, runtime, probe);
+    }
     require(
         options.names.is_empty() && options.take.is_empty() && options.drops.is_empty(),
         "history_branch_choices_required: --from cannot mix named hypotheses, --take or --drop; use --choose",
-    )?;
-    let entry = &route.paths()[0];
-    require(
-        super::active_history(entry)?,
-        "history_branch_adoption_requires_active_history",
     )?;
     let store = crate::history_store::Store::new(entry)?;
     let _lock = crate::history_transaction_fs::DirectoryGuard::acquire(&store.root, true)?;
@@ -204,4 +207,77 @@ pub(super) fn run(
         stderr: String::new(),
         code: 0,
     })
+}
+
+fn ordinary(
+    options: &Options,
+    route: &WriteRoute,
+    runtime: Option<&Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<CommandOutput> {
+    require(
+        options.from_refs.len() == 1,
+        "ordinary branch consolidation accepts one --from ref",
+    )?;
+    require(
+        options.by.is_none() && options.choices.is_empty() && options.source_revision.is_none(),
+        "--by, --choose and --source-revision require active-history --from",
+    )?;
+    let reference = &options.from_refs[0];
+    let (_, root, relative, oid, day) = crate::public_readers::branch_read::context(
+        route.paths(),
+        &route.project().root,
+        reference,
+    )?;
+    let captured = crate::source_target::records(&root, &relative, &oid, runtime)?;
+    let data = map(&captured)?;
+    let files = map(&data["files"])?;
+    let raw = text(
+        files
+            .get(&relative)
+            .ok_or_else(|| error("target_record_unavailable"))?,
+    )?;
+    let mut supplied = vec![crate::public_consolidation::ordinary::SuppliedHypothesis {
+        name: reference.clone(),
+        document: data["doc"].clone(),
+        head: V::Map(Map::from([
+            (
+                "claim".into(),
+                V::Text(format!(
+                    "what {reference} committed ({}), read as a hypothesis",
+                    &oid[..7]
+                )),
+            ),
+            ("born".into(), V::Text(day)),
+        ])),
+        source: crate::history_yaml::decode_ordinary_source_value(raw.as_bytes())?,
+        text: raw.into(),
+    }];
+    let layout = crate::history_transaction::Layout::for_entry(&relative)?;
+    for item in list(&data["hypotheses"])? {
+        let item = map(item)?;
+        let name = text(&item["name"])?;
+        let qualified = format!("{reference}:{name}");
+        let suffixes = [
+            format!("{}/{}.yaml", layout.hypotheses, name),
+            format!("{}/{}.yml", layout.hypotheses, name),
+        ];
+        let raw = suffixes
+            .iter()
+            .find_map(|path| files.get(path))
+            .and_then(|v| text(v).ok())
+            .unwrap_or("");
+        supplied.push(crate::public_consolidation::ordinary::SuppliedHypothesis {
+            name: qualified,
+            document: item["doc"].clone(),
+            head: item["head"].clone(),
+            source: crate::history_yaml::OrdinaryValue::from_typed(&item["doc"]),
+            text: raw.into(),
+        });
+    }
+    let mut selected = options.clone();
+    selected
+        .names
+        .extend(supplied.iter().map(|h| h.name.clone()));
+    crate::public_consolidation::ordinary::run_supplied(&selected, route, &supplied, runtime, probe)
 }

@@ -45,6 +45,13 @@ struct Hypothesis {
     source: O,
     text: String,
 }
+pub(crate) struct SuppliedHypothesis {
+    pub name: String,
+    pub document: V,
+    pub head: V,
+    pub source: O,
+    pub text: String,
+}
 impl Hypothesis {
     fn path(&self) -> Result<&PathBuf> {
         self.path.as_ref().ok_or_else(|| {
@@ -69,6 +76,7 @@ fn captured_projection<'a>(
 fn read_hypotheses(
     capture: &CapturedSource,
     requested: &[String],
+    supplied: &[SuppliedHypothesis],
     runtime: Option<&Runtime>,
 ) -> Result<Vec<Hypothesis>> {
     let all = map(capture.hypotheses())?;
@@ -120,6 +128,23 @@ fn read_hypotheses(
                 text: std::str::from_utf8(raw)
                     .map_err(|_| error("invalid_utf8"))?
                     .into(),
+            },
+        );
+    }
+    for h in supplied {
+        require(!pool.contains_key(&h.name), "duplicate_branch_hypothesis")?;
+        let raw = entries(&h.document)?;
+        pool.insert(
+            h.name.clone(),
+            Hypothesis {
+                name: h.name.clone(),
+                path: None,
+                doc: h.document.clone(),
+                head: h.head.clone(),
+                ids: raw.keys().cloned().collect(),
+                raw,
+                source: h.source.clone(),
+                text: h.text.clone(),
             },
         );
     }
@@ -304,6 +329,15 @@ pub(super) fn run(
     runtime_override: Option<&Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<CommandOutput> {
+    run_supplied(options, route, &[], runtime_override, probe)
+}
+pub(crate) fn run_supplied(
+    options: &Options,
+    route: &WriteRoute,
+    supplied: &[SuppliedHypothesis],
+    runtime_override: Option<&Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<CommandOutput> {
     let entry = &route.paths()[0];
     let layout = crate::history_transaction::Layout::for_entry(
         entry
@@ -377,7 +411,7 @@ pub(super) fn run(
             code: 0,
         });
     }
-    let hyps = read_hypotheses(&capture, &options.names, runtime)?;
+    let hyps = read_hypotheses(&capture, &options.names, supplied, runtime)?;
     if !options.dry_run {
         privacy(
             &capture,

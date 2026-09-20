@@ -685,12 +685,14 @@ pub(super) fn fold(
         });
     }
     for h in &c.hyps {
-        images.push(FileImage {
-            path: h.path()?.to_string_lossy().into(),
-            role: "hypothesis".into(),
-            before: Some(capture.files()[h.path()?].clone()),
-            after: None,
-        });
+        if let Some(path) = &h.path {
+            images.push(FileImage {
+                path: path.to_string_lossy().into(),
+                role: "hypothesis".into(),
+                before: Some(capture.files()[path].clone()),
+                after: None,
+            });
+        }
     }
     let names = c
         .hyps
@@ -724,9 +726,11 @@ pub(super) fn fold(
     }
     let mut commit = shown.clone();
     for h in &c.hyps {
-        let p = notice_path(route, h.path()?);
-        shown.push(format!("{p} (deleted)"));
-        commit.push(p);
+        if let Some(path) = &h.path {
+            let p = notice_path(route, path);
+            shown.push(format!("{p} (deleted)"));
+            commit.push(p);
+        }
     }
     out.push(format!(
         "files to commit: {}",
