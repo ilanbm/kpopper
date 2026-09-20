@@ -1,4 +1,6 @@
 //! Public named-hypothesis consolidation over ordinary records and active history.
+#[path = "public_branch_consolidation.rs"]
+mod branch;
 #[path = "ordinary_consolidation_full.rs"]
 mod full;
 #[path = "consolidation_preview_facts.rs"]
@@ -81,6 +83,10 @@ pub struct Options {
     pub take: Vec<String>,
     pub drops: Vec<String>,
     pub record: Option<PathBuf>,
+    pub from_refs: Vec<String>,
+    pub by: Option<String>,
+    pub choices: Vec<String>,
+    pub source_revision: Option<String>,
 }
 
 fn validate(options: &Options) -> Result<()> {
@@ -340,6 +346,9 @@ fn dispatch_with_runtime(
         .unwrap_or_else(|| public_workspace::records(&cwd))?;
     let route = WriteRoute::capture(&paths, &cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
+    if !options.from_refs.is_empty() {
+        return branch::run(options, &route, &paths, runtime, probe);
+    }
     let lock = F::DirectoryGuard::acquire(
         route.paths()[0]
             .parent()

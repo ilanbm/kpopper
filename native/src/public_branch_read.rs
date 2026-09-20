@@ -65,7 +65,7 @@ fn resolve(root: &Path, reference: &str) -> Result<(String, String)> {
     Ok((oid, day))
 }
 
-fn context(
+pub(crate) fn context(
     paths: &[PathBuf],
     cwd: &Path,
     reference: &str,

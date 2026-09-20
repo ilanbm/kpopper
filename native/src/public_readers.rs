@@ -1,6 +1,6 @@
 //! Source capture and public read command routing.
 #[path = "public_branch_read.rs"]
-mod branch_read;
+pub(crate) mod branch_read;
 use crate::{
     Result,
     history_contract::*,

@@ -88,6 +88,7 @@ enum ReceiptFamily {
     Edit,
     Hypothesis,
     Identity,
+    Branch,
 }
 type RecoveryProbe<'a> = Option<&'a mut dyn FnMut(&str) -> Result<()>>;
 
@@ -111,7 +112,9 @@ fn verify_report_route(
 fn receipt_family(mutation: &PreparedMutation) -> Result<ReceiptFamily> {
     let data = mutation.to_data();
     let before = map(&map(&map(&data)?["receipt"])?["before"])?;
-    Ok(if before.contains_key("identity_authoring") {
+    Ok(if before.contains_key("history_branch_adoption") {
+        ReceiptFamily::Branch
+    } else if before.contains_key("identity_authoring") {
         ReceiptFamily::Identity
     } else if before.contains_key("history_edit") {
         ReceiptFamily::Edit
@@ -130,6 +133,8 @@ fn verify_mutation(
         ReceiptFamily::Edit => E::verify_prepared(store, mutation, runtime),
         ReceiptFamily::Hypothesis => HA::verify_prepared(store, mutation, runtime),
         ReceiptFamily::Identity => I::verify_prepared(store, mutation, runtime),
+        ReceiptFamily::Branch => crate::history_branch_adoption::verify(
+            &store.capture()?, mutation, &crate::history_branch_adoption::live_evidence(store, mutation)?),
         ReceiptFamily::Authoring => A::verify_prepared(store, mutation, runtime),
     }
 }
@@ -143,6 +148,7 @@ fn commit(
         ReceiptFamily::Edit => E::commit(store, mutation, runtime, verify),
         ReceiptFamily::Hypothesis => HA::commit(store, mutation, runtime, verify),
         ReceiptFamily::Identity => I::commit(store, mutation, runtime, verify),
+        ReceiptFamily::Branch => crate::history_branch_adoption::commit(store, mutation, verify),
         ReceiptFamily::Authoring => A::commit(store, mutation, runtime, verify),
     }
 }
@@ -194,7 +200,7 @@ fn publish(
     original: &[PathBuf],
     runtime: Option<&Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
-) -> Result<()> {
+) -> Result<V> {
     let routing = routing(route, original)?;
     let raw = history_emit::encode_document(&envelope(mutation, routing.clone())?)?;
     let relative = journal(store);
@@ -208,14 +214,15 @@ fn publish(
     F::publish_immutable(&store.root, &format!("{parent}/.gitignore"), b"*\n")?;
     F::publish_immutable(&store.root, &relative, &raw)?;
     probe("journal")?;
-    commit(store, mutation, runtime, &mut |_| {
+    let result = commit(store, mutation, runtime, &mut |_| {
         route.verify()?;
         require(F::read(&path)?.as_ref() == Some(&raw), "concurrent_edit")
     })
     .map_err(|e| retained_journal(e, &path))?;
     probe("committed")?;
     route.verify()?;
-    finish(store, mutation, &path, &raw)
+    finish(store, mutation, &path, &raw)?;
+    Ok(result)
 }
 
 /// Publish a mutation prepared by another public history adapter through the
@@ -228,7 +235,7 @@ pub(crate) fn publish_prepared(
     original: &[PathBuf],
     runtime: Option<&Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
-) -> Result<()> {
+) -> Result<V> {
     publish(store, mutation, route, original, runtime, probe)
 }
 
