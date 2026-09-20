@@ -15,7 +15,113 @@ use serde_json::{Map, Value as J, json};
 use std::collections::{BTreeMap, BTreeSet};
 
 const RULES: &str = include_str!("../../scripts/session/rules.txt");
-type NavigationIndex = (BTreeMap<String, BTreeSet<String>>, BTreeMap<String, String>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Entry {
+    Group(String),
+    Node(String),
+}
+impl Entry {
+    fn key(&self) -> &str {
+        match self {
+            Self::Group(key) | Self::Node(key) => key,
+        }
+    }
+}
+#[derive(Clone, Debug, Default)]
+struct Navigation {
+    groups: BTreeMap<String, BTreeSet<String>>,
+    leaves: BTreeMap<String, String>,
+    children: BTreeMap<String, BTreeSet<String>>,
+    direct: BTreeMap<String, Vec<String>>,
+}
+impl Navigation {
+    fn successors(&self, path: &str) -> Vec<Entry> {
+        self.children
+            .get(path)
+            .into_iter()
+            .flatten()
+            .cloned()
+            .map(Entry::Group)
+            .chain(
+                self.direct
+                    .get(path)
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .map(Entry::Node),
+            )
+            .collect()
+    }
+    fn members(&self, entry: &Entry) -> BTreeSet<String> {
+        match entry {
+            Entry::Group(key) => self.groups.get(key).cloned().unwrap_or_default(),
+            Entry::Node(key) => BTreeSet::from([key.clone()]),
+        }
+    }
+    fn balance(&mut self, path: &str) {
+        let entries = self.successors(path);
+        if entries.len() > 64 {
+            let width = 16.max(entries.len().div_ceil(16));
+            self.children.remove(path);
+            self.direct.remove(path);
+            for (index, chunk) in entries.chunks(width).enumerate() {
+                let bucket = format!("{}/@ids{}", path.trim_end_matches('/'), index + 1);
+                self.children
+                    .entry(path.into())
+                    .or_default()
+                    .insert(bucket.clone());
+                for entry in chunk {
+                    let members = self.members(entry);
+                    self.groups
+                        .entry(bucket.clone())
+                        .or_default()
+                        .extend(members);
+                    match entry {
+                        Entry::Group(key) => {
+                            self.children
+                                .entry(bucket.clone())
+                                .or_default()
+                                .insert(key.clone());
+                        }
+                        Entry::Node(key) => self
+                            .direct
+                            .entry(bucket.clone())
+                            .or_default()
+                            .push(key.clone()),
+                    }
+                }
+            }
+        }
+        for child in self.children.get(path).cloned().unwrap_or_default() {
+            self.balance(&child);
+        }
+    }
+    fn layers(&self, path: &str) -> Vec<Vec<Entry>> {
+        let mut levels = vec![vec![Entry::Group(path.into())]];
+        loop {
+            let next = levels
+                .last()
+                .unwrap()
+                .iter()
+                .flat_map(|entry| {
+                    let children = match entry {
+                        Entry::Group(key) => self.successors(key),
+                        Entry::Node(_) => vec![],
+                    };
+                    if children.is_empty() {
+                        vec![entry.clone()]
+                    } else {
+                        children
+                    }
+                })
+                .collect::<Vec<_>>();
+            if next == *levels.last().unwrap() {
+                return levels;
+            }
+            levels.push(next);
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Opening {
@@ -31,8 +137,9 @@ pub struct OrdinarySession {
     graph: J,
     scan: J,
     groups: BTreeMap<String, BTreeSet<String>>,
-    leaves: BTreeMap<String, String>,
+    navigation: Navigation,
     proposals: BTreeMap<String, J>,
+    directory_keys: BTreeMap<String, Vec<String>>,
 }
 
 fn canonical(value: &J) -> Result<String> {
@@ -156,13 +263,65 @@ fn card(bundle: &J) -> Result<String> {
 }
 
 fn expression_text(value: &J) -> String {
-    if let Some(expression) = value.as_str() {
-        return expression.into();
+    if !value.is_object() {
+        return V::from_json(value)
+            .map(|value| {
+                if crate::history_view::truth(&value) {
+                    crate::source_text::ordinary_python_str(&value)
+                } else {
+                    String::new()
+                }
+            })
+            .unwrap_or_default();
+    }
+    let value_typed = V::from_json(value).unwrap();
+    let predicate = matches!(
+        value["op"].as_str(),
+        Some("eq" | "ne" | "lt" | "le" | "gt" | "ge")
+    ) || crate::reasoning_language::legacy_expression_detailed(&value_typed, true)
+        .is_ok();
+    if let Err(error) =
+        crate::reasoning_language::legacy_expression_detailed(&value_typed, predicate)
+    {
+        return format!("<invalid expression: {}>", error.0);
     }
     if let Some(expr) = value.get("expr").and_then(J::as_str) {
         return expr.into();
     }
-    serde_json::to_string(value).unwrap_or_else(|_| "UNKNOWN".into())
+    fn render(value: &J) -> String {
+        if let Some(text) = value
+            .get("ref")
+            .or_else(|| value.get("num"))
+            .and_then(J::as_str)
+        {
+            return text.into();
+        }
+        if let Some(text) = value.get("text") {
+            return serde_json::to_string(text).unwrap();
+        }
+        if let Some(boolean) = value.get("bool") {
+            return boolean.to_string();
+        }
+        let symbol = match value["op"].as_str().unwrap() {
+            "add" => "+",
+            "sub" => "-",
+            "mul" => "*",
+            "div" => "/",
+            "eq" => "==",
+            "ne" => "!=",
+            "lt" => "<",
+            "le" => "<=",
+            "gt" => ">",
+            "ge" => ">=",
+            _ => unreachable!(),
+        };
+        format!(
+            "({} {symbol} {})",
+            render(&value["args"][0]),
+            render(&value["args"][1])
+        )
+    }
+    render(value)
 }
 
 impl OrdinarySession {
@@ -181,23 +340,30 @@ impl OrdinarySession {
             Some(runtime),
         )?;
         let data = projection.session_data()?;
+        let mut directory_keys = source_directory_keys(capture.source(), &data.sections);
         let program = runtime
             .ordinary_program()
             .ok_or_else(|| Error("ordinary expression program is not configured".into()))?;
         let mut graph = graph(capture, data, project, program.provenance()?)?;
         apply_profile(&mut graph, navigation)?;
+        let navigation = navigation_index(&graph)?;
+        graph["navigation_routes"] = json!(navigation.groups);
+        graph["navigation_leaf_routes"] = json!(navigation.leaves);
+        add_protocol_directory_keys(&mut directory_keys, &graph);
+        add_hypothesis_directory_keys(&mut directory_keys, &graph, capture);
         let scan = program.scan(&graph, &OperationalBounds::default())?;
         let snapshot = sha256(canonical(&graph)?.as_bytes());
         let revision = sha256(canonical(&json!({"project":project,"graph":snapshot}))?.as_bytes());
-        let (groups, leaves) = navigation_index(&graph)?;
+        let groups = navigation.groups.clone();
         Ok(Self {
             project: project.into(),
             revision,
             graph,
             scan,
             groups,
-            leaves,
+            navigation,
             proposals: BTreeMap::new(),
+            directory_keys,
         })
     }
 
@@ -217,9 +383,34 @@ impl OrdinarySession {
                 &self.project,
                 proposal,
             )?;
+            let mut keys = proposal
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
+            keys.push("stale_base".into());
+            self.directory_keys
+                .insert(format!("proposal:{id}"), keys.clone());
+            self.directory_keys.insert(format!("pending#/{id}"), keys);
         }
+        self.directory_keys
+            .insert("pending".into(), proposals.keys().cloned().collect());
         self.proposals = proposals;
         Ok(self)
+    }
+
+    pub(crate) fn with_navigation_order(
+        mut self,
+        profile: Option<&crate::history_yaml::OrdinaryValue>,
+    ) -> Self {
+        if let Some(orientation @ crate::history_yaml::OrdinaryValue::Map(fields)) =
+            profile.and_then(|profile| profile.get("orientation"))
+            && !fields.is_empty()
+        {
+            index_directory_keys(orientation, "orientation", &mut self.directory_keys);
+        }
+        self
     }
 
     fn pending(&self) -> J {
@@ -240,8 +431,11 @@ impl OrdinarySession {
         F: Fn(&str) -> usize,
     {
         require((64..=65_536).contains(&tokens), "tokens must be 64..65536")?;
-        let packet = self.packet()?;
-        let text = self.render_open(&packet, true)?;
+        let levels = self.navigation.layers("/");
+        let mut frontier = levels[0].clone();
+        let mut expanded = false;
+        let mut packet = self.packet(&frontier)?;
+        let mut text = self.render_open(&packet, expanded, &count)?;
         require(
             count(&text) <= tokens,
             &format!(
@@ -249,11 +443,70 @@ impl OrdinarySession {
                 count(&text)
             ),
         )?;
+        let preferred = self.graph["navigation_profile"]["opening_depth"]
+            .as_u64()
+            .unwrap_or(1) as usize;
+        for level in levels.iter().skip(1).take(preferred) {
+            let candidate = self.packet(level)?;
+            let rendered = self.render_open(&candidate, false, &count)?;
+            if count(&rendered) > tokens {
+                break;
+            }
+            frontier = level.clone();
+            packet = candidate;
+        }
+        let rendered = self.render_open(&packet, true, &count)?;
+        if count(&rendered) <= tokens {
+            expanded = true;
+        }
+        for level in &levels {
+            if level.len() < frontier.len() {
+                continue;
+            }
+            let rendered = self.render_open(&self.packet(level)?, expanded, &count)?;
+            if count(&rendered) > tokens {
+                break;
+            }
+            frontier = level.clone();
+        }
+        (frontier, text) = self.refine(
+            frontier,
+            |cells| self.render_open(&self.packet(cells)?, expanded, &count),
+            tokens,
+            &count,
+        )?;
+        packet = self.packet(&frontier)?;
+        for level in levels.iter().skip(1) {
+            let mut candidate = packet.clone();
+            candidate["link_map"] = json!(self.link_map(level));
+            candidate["link_cells"] = json!(
+                level
+                    .iter()
+                    .map(|entry| self.cell(entry))
+                    .collect::<Result<Vec<_>>>()?
+            );
+            let rendered = self.render_open(&candidate, expanded, &count)?;
+            if count(&rendered) > tokens {
+                break;
+            }
+            packet = candidate;
+            text = rendered;
+        }
+        packet["events_expanded"] = json!(expanded);
         Ok(Opening {
             tokens: count(&text),
             text,
             packet,
         })
+    }
+
+    /// Guard the exact opening packet against this immutable ordinary graph.
+    pub fn guard_opening(
+        &self,
+        opening: &Opening,
+        program: &crate::ordinary_runtime::Program,
+    ) -> Result<J> {
+        program.guard_view(&self.graph, &opening.packet, &OperationalBounds::default())
     }
 
     pub fn read<F>(
@@ -274,18 +527,11 @@ impl OrdinarySession {
         require((64..=65_536).contains(&tokens), "tokens must be 64..65536")?;
         if reference.starts_with('/') {
             require(offset.is_none(), "offset applies only to exact text fields")?;
-            let text = self.branch_text(reference)?;
-            require(
-                count(&text) <= tokens,
-                "budget cannot carry the complete branch root",
-            )?;
-            return Ok(text);
+            return self.branch_text(reference, tokens, &count);
         }
         if reference.starts_with("links:") && !reference.contains('#') {
             require(offset.is_none(), "offset applies only to exact text fields")?;
-            let text = self.link_text(&reference[6..])?;
-            require(count(&text) <= tokens, "budget cannot carry link metadata")?;
-            return Ok(text);
+            return self.link_text(&reference[6..], tokens, &count);
         }
         let value = self.read_value(reference)?;
         if let Some(offset) = offset {
@@ -328,24 +574,52 @@ impl OrdinarySession {
         if count(&response) <= tokens {
             return Ok(response);
         }
+        let child_prefix = format!(
+            "{reference}{}/",
+            if reference.contains('#') { "" } else { "#" }
+        );
+        let base = reference
+            .split_once('#')
+            .map_or(reference, |(base, _)| base);
+        let normalized = if self.graph["nodes"].get(base).is_some()
+            && !["orientation", "assessment", "pending", "native"].contains(&base)
+        {
+            format!("node:{reference}")
+        } else {
+            reference.to_owned()
+        };
         let children = value
             .as_object()
             .map(|map| {
-                map.keys()
+                let mut keys = self
+                    .directory_keys
+                    .get(&normalized)
+                    .cloned()
+                    .unwrap_or_else(|| map.keys().cloned().collect());
+                if base.starts_with("events:") && !reference.contains('#') {
+                    keys.sort_by_key(|key| key[1..].parse::<usize>().unwrap());
+                }
+                keys.iter()
                     .map(|key| {
-                        format!("{reference}#/{}", key.replace('~', "~0").replace('/', "~1"))
+                        format!(
+                            "{child_prefix}{}",
+                            key.replace('~', "~0").replace('/', "~1")
+                        )
                     })
                     .collect::<Vec<_>>()
             })
             .or_else(|| {
                 value
                     .as_array()
-                    .map(|a| (0..a.len()).map(|i| format!("{reference}#/{i}")).collect())
+                    .map(|a| (0..a.len()).map(|i| format!("{child_prefix}{i}")).collect())
             })
             .unwrap_or_default();
-        let diagnostic = canonical(
-            &json!({"complete":false,"required_tokens":count(&response),"ref":reference,"children":children,"next":if value.is_string(){"read this text with offset=0 for labeled fragments"}else{"read a field or raise tokens"}}),
-        )?;
+        let mut value = json!({"complete":false,"required_tokens":count(&response),"ref":reference,"children":children,"next":if value.is_string(){"read this text with offset=0 for labeled fragments"}else{"read a field or raise tokens"}});
+        let mut diagnostic = canonical(&value)?;
+        if count(&diagnostic) > tokens {
+            value.as_object_mut().unwrap().remove("children");
+            diagnostic = canonical(&value)?;
+        }
         require(
             count(&diagnostic) <= tokens,
             "budget cannot carry a complete read response",
@@ -467,24 +741,42 @@ impl OrdinarySession {
         let nodes = self.graph["nodes"]
             .as_object()
             .ok_or_else(|| Error("invalid ordinary session graph".into()))?;
-        let mut value = if let Some(id) = base.strip_prefix("checked:") {
+        if nodes.contains_key(base)
+            && !["orientation", "assessment", "pending", "native"].contains(&base)
+        {
+            return self.read_value(&format!("node:{reference}"));
+        }
+        let selected = pointer_path
+            .strip_prefix('/')
+            .unwrap_or("")
+            .split('/')
+            .next()
+            .unwrap_or("");
+        let mut value = if base == "orientation" {
+            self.graph
+                .get("orientation")
+                .filter(|value| value.as_object().is_some_and(|value| !value.is_empty()))
+                .cloned()
+                .unwrap_or_else(|| json!({"text":self.graph["scope"],"basis":["record scope"]}))
+        } else if let Some(id) = base.strip_prefix("checked:") {
             self.assessment(id)
                 .cloned()
                 .ok_or_else(|| Error("not_a_judgment".into()))?
         } else if let Some(id) = base.strip_prefix("node:") {
             let node = nodes
                 .get(id)
-                .ok_or_else(|| Error("unlisted operation or identifier".into()))?;
+                .ok_or_else(|| Error("unlisted operation or identifier; read / with this revision to list valid handles".into()))?;
             if node["kind"] == "judgment"
-                && (pointer_path.is_empty()
+                && (!reference.contains('#')
                     || [
-                        "/epistemic_card",
-                        "/checked_bundle_ref",
-                        "/raw_ref",
-                        "/scope",
+                        "epistemic_card",
+                        "checked_bundle_ref",
+                        "raw_ref",
+                        "scope",
+                        "state_tags_ref",
+                        "state_tags_scope",
                     ]
-                    .iter()
-                    .any(|field| pointer_path.starts_with(field)))
+                    .contains(&selected))
             {
                 let bundle = self
                     .assessment(id)
@@ -502,10 +794,14 @@ impl OrdinarySession {
                 node.clone()
             }
         } else if let Some(handle) = base.strip_prefix("source:") {
+            require(
+                !nodes.contains_key(handle) || self.graph["sources"].get(handle).is_some(),
+                &format!("this is a record entry; read node:{handle} with this revision"),
+            )?;
             let source = self.graph["sources"]
                 .get(handle)
                 .cloned()
-                .ok_or_else(|| Error("unlisted operation or identifier".into()))?;
+                .ok_or_else(|| Error("unlisted operation or identifier; read / with this revision to list valid handles".into()))?;
             let text = source["text"]
                 .as_str()
                 .ok_or_else(|| Error("invalid source".into()))?;
@@ -532,8 +828,15 @@ impl OrdinarySession {
                         let alerts = states
                             .iter()
                             .filter(|state| {
-                                ["contested", "broken", "unchecked", "falsified"]
-                                    .contains(&state.as_str().unwrap_or(""))
+                                [
+                                    "moved",
+                                    "falsified",
+                                    "broken",
+                                    "unchecked",
+                                    "no_predicate",
+                                    "contested",
+                                ]
+                                .contains(&state.as_str().unwrap_or(""))
                             })
                             .cloned()
                             .collect::<Vec<_>>();
@@ -542,7 +845,13 @@ impl OrdinarySession {
                     .collect(),
             )
         } else if base == "assessment" {
-            json!({"counts":self.scan["counts"],"events":self.scan["events"].as_object().map(|m|m.keys().collect::<Vec<_>>()).unwrap_or_default(),"errors":self.scan["errors"]})
+            let mut events = self.scan["events"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .collect::<Vec<_>>();
+            events.sort_by_key(|key| key[1..].parse::<usize>().unwrap());
+            json!({"counts":self.scan["counts"],"events":events,"errors":self.scan["errors"]})
         } else if let Some(key) = base.strip_prefix("event:") {
             self.scan["events"]
                 .get(key)
@@ -576,13 +885,53 @@ impl OrdinarySession {
                     .map(|(id, v)| (id.clone(), v.clone()))
                     .collect(),
             )
+        } else if let Some(key) = base.strip_prefix("edges:") {
+            let members = self.members(key)?;
+            J::Array(
+                self.graph["edges"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|edge| {
+                        members.contains(edge["from"].as_str().unwrap())
+                            || members.contains(edge["to"].as_str().unwrap())
+                    })
+                    .cloned()
+                    .collect(),
+            )
         } else if let Some(key) = base.strip_prefix("links:") {
             J::Array(self.links(key)?)
         } else {
-            return Err(Error("unknown reference".into()));
+            return Err(Error(
+                "unknown reference; read / with this revision to list valid handles".into(),
+            ));
         };
         if !pointer_path.is_empty() {
-            value = pointer(&value, pointer_path)?.clone();
+            let checked = base == "orientation"
+                || base == "assessment"
+                || ["checked:", "event:", "events:", "links:", "conditions:"]
+                    .iter()
+                    .any(|prefix| base.starts_with(prefix))
+                || (base.strip_prefix("node:").is_some_and(|id| {
+                    nodes.get(id).is_some_and(|node| node["kind"] == "judgment")
+                }) && [
+                    "epistemic_card",
+                    "checked_bundle_ref",
+                    "raw_ref",
+                    "scope",
+                    "state_tags_ref",
+                    "state_tags_scope",
+                ]
+                .contains(&selected));
+            value = pointer(&value, pointer_path)
+                .map_err(|error| {
+                    if checked && error.0 == "unknown field" {
+                        Error("unknown checked field".into())
+                    } else {
+                        error
+                    }
+                })?
+                .clone();
         }
         Ok(value)
     }
@@ -608,29 +957,106 @@ impl OrdinarySession {
             .cloned()
             .collect())
     }
-    fn branch_text(&self, path: &str) -> Result<String> {
-        let ids = self.groups.get(path).ok_or_else(|| {
-            Error("unknown branch; read / with this revision to list valid branches".into())
-        })?;
-        let mut lines = vec![format!("revision={}", self.revision), format!("MAP {path}")];
-        let mut context = String::new();
-        for id in ids {
-            let cell = self.cell(id)?;
-            let topic = cell["topic"].as_str().unwrap_or("/");
-            if topic != context && topic != path {
-                lines.push(format!("@ {topic}"));
-                context = topic.into();
+    fn refine<F, C>(
+        &self,
+        mut frontier: Vec<Entry>,
+        render: F,
+        tokens: usize,
+        count: &C,
+    ) -> Result<(Vec<Entry>, String)>
+    where
+        F: Fn(&[Entry]) -> Result<String>,
+        C: Fn(&str) -> usize,
+    {
+        let mut text = render(&frontier)?;
+        let mut current_tokens = count(&text);
+        loop {
+            let mut best = None;
+            for (index, entry) in frontier.iter().enumerate() {
+                let Entry::Group(key) = entry else {
+                    continue;
+                };
+                let children = self.navigation.successors(key);
+                if children.is_empty() || children == [entry.clone()] {
+                    continue;
+                }
+                let mut candidate = frontier[..index].to_vec();
+                candidate.extend(children.iter().cloned());
+                candidate.extend_from_slice(&frontier[index + 1..]);
+                let rendered = render(&candidate)?;
+                let size = count(&rendered);
+                if size > tokens {
+                    continue;
+                }
+                let added = size.saturating_sub(current_tokens).max(1) as f64;
+                let score = (
+                    children
+                        .iter()
+                        .filter(|entry| matches!(entry, Entry::Node(_)))
+                        .count() as f64
+                        / added,
+                    (children.len() as f64 - 1.0) / added,
+                    -(size as i64),
+                    -(index as i64),
+                );
+                if best
+                    .as_ref()
+                    .is_none_or(|(previous, _, _, _)| score > *previous)
+                {
+                    best = Some((score, candidate, rendered, size));
+                }
             }
-            lines.push(format!("- node:{id}"));
+            let Some((_, next, rendered, size)) = best else {
+                return Ok((frontier, text));
+            };
+            frontier = next;
+            text = rendered;
+            current_tokens = size;
         }
-        lines.push(
-            "Counts describe links, not IDs. Read node:ID, /topic or links:ID. Names are locators."
-                .into(),
-        );
-        Ok(lines.join("\n") + "\n")
     }
 
-    fn link_text(&self, key: &str) -> Result<String> {
+    fn branch_text<C: Fn(&str) -> usize>(
+        &self,
+        path: &str,
+        tokens: usize,
+        count: &C,
+    ) -> Result<String> {
+        require(
+            self.groups.contains_key(path),
+            "unknown branch; read / with this revision to list valid branches",
+        )?;
+        let render = |level: &[Entry]| -> Result<String> {
+            let mut lines = vec![format!("revision={}", self.revision), format!("MAP {path}")];
+            lines.extend(
+                self.map_lines(
+                    &level
+                        .iter()
+                        .map(|entry| self.cell(entry))
+                        .collect::<Result<Vec<_>>>()?,
+                    path,
+                )?,
+            );
+            lines.push("Counts describe links, not IDs. Read node:ID, /topic or links:ID. Names are locators.".into());
+            Ok(lines.join("\n") + "\n")
+        };
+        let mut chosen = None;
+        for level in self.navigation.layers(path) {
+            if count(&render(&level)?) > tokens {
+                break;
+            }
+            chosen = Some(level);
+        }
+        let frontier =
+            chosen.ok_or_else(|| Error("budget cannot carry the complete branch root".into()))?;
+        Ok(self.refine(frontier, render, tokens, count)?.1)
+    }
+
+    fn link_text<C: Fn(&str) -> usize>(
+        &self,
+        key: &str,
+        tokens: usize,
+        count: &C,
+    ) -> Result<String> {
         let edges = self.links(key)?;
         let mut lines = vec![
             format!("revision={}", self.revision),
@@ -639,20 +1065,82 @@ impl OrdinarySession {
         lines.extend(edges.iter().map(|edge| {
             format!(
                 "{} {} {}",
-                edge["from"].as_str().unwrap_or(""),
-                edge["rel"].as_str().unwrap_or(""),
-                edge["to"].as_str().unwrap_or("")
+                edge["from"].as_str().unwrap(),
+                edge["rel"].as_str().unwrap(),
+                edge["to"].as_str().unwrap()
             )
         }));
-        Ok(lines.join("\n") + "\n")
+        let text = lines.join("\n") + "\n";
+        if count(&text) <= tokens {
+            return Ok(text);
+        }
+        if !self.groups.contains_key(key) {
+            let diagnostic = format!(
+                "revision={}\n{} links folded; read links:{key}#/INDEX (0..{}) or raise tokens.\n",
+                self.revision,
+                edges.len(),
+                edges.len() as i64 - 1
+            );
+            require(
+                count(&diagnostic) <= tokens,
+                "budget cannot carry link metadata",
+            )?;
+            return Ok(diagnostic);
+        }
+        let mut chosen = None;
+        for level in self.navigation.layers(key) {
+            let mut lines = vec![
+                format!("revision={}", self.revision),
+                format!("LINKS {key} — grouped by source; expand a links: reference."),
+            ];
+            for entry in level {
+                let cell = self.cell(&entry)?;
+                lines.push(format!(
+                    "+ {} [{}] {}",
+                    cell["links_ref"].as_str().unwrap(),
+                    cell["edge_indices"].as_array().unwrap().len(),
+                    relation_counts(&cell["relation_counts"])
+                ));
+            }
+            let text = lines.join("\n") + "\n";
+            if count(&text) > tokens {
+                break;
+            }
+            chosen = Some(text);
+        }
+        chosen.ok_or_else(|| Error("budget cannot carry link directory".into()))
     }
 
-    fn packet(&self) -> Result<J> {
-        let nodes = self.graph["nodes"].as_object().unwrap();
-        let events = self.scan["events"].as_object().unwrap();
-        let cells = nodes
-            .keys()
-            .map(|id| self.cell(id))
+    fn link_map(&self, frontier: &[Entry]) -> Vec<J> {
+        let owner = frontier
+            .iter()
+            .flat_map(|entry| {
+                self.navigation
+                    .members(entry)
+                    .into_iter()
+                    .map(move |id| (id, entry.key()))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut rows = BTreeMap::<(String, String, String), Vec<usize>>::new();
+        for (index, edge) in self.graph["edges"].as_array().unwrap().iter().enumerate() {
+            let target = edge["to"].as_str().unwrap();
+            let key = (
+                owner[edge["from"].as_str().unwrap()].to_owned(),
+                edge["rel"].as_str().unwrap().to_owned(),
+                owner
+                    .get(target)
+                    .map(|key| (*key).to_owned())
+                    .unwrap_or_else(|| format!("unresolved:{target}")),
+            );
+            rows.entry(key).or_default().push(index);
+        }
+        rows.into_iter().map(|((source, relation, target), indices)| json!({"from":source,"rel":relation,"to":target,"edge_indices":indices})).collect()
+    }
+
+    fn packet(&self, frontier: &[Entry]) -> Result<J> {
+        let cells = frontier
+            .iter()
+            .map(|entry| self.cell(entry))
             .collect::<Result<Vec<_>>>()?;
         let stale = self
             .proposals
@@ -660,30 +1148,132 @@ impl OrdinarySession {
             .filter(|proposal| proposal["base_revision"] != self.revision)
             .count();
         Ok(
-            json!({"schema":"kpopper.epistemic-view.v3","project":self.project,"revision":self.revision,"counts":self.scan["counts"],"cells":cells,"conditions_ref":"conditions:/","events":self.scan["events"],"orientation":self.graph.get("orientation").cloned().unwrap_or_else(||json!({})),"rules":RULES,"links":self.graph["edges"],"pending":self.proposals.len(),"stale_pending":stale,"native_hypotheses":self.graph["native_hypotheses"].as_object().map(|m|m.values().filter(|h|h["kind"]!="contribution").count()).unwrap_or(0),"contributions":self.graph["contributions"],"read_mode":self.graph["read_mode"],"events_expanded":!events.is_empty()}),
+            json!({"schema":"kpopper.epistemic-view.v3","project":self.project,"revision":self.revision,"counts":self.scan["counts"],"cells":cells,"conditions_ref":"conditions:/","events":self.scan["events"],"orientation":self.graph.get("orientation").cloned().unwrap_or_else(||json!({})),"rules":RULES.trim(),"links":self.graph["edges"],"pending":self.proposals.len(),"stale_pending":stale,"native_hypotheses":self.graph["native_hypotheses"].as_object().map(|m|m.values().filter(|h|h["kind"]!="contribution").count()).unwrap_or(0),"contributions":self.graph["contributions"],"read_mode":self.graph["read_mode"]}),
         )
     }
-    fn cell(&self, id: &str) -> Result<J> {
-        let node = &self.graph["nodes"][id];
-        let topic = self.leaves.get(id).cloned().unwrap_or_else(|| "/".into());
+    fn cell(&self, entry: &Entry) -> Result<J> {
+        let key = entry.key();
+        let members = self.navigation.members(entry);
         let edges = self.graph["edges"].as_array().unwrap();
         let indices = edges
             .iter()
             .enumerate()
-            .filter(|(_, edge)| edge["from"] == id)
+            .filter(|(_, edge)| members.contains(edge["from"].as_str().unwrap()))
             .map(|(i, _)| i)
             .collect::<Vec<_>>();
         let mut counts = BTreeMap::<String, usize>::new();
         for index in &indices {
             *counts
-                .entry(edges[*index]["rel"].as_str().unwrap_or("").into())
+                .entry(edges[*index]["rel"].as_str().unwrap().into())
                 .or_default() += 1;
         }
+        let has_state = |id: &str, state: &str| {
+            self.graph["nodes"][id]["states"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(state))
+        };
         Ok(
-            json!({"kind":"node","key":id,"topic":topic,"members":[id],"conflicts":if node["states"].as_array().is_some_and(|s|s.contains(&json!("contested"))){vec![id]}else{vec![]},"questions":if node["states"].as_array().is_some_and(|s|s.contains(&json!("question"))){vec![id]}else{vec![]},"attention":self.scan["events"].as_object().unwrap().values().any(|event|event["affected"].as_array().is_some_and(|a|a.contains(&json!(id)))).then_some(vec![id]).unwrap_or_default(),"edge_indices":indices,"relation_counts":counts,"links_ref":format!("links:{id}")}),
+            json!({"kind":if matches!(entry, Entry::Node(_)){"node"}else{"group"},"key":key,
+            "topic":if matches!(entry, Entry::Node(_)){self.navigation.leaves[key].as_str()}else{key},
+            "members":members,"conflicts":members.iter().filter(|id|has_state(id,"contested")).collect::<Vec<_>>(),
+            "questions":members.iter().filter(|id|has_state(id,"question")).collect::<Vec<_>>(),
+            "attention":members.iter().filter(|id|self.scan["events"].as_object().unwrap().values().any(|event|event["affected"].as_array().unwrap().contains(&json!(id)))).collect::<Vec<_>>(),
+            "edge_indices":indices,"relation_counts":counts,"links_ref":format!("links:{key}")}),
         )
     }
-    fn render_open(&self, packet: &J, expanded: bool) -> Result<String> {
+    fn cell_line(&self, cell: &J) -> Result<String> {
+        let key = cell["key"].as_str().unwrap();
+        let mut line = if cell["kind"] == "group" {
+            format!("+ {key} [{}]", cell["members"].as_array().unwrap().len())
+        } else {
+            let reference = format!("node:{key}");
+            format!(
+                "- {}",
+                if reference.chars().any(char::is_whitespace) {
+                    canonical(&json!(reference))?
+                } else {
+                    reference
+                }
+            )
+        };
+        for (field, label) in [
+            ("conflicts", "CONTESTED"),
+            ("questions", "questions"),
+            ("attention", "review"),
+        ] {
+            let n = cell[field].as_array().unwrap().len();
+            if n != 0 {
+                line += &format!(" {label}={n}");
+            }
+        }
+        if !cell["relation_counts"].as_object().unwrap().is_empty() {
+            line += &format!(" {}", relation_counts(&cell["relation_counts"]));
+        }
+        Ok(line)
+    }
+    fn map_lines(&self, cells: &[J], path: &str) -> Result<Vec<String>> {
+        let mut lines = vec![];
+        let mut context = None;
+        for cell in cells {
+            if cell["kind"] == "node" {
+                let topic = cell["topic"].as_str().unwrap();
+                if Some(topic) != context && topic != path {
+                    lines.push(format!("@ {topic}"));
+                }
+                context = Some(topic);
+            } else {
+                context = None;
+            }
+            lines.push(self.cell_line(cell)?);
+        }
+        Ok(lines)
+    }
+    fn event_line<C: Fn(&str) -> usize>(&self, key: &str, event: &J, count: &C) -> Result<String> {
+        let id = event["id"].as_str().unwrap();
+        let kind = event["kind"].as_str().unwrap();
+        let detail = if kind == "premise_change" {
+            let mut values = format!(
+                "seen={} current={}",
+                canonical(&event["value_at_review"])?,
+                canonical(&event["current_recorded_value"])?
+            );
+            if event["value_at_review"] == event["current_recorded_value"] {
+                values = "formula changed".into();
+            }
+            if count(&values) > 32 {
+                values = if event["role"] == "recorded_judgment_claim" {
+                    "text changed"
+                } else {
+                    "recorded value changed"
+                }
+                .into();
+            }
+            format!("{id} {values}")
+        } else if ["contested", "unreadable"].contains(&kind) {
+            format!("{id} {}", kind.to_uppercase())
+        } else {
+            let predicate = &event["falsifier"];
+            let state = match predicate["holds_on_current_values"].as_bool() {
+                Some(true) => "TRIGGERED",
+                Some(false) => "NOT_TRIGGERED",
+                None => "UNKNOWN",
+            };
+            let detail = format!("{id} {} {state}", expression_text(&predicate["expression"]));
+            if count(&detail) <= 48 {
+                detail
+            } else {
+                format!("{id} {}", kind.to_uppercase())
+            }
+        };
+        Ok(format!("@event:{key} {detail}"))
+    }
+    fn render_open<C: Fn(&str) -> usize>(
+        &self,
+        packet: &J,
+        expanded: bool,
+        count: &C,
+    ) -> Result<String> {
         let c = &packet["counts"];
         let purpose = packet["orientation"]["text"]
             .as_str()
@@ -714,7 +1304,10 @@ impl OrdinarySession {
                 self.scan["events"].as_object().unwrap().len()
             ),
         ];
-        if !self.proposals.is_empty() {
+        if packet["pending"] != 0
+            || packet["stale_pending"] != 0
+            || packet["native_hypotheses"] != 0
+        {
             lines.insert(
                 lines.len() - 1,
                 format!(
@@ -723,58 +1316,49 @@ impl OrdinarySession {
                 ),
             );
         }
+        for contribution in packet["contributions"].as_array().into_iter().flatten() {
+            lines.push(format!(
+                "PENDING {} {} {} @native",
+                contribution["revision"]
+                    .as_str()
+                    .unwrap()
+                    .chars()
+                    .take(12)
+                    .collect::<String>(),
+                contribution["state"].as_str().unwrap(),
+                canonical(&contribution["scope"])?
+            ));
+        }
         if expanded {
-            for (key, event) in self.scan["events"].as_object().unwrap() {
-                lines.push(format!(
-                    "@event:{key} {} {}",
-                    event["id"].as_str().unwrap_or(""),
-                    event["kind"].as_str().unwrap_or("").to_uppercase()
-                ));
+            let mut events = self.scan["events"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .collect::<Vec<_>>();
+            events.sort_by_key(|(key, _)| key[1..].parse::<usize>().unwrap());
+            for (key, event) in events {
+                lines.push(self.event_line(key, event, count)?);
             }
         }
         lines.push("MAP / — declared navigation; names do not establish claims:".into());
-        let mut context = "";
-        for cell in packet["cells"].as_array().unwrap() {
-            let topic = cell["topic"].as_str().unwrap_or("/");
-            if topic != context && topic != "/" {
-                lines.push(format!("@ {topic}"));
-                context = topic;
-            }
-            let id = cell["key"].as_str().unwrap();
-            let mut line = format!("- node:{id}");
-            for (relation, count) in cell["relation_counts"].as_object().unwrap() {
-                line.push_str(&format!(
-                    " {}_count={count}",
-                    if relation == "rests_on" {
-                        "dependency"
-                    } else if relation == "from" {
-                        "source"
-                    } else {
-                        relation
-                    }
-                ));
-            }
-            lines.push(line);
-        }
-        let mut folded = BTreeMap::<(String, String, String), usize>::new();
-        for edge in self.graph["edges"].as_array().unwrap() {
-            *folded
-                .entry((
-                    edge["from"].as_str().unwrap_or("").into(),
-                    edge["rel"].as_str().unwrap_or("").into(),
-                    edge["to"].as_str().unwrap_or("").into(),
-                ))
-                .or_default() += 1;
-        }
-        if !folded.is_empty() {
+        lines.extend(self.map_lines(packet["cells"].as_array().unwrap(), "/")?);
+        if let Some(rows) = packet
+            .get("link_map")
+            .and_then(J::as_array)
+            .filter(|rows| !rows.is_empty())
+        {
             lines.push(
                 "LINK MAP — folded endpoints; all links counted; exact links at links:/".into(),
             );
-            lines.extend(
-                folded.into_iter().map(|((from, relation, to), count)| {
-                    format!("{from} {relation} {to} [{count}]")
-                }),
-            );
+            lines.extend(rows.iter().map(|row| {
+                format!(
+                    "{} {} {} [{}]",
+                    row["from"].as_str().unwrap(),
+                    row["rel"].as_str().unwrap(),
+                    row["to"].as_str().unwrap(),
+                    row["edge_indices"].as_array().unwrap().len()
+                )
+            }));
         }
         lines.push("Counts describe links: dependency_count=rests_on, source_count=from; not proof. Read node:ID, /topic, links:ID or @ref without @; pass revision.".into());
         Ok(lines.join("\n") + "\n")
@@ -809,6 +1393,7 @@ fn graph(
             handles.insert(path.clone(), handle);
         }
     }
+    let native_hypotheses = session_hypotheses(capture, data.native_hypotheses)?;
     let mut nodes = Map::from_iter(data.nodes);
     for (id, node) in &mut nodes {
         let section = data.sections.get(id);
@@ -823,8 +1408,81 @@ fn graph(
         }
     }
     Ok(
-        json!({"nodes":nodes,"edges":data.edges,"topics":data.topics,"scope":data.scope,"sources":sources,"native_hypotheses":data.native_hypotheses,"contributions":data.contributions,"knowledge_conflicts":data.knowledge_conflicts,"read_mode":map(&capture.ordinary_context())?["read_mode"].to_json()?,"origin":provenance,"project_context":project}),
+        json!({"nodes":nodes,"edges":data.edges,"topics":data.topics,"scope":data.scope,"sources":sources,"native_hypotheses":native_hypotheses,"contributions":data.contributions,"knowledge_conflicts":data.knowledge_conflicts,"read_mode":map(&capture.ordinary_context())?["read_mode"].to_json()?,"origin":provenance,"project_context":project}),
     )
+}
+
+fn hypothesis_document_source(
+    capture: &CapturedSource,
+    hypothesis: &J,
+) -> Option<crate::history_yaml::OrdinaryValue> {
+    use crate::history_yaml::OrdinaryValue as S;
+    let path = std::path::Path::new(hypothesis["path"].as_str()?);
+    let S::Map(mut fields) =
+        crate::history_yaml::decode_ordinary_source_value(capture.files().get(path)?).ok()?
+    else {
+        return None;
+    };
+    fields.retain(|(key, _)| key.text() != Some("hypothesis"));
+    let source = S::Map(fields);
+    (ordinary_reader::json_value(&source.projected(), 0)
+        .ok()
+        .as_ref()
+        == Some(&hypothesis["doc"]))
+    .then_some(source)
+}
+
+// provenance.bodies intentionally includes every mapping collection, even when
+// collections_of excludes one because its members have incompatible shapes.
+fn hypothesis_raw(
+    source: &crate::history_yaml::OrdinaryValue,
+) -> crate::history_yaml::OrdinaryValue {
+    use crate::history_yaml::{OrdinaryKey, OrdinaryValue as S};
+    let mut raw: Vec<(OrdinaryKey, S)> = vec![];
+    if let S::Map(collections) = source {
+        for (collection, members) in collections {
+            if collection
+                .text()
+                .is_some_and(|name| ["meta", "schema", "record", "also"].contains(&name))
+            {
+                continue;
+            }
+            if let S::Map(members) = members {
+                for (key, body) in members {
+                    if let Some((_, previous)) = raw
+                        .iter_mut()
+                        .find(|(candidate, _)| candidate.python_eq(key))
+                    {
+                        *previous = body.clone();
+                    } else {
+                        raw.push((key.clone(), body.clone()));
+                    }
+                }
+            }
+        }
+    }
+    S::Map(raw)
+}
+
+fn session_hypotheses(capture: &CapturedSource, mut hypotheses: J) -> Result<J> {
+    use crate::history_yaml::OrdinaryValue as S;
+    for hypothesis in hypotheses
+        .as_object_mut()
+        .into_iter()
+        .flat_map(|values| values.values_mut())
+    {
+        let document = V::from_json(&hypothesis["doc"])?;
+        let source = hypothesis_document_source(capture, hypothesis)
+            .unwrap_or_else(|| S::from_typed(&document));
+        hypothesis.as_object_mut().unwrap().remove("document");
+        hypothesis["raw"] = ordinary_reader::json_value(&hypothesis_raw(&source).projected(), 0)?;
+        let ids = crate::reasoning_fields::collections(&document)?
+            .into_values()
+            .flat_map(|members| members.into_keys())
+            .collect::<BTreeSet<_>>();
+        hypothesis["ids"] = json!(ids);
+    }
+    Ok(hypotheses)
 }
 
 fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
@@ -832,6 +1490,12 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
         return Ok(());
     };
     let profile = ordinary_reader::json_value(profile, 0)?;
+    if profile
+        .as_object()
+        .is_some_and(|profile| profile.is_empty())
+    {
+        return Ok(());
+    }
     let groups = profile["groups"]
         .as_object()
         .ok_or_else(|| Error("profile must contain declared groups".into()))?;
@@ -880,36 +1544,588 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
             })),
         );
     }
+    let orientation = profile
+        .get("orientation")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    if orientation.as_object().is_none_or(|o| !o.is_empty()) {
+        require(
+            orientation["text"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty())
+                && orientation["basis"]
+                    .as_array()
+                    .is_some_and(|ids| !ids.is_empty()),
+            "orientation needs text and basis",
+        )?;
+        for id in orientation["basis"].as_array().unwrap() {
+            let id = id
+                .as_str()
+                .ok_or_else(|| Error("orientation basis must list IDs".into()))?;
+            require(
+                node_ids.contains(id),
+                &format!("orientation basis missing: {id}"),
+            )?;
+        }
+    }
+    let depth = profile.get("opening_depth").cloned().unwrap_or(json!(1));
+    require(
+        depth.as_u64().is_some_and(|depth| (1..=8).contains(&depth)),
+        "opening_depth must be 1..8",
+    )?;
     graph["topics"] = J::Object(topics);
     graph["orientation"] = profile
         .get("orientation")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    graph["navigation_profile"] = json!({"description":profile["description"].as_str().unwrap_or("Declared navigation."),"sha256":sha256(canonical(&profile)?.as_bytes()),"unmatched_ids":assigned.keys().filter(|id|!node_ids.contains(*id)).collect::<Vec<_>>(),"opening_depth":profile["opening_depth"].as_u64().unwrap_or(1)});
+    graph["navigation_profile"] = json!({"description":profile["description"].as_str().unwrap_or("Declared navigation."),"sha256":sha256(canonical(&profile)?.as_bytes()),"unmatched_ids":assigned.keys().filter(|id|!node_ids.contains(*id)).collect::<Vec<_>>(),"opening_depth":depth});
     Ok(())
 }
 
-fn navigation_index(graph: &J) -> Result<NavigationIndex> {
+// Directory ordering is presentation metadata, kept outside the canonical graph
+// and revision. Ordinary scalar keys retain Python's spelling and first-key
+// identity after YAML numeric-key collisions.
+fn index_directory_keys(
+    value: &crate::history_yaml::OrdinaryValue,
+    reference: &str,
+    out: &mut BTreeMap<String, Vec<String>>,
+) {
+    use crate::history_yaml::OrdinaryValue as S;
+    match value {
+        S::Map(values) => {
+            let keys = values
+                .iter()
+                .map(|(key, _)| crate::source_text::ordinary_python_str(key.scalar()))
+                .collect::<Vec<_>>();
+            out.insert(reference.into(), keys.clone());
+            for ((_, value), key) in values.iter().zip(keys) {
+                index_directory_keys(
+                    value,
+                    &format!(
+                        "{reference}{}/{}",
+                        if reference.contains('#') { "" } else { "#" },
+                        key.replace('~', "~0").replace('/', "~1")
+                    ),
+                    out,
+                );
+            }
+        }
+        S::List(values) => {
+            for (i, value) in values.iter().enumerate() {
+                index_directory_keys(
+                    value,
+                    &format!(
+                        "{reference}{}/{i}",
+                        if reference.contains('#') { "" } else { "#" }
+                    ),
+                    out,
+                );
+            }
+        }
+        S::Scalar(_) => (),
+    }
+}
+
+fn source_directory_keys(
+    source: &crate::history_yaml::OrdinaryValue,
+    sections: &BTreeMap<String, String>,
+) -> BTreeMap<String, Vec<String>> {
+    use crate::history_yaml::OrdinaryValue as S;
+    let mut out = BTreeMap::new();
+    for (id, section) in sections {
+        if let Some(body) = source.get(section).and_then(|members| members.get(id)) {
+            if matches!(body, S::Map(_)) {
+                index_directory_keys(body, &format!("node:{id}#/body"), &mut out);
+                index_directory_keys(body, &format!("node:{id}#/assessment_body"), &mut out);
+            } else {
+                out.insert(format!("node:{id}#/body"), vec!["v".into()]);
+                index_directory_keys(body, &format!("node:{id}#/body/v"), &mut out);
+                index_directory_keys(body, &format!("node:{id}#/source_body"), &mut out);
+            }
+        }
+    }
+    out
+}
+fn add_protocol_directory_keys(out: &mut BTreeMap<String, Vec<String>>, graph: &J) {
+    out.insert(
+        "orientation".into(),
+        if graph
+            .get("orientation")
+            .and_then(J::as_object)
+            .is_none_or(|value| value.is_empty())
+        {
+            vec!["text".into(), "basis".into()]
+        } else {
+            graph["orientation"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect()
+        },
+    );
+    out.insert(
+        "assessment".into(),
+        vec!["counts".into(), "events".into(), "errors".into()],
+    );
+    for (id, node) in graph["nodes"].as_object().unwrap() {
+        let raw = [
+            "kind",
+            "states",
+            "body",
+            "source_body",
+            "assessment_body",
+            "assessment_fields",
+            "record_source",
+            "record_sources",
+        ]
+        .into_iter()
+        .filter(|key| node.get(*key).is_some())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+        out.insert(format!("node:{id}#"), raw.clone());
+        out.insert(
+            format!("node:{id}"),
+            if node["kind"] == "judgment" {
+                [
+                    "body",
+                    "epistemic_card",
+                    "checked_bundle_ref",
+                    "raw_ref",
+                    "scope",
+                    "state_tags_ref",
+                    "state_tags_scope",
+                ]
+                .map(str::to_owned)
+                .to_vec()
+            } else {
+                raw
+            },
+        );
+        if node["kind"] == "judgment" {
+            out.insert(
+                format!("node:{id}#/assessment_fields"),
+                ["deps", "snapshot", "predicate"]
+                    .map(str::to_owned)
+                    .to_vec(),
+            );
+            let reference = format!("node:{id}#/assessment_body");
+            if let Some(keys) = out.get_mut(&reference) {
+                for (role, canonical) in [
+                    ("deps", "rests_on"),
+                    ("snapshot", "seen"),
+                    ("predicate", "wrong_if"),
+                ] {
+                    if node["assessment_fields"][role].is_string()
+                        && !keys.iter().any(|key| key == canonical)
+                    {
+                        keys.push(canonical.into());
+                    }
+                }
+            }
+            for (role, canonical) in [
+                ("deps", "rests_on"),
+                ("snapshot", "seen"),
+                ("predicate", "wrong_if"),
+            ] {
+                if let Some(source) = node["assessment_fields"][role].as_str() {
+                    let source_prefix = format!(
+                        "node:{id}#/body/{}",
+                        source.replace('~', "~0").replace('/', "~1")
+                    );
+                    let target_prefix = format!("{reference}/{canonical}");
+                    let aliases = out
+                        .iter()
+                        .filter_map(|(path, keys)| {
+                            path.strip_prefix(&source_prefix)
+                                .filter(|tail| tail.is_empty() || tail.starts_with('/'))
+                                .map(|tail| (format!("{target_prefix}{tail}"), keys.clone()))
+                        })
+                        .collect::<Vec<_>>();
+                    out.extend(aliases);
+                }
+            }
+        }
+        if crate::reasoning_fields::BUILTINS.contains(&id.as_str()) {
+            out.insert(
+                format!("node:{id}#/body"),
+                ["name", "v", "from"]
+                    .into_iter()
+                    .filter(|key| node["body"].get(*key).is_some())
+                    .map(str::to_owned)
+                    .collect(),
+            );
+        }
+    }
+    for handle in graph["sources"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(handle, _)| handle)
+    {
+        out.insert(
+            format!("source:{handle}"),
+            ["text", "sha256", "location"].map(str::to_owned).to_vec(),
+        );
+    }
+}
+
+fn add_hypothesis_directory_keys(
+    out: &mut BTreeMap<String, Vec<String>>,
+    graph: &J,
+    capture: &CapturedSource,
+) {
+    use crate::history_yaml::OrdinaryValue as S;
+    for (name, hypothesis) in graph["native_hypotheses"].as_object().into_iter().flatten() {
+        if hypothesis["kind"] == "contribution" {
+            continue;
+        }
+        let Some(path) = hypothesis["path"].as_str() else {
+            continue;
+        };
+        let Some(bytes) = capture.files().get(std::path::Path::new(path)) else {
+            continue;
+        };
+        let Ok(S::Map(mut fields)) = crate::history_yaml::decode_ordinary_source_value(bytes)
+        else {
+            continue;
+        };
+        let reference = format!("native#/{}", name.replace('~', "~0").replace('/', "~1"));
+        out.insert(
+            reference.clone(),
+            ["name", "path", "head", "doc", "ids", "raw", "error"]
+                .map(str::to_owned)
+                .to_vec(),
+        );
+        if let Some((_, head)) = fields
+            .iter()
+            .find(|(key, _)| key.text() == Some("hypothesis"))
+            && ordinary_reader::json_value(&head.projected(), 0)
+                .ok()
+                .as_ref()
+                == Some(&hypothesis["head"])
+        {
+            index_directory_keys(head, &format!("{reference}/head"), out);
+        }
+        fields.retain(|(key, _)| key.text() != Some("hypothesis"));
+        let document = S::Map(fields);
+        if ordinary_reader::json_value(&document.projected(), 0)
+            .ok()
+            .as_ref()
+            == Some(&hypothesis["doc"])
+        {
+            index_directory_keys(&document, &format!("{reference}/doc"), out);
+            index_directory_keys(&hypothesis_raw(&document), &format!("{reference}/raw"), out);
+        }
+    }
+}
+
+fn relation_counts(counts: &J) -> String {
+    counts
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(relation, count)| {
+            let label = match relation.as_str() {
+                "rests_on" => "dependency_count".into(),
+                "from" => "source_count".into(),
+                _ => format!("{relation}_count"),
+            };
+            format!("{label}={count}")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn navigation_index(graph: &J) -> Result<Navigation> {
     let topics = graph["topics"]
         .as_object()
         .ok_or_else(|| Error("invalid ordinary topics".into()))?;
-    let mut groups = BTreeMap::<String, BTreeSet<String>>::new();
-    let mut leaves = BTreeMap::new();
+    let mut tree = Navigation::default();
+    tree.groups.entry("/".into()).or_default();
     for (id, parts) in topics {
         let mut path = "/".to_owned();
-        groups.entry(path.clone()).or_default().insert(id.clone());
+        tree.groups
+            .entry(path.clone())
+            .or_default()
+            .insert(id.clone());
         for part in parts
             .as_array()
             .ok_or_else(|| Error("invalid topic path".into()))?
         {
             let part = part
                 .as_str()
+                .filter(|part| !part.is_empty())
                 .ok_or_else(|| Error("invalid topic path".into()))?;
-            path.push_str(part);
-            groups.entry(path.clone()).or_default().insert(id.clone());
-            path.push('/');
+            let quoted = part
+                .as_bytes()
+                .iter()
+                .map(|byte| {
+                    if byte.is_ascii_alphanumeric() || b"-._~".contains(byte) {
+                        (*byte as char).to_string()
+                    } else {
+                        format!("%{byte:02X}")
+                    }
+                })
+                .collect::<String>();
+            let child = format!("{}/{quoted}", path.trim_end_matches('/'));
+            tree.children.entry(path).or_default().insert(child.clone());
+            tree.groups
+                .entry(child.clone())
+                .or_default()
+                .insert(id.clone());
+            path = child;
         }
-        leaves.insert(id.clone(), path.trim_end_matches('/').into());
+        tree.leaves.insert(id.clone(), path.clone());
+        tree.direct.entry(path).or_default().push(id.clone());
     }
-    Ok((groups, leaves))
+    if let Some(order) = graph.get("node_order").and_then(J::as_array) {
+        let rank = order
+            .iter()
+            .enumerate()
+            .map(|(index, id)| (id.as_str().unwrap_or(""), index))
+            .collect::<BTreeMap<_, _>>();
+        require(
+            order.len() == topics.len()
+                && rank.len() == topics.len()
+                && topics.keys().all(|id| rank.contains_key(id.as_str())),
+            "node_order must be a permutation of node IDs",
+        )?;
+        for ids in tree.direct.values_mut() {
+            ids.sort_by_key(|id| rank[id.as_str()]);
+        }
+    }
+    tree.balance("/");
+    Ok(tree)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tokenizer::Encoding;
+    fn fixtures() -> J {
+        serde_json::from_str(include_str!(
+            "../tests/fixtures/ordinary-session-view-oracle.json"
+        ))
+        .unwrap()
+    }
+    fn from_fixture(case: &J) -> OrdinarySession {
+        let graph = case["graph"].clone();
+        let navigation = navigation_index(&graph).unwrap();
+        let revision = case["revision"].as_str().unwrap().to_owned();
+        let pending = case["pending"].as_u64().unwrap();
+        let stale = case["stale"].as_u64().unwrap();
+        OrdinarySession {
+            project: "fixture".into(),
+            revision: revision.clone(),
+            graph,
+            scan: case["scan"].clone(),
+            groups: navigation.groups.clone(),
+            navigation,
+            directory_keys: serde_json::from_value(case["directory_keys"].clone()).unwrap(),
+            proposals: (0..pending)
+                .map(|i| {
+                    (
+                        format!("proposal{i}"),
+                        json!({"base_revision":if i < stale { "old" } else { &revision }}),
+                    )
+                })
+                .collect(),
+        }
+    }
+    fn program() -> crate::ordinary_runtime::Program {
+        let root = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").unwrap())
+                    .join(".cache/kpopper/lean")
+                    .join(crate::reasoning_runtime::target_name().unwrap())
+                    .join(env!("KPOP_ORDINARY_SOURCE_SHA256"))
+            });
+        crate::ordinary_runtime::Program::open(&root).unwrap()
+    }
+    #[test]
+    fn python_oracle_complete_packets_and_budgeted_navigation() {
+        let fixtures = fixtures();
+        for case in fixtures["cases"].as_array().unwrap() {
+            let session = from_fixture(case);
+            let name = case["name"].as_str().unwrap();
+            assert_eq!(
+                json!(session.navigation.groups),
+                case["graph"]["navigation_routes"],
+                "{name}: complete routes"
+            );
+            assert_eq!(
+                json!(session.navigation.leaves),
+                case["graph"]["navigation_leaf_routes"],
+                "{name}: leaf routes"
+            );
+            for row in case["openings"].as_array().unwrap() {
+                let budget = row["budget"].as_u64().unwrap() as usize;
+                let actual = session.opening(budget, |text| Encoding::O200kBase.count(text));
+                if let Some(error) = row.get("error") {
+                    assert_eq!(
+                        actual.unwrap_err().0,
+                        error.as_str().unwrap(),
+                        "{name} budget={budget}"
+                    );
+                } else {
+                    let actual = actual.unwrap();
+                    assert_eq!(
+                        actual.text,
+                        row["opening"]["text"].as_str().unwrap(),
+                        "{name} budget={budget} text"
+                    );
+                    assert_eq!(
+                        actual.packet, row["opening"]["packet"],
+                        "{name} budget={budget} packet"
+                    );
+                    assert_eq!(
+                        actual.tokens,
+                        row["opening"]["tokens"].as_u64().unwrap() as usize,
+                        "{name} budget={budget} tokens"
+                    );
+                    assert!(actual.tokens <= budget);
+                }
+            }
+            for row in case["reads"].as_array().unwrap() {
+                let reference = row["ref"].as_str().unwrap();
+                let budget = row["budget"].as_u64().unwrap() as usize;
+                let actual = session.read(reference, session.revision(), budget, None, |text| {
+                    Encoding::O200kBase.count(text)
+                });
+                if let Some(error) = row.get("error") {
+                    assert_eq!(
+                        actual.unwrap_err().0,
+                        error.as_str().unwrap(),
+                        "{name} {reference} budget={budget}"
+                    );
+                } else {
+                    assert_eq!(
+                        actual.unwrap(),
+                        row["text"].as_str().unwrap(),
+                        "{name} {reference} budget={budget}"
+                    );
+                }
+            }
+            for row in case["field_reads"].as_array().unwrap() {
+                let reference = row["ref"].as_str().unwrap();
+                let budget = row["budget"].as_u64().unwrap() as usize;
+                let offset = row["offset"].as_u64().map(|offset| offset as usize);
+                let actual = session.read(reference, session.revision(), budget, offset, |text| {
+                    Encoding::O200kBase.count(text)
+                });
+                if let Some(error) = row.get("error") {
+                    assert_eq!(
+                        actual.unwrap_err().0,
+                        error.as_str().unwrap(),
+                        "{name} {reference} budget={budget}"
+                    );
+                } else {
+                    assert_eq!(
+                        actual.unwrap(),
+                        row["text"].as_str().unwrap(),
+                        "{name} {reference} budget={budget}"
+                    );
+                }
+            }
+            for row in case["value_reads"].as_array().unwrap() {
+                let reference = row["ref"].as_str().unwrap();
+                let actual = session.read_value(reference);
+                if let Some(error) = row.get("error") {
+                    assert_eq!(
+                        actual.unwrap_err().0,
+                        error.as_str().unwrap(),
+                        "{name} {reference}"
+                    );
+                } else {
+                    assert_eq!(actual.unwrap(), row["value"], "{name} {reference}");
+                }
+            }
+        }
+    }
+    #[test]
+    fn python_oracle_navigation_profiles_and_validation() {
+        let fixtures = fixtures();
+        for case in fixtures["cases"].as_array().unwrap() {
+            let mut graph = case["authored_graph"].clone();
+            let profile =
+                (!case["profile"].is_null()).then(|| V::from_json(&case["profile"]).unwrap());
+            apply_profile(&mut graph, profile.as_ref()).unwrap();
+            let navigation = navigation_index(&graph).unwrap();
+            graph["navigation_routes"] = json!(navigation.groups);
+            graph["navigation_leaf_routes"] = json!(navigation.leaves);
+            assert_eq!(graph, case["graph"], "{}", case["name"]);
+        }
+        for case in fixtures["invalid_profiles"].as_array().unwrap() {
+            let mut graph = fixtures["cases"][0]["authored_graph"].clone();
+            let profile = V::from_json(&case["profile"]).unwrap();
+            assert_eq!(
+                apply_profile(&mut graph, Some(&profile)).unwrap_err().0,
+                case["error"].as_str().unwrap()
+            );
+        }
+    }
+    #[test]
+    fn verified_lean_guard_accepts_python_packets_and_refuses_corruptions() {
+        let program = program();
+        let fixtures = fixtures();
+        for case in fixtures["cases"].as_array().unwrap() {
+            let session = from_fixture(case);
+            assert_eq!(
+                program
+                    .scan(&session.graph, &OperationalBounds::default())
+                    .unwrap(),
+                session.scan
+            );
+            for budget in [700, 1200] {
+                let opening = session
+                    .opening(budget, |text| Encoding::O200kBase.count(text))
+                    .unwrap();
+                assert_eq!(
+                    session.guard_opening(&opening, &program).unwrap()["accepted"],
+                    true,
+                    "{}",
+                    case["name"]
+                );
+            }
+        }
+        let session = from_fixture(&fixtures["cases"][0]);
+        let opening = session
+            .opening(700, |text| Encoding::O200kBase.count(text))
+            .unwrap();
+        for (field, value) in [
+            ("cells", json!([])),
+            ("events", json!({})),
+            ("links", json!([])),
+            ("counts", json!({})),
+        ] {
+            let mut corrupt = opening.clone();
+            corrupt.packet[field] = value;
+            assert!(
+                session
+                    .guard_opening(&corrupt, &program)
+                    .unwrap_err()
+                    .0
+                    .contains("invalid projection"),
+                "{field}"
+            );
+        }
+        for field in ["project", "revision"] {
+            let mut corrupt = opening.clone();
+            corrupt.packet[field] = json!("wrong");
+            assert_eq!(
+                session.guard_opening(&corrupt, &program).unwrap_err().0,
+                "view context does not match this record snapshot"
+            );
+        }
+        for field in ["orientation", "rules"] {
+            let mut corrupt = opening.clone();
+            corrupt.packet[field] = json!("wrong");
+            assert_eq!(
+                session.guard_opening(&corrupt, &program).unwrap_err().0,
+                "view orientation or rules changed"
+            );
+        }
+    }
 }

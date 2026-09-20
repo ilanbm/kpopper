@@ -282,6 +282,8 @@ fn ordinary_search_context_and_proposals_are_revision_bound_and_idempotent() {
     .unwrap();
     assert_eq!(retained["value"]["id"], first["id"]);
     assert_eq!(retained["value"]["stale_base"], false);
+    let fresh_open = ok(command(root, "open").output().unwrap());
+    assert!(fresh_open.contains("pending=1 stale=0; native hypotheses=0"));
     let before = fs::read_dir(root.join("state")).unwrap().count();
     fs::write(
         root.join("GROUNDING.yaml"),
@@ -295,6 +297,168 @@ fn ordinary_search_context_and_proposals_are_revision_bound_and_idempotent() {
     assert_eq!(stale.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&stale.stderr).contains("reopen"));
     assert_eq!(fs::read_dir(root.join("state")).unwrap().count(), before);
+    let stale_open = ok(command(root, "open").output().unwrap());
+    assert!(stale_open.contains("pending=1 stale=1; native hypotheses=0"));
+}
+
+#[test]
+fn ordinary_default_open_folds_and_advertised_handles_are_readable() {
+    let temp = fixture();
+    let root = temp.path();
+    let more = (0..40)
+        .map(|i| format!("  p.extra{i:02}: {{v: {i}, from: s.note}}\n"))
+        .collect::<String>();
+    let record = RECORD
+        .replace("  p.map:", &(more + "  p.map:"))
+        .replace("seen: {p.a: 12}", "seen: {p.a: 5}")
+        + "open:\n  q.later: {text: 'Which evidence is missing?'}\n";
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let opened = ok(command(root, "open").output().unwrap());
+    assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&opened) <= 700);
+    assert!(opened.contains("+ /known/p [42] source_count=41"));
+    assert!(opened.contains("p.a seen=5 current=12"));
+    assert!(opened.contains("questions=1"));
+    assert!(opened.contains("review=1"));
+    let revision = revision(&opened);
+    for (reference, expected) in [
+        ("/known/p", "+ /known/p [42] source_count=41"),
+        ("links:/known/p", "+ links:/known/p [41] source_count=41"),
+    ] {
+        let text = ok(command(root, "read")
+            .args([
+                "--ref",
+                reference,
+                "--revision",
+                &revision,
+                "--tokens",
+                "100",
+            ])
+            .output()
+            .unwrap());
+        assert!(text.contains(expected));
+        assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&text) <= 100);
+    }
+    for reference in [
+        "orientation",
+        "p.a",
+        "p.map#/body/v",
+        "node:d.keep#/state_tags_ref",
+        "node:d.keep#/state_tags_scope",
+    ] {
+        let response: J = serde_json::from_str(&ok(command(root, "read")
+            .args(["--ref", reference, "--revision", &revision])
+            .output()
+            .unwrap()))
+        .unwrap();
+        assert_eq!(response["complete"], true);
+    }
+    let source = command(root, "read")
+        .args(["--ref", "source:p.a", "--revision", &revision])
+        .output()
+        .unwrap();
+    assert_eq!(source.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&source.stderr)
+            .contains("this is a record entry; read node:p.a with this revision")
+    );
+}
+
+#[test]
+fn ordinary_read_directories_preserve_authored_order_and_scalar_key_identity() {
+    let fixture_data: J =
+        serde_json::from_str(include_str!("fixtures/ordinary-session-view-oracle.json")).unwrap();
+    for case in fixture_data["source_order_cases"].as_array().unwrap() {
+        let temp = fixture();
+        let root = temp.path();
+        fs::write(
+            root.join("GROUNDING.yaml"),
+            case["record"].as_str().unwrap(),
+        )
+        .unwrap();
+        if let Some(profile) = case["profile_text"].as_str() {
+            fs::create_dir_all(root.join(".kpopper")).unwrap();
+            fs::write(root.join(".kpopper/session.json"), profile).unwrap();
+        }
+        if let Some(hypothesis) = case["hypothesis"].as_str() {
+            fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+            fs::write(root.join(".kpopper/hypotheses/candidate.yaml"), hypothesis).unwrap();
+        }
+        for (filename, contents) in case["extra_hypotheses"].as_object().unwrap() {
+            fs::write(
+                root.join(".kpopper/hypotheses").join(filename),
+                contents.as_str().unwrap(),
+            )
+            .unwrap();
+        }
+        let opened = ok(command(root, "open").output().unwrap());
+        let revision = revision(&opened);
+        for (reference, keys) in case["directories"].as_object().unwrap() {
+            let response: J = serde_json::from_str(&ok(command(root, "read")
+                .args([
+                    "--ref",
+                    reference,
+                    "--revision",
+                    &revision,
+                    "--tokens",
+                    "300",
+                ])
+                .output()
+                .unwrap()))
+            .unwrap();
+            assert_eq!(response["complete"], false);
+            let prefix = format!(
+                "{reference}{}/",
+                if reference.contains('#') { "" } else { "#" }
+            );
+            let expected = keys
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|key| {
+                    format!(
+                        "{prefix}{}",
+                        key.as_str().unwrap().replace('~', "~0").replace('/', "~1")
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                response["children"],
+                json!(expected),
+                "{} {reference}",
+                case["name"]
+            );
+        }
+        let response: J = serde_json::from_str(&ok(command(root, "read")
+            .args([
+                "--ref",
+                "node:p.map#/body/v",
+                "--revision",
+                &revision,
+                "--tokens",
+                "65536",
+            ])
+            .output()
+            .unwrap()))
+        .unwrap();
+        assert_eq!(response["value"], case["value"], "{}", case["name"]);
+        for (name, expected) in case["hypothesis_values"].as_object().unwrap() {
+            let reference = format!("native#/{name}");
+            let mut response: J = serde_json::from_str(&ok(command(root, "read")
+                .args([
+                    "--ref",
+                    &reference,
+                    "--revision",
+                    &revision,
+                    "--tokens",
+                    "65536",
+                ])
+                .output()
+                .unwrap()))
+            .unwrap();
+            response["value"]["path"] = json!("PATH");
+            assert_eq!(response["value"], *expected, "hypothesis {name}");
+        }
+    }
 }
 
 #[test]
@@ -360,6 +524,53 @@ fn pinned_python_oracle_matches_native_open_read_and_verify_packets() {
             .replace(oracle_revision, "REVISION")
     );
     assert!(open.contains("d.keep"));
+    for row in oracle["budget_openings"]
+        .as_array()
+        .expect("oracle driver must include default and constrained budget openings")
+    {
+        let budget = row["budget"].to_string();
+        let output = command(root, "open")
+            .args(["--tokens", &budget])
+            .output()
+            .unwrap();
+        if row.get("error").is_some() {
+            assert_eq!(output.status.code(), Some(2));
+            // Context revisions differ between runtimes and can have different
+            // BPE lengths. Exact token/error parity is covered by frozen graphs.
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains("minimum complete opening needs")
+            );
+        } else {
+            assert_eq!(
+                ok(output).replace(&revision, "REVISION"),
+                row["text"]
+                    .as_str()
+                    .unwrap()
+                    .replace(oracle_revision, "REVISION")
+            );
+        }
+    }
+    for (reference, expected) in oracle["handle_reads"]
+        .as_object()
+        .expect("oracle driver must include advertised handles")
+    {
+        let mut actual: J = serde_json::from_str(&ok(command(root, "read")
+            .args([
+                "--ref",
+                reference,
+                "--revision",
+                &revision,
+                "--tokens",
+                "1600",
+            ])
+            .output()
+            .unwrap()))
+        .unwrap();
+        let mut expected = expected.clone();
+        actual["revision"] = json!("REVISION");
+        expected["revision"] = json!("REVISION");
+        assert_eq!(actual, expected, "{reference}");
+    }
     let mut native: J = serde_json::from_str(&ok(command(root, "read")
         .args([
             "--ref",
@@ -553,4 +764,29 @@ fn pinned_python_oracle_matches_native_open_read_and_verify_packets() {
     )
     .unwrap();
     assert_eq!(mcp_proposal, native_proposal);
+    let fresh = ok(command(root, "open").output().unwrap());
+    assert_eq!(
+        fresh.replace(&revision, "REVISION"),
+        oracle["fresh_open"]
+            .as_str()
+            .unwrap()
+            .replace(oracle_revision, "REVISION")
+    );
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        RECORD.replace("v: 12", "v: 13"),
+    )
+    .unwrap();
+    let stale = ok(command(root, "open").output().unwrap());
+    let stale_revision = stale
+        .lines()
+        .find_map(|line| line.strip_prefix("project=fixture revision="))
+        .unwrap();
+    assert_eq!(
+        stale.replace(stale_revision, "REVISION"),
+        oracle["stale_open"]
+            .as_str()
+            .unwrap()
+            .replace(oracle["stale_revision"].as_str().unwrap(), "REVISION")
+    );
 }

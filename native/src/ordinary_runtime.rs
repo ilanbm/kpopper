@@ -14,6 +14,81 @@ use std::{
     time::Duration,
 };
 
+/// Python's expressions.wire_payload lowers only executable positions. Source
+/// bodies in the session graph, revision identity and view evidence stay intact.
+fn session_payload(mut request: J, bounds: &OperationalBounds) -> Result<Vec<u8>> {
+    require(
+        serde_json::to_vec(&request)?.len() <= bounds.input_bytes,
+        "ordinary_input_limit",
+    )?;
+    fn expression(value: &mut J, predicate: bool) {
+        if value
+            .as_object()
+            .is_some_and(|object| object.contains_key("expr"))
+            && let Ok(typed) = crate::value::TypedValue::from_json(value)
+            && let Ok(tree) =
+                crate::reasoning_language::legacy_expression_detailed(&typed, predicate)
+            && let Ok(tree) = tree.to_json()
+        {
+            *value = tree;
+        }
+    }
+    fn body(value: Option<&mut J>, predicates: &[&str], snapshots: &[&str]) {
+        let Some(value) = value.and_then(J::as_object_mut) else {
+            return;
+        };
+        if let Some(rule) = value.get_mut("rule") {
+            expression(rule, false);
+        }
+        for field in predicates {
+            if let Some(predicate) = value.get_mut(*field) {
+                expression(predicate, true);
+            }
+        }
+        for field in snapshots {
+            if let Some(seen) = value.get_mut(*field).and_then(J::as_object_mut) {
+                for snapshot in seen.values_mut() {
+                    if let Some(rule) = snapshot
+                        .get_mut("computed")
+                        .and_then(J::as_object_mut)
+                        .and_then(|computed| computed.get_mut("rule"))
+                    {
+                        expression(rule, false);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(nodes) = request
+        .get_mut("record")
+        .and_then(|record| record.get_mut("nodes"))
+        .and_then(J::as_object_mut)
+    {
+        for node in nodes.values_mut() {
+            let predicate = node["assessment_fields"]["predicate"]
+                .as_str()
+                .unwrap_or("wrong_if")
+                .to_owned();
+            let snapshot = node["assessment_fields"]["snapshot"]
+                .as_str()
+                .unwrap_or("seen")
+                .to_owned();
+            body(node.get_mut("body"), &[&predicate], &[&snapshot]);
+            body(
+                node.get_mut("assessment_body"),
+                &[&predicate, "wrong_if"],
+                &[&snapshot, "seen"],
+            );
+        }
+    }
+    if let Some(predicate) = request.get_mut("predicate") {
+        expression(predicate, true);
+    }
+    let payload = serde_json::to_vec(&request)?;
+    require(payload.len() <= bounds.input_bytes, "ordinary_input_limit")?;
+    Ok(payload)
+}
+
 #[derive(Debug)]
 pub struct Program {
     root: PathBuf,
@@ -102,6 +177,13 @@ impl Program {
             output_bytes: bounds.output_bytes.min(self.bounds.output_bytes),
         })
     }
+    /// Ordinary session operations retain the Python subprocess contract of
+    /// twenty seconds. Compute requests retain their configured runtime bound.
+    fn session_bounds(&self, bounds: &OperationalBounds) -> Result<OperationalBounds> {
+        let mut bounds = self.effective_bounds(bounds)?;
+        bounds.timeout = bounds.timeout.min(Duration::from_secs(20));
+        Ok(bounds)
+    }
     pub fn request(&self, request: &J, bounds: &OperationalBounds) -> Result<J> {
         let bounds = self.effective_bounds(bounds)?;
         let payload = serde_json::to_vec(request)?;
@@ -140,7 +222,7 @@ impl Program {
         let (status, output) = run_command_bounded_with_status(
             &mut command,
             payload,
-            Duration::from_secs(20).min(bounds.timeout),
+            bounds.timeout,
             bounds.output_bytes,
         )?;
         self.verify()?;
@@ -157,10 +239,9 @@ impl Program {
 
     /// Evaluate the complete ordinary checked-reader graph once.
     pub fn scan(&self, record: &J, bounds: &OperationalBounds) -> Result<J> {
-        let bounds = self.effective_bounds(bounds)?;
+        let bounds = self.session_bounds(bounds)?;
         let request = serde_json::json!({"operation":"scan","record":record});
-        let payload = serde_json::to_vec(&request)?;
-        require(payload.len() <= bounds.input_bytes, "ordinary_input_limit")?;
+        let payload = session_payload(request, &bounds)?;
         let (_, result) = self.execute(payload, &bounds, &[0])?;
         require(
             result["counts"].is_object()
@@ -191,10 +272,9 @@ impl Program {
         assertions: &[J],
         bounds: &OperationalBounds,
     ) -> Result<J> {
-        let bounds = self.effective_bounds(bounds)?;
+        let bounds = self.session_bounds(bounds)?;
         let request = serde_json::json!({"record":record,"id":judgment,"assertions":assertions});
-        let payload = serde_json::to_vec(&request)?;
-        require(payload.len() <= bounds.input_bytes, "ordinary_input_limit")?;
+        let payload = session_payload(request, &bounds)?;
         let (code, result) = self.execute(payload, &bounds, &[0, 2])?;
         require(
             result["assertion_checks"].is_array()
@@ -229,6 +309,57 @@ impl Program {
         require(
             (code == 0 && accepted) || (code == 2 && !accepted),
             "invalid_ordinary_assessment_status",
+        )?;
+        Ok(result)
+    }
+
+    /// Verify a complete navigation projection with the same checked program
+    /// that computed the ordinary assessment. No caller-authored acceptance is
+    /// trusted, and record identity is re-derived before invoking Lean.
+    pub fn guard_view(&self, record: &J, view: &J, bounds: &OperationalBounds) -> Result<J> {
+        let project = record["project_context"].as_str().unwrap_or("");
+        let snapshot = sha256(&serde_json::to_vec(record)?);
+        let revision = sha256(&serde_json::to_vec(
+            &serde_json::json!({"project":project,"graph":snapshot}),
+        )?);
+        require(
+            !project.is_empty() && view["project"] == project && view["revision"] == revision,
+            "view context does not match this record snapshot",
+        )?;
+        let orientation = record
+            .get("orientation")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        require(
+            view["orientation"] == orientation
+                && view["rules"] == include_str!("../../scripts/session/rules.txt").trim(),
+            "view orientation or rules changed",
+        )?;
+        let bounds = self.session_bounds(bounds)?;
+        let payload = session_payload(
+            serde_json::json!({"operation":"guard_view","record":record,"view":view}),
+            &bounds,
+        )?;
+        let (_, result) = self.execute(payload, &bounds, &[0])?;
+        let checks = [
+            "accepted",
+            "coverage",
+            "conflicts",
+            "links",
+            "cell_ownership",
+            "counts",
+            "conditions_addressed",
+            "link_map",
+            "events",
+            "raw_links",
+        ];
+        require(
+            checks.iter().all(|key| result[*key].is_boolean()),
+            "invalid_ordinary_guard_response",
+        )?;
+        require(
+            checks.iter().all(|key| result[*key] == true),
+            &format!("invalid projection: {}", serde_json::to_string(&result)?),
         )?;
         Ok(result)
     }
@@ -338,6 +469,121 @@ mod tests {
                 .unwrap_err()
                 .0,
             "runtime_timeout"
+        );
+    }
+
+    fn empty_view() -> (J, J) {
+        let record = serde_json::json!({"project_context":"fixture","nodes":{},"edges":[]});
+        let revision = sha256(&serde_json::to_vec(&serde_json::json!({"project":"fixture","graph":sha256(&serde_json::to_vec(&record).unwrap())})).unwrap());
+        let view = serde_json::json!({"project":"fixture","revision":revision,"orientation":{},"rules":include_str!("../../scripts/session/rules.txt").trim()});
+        (record, view)
+    }
+
+    #[test]
+    fn session_executable_lowering_matches_python_without_rewriting_evidence() {
+        let fixture: J = serde_json::from_str(include_str!(
+            "../tests/fixtures/ordinary-session-view-oracle.json"
+        ))
+        .unwrap();
+        for case in fixture["wire_requests"].as_array().unwrap() {
+            let actual: J = serde_json::from_slice(
+                &session_payload(case["input"].clone(), &OperationalBounds::default()).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(actual, case["wire"]);
+        }
+    }
+
+    #[test]
+    fn compute_keeps_configured_timeout_and_sessions_have_explicit_twenty_second_cap() {
+        let (_temp, mut program) = scripted(b"#!/bin/sh\nprintf '{}'");
+        let bounds = OperationalBounds {
+            timeout: Duration::from_secs(25),
+            ..Default::default()
+        };
+        assert_eq!(
+            program.effective_bounds(&bounds).unwrap().timeout,
+            Duration::from_secs(25)
+        );
+        assert_eq!(
+            program.session_bounds(&bounds).unwrap().timeout,
+            Duration::from_secs(20)
+        );
+        program.limit(&OperationalBounds {
+            timeout: Duration::from_millis(20),
+            ..Default::default()
+        });
+        assert_eq!(
+            program.effective_bounds(&bounds).unwrap().timeout,
+            Duration::from_millis(20)
+        );
+        assert_eq!(
+            program.session_bounds(&bounds).unwrap().timeout,
+            Duration::from_millis(20)
+        );
+    }
+
+    #[test]
+    fn guard_protocol_and_process_limits_fail_closed() {
+        let (record, view) = empty_view();
+        let (temp, mut program) = scripted(b"#!/bin/sh\nprintf '{\"accepted\":true}'");
+        assert_eq!(
+            program
+                .guard_view(&record, &view, &OperationalBounds::default())
+                .unwrap_err()
+                .0,
+            "invalid_ordinary_guard_response"
+        );
+        program.limit(&OperationalBounds {
+            input_bytes: 1,
+            ..Default::default()
+        });
+        assert_eq!(
+            program
+                .guard_view(&record, &view, &OperationalBounds::default())
+                .unwrap_err()
+                .0,
+            "ordinary_input_limit"
+        );
+        program.limit(&OperationalBounds {
+            output_bytes: 1,
+            ..Default::default()
+        });
+        assert_eq!(
+            program
+                .guard_view(&record, &view, &OperationalBounds::default())
+                .unwrap_err()
+                .0,
+            "output_limit"
+        );
+        program.limit(&OperationalBounds::default());
+        fs::write(temp.path().join("epistemic-core"), b"changed").unwrap();
+        assert_eq!(
+            program
+                .guard_view(&record, &view, &OperationalBounds::default())
+                .unwrap_err()
+                .0,
+            "ordinary_program_changed"
+        );
+        let (_temp, mut timeout) = scripted(b"#!/bin/sh\nsleep 1\nprintf '{}'");
+        timeout.limit(&OperationalBounds {
+            timeout: Duration::from_millis(20),
+            ..Default::default()
+        });
+        assert_eq!(
+            timeout
+                .guard_view(&record, &view, &OperationalBounds::default())
+                .unwrap_err()
+                .0,
+            "runtime_timeout"
+        );
+        let (_temp, rejected) = scripted(b"#!/bin/sh\nprintf '{\"accepted\":true,\"coverage\":false,\"conflicts\":true,\"links\":true,\"cell_ownership\":true,\"counts\":true,\"conditions_addressed\":true,\"link_map\":true,\"events\":true,\"raw_links\":true}'");
+        assert!(
+            rejected
+                .guard_view(&record, &view, &OperationalBounds::default())
+                .unwrap_err()
+                .0
+                .starts_with("invalid projection:")
         );
     }
 }

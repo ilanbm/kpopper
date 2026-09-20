@@ -163,6 +163,7 @@ pub struct Service {
     inputs: Inventory,
     project: String,
     navigation: Option<V>,
+    navigation_source: Option<Vec<u8>>,
     requested_profile: Option<String>,
 }
 impl Service {
@@ -253,6 +254,9 @@ impl Service {
             .as_ref()
             .map(|p| json_file(&mut inputs, p).and_then(|v| V::from_json(&v)))
             .transpose()?;
+        // JSON ingress above remains authoritative. Retain source order only
+        // for ordinary read-directory presentation, using captured bytes.
+        let navigation_source = profile.as_ref().map(|path| inputs.files[path].clone());
         let store =
             CheckedSessionStore::open(&state, &name, &input, navigation.clone(), options.encoding)?;
         inputs.verify()?;
@@ -264,6 +268,7 @@ impl Service {
             inputs,
             project: name,
             navigation,
+            navigation_source,
             requested_profile: options.assessment_profile.clone(),
         })
     }
@@ -307,12 +312,18 @@ impl Service {
             string_is(&map(&capabilities)?["profile"], "ordinary-reader/v1"),
             "checked-reader/v1 requires an ordinary record",
         )?;
+        let navigation_source = self
+            .navigation_source
+            .as_deref()
+            .map(crate::history_yaml::decode_ordinary_source_value)
+            .transpose()?;
         let session = crate::ordinary_checked_session::OrdinarySession::capture(
             &capture,
             &runtime,
             &self.project,
             self.navigation.as_ref(),
         )?
+        .with_navigation_order(navigation_source.as_ref())
         .with_proposals(self.store.proposals()?)?;
         capture.verify()?;
         Ok((capture, runtime, session))
@@ -321,13 +332,15 @@ impl Service {
     pub fn opening(&self, tokens: usize) -> Result<String> {
         crate::require((64..=65_536).contains(&tokens), "tokens must be 64..65536")?;
         if self.ordinary()? {
-            let (capture, _, session) = self.ordinary_session()?;
-            let result = session
-                .opening(tokens, |s| self.store.encoding().count(s))?
-                .text;
+            let (capture, runtime, session) = self.ordinary_session()?;
+            let opening = session.opening(tokens, |s| self.store.encoding().count(s))?;
+            let program = runtime
+                .ordinary_program()
+                .ok_or_else(|| error("ordinary expression program is not configured"))?;
+            session.guard_opening(&opening, program)?;
             capture.verify()?;
             self.inputs.verify()?;
-            return Ok(result);
+            return Ok(opening.text);
         }
         let runtime = W::core_runtime()?;
         let capture = source_capture::capture_source_with_runtime(
