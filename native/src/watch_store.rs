@@ -128,6 +128,18 @@ fn git_with_program(
     command.stdout(std::process::Stdio::piped());
     command.stderr(std::process::Stdio::piped());
     let mut child = command.spawn()?;
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let stdout_thread = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        stdout.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let stderr_thread = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        stderr.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes).map(|_| bytes)
+    });
     let deadline = std::time::Instant::now() + timeout;
     loop {
         if child.try_wait()?.is_some() {
@@ -136,6 +148,8 @@ fn git_with_program(
         if std::time::Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = stdout_thread.join();
+            let _ = stderr_thread.join();
             return Err(error(format!(
                 "Git command timed out after {} seconds",
                 timeout.as_secs()
@@ -143,7 +157,14 @@ fn git_with_program(
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    let out = child.wait_with_output()?;
+    let status = child.wait()?;
+    let stdout = stdout_thread
+        .join()
+        .map_err(|_| error("Git output reader failed"))??;
+    let stderr = stderr_thread
+        .join()
+        .map_err(|_| error("Git error reader failed"))??;
+    let out = std::process::Output { status, stdout, stderr };
     require(
         out.status.success(),
         &format!(
@@ -178,6 +199,20 @@ mod git_tests {
                 .unwrap_err()
                 .0,
             "Git command timed out after 0 seconds"
+        );
+    }
+
+    #[test]
+    fn git_output_is_drained_beyond_pipe_capacity() {
+        let temp = tempfile::tempdir().unwrap();
+        let fake = temp.path().join("git");
+        fs::write(&fake, b"#!/bin/sh\nyes x | head -c 200000\n").unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(
+            git_with_program(&fake.to_string_lossy(), Path::new("."), &["status"], Duration::from_secs(1))
+                .unwrap()
+                .len(),
+            199999
         );
     }
 }
@@ -499,6 +534,11 @@ impl Watch {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;

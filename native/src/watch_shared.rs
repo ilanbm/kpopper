@@ -31,9 +31,7 @@ pub fn load_report(path: &str) -> Result<J> {
     crate::json_ingress::parse_slice_bounded(&raw, crate::json_ingress::DuplicateKeys::Reject, 128)
         .map_err(|e| {
             let message = e.to_string();
-            if raw.windows(3).any(|part| part == b"NaN")
-                || raw.windows(8).any(|part| part == b"Infinity")
-            {
+            if has_nonfinite_token(&raw) {
                 return error("shared observations need a finite scalar value");
             }
             if let Some(key) = message.strip_prefix("Duplicate JSON key: ") {
@@ -46,6 +44,41 @@ pub fn load_report(path: &str) -> Result<J> {
                 error(message)
             }
         })
+}
+fn has_nonfinite_token(raw: &[u8]) -> bool {
+    let mut quoted = false;
+    let mut escaped = false;
+    let mut index = 0;
+    while index < raw.len() {
+        let byte = raw[index];
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = false;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'"' {
+            quoted = true;
+            index += 1;
+            continue;
+        }
+        for token in [b"NaN".as_slice(), b"Infinity".as_slice()] {
+            if raw[index..].starts_with(token)
+                && (index == 0 || !raw[index - 1].is_ascii_alphanumeric())
+                && (index + token.len() == raw.len()
+                    || !raw[index + token.len()].is_ascii_alphanumeric())
+            {
+                return true;
+            }
+        }
+        index += 1;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -60,6 +93,21 @@ mod tests {
         assert_eq!(
             load_report(temp.path().to_str().unwrap()).unwrap_err().0,
             "shared observations need a finite scalar value"
+        );
+    }
+
+    #[test]
+    fn quoted_nonfinite_text_and_duplicate_json_keep_parser_errors() {
+        let quoted = tempfile::NamedTempFile::new().unwrap();
+        fs::write(quoted.path(), br#"{"id":"e","value":"NaN"}"#).unwrap();
+        assert!(load_report(quoted.path().to_str().unwrap()).is_ok());
+        let duplicate = tempfile::NamedTempFile::new().unwrap();
+        fs::write(duplicate.path(), br#"{"id":"e","id":"e2","value":1}"#).unwrap();
+        assert!(
+            !load_report(duplicate.path().to_str().unwrap())
+                .unwrap_err()
+                .0
+                .contains("finite scalar")
         );
     }
 }
