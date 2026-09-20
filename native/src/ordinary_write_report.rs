@@ -147,12 +147,11 @@ pub(crate) fn render(
         {
             for (judgment, versions) in kept {
                 let versions = list(versions);
-                let last = (0..versions.len())
-                    .rfind(|index| {
-                        list(get(version(versions, *index), "rests_on"))
-                            .iter()
-                            .any(|v| string_is(v, id))
-                    });
+                let last = (0..versions.len()).rfind(|index| {
+                    list(get(version(versions, *index), "rests_on"))
+                        .iter()
+                        .any(|v| string_is(v, id))
+                });
                 if let Some(index) = last {
                     out.push(format!("  listened to by nothing standing - {judgment} listened until {}: pull {judgment} --history", py(get(&versions[index], "day"))));
                 }
