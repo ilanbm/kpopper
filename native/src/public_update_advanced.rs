@@ -277,6 +277,7 @@ pub(crate) fn capture_prepared_history(
         &source_id,
         prepared.diagnostics,
         pending,
+        "Complete scoped history report captured in pending_grounding",
     )
 }
 
@@ -457,6 +458,7 @@ fn finish(
     source_id: &str,
     diagnostics: Vec<String>,
     pending: V,
+    reason: &str,
 ) -> Result<Output> {
     let (mut answer, signals) = super::receipt(
         report,
@@ -466,7 +468,7 @@ fn finish(
         context.source_path,
         context.envelope_sha256,
         "project_captured",
-        Some("Complete report captured in pending_grounding"),
+        Some(reason),
         false,
         None,
         None,
@@ -658,6 +660,14 @@ pub(crate) fn capture(
         },
     )?;
     (context.after_capture)()?;
+    let reason = if map(field(map(&bundle)?, "manifest")?)?
+        .get("version")
+        .is_some_and(|value| crate::history_contract::is_int(value, "3"))
+    {
+        "Complete scoped history report captured in pending_grounding"
+    } else {
+        "Complete report captured in pending_grounding"
+    };
     Ok(Some(finish(
         report,
         event,
@@ -665,6 +675,7 @@ pub(crate) fn capture(
         &source_id,
         prepared.diagnostics,
         pending,
+        reason,
     )?))
 }
 
@@ -783,6 +794,14 @@ pub(crate) fn recover(
             }
         },
     )?;
+    let reason = if map(field(map(&bundle)?, "manifest")?)?
+        .get("version")
+        .is_some_and(|value| crate::history_contract::is_int(value, "3"))
+    {
+        "Complete scoped history report captured in pending_grounding"
+    } else {
+        "Complete report captured in pending_grounding"
+    };
     Ok(Some(finish(
         report,
         event,
@@ -790,6 +809,7 @@ pub(crate) fn recover(
         source_id,
         diagnostics,
         pending,
+        reason,
     )?))
 }
 
