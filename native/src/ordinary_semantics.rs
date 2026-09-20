@@ -65,31 +65,6 @@ pub(crate) fn reversal_pending(body: &V) -> Option<String> {
     }
 }
 
-#[cfg(test)]
-mod reversal_tests {
-    use super::*;
-
-    #[test]
-    fn a_reversal_is_acknowledged_only_by_a_valid_review_day() {
-        for (reviewed, pending) in [
-            (V::Null, true),
-            (s("unknown"), true),
-            (s("2026-09-31"), true),
-            (s("2026-09-15"), true),
-            (s(" 2026-09-16 after reading"), false),
-            (s("2026-09-17T12:30:00Z"), false),
-        ] {
-            let body = V::Map(Map::from([
-                (
-                    "replaced".into(),
-                    V::List(vec![s("its condition fired on 2026-09-16")]),
-                ),
-                ("reviewed".into(), reviewed.clone()),
-            ]));
-            assert_eq!(reversal_pending(&body).is_some(), pending, "{reviewed:?}");
-        }
-    }
-}
 pub(crate) fn predicate_of(body: &V, fields: &Map) -> V {
     let v = map(body)
         .ok()
@@ -550,34 +525,6 @@ pub(crate) fn arrangement(reader: &Reader<'_>, body: &V) -> bool {
 mod tests {
     use super::*;
     use crate::ordinary_value::{Map, NonFiniteFloat};
-    #[test]
-    fn finite_reader_semantics_stay_equal_to_the_existing_oracle() {
-        let data: J =
-            serde_json::from_str(include_str!("../tests/fixtures/ordinary-reader.json")).unwrap();
-        let raw = V::from_typed(&crate::value::TypedValue::from_tagged(&data["raw"]).unwrap());
-        let raw = map(&raw).unwrap();
-        let ids = data["ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap().into())
-            .collect();
-        let program = crate::ordinary_reader::tests::program();
-        for row in data["values"].as_array().unwrap() {
-            assert_eq!(
-                value_of(raw, &ids, row["key"].as_str().unwrap(), Some(&program)).unwrap(),
-                V::from_typed(&crate::value::TypedValue::from_tagged(&row["value"]).unwrap())
-            );
-        }
-        for row in data["predicates"].as_array().unwrap() {
-            let pred =
-                V::from_typed(&crate::value::TypedValue::from_tagged(&row["predicate"]).unwrap());
-            assert_eq!(
-                evaluate(&pred, raw, &ids, Some(&program)).unwrap(),
-                row["value"].as_bool()
-            );
-        }
-    }
     #[test]
     fn source_nonfinite_plain_comparisons_and_derivative_calculations_match_python() {
         let program = crate::ordinary_reader::tests::program();

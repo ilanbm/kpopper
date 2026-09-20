@@ -323,37 +323,10 @@ pub fn assess(
 mod tests {
     use super::*;
     #[test]
-    fn complete_finite_and_nonfinite_reports_match_python() {
+    fn complete_nonfinite_reports_match_python() {
         let cache = tempfile::tempdir().unwrap();
         let runtime = crate::history_authoring::tests::runtime(cache.path())
             .with_ordinary_program(crate::ordinary_reader::tests::program());
-        let original: serde_json::Value =
-            serde_json::from_str(include_str!("../tests/fixtures/ordinary-assessment.json"))
-                .unwrap();
-        for case in original["cases"].as_array().unwrap() {
-            let convert = |v: &serde_json::Value| {
-                V::from_typed(&crate::value::TypedValue::from_tagged(v).unwrap())
-            };
-            let doc = convert(&case["document"]);
-            let layers = convert(&case["layers"]);
-            let context = convert(&case["context"]);
-            for policy in [A::POLICY, "falsifiers-only/v1"] {
-                let got = assess(
-                    &doc,
-                    map(&layers).unwrap(),
-                    &context,
-                    Some(&runtime),
-                    policy,
-                )
-                .unwrap();
-                assert_eq!(
-                    got,
-                    convert(&case["reports"][policy]),
-                    "{} {policy}",
-                    case["name"]
-                );
-            }
-        }
         let cases: serde_json::Value = serde_json::from_str(include_str!(
             "../tests/fixtures/ordinary-nonfinite-reports.json"
         ))

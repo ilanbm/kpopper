@@ -860,3 +860,105 @@ mod ordinary_domain_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod nonfinite_target_tests {
+    use super::*;
+    fn git(root: &Path, args: &[&str]) {
+        let result = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    #[test]
+    fn ordinary_target_refusals_preserve_python_snapshot_boundary() {
+        for (source, reason) in [
+            (
+                "known: {p.value: {v: .nan}}\n",
+                "snapshot data contains a nonfinite value",
+            ),
+            (
+                "known: {p.value: {v: 1, .nan: source}}\n",
+                "snapshot mappings require string keys",
+            ),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            git(&root, &["init", "-q"]);
+            let entry = root.join("GROUNDING.yaml");
+            std::fs::write(&entry, source).unwrap();
+            git(&root, &["add", "GROUNDING.yaml"]);
+            git(
+                &root,
+                &[
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "commit",
+                    "-qm",
+                    "target",
+                ],
+            );
+            git(&root, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+            std::fs::write(&entry, "known: {p.value: {v: 1}}\n").unwrap();
+            let config = root.join(".git/kpopper/project");
+            std::fs::create_dir_all(&config).unwrap();
+            std::fs::write(config.join("project.json"), r#"{"version":1,"mode":"advanced","record":"GROUNDING.yaml","generation":0,"publication":{"remote":"origin","repository":"test/test","target":"main","branch":"pending_grounding","standing_permission":false}}"#).unwrap();
+            let capture = capture_ordinary_source(&[entry], &root, ReadMode::Live, None).unwrap();
+            assert_eq!(
+                map(&capture.ordinary_context()).unwrap()["target_unavailable"],
+                s(reason)
+            );
+            assert_eq!(
+                capture.reader_lines().unwrap(),
+                vec![format!("TARGET UNVERIFIED: {reason}")]
+            );
+            capture.verify().unwrap();
+        }
+    }
+    #[test]
+    fn full_domain_capture_rechecks_nonfinite_source_and_hypothesis_bytes() {
+        for change_hypothesis in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            let entry = root.join("GROUNDING.yaml");
+            std::fs::write(&entry, "known: {p.value: {v: .nan}}\n").unwrap();
+            let dir = root.join(".kpopper/hypotheses");
+            std::fs::create_dir_all(&dir).unwrap();
+            let hypothesis = dir.join("other.yaml");
+            std::fs::write(&hypothesis, "known: {p.value: {v: .inf}}\n").unwrap();
+            let error = match capture_ordinary_with(
+                &[entry.clone()],
+                &root,
+                ReadMode::Frozen,
+                None,
+                &mut |pass, _| {
+                    if pass == 0 {
+                        std::fs::write(
+                            if change_hypothesis {
+                                &hypothesis
+                            } else {
+                                &entry
+                            },
+                            "known: {p.value: {v: -.inf}}\n",
+                        )?;
+                    }
+                    Ok(())
+                },
+                None,
+            ) {
+                Ok(_) => panic!("accepted changed nonfinite capture"),
+                Err(error) => error,
+            };
+            assert_eq!(error.0, "snapshot_changed");
+        }
+    }
+}
