@@ -7,6 +7,7 @@ pub mod checked_session;
 pub mod checked_session_store;
 pub mod core_html;
 pub mod direct_history;
+mod followup_core;
 pub mod followup_store;
 pub mod followup_triggers;
 pub mod history_activation;

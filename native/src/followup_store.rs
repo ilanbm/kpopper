@@ -1,8 +1,7 @@
 //! Durable workspace-local followups, independent of the canonical task store.
 use crate::{
-    Error, Result, followup_triggers as triggers, history_contract as H, history_view::list,
-    identity::sha256, ordinary_reader::Reader, require, source_capture::ReadMode,
-    value::TypedValue as V,
+    Error, Result, followup_triggers as triggers, history_contract as H, identity::sha256,
+    ordinary_reader::Reader, require, source_capture::ReadMode, value::TypedValue as V,
 };
 use chrono::{DateTime, Duration, Utc};
 use fs2::FileExt;
@@ -58,15 +57,18 @@ fn state_home() -> Result<PathBuf> {
         .ok_or_else(|| error("home_directory_unavailable"))
 }
 
-fn typed_json(value: &V) -> Result<Value> {
+pub(crate) fn typed_json(value: &V) -> Result<Value> {
     Ok(match value {
         V::Null => Value::Null,
         V::Bool(value) => json!(value),
         V::Integer(value) => Value::Number(value.as_str().parse()?),
-        V::Float(value) => json!(value.get()),
+        V::Float(value) => Value::Number(crate::identity::python_float(value.get()).parse()?),
         V::Text(value) => json!(value),
         V::Date(value) => json!(value.as_str()),
-        V::DateTime(value) => json!(value.as_str()),
+        V::DateTime(value) => json!(triggers::stamp(triggers::parse_time(
+            value.as_str(),
+            "UTC"
+        )?)),
         V::List(values) => Value::Array(values.iter().map(typed_json).collect::<Result<_>>()?),
         V::Map(values) => Value::Object(
             values
@@ -97,31 +99,66 @@ pub fn parse_input(raw: &[u8]) -> Result<Value> {
     require(raw.len() <= MAX_BYTES, "byte_limit")?;
     let first = raw.iter().copied().find(|byte| !byte.is_ascii_whitespace());
     if matches!(first, Some(b'{' | b'[')) {
-        return crate::json_ingress::parse_slice_bounded(
+        let value = crate::json_ingress::parse_slice_bounded(
             raw,
             crate::json_ingress::DuplicateKeys::Reject,
             128,
         )
-        .map_err(|e| error(format!("invalid_json: {e}")));
+        .map_err(|e| error(format!("invalid_json: {e}")))?;
+        return canonical(&value);
     }
     typed_json(&crate::history_yaml::decode_document(raw)?)
 }
 
-fn canonical(value: &Value) -> Value {
-    match value {
-        Value::Array(values) => Value::Array(values.iter().map(canonical).collect()),
-        Value::Object(values) => Value::Object(
-            values
-                .iter()
-                .map(|(key, value)| (key.clone(), canonical(value)))
-                .collect(),
-        ),
-        value => value.clone(),
+fn canonical(value: &Value) -> Result<Value> {
+    fn visit(value: &Value, depth: usize, count: &mut usize) -> Result<Value> {
+        *count += 1;
+        require(
+            depth <= 100 && *count <= 100_000,
+            "value exceeds normalization bounds",
+        )?;
+        Ok(match value {
+            Value::Number(number) => {
+                let spelling = number.to_string();
+                let normalized = if spelling.contains(['.', 'e', 'E']) {
+                    let float = spelling
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|v| v.is_finite())
+                        .ok_or_else(|| error("nonfinite numbers are not supported"))?;
+                    crate::identity::python_float(float)
+                } else {
+                    require(
+                        spelling.trim_start_matches('-').len() <= 4300,
+                        "integer exceeds 4300 digits",
+                    )?;
+                    spelling
+                        .parse::<num_bigint::BigInt>()
+                        .map_err(|_| error("invalid integer"))?
+                        .to_string()
+                };
+                Value::Number(normalized.parse()?)
+            }
+            Value::Array(values) => Value::Array(
+                values
+                    .iter()
+                    .map(|v| visit(v, depth + 1, count))
+                    .collect::<Result<_>>()?,
+            ),
+            Value::Object(values) => Value::Object(
+                values
+                    .iter()
+                    .map(|(key, v)| Ok((key.clone(), visit(v, depth + 1, count)?)))
+                    .collect::<Result<_>>()?,
+            ),
+            value => value.clone(),
+        })
     }
+    visit(value, 0, &mut 0)
 }
 
 pub fn digest(value: &Value) -> Result<String> {
-    Ok(sha256(&serde_json::to_vec(&canonical(value))?))
+    Ok(sha256(&serde_json::to_vec(&canonical(value)?)?))
 }
 
 fn text(value: Option<&Value>, field: &str) -> Result<String> {
@@ -254,9 +291,60 @@ fn atomic(path: &Path, raw: &[u8]) -> Result<()> {
 }
 
 fn atomic_value(path: &Path, value: &Value) -> Result<()> {
-    let mut raw = serde_json::to_vec_pretty(&canonical(value))?;
+    atomic(path, &serialized_value(value)?)
+}
+
+fn serialized_value(value: &Value) -> Result<Vec<u8>> {
+    // This shared ledger is also read as YAML 1.1. JSON exponent tokens without
+    // a decimal point would be read as strings by the Python reader.
+    let raw = serde_json::to_string_pretty(&canonical(value)?)?;
+    let mut safe = String::with_capacity(raw.len());
+    let mut quoted = false;
+    let mut escaped = false;
+    let bytes = raw.as_bytes();
+    let mut at = 0;
+    while at < bytes.len() {
+        let ch = raw[at..].chars().next().unwrap();
+        if !quoted && (ch == '-' || ch.is_ascii_digit()) {
+            let end = at
+                + bytes[at..]
+                    .iter()
+                    .take_while(|b| b.is_ascii_digit() || b"-+.eE".contains(b))
+                    .count();
+            let token = &raw[at..end];
+            if let Some(exp) = token.find(['e', 'E'])
+                && !token[..exp].contains('.')
+            {
+                safe.push_str(&token[..exp]);
+                safe.push_str(".0");
+                safe.push_str(&token[exp..]);
+            } else {
+                safe.push_str(token);
+            }
+            at = end;
+            continue;
+        }
+        safe.push(ch);
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = false;
+            }
+        } else if ch == '"' {
+            quoted = true;
+        }
+        at += ch.len_utf8();
+    }
+    let mut raw = safe.into_bytes();
     raw.push(b'\n');
-    atomic(path, &raw)
+    require(
+        raw.len() <= MAX_BYTES,
+        "Followups ledger is too large; retain a backup before reducing history",
+    )?;
+    Ok(raw)
 }
 
 fn python_json(value: &Value) -> Result<String> {
@@ -585,20 +673,18 @@ impl Store {
     }
 
     fn transaction<T>(&self, mutation: impl FnOnce(&mut Value) -> Result<T>) -> Result<T> {
-        require(
-            self.path.exists(),
-            "Followups are not configured. Run `kpop followups setup`.",
-        )?;
+        self.load(true)?;
         let _lock = self.lock()?;
         let mut data = self.load(true)?.unwrap();
         let before = digest(&data)?;
         let result = mutation(&mut data)?;
         if digest(&data)? != before {
+            let serialized = serialized_value(&data)?;
             atomic(
                 &self.root.join("followups.previous.yaml"),
                 &fs::read(&self.path)?,
             )?;
-            atomic_value(&self.path, &data)?;
+            atomic(&self.path, &serialized)?;
         }
         Ok(result)
     }
@@ -770,6 +856,11 @@ impl Store {
     }
 
     fn graph(&self, data: &Value) -> Result<Graph> {
+        self.graph_inner(data)
+            .map_err(|reason| error(format!("Knowledge record unavailable: {reason}")))
+    }
+
+    fn graph_inner(&self, data: &Value) -> Result<Graph> {
         let record = PathBuf::from(data["config"]["record"].as_str().unwrap());
         let workspace = PathBuf::from(data["config"]["workspace"].as_str().unwrap());
         let paths = vec![record];
@@ -793,117 +884,49 @@ impl Store {
                 crate::reasoning_runtime::OperationalBounds::default(),
                 None,
             )?;
-            let report = H::map(context.assessment())?;
-            let mut graph = Graph::default();
-            for (id, node) in H::map(&report["nodes"])? {
-                let node_map = H::map(node)?;
-                let computation = node_map.get("computation").unwrap_or(&V::Null);
-                let available = H::map(&node_map["coverage"])
-                    .ok()
-                    .and_then(|m| m.get("complete"))
-                    .is_some_and(|v| *v == V::Bool(true))
-                    && H::map(&H::map(&node_map["state"])?["integrity"])?
-                        .get("issues")
-                        .and_then(|v| list(v).ok())
-                        .is_some_and(|issues| issues.is_empty())
-                    && H::map(&H::map(&node_map["state"])?["contention"])?
-                        .get("status")
-                        .is_some_and(|v| H::string_is(v, "none_detected"))
-                    && H::map(&node_map["acceptance"])
-                        .ok()
-                        .and_then(|m| m.get("status"))
-                        .is_some_and(|v| {
-                            H::string_is(v, "accepted") || H::string_is(v, "not_applicable")
-                        });
-                let value = if let Ok(computation) = H::map(computation) {
-                    if H::string_is(&computation["status"], "ok") {
-                        typed_json(&computation["value"])?
-                    } else {
-                        Value::Null
-                    }
-                } else {
-                    let body = H::map(&node_map["body"])?;
-                    body.get("verdict")
-                        .or_else(|| body.get("title"))
-                        .map(typed_json)
-                        .transpose()?
-                        .unwrap_or(Value::Null)
-                };
-                let evidence = node.to_tagged()?;
-                graph.values.insert(id.clone(), json!({"core":{"version":1,"available":available,"value":value,"findings":typed_json(node)?,"evidence":{"encoding":"typed-json/v1","payload":evidence,"digest":node.digest()?}}}));
-                graph.core.insert(id.clone());
-                let actions = list(&node_map["attention"])?;
-                let reasons = actions
-                    .iter()
-                    .flat_map(|action| {
-                        H::map(action)
-                            .ok()
-                            .and_then(|m| m.get("reasons"))
-                            .and_then(|v| list(v).ok())
-                            .into_iter()
-                            .flatten()
-                    })
-                    .filter_map(|reason| {
-                        H::map(reason)
-                            .ok()
-                            .and_then(|m| m.get("code"))
-                            .and_then(|v| H::text(v).ok())
-                            .map(str::to_owned)
-                    })
-                    .collect::<BTreeSet<_>>();
-                if !available || !reasons.is_empty() {
-                    graph.maintenance.push(json!({"id":id,"reasons":if reasons.is_empty(){vec!["reading_unavailable".to_owned()]}else{reasons.into_iter().collect()},"snapshot_id":context.snapshot_id(),"findings_revision":context.findings_revision()}));
-                }
-            }
+            let projected = crate::followup_core::project(
+                context.assessment(),
+                context.snapshot_id(),
+                context.findings_revision(),
+            )?;
+            let graph = Graph {
+                core: projected.values.keys().cloned().collect(),
+                values: projected.values,
+                maintenance: projected.maintenance,
+            };
             capture.verify()?;
             return Ok(graph);
         }
-        let reader = Reader::new(capture.ordinary_document(), runtime.as_ref())?;
-        let report = crate::ordinary_assessment::from_capture(
-            &capture,
-            runtime.as_ref(),
-            crate::ordinary_assessment::POLICY,
-        )?;
-        let nodes = H::map(&H::map(&report)?["nodes"])?;
+        let reader = Reader::for_followups(capture.ordinary_document(), runtime.as_ref())?;
         let mut graph = Graph::default();
-        for (id, body) in reader.raw() {
-            let computed = H::map(body).is_ok_and(|map| map.contains_key("rule"));
-            match reader.value(id) {
-                Ok(V::Null) if computed => {
-                    graph.values.insert(id.clone(), json!({"unavailable":"ordinary expression program is not configured or returned no value"}));
-                }
-                Ok(value) => {
-                    graph.values.insert(id.clone(), typed_json(&value)?);
-                }
-                Err(reason) => {
-                    graph
-                        .values
-                        .insert(id.clone(), json!({"unavailable":reason.to_string()}));
-                }
-            }
-            if let Some(node) = nodes.get(id) {
-                let reasons = H::map(node)
-                    .ok()
-                    .and_then(|m| m.get("attention"))
-                    .and_then(|v| list(v).ok())
+        for id in &reader.ids {
+            let Some(body) = reader.raw().get(id) else {
+                continue;
+            };
+            let value = if id.starts_with("page.")
+                && crate::reasoning_fields::BUILTINS.contains(&id.as_str())
+            {
+                Err(error(
+                    "page inputs are unavailable; build the canonical page again",
+                ))
+            } else {
+                crate::ordinary_assessment::snapshot_value(&reader, id)
+                    .and_then(|value| crate::history_yaml::strict_ordinary_projection(&value))
+                    .and_then(|value| typed_json(&value))
+            };
+            graph.values.insert(
+                id.clone(),
+                match value {
+                    Ok(value) => value,
+                    Err(reason) => json!({"unavailable":reason.to_string()}),
+                },
+            );
+            if H::map(body).is_ok_and(|body| {
+                H::text(&reader.fields()["deps"]).is_ok_and(|key| body.contains_key(key))
+            }) {
+                let reasons = crate::ordinary_counts::flags(&reader, body)?
                     .into_iter()
-                    .flatten()
-                    .flat_map(|action| {
-                        H::map(action)
-                            .ok()
-                            .and_then(|m| m.get("reasons"))
-                            .and_then(|v| list(v).ok())
-                            .into_iter()
-                            .flatten()
-                    })
-                    .filter_map(|reason| {
-                        H::map(reason)
-                            .ok()
-                            .and_then(|m| m.get("code"))
-                            .and_then(|v| H::text(v).ok())
-                            .map(str::to_owned)
-                    })
-                    .collect::<BTreeSet<_>>();
+                    .collect::<Vec<_>>();
                 if !reasons.is_empty() {
                     graph.maintenance.push(json!({"id":id,"reasons":reasons}));
                 }
@@ -966,6 +989,7 @@ impl Store {
     }
 
     pub fn add(&self, supplied: Value) -> Result<Value> {
+        let supplied = canonical(&supplied)?;
         self.transaction(|data| {
             let executor = self.validate_spec(&supplied, data, None)?;
             let key = supplied["id"].as_str().unwrap().to_owned();
@@ -1228,10 +1252,7 @@ impl Store {
         let data = self.load(true)?.unwrap();
         let (graph, graph_error) = match self.graph(&data) {
             Ok(graph) => (graph, None),
-            Err(reason) => (
-                Graph::default(),
-                Some(format!("Knowledge record unavailable: {reason}")),
-            ),
+            Err(reason) => (Graph::default(), Some(reason.to_string())),
         };
         let now = self.now();
         let mut rows = data["items"]
@@ -1282,6 +1303,7 @@ impl Store {
     }
 
     pub fn observe(&self, report: Value) -> Result<Value> {
+        let report = canonical(&report)?;
         let object = report
             .as_object()
             .ok_or_else(|| error("An observation needs ref, value, observed_at and evidence"))?;
@@ -1437,6 +1459,7 @@ impl Store {
     }
 
     pub fn refresh(&self, key: &str, supplied: Value, evidence: &str) -> Result<Value> {
+        let supplied = canonical(&supplied)?;
         text(Some(&json!(evidence)), "reread evidence")?;
         self.transaction(|data|{
             let old=Self::item(data,key)?.clone();

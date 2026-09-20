@@ -395,6 +395,51 @@ pub struct Reader<'a> {
     runtime: Option<&'a Runtime>,
 }
 impl<'a> Reader<'a> {
+    /// Followups retain source-only records even when no judgment field roles
+    /// can be inferred, matching the legacy graph reader's explicit fallback.
+    pub(crate) fn for_followups(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
+        match Self::new(document, runtime) {
+            Ok(reader) => Ok(reader),
+            Err(error) if error.0 == "ordinary_fields_unreadable" => {
+                let raw = F::collections(document)?
+                    .into_values()
+                    .flatten()
+                    .collect::<Map>();
+                let keys = raw
+                    .values()
+                    .filter_map(|v| map(v).ok())
+                    .flat_map(|m| m.keys())
+                    .collect::<BTreeSet<_>>();
+                let mut suffix = 0usize;
+                let role = loop {
+                    let key = format!("__followup_unassigned_role_{suffix}");
+                    if !keys.contains(&key) {
+                        break key;
+                    }
+                    suffix += 1;
+                };
+                let fields = ["deps", "snapshot", "predicate"]
+                    .into_iter()
+                    .map(|name| (name.to_owned(), s(&role)))
+                    .collect();
+                let mut reader = Self {
+                    document: document.clone(),
+                    fields,
+                    ids: raw.keys().cloned().collect(),
+                    raw,
+                    hypotheses: Map::new(),
+                    knowledge_conflicts: BTreeSet::new(),
+                    runtime,
+                };
+                reader
+                    .raw
+                    .extend(crate::ordinary_counts::builtins(&reader)?);
+                Ok(reader)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     pub fn new(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
         require(
             map(&F::capabilities(document, None)?)?["profile"] == s("ordinary-reader/v1"),

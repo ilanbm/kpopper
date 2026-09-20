@@ -144,7 +144,7 @@ pub(crate) fn equal_value(a: &V, b: &V) -> bool {
         _ => python_equal(a, b),
     }
 }
-fn snapshot_value(reader: &Reader<'_>, dep: &str) -> Result<V> {
+pub(crate) fn snapshot_value(reader: &Reader<'_>, dep: &str) -> Result<V> {
     let body = get(&reader.raw, dep);
     let Ok(b) = map(body) else {
         return Ok(body.clone());

@@ -184,7 +184,7 @@ fn date_trigger_uses_the_configured_iana_timezone() {
 }
 
 #[test]
-fn core_record_baseline_retains_a_captured_reading_marker() {
+fn a_core_record_without_a_runtime_retains_unavailable_evidence() {
     let temp = tempfile::tempdir().unwrap();
     let workspace = temp.path().join("project");
     fs::create_dir(&workspace).unwrap();
@@ -202,13 +202,14 @@ fn core_record_baseline_retains_a_captured_reading_marker() {
     let added = store.add(followup).unwrap();
     assert_eq!(added["core_baseline"], json!(["p.x"]));
     assert_eq!(added["baseline"]["p.x"]["core"]["version"], 1);
-    assert_eq!(row(&store.scan(20).unwrap())["state"], "waiting");
+    assert_eq!(added["baseline"]["p.x"]["core"]["available"], false);
+    assert_eq!(row(&store.scan(20).unwrap())["state"], "unknown");
     fs::write(
         workspace.join("GROUNDING.yaml"),
         "meta: {reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nknown: {p.x: {v: 2}}\n",
     )
     .unwrap();
-    assert_eq!(row(&store.scan(20).unwrap())["state"], "ready");
+    assert_eq!(row(&store.scan(20).unwrap())["state"], "unknown");
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! Bounded, pure, three-valued followup trigger evaluation.
 use crate::{Error, Result, require};
-use chrono::{DateTime, LocalResult, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Datelike, LocalResult, NaiveDate, Offset, TimeZone, Utc};
 use chrono_tz::Tz;
 use num_bigint::BigInt;
 use serde_json::{Map, Value, json};
@@ -18,27 +18,91 @@ pub struct Evaluation {
 }
 
 pub fn stamp(value: DateTime<Utc>) -> String {
-    value.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
+    value.to_rfc3339_opts(
+        if value.timestamp_subsec_micros() == 0 {
+            chrono::SecondsFormat::Secs
+        } else {
+            chrono::SecondsFormat::Micros
+        },
+        true,
+    )
 }
 
 pub fn parse_time(value: &str, zone: &str) -> Result<DateTime<Utc>> {
+    let timezone =
+        Tz::from_str(zone).map_err(|e| Error(format!("invalid time or timezone: {e}")))?;
+    let in_range = |value: DateTime<Utc>| {
+        require(
+            (1..=9999).contains(&value.year()),
+            "invalid time or timezone: date value out of range",
+        )?;
+        Ok(value)
+    };
     if value.len() == 10 {
         let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
             .map_err(|e| Error(format!("invalid time or timezone: {e}")))?;
-        let timezone =
-            Tz::from_str(zone).map_err(|e| Error(format!("invalid time or timezone: {e}")))?;
+        require(
+            date.year() >= 1,
+            "invalid time or timezone: year 0 is out of range",
+        )?;
         let local = date
             .and_hms_opt(0, 0, 0)
             .ok_or_else(|| Error("invalid time or timezone".into()))?;
         return match timezone.from_local_datetime(&local) {
             LocalResult::Single(value) | LocalResult::Ambiguous(value, _) => {
-                Ok(value.with_timezone(&Utc))
+                in_range(value.with_timezone(&Utc))
             }
-            LocalResult::None => Err(Error(
-                "invalid time or timezone: nonexistent local time".into(),
-            )),
+            LocalResult::None => {
+                // ZoneInfo fold=0 uses the pre-transition offset for a gap.
+                for hours in 1..=48 {
+                    let Some(previous) = local.checked_sub_signed(chrono::Duration::hours(hours))
+                    else {
+                        break;
+                    };
+                    let offset = match timezone.offset_from_local_datetime(&previous) {
+                        LocalResult::Single(offset) | LocalResult::Ambiguous(offset, _) => {
+                            offset.fix().local_minus_utc()
+                        }
+                        LocalResult::None => continue,
+                    };
+                    let value = local
+                        .and_utc()
+                        .checked_sub_signed(chrono::Duration::seconds(offset.into()))
+                        .ok_or_else(|| {
+                            Error("invalid time or timezone: date value out of range".into())
+                        })?;
+                    return in_range(value);
+                }
+                Err(Error(
+                    "invalid time or timezone: nonexistent local time".into(),
+                ))
+            }
         };
     }
+    static STAMP: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(
+        r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2})(?::([0-9]{2})(\.[0-9]{1,6})?)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap()
+    });
+    let fields = STAMP.captures(value).ok_or_else(|| {
+        Error(
+            "invalid time or timezone: expected an ISO date or timestamp with an explicit offset"
+                .into(),
+        )
+    })?;
+    require(
+        fields
+            .get(3)
+            .is_none_or(|seconds| seconds.as_str().parse::<u8>().is_ok_and(|n| n < 60)),
+        "invalid time or timezone: second must be in 0..59",
+    )?;
+    let value = format!(
+        "{}T{}:{}{}{}",
+        &fields[1],
+        &fields[2],
+        fields.get(3).map_or("00", |s| s.as_str()),
+        fields.get(4).map_or("", |s| s.as_str()),
+        &fields[5]
+    );
     let mut normalized = value.replace('t', "T");
     if normalized.ends_with(['z', 'Z']) {
         normalized.truncate(normalized.len() - 1);
@@ -47,9 +111,9 @@ pub fn parse_time(value: &str, zone: &str) -> Result<DateTime<Utc>> {
     if let Some(at) = normalized.find(' ') {
         normalized.replace_range(at..=at, "T");
     }
-    DateTime::parse_from_rfc3339(&normalized)
-        .map(|value| value.with_timezone(&Utc))
-        .map_err(|e| Error(format!("invalid time or timezone: {e}")))
+    let parsed = DateTime::parse_from_rfc3339(&normalized)
+        .map_err(|e| Error(format!("invalid time or timezone: {e}")))?;
+    in_range(parsed.with_timezone(&Utc))
 }
 
 fn text(value: &Value, label: &str) -> Result<String> {
@@ -143,12 +207,12 @@ pub fn validate(trigger: &Value, related: &[String]) -> Result<()> {
                 )?;
                 require(
                     !object["value"].is_array()
-                        && (!object["value"].is_object() || decimal(&object["value"]).is_some()),
+                        && (!object["value"].is_object() || number(&object["value"]).is_some()),
                     "condition comparison value must be scalar",
                 )?;
                 if ["<", "<=", ">", ">="].contains(&op) {
                     require(
-                        decimal(&object["value"]).is_some(),
+                        number(&object["value"]).is_some(),
                         "ordering requires a finite numeric comparison value",
                     )?;
                 }
@@ -170,6 +234,10 @@ pub fn validate(trigger: &Value, related: &[String]) -> Result<()> {
                 require(
                     age.is_some_and(|age| age.is_finite() && age > 0.0),
                     "max_age_hours must be a positive finite number",
+                )?;
+                require(
+                    age.unwrap() < 24_000_000_000.0,
+                    "max_age_hours is too large",
                 )?;
             }
             _ => {}
@@ -207,42 +275,54 @@ pub fn referenced_external(trigger: &Value) -> Result<BTreeSet<String>> {
     references(trigger, "external")
 }
 
-#[derive(Clone, Debug)]
-struct Decimal {
-    coefficient: BigInt,
-    scale: i64,
-}
-fn decimal(value: &Value) -> Option<Decimal> {
-    let source = value.as_number()?.to_string();
-    let (mantissa, exponent) = if let Some((mantissa, exponent)) = source.split_once(['e', 'E']) {
-        (mantissa, exponent.parse().ok()?)
-    } else {
-        (source.as_str(), 0i64)
-    };
-    let negative = mantissa.starts_with('-');
-    let mantissa = mantissa.trim_start_matches('-');
-    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
-    let digits = format!("{whole}{fraction}");
-    let mut coefficient = BigInt::parse_bytes(digits.as_bytes(), 10)?;
-    if negative {
-        coefficient = -coefficient;
-    }
-    Some(Decimal {
-        coefficient,
-        scale: fraction.len() as i64 - exponent,
-    })
+fn number(value: &Value) -> Option<(BigInt, BigInt)> {
+    crate::ordinary_assessment::number(&crate::value::TypedValue::from_json(value).ok()?)
 }
 fn compare_numbers(left: &Value, right: &Value) -> Option<Ordering> {
-    let left = decimal(left)?;
-    let right = decimal(right)?;
-    let scale = left.scale.max(right.scale);
-    let a = left.coefficient * BigInt::from(10u8).pow((scale - left.scale) as u32);
-    let b = right.coefficient * BigInt::from(10u8).pow((scale - right.scale) as u32);
-    Some(a.cmp(&b))
+    let (a, b) = number(left)?;
+    let (c, d) = number(right)?;
+    Some((a * d).cmp(&(c * b)))
 }
 fn equal(left: &Value, right: &Value) -> bool {
     if let Some(ordering) = compare_numbers(left, right) {
         return ordering == Ordering::Equal;
+    }
+    if let (Some(a), Some(b)) = (left.as_object(), right.as_object())
+        && a.len() == 1
+        && b.len() == 1
+        && let (Some(a), Some(b)) = (
+            a.get("computed").and_then(Value::as_object),
+            b.get("computed").and_then(Value::as_object),
+        )
+        && a.len() == b.len()
+        && ["rule", "value"]
+            .iter()
+            .all(|key| a.contains_key(*key) && b.contains_key(*key))
+    {
+        return a.iter().all(|(key, value)| {
+            b.get(key).is_some_and(|other| {
+                if key == "rule" {
+                    match (
+                        crate::value::TypedValue::from_json(value),
+                        crate::value::TypedValue::from_json(other),
+                    ) {
+                        (Ok(a), Ok(b)) => {
+                            crate::source_clock::python_equal(&a, &b)
+                                || matches!(
+                                    (&a, &b),
+                                    (
+                                        crate::value::TypedValue::Map(_),
+                                        crate::value::TypedValue::Map(_)
+                                    )
+                                ) && crate::ordinary_counts::same_rule(&a, &b)
+                        }
+                        _ => false,
+                    }
+                } else {
+                    equal(value, other)
+                }
+            })
+        });
     }
     match (left, right) {
         (Value::Array(a), Value::Array(b)) => {
@@ -258,7 +338,7 @@ fn equal(left: &Value, right: &Value) -> bool {
 }
 
 fn core_scalar(value: &Value) -> Option<Value> {
-    let core = value.as_object()?.get("core")?.as_object()?;
+    let core = crate::followup_core::envelope(value).ok()?.as_object()?;
     if core.get("version") != Some(&json!(1)) || core.get("available") != Some(&json!(true)) {
         return None;
     }
@@ -267,23 +347,23 @@ fn core_scalar(value: &Value) -> Option<Value> {
         "number" => Some(json!({"rational":[typed.get("numerator")?,typed.get("denominator")?]})),
         "text" | "boolean" => typed.get("value").cloned(),
         "null" => Some(Value::Null),
-        _ => typed.get("value").cloned(),
+        _ => Some(Value::Object(typed.clone())),
     }
 }
 pub fn unavailable(value: Option<&Value>, core: bool) -> bool {
-    let Some(Value::Object(object)) = value else {
-        return false;
-    };
     if core {
-        return object
-            .get("core")
-            .and_then(Value::as_object)
+        return value
+            .and_then(|value| crate::followup_core::envelope(value).ok())
             .and_then(|core| core.get("available"))
             .and_then(Value::as_bool)
             != Some(true);
     }
+    let Some(Value::Object(object)) = value else {
+        return false;
+    };
     object.len() == 1 && object.get("unavailable").is_some_and(Value::is_string)
         || object.len() == 1
+            && object.contains_key("computed")
             && object
                 .get("computed")
                 .and_then(Value::as_object)
@@ -390,7 +470,11 @@ impl Context<'_> {
                 let identity = spec.as_str().unwrap();
                 let current = self.snapshot("graph", identity, false);
                 let previous = self.snapshot("baseline", identity, true);
-                let result = current.zip(previous).map(|(a, b)| !equal(&a, &b));
+                let matching_types =
+                    self.current_core.contains(identity) == self.baseline_core.contains(identity);
+                let result = current
+                    .zip(previous)
+                    .map(|(a, b)| !matching_types || !equal(&a, &b));
                 self.reasons.push(format!(
                     "{identity} {}",
                     match result {
@@ -414,8 +498,15 @@ impl Context<'_> {
                     {
                         value["computed"]
                             .get("value")
+                            .filter(|_| value["computed"].get("rule").is_some())
                             .cloned()
                             .filter(|v| !v.is_null())
+                    } else if value
+                        .as_object()
+                        .is_some_and(|m| m.len() == 1 && m.contains_key("rational"))
+                        && number(&value).is_none()
+                    {
+                        None
                     } else {
                         Some(value)
                     }
@@ -462,9 +553,16 @@ impl Context<'_> {
                         .filter(|value| value.contains(['T', 't', ' ']))
                         .and_then(|value| parse_time(value, "UTC").ok());
                     if complete && evidence.is_some_and(|value| !value.trim().is_empty()) {
-                        if let Some(observed) = observed {
-                            let expiry = observed
-                                + chrono::Duration::milliseconds((max_age * 3_600_000.0) as i64);
+                        let expiry = observed.and_then(|observed| {
+                            let micros = (max_age * 3_600_000_000.0).round_ties_even();
+                            if !micros.is_finite() || micros < 0.0 || micros >= i64::MAX as f64 {
+                                return None;
+                            }
+                            observed
+                                .checked_add_signed(chrono::Duration::microseconds(micros as i64))
+                                .filter(|value| (1..=9999).contains(&value.year()))
+                        });
+                        if let (Some(observed), Some(expiry)) = (observed, expiry) {
                             let status = if observed > self.now {
                                 "future"
                             } else if self.now >= expiry {
