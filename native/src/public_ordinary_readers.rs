@@ -19,6 +19,7 @@ use std::{
     sync::LazyLock,
 };
 type Reach = (Vec<(String, String)>, BTreeSet<String>);
+type WriteReach = (Vec<(String, String)>, BTreeSet<String>, Vec<String>);
 static MISFILED_REOPENER: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)")
         .unwrap()
@@ -216,6 +217,10 @@ impl<'a> World<'a> {
         R::predicate_of(&self.judgments[id], &self.reader.fields)
     }
     fn reach(&self, changed: &[String]) -> Result<Reach> {
+        let (hit, moved, _) = self.write_reach(changed)?;
+        Ok((hit, moved))
+    }
+    pub(crate) fn write_reach(&self, changed: &[String]) -> Result<WriteReach> {
         let mut feeds = BTreeMap::<String, Vec<String>>::new();
         let mut judgments = BTreeMap::<String, Vec<String>>::new();
         for id in &self.reader.ids {
@@ -251,12 +256,14 @@ impl<'a> World<'a> {
             }
         }
         let mut hit = vec![];
+        let mut derived = vec![];
         let mut hit_ids = BTreeSet::new();
         let mut moved = changed.iter().cloned().collect::<BTreeSet<_>>();
         let mut frontier = changed.to_vec();
         while let Some(source) = frontier.pop() {
             for id in feeds.get(&source).into_iter().flatten() {
                 if moved.insert(id.clone()) {
+                    derived.push(id.clone());
                     frontier.push(id.clone());
                 }
             }
@@ -268,7 +275,7 @@ impl<'a> World<'a> {
             }
         }
         moved.extend(hit_ids);
-        Ok((hit, moved))
+        Ok((hit, moved, derived))
     }
 }
 pub struct Projection<'a> {
@@ -1306,6 +1313,13 @@ impl World<'_> {
     /// The ordinary reader's exact post-observation state and explanation. This
     /// uses captured inputs and the existing computation runtime, never source discovery.
     pub(crate) fn state(&self, id: &str) -> Result<(String, String)> {
+        self.state_with_touched(id, &BTreeSet::new())
+    }
+    pub(crate) fn state_with_touched(
+        &self,
+        id: &str,
+        touched: &BTreeSet<String>,
+    ) -> Result<(String, String)> {
         let world = self;
         fn field<'a>(value: &'a V, key: &str) -> &'a V {
             match value {
@@ -1387,7 +1401,11 @@ impl World<'_> {
             })
             .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
-        let moves = world.moved(id)?;
+        let moves = world
+            .moved(id)?
+            .into_iter()
+            .filter(|(dependency, _, _, _)| touched.is_empty() || touched.contains(dependency))
+            .collect::<Vec<_>>();
         if let Some((dep, old, new, _)) = moves.iter().find(|(_, _, _, s)| *s == "moved") {
             let snapshot = seen.get(dep).unwrap_or(&V::Null);
             let current = world.reader.raw().get(dep).unwrap_or(&V::Null);
