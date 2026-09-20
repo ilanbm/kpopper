@@ -50,7 +50,20 @@ fn invoke_event(
     event_id: &str,
     extra: &[&str],
 ) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    import_command(root, record, shareability, event_id, extra)
+        .output()
+        .unwrap()
+}
+
+fn import_command(
+    root: &Path,
+    record: &Path,
+    shareability: &str,
+    event_id: &str,
+    extra: &[&str],
+) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    command
         .args([
             "--workspace",
             root.to_str().unwrap(),
@@ -70,9 +83,73 @@ fn invoke_event(
         .env(
             "KPOPPER_PRIVATE_HOME",
             root.parent().unwrap().join("private"),
-        )
+        );
+    command
+}
+
+#[cfg(unix)]
+#[test]
+fn incomplete_prepared_git_tree_is_refused_before_moving_pending_ref() {
+    use std::os::unix::fs::PermissionsExt;
+    let (temp, root, record) = fixture(PUBLIC);
+    let bin = temp.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let real_git = Command::new("sh")
+        .args(["-c", "command -v git"])
         .output()
-        .unwrap()
+        .unwrap();
+    assert!(real_git.status.success());
+    let wrapper = bin.join("git");
+    fs::write(
+        &wrapper,
+        br#"#!/bin/sh
+for argument in "$@"; do
+  case "$argument" in
+    100644,*,events/event-fixed.json)
+      "$KPOP_TEST_REAL_GIT" -C "$KPOP_TEST_GIT_ROOT" read-tree --empty || exit
+      ;;
+  esac
+done
+exec "$KPOP_TEST_REAL_GIT" "$@"
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o700)).unwrap();
+    let path = std::env::join_paths(
+        std::iter::once(bin).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    let before = fs::read(&record).unwrap();
+    let output = import_command(&root, &record, "project", "event-fixed", &[])
+        .env("PATH", path)
+        .env(
+            "KPOP_TEST_REAL_GIT",
+            String::from_utf8(real_git.stdout).unwrap().trim(),
+        )
+        .env("KPOP_TEST_GIT_ROOT", &root)
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(
+        parsed(&output)["error"],
+        "pending tree verification failed before publication"
+    );
+    assert_eq!(fs::read(&record).unwrap(), before);
+    assert!(
+        !Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["rev-parse", "--verify", "refs/kpopper/pending_grounding"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 }
 
 fn parsed(output: &Output) -> Value {

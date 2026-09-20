@@ -297,6 +297,7 @@ fn write_commit(
     } else {
         git(root, &["read-tree", "--empty"], &[], &env)?;
     }
+    let mut expected = existing.clone();
     for (path, bytes) in additions {
         crate::history_branch::portable_path(path)?;
         if let Some(oid) = existing.get(path) {
@@ -307,6 +308,8 @@ fn write_commit(
             continue;
         }
         let oid = git_text(root, &["hash-object", "-w", "--stdin"], bytes, &[])?;
+        pending_state::verify_blob(&oid, bytes)?;
+        expected.insert(path.clone(), oid.clone());
         let cache = format!("100644,{oid},{path}");
         git(
             root,
@@ -315,14 +318,24 @@ fn write_commit(
             &env,
         )?;
     }
-    let tree = git_text(root, &["write-tree"], &[], &env)?;
+    let tree_id = git_text(root, &["write-tree"], &[], &env)?;
+    require(
+        tree(root, Some(&tree_id))? == expected,
+        "pending tree verification failed before publication",
+    )?;
+    for (path, bytes) in additions {
+        require(
+            blob(root, &expected[path])? == *bytes,
+            "pending tree verification failed before publication",
+        )?;
+    }
     let author = [
         ("GIT_AUTHOR_NAME", "Knowledge record"),
         ("GIT_AUTHOR_EMAIL", "knowledge@localhost"),
         ("GIT_COMMITTER_NAME", "Knowledge record"),
         ("GIT_COMMITTER_EMAIL", "knowledge@localhost"),
     ];
-    let mut args = vec!["commit-tree", "--no-gpg-sign", tree.as_str()];
+    let mut args = vec!["commit-tree", "--no-gpg-sign", tree_id.as_str()];
     if let Some(old) = old {
         args.extend(["-p", old]);
     }
