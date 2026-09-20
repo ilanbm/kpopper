@@ -1217,7 +1217,10 @@ impl Graph<'_> {
     }
 }
 pub(crate) type FieldIdentity = BTreeMap<String, crate::history_emit::OrdinaryIdentity>;
-pub(crate) fn source_identity(raw: &str, value: &Source) -> Result<crate::history_emit::OrdinaryIdentity> {
+pub(crate) fn source_identity(
+    raw: &str,
+    value: &Source,
+) -> Result<crate::history_emit::OrdinaryIdentity> {
     let (graph, root) = parse(raw)?;
     graph.identity(root, value, &mut BTreeSet::new())
 }

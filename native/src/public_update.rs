@@ -2,21 +2,39 @@
 use crate::{
     Result,
     history_contract::{error, map},
-    history_transaction_fs as F,
-    legacy_batch,
+    history_transaction_fs as F, legacy_batch,
     project_modes::WriteRoute,
     source_inventory::Inventory,
     value::TypedValue as V,
 };
-use clap::Args;
 use base64::Engine as _;
+use clap::Args;
 use serde_json::{Map as JsonMap, Value as J, json};
-use std::{collections::{BTreeMap, BTreeSet}, fs, path::{Path, PathBuf}};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::{Path, PathBuf},
+};
 
 const FIELDS: &[&str] = &[
-    "event_id", "session_id", "source_quote", "target", "value", "date", "kind",
-    "question", "reason", "updates", "record_sha256", "shareability", "privacy", "scope",
-    "source", "at", "profile", "disclosed_locators",
+    "event_id",
+    "session_id",
+    "source_quote",
+    "target",
+    "value",
+    "date",
+    "kind",
+    "question",
+    "reason",
+    "updates",
+    "record_sha256",
+    "shareability",
+    "privacy",
+    "scope",
+    "source",
+    "at",
+    "profile",
+    "disclosed_locators",
 ];
 
 #[derive(Clone, Debug, Args)]
@@ -55,9 +73,18 @@ fn required_text(map: &JsonMap<String, J>, key: &str) -> Result<String> {
 
 fn parse(raw: &[u8]) -> Result<Report> {
     let value = crate::json_ingress::parse_slice(raw, crate::json_ingress::DuplicateKeys::Reject)?;
-    let top = value.as_object().ok_or_else(|| error("capture envelope must be a JSON object"))?;
-    let unknown = top.keys().filter(|k| !FIELDS.contains(&k.as_str())).cloned().collect::<Vec<_>>();
-    crate::require(unknown.is_empty(), &format!("unknown envelope fields: {}", unknown.join(", ")))?;
+    let top = value
+        .as_object()
+        .ok_or_else(|| error("capture envelope must be a JSON object"))?;
+    let unknown = top
+        .keys()
+        .filter(|k| !FIELDS.contains(&k.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    crate::require(
+        unknown.is_empty(),
+        &format!("unknown envelope fields: {}", unknown.join(", ")),
+    )?;
     let quote = required_text(top, "source_quote")?;
     let date = required_text(top, "date")?;
     crate::value::Date::new(&date)?;
@@ -65,56 +92,99 @@ fn parse(raw: &[u8]) -> Result<Report> {
         crate::require(profile == "core/v1", "unsupported writer profile")?;
     }
     for key in ["source", "at"] {
-        if top.contains_key(key) { required_text(top, key)?; }
+        if top.contains_key(key) {
+            required_text(top, key)?;
+        }
     }
     if let Some(hash) = top.get("record_sha256").filter(|v| !v.is_null()) {
         let hash = hash.as_str().unwrap_or("");
-        crate::require(hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
-            "record_sha256 must be the hash returned by the prior record read")?;
+        crate::require(
+            hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
+            "record_sha256 must be the hash returned by the prior record read",
+        )?;
     }
     let batch = top.contains_key("updates");
     let updates = if let Some(updates) = top.get("updates").and_then(J::as_array) {
-        crate::require((1..=32).contains(&updates.len()), "updates must contain 1..32 operations")?;
-        crate::require(!top.contains_key("target") && !top.contains_key("value"),
-            "use updates or target/value, not both")?;
+        crate::require(
+            (1..=32).contains(&updates.len()),
+            "updates must contain 1..32 operations",
+        )?;
+        crate::require(
+            !top.contains_key("target") && !top.contains_key("value"),
+            "use updates or target/value, not both",
+        )?;
         updates.clone()
     } else {
         let target = required_text(top, "target")?;
-        let value = top.get("value").ok_or_else(|| error("the report needs target and value"))?;
+        let value = top
+            .get("value")
+            .ok_or_else(|| error("the report needs target and value"))?;
         vec![json!({"kind":"set","id":target,"value":value})]
     };
     let mut names = BTreeSet::new();
     for update in &updates {
-        let item = update.as_object().ok_or_else(|| error("each update needs kind=set or kind=add"))?;
+        let item = update
+            .as_object()
+            .ok_or_else(|| error("each update needs kind=set or kind=add"))?;
         let kind = item.get("kind").and_then(J::as_str).unwrap_or("");
-        crate::require(["set", "add"].contains(&kind), "each update needs kind=set or kind=add")?;
+        crate::require(
+            ["set", "add"].contains(&kind),
+            "each update needs kind=set or kind=add",
+        )?;
         let allowed: BTreeSet<&str> = if kind == "set" {
             ["kind", "id", "at", "value"].into_iter().collect()
         } else {
-            ["kind", "id", "at", "body", "into", "drops"].into_iter().collect()
+            ["kind", "id", "at", "body", "into", "drops"]
+                .into_iter()
+                .collect()
         };
-        crate::require(item.keys().all(|k| allowed.contains(k.as_str())), &format!("invalid fields in {kind} update"))?;
-        crate::require(item.contains_key(if kind == "set" { "value" } else { "body" }),
-            &format!("invalid fields in {kind} update"))?;
+        crate::require(
+            item.keys().all(|k| allowed.contains(k.as_str())),
+            &format!("invalid fields in {kind} update"),
+        )?;
+        crate::require(
+            item.contains_key(if kind == "set" { "value" } else { "body" }),
+            &format!("invalid fields in {kind} update"),
+        )?;
         let id = required_text(item, "id")?;
-        crate::history_paths::subject(&id).map_err(|_| error("each update needs a valid entry id"))?;
-        crate::require(names.insert(id.clone()), &format!("one update per id in a batch: {id}"))?;
+        crate::history_paths::subject(&id)
+            .map_err(|_| error("each update needs a valid entry id"))?;
+        crate::require(
+            names.insert(id.clone()),
+            &format!("one update per id in a batch: {id}"),
+        )?;
         if kind == "add" {
             crate::require(item["body"].is_object(), "add body must be a mapping")?;
             let body = item["body"].as_object().unwrap();
-            crate::require(!["from", "at", "of", "src", "source", "seen"].iter().any(|k| body.contains_key(*k)),
-                "batch citations and snapshots are supplied by the report writer")?;
+            crate::require(
+                !["from", "at", "of", "src", "source", "seen"]
+                    .iter()
+                    .any(|k| body.contains_key(*k)),
+                "batch citations and snapshots are supplied by the report writer",
+            )?;
         }
         for key in ["at", "into"] {
-            if item.contains_key(key) { required_text(item, key)?; }
+            if item.contains_key(key) {
+                required_text(item, key)?;
+            }
         }
     }
-    Ok(Report { raw: value, date, quote, updates, batch })
+    Ok(Report {
+        raw: value,
+        date,
+        quote,
+        updates,
+        batch,
+    })
 }
 
 fn private_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path)?;
-    #[cfg(unix)] {
+    #[cfg(unix)]
+    {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     }
@@ -128,38 +198,68 @@ fn save(path: &Path, value: &J) -> Result<()> {
 }
 
 fn state_root(record: &Path, selected: Option<&Path>) -> Result<PathBuf> {
-    if let Some(path) = selected { return Ok(std::path::absolute(path)?); }
+    if let Some(path) = selected {
+        return Ok(std::path::absolute(path)?);
+    }
     let base = std::env::var_os("XDG_STATE_HOME")
         .filter(|p| Path::new(p).is_absolute())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/state")))
         .ok_or_else(|| error("state home is unavailable"))?;
-    Ok(base.join("kpopper/ingestion").join(crate::identity::sha256(record.to_string_lossy().as_bytes())))
+    Ok(base
+        .join("kpopper/ingestion")
+        .join(crate::identity::sha256(record.to_string_lossy().as_bytes())))
 }
 
 fn prepare_state(record: &Path, selected: Option<&Path>) -> Result<PathBuf> {
     let root = state_root(record, selected)?;
-    if record.starts_with(&root) { return Err(error("state directory cannot contain the provenance record")); }
-    if root.exists() && !root.is_dir() { return Err(error("state path exists and is not a directory")); }
+    if record.starts_with(&root) {
+        return Err(error(
+            "state directory cannot contain the provenance record",
+        ));
+    }
+    if root.exists() && !root.is_dir() {
+        return Err(error("state path exists and is not a directory"));
+    }
     private_dir(&root)?;
     let marker = root.join("record.json");
     let expected = json!({"record": record});
     if let Some(raw) = F::read(&marker)? {
-        crate::require(crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)? == expected,
-            "state directory belongs to another provenance record")?;
+        crate::require(
+            crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?
+                == expected,
+            "state directory belongs to another provenance record",
+        )?;
     } else {
-        crate::require(fs::read_dir(&root)?.next().is_none(), "existing non-empty state directory is not owned by ingestion")?;
+        crate::require(
+            fs::read_dir(&root)?.next().is_none(),
+            "existing non-empty state directory is not owned by ingestion",
+        )?;
         save(&marker, &expected)?;
     }
-    for name in ["envelopes", "sources", "receipts", "results", "journals", "signals"] { private_dir(&root.join(name))?; }
+    for name in [
+        "envelopes",
+        "sources",
+        "receipts",
+        "results",
+        "journals",
+        "signals",
+    ] {
+        private_dir(&root.join(name))?;
+    }
     Ok(root)
 }
 
 fn event_id(record: &Path, report: &Report) -> Result<String> {
     if let Some(value) = report.raw.get("event_id") {
-        let supplied = value.as_str().filter(|s| !s.trim().is_empty())
+        let supplied = value
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
             .ok_or_else(|| error("event_id must be non-empty when supplied"))?;
-        Ok(crate::identity::sha256(format!("{}\0{supplied}", record.display()).as_bytes())[..32].into())
+        Ok(
+            crate::identity::sha256(format!("{}\0{supplied}", record.display()).as_bytes())[..32]
+                .into(),
+        )
     } else {
         crate::public_history::fresh_id("report")
     }
@@ -167,10 +267,16 @@ fn event_id(record: &Path, report: &Report) -> Result<String> {
 
 fn source_collection(document: &V, report: &Report) -> Result<String> {
     let collections = crate::reasoning_fields::collections(document)?;
-    let is_source = |body: &V| map(body).is_ok_and(|body| {
-        !["v", "quoted", "rule"].iter().any(|k| body.contains_key(*k))
-            && ["asked", "file", "url", "of", "read"].iter().any(|k| body.get(*k).is_some_and(crate::history_view::truth))
-    });
+    let is_source = |body: &V| {
+        map(body).is_ok_and(|body| {
+            !["v", "quoted", "rule"]
+                .iter()
+                .any(|k| body.contains_key(*k))
+                && ["asked", "file", "url", "of", "read"]
+                    .iter()
+                    .any(|k| body.get(*k).is_some_and(crate::history_view::truth))
+        })
+    };
     if let Some(source) = report.raw.get("source").and_then(J::as_str) {
         for (name, members) in &collections {
             if let Some(body) = members.get(source) {
@@ -180,34 +286,67 @@ fn source_collection(document: &V, report: &Report) -> Result<String> {
         }
         return Err(error("explicit source is not a recorded source"));
     }
-    let candidates = collections.iter().filter(|(_, members)| members.values().any(is_source))
-        .map(|(name, _)| name.clone()).collect::<Vec<_>>();
-    crate::require(candidates.len() == 1, "the batch needs one unambiguous existing source collection")?;
+    let candidates = collections
+        .iter()
+        .filter(|(_, members)| members.values().any(is_source))
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    crate::require(
+        candidates.len() == 1,
+        "the batch needs one unambiguous existing source collection",
+    )?;
     Ok(candidates[0].clone())
 }
 
 fn actions(report: &Report, event: &str, source_file: &Path, collection: &str) -> Result<Vec<V>> {
     let source_id = format!("s.ingest_{event}");
-    let cited = report.raw.get("source").and_then(J::as_str).unwrap_or(&source_id);
-    crate::require(report.raw.get("source").and_then(J::as_str) != Some(source_id.as_str()),
-        "a report cannot cite its own capture as an existing source")?;
-    let ids = report.updates.iter().map(|u| u["id"].as_str().unwrap()).collect::<Vec<_>>();
+    let cited = report
+        .raw
+        .get("source")
+        .and_then(J::as_str)
+        .unwrap_or(&source_id);
+    crate::require(
+        report.raw.get("source").and_then(J::as_str) != Some(source_id.as_str()),
+        "a report cannot cite its own capture as an existing source",
+    )?;
+    let ids = report
+        .updates
+        .iter()
+        .map(|u| u["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
     let mut body = JsonMap::from_iter([
         ("name".into(), json!("Captured report")),
         ("file".into(), json!(source_file)),
         ("read".into(), json!(report.date)),
-        ("recorded_for".into(), json!(format!("Update {} from this captured report.", ids.join(", ")))),
+        (
+            "recorded_for".into(),
+            json!(format!(
+                "Update {} from this captured report.",
+                ids.join(", ")
+            )),
+        ),
     ]);
-    if let Some(source) = report.raw.get("source") { body.insert("from".into(), source.clone()); }
-    if let Some(at) = report.raw.get("at") { body.insert("at".into(), at.clone()); }
-    let mut planned = vec![json!({"kind":"add","id":source_id,"body":body,"as_of":report.date,"into":collection})];
+    if let Some(source) = report.raw.get("source") {
+        body.insert("from".into(), source.clone());
+    }
+    if let Some(at) = report.raw.get("at") {
+        body.insert("at".into(), at.clone());
+    }
+    let mut planned = vec![
+        json!({"kind":"add","id":source_id,"body":body,"as_of":report.date,"into":collection}),
+    ];
     let mut ordered = report.updates.clone();
     ordered.sort_by_key(|u| u["kind"] != "set");
     for mut update in ordered {
         let item = update.as_object_mut().unwrap();
         item.insert("as_of".into(), json!(report.date));
-        item.insert("why".into(), report.raw.get("reason").cloned().unwrap_or(J::Null));
-        let location = item.remove("at").or_else(|| report.raw.get("at").cloned())
+        item.insert(
+            "why".into(),
+            report.raw.get("reason").cloned().unwrap_or(J::Null),
+        );
+        let location = item
+            .remove("at")
+            .or_else(|| report.raw.get("at").cloned())
             .unwrap_or_else(|| json!("entire captured report"));
         if item["kind"] == "set" {
             item.insert("source".into(), json!(cited));
@@ -241,16 +380,22 @@ fn graph_document(
     seeds: &[String],
     supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<J> {
-    let capabilities = crate::reasoning_fields::capabilities(&document, None)?;
+    let capabilities = crate::reasoning_fields::capabilities(document, None)?;
     if map(&capabilities)?.get("profile") == Some(&V::Text("core/v1".into())) {
         return core_graph(raw, document, seeds, supplied_runtime);
     }
     let owned_runtime = if supplied_runtime.is_none() {
-        crate::public_workspace::runtime_for_document(&document)?
-    } else { None };
+        crate::public_workspace::runtime_for_document(document)?
+    } else {
+        None
+    };
     let runtime = supplied_runtime.or(owned_runtime.as_ref());
     let projection = crate::public_ordinary_readers::Projection::new(
-        document, &BTreeMap::new(), &BTreeMap::new(), vec![], runtime,
+        document,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        vec![],
+        runtime,
     )?;
     let world = &projection.base;
     let (mut hit, touched, derived) = world.write_reach(seeds)?;
@@ -264,10 +409,13 @@ fn graph_document(
     for (id, body) in &world.judgments {
         let (tag, reason) = world.state_with_touched(id, &touched)?;
         let pred = crate::ordinary_reader::predicate_of(body, world.reader.fields());
-        judgments.insert(id.clone(), json!({
-            "tag":tag, "reason":reason, "evaluation":world.reader.predicate(&pred)?,
-            "verdict":map(body).ok().and_then(|b| b.get("verdict")).map(V::to_json).transpose()?
-        }));
+        judgments.insert(
+            id.clone(),
+            json!({
+                "tag":tag, "reason":reason, "evaluation":world.reader.predicate(&pred)?,
+                "verdict":map(body).ok().and_then(|b| b.get("verdict")).map(V::to_json).transpose()?
+            }),
+        );
     }
     let profile = capabilities.to_json()?["profile"].clone();
     Ok(json!({
@@ -278,7 +426,9 @@ fn graph_document(
     }))
 }
 
-fn reach(document: &V, seeds: &[String]) -> Result<(BTreeMap<String, String>, BTreeSet<String>, Vec<String>)> {
+type Reach = (BTreeMap<String, String>, BTreeSet<String>, Vec<String>);
+
+fn reach(document: &V, seeds: &[String]) -> Result<Reach> {
     let entries = crate::reasoning_snapshot::entries(document)?;
     let fields = crate::reasoning_fields::snapshot_fields(document)?;
     let deps = fields["deps"].to_json()?.as_str().unwrap().to_owned();
@@ -287,7 +437,10 @@ fn reach(document: &V, seeds: &[String]) -> Result<(BTreeMap<String, String>, BT
     for (id, (_, body)) in &entries {
         let Ok(body) = map(body) else { continue };
         if let Some(V::List(values)) = body.get(&deps) {
-            for dep in values.iter().filter_map(|v| match v { V::Text(s) => Some(s), _ => None }) {
+            for dep in values.iter().filter_map(|v| match v {
+                V::Text(s) => Some(s),
+                _ => None,
+            }) {
                 judgments.entry(dep.clone()).or_default().push(id.clone());
             }
         } else if let Some(rule) = body.get("rule") {
@@ -304,14 +457,23 @@ fn reach(document: &V, seeds: &[String]) -> Result<(BTreeMap<String, String>, BT
     let mut frontier = seeds.to_vec();
     while let Some(source) = frontier.pop() {
         for id in feeds.get(&source).into_iter().flatten() {
-            if moved.insert(id.clone()) { derived.push(id.clone()); frontier.push(id.clone()); }
+            if moved.insert(id.clone()) {
+                derived.push(id.clone());
+                frontier.push(id.clone());
+            }
         }
         for id in judgments.get(&source).into_iter().flatten() {
-            if !via.contains_key(id) { via.insert(id.clone(), source.clone()); frontier.push(id.clone()); }
+            if !via.contains_key(id) {
+                via.insert(id.clone(), source.clone());
+                frontier.push(id.clone());
+            }
         }
     }
     for seed in seeds {
-        if entries.get(seed).is_some_and(|(_, body)| map(body).is_ok_and(|b| b.contains_key(&deps))) {
+        if entries
+            .get(seed)
+            .is_some_and(|(_, body)| map(body).is_ok_and(|b| b.contains_key(&deps)))
+        {
             via.entry(seed.clone()).or_insert_with(|| seed.clone());
         }
     }
@@ -326,7 +488,10 @@ fn core_graph(
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<J> {
     let mut world = crate::reasoning_authoring::World::new(
-        document, None, runtime, crate::reasoning_runtime::OperationalBounds::default(),
+        document,
+        None,
+        runtime,
+        crate::reasoning_runtime::OperationalBounds::default(),
     )?;
     let report = world.assessment()?;
     let fields = crate::reasoning_fields::snapshot_fields(document)?;
@@ -335,21 +500,35 @@ fn core_graph(
     let (via, touched, derived) = reach(document, seeds)?;
     let mut judgments = JsonMap::new();
     for (id, (_, body)) in &entries {
-        if !map(body).is_ok_and(|b| b.contains_key(&deps)) { continue }
+        if !map(body).is_ok_and(|b| b.contains_key(&deps)) {
+            continue;
+        }
         let state = world.state(id)?;
-        let V::List(state) = state else { return Err(error("invalid core state")) };
+        let V::List(state) = state else {
+            return Err(error("invalid core state"));
+        };
         let tag = state[0].to_json()?;
         let reason = state[1].to_json()?;
         let status = map(&map(&map(&report)?["nodes"])?[id])?["state"].clone();
-        let evaluation = match map(&map(&status)?["falsifier"])?["status"].to_json()?.as_str() {
-            Some("holds") => J::Bool(true), Some("does_not_hold") => J::Bool(false), _ => J::Null,
+        let evaluation = match map(&map(&status)?["falsifier"])?["status"]
+            .to_json()?
+            .as_str()
+        {
+            Some("holds") => J::Bool(true),
+            Some("does_not_hold") => J::Bool(false),
+            _ => J::Null,
         };
-        judgments.insert(id.clone(), json!({"tag":tag,"reason":reason,"evaluation":evaluation,
-            "verdict":map(body)?.get("verdict").map(V::to_json).transpose()?}));
+        judgments.insert(
+            id.clone(),
+            json!({"tag":tag,"reason":reason,"evaluation":evaluation,
+            "verdict":map(body)?.get("verdict").map(V::to_json).transpose()?}),
+        );
     }
-    Ok(json!({"hash":crate::identity::sha256(raw),"assessment_profile":"core/v1",
+    Ok(
+        json!({"hash":crate::identity::sha256(raw),"assessment_profile":"core/v1",
         "judgments":judgments,"reach":{"judgments":via.keys().cloned().collect::<Vec<_>>(),
-        "via":via,"touched":touched,"derived":derived}}))
+        "via":via,"touched":touched,"derived":derived}}),
+    )
 }
 
 fn mutation_graphs(
@@ -357,12 +536,28 @@ fn mutation_graphs(
     report: &Report,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<(J, J)> {
-    let image = mutation.files().iter().find(|f| f.role == "record")
+    let image = mutation
+        .files()
+        .iter()
+        .find(|f| f.role == "record")
         .ok_or_else(|| error("report mutation has no record image"))?;
-    let before = image.before.as_deref().ok_or_else(|| error("report mutation has no record preimage"))?;
-    let after = image.after.as_deref().ok_or_else(|| error("report mutation has no record result"))?;
-    let seeds = report.updates.iter().map(|v| v["id"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
-    Ok((graph(before, &seeds, runtime)?, graph(after, &seeds, runtime)?))
+    let before = image
+        .before
+        .as_deref()
+        .ok_or_else(|| error("report mutation has no record preimage"))?;
+    let after = image
+        .after
+        .as_deref()
+        .ok_or_else(|| error("report mutation has no record result"))?;
+    let seeds = report
+        .updates
+        .iter()
+        .map(|v| v["id"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    Ok((
+        graph(before, &seeds, runtime)?,
+        graph(after, &seeds, runtime)?,
+    ))
 }
 
 fn verify_requested_profile(
@@ -372,8 +567,10 @@ fn verify_requested_profile(
 ) -> Result<()> {
     if let Some(requested) = report.raw.get("profile").and_then(J::as_str) {
         let (_, after) = mutation_graphs(mutation, report, runtime)?;
-        crate::require(after["assessment_profile"] == requested,
-            "requested writer profile requires explicit record migration")?;
+        crate::require(
+            after["assessment_profile"] == requested,
+            "requested writer profile requires explicit record migration",
+        )?;
     }
     Ok(())
 }
@@ -382,18 +579,36 @@ fn target_after_sha256(
     mutation: &crate::history_transaction::PreparedMutation,
     report: &Report,
 ) -> Result<String> {
-    let raw = mutation.files().iter().find(|f| f.role == "record")
-        .and_then(|f| f.after.as_deref()).ok_or_else(|| error("report mutation has no record result"))?;
+    let raw = mutation
+        .files()
+        .iter()
+        .find(|f| f.role == "record")
+        .and_then(|f| f.after.as_deref())
+        .ok_or_else(|| error("report mutation has no record result"))?;
     let document = crate::history_yaml::decode_ordinary_source_value(raw)?.projected();
     let entries = crate::reasoning_snapshot::entries(&document)?;
     let value = if report.batch {
-        V::Map(report.updates.iter().map(|item| {
-            let id = item["id"].as_str().unwrap();
-            (id.to_owned(), entries.get(id).map(|(_, body)| body.clone()).unwrap_or(V::Null))
-        }).collect())
+        V::Map(
+            report
+                .updates
+                .iter()
+                .map(|item| {
+                    let id = item["id"].as_str().unwrap();
+                    (
+                        id.to_owned(),
+                        entries
+                            .get(id)
+                            .map(|(_, body)| body.clone())
+                            .unwrap_or(V::Null),
+                    )
+                })
+                .collect(),
+        )
     } else {
-        entries.get(report.updates[0]["id"].as_str().unwrap())
-            .map(|(_, body)| body.clone()).unwrap_or(V::Null)
+        entries
+            .get(report.updates[0]["id"].as_str().unwrap())
+            .map(|(_, body)| body.clone())
+            .unwrap_or(V::Null)
     };
     let ordinary = crate::history_yaml::OrdinaryValue::from_typed(&value);
     Ok(crate::identity::sha256(
@@ -404,12 +619,18 @@ fn target_after_sha256(
 fn classification(before: &J, after: &J) -> (Vec<String>, Vec<String>) {
     let mut fired = Vec::new();
     let mut actionable = Vec::new();
-    for id in after["reach"]["judgments"].as_array().into_iter().flatten().filter_map(J::as_str) {
+    for id in after["reach"]["judgments"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(J::as_str)
+    {
         let old = &before["judgments"][id];
         let now = &after["judgments"][id];
         if old["evaluation"] != true && now["evaluation"] == true {
             fired.push(id.to_owned());
-        } else if ["MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"].contains(&now["tag"].as_str().unwrap_or(""))
+        } else if ["MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"]
+            .contains(&now["tag"].as_str().unwrap_or(""))
             && (old["tag"] != now["tag"] || old["reason"] != now["reason"])
         {
             actionable.push(id.to_owned());
@@ -419,26 +640,45 @@ fn classification(before: &J, after: &J) -> (Vec<String>, Vec<String>) {
 }
 
 fn signal_id(event: &str, category: &str, names: &[String]) -> String {
-    crate::identity::sha256(format!("{event}\0{category}\0{}", names.join("\0")).as_bytes())[..32].into()
+    crate::identity::sha256(format!("{event}\0{category}\0{}", names.join("\0")).as_bytes())[..32]
+        .into()
 }
 
 #[allow(clippy::too_many_arguments)]
-fn receipt(report: &Report, record: &Path, root: &Path, event: &str, source: &Path,
-           envelope_sha: &str, state: &str, reason: Option<&str>, recovered: bool,
-           mutation: Option<&crate::history_transaction::PreparedMutation>,
-           supplied_graphs: Option<&(J, J)>,
-           runtime: Option<&crate::reasoning_runtime::Runtime>) -> Result<(J, Vec<J>)> {
+fn receipt(
+    report: &Report,
+    record: &Path,
+    root: &Path,
+    event: &str,
+    source: &Path,
+    envelope_sha: &str,
+    state: &str,
+    reason: Option<&str>,
+    recovered: bool,
+    mutation: Option<&crate::history_transaction::PreparedMutation>,
+    supplied_graphs: Option<&(J, J)>,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<(J, Vec<J>)> {
     let source_id = format!("s.ingest_{event}");
-    let diagnostics = mutation.and_then(|mutation| {
-        mutation.to_data().to_json().ok()
-            .and_then(|v| v["receipt"]["after"]["batch"]["diagnostics"].as_array().cloned())
-    }).unwrap_or_default();
+    let diagnostics = mutation
+        .and_then(|mutation| {
+            mutation.to_data().to_json().ok().and_then(|v| {
+                v["receipt"]["after"]["batch"]["diagnostics"]
+                    .as_array()
+                    .cloned()
+            })
+        })
+        .unwrap_or_default();
     let (before, after, fired, actionable) = if let Some(mutation) = mutation {
-        let (before, after) = supplied_graphs.cloned()
-            .map(Ok).unwrap_or_else(|| mutation_graphs(mutation, report, runtime))?;
+        let (before, after) = supplied_graphs
+            .cloned()
+            .map(Ok)
+            .unwrap_or_else(|| mutation_graphs(mutation, report, runtime))?;
         let (fired, actionable) = classification(&before, &after);
         (Some(before), Some(after), fired, actionable)
-    } else { (None, None, vec![], vec![]) };
+    } else {
+        (None, None, vec![], vec![])
+    };
     let mut signals = Vec::new();
     if let Some(after) = &after {
         if !fired.is_empty() {
@@ -450,7 +690,16 @@ fn receipt(report: &Report, record: &Path, root: &Path, event: &str, source: &Pa
             }));
         }
         if !actionable.is_empty() {
-            let question = actionable.iter().map(|id| format!("{id} requires review: {}", after["judgments"][id]["reason"].as_str().unwrap_or(""))).collect::<Vec<_>>().join("; ");
+            let question = actionable
+                .iter()
+                .map(|id| {
+                    format!(
+                        "{id} requires review: {}",
+                        after["judgments"][id]["reason"].as_str().unwrap_or("")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
             signals.push(json!({
                 "id":signal_id(event,"question",&actionable), "event_id":event,
                 "category":"question", "target":J::Null, "source_quote":report.quote,
@@ -471,12 +720,20 @@ fn receipt(report: &Report, record: &Path, root: &Path, event: &str, source: &Pa
         "newly_fired_judgments": fired, "actionable_judgments": actionable,
         "recovered": recovered, "diagnostics": diagnostics
     });
-    if report.batch { value["updates"] = J::Array(report.updates.clone()); }
+    if report.batch {
+        value["updates"] = J::Array(report.updates.clone());
+    }
     if let Some(cited) = report.raw.get("source") {
-        value["cited_source"] = if state == "applied" { cited.clone() } else { J::Null };
+        value["cited_source"] = if state == "applied" {
+            cited.clone()
+        } else {
+            J::Null
+        };
         value["date"] = json!(report.date);
     }
-    if let Some(at) = report.raw.get("at") { value["at"] = at.clone(); }
+    if let Some(at) = report.raw.get("at") {
+        value["at"] = at.clone();
+    }
     if let Some(mutation) = mutation {
         let data = mutation.to_data().to_json()?;
         value["mutation"] = json!({"operation":data["operation"],"digest":data["digest"],"receipt":data["receipt"]});
@@ -505,10 +762,15 @@ fn retained_journal(
 }
 
 fn journal_mutation(value: &J) -> Result<crate::history_transaction::PreparedMutation> {
-    crate::require(value["version"] == 1 && value["kind"] == "native-source-report/v1",
-        "invalid report journal")?;
-    let encoded = value["mutation"].as_str().ok_or_else(|| error("invalid report journal"))?;
-    let raw = base64::engine::general_purpose::STANDARD.decode(encoded)
+    crate::require(
+        value["version"] == 1 && value["kind"] == "native-source-report/v1",
+        "invalid report journal",
+    )?;
+    let encoded = value["mutation"]
+        .as_str()
+        .ok_or_else(|| error("invalid report journal"))?;
+    let raw = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
         .map_err(|_| error("invalid report journal"))?;
     crate::history_transaction::PreparedMutation::from_bytes(&raw)
 }
@@ -525,15 +787,23 @@ fn run_with_probe(
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<Output> {
     let raw = if options.file == "-" {
-        stdin.ok_or_else(|| error("missing standard input"))?.to_vec()
+        stdin
+            .ok_or_else(|| error("missing standard input"))?
+            .to_vec()
     } else {
         fs::read(cwd.join(&options.file))?
     };
     let report = parse(&raw)?;
-    let original = if let Some(record) = &options.record { vec![cwd.join(record)] }
-        else { crate::public_workspace::records(cwd)? };
+    let original = if let Some(record) = &options.record {
+        vec![cwd.join(record)]
+    } else {
+        crate::public_workspace::records(cwd)?
+    };
     let route = WriteRoute::capture(&original, cwd)?;
-    crate::require(route.paths().len() == 1, "ingestion requires one record path")?;
+    crate::require(
+        route.paths().len() == 1,
+        "ingestion requires one record path",
+    )?;
     let record = route.paths()[0].clone();
     let root = prepare_state(&record, options.state_dir.as_deref())?;
     let event = event_id(&record, &report)?;
@@ -541,16 +811,29 @@ fn run_with_probe(
     let source_path = root.join("sources").join(format!("{event}.txt"));
     let receipt_path = root.join("receipts").join(format!("{event}.json"));
     let journal_path = root.join("journals").join(format!("{event}.json"));
-    let canonical = { let mut b = serde_json::to_vec(&report.raw)?; b.push(b'\n'); b };
+    let canonical = {
+        let mut b = serde_json::to_vec(&report.raw)?;
+        b.push(b'\n');
+        b
+    };
     let envelope_sha = crate::identity::sha256(&canonical);
     let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
     let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
     if let Some(existing) = F::read(&envelope_path)? {
-        crate::require(existing == canonical, "event_id was reused for different input")?;
+        crate::require(
+            existing == canonical,
+            "event_id was reused for different input",
+        )?;
         if let Some(receipt) = F::read(&receipt_path)? {
-            let value: J = crate::json_ingress::parse_slice(&receipt, crate::json_ingress::DuplicateKeys::Reject)?;
+            let value: J = crate::json_ingress::parse_slice(
+                &receipt,
+                crate::json_ingress::DuplicateKeys::Reject,
+            )?;
             let code = if value["state"] == "applied" { 0 } else { 1 };
-            return Ok(Output { text: String::from_utf8(receipt).map_err(|_| error("invalid receipt"))?, code });
+            return Ok(Output {
+                text: String::from_utf8(receipt).map_err(|_| error("invalid receipt"))?,
+                code,
+            });
         }
     } else {
         F::replace(&source_path, Some(report.quote.as_bytes()))?;
@@ -558,9 +841,12 @@ fn run_with_probe(
     }
 
     if let Some(raw) = F::read(&journal_path)? {
-        let mut journal = crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?;
+        let mut journal =
+            crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?;
         let mutation = journal_mutation(&journal)?;
-        let history = journal["history"].as_bool().ok_or_else(|| error("invalid report journal"))?;
+        let history = journal["history"]
+            .as_bool()
+            .ok_or_else(|| error("invalid report journal"))?;
         drop(_state_lock);
         drop(_record_lock);
         drop(route);
@@ -571,12 +857,18 @@ fn run_with_probe(
         } else if crate::legacy_authoring::recovery_pending(&original, cwd)? {
             crate::legacy_authoring::recover(&original, cwd, false)?;
         } else {
-            crate::require(journal["phase"] == "committed", "unfinished report lost its recovery journal")?;
+            crate::require(
+                journal["phase"] == "committed",
+                "unfinished report lost its recovery journal",
+            )?;
         }
         let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
         let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
         if let Some(receipt) = F::read(&receipt_path)? {
-            return Ok(Output { text: String::from_utf8(receipt).map_err(|_| error("invalid receipt"))?, code: 0 });
+            return Ok(Output {
+                text: String::from_utf8(receipt).map_err(|_| error("invalid receipt"))?,
+                code: 0,
+            });
         }
         journal["phase"] = json!("committed");
         save(&journal_path, &journal)?;
@@ -584,14 +876,37 @@ fn run_with_probe(
             (Some(before), Some(after)) => Some((before.clone(), after.clone())),
             _ => None,
         };
-        let (answer, signals) = receipt(&report, &record, &root, &event, &source_path, &envelope_sha,
-            "applied", None, true, Some(&mutation), graphs.as_ref(), supplied_runtime)?;
+        let (answer, signals) = receipt(
+            &report,
+            &record,
+            &root,
+            &event,
+            &source_path,
+            &envelope_sha,
+            "applied",
+            None,
+            true,
+            Some(&mutation),
+            graphs.as_ref(),
+            supplied_runtime,
+        )?;
         for signal in &signals {
-            save(&root.join("signals").join(format!("{}.json", signal["id"].as_str().unwrap())), signal)?;
+            save(
+                &root
+                    .join("signals")
+                    .join(format!("{}.json", signal["id"].as_str().unwrap())),
+                signal,
+            )?;
         }
         save(&receipt_path, &answer)?;
-        save(&root.join("results").join(format!("{event}.json")), &json!({"receipt":answer,"signals":signals}))?;
-        return Ok(Output { text: format!("{}\n", serde_json::to_string(&answer)?), code: 0 });
+        save(
+            &root.join("results").join(format!("{event}.json")),
+            &json!({"receipt":answer,"signals":signals}),
+        )?;
+        return Ok(Output {
+            text: format!("{}\n", serde_json::to_string(&answer)?),
+            code: 0,
+        });
     }
 
     let outcome = (|| {
@@ -600,9 +915,17 @@ fn run_with_probe(
             J::String(s) => !s.is_empty(),
             _ => true,
         }) {
-            return Err(error("private or unclear original source permission; report retained privately"));
+            return Err(error(
+                "private or unclear original source permission; report retained privately",
+            ));
         }
-        if report.raw.get("scope").and_then(|v| v.get("kind")).and_then(J::as_str) == Some("unclear") {
+        if report
+            .raw
+            .get("scope")
+            .and_then(|v| v.get("kind"))
+            .and_then(J::as_str)
+            == Some("unclear")
+        {
             return Err(error("unclear report scope; retained privately"));
         }
         route.verify()?;
@@ -615,41 +938,72 @@ fn run_with_probe(
         }))?;
         if authority == crate::legacy_authoring::AuthorityRoute::Legacy {
             let mut inventory = Inventory::default();
-            let captured = crate::source_document::load(
-                std::slice::from_ref(&record), &mut inventory, false,
+            let captured =
+                crate::source_document::load(std::slice::from_ref(&record), &mut inventory, false)?;
+            crate::require(
+                captured.members == [record.clone()],
+                "multi-file and pointer records require primary review",
             )?;
-            crate::require(captured.members == [record.clone()],
-                "multi-file and pointer records require primary review")?;
-            crate::require(map(&captured.hypotheses)?.is_empty(),
-                "a record with hypothesis context requires primary review")?;
+            crate::require(
+                map(&captured.hypotheses)?.is_empty(),
+                "a record with hypothesis context requires primary review",
+            )?;
             let document = captured.source.projected();
-            if report.raw.get("source").is_some() || report.updates.iter().any(|u| u["kind"] == "add") {
+            if report.raw.get("source").is_some()
+                || report.updates.iter().any(|u| u["kind"] == "add")
+            {
                 let expected = report.raw.get("record_sha256").and_then(J::as_str)
                     .ok_or_else(|| error("new entries and existing source citations require record_sha256 from the primary's prior read"))?;
-                let bytes = inventory.files.get(&record).ok_or_else(|| error("snapshot_changed"))?;
-                crate::require(crate::identity::sha256(bytes) == expected,
-                    "record changed since the primary read it; reread the premises before resubmitting")?;
+                let bytes = inventory
+                    .files
+                    .get(&record)
+                    .ok_or_else(|| error("snapshot_changed"))?;
+                crate::require(
+                    crate::identity::sha256(bytes) == expected,
+                    "record changed since the primary read it; reread the premises before resubmitting",
+                )?;
             }
-            crate::require(!crate::recording_privacy::private_marker(&document),
-                "private or unclear original source permission; report retained privately")?;
+            crate::require(
+                !crate::recording_privacy::private_marker(&document),
+                "private or unclear original source permission; report retained privately",
+            )?;
             let collection = source_collection(&document, &report)?;
             let planned = actions(&report, &event, &source_path, &collection)?;
-            let prepared = legacy_batch::prepare(&planned, &route, &legacy_batch::Options {
-                operation: format!("report-{event}"), context,
-            }, inventory)?;
+            let prepared = legacy_batch::prepare(
+                &planned,
+                &route,
+                &legacy_batch::Options {
+                    operation: format!("report-{event}"),
+                    context,
+                },
+                inventory,
+            )?;
             let mutation = prepared.mutation.clone();
             verify_requested_profile(&report, &mutation, supplied_runtime)?;
             let graphs = mutation_graphs(&mutation, &report, supplied_runtime)?;
-            save(&journal_path, &retained_journal(&mutation, false, "prepared", Some(&graphs))?)?;
+            save(
+                &journal_path,
+                &retained_journal(&mutation, false, "prepared", Some(&graphs))?,
+            )?;
             probe("prepared")?;
             let mut committed = |_: &V| {
-                save(&journal_path, &retained_journal(&mutation, false, "committed", Some(&graphs))?)?;
+                save(
+                    &journal_path,
+                    &retained_journal(&mutation, false, "committed", Some(&graphs))?,
+                )?;
                 probe("committed")
             };
-            crate::legacy_authoring::publish_prepared_with_committed(prepared, &route, &mut committed)?;
+            crate::legacy_authoring::publish_prepared_with_committed(
+                prepared,
+                &route,
+                &mut committed,
+            )?;
             return Ok((mutation, graphs));
         }
-        let entry_name = record.file_name().and_then(|v| v.to_str()).ok_or_else(|| error("invalid_path"))?;
+        let entry_name = record
+            .file_name()
+            .and_then(|v| v.to_str())
+            .ok_or_else(|| error("invalid_path"))?;
         let layout = crate::history_transaction::Layout::for_entry(entry_name)?;
         let portable = if layout.home.is_empty() {
             format!("evidence/reports/{event}.txt")
@@ -662,18 +1016,24 @@ fn run_with_probe(
         if report.raw.get("source").is_some() || report.updates.iter().any(|u| u["kind"] == "add") {
             let expected = report.raw.get("record_sha256").and_then(J::as_str)
                 .ok_or_else(|| error("new entries and existing source citations require record_sha256 from the primary's prior read"))?;
-            crate::require(crate::identity::sha256(&captured.entry_bytes) == expected,
-                "record changed since the primary read it; reread the premises before resubmitting")?;
+            crate::require(
+                crate::identity::sha256(&captured.entry_bytes) == expected,
+                "record changed since the primary read it; reread the premises before resubmitting",
+            )?;
         }
-        crate::require(!crate::recording_privacy::private_marker(&document),
-            "private or unclear source permission in history report")?;
+        crate::require(
+            !crate::recording_privacy::private_marker(&document),
+            "private or unclear source permission in history report",
+        )?;
         let collection = source_collection(&document, &report)
             .map_err(|e| error(&format!("history source collection: {e}")))?;
         let planned = actions(&report, &event, Path::new(&portable), &collection)
             .map_err(|e| error(&format!("history report actions: {e}")))?;
         let owned_runtime = if supplied_runtime.is_none() {
             crate::public_workspace::runtime_for_document(&document)?
-        } else { None };
+        } else {
+            None
+        };
         let runtime = supplied_runtime.or(owned_runtime.as_ref());
         let now = chrono::Utc::now();
         let write = crate::history_authoring::Options {
@@ -689,15 +1049,23 @@ fn run_with_probe(
             authoring: write,
             receipt_version: 8,
             context,
-            evidence: std::collections::BTreeMap::from([(portable, report.quote.as_bytes().to_vec())]),
+            evidence: std::collections::BTreeMap::from([(
+                portable,
+                report.quote.as_bytes().to_vec(),
+            )]),
         };
         let mutation = crate::history_authoring_batch::prepare_batch(
             &store, &captured, &planned, &batch, runtime,
-        ).map_err(|e| error(&format!("history report preparation: {e}")))?;
+        )
+        .map_err(|e| error(&format!("history report preparation: {e}")))?;
         verify_requested_profile(&report, &mutation, runtime)?;
         let candidate = crate::history_authoring::candidate(&captured, &mutation)
             .map_err(|e| error(&format!("history report candidate: {e}")))?;
-        let seeds = report.updates.iter().map(|v| v["id"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
+        let seeds = report
+            .updates
+            .iter()
+            .map(|v| v["id"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
         let before_document = crate::history_authoring::document(&captured)
             .map_err(|e| error(&format!("history report before document: {e}")))?;
         let after_document = crate::history_authoring::document(&candidate)
@@ -708,16 +1076,35 @@ fn run_with_probe(
             graph_document(&candidate.entry_bytes, &after_document, &seeds, runtime)
                 .map_err(|e| error(&format!("history report after graph: {e}")))?,
         );
-        let authored = V::List(mutation.files().iter().filter(|f| f.role == "history_object")
-            .map(|f| crate::history_yaml::decode_document(f.after.as_ref().unwrap())).collect::<Result<Vec<_>>>()?);
-        crate::require(!crate::recording_privacy::private_marker(&authored),
-            "private or unclear prepared source permission")?;
-        save(&journal_path, &retained_journal(&mutation, true, "prepared", Some(&graphs))?)?;
+        let authored = V::List(
+            mutation
+                .files()
+                .iter()
+                .filter(|f| f.role == "history_object")
+                .map(|f| crate::history_yaml::decode_document(f.after.as_ref().unwrap()))
+                .collect::<Result<Vec<_>>>()?,
+        );
+        crate::require(
+            !crate::recording_privacy::private_marker(&authored),
+            "private or unclear prepared source permission",
+        )?;
+        save(
+            &journal_path,
+            &retained_journal(&mutation, true, "prepared", Some(&graphs))?,
+        )?;
         probe("prepared")?;
         crate::direct_history::publish_prepared(
-            &store, &mutation, &route, &original, runtime, &mut |phase| {
+            &store,
+            &mutation,
+            &route,
+            &original,
+            runtime,
+            &mut |phase| {
                 if phase == "committed" {
-                    save(&journal_path, &retained_journal(&mutation, true, "committed", Some(&graphs))?)?;
+                    save(
+                        &journal_path,
+                        &retained_journal(&mutation, true, "committed", Some(&graphs))?,
+                    )?;
                 }
                 probe(phase)
             },
@@ -727,18 +1114,43 @@ fn run_with_probe(
     let (state, reason, mutation, graphs, code) = match outcome {
         Ok((mutation, graphs)) => ("applied", None, Some(mutation), Some(graphs), 0),
         Err(e) => {
-            if journal_path.is_file() { return Err(e) }
+            if journal_path.is_file() {
+                return Err(e);
+            }
             ("needs_primary", Some(e.to_string()), None, None, 1)
         }
     };
-    let (receipt, signals) = receipt(&report, &record, &root, &event, &source_path, &envelope_sha,
-        state, reason.as_deref(), false, mutation.as_ref(), graphs.as_ref(), supplied_runtime)?;
+    let (receipt, signals) = receipt(
+        &report,
+        &record,
+        &root,
+        &event,
+        &source_path,
+        &envelope_sha,
+        state,
+        reason.as_deref(),
+        false,
+        mutation.as_ref(),
+        graphs.as_ref(),
+        supplied_runtime,
+    )?;
     for signal in &signals {
-        save(&root.join("signals").join(format!("{}.json", signal["id"].as_str().unwrap())), signal)?;
+        save(
+            &root
+                .join("signals")
+                .join(format!("{}.json", signal["id"].as_str().unwrap())),
+            signal,
+        )?;
     }
     save(&receipt_path, &receipt)?;
-    save(&root.join("results").join(format!("{event}.json")), &json!({"receipt":receipt,"signals":signals}))?;
-    Ok(Output { text: format!("{}\n", serde_json::to_string(&receipt)?), code })
+    save(
+        &root.join("results").join(format!("{event}.json")),
+        &json!({"receipt":receipt,"signals":signals}),
+    )?;
+    Ok(Output {
+        text: format!("{}\n", serde_json::to_string(&receipt)?),
+        code,
+    })
 }
 
 #[cfg(test)]
@@ -760,12 +1172,25 @@ mod tests {
         let report = json!({"event_id":"recover-me","date":"2026-09-20","source_quote":"x is 2",
             "updates":[{"kind":"set","id":"p.x","value":2}]});
         let bytes = serde_json::to_vec(&report).unwrap();
-        let options = Options { file: "-".into(), record: None, state_dir: Some(state.clone()) };
+        let options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(state.clone()),
+        };
         let first = run_with_probe(&options, temp.path(), Some(&bytes), None, &mut |phase| {
-            if phase == "committed" { Err(error("injected completion failure")) } else { Ok(()) }
+            if phase == "committed" {
+                Err(error("injected completion failure"))
+            } else {
+                Ok(())
+            }
         });
         assert_eq!(first.unwrap_err().0, "injected completion failure");
-        assert!(fs::read_dir(state.join("receipts")).unwrap().next().is_none());
+        assert!(
+            fs::read_dir(state.join("receipts"))
+                .unwrap()
+                .next()
+                .is_none()
+        );
         let recovered = run(&options, temp.path(), Some(&bytes)).unwrap();
         assert_eq!(recovered.code, 0);
         let receipt: J = serde_json::from_str(&recovered.text).unwrap();
@@ -783,36 +1208,70 @@ mod tests {
             "date":"2026-09-20","source_quote":"new value","updates":[{"kind":"add","id":"p.y","body":{"v":2}}]});
         let bytes = serde_json::to_vec(&report).unwrap();
         let state = temp.path().join("state");
-        let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
+        let options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(state.clone()),
+        };
         let result = run_with_probe(&options, temp.path(), Some(&bytes), None, &mut |phase| {
             if phase == "prepared" {
-                fs::write(&entry, "sources:\n  s.changed: {url: 'https://changed.test', read: 2026-09-20}\nknown:\n  p.x: {v: 99}\n")?;
+                fs::write(
+                    &entry,
+                    "sources:\n  s.changed: {url: 'https://changed.test', read: 2026-09-20}\nknown:\n  p.x: {v: 99}\n",
+                )?;
             }
             Ok(())
         });
         assert!(result.is_err());
-        assert!(fs::read_dir(state.join("receipts")).unwrap().next().is_none());
+        assert!(
+            fs::read_dir(state.join("receipts"))
+                .unwrap()
+                .next()
+                .is_none()
+        );
         assert!(fs::read_to_string(entry).unwrap().contains("p.x: {v: 99}"));
     }
 
     #[test]
     fn active_history_update_publishes_before_building_its_receipt() {
         let temp = tempfile::tempdir().unwrap();
-        assert!(std::process::Command::new("git").args(["init", "-q"])
-            .current_dir(temp.path()).status().unwrap().success());
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "-q"])
+                .current_dir(temp.path())
+                .status()
+                .unwrap()
+                .success()
+        );
         let entry = temp.path().join("GROUNDING.yaml");
-        let policy = crate::project_modes::Project::open(temp.path()).unwrap().config().unwrap();
+        let policy = crate::project_modes::Project::open(temp.path())
+            .unwrap()
+            .config()
+            .unwrap();
         let cache = tempfile::tempdir().unwrap();
         let runtime = crate::history_authoring::tests::runtime(cache.path())
             .with_ordinary_program(crate::ordinary_reader::tests::program());
         let initial = V::from_json(&json!({"kind":"add","id":"p.x",
-            "body":{"v":1},"as_of":"2026-09-01"})).unwrap();
-        let bootstrap = crate::history_bootstrap::prepare(&entry, &initial, &policy,
+            "body":{"v":1},"as_of":"2026-09-01"}))
+        .unwrap();
+        let bootstrap = crate::history_bootstrap::prepare(
+            &entry,
+            &initial,
+            &policy,
             &crate::history_bootstrap::BootstrapOptions {
-                operation:"bootstrap-update-test".into(), recorded_at:"2026-09-01T00:00:00Z".into(),
-                recording_day:"2026-09-01".into(), record_id:"update-test".into(), by:V::Null,
-            }, Some(&runtime)).unwrap();
-        crate::history_bootstrap::publish(&entry, &bootstrap, &policy, Some(&runtime), &mut |_| Ok(())).unwrap();
+                operation: "bootstrap-update-test".into(),
+                recorded_at: "2026-09-01T00:00:00Z".into(),
+                recording_day: "2026-09-01".into(),
+                record_id: "update-test".into(),
+                by: V::Null,
+            },
+            Some(&runtime),
+        )
+        .unwrap();
+        crate::history_bootstrap::publish(&entry, &bootstrap, &policy, Some(&runtime), &mut |_| {
+            Ok(())
+        })
+        .unwrap();
         for (index, action) in [
             json!({"kind":"add","id":"s.old","into":"known","body":{"url":"https://example.test","read":"2026-09-01"},"as_of":"2026-09-01"}),
             json!({"kind":"add","id":"d.x","body":{"rests_on":["p.x"],"verdict":"ok","wrong_if":"p.x > 1"},"as_of":"2026-09-01"}),
@@ -833,13 +1292,30 @@ mod tests {
         let report = json!({"event_id":"history-update","date":"2026-09-20","source_quote":"x is 2",
             "updates":[{"kind":"set","id":"p.x","value":2}]});
         let bytes = serde_json::to_vec(&report).unwrap();
-        let output = run_with_probe(&Options { file:"-".into(), record:None, state_dir:Some(temp.path().join("state")) },
-            temp.path(), Some(&bytes), Some(&runtime), &mut |_| Ok(())).unwrap();
+        let output = run_with_probe(
+            &Options {
+                file: "-".into(),
+                record: None,
+                state_dir: Some(temp.path().join("state")),
+            },
+            temp.path(),
+            Some(&bytes),
+            Some(&runtime),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(output.code, 0, "{}", output.text);
         let receipt: J = serde_json::from_str(&output.text).unwrap();
         assert_eq!(receipt["state"], "applied");
         assert_eq!(receipt["newly_fired_judgments"], json!(["d.x"]));
-        let captured = crate::history_store::Store::new(&entry).unwrap().capture().unwrap();
-        assert!(map(&map(&captured.state).unwrap()["subjects"]).unwrap().contains_key("p.x"));
+        let captured = crate::history_store::Store::new(&entry)
+            .unwrap()
+            .capture()
+            .unwrap();
+        assert!(
+            map(&map(&captured.state).unwrap()["subjects"])
+                .unwrap()
+                .contains_key("p.x")
+        );
     }
 }

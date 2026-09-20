@@ -54,19 +54,6 @@ fn safe(path: &Path) -> Result<String> {
     Ok(parts.join("/"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::safe;
-    use std::path::Path;
-
-    #[test]
-    fn parent_components_are_refused_even_when_they_would_normalize_inside() {
-        assert_eq!(
-            safe(Path::new("sub/../other.yaml")).unwrap_err().0,
-            "record pointer must use a portable path inside its checkout"
-        );
-    }
-}
 fn tree_files(root: &Path, folder: &str) -> Result<Vec<String>> {
     fn visit(root: &Path, path: &Path, out: &mut Vec<String>) -> Result<()> {
         if !path.exists() {
@@ -412,4 +399,18 @@ pub fn snapshot(watch: &Watch) -> Result<Snapshot> {
     ]);
     let value = crate::ordinary_reader::json_value(&data, 0)?;
     Ok(Snapshot { data, value })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe;
+    use std::path::Path;
+
+    #[test]
+    fn parent_components_are_refused_even_when_they_would_normalize_inside() {
+        assert_eq!(
+            safe(Path::new("sub/../other.yaml")).unwrap_err().0,
+            "record pointer must use a portable path inside its checkout"
+        );
+    }
 }

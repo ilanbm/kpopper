@@ -81,36 +81,6 @@ fn has_nonfinite_token(raw: &[u8]) -> bool {
     false
 }
 
-#[cfg(test)]
-mod tests {
-    use super::load_report;
-    use std::fs;
-
-    #[test]
-    fn nonfinite_json_reports_the_shared_scalar_contract() {
-        let temp = tempfile::NamedTempFile::new().unwrap();
-        fs::write(temp.path(), br#"{"id":"e","value":NaN}"#).unwrap();
-        assert_eq!(
-            load_report(temp.path().to_str().unwrap()).unwrap_err().0,
-            "shared observations need a finite scalar value"
-        );
-    }
-
-    #[test]
-    fn quoted_nonfinite_text_and_duplicate_json_keep_parser_errors() {
-        let quoted = tempfile::NamedTempFile::new().unwrap();
-        fs::write(quoted.path(), br#"{"id":"e","value":"NaN"}"#).unwrap();
-        assert!(load_report(quoted.path().to_str().unwrap()).is_ok());
-        let duplicate = tempfile::NamedTempFile::new().unwrap();
-        fs::write(duplicate.path(), br#"{"id":"e","id":"e2","value":1}"#).unwrap();
-        assert!(
-            !load_report(duplicate.path().to_str().unwrap())
-                .unwrap_err()
-                .0
-                .contains("finite scalar")
-        );
-    }
-}
 fn layout(watch: &Watch, enabled: bool) -> Result<(PathBuf, PathBuf)> {
     let config = watch.config()?.unwrap_or(J::Null);
     require(
@@ -887,4 +857,35 @@ pub fn resolve(watch: &Watch, id: &str, evidence: &str) -> Result<J> {
     }
     watch.request()?;
     Ok(json!({"state":"resolved","event_id":id}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_report;
+    use std::fs;
+
+    #[test]
+    fn nonfinite_json_reports_the_shared_scalar_contract() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        fs::write(temp.path(), br#"{"id":"e","value":NaN}"#).unwrap();
+        assert_eq!(
+            load_report(temp.path().to_str().unwrap()).unwrap_err().0,
+            "shared observations need a finite scalar value"
+        );
+    }
+
+    #[test]
+    fn quoted_nonfinite_text_and_duplicate_json_keep_parser_errors() {
+        let quoted = tempfile::NamedTempFile::new().unwrap();
+        fs::write(quoted.path(), br#"{"id":"e","value":"NaN"}"#).unwrap();
+        assert!(load_report(quoted.path().to_str().unwrap()).is_ok());
+        let duplicate = tempfile::NamedTempFile::new().unwrap();
+        fs::write(duplicate.path(), br#"{"id":"e","id":"e2","value":1}"#).unwrap();
+        assert!(
+            !load_report(duplicate.path().to_str().unwrap())
+                .unwrap_err()
+                .0
+                .contains("finite scalar")
+        );
+    }
 }

@@ -683,7 +683,10 @@ fn main() {
                 .clone()
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
-            Ok::<_,kpop_native::Error>(kpop_native::public_consolidation::dispatch(&arguments.options()?, &cwd))
+            Ok::<_, kpop_native::Error>(kpop_native::public_consolidation::dispatch(
+                &arguments.options()?,
+                &cwd,
+            ))
         })();
         let (output, error, code) = match result {
             Ok(output) => (output.stdout, output.stderr, output.code),
@@ -1112,7 +1115,6 @@ fn main() {
             }
         }
         Ok(value) if is_agent => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
-
 
         Ok(value) => println!("{}", value),
         Err(error) => {

@@ -105,6 +105,7 @@ fn with_lock<T>(key: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
     }
     let file = fs::OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(path)?;
