@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0 — 2026-09-21
+
+- Add opt-in Rust runtime with verified native bundles (#149) — minor
+- Make README workflows easier to discover (#147) — patch
+- Record Claude plugin install request [skip ci] — no bump declared
+
+Decisions recorded: d.native_cycles_refuse, d.readme_canvas_placement, d.readme_paths_use_wide_banners
+
 ## 1.8.1 — 2026-09-19
 
 - Fix Claude plugin installation with packaged runtimes (#144) — patch
