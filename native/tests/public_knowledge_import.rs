@@ -298,7 +298,13 @@ fn malformed_nontext_incomplete_and_missing_evidence_fail_without_writes() {
 #[test]
 fn reused_event_with_changed_input_refuses_without_moving_the_ref() {
     let (_temp, root, record) = fixture(PUBLIC);
-    let first = parsed(&invoke(&root, &record, "project", &[]));
+    let first = invoke(&root, &record, "project", &[]);
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stdout)
+    );
+    let first = parsed(&first);
     let head = first["ledger_commit"].clone();
     fs::write(&record, PUBLIC.replace("v: 10", "v: 11")).unwrap();
     let output = invoke(&root, &record, "project", &[]);

@@ -286,8 +286,12 @@ fn write_commit(
     existing: &BTreeMap<String, String>,
     additions: &BTreeMap<String, Vec<u8>>,
 ) -> Result<String> {
-    let index = tempfile::NamedTempFile::new()?.into_temp_path();
-    fs::remove_file(&index)?;
+    // Keep a reserved directory alive for the lifetime of the temporary index.
+    // Removing a NamedTempFile before Git opens its index leaves the basename
+    // available for reuse, so another import can select the same GIT_INDEX_FILE
+    // and contend on its sibling `.lock` file.
+    let index_dir = tempfile::tempdir()?;
+    let index = index_dir.path().join("index");
     let index_name = index
         .to_str()
         .ok_or_else(|| Error("nonportable_project_path".into()))?;
