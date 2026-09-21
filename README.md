@@ -16,6 +16,14 @@ kpopper connects decisions to the evidence, assumptions and earlier decisions th
 depend on, and records what would make them worth revisiting. When a recorded premise
 changes, kpopper traces its reach through the record and surfaces what needs another look.
 
+Agent reasoning costs time and tokens. kpopper runs calculations and dependency checks
+deterministically, aiming to turn seconds of model work into milliseconds of
+computation—and focus the agent on decisions that need judgment.
+
+[![A changed recorded assumption is highlighted amber in a dependency graph. Deterministic local checks follow its connections in blue while unrelated nodes fade. Decisions A, B and C are returned to the agent for review. A prominent badge reads: A check that takes an agent 10 seconds runs locally in 4.5 milliseconds. When a recorded assumption changes, deterministic checks show the agent which decisions need another look.](assets/diagrams/dependency-checks.png)](assets/diagrams/dependency-checks.png)
+
+[Phone layout](assets/diagrams/dependency-checks-mobile.png)
+
 > [!IMPORTANT]
 > **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
 >
@@ -35,7 +43,7 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 - [Choose your path](#choose-your-path)
   - [Coding agents](#example-1-coding-agent)
-  - [Cowork / Work](#example-2-claude-cowork-and-chatgpt-work)
+  - [Claude Cowork / ChatGPT Work](#example-2-claude-cowork-and-chatgpt-work)
   - [Research](#example-3-research)
 - [Installation and first use](#get-started)
 - [CLI and plugin quick reference](#quick-reference)
@@ -54,8 +62,8 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 ## Where would you like to start?
 
-Open the example closest to your work. Each path follows the situation, the record
-and what the checks return. You can also [go straight to installation](#get-started).
+Open the path closest to your work. Each section includes workflows, examples and
+the records behind them. You can also [go straight to installation](#get-started).
 
 <a id="access-control-and-shared-caching"></a>
 
@@ -65,7 +73,12 @@ and what the checks return. You can also [go straight to installation](#get-star
 <a id="example-1-coding-agent"></a>
 
 <details>
-<summary><a href="assets/stories/cache-privacy.png"><img src="assets/navigation/coding.png" width="112" height="70" align="middle" alt="Preview the coding-agent illustration"></a> <strong>Coding agents</strong><br>Catch assumptions that break across branches and worktrees.</summary>
+<summary>
+<strong>Coding agents</strong><br>
+Claude Code · Codex · Cursor · and more<br><br>
+<a id="coding-preview"><img src="assets/navigation/coding-banner.png" width="960" alt="PR A enables private projects. PR B adds a cache keyed only by query, assuming all results are public. Both changes point to the merged cache, where a private project and a red failure mark show private results exposed."></a><br>
+<strong>Explore workflows and examples ↓</strong>
+</summary>
 
 ## Example 1: Coding Agent (assumption checks)
 
@@ -250,7 +263,12 @@ These project modes also apply to document and research work.
 <a id="example-2-claude-cowork-and-chatgpt-work"></a>
 
 <details>
-<summary><a href="assets/stories/cowork-workshop.png"><img src="assets/navigation/cowork.png" width="112" height="70" align="middle" alt="Preview the workshop illustration"></a> <strong>Cowork / Work</strong><br>Keep plans current when the brief changes.</summary>
+<summary>
+<strong>Claude Cowork / ChatGPT Work</strong><br>
+Keep plans current when the brief changes.<br><br>
+<a id="cowork-preview"><img src="assets/navigation/cowork-banner.png" width="960" alt="A plan built around one venue kitchen meets workshop participants cooking remotely from their own homes."></a><br>
+<strong>Explore workflows and examples ↓</strong>
+</summary>
 
 ## Example 2: Claude Cowork / ChatGPT Work (freshness)
 
@@ -373,7 +391,12 @@ For another example that needs judgment, explore
 <a id="example-3-research"></a>
 
 <details>
-<summary><a href="assets/stories/dark-matter-intro.png"><img src="assets/navigation/research.png" width="112" height="70" align="middle" alt="Preview the research illustration"></a> <strong>Research</strong><br>Connect evidence and revisit conclusions as findings change.</summary>
+<summary>
+<strong>Research</strong><br>
+Connect evidence and revisit conclusions as findings change.<br><br>
+<a id="research-preview"><img src="assets/navigation/research-banner.png" width="960" alt="Galaxy rotation, gravitational lensing and the cosmic microwave background introduce the research evidence."></a><br>
+<strong>Explore workflows and examples ↓</strong>
+</summary>
 
 ## Example 3: Research (evidence synthesis)
 
@@ -1257,8 +1280,7 @@ unrelated IDs, can still require human review.
 
 <a id="popper-give-a-conclusion-a-way-to-fail"></a>
 
-<details>
-<summary><strong>Popper: give a conclusion a way to fail</strong></summary>
+## Popper: give a conclusion a way to fail
 
 The man in the banner is **Karl Popper**, cast here as an unlikely K-pop star.
 
@@ -1270,6 +1292,9 @@ explains the idea and its limits.
 kpopper borrows that discipline for agent reasoning: **preserve the evidence, state what
 would undermine a conclusion, and know when to reconsider it.** This is the idea behind
 the name.
+
+<details>
+<summary><strong>How the Popper example works</strong></summary>
 
 **Now prove that Karl Popper isn't the father of K-pop.**
 
@@ -1527,6 +1552,8 @@ authorize. It does not install connectors or scan accounts by itself. See
 [starting a knowledge record](docs/first-use.md) for the workflow and host requirements.
 
 </details>
+
+[![A software agent holds a palette and paints connections between evidence, assumptions, a decision and conditions for review on an easel labelled GROUNDING.yaml. Earlier notes remain beside the agent. The caption reads: The canvas your AI didn’t know it needed.](assets/canvas-for-reasoning.png)](assets/canvas-for-reasoning.png)
 
 ## Make it earn its place
 
