@@ -21,6 +21,18 @@ Development and test builds optimize SHA-256 hashing because launcher attestatio
 verifies complete executable and runtime artifacts within a bounded deadline.
 Run validation separately from other compilation jobs to avoid resource contention.
 
+The full integration suite needs the same verified reasoning resources as a runtime
+bundle. For a macOS ARM64 bundle, run (use its matching target directory elsewhere):
+
+```sh
+KPOP_TEST_ORDINARY_PROGRAM=/absolute/bundle/resources/ordinary/darwin-arm64 \
+KPOP_CONSOLIDATION_RESOURCES=/absolute/bundle/resources \
+cargo test --locked --no-fail-fast
+```
+
+The platform acceptance workflow builds these resources before testing. Tests that
+require an explicitly selected Python oracle or managed deployment remain opt-in.
+
 Core commands and Hub rendering do not require Python, Node, Cargo or Rust on the
 runtime PATH. Rust and downloaded build dependencies are required only for builds.
 Optional Hub browser checks use Node, playwright-core and Chrome.
