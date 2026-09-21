@@ -1,0 +1,3 @@
+review d.keep: seen rewritten from what the record holds (2026-09-19)
+  p.alpha: stale -> old text
+  d.keep holds: wrong_if does not hold (p.beta > 3)

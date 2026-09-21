@@ -1,0 +1,2784 @@
+{
+  "oracle": "baseline-f480ea6/scripts/export_graph.py",
+  "cases": [
+    {
+      "name": "states-links-unicode",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "d.muted",
+        "d.falsified",
+        "d.moved",
+        "d.blocked",
+        "hyp.old"
+      ],
+      "direction": "support",
+      "depth": 2,
+      "max_nodes": 12,
+      "packet": {
+        "nodes": {
+          "d.muted": {
+            "body": {
+              "verdict": "Continue",
+              "rests_on": [
+                "m.cost"
+              ],
+              "seen": {
+                "m.cost": 10
+              },
+              "wrong_if": "m.cost > 20"
+            },
+            "missing": false,
+            "states": [],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.cost",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 12,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "muted"
+              }
+            ],
+            "omitted_readings": 0,
+            "condition": {
+              "expression": "m.cost > 20",
+              "result": false,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.falsified": {
+            "body": {
+              "verdict": "Stop",
+              "rests_on": [
+                "m.cost"
+              ],
+              "seen": {
+                "m.cost": 10
+              },
+              "wrong_if": "m.cost > 11"
+            },
+            "missing": false,
+            "states": [
+              "falsified"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.cost",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 12,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "crossed"
+              }
+            ],
+            "omitted_readings": 0,
+            "condition": {
+              "expression": "m.cost > 11",
+              "result": true,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.moved": {
+            "body": {
+              "verdict": "Review",
+              "rests_on": [
+                "m.cost"
+              ],
+              "seen": {
+                "m.cost": 10
+              },
+              "reopened_by": "A new quote arrives"
+            },
+            "missing": false,
+            "states": [
+              "moved"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.cost",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 12,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "moved"
+              }
+            ],
+            "omitted_readings": 0,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.blocked": {
+            "body": {
+              "verdict": "Wait",
+              "rests_on": [
+                "missing.entry"
+              ],
+              "seen": {
+                "missing.entry": true
+              },
+              "blocked_on": {
+                "missing": [
+                  "missing.entry"
+                ],
+                "why": "Awaiting confirmation"
+              }
+            },
+            "missing": false,
+            "states": [
+              "blocked"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "missing.entry",
+                "has_review": true,
+                "at_review": true,
+                "current_status": "missing",
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "unavailable"
+              }
+            ],
+            "omitted_readings": 0,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "hyp.old": {
+            "body": {
+              "v": "refuted",
+              "refutes": [
+                "d.moved"
+              ],
+              "at": "Trial failed"
+            },
+            "missing": false,
+            "states": [],
+            "kind": "findings"
+          },
+          "m.cost": {
+            "body": {
+              "v": 12,
+              "from": "s.note",
+              "name": "Cost",
+              "metadata": {
+                "current": "new"
+              }
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "missing.entry": {
+            "body": null,
+            "missing": true,
+            "states": [],
+            "kind": "missing"
+          },
+          "s.note": {
+            "body": {
+              "name": "מקור 日本語 <script> & #quot; [check] `text`",
+              "file": "notes.md",
+              "read": "2026-01-01"
+            },
+            "missing": false,
+            "states": [],
+            "kind": "sources"
+          }
+        },
+        "edges": [
+          [
+            "d.blocked",
+            "rests_on",
+            "missing.entry"
+          ],
+          [
+            "d.falsified",
+            "rests_on",
+            "m.cost"
+          ],
+          [
+            "d.moved",
+            "rests_on",
+            "m.cost"
+          ],
+          [
+            "d.muted",
+            "rests_on",
+            "m.cost"
+          ],
+          [
+            "hyp.old",
+            "refutes",
+            "d.moved"
+          ],
+          [
+            "m.cost",
+            "from",
+            "s.note"
+          ]
+        ],
+        "seeds": [
+          "d.muted",
+          "d.falsified",
+          "d.moved",
+          "d.blocked",
+          "hyp.old"
+        ],
+        "direction": "support",
+        "depth": 2,
+        "max_nodes": 12,
+        "snapshot": "67a7ab472e249d76",
+        "outside_nodes": 2,
+        "frontier_edges": 1,
+        "omitted_edges": 0,
+        "hypotheses": 0,
+        "contributions": 0,
+        "hypothesis_errors": {},
+        "fields": {
+          "deps": "rests_on",
+          "snapshot": "seen",
+          "predicate": "wrong_if"
+        },
+        "assessment": {
+          "schema_version": 1,
+          "assessment_profile": "ordinary-reader/v1",
+          "attention_policy": "focused-review/v1",
+          "record_revision": "67a7ab472e249d765364b3d01e68d183d2ae719d68caefa8034fb60c8a1683b6",
+          "scope": {
+            "base": "supplied_record",
+            "hypotheses_checked": [],
+            "hypotheses_skipped": {},
+            "external_sources_fetched": false,
+            "coverage": "supplied_record",
+            "integrity_checks": "listed per node; not a complete check or page verification",
+            "knowledge": {
+              "read_mode": "frozen",
+              "contributions_checked": [],
+              "conflict_sources": {},
+              "target": {
+                "status": "unassessed",
+                "ref": null,
+                "revision": null,
+                "reason": null
+              }
+            }
+          },
+          "assessment_revision": "3ea83f446600d9c7214ea0a33f66acd1b2b5bf35f8ccda3cd7c889667190db76"
+        }
+      },
+      "markdown": "## Knowledge excerpt\n\nRecord 67a7ab472e249d76; support depth 2; 8 nodes shown (limit 12), 2 outside selection; 1 boundary links; 0 internal links omitted (cap 96).\n\nBLOCKED: referenced input is missing with a recorded explanation; FALSIFIED: declared condition holds on recorded values; MOVED: changed premise needs review.\n\n### d.muted — judgment\n\n- verdict: Continue\n- wrong\\_if: m.cost \\> 20 → false on current recorded values.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; within condition; no review flag |\n\n### d.falsified — judgment · FALSIFIED\n\n- verdict: Stop\n- wrong\\_if: m.cost \\> 11 → true on current recorded values.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; declared condition holds |\n\n### d.moved — judgment · MOVED\n\n- verdict: Review\n- reopened\\_by \\(human condition; not evaluated\\): A new quote arrives\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; review flag |\n\n### d.blocked — judgment · BLOCKED\n\n- verdict: Wait\n- blocked\\_on \\(recorded declaration\\): \\{\"missing\": \\[\"missing.entry\"\\], \"why\": \"Awaiting confirmation\"\\}\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| missing.entry | true | missing from record | not compared |\n\n### hyp.old — findings\n\n- current: refuted\n- refutes: \\[\"d.moved\"\\]\n- at: Trial failed\n\n### m.cost — known\n\n- current: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### missing.entry — missing\n\nReferenced ID is absent from the base record.\n\n### s.note — sources\n\n- name: מקור 日本語 \\<script\\> \\& \\#quot; \\[check\\] \\`text\\`\n- file: notes.md\n- read: \"2026-01-01\"\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- d.blocked → rests_on → missing.entry (declared premise).\n- d.falsified → rests_on → m.cost (declared premise).\n- d.moved → rests_on → m.cost (declared premise).\n- d.muted → rests_on → m.cost (declared premise).\n- hyp.old → refutes → d.moved (recorded refutation, not a dependency or a newly evaluated condition).\n- m.cost → from → s.note (recorded source).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "markdown_details": "## Knowledge excerpt\n\nRecord 67a7ab472e249d76; support depth 2; 8 nodes shown (limit 12), 2 outside selection; 1 boundary links; 0 internal links omitted (cap 96).\n\nBLOCKED: referenced input is missing with a recorded explanation; FALSIFIED: declared condition holds on recorded values; MOVED: changed premise needs review.\n\n### d.muted — judgment\n\n- verdict: Continue\n- wrong\\_if: m.cost \\> 20 → false on current recorded values.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; within condition; no review flag |\n\nRecorded fields:\n- verdict: Continue\n- rests\\_on: \\[\"m.cost\"\\]\n- historical snapshot \\(seen\\): \\{\"m.cost\": 10\\}\n- wrong\\_if: m.cost \\> 20\n\n### d.falsified — judgment · FALSIFIED\n\n- verdict: Stop\n- wrong\\_if: m.cost \\> 11 → true on current recorded values.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; declared condition holds |\n\nRecorded fields:\n- verdict: Stop\n- rests\\_on: \\[\"m.cost\"\\]\n- historical snapshot \\(seen\\): \\{\"m.cost\": 10\\}\n- wrong\\_if: m.cost \\> 11\n\n### d.moved — judgment · MOVED\n\n- verdict: Review\n- reopened\\_by \\(human condition; not evaluated\\): A new quote arrives\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; review flag |\n\nRecorded fields:\n- verdict: Review\n- rests\\_on: \\[\"m.cost\"\\]\n- historical snapshot \\(seen\\): \\{\"m.cost\": 10\\}\n- reopened\\_by: A new quote arrives\n\n### d.blocked — judgment · BLOCKED\n\n- verdict: Wait\n- blocked\\_on \\(recorded declaration\\): \\{\"missing\": \\[\"missing.entry\"\\], \"why\": \"Awaiting confirmation\"\\}\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| missing.entry | true | missing from record | not compared |\n\nRecorded fields:\n- verdict: Wait\n- rests\\_on: \\[\"missing.entry\"\\]\n- historical snapshot \\(seen\\): \\{\"missing.entry\": true\\}\n- blocked\\_on: \\{\"missing\": \\[\"missing.entry\"\\], \"why\": \"Awaiting confirmation\"\\}\n\n### hyp.old — findings\n\n- current: refuted\n- refutes: \\[\"d.moved\"\\]\n- at: Trial failed\n\nRecorded fields:\n- v: refuted\n- refutes: \\[\"d.moved\"\\]\n- at: Trial failed\n\n### m.cost — known\n\n- current: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\nRecorded fields:\n- v: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### missing.entry — missing\n\nReferenced ID is absent from the base record.\n\n### s.note — sources\n\n- name: מקור 日本語 \\<script\\> \\& \\#quot; \\[check\\] \\`text\\`\n- file: notes.md\n- read: \"2026-01-01\"\n\nRecorded fields:\n- name: מקור 日本語 \\<script\\> \\& \\#quot; \\[check\\] \\`text\\`\n- file: notes.md\n- read: \"2026-01-01\"\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- d.blocked → rests_on → missing.entry (declared premise).\n- d.falsified → rests_on → m.cost (declared premise).\n- d.moved → rests_on → m.cost (declared premise).\n- d.muted → rests_on → m.cost (declared premise).\n- hyp.old → refutes → d.moved (recorded refutation, not a dependency or a newly evaluated condition).\n- m.cost → from → s.note (recorded source).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "mermaid": "flowchart TB\n  accTitle: Knowledge excerpt\n  accDescr: Declared links only. MOVED needs review; FALSIFIED means a declared condition is true.\n  %% Record 67a7ab472e249d76; support depth 2; 8 nodes shown (limit 12), 2 outside selection; 1 boundary links; 0 internal links omitted (cap 96).\n  n0[\"d.muted<br/>judgment<br/>Continue\"]\n  n1[\"d.falsified<br/>judgment: FALSIFIED<br/>Stop\"]\n  n2[\"d.moved<br/>judgment: MOVED<br/>Review\"]\n  n3[\"d.blocked<br/>judgment: BLOCKED<br/>Wait\"]\n  n4[\"hyp.old<br/>findings<br/>refuted\"]\n  n5[\"m.cost<br/>known<br/>v: 12<br/>Cost\"]\n  n6[\"missing.entry<br/>missing: MISSING<br/>Referenced ID is absent from the<br/>base record\"]\n  n7[\"s.note<br/>sources<br/>מקור 日本語 #60;script#62; #38; #35;quot#59; #91;check#93;<br/>#96;text#96;\"]\n  n3 -->|rests_on| n6\n  n1 -->|rests_on| n5\n  n2 -->|rests_on| n5\n  n0 -->|rests_on| n5\n  n4 -.->|refutes| n2\n  n5 -->|from| n7\n  export_legend[\"BLOCKED: referenced input is missing with a recorded explanation<br/>FALSIFIED: declared condition holds on recorded values<br/>MOVED: changed premise needs review\"]\n  export_note[\"Scope #40;not a record#41;<br/>67a7ab472e249d76<br/>2 nodes outside selection<br/>1 boundary links<br/>0 internal links omitted<br/>0 labels shortened #40;80 chars#41;<br/>0 hypotheses not expanded<br/>0 project contributions not expanded<br/>0 unreadable hypotheses<br/>Details: read the text export\"]\n  style export_note stroke-dasharray: 4 4\n"
+    },
+    {
+      "name": "impact-frontier-cycle",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: m.total, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "m.cost"
+      ],
+      "direction": "impact",
+      "depth": 4,
+      "max_nodes": 3,
+      "packet": {
+        "nodes": {
+          "m.cost": {
+            "body": {
+              "v": 12,
+              "from": "m.total",
+              "name": "Cost",
+              "metadata": {
+                "current": "new"
+              }
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "d.falsified": {
+            "body": {
+              "verdict": "Stop",
+              "rests_on": [
+                "m.cost"
+              ],
+              "seen": {
+                "m.cost": 10
+              },
+              "wrong_if": "m.cost > 11"
+            },
+            "missing": false,
+            "states": [
+              "falsified"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.cost",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 12,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "crossed"
+              }
+            ],
+            "omitted_readings": 0,
+            "condition": {
+              "expression": "m.cost > 11",
+              "result": true,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.moved": {
+            "body": {
+              "verdict": "Review",
+              "rests_on": [
+                "m.cost"
+              ],
+              "seen": {
+                "m.cost": 10
+              },
+              "reopened_by": "A new quote arrives"
+            },
+            "missing": false,
+            "states": [
+              "moved"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.cost",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 12,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "moved"
+              }
+            ],
+            "omitted_readings": 0,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          }
+        },
+        "edges": [
+          [
+            "d.falsified",
+            "rests_on",
+            "m.cost"
+          ],
+          [
+            "d.moved",
+            "rests_on",
+            "m.cost"
+          ]
+        ],
+        "seeds": [
+          "m.cost"
+        ],
+        "direction": "impact",
+        "depth": 4,
+        "max_nodes": 3,
+        "snapshot": "2c9afa63785c89a3",
+        "outside_nodes": 6,
+        "frontier_edges": 4,
+        "omitted_edges": 0,
+        "hypotheses": 0,
+        "contributions": 0,
+        "hypothesis_errors": {},
+        "fields": {
+          "deps": "rests_on",
+          "snapshot": "seen",
+          "predicate": "wrong_if"
+        },
+        "assessment": {
+          "schema_version": 1,
+          "assessment_profile": "ordinary-reader/v1",
+          "attention_policy": "focused-review/v1",
+          "record_revision": "2c9afa63785c89a3633c03b557eb9591ef9b4e0c7c8b0e7e79950faea62a7096",
+          "scope": {
+            "base": "supplied_record",
+            "hypotheses_checked": [],
+            "hypotheses_skipped": {},
+            "external_sources_fetched": false,
+            "coverage": "supplied_record",
+            "integrity_checks": "listed per node; not a complete check or page verification",
+            "knowledge": {
+              "read_mode": "frozen",
+              "contributions_checked": [],
+              "conflict_sources": {},
+              "target": {
+                "status": "unassessed",
+                "ref": null,
+                "revision": null,
+                "reason": null
+              }
+            }
+          },
+          "assessment_revision": "59a0a74f192c04b865819aa9a3f943896ae9185521260ec04f3b454affcfe260"
+        }
+      },
+      "markdown": "## Knowledge excerpt\n\nRecord 2c9afa63785c89a3; impact depth 4; 3 nodes shown (limit 3), 6 outside selection; 4 boundary links; 0 internal links omitted (cap 96).\n\nFALSIFIED: declared condition holds on recorded values; MOVED: changed premise needs review.\n\n### m.cost — known\n\n- current: 12\n- from: m.total\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### d.falsified — judgment · FALSIFIED\n\n- verdict: Stop\n- wrong\\_if: m.cost \\> 11 → true on current recorded values.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; declared condition holds |\n\n### d.moved — judgment · MOVED\n\n- verdict: Review\n- reopened\\_by \\(human condition; not evaluated\\): A new quote arrives\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; review flag |\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- d.falsified → rests_on → m.cost (declared premise).\n- d.moved → rests_on → m.cost (declared premise).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "markdown_details": "## Knowledge excerpt\n\nRecord 2c9afa63785c89a3; impact depth 4; 3 nodes shown (limit 3), 6 outside selection; 4 boundary links; 0 internal links omitted (cap 96).\n\nFALSIFIED: declared condition holds on recorded values; MOVED: changed premise needs review.\n\n### m.cost — known\n\n- current: 12\n- from: m.total\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\nRecorded fields:\n- v: 12\n- from: m.total\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### d.falsified — judgment · FALSIFIED\n\n- verdict: Stop\n- wrong\\_if: m.cost \\> 11 → true on current recorded values.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; declared condition holds |\n\nRecorded fields:\n- verdict: Stop\n- rests\\_on: \\[\"m.cost\"\\]\n- historical snapshot \\(seen\\): \\{\"m.cost\": 10\\}\n- wrong\\_if: m.cost \\> 11\n\n### d.moved — judgment · MOVED\n\n- verdict: Review\n- reopened\\_by \\(human condition; not evaluated\\): A new quote arrives\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.cost | 10 | 12 | changed; review flag |\n\nRecorded fields:\n- verdict: Review\n- rests\\_on: \\[\"m.cost\"\\]\n- historical snapshot \\(seen\\): \\{\"m.cost\": 10\\}\n- reopened\\_by: A new quote arrives\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- d.falsified → rests_on → m.cost (declared premise).\n- d.moved → rests_on → m.cost (declared premise).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "mermaid": "flowchart TB\n  accTitle: Knowledge excerpt\n  accDescr: Declared links only. MOVED needs review; FALSIFIED means a declared condition is true.\n  %% Record 2c9afa63785c89a3; impact depth 4; 3 nodes shown (limit 3), 6 outside selection; 4 boundary links; 0 internal links omitted (cap 96).\n  n0[\"m.cost<br/>known<br/>v: 12<br/>Cost\"]\n  n1[\"d.falsified<br/>judgment: FALSIFIED<br/>Stop\"]\n  n2[\"d.moved<br/>judgment: MOVED<br/>Review\"]\n  n1 -->|rests_on| n0\n  n2 -->|rests_on| n0\n  export_legend[\"FALSIFIED: declared condition holds on recorded values<br/>MOVED: changed premise needs review\"]\n  export_note[\"Scope #40;not a record#41;<br/>2c9afa63785c89a3<br/>6 nodes outside selection<br/>4 boundary links<br/>0 internal links omitted<br/>0 labels shortened #40;80 chars#41;<br/>0 hypotheses not expanded<br/>0 project contributions not expanded<br/>0 unreadable hypotheses<br/>Details: read the text export\"]\n  style export_note stroke-dasharray: 4 4\n"
+    },
+    {
+      "name": "rule-calculation",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "m.total"
+      ],
+      "direction": "support",
+      "depth": 1,
+      "max_nodes": 12,
+      "packet": {
+        "nodes": {
+          "m.total": {
+            "body": {
+              "rule": {
+                "expr": "m.cost + m.other"
+              }
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known",
+            "calculation": {
+              "reason": "derived_value",
+              "role": "derived_value",
+              "value": 15
+            }
+          },
+          "m.cost": {
+            "body": {
+              "v": 12,
+              "from": "s.note",
+              "name": "Cost",
+              "metadata": {
+                "current": "new"
+              }
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.other": {
+            "body": {
+              "v": 3,
+              "unit": "percent",
+              "from": "a prose locator"
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          }
+        },
+        "edges": [
+          [
+            "m.total",
+            "rule_reads",
+            "m.cost"
+          ],
+          [
+            "m.total",
+            "rule_reads",
+            "m.other"
+          ]
+        ],
+        "seeds": [
+          "m.total"
+        ],
+        "direction": "support",
+        "depth": 1,
+        "max_nodes": 12,
+        "snapshot": "67a7ab472e249d76",
+        "outside_nodes": 6,
+        "frontier_edges": 4,
+        "omitted_edges": 0,
+        "hypotheses": 0,
+        "contributions": 0,
+        "hypothesis_errors": {},
+        "fields": {
+          "deps": "rests_on",
+          "snapshot": "seen",
+          "predicate": "wrong_if"
+        },
+        "assessment": {
+          "schema_version": 1,
+          "assessment_profile": "ordinary-reader/v1",
+          "attention_policy": "focused-review/v1",
+          "record_revision": "67a7ab472e249d765364b3d01e68d183d2ae719d68caefa8034fb60c8a1683b6",
+          "scope": {
+            "base": "supplied_record",
+            "hypotheses_checked": [],
+            "hypotheses_skipped": {},
+            "external_sources_fetched": false,
+            "coverage": "supplied_record",
+            "integrity_checks": "listed per node; not a complete check or page verification",
+            "knowledge": {
+              "read_mode": "frozen",
+              "contributions_checked": [],
+              "conflict_sources": {},
+              "target": {
+                "status": "unassessed",
+                "ref": null,
+                "revision": null,
+                "reason": null
+              }
+            }
+          },
+          "assessment_revision": "3ea83f446600d9c7214ea0a33f66acd1b2b5bf35f8ccda3cd7c889667190db76"
+        }
+      },
+      "markdown": "## Knowledge excerpt\n\nRecord 67a7ab472e249d76; support depth 1; 3 nodes shown (limit 12), 6 outside selection; 4 boundary links; 0 internal links omitted (cap 96).\n\n### m.total — known\n\n- rule: m.cost + m.other\n- calculated current: 15\n\n### m.cost — known\n\n- current: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### m.other — known\n\n- current: 3\n- unit: percent\n- from: a prose locator\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- m.total → rule_reads → m.cost (input named by a rule).\n- m.total → rule_reads → m.other (input named by a rule).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "markdown_details": "## Knowledge excerpt\n\nRecord 67a7ab472e249d76; support depth 1; 3 nodes shown (limit 12), 6 outside selection; 4 boundary links; 0 internal links omitted (cap 96).\n\n### m.total — known\n\n- rule: m.cost + m.other\n- calculated current: 15\n\nRecorded fields:\n- rule: \\{\"expr\": \"m.cost + m.other\"\\}\n\n### m.cost — known\n\n- current: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\nRecorded fields:\n- v: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### m.other — known\n\n- current: 3\n- unit: percent\n- from: a prose locator\n\nRecorded fields:\n- v: 3\n- unit: percent\n- from: a prose locator\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- m.total → rule_reads → m.cost (input named by a rule).\n- m.total → rule_reads → m.other (input named by a rule).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "mermaid": "flowchart TB\n  accTitle: Knowledge excerpt\n  accDescr: Declared links only. MOVED needs review; FALSIFIED means a declared condition is true.\n  %% Record 67a7ab472e249d76; support depth 1; 3 nodes shown (limit 12), 6 outside selection; 4 boundary links; 0 internal links omitted (cap 96).\n  n0[\"m.total<br/>known<br/>known\"]\n  n1[\"m.cost<br/>known<br/>v: 12<br/>Cost\"]\n  n2[\"m.other<br/>known<br/>3 percent\"]\n  n0 -->|rule_reads| n1\n  n0 -->|rule_reads| n2\n  export_note[\"Scope #40;not a record#41;<br/>67a7ab472e249d76<br/>6 nodes outside selection<br/>4 boundary links<br/>0 internal links omitted<br/>0 labels shortened #40;80 chars#41;<br/>0 hypotheses not expanded<br/>0 project contributions not expanded<br/>0 unreadable hypotheses<br/>Details: read the text export\"]\n  style export_note stroke-dasharray: 4 4\n"
+    },
+    {
+      "name": "dense-cap",
+      "yaml": "judgments:\n  d.n0:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\n  d.n1:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\n  d.n2:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\n  d.n3:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\n  d.n4:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\n  d.n5:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\n  d.n6:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\n  d.n7:\n    rests_on:\n    - m.n0\n    - m.n1\n    - m.n2\n    - m.n3\n    - m.n4\n    - m.n5\n    - m.n6\n    - m.n7\n    - m.n8\n    - m.n9\n    - m.n10\n    - m.n11\n    - m.n12\n    - m.n13\n    - m.n14\n    - m.n15\n    seen:\n      m.n0: 0\n      m.n1: 1\n      m.n10: 10\n      m.n11: 11\n      m.n12: 12\n      m.n13: 13\n      m.n14: 14\n      m.n15: 15\n      m.n2: 2\n      m.n3: 3\n      m.n4: 4\n      m.n5: 5\n      m.n6: 6\n      m.n7: 7\n      m.n8: 8\n      m.n9: 9\nknown:\n  m.n0:\n    v: 0\n  m.n1:\n    v: 1\n  m.n10:\n    v: 10\n  m.n11:\n    v: 11\n  m.n12:\n    v: 12\n  m.n13:\n    v: 13\n  m.n14:\n    v: 14\n  m.n15:\n    v: 15\n  m.n2:\n    v: 2\n  m.n3:\n    v: 3\n  m.n4:\n    v: 4\n  m.n5:\n    v: 5\n  m.n6:\n    v: 6\n  m.n7:\n    v: 7\n  m.n8:\n    v: 8\n  m.n9:\n    v: 9\nmeta:\n  name: Not an entry\nschema:\n  deps: rests_on\n  snapshot: seen\n",
+      "seeds": [
+        "d.n0",
+        "d.n1",
+        "d.n2",
+        "d.n3",
+        "d.n4",
+        "d.n5",
+        "d.n6",
+        "d.n7"
+      ],
+      "direction": "support",
+      "depth": 1,
+      "max_nodes": 32,
+      "packet": {
+        "nodes": {
+          "d.n0": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.n1": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.n2": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.n3": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.n4": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.n5": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.n6": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "d.n7": {
+            "body": {
+              "rests_on": [
+                "m.n0",
+                "m.n1",
+                "m.n2",
+                "m.n3",
+                "m.n4",
+                "m.n5",
+                "m.n6",
+                "m.n7",
+                "m.n8",
+                "m.n9",
+                "m.n10",
+                "m.n11",
+                "m.n12",
+                "m.n13",
+                "m.n14",
+                "m.n15"
+              ],
+              "seen": {
+                "m.n0": 0,
+                "m.n1": 1,
+                "m.n10": 10,
+                "m.n11": 11,
+                "m.n12": 12,
+                "m.n13": 13,
+                "m.n14": 14,
+                "m.n15": 15,
+                "m.n2": 2,
+                "m.n3": 3,
+                "m.n4": 4,
+                "m.n5": 5,
+                "m.n6": 6,
+                "m.n7": 7,
+                "m.n8": 8,
+                "m.n9": 9
+              }
+            },
+            "missing": false,
+            "states": [
+              "no_predicate"
+            ],
+            "kind": "judgment",
+            "readings": [
+              {
+                "id": "m.n0",
+                "has_review": true,
+                "at_review": 0,
+                "current_status": "shown",
+                "current": 0,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n1",
+                "has_review": true,
+                "at_review": 1,
+                "current_status": "shown",
+                "current": 1,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n2",
+                "has_review": true,
+                "at_review": 2,
+                "current_status": "shown",
+                "current": 2,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n3",
+                "has_review": true,
+                "at_review": 3,
+                "current_status": "shown",
+                "current": 3,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n4",
+                "has_review": true,
+                "at_review": 4,
+                "current_status": "shown",
+                "current": 4,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n5",
+                "has_review": true,
+                "at_review": 5,
+                "current_status": "shown",
+                "current": 5,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n6",
+                "has_review": true,
+                "at_review": 6,
+                "current_status": "shown",
+                "current": 6,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n7",
+                "has_review": true,
+                "at_review": 7,
+                "current_status": "shown",
+                "current": 7,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n8",
+                "has_review": true,
+                "at_review": 8,
+                "current_status": "shown",
+                "current": 8,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n9",
+                "has_review": true,
+                "at_review": 9,
+                "current_status": "shown",
+                "current": 9,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n10",
+                "has_review": true,
+                "at_review": 10,
+                "current_status": "shown",
+                "current": 10,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              },
+              {
+                "id": "m.n11",
+                "has_review": true,
+                "at_review": 11,
+                "current_status": "shown",
+                "current": 11,
+                "current_calculated": false,
+                "formula_changed": null,
+                "comparison": "same"
+              }
+            ],
+            "omitted_readings": 4,
+            "condition": {
+              "expression": "",
+              "result": null,
+              "undeclared_reads": [],
+              "missing_reads": [],
+              "unparsed_mentions": []
+            }
+          },
+          "m.n0": {
+            "body": {
+              "v": 0
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n1": {
+            "body": {
+              "v": 1
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n10": {
+            "body": {
+              "v": 10
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n11": {
+            "body": {
+              "v": 11
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n12": {
+            "body": {
+              "v": 12
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n13": {
+            "body": {
+              "v": 13
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n14": {
+            "body": {
+              "v": 14
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n15": {
+            "body": {
+              "v": 15
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n2": {
+            "body": {
+              "v": 2
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n3": {
+            "body": {
+              "v": 3
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n4": {
+            "body": {
+              "v": 4
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n5": {
+            "body": {
+              "v": 5
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n6": {
+            "body": {
+              "v": 6
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n7": {
+            "body": {
+              "v": 7
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n8": {
+            "body": {
+              "v": 8
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          },
+          "m.n9": {
+            "body": {
+              "v": 9
+            },
+            "missing": false,
+            "states": [],
+            "kind": "known"
+          }
+        },
+        "edges": [
+          [
+            "d.n0",
+            "rests_on",
+            "m.n0"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n1"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n10"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n11"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n12"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n13"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n14"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n15"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n2"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n3"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n4"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n5"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n6"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n7"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n8"
+          ],
+          [
+            "d.n0",
+            "rests_on",
+            "m.n9"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n0"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n1"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n10"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n11"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n12"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n13"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n14"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n15"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n2"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n3"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n4"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n5"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n6"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n7"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n8"
+          ],
+          [
+            "d.n1",
+            "rests_on",
+            "m.n9"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n0"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n1"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n10"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n11"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n12"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n13"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n14"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n15"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n2"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n3"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n4"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n5"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n6"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n7"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n8"
+          ],
+          [
+            "d.n2",
+            "rests_on",
+            "m.n9"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n0"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n1"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n10"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n11"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n12"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n13"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n14"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n15"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n2"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n3"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n4"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n5"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n6"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n7"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n8"
+          ],
+          [
+            "d.n3",
+            "rests_on",
+            "m.n9"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n0"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n1"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n10"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n11"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n12"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n13"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n14"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n15"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n2"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n3"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n4"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n5"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n6"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n7"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n8"
+          ],
+          [
+            "d.n4",
+            "rests_on",
+            "m.n9"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n0"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n1"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n10"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n11"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n12"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n13"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n14"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n15"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n2"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n3"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n4"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n5"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n6"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n7"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n8"
+          ],
+          [
+            "d.n5",
+            "rests_on",
+            "m.n9"
+          ]
+        ],
+        "seeds": [
+          "d.n0",
+          "d.n1",
+          "d.n2",
+          "d.n3",
+          "d.n4",
+          "d.n5",
+          "d.n6",
+          "d.n7"
+        ],
+        "direction": "support",
+        "depth": 1,
+        "max_nodes": 32,
+        "snapshot": "95e351325097dd18",
+        "outside_nodes": 0,
+        "frontier_edges": 0,
+        "omitted_edges": 32,
+        "hypotheses": 0,
+        "contributions": 0,
+        "hypothesis_errors": {},
+        "fields": {
+          "deps": "rests_on",
+          "snapshot": "seen",
+          "predicate": null
+        },
+        "assessment": {
+          "schema_version": 1,
+          "assessment_profile": "ordinary-reader/v1",
+          "attention_policy": "focused-review/v1",
+          "record_revision": "95e351325097dd18f8080aa9febcc6b6dfc769d880d33aa96861b63128fcf35c",
+          "scope": {
+            "base": "supplied_record",
+            "hypotheses_checked": [],
+            "hypotheses_skipped": {},
+            "external_sources_fetched": false,
+            "coverage": "supplied_record",
+            "integrity_checks": "listed per node; not a complete check or page verification",
+            "knowledge": {
+              "read_mode": "frozen",
+              "contributions_checked": [],
+              "conflict_sources": {},
+              "target": {
+                "status": "unassessed",
+                "ref": null,
+                "revision": null,
+                "reason": null
+              }
+            }
+          },
+          "assessment_revision": "ce76f5e099fdda6ee0a9e18b9256ad58fdd324ee20666ee30a3dca3ada72d998"
+        }
+      },
+      "markdown": "## Knowledge excerpt\n\nRecord 95e351325097dd18; support depth 1; 24 nodes shown (limit 32), 0 outside selection; 0 boundary links; 32 internal links omitted (cap 96).\n\nNO_PREDICATE: no condition this reader can decide.\n\n### d.n0 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### d.n1 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### d.n2 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### d.n3 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### d.n4 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### d.n5 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### d.n6 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### d.n7 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\n### m.n0 — known\n\n- current: 0\n\n### m.n1 — known\n\n- current: 1\n\n### m.n10 — known\n\n- current: 10\n\n### m.n11 — known\n\n- current: 11\n\n### m.n12 — known\n\n- current: 12\n\n### m.n13 — known\n\n- current: 13\n\n### m.n14 — known\n\n- current: 14\n\n### m.n15 — known\n\n- current: 15\n\n### m.n2 — known\n\n- current: 2\n\n### m.n3 — known\n\n- current: 3\n\n### m.n4 — known\n\n- current: 4\n\n### m.n5 — known\n\n- current: 5\n\n### m.n6 — known\n\n- current: 6\n\n### m.n7 — known\n\n- current: 7\n\n### m.n8 — known\n\n- current: 8\n\n### m.n9 — known\n\n- current: 9\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- d.n0 → rests_on → m.n0 (declared premise).\n- d.n0 → rests_on → m.n1 (declared premise).\n- d.n0 → rests_on → m.n10 (declared premise).\n- d.n0 → rests_on → m.n11 (declared premise).\n- d.n0 → rests_on → m.n12 (declared premise).\n- d.n0 → rests_on → m.n13 (declared premise).\n- d.n0 → rests_on → m.n14 (declared premise).\n- d.n0 → rests_on → m.n15 (declared premise).\n- d.n0 → rests_on → m.n2 (declared premise).\n- d.n0 → rests_on → m.n3 (declared premise).\n- d.n0 → rests_on → m.n4 (declared premise).\n- d.n0 → rests_on → m.n5 (declared premise).\n- d.n0 → rests_on → m.n6 (declared premise).\n- d.n0 → rests_on → m.n7 (declared premise).\n- d.n0 → rests_on → m.n8 (declared premise).\n- d.n0 → rests_on → m.n9 (declared premise).\n- d.n1 → rests_on → m.n0 (declared premise).\n- d.n1 → rests_on → m.n1 (declared premise).\n- d.n1 → rests_on → m.n10 (declared premise).\n- d.n1 → rests_on → m.n11 (declared premise).\n- d.n1 → rests_on → m.n12 (declared premise).\n- d.n1 → rests_on → m.n13 (declared premise).\n- d.n1 → rests_on → m.n14 (declared premise).\n- d.n1 → rests_on → m.n15 (declared premise).\n- d.n1 → rests_on → m.n2 (declared premise).\n- d.n1 → rests_on → m.n3 (declared premise).\n- d.n1 → rests_on → m.n4 (declared premise).\n- d.n1 → rests_on → m.n5 (declared premise).\n- d.n1 → rests_on → m.n6 (declared premise).\n- d.n1 → rests_on → m.n7 (declared premise).\n- d.n1 → rests_on → m.n8 (declared premise).\n- d.n1 → rests_on → m.n9 (declared premise).\n- d.n2 → rests_on → m.n0 (declared premise).\n- d.n2 → rests_on → m.n1 (declared premise).\n- d.n2 → rests_on → m.n10 (declared premise).\n- d.n2 → rests_on → m.n11 (declared premise).\n- d.n2 → rests_on → m.n12 (declared premise).\n- d.n2 → rests_on → m.n13 (declared premise).\n- d.n2 → rests_on → m.n14 (declared premise).\n- d.n2 → rests_on → m.n15 (declared premise).\n- d.n2 → rests_on → m.n2 (declared premise).\n- d.n2 → rests_on → m.n3 (declared premise).\n- d.n2 → rests_on → m.n4 (declared premise).\n- d.n2 → rests_on → m.n5 (declared premise).\n- d.n2 → rests_on → m.n6 (declared premise).\n- d.n2 → rests_on → m.n7 (declared premise).\n- d.n2 → rests_on → m.n8 (declared premise).\n- d.n2 → rests_on → m.n9 (declared premise).\n- d.n3 → rests_on → m.n0 (declared premise).\n- d.n3 → rests_on → m.n1 (declared premise).\n- d.n3 → rests_on → m.n10 (declared premise).\n- d.n3 → rests_on → m.n11 (declared premise).\n- d.n3 → rests_on → m.n12 (declared premise).\n- d.n3 → rests_on → m.n13 (declared premise).\n- d.n3 → rests_on → m.n14 (declared premise).\n- d.n3 → rests_on → m.n15 (declared premise).\n- d.n3 → rests_on → m.n2 (declared premise).\n- d.n3 → rests_on → m.n3 (declared premise).\n- d.n3 → rests_on → m.n4 (declared premise).\n- d.n3 → rests_on → m.n5 (declared premise).\n- d.n3 → rests_on → m.n6 (declared premise).\n- d.n3 → rests_on → m.n7 (declared premise).\n- d.n3 → rests_on → m.n8 (declared premise).\n- d.n3 → rests_on → m.n9 (declared premise).\n- d.n4 → rests_on → m.n0 (declared premise).\n- d.n4 → rests_on → m.n1 (declared premise).\n- d.n4 → rests_on → m.n10 (declared premise).\n- d.n4 → rests_on → m.n11 (declared premise).\n- d.n4 → rests_on → m.n12 (declared premise).\n- d.n4 → rests_on → m.n13 (declared premise).\n- d.n4 → rests_on → m.n14 (declared premise).\n- d.n4 → rests_on → m.n15 (declared premise).\n- d.n4 → rests_on → m.n2 (declared premise).\n- d.n4 → rests_on → m.n3 (declared premise).\n- d.n4 → rests_on → m.n4 (declared premise).\n- d.n4 → rests_on → m.n5 (declared premise).\n- d.n4 → rests_on → m.n6 (declared premise).\n- d.n4 → rests_on → m.n7 (declared premise).\n- d.n4 → rests_on → m.n8 (declared premise).\n- d.n4 → rests_on → m.n9 (declared premise).\n- d.n5 → rests_on → m.n0 (declared premise).\n- d.n5 → rests_on → m.n1 (declared premise).\n- d.n5 → rests_on → m.n10 (declared premise).\n- d.n5 → rests_on → m.n11 (declared premise).\n- d.n5 → rests_on → m.n12 (declared premise).\n- d.n5 → rests_on → m.n13 (declared premise).\n- d.n5 → rests_on → m.n14 (declared premise).\n- d.n5 → rests_on → m.n15 (declared premise).\n- d.n5 → rests_on → m.n2 (declared premise).\n- d.n5 → rests_on → m.n3 (declared premise).\n- d.n5 → rests_on → m.n4 (declared premise).\n- d.n5 → rests_on → m.n5 (declared premise).\n- d.n5 → rests_on → m.n6 (declared premise).\n- d.n5 → rests_on → m.n7 (declared premise).\n- d.n5 → rests_on → m.n8 (declared premise).\n- d.n5 → rests_on → m.n9 (declared premise).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "markdown_details": "## Knowledge excerpt\n\nRecord 95e351325097dd18; support depth 1; 24 nodes shown (limit 32), 0 outside selection; 0 boundary links; 32 internal links omitted (cap 96).\n\nNO_PREDICATE: no condition this reader can decide.\n\n### d.n0 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### d.n1 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### d.n2 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### d.n3 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### d.n4 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### d.n5 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### d.n6 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### d.n7 — judgment · NO_PREDICATE\n\n- No executable condition declared.\n\n| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |\n|---|---|---|---|\n| m.n0 | 0 | 0 | unchanged |\n| m.n1 | 1 | 1 | unchanged |\n| m.n2 | 2 | 2 | unchanged |\n| m.n3 | 3 | 3 | unchanged |\n| m.n4 | 4 | 4 | unchanged |\n| m.n5 | 5 | 5 | unchanged |\n| m.n6 | 6 | 6 | unchanged |\n| m.n7 | 7 | 7 | unchanged |\n| m.n8 | 8 | 8 | unchanged |\n| m.n9 | 9 | 9 | unchanged |\n| m.n10 | 10 | 10 | unchanged |\n| m.n11 | 11 | 11 | unchanged |\n\n4 dependency rows omitted by the 12-row limit; read the record for the complete dependencies.\n\nRecorded fields:\n- rests\\_on: \\[\"m.n0\", \"m.n1\", \"m.n2\", \"m.n3\", \"m.n4\", \"m.n5\", \"m.n6\", \"m.n7\", \"m.n8\", \"m.n9\", \"m.n10\", \"m.n11\", \"m.n12\", \"m.n13\", \"m.n14\", \"m.n15\"\\]\n- historical snapshot \\(seen\\): \\{\"m.n0\": 0, \"m.n1\": 1, \"m.n10\": 10, \"m.n11\": 11, \"m.n12\": 12, \"m.n13\": 13, \"m.n14\": 14, \"m.n15\": 15, \"m.n2\": 2, \"m.n3\": 3, \"m.n4\": 4, \"m.n5\": 5, \"m.n6\": 6, \"m.n7\": 7, \"m.n8\": 8, \"m.n9\": 9\\}\n\n### m.n0 — known\n\n- current: 0\n\nRecorded fields:\n- v: 0\n\n### m.n1 — known\n\n- current: 1\n\nRecorded fields:\n- v: 1\n\n### m.n10 — known\n\n- current: 10\n\nRecorded fields:\n- v: 10\n\n### m.n11 — known\n\n- current: 11\n\nRecorded fields:\n- v: 11\n\n### m.n12 — known\n\n- current: 12\n\nRecorded fields:\n- v: 12\n\n### m.n13 — known\n\n- current: 13\n\nRecorded fields:\n- v: 13\n\n### m.n14 — known\n\n- current: 14\n\nRecorded fields:\n- v: 14\n\n### m.n15 — known\n\n- current: 15\n\nRecorded fields:\n- v: 15\n\n### m.n2 — known\n\n- current: 2\n\nRecorded fields:\n- v: 2\n\n### m.n3 — known\n\n- current: 3\n\nRecorded fields:\n- v: 3\n\n### m.n4 — known\n\n- current: 4\n\nRecorded fields:\n- v: 4\n\n### m.n5 — known\n\n- current: 5\n\nRecorded fields:\n- v: 5\n\n### m.n6 — known\n\n- current: 6\n\nRecorded fields:\n- v: 6\n\n### m.n7 — known\n\n- current: 7\n\nRecorded fields:\n- v: 7\n\n### m.n8 — known\n\n- current: 8\n\nRecorded fields:\n- v: 8\n\n### m.n9 — known\n\n- current: 9\n\nRecorded fields:\n- v: 9\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\n- d.n0 → rests_on → m.n0 (declared premise).\n- d.n0 → rests_on → m.n1 (declared premise).\n- d.n0 → rests_on → m.n10 (declared premise).\n- d.n0 → rests_on → m.n11 (declared premise).\n- d.n0 → rests_on → m.n12 (declared premise).\n- d.n0 → rests_on → m.n13 (declared premise).\n- d.n0 → rests_on → m.n14 (declared premise).\n- d.n0 → rests_on → m.n15 (declared premise).\n- d.n0 → rests_on → m.n2 (declared premise).\n- d.n0 → rests_on → m.n3 (declared premise).\n- d.n0 → rests_on → m.n4 (declared premise).\n- d.n0 → rests_on → m.n5 (declared premise).\n- d.n0 → rests_on → m.n6 (declared premise).\n- d.n0 → rests_on → m.n7 (declared premise).\n- d.n0 → rests_on → m.n8 (declared premise).\n- d.n0 → rests_on → m.n9 (declared premise).\n- d.n1 → rests_on → m.n0 (declared premise).\n- d.n1 → rests_on → m.n1 (declared premise).\n- d.n1 → rests_on → m.n10 (declared premise).\n- d.n1 → rests_on → m.n11 (declared premise).\n- d.n1 → rests_on → m.n12 (declared premise).\n- d.n1 → rests_on → m.n13 (declared premise).\n- d.n1 → rests_on → m.n14 (declared premise).\n- d.n1 → rests_on → m.n15 (declared premise).\n- d.n1 → rests_on → m.n2 (declared premise).\n- d.n1 → rests_on → m.n3 (declared premise).\n- d.n1 → rests_on → m.n4 (declared premise).\n- d.n1 → rests_on → m.n5 (declared premise).\n- d.n1 → rests_on → m.n6 (declared premise).\n- d.n1 → rests_on → m.n7 (declared premise).\n- d.n1 → rests_on → m.n8 (declared premise).\n- d.n1 → rests_on → m.n9 (declared premise).\n- d.n2 → rests_on → m.n0 (declared premise).\n- d.n2 → rests_on → m.n1 (declared premise).\n- d.n2 → rests_on → m.n10 (declared premise).\n- d.n2 → rests_on → m.n11 (declared premise).\n- d.n2 → rests_on → m.n12 (declared premise).\n- d.n2 → rests_on → m.n13 (declared premise).\n- d.n2 → rests_on → m.n14 (declared premise).\n- d.n2 → rests_on → m.n15 (declared premise).\n- d.n2 → rests_on → m.n2 (declared premise).\n- d.n2 → rests_on → m.n3 (declared premise).\n- d.n2 → rests_on → m.n4 (declared premise).\n- d.n2 → rests_on → m.n5 (declared premise).\n- d.n2 → rests_on → m.n6 (declared premise).\n- d.n2 → rests_on → m.n7 (declared premise).\n- d.n2 → rests_on → m.n8 (declared premise).\n- d.n2 → rests_on → m.n9 (declared premise).\n- d.n3 → rests_on → m.n0 (declared premise).\n- d.n3 → rests_on → m.n1 (declared premise).\n- d.n3 → rests_on → m.n10 (declared premise).\n- d.n3 → rests_on → m.n11 (declared premise).\n- d.n3 → rests_on → m.n12 (declared premise).\n- d.n3 → rests_on → m.n13 (declared premise).\n- d.n3 → rests_on → m.n14 (declared premise).\n- d.n3 → rests_on → m.n15 (declared premise).\n- d.n3 → rests_on → m.n2 (declared premise).\n- d.n3 → rests_on → m.n3 (declared premise).\n- d.n3 → rests_on → m.n4 (declared premise).\n- d.n3 → rests_on → m.n5 (declared premise).\n- d.n3 → rests_on → m.n6 (declared premise).\n- d.n3 → rests_on → m.n7 (declared premise).\n- d.n3 → rests_on → m.n8 (declared premise).\n- d.n3 → rests_on → m.n9 (declared premise).\n- d.n4 → rests_on → m.n0 (declared premise).\n- d.n4 → rests_on → m.n1 (declared premise).\n- d.n4 → rests_on → m.n10 (declared premise).\n- d.n4 → rests_on → m.n11 (declared premise).\n- d.n4 → rests_on → m.n12 (declared premise).\n- d.n4 → rests_on → m.n13 (declared premise).\n- d.n4 → rests_on → m.n14 (declared premise).\n- d.n4 → rests_on → m.n15 (declared premise).\n- d.n4 → rests_on → m.n2 (declared premise).\n- d.n4 → rests_on → m.n3 (declared premise).\n- d.n4 → rests_on → m.n4 (declared premise).\n- d.n4 → rests_on → m.n5 (declared premise).\n- d.n4 → rests_on → m.n6 (declared premise).\n- d.n4 → rests_on → m.n7 (declared premise).\n- d.n4 → rests_on → m.n8 (declared premise).\n- d.n4 → rests_on → m.n9 (declared premise).\n- d.n5 → rests_on → m.n0 (declared premise).\n- d.n5 → rests_on → m.n1 (declared premise).\n- d.n5 → rests_on → m.n10 (declared premise).\n- d.n5 → rests_on → m.n11 (declared premise).\n- d.n5 → rests_on → m.n12 (declared premise).\n- d.n5 → rests_on → m.n13 (declared premise).\n- d.n5 → rests_on → m.n14 (declared premise).\n- d.n5 → rests_on → m.n15 (declared premise).\n- d.n5 → rests_on → m.n2 (declared premise).\n- d.n5 → rests_on → m.n3 (declared premise).\n- d.n5 → rests_on → m.n4 (declared premise).\n- d.n5 → rests_on → m.n5 (declared premise).\n- d.n5 → rests_on → m.n6 (declared premise).\n- d.n5 → rests_on → m.n7 (declared premise).\n- d.n5 → rests_on → m.n8 (declared premise).\n- d.n5 → rests_on → m.n9 (declared premise).\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "mermaid": "flowchart TB\n  accTitle: Knowledge excerpt\n  accDescr: Declared links only. MOVED needs review; FALSIFIED means a declared condition is true.\n  %% Record 95e351325097dd18; support depth 1; 24 nodes shown (limit 32), 0 outside selection; 0 boundary links; 32 internal links omitted (cap 96).\n  n0[\"d.n0<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n1[\"d.n1<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n2[\"d.n2<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n3[\"d.n3<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n4[\"d.n4<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n5[\"d.n5<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n6[\"d.n6<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n7[\"d.n7<br/>judgment: NO_PREDICATE<br/>judgment\"]\n  n8[\"m.n0<br/>known<br/>0\"]\n  n9[\"m.n1<br/>known<br/>1\"]\n  n10[\"m.n10<br/>known<br/>10\"]\n  n11[\"m.n11<br/>known<br/>11\"]\n  n12[\"m.n12<br/>known<br/>12\"]\n  n13[\"m.n13<br/>known<br/>13\"]\n  n14[\"m.n14<br/>known<br/>14\"]\n  n15[\"m.n15<br/>known<br/>15\"]\n  n16[\"m.n2<br/>known<br/>2\"]\n  n17[\"m.n3<br/>known<br/>3\"]\n  n18[\"m.n4<br/>known<br/>4\"]\n  n19[\"m.n5<br/>known<br/>5\"]\n  n20[\"m.n6<br/>known<br/>6\"]\n  n21[\"m.n7<br/>known<br/>7\"]\n  n22[\"m.n8<br/>known<br/>8\"]\n  n23[\"m.n9<br/>known<br/>9\"]\n  n0 -->|rests_on| n8\n  n0 -->|rests_on| n9\n  n0 -->|rests_on| n10\n  n0 -->|rests_on| n11\n  n0 -->|rests_on| n12\n  n0 -->|rests_on| n13\n  n0 -->|rests_on| n14\n  n0 -->|rests_on| n15\n  n0 -->|rests_on| n16\n  n0 -->|rests_on| n17\n  n0 -->|rests_on| n18\n  n0 -->|rests_on| n19\n  n0 -->|rests_on| n20\n  n0 -->|rests_on| n21\n  n0 -->|rests_on| n22\n  n0 -->|rests_on| n23\n  n1 -->|rests_on| n8\n  n1 -->|rests_on| n9\n  n1 -->|rests_on| n10\n  n1 -->|rests_on| n11\n  n1 -->|rests_on| n12\n  n1 -->|rests_on| n13\n  n1 -->|rests_on| n14\n  n1 -->|rests_on| n15\n  n1 -->|rests_on| n16\n  n1 -->|rests_on| n17\n  n1 -->|rests_on| n18\n  n1 -->|rests_on| n19\n  n1 -->|rests_on| n20\n  n1 -->|rests_on| n21\n  n1 -->|rests_on| n22\n  n1 -->|rests_on| n23\n  n2 -->|rests_on| n8\n  n2 -->|rests_on| n9\n  n2 -->|rests_on| n10\n  n2 -->|rests_on| n11\n  n2 -->|rests_on| n12\n  n2 -->|rests_on| n13\n  n2 -->|rests_on| n14\n  n2 -->|rests_on| n15\n  n2 -->|rests_on| n16\n  n2 -->|rests_on| n17\n  n2 -->|rests_on| n18\n  n2 -->|rests_on| n19\n  n2 -->|rests_on| n20\n  n2 -->|rests_on| n21\n  n2 -->|rests_on| n22\n  n2 -->|rests_on| n23\n  n3 -->|rests_on| n8\n  n3 -->|rests_on| n9\n  n3 -->|rests_on| n10\n  n3 -->|rests_on| n11\n  n3 -->|rests_on| n12\n  n3 -->|rests_on| n13\n  n3 -->|rests_on| n14\n  n3 -->|rests_on| n15\n  n3 -->|rests_on| n16\n  n3 -->|rests_on| n17\n  n3 -->|rests_on| n18\n  n3 -->|rests_on| n19\n  n3 -->|rests_on| n20\n  n3 -->|rests_on| n21\n  n3 -->|rests_on| n22\n  n3 -->|rests_on| n23\n  n4 -->|rests_on| n8\n  n4 -->|rests_on| n9\n  n4 -->|rests_on| n10\n  n4 -->|rests_on| n11\n  n4 -->|rests_on| n12\n  n4 -->|rests_on| n13\n  n4 -->|rests_on| n14\n  n4 -->|rests_on| n15\n  n4 -->|rests_on| n16\n  n4 -->|rests_on| n17\n  n4 -->|rests_on| n18\n  n4 -->|rests_on| n19\n  n4 -->|rests_on| n20\n  n4 -->|rests_on| n21\n  n4 -->|rests_on| n22\n  n4 -->|rests_on| n23\n  n5 -->|rests_on| n8\n  n5 -->|rests_on| n9\n  n5 -->|rests_on| n10\n  n5 -->|rests_on| n11\n  n5 -->|rests_on| n12\n  n5 -->|rests_on| n13\n  n5 -->|rests_on| n14\n  n5 -->|rests_on| n15\n  n5 -->|rests_on| n16\n  n5 -->|rests_on| n17\n  n5 -->|rests_on| n18\n  n5 -->|rests_on| n19\n  n5 -->|rests_on| n20\n  n5 -->|rests_on| n21\n  n5 -->|rests_on| n22\n  n5 -->|rests_on| n23\n  export_legend[\"NO_PREDICATE: no condition this reader can decide\"]\n  export_note[\"Scope #40;not a record#41;<br/>95e351325097dd18<br/>0 nodes outside selection<br/>0 boundary links<br/>32 internal links omitted<br/>0 labels shortened #40;80 chars#41;<br/>0 hypotheses not expanded<br/>0 project contributions not expanded<br/>0 unreadable hypotheses<br/>Details: read the text export\"]\n  style export_note stroke-dasharray: 4 4\n"
+    },
+    {
+      "name": "hypotheses",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "m.cost"
+      ],
+      "direction": "support",
+      "depth": 0,
+      "max_nodes": 12,
+      "hypotheses": {
+        "rival.yaml": "known:\n  m.cost: {v: 99}\n",
+        "another.yaml": "known:\n  m.cost: {v: 100}\n"
+      },
+      "packet": {
+        "nodes": {
+          "m.cost": {
+            "body": {
+              "v": 12,
+              "from": "s.note",
+              "name": "Cost",
+              "metadata": {
+                "current": "new"
+              }
+            },
+            "missing": false,
+            "states": [
+              "contested"
+            ],
+            "kind": "known"
+          }
+        },
+        "edges": [],
+        "seeds": [
+          "m.cost"
+        ],
+        "direction": "support",
+        "depth": 0,
+        "max_nodes": 12,
+        "snapshot": "6596a310cc28c745",
+        "outside_nodes": 8,
+        "frontier_edges": 5,
+        "omitted_edges": 0,
+        "hypotheses": 2,
+        "contributions": 0,
+        "hypothesis_errors": {},
+        "fields": {
+          "deps": "rests_on",
+          "snapshot": "seen",
+          "predicate": "wrong_if"
+        },
+        "assessment": {
+          "schema_version": 1,
+          "assessment_profile": "ordinary-reader/v1",
+          "attention_policy": "focused-review/v1",
+          "record_revision": "6596a310cc28c745ba3250b71d5018794800f02fc74982ff7292fbfd02839dff",
+          "scope": {
+            "base": "supplied_record",
+            "hypotheses_checked": [
+              "another",
+              "rival"
+            ],
+            "hypotheses_skipped": {},
+            "external_sources_fetched": false,
+            "coverage": "supplied_record",
+            "integrity_checks": "listed per node; not a complete check or page verification",
+            "knowledge": {
+              "read_mode": "frozen",
+              "contributions_checked": [],
+              "conflict_sources": {},
+              "target": {
+                "status": "unassessed",
+                "ref": null,
+                "revision": null,
+                "reason": null
+              }
+            }
+          },
+          "assessment_revision": "db00f5c3299186e7bb491a369422a55e0205db46f278e88b3f887c2c4216a7d2"
+        }
+      },
+      "markdown": "## Knowledge excerpt\n\nRecord 6596a310cc28c745; support depth 0; 1 nodes shown (limit 12), 8 outside selection; 5 boundary links; 0 internal links omitted (cap 96).\n\nCONTESTED: readable hypotheses contain competing claims.\n\nBase record; 2 hypotheses are not expanded. Conflict flags compare readable hypotheses, not every possible alternative.\n\n### m.cost — known · CONTESTED\n\n- current: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\nNo links shown within this selection.\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "markdown_details": "## Knowledge excerpt\n\nRecord 6596a310cc28c745; support depth 0; 1 nodes shown (limit 12), 8 outside selection; 5 boundary links; 0 internal links omitted (cap 96).\n\nCONTESTED: readable hypotheses contain competing claims.\n\nBase record; 2 hypotheses are not expanded. Conflict flags compare readable hypotheses, not every possible alternative.\n\n### m.cost — known · CONTESTED\n\n- current: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\nRecorded fields:\n- v: 12\n- from: s.note\n- name: Cost\n- metadata: \\{\"current\": \"new\"\\}\n\n### Recorded links\n\nLeft names right; impact traversal keeps this direction.\n\nNo links shown within this selection.\n\nConditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.\n",
+      "mermaid": "flowchart TB\n  accTitle: Knowledge excerpt\n  accDescr: Declared links only. MOVED needs review; FALSIFIED means a declared condition is true.\n  %% Record 6596a310cc28c745; support depth 0; 1 nodes shown (limit 12), 8 outside selection; 5 boundary links; 0 internal links omitted (cap 96).\n  n0[\"m.cost<br/>known: CONTESTED<br/>v: 12<br/>Cost\"]\n  export_legend[\"CONTESTED: readable hypotheses contain competing claims\"]\n  export_note[\"Scope #40;not a record#41;<br/>6596a310cc28c745<br/>8 nodes outside selection<br/>5 boundary links<br/>0 internal links omitted<br/>0 labels shortened #40;80 chars#41;<br/>2 hypotheses not expanded<br/>0 project contributions not expanded<br/>0 unreadable hypotheses<br/>Details: read the text export\"]\n  style export_note stroke-dasharray: 4 4\n"
+    }
+  ],
+  "refusals": [
+    {
+      "name": "nontext-entry",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n\nextra:\n  2024: {v: 1}\n",
+      "seeds": [
+        "d.muted"
+      ],
+      "error": "export requires string entry and dependency IDs; quote numeric IDs in YAML",
+      "cli_error": "usage: kpop export [-h] [--record RECORD]\n                   [--format {markdown,markdown-mermaid,mermaid}]\n                   [--direction {support,impact}] [--depth DEPTH]\n                   [--max-nodes MAX_NODES] [--details] [--profile {core/v1}]\n                   ids [ids ...]\nkpop export: error: export requires string entry and dependency IDs; quote numeric IDs in YAML\n"
+    },
+    {
+      "name": "nontext-dependency",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost, 2024], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "d.muted"
+      ],
+      "error": "export requires string entry and dependency IDs; quote numeric IDs in YAML",
+      "cli_error": "usage: kpop export [-h] [--record RECORD]\n                   [--format {markdown,markdown-mermaid,mermaid}]\n                   [--direction {support,impact}] [--depth DEPTH]\n                   [--max-nodes MAX_NODES] [--details] [--profile {core/v1}]\n                   ids [ids ...]\nkpop export: error: export requires string entry and dependency IDs; quote numeric IDs in YAML\n"
+    },
+    {
+      "name": "malformed-dependencies",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: m.cost, seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "d.muted"
+      ],
+      "error": "d.muted: rests_on must be a list of entry IDs",
+      "cli_error": "usage: kpop export [-h] [--record RECORD]\n                   [--format {markdown,markdown-mermaid,mermaid}]\n                   [--direction {support,impact}] [--depth DEPTH]\n                   [--max-nodes MAX_NODES] [--details] [--profile {core/v1}]\n                   ids [ids ...]\nkpop export: error: d.muted: rests_on must be a list of entry IDs\n"
+    },
+    {
+      "name": "metadata-selector",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "deps"
+      ],
+      "error": "unknown exact ID(s): deps; use kpop open or pull",
+      "cli_error": "usage: kpop export [-h] [--record RECORD]\n                   [--format {markdown,markdown-mermaid,mermaid}]\n                   [--direction {support,impact}] [--depth DEPTH]\n                   [--max-nodes MAX_NODES] [--details] [--profile {core/v1}]\n                   ids [ids ...]\nkpop export: error: unknown exact ID(s): deps; use kpop open or pull\n"
+    },
+    {
+      "name": "unknown-exact",
+      "yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.note:\n    name: 'מקור 日本語 <script> & #quot; [check] `text`'\n    file: notes.md\n    read: 2026-01-01\nknown:\n  m.cost: {v: 12, from: s.note, name: Cost, metadata: {current: new}}\n  m.other: {v: 3, unit: percent, from: 'a prose locator'}\n  m.total: {rule: {expr: 'm.cost + m.other'}}\njudgments:\n  d.muted: {verdict: Continue, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 20'}\n  d.falsified: {verdict: Stop, rests_on: [m.cost], seen: {m.cost: 10}, wrong_if: 'm.cost > 11'}\n  d.moved: {verdict: Review, rests_on: [m.cost], seen: {m.cost: 10}, reopened_by: 'A new quote arrives'}\n  d.blocked:\n    verdict: Wait\n    rests_on: [missing.entry]\n    seen: {missing.entry: true}\n    blocked_on: {missing: [missing.entry], why: 'Awaiting confirmation'}\nfindings:\n  hyp.old: {v: refuted, refutes: [d.moved], at: 'Trial failed'}\n",
+      "seeds": [
+        "D.MUTED"
+      ],
+      "error": "unknown exact ID(s): D.MUTED; use kpop open or pull",
+      "cli_error": "usage: kpop export [-h] [--record RECORD]\n                   [--format {markdown,markdown-mermaid,mermaid}]\n                   [--direction {support,impact}] [--depth DEPTH]\n                   [--max-nodes MAX_NODES] [--details] [--profile {core/v1}]\n                   ids [ids ...]\nkpop export: error: unknown exact ID(s): D.MUTED; use kpop open or pull\n"
+    }
+  ]
+}

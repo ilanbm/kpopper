@@ -1,0 +1,519 @@
+//! Bounded committed target closure, materialized only in a private scratch tree.
+use crate::{
+    Result,
+    history_authority::Files,
+    history_contract::*,
+    history_view::{list, map_mut, truth},
+    history_yaml as Y,
+    identity::sha256,
+    pending_state as P,
+    reasoning_runtime::{OperationalBounds, Runtime},
+    reasoning_snapshot::{CaptureOptions, Snapshot},
+    require,
+    source_capture::{ReadMode, capture_ordinary_source_with_runtime},
+    value::{Integer, TypedValue as V},
+};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    path::{Component, Path},
+};
+fn s(v: &str) -> V {
+    V::Text(v.into())
+}
+fn obj(items: impl IntoIterator<Item = (&'static str, V)>) -> V {
+    V::Map(items.into_iter().map(|(k, v)| (k.into(), v)).collect())
+}
+fn name(path: &Path) -> Result<&str> {
+    path.to_str().ok_or_else(|| error("invalid_target_path"))
+}
+fn safe(path: &str) -> Result<String> {
+    require(
+        !Path::new(path).is_absolute() && !path.contains('\\'),
+        "invalid_target_path",
+    )?;
+    let mut parts = vec![];
+    for part in Path::new(path).components() {
+        match part {
+            Component::Normal(p) => parts.push(name(Path::new(p))?),
+            Component::CurDir => {}
+            Component::ParentDir => return Err(error("invalid_target_path")),
+            _ => return Err(error("invalid_target_path")),
+        }
+    }
+    let value = parts.join("/");
+    crate::history_branch::portable_path(&value)?;
+    Ok(value)
+}
+fn pointer(path: &Path) -> Result<String> {
+    require(!path.is_absolute(), "invalid_target_path")?;
+    let mut normalized = std::path::PathBuf::new();
+    for part in path.components() {
+        if part == Component::ParentDir {
+            require(normalized.pop(), "invalid_target_path")?;
+        } else {
+            normalized.push(part);
+        }
+    }
+    safe(name(&normalized)?)
+}
+struct Reader<'a> {
+    root: &'a Path,
+    tree: BTreeMap<String, (String, String, String)>,
+}
+impl Reader<'_> {
+    fn read(&self, path: &str, maximum: usize) -> Result<Vec<u8>> {
+        let (mode, kind, oid) = self
+            .tree
+            .get(path)
+            .ok_or_else(|| error("target_record_unavailable"))?;
+        require(
+            kind == "blob" && ["100644", "100755"].contains(&mode.as_str()),
+            "nonregular_target_file",
+        )?;
+        let raw = P::git(self.root, &["cat-file", "blob", oid], maximum, false)?.unwrap();
+        P::verify_blob(oid, &raw)?;
+        Ok(raw)
+    }
+}
+fn byte_value(raw: &[u8]) -> V {
+    obj([
+        ("encoding", s("hex")),
+        (
+            "data",
+            s(&raw.iter().map(|b| format!("{b:02x}")).collect::<String>()),
+        ),
+        ("sha256", s(&sha256(raw))),
+    ])
+}
+pub(crate) fn history_evidence(capture: &crate::history_capture::Capture) -> Result<V> {
+    let mut files = Files::from([
+        ("entry.yaml".into(), capture.entry_bytes.clone()),
+        ("authority.yaml".into(), capture.authority_bytes.clone()),
+    ]);
+    let mut commits = capture.commits.clone();
+    for generation in capture.inactive_generations.values() {
+        commits.extend(generation.commits.clone());
+    }
+    for (op, raw) in commits {
+        files.insert(format!("commits/{op}.yaml"), raw);
+    }
+    for (key, raw) in &capture.object_bytes {
+        files.insert(
+            format!("objects/{}", capture.object_paths[key]),
+            raw.clone(),
+        );
+    }
+    for (path, raw) in &capture.cancellation_bytes {
+        files.insert(format!("cancellations/{path}"), raw.clone());
+    }
+    let retained = V::Map(
+        capture
+            .inactive_generations
+            .iter()
+            .map(|(k, g)| (k.clone(), s(&g.digest)))
+            .collect(),
+    );
+    let adapted = crate::history_adapter::from_store_capture(capture)?;
+    let mut value = obj([
+        (
+            "version",
+            V::Integer(Integer::new(if capture.inactive_generations.is_empty() {
+                "1"
+            } else {
+                "2"
+            })?),
+        ),
+        (
+            "files",
+            V::Map(
+                files
+                    .iter()
+                    .map(|(k, r)| (k.clone(), byte_value(r)))
+                    .collect(),
+            ),
+        ),
+        (
+            "sha256",
+            V::Map(
+                files
+                    .iter()
+                    .map(|(k, r)| (k.clone(), s(&sha256(r))))
+                    .collect(),
+            ),
+        ),
+        ("rules", map(&capture.state)?["rules"].clone()),
+        ("baseline", capture.baseline.clone()),
+        ("projection", adapted.projection().clone()),
+    ]);
+    if !capture.inactive_generations.is_empty() {
+        map_mut(&mut value)?.insert("inactive_generations".into(), retained);
+    }
+    crate::history_bundle::validate_observation(&value, &files)?;
+    Ok(value)
+}
+pub(crate) fn records(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<V> {
+    // The caller retains all live project/record guards. A detached immutable
+    // revision is replayed in a new temporary directory and must not inherit
+    // the caller's directory lock-order namespace.
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| records_isolated(root, entry, revision, runtime))
+            .join()
+            .map_err(|_| error("target_replay_failed"))?
+    })
+}
+pub(crate) struct OrdinaryRecords {
+    pub document: crate::ordinary_value::Value,
+    pub hypotheses: crate::ordinary_value::Map,
+}
+pub(crate) fn records_ordinary(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<OrdinaryRecords> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let materialized = materialize(root, entry, revision, runtime)?;
+                Ok(OrdinaryRecords {
+                    document: materialized.captured.ordinary_document().clone(),
+                    hypotheses: crate::ordinary_value::map(materialized.captured.hypotheses())?
+                        .clone(),
+                })
+            })
+            .join()
+            .map_err(|_| error("target_replay_failed"))?
+    })
+}
+struct Materialized {
+    _temp: tempfile::TempDir,
+    captured: crate::source_capture::OrdinaryCapture,
+    files: Files,
+    raw_names: BTreeSet<String>,
+    active: bool,
+}
+fn materialize(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<Materialized> {
+    require(
+        [40, 64].contains(&revision.len())
+            && revision
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+        "invalid_target_revision",
+    )?;
+    let raw = P::git(
+        root,
+        &["ls-tree", "-r", "-z", revision],
+        16 * 1024 * 1024,
+        false,
+    )?
+    .unwrap();
+    let mut reader = Reader {
+        root,
+        tree: BTreeMap::new(),
+    };
+    for row in raw.split(|b| *b == 0).filter(|r| !r.is_empty()) {
+        let split = row
+            .iter()
+            .position(|b| *b == b'\t')
+            .ok_or_else(|| error("invalid_target_tree"))?;
+        let info = std::str::from_utf8(&row[..split])
+            .map_err(|_| error("invalid_target_tree"))?
+            .split(' ')
+            .collect::<Vec<_>>();
+        require(info.len() == 3, "invalid_target_tree")?;
+        let path =
+            std::str::from_utf8(&row[split + 1..]).map_err(|_| error("invalid_target_path"))?;
+        reader.tree.insert(
+            path.into(),
+            (info[0].into(), info[1].into(), info[2].into()),
+        );
+        require(reader.tree.len() <= 100_000, "target_limit")?;
+    }
+    let mut entry = safe(entry)?;
+    if !reader.tree.contains_key(&entry)
+        && [Some("GROUNDING.yaml"), Some("PROVENANCE.yaml")]
+            .contains(&Path::new(&entry).file_name().and_then(|v| v.to_str()))
+    {
+        let parent = Path::new(&entry).parent().unwrap();
+        for alternate in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+            let p = name(&parent.join(alternate))?.to_owned();
+            if reader.tree.contains_key(&p) {
+                entry = p;
+                break;
+            }
+        }
+    }
+    let layout = crate::history_transaction::Layout::for_entry(&entry)?;
+    let marker = if reader.tree.contains_key(&layout.authority) {
+        let raw = reader.read(&layout.authority, 1024 * 1024)?;
+        let value = Y::decode_document(&raw)?;
+        crate::history_authority::validate_authority(&value)?;
+        Some(value)
+    } else {
+        None
+    };
+    let active = marker
+        .as_ref()
+        .is_some_and(|m| string_is(&map(m).unwrap()["authority"], "history"));
+    let maximum = if active {
+        64 * 1024 * 1024
+    } else {
+        4 * 1024 * 1024
+    };
+    let limit = if active { 2 * MAX_OBJECTS + 128 } else { 128 };
+    let mut queue = VecDeque::from([entry.clone()]);
+    let mut raw_names = BTreeSet::new();
+    if active {
+        queue.push_back(layout.authority.clone());
+        raw_names.insert(layout.authority.clone());
+        for (name, (mode, kind, _)) in &reader.tree {
+            if [&layout.objects, &layout.commits, &layout.cancellations]
+                .iter()
+                .any(|dir| name.starts_with(&format!("{dir}/")))
+            {
+                require(mode == "100644" && kind == "blob", "nonregular_target_file")?;
+                queue.push_back(safe(name)?);
+                raw_names.insert(name.clone());
+            }
+        }
+    }
+    for name in reader.tree.keys().filter(|p| {
+        p.starts_with(&format!("{}/", layout.hypotheses))
+            && (p.ends_with(".yaml") || p.ends_with(".yml"))
+    }) {
+        queue.push_back(name.clone());
+    }
+    let mut files = Files::new();
+    let mut total = 0;
+    while let Some(path) = queue.pop_front() {
+        let path = safe(&path)?;
+        if files.contains_key(&path) {
+            continue;
+        }
+        require(files.len() < limit, "target_limit")?;
+        let raw = reader.read(&path, if active { 16 * 1024 * 1024 } else { maximum })?;
+        total += raw.len();
+        require(total <= maximum, "target_limit")?;
+        files.insert(path.clone(), raw.clone());
+        if raw_names.contains(&path) {
+            continue;
+        }
+        let body = Y::decode_full_ordinary_source_value(&raw)?;
+        if active && path == entry {
+            if let Some(imported) = body.get("meta").and_then(|v| v.get("history_import")) {
+                let value = imported.strict_typed()?;
+                for member in list(&map(&value)?["members"])? {
+                    let p = safe(name(
+                        &Path::new(&entry)
+                            .parent()
+                            .unwrap()
+                            .join(text(&map(member)?["path"])?),
+                    )?)?;
+                    queue.push_back(p.clone());
+                    raw_names.insert(p);
+                }
+            }
+        } else {
+            for key in ["record", "also"] {
+                let values = match body.get(key) {
+                    Some(v @ crate::ordinary_source::Source::Scalar(
+                        crate::ordinary_value::Scalar::Finite(V::Text(_)),
+                    )) => vec![v],
+                    Some(crate::ordinary_source::Source::List(a)) => a.iter().collect(),
+                    Some(crate::ordinary_source::Source::Map(m)) =>
+                        m.iter().map(|(_, v)| v).collect(),
+                    _ => vec![],
+                };
+                for value in values {
+                    if let crate::ordinary_source::Source::Scalar(
+                        crate::ordinary_value::Scalar::Finite(V::Text(p)),
+                    ) = value
+                        && (p.ends_with(".yaml") || p.ends_with(".yml"))
+                    {
+                        queue.push_back(pointer(&Path::new(&path).parent().unwrap().join(p))?);
+                    }
+                }
+            }
+        }
+    }
+    let temp = tempfile::tempdir()?;
+    let scratch = temp.path().canonicalize()?;
+    for (path, raw) in &files {
+        let path = scratch.join(path);
+        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::write(path, raw)?;
+    }
+    let captured = capture_ordinary_source_with_runtime(
+        &[scratch.join(&entry)],
+        &scratch,
+        if active {
+            ReadMode::Frozen
+        } else {
+            ReadMode::Live
+        },
+        None,
+        runtime,
+    )?;
+    Ok(Materialized {
+        _temp: temp,
+        captured,
+        files,
+        raw_names,
+        active,
+    })
+}
+fn records_isolated(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<V> {
+    let Materialized {
+        _temp,
+        captured,
+        files,
+        raw_names,
+        active,
+    } = materialize(root, entry, revision, runtime)?;
+    let captured = captured.try_finite()?;
+    let document = captured.strict_document()?;
+    let mut hypotheses = vec![];
+    for (name, hyp) in map(captured.hypotheses())? {
+        let hyp = map(hyp)?;
+        require(
+            !hyp.get("error").is_some_and(truth),
+            "unreadable_target_hypothesis",
+        )?;
+        let mut value = obj([
+            ("name", s(name)),
+            (
+                "doc",
+                hyp.get("doc")
+                    .or_else(|| hyp.get("document"))
+                    .ok_or_else(|| error("invalid_target_hypothesis"))?
+                    .clone(),
+            ),
+            ("head", hyp["head"].clone()),
+        ]);
+        if active && let Some(kind) = hyp.get("kind").filter(|v| truth(v)) {
+            map_mut(&mut value)?.insert("kind".into(), kind.clone());
+        }
+        hypotheses.push(value);
+    }
+    let hashes = V::Map(
+        files
+            .iter()
+            .map(|(path, raw)| {
+                Ok((
+                    path.clone(),
+                    if active {
+                        s(&sha256(raw))
+                    } else {
+                        s(std::str::from_utf8(raw).map_err(|_| error("invalid_target_text"))?)
+                    },
+                ))
+            })
+            .collect::<Result<Map>>()?,
+    );
+    let hash = sha256(&crate::history_emit::encode_document(&hashes)?);
+    let mut output = obj([
+        ("doc", document.clone()),
+        ("hypotheses", V::List(hypotheses.clone())),
+        ("hash", s(&hash)),
+    ]);
+    let snapshot = if active {
+        map_mut(&mut output)?.insert(
+            "history".into(),
+            history_evidence(captured.history_capture().unwrap())?,
+        );
+        captured.snapshot()?.to_data()
+    } else if crate::reasoning_operations::selected(&document)? {
+        require(runtime.is_some(), "target_runtime_required")?;
+        let context = crate::reasoning_context::CapturedAssessment::from_snapshot(
+            captured.snapshot()?.clone(),
+            None,
+            "focused-review/v1",
+            runtime,
+            OperationalBounds::default(),
+            None,
+        )?;
+        map_mut(&mut output)?.insert(
+            "core".into(),
+            obj([
+                ("snapshot", s(&captured.snapshot()?.to_json()?)),
+                ("assessment", context.base_assessment().clone()),
+                ("findings", crate::reasoning_operations::findings(&context)?),
+            ]),
+        );
+        captured.snapshot()?.to_data()
+    } else {
+        let hyps = V::Map(
+            hypotheses
+                .iter()
+                .map(|h| {
+                    let h = map(h).unwrap();
+                    (
+                        text(&h["name"]).unwrap().into(),
+                        obj([("doc", h["doc"].clone()), ("head", h["head"].clone())]),
+                    )
+                })
+                .collect(),
+        );
+        Snapshot::from_data(
+            &document,
+            CaptureOptions {
+                hypotheses: Some(hyps),
+                context: Some(obj([
+                    ("read_mode", s("supplied")),
+                    ("watch_capture", obj([("hash", s(&hash))])),
+                ])),
+                ..Default::default()
+            },
+        )?
+        .to_data()
+    };
+    map_mut(&mut output)?.insert("snapshot".into(), snapshot);
+    map_mut(&mut output)?.insert(
+        "files".into(),
+        V::Map(
+            files
+                .iter()
+                .filter(|(p, _)| !raw_names.contains(*p))
+                .map(|(p, r)| {
+                    Ok((
+                        p.clone(),
+                        s(std::str::from_utf8(r).map_err(|_| error("invalid_target_text"))?),
+                    ))
+                })
+                .collect::<Result<Map>>()?,
+        ),
+    );
+    Ok(output)
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    #[test]
+    fn entries_and_imports_refuse_parent_components_but_pointers_normalize_within_root() {
+        assert!(safe("sub/../GROUNDING.yaml").is_err());
+        assert_eq!(
+            pointer(Path::new("sub/../GROUNDING.yaml")).unwrap(),
+            "GROUNDING.yaml"
+        );
+        assert!(pointer(Path::new("sub/../../escape.yaml")).is_err());
+        assert!(safe("/outside.yaml").is_err());
+        assert!(safe("C:\\outside.yaml").is_err());
+    }
+}

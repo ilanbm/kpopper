@@ -1,0 +1,863 @@
+[
+  {
+    "name": "whole-tokens",
+    "kind": "rewrite",
+    "source": "p.old p.old. xp.old p.old_suffix p.old.child {{p.old}} /p.old/\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "p.keep p.keep. xp.old p.old_suffix p.old.child {{p.keep}} /p.keep/\n",
+      4
+    ]
+  },
+  {
+    "name": "text-and-comment",
+    "kind": "rewrite",
+    "source": "known:\n  p.old: {v: 1} # p.old\n  p.text: {v: \"{{p.old}}\"}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.keep: {v: 1} # p.keep\n  p.text: {v: \"{{p.keep}}\"}\n",
+      3
+    ]
+  },
+  {
+    "name": "literal",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    rule: {op: eq, args: [{ref: p.old}, {text: p.old}]}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x:\n    rule: {op: eq, args: [{ref: p.keep}, {text: p.old}]}\n",
+      1
+    ]
+  },
+  {
+    "name": "readable",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    rule: {expr: \"p.old + p.old\"}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x:\n    rule: {expr: \"p.keep + p.keep\"}\n",
+      1
+    ]
+  },
+  {
+    "name": "readable-string-literal",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    wrong_if: {expr: 'p.old == \"p.old\"'}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x:\n    wrong_if: {expr: \"p.keep == \\\"p.old\\\"\"}\n",
+      1
+    ]
+  },
+  {
+    "name": "snapshot-value",
+    "kind": "rewrite",
+    "source": "judgments:\n  d.x:\n    seen:\n      p.old:\n        computed:\n          value: {text: p.old}\n          rule: {expr: \"p.old + 2\"}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "judgments:\n  d.x:\n    seen:\n      p.keep:\n        computed:\n          value: {text: p.old}\n          rule: {expr: \"p.keep + 2\"}\n",
+      2
+    ]
+  },
+  {
+    "name": "alias-literal",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    rule: &literal {text: p.old}\n  p.y:\n    rule: *literal\n  p.z: {v: p.old}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x:\n    rule: &literal {text: p.old}\n  p.y:\n    rule: *literal\n  p.z: {v: p.keep}\n",
+      1
+    ]
+  },
+  {
+    "name": "alias-before-expression",
+    "kind": "rewrite",
+    "source": "known:\n  p.x: {v: &literal {text: p.old}}\n  p.y: {rule: *literal}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x: {v: &literal {text: p.keep}}\n  p.y: {rule: *literal}\n",
+      1
+    ]
+  },
+  {
+    "name": "alias-expression-before-value",
+    "kind": "rewrite",
+    "source": "known:\n  p.x: {rule: &literal {text: p.old}}\n  p.y: {v: *literal}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x: {rule: &literal {text: p.old}}\n  p.y: {v: *literal}\n",
+      0
+    ]
+  },
+  {
+    "name": "alias-cycle",
+    "kind": "rewrite",
+    "source": "known:\n  p.x: &loop {v: p.old, nested: *loop}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x: &loop {v: p.keep, nested: *loop}\n",
+      1
+    ]
+  },
+  {
+    "name": "unicode-before-literal",
+    "kind": "rewrite",
+    "source": "meta: {name: שלום}\nknown:\n  p.x: {rule: {text: p.old}, name: שלום p.old}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "meta: {name: שלום}\nknown:\n  p.x: {rule: {text: p.old}, name: שלום p.keep}\n",
+      1
+    ]
+  },
+  {
+    "name": "unicode-expression",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    wrong_if: {expr: 'p.old == \"שלום p.old\"'}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x:\n    wrong_if: {expr: \"p.keep == \\\"שלום p.old\\\"\"}\n",
+      1
+    ]
+  },
+  {
+    "name": "folded-expression",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    rule:\n      expr: >\n        p.old + 2\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x:\n    rule:\n      expr: \"p.keep + 2\"\n",
+      1
+    ]
+  },
+  {
+    "name": "literal-expression",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    rule:\n      expr: |\n        p.old + 2\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x:\n    rule:\n      expr: \"p.keep + 2\"\n",
+      1
+    ]
+  },
+  {
+    "name": "custom-fields",
+    "kind": "rewrite",
+    "source": "known:\n  p.x:\n    invalid: {text: p.old}\n    snapshot:\n      p.old:\n        computed: {value: p.old, rule: {ref: p.old}}\n",
+    "predicate": "invalid",
+    "snapshot": "snapshot",
+    "expected": [
+      "known:\n  p.x:\n    invalid: {text: p.old}\n    snapshot:\n      p.keep:\n        computed: {value: p.old, rule: {ref: p.keep}}\n",
+      2
+    ]
+  },
+  {
+    "name": "malformed-prose",
+    "kind": "rewrite",
+    "source": "refused: [ p.old (and p.old)\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "refused: [ p.keep (and p.keep)\n",
+      2
+    ]
+  },
+  {
+    "name": "unknown-alias",
+    "kind": "rewrite",
+    "source": "known: {p.old: *missing}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known: {p.keep: *missing}\n",
+      1
+    ]
+  },
+  {
+    "name": "tagged-literal",
+    "kind": "rewrite",
+    "source": "known:\n  p.x: {rule: {text: !!str p.old}}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x: {rule: {text: !!str p.old}}\n",
+      0
+    ]
+  },
+  {
+    "name": "anchor-in-expr-scalar",
+    "kind": "rewrite",
+    "source": "known:\n  p.x: {rule: {expr: &expr \"p.old + 2\"}}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x: {rule: {expr: \"p.keep + 2\"}}\n",
+      1
+    ]
+  },
+  {
+    "name": "typed-literal-values",
+    "kind": "rewrite",
+    "source": "known:\n  p.x: {rule: {num: p.old}}\n  p.y: {wrong_if: {bool: p.old}}\n",
+    "predicate": "wrong_if",
+    "snapshot": "seen",
+    "expected": [
+      "known:\n  p.x: {rule: {num: p.old}}\n  p.y: {wrong_if: {bool: p.old}}\n",
+      0
+    ]
+  },
+  {
+    "name": "flow-only",
+    "kind": "dedupe",
+    "source": "known: {p.x: {also: [p.keep, p.keep, p.other]}}\n",
+    "expected": "known: {p.x: {also: [p.keep, p.other]}}\n"
+  },
+  {
+    "name": "quoted-list-text",
+    "kind": "dedupe",
+    "source": "known:\n  p.x: {v: \"[p.keep, p.keep]\", also: [p.keep, p.keep]}\n",
+    "expected": "known:\n  p.x: {v: \"[p.keep, p.keep]\", also: [p.keep]}\n"
+  },
+  {
+    "name": "alias-flow",
+    "kind": "dedupe",
+    "source": "known:\n  p.x: {v: &text \"[p.keep, p.keep]\", also: &list [p.keep, p.keep]}\n  p.y: {v: *text, also: *list}\n",
+    "expected": "known:\n  p.x: {v: &text \"[p.keep, p.keep]\", also: &list [p.keep]}\n  p.y: {v: *text, also: *list}\n"
+  },
+  {
+    "name": "unicode-flow",
+    "kind": "dedupe",
+    "source": "meta: {name: שלום}\nknown: {p.x: {also: [p.keep, p.keep]}}\n",
+    "expected": "meta: {name: שלום}\nknown: {p.x: {also: [p.keep]}}\n"
+  },
+  {
+    "name": "quoted-id-not-deduped",
+    "kind": "dedupe",
+    "source": "known: {p.x: {also: [\"p.keep\", p.keep, p.keep]}}\n",
+    "expected": "known: {p.x: {also: [\"p.keep\", p.keep]}}\n"
+  },
+  {
+    "name": "block-not-deduped",
+    "kind": "dedupe",
+    "source": "known:\n  p.x:\n    also:\n      - p.keep\n      - p.keep\n",
+    "expected": "known:\n  p.x:\n    also:\n      - p.keep\n      - p.keep\n"
+  },
+  {
+    "name": "distinct-block",
+    "kind": "dedupe",
+    "source": "known:\n  p.x:\n    distinct_from: \"p.keep, p.keep, p.other\"\n",
+    "expected": "known:\n  p.x:\n    distinct_from: \"p.keep, p.other\""
+  },
+  {
+    "name": "distinct-unquoted",
+    "kind": "dedupe",
+    "source": "known:\n  p.x:\n    distinct_from: p.keep, p.keep\n",
+    "expected": "known:\n  p.x:\n    distinct_from: p.keep"
+  },
+  {
+    "name": "distinct-single-quote",
+    "kind": "dedupe",
+    "source": "known:\n  p.x:\n    distinct_from: 'p.keep p.keep'\n",
+    "expected": "known:\n  p.x:\n    distinct_from: p.keep"
+  },
+  {
+    "name": "flow-newline",
+    "kind": "dedupe",
+    "source": "known:\n  p.x: {also: [p.keep,\n    p.keep, p.other]}\n",
+    "expected": "known:\n  p.x: {also: [p.keep, p.other]}\n"
+  },
+  {
+    "name": "invalid",
+    "kind": "dedupe",
+    "source": "known: [p.keep, p.keep\n",
+    "expected": "known: [p.keep, p.keep\n"
+  },
+  {
+    "name": "distinct-flow",
+    "kind": "distinct",
+    "source": "meta: {updated: 2026-09-01}\nknown:\n  p.keep: {v: 1}\n  p.other: {v: 1}\n",
+    "ids": "p.other",
+    "why": "Different subjects",
+    "hypothesis": false,
+    "expected": "meta: {updated: 2026-09-20}\nknown:\n  p.keep: {v: 1, distinct_from: p.other}\n    # distinct 2026-09-20: Different subjects\n  p.other: {v: 1}\n"
+  },
+  {
+    "name": "distinct-flow-existing",
+    "kind": "distinct",
+    "source": "meta: {updated: \"2026-09-01\"}\nknown:\n  p.keep: {v: 1, distinct_from: p.first}\n",
+    "ids": "p.first, p.other",
+    "why": "Different subjects",
+    "hypothesis": false,
+    "expected": "meta: {updated: \"2026-09-20\"}\nknown:\n  p.keep: {v: 1, distinct_from: \"p.first, p.other\"}\n    # distinct 2026-09-20: Different subjects\n"
+  },
+  {
+    "name": "distinct-block",
+    "kind": "distinct",
+    "source": "meta:\n  updated: 2026-09-01 # day\nknown:\n  p.keep:\n    v: 1\n    # retained\n\n  p.other: {v: 1}\n",
+    "ids": "p.other",
+    "why": "Different subjects",
+    "hypothesis": false,
+    "expected": "meta:\n  updated: 2026-09-20 # day\nknown:\n  p.keep:\n    v: 1\n    # retained\n    distinct_from: p.other\n    # distinct 2026-09-20: Different subjects\n\n  p.other: {v: 1}\n"
+  },
+  {
+    "name": "distinct-field-replacement",
+    "kind": "distinct",
+    "source": "known:\n  p.keep:\n    v: 1\n    distinct_from: p.first\n    # old comment\n    name: Kept\n",
+    "ids": "p.first, p.other",
+    "why": "Different subjects",
+    "hypothesis": false,
+    "expected": "known:\n  p.keep:\n    v: 1\n    distinct_from: \"p.first, p.other\"\n    # old comment\n    name: Kept\n    # distinct 2026-09-20: Different subjects\n"
+  },
+  {
+    "name": "distinct-hypothesis",
+    "kind": "distinct",
+    "source": "meta: {updated: 2026-09-01}\nknown:\n  p.keep: {v: 1}\n",
+    "ids": "p.other",
+    "why": "Different subjects",
+    "hypothesis": true,
+    "expected": "meta: {updated: 2026-09-01}\nknown:\n  p.keep: {v: 1, distinct_from: p.other}\n    # distinct 2026-09-20: Different subjects\n"
+  },
+  {
+    "name": "distinct-missing-updated",
+    "kind": "distinct",
+    "source": "meta:\n  name: Record\nknown:\n  p.keep: {v: 1}\n",
+    "ids": "p.other",
+    "why": "Different subjects",
+    "hypothesis": false,
+    "expected": "meta:\n  updated: 2026-09-20\n  name: Record\nknown:\n  p.keep: {v: 1, distinct_from: p.other}\n    # distinct 2026-09-20: Different subjects\n"
+  },
+  {
+    "name": "distinct-empty-meta",
+    "kind": "distinct",
+    "source": "meta: {}\nknown:\n  p.keep: {v: 1}\n",
+    "ids": "p.other",
+    "why": "Different subjects",
+    "hypothesis": false,
+    "expected": "meta: {updated: \"2026-09-20\"}\nknown:\n  p.keep: {v: 1, distinct_from: p.other}\n    # distinct 2026-09-20: Different subjects\n"
+  },
+  {
+    "name": "distinct-unicode-meta",
+    "kind": "distinct",
+    "source": "meta: {name: שלום, updated: '2026-09-01'}\nknown:\n  p.keep: {v: 1}\n",
+    "ids": "p.other",
+    "why": "נושאים שונים",
+    "hypothesis": false,
+    "expected": "meta: {name: שלום, updated: '2026-09-20'}\nknown:\n  p.keep: {v: 1, distinct_from: p.other}\n    # distinct 2026-09-20: נושאים שונים\n"
+  },
+  {
+    "name": "same-flow",
+    "kind": "same-file",
+    "source": "meta: {updated: 2026-09-01}\nknown:\n  p.keep: {v: 1}\n  p.old: {v: 1}\n",
+    "merged": "v: 1\n",
+    "also": [
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": "meta: {updated: 2026-09-20}\nknown:\n  p.keep: {v: 1, also: [p.old]}\n",
+    "error": null
+  },
+  {
+    "name": "same-comments",
+    "kind": "same-file",
+    "source": "known:\n  p.keep:\n    v: 1 # kept\n    name: Mine\n    # own comment\n\n  p.old:\n    v: 1\n    name: Other\n    # old comment\n\n  p.last: {v: 2}\n",
+    "merged": "v: 1\nname: Mine\n",
+    "also": [
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": "known:\n  p.keep:\n    v: 1 # kept\n    name: Mine\n    also: [p.old]\n    # own comment\n    # old comment\n\n  p.last: {v: 2}\n",
+    "error": null
+  },
+  {
+    "name": "same-carry-fields",
+    "kind": "same-file",
+    "source": "known:\n  p.keep: {v: 1}\n  p.old: {v: 1, name: Other, note: \"{{p.old}}\"}\n",
+    "merged": "v: 1\nname: Other\nnote: '{{p.old}}'\n",
+    "also": [
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": "known:\n  p.keep: {v: 1, name: Other, note: \"{{p.keep}}\", also: [p.old]}\n",
+    "error": null
+  },
+  {
+    "name": "same-deps-seen",
+    "kind": "same-file",
+    "source": "known:\n  p.keep: {v: 1}\n  p.old: {v: 1}\njudgments:\n  d.x:\n    rests_on: [p.keep, p.old]\n    seen: {p.keep: 1, p.old: 1}\n    verdict: Keep\n    wrong_if: p.old > 2\n",
+    "merged": "v: 1\n",
+    "also": [
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": "known:\n  p.keep: {v: 1, also: [p.old]}\njudgments:\n  d.x:\n    rests_on: [p.keep]\n    seen: {p.keep: 1}\n    verdict: Keep\n    wrong_if: p.keep > 2\n",
+    "error": null
+  },
+  {
+    "name": "same-seen-block",
+    "kind": "same-file",
+    "source": "known:\n  p.keep: {v: 1}\n  p.old: {v: 1}\njudgments:\n  d.x:\n    rests_on: [p.keep, p.old]\n    seen:\n      p.keep: 1\n      p.old: 1\n    verdict: Keep\n    wrong_if: p.old > 2\n",
+    "merged": "v: 1\n",
+    "also": [
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": "known:\n  p.keep: {v: 1, also: [p.old]}\njudgments:\n  d.x:\n    rests_on: [p.keep]\n    seen:\n      p.keep: 1\n    verdict: Keep\n    wrong_if: p.keep > 2\n",
+    "error": null
+  },
+  {
+    "name": "same-also",
+    "kind": "same-file",
+    "source": "known:\n  p.keep:\n    v: 1\n    also: [p.was]\n    # own\n  p.old:\n    v: 1\n    also: p.older\n",
+    "merged": "v: 1\n",
+    "also": [
+      "p.was",
+      "p.older",
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": "known:\n  p.keep:\n    v: 1\n    also: [p.was, p.older, p.old]\n    # own\n",
+    "error": null
+  },
+  {
+    "name": "same-new-survivor",
+    "kind": "same-file",
+    "source": "known:\n  p.old: {v: 1}\n  p.z: {v: 3}\n",
+    "merged": "v: 1\n",
+    "also": [
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": "known:\n  p.keep: {v: 1, also: [p.old]}\n  p.z: {v: 3}\n",
+    "error": null
+  },
+  {
+    "name": "same-empty-collection-refusal",
+    "kind": "same-file",
+    "source": "known:\n  p.old: {v: 1}\n",
+    "merged": "v: 1\n",
+    "also": [
+      "p.old"
+    ],
+    "deps": "rests_on",
+    "snapshot": "seen",
+    "expected": null,
+    "error": "no collection known in this file"
+  },
+  {
+    "name": "merge-equal",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    name: Mine\n  p.old:\n    v: '1.0'\n    name: Other\n    note: Extra\n",
+    "left": "v: 1\nname: Mine\n",
+    "right": "v: '1.0'\nname: Other\nnote: Extra\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "v: 1\nname: Mine\nnote: Extra\nalso:\n- p.old\n",
+      "notes": []
+    }
+  },
+  {
+    "name": "merge-undated-refusal",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n  p.old:\n    v: 2\n",
+    "left": "v: 1\n",
+    "right": "v: 2\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "error": "refused - p.keep holds 1 and p.old holds 2, and nothing dates either reading: two readings that disagree are a contradiction, not one subject twice; set the one that is right, or open a hypothesis, then same"
+    }
+  },
+  {
+    "name": "merge-newer-denied",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    of: '2026-09-01'\n  p.old:\n    v: 2\n    of: '2026-09-02'\n",
+    "left": "v: 1\nof: '2026-09-01'\n",
+    "right": "v: 2\nof: '2026-09-02'\n",
+    "allow": false,
+    "calls": [
+      [
+        "p.keep",
+        {
+          "v": 1,
+          "of": "2026-09-01"
+        },
+        2,
+        "2026-09-02"
+      ]
+    ],
+    "expected": {
+      "error": "refused - p.keep holds 1 as of 2026-09-01 and p.old holds 2 as of 2026-09-02 - oracle admission: two readings that disagree are a contradiction, not one subject twice; set the one that is right, or open a hypothesis, then same"
+    }
+  },
+  {
+    "name": "merge-newer-approved",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    name: Mine\n    unit: USD\n    from: s.old\n    at: '1'\n    of: '2026-09-01'\n    note: old\n  p.old:\n    v: 2\n    from: s.new\n    read: '2026-09-02'\n    at: '2'\n    name: Other\n    new: extra\n",
+    "left": "v: 1\nname: Mine\nunit: USD\nfrom: s.old\nat: '1'\nof: '2026-09-01'\nnote: old\n",
+    "right": "v: 2\nfrom: s.new\nread: '2026-09-02'\nat: '2'\nname: Other\nnew: extra\n",
+    "allow": true,
+    "calls": [
+      [
+        "p.keep",
+        {
+          "v": 1,
+          "name": "Mine",
+          "unit": "USD",
+          "from": "s.old",
+          "at": "1",
+          "of": "2026-09-01",
+          "note": "old"
+        },
+        2,
+        "2026-09-02"
+      ]
+    ],
+    "expected": {
+      "body": "v: 2\nname: Mine\nunit: USD\nfrom: s.new\nat: '2'\nnote: old\nread: '2026-09-02'\nnew: extra\nalso:\n- p.old\n",
+      "notes": [
+        "p.keep takes p.old's reading: 1 -> 2 - oracle admission"
+      ]
+    }
+  },
+  {
+    "name": "merge-older",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    of: '2026-09-02'\n  p.old:\n    v: 2\n    of: '2026-09-01'\n",
+    "left": "v: 1\nof: '2026-09-02'\n",
+    "right": "v: 2\nof: '2026-09-01'\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "v: 1\nof: '2026-09-02'\nalso:\n- p.old\n",
+      "notes": [
+        "p.keep keeps its reading 1 as of 2026-09-02; p.old's 2 as of 2026-09-01 is older"
+      ]
+    }
+  },
+  {
+    "name": "merge-undated-other",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    of: '2026-09-02'\n  p.old:\n    v: 2\n",
+    "left": "v: 1\nof: '2026-09-02'\n",
+    "right": "v: 2\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "v: 1\nof: '2026-09-02'\nalso:\n- p.old\n",
+      "notes": [
+        "p.keep keeps its reading 1 as of 2026-09-02; p.old's 2, undated is older"
+      ]
+    }
+  },
+  {
+    "name": "merge-same-day-denied",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    of: '2026-09-02'\n  p.old:\n    v: 2\n    of: '2026-09-02'\n",
+    "left": "v: 1\nof: '2026-09-02'\n",
+    "right": "v: 2\nof: '2026-09-02'\n",
+    "allow": false,
+    "calls": [
+      [
+        "p.keep",
+        {
+          "v": 1,
+          "of": "2026-09-02"
+        },
+        2,
+        "2026-09-02"
+      ]
+    ],
+    "expected": {
+      "error": "refused - p.keep holds 1 as of 2026-09-02 and p.old holds 2 as of 2026-09-02 - oracle admission: two readings that disagree are a contradiction, not one subject twice; set the one that is right, or open a hypothesis, then same"
+    }
+  },
+  {
+    "name": "merge-source-days",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    from: s.old\n  p.old:\n    v: 2\n    from: s.new\n  s.old:\n    read: '2026-09-01'\n  s.new:\n    read: '2026-09-02'\n",
+    "left": "v: 1\nfrom: s.old\n",
+    "right": "v: 2\nfrom: s.new\n",
+    "allow": true,
+    "calls": [
+      [
+        "p.keep",
+        {
+          "v": 1,
+          "from": "s.old"
+        },
+        2,
+        "2026-09-02"
+      ]
+    ],
+    "expected": {
+      "body": "v: 2\nfrom: s.new\nalso:\n- p.old\n",
+      "notes": [
+        "p.keep takes p.old's reading: 1 -> 2 - oracle admission"
+      ]
+    }
+  },
+  {
+    "name": "merge-null-sources",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    file: old\n    read: '2026-09-01'\n  p.old:\n    file: new\n    read: '2026-09-02'\n",
+    "left": "file: old\nread: '2026-09-01'\n",
+    "right": "file: new\nread: '2026-09-02'\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "file: new\nread: '2026-09-02'\nalso:\n- p.old\n",
+      "notes": [
+        "p.keep takes p.old's reading of 2026-09-02"
+      ]
+    }
+  },
+  {
+    "name": "merge-empty-survivor",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep: {}\n  p.old:\n    file: new\n    read: '2026-09-02'\n",
+    "left": "{}\n",
+    "right": "file: new\nread: '2026-09-02'\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "file: new\nread: '2026-09-02'\nalso:\n- p.old\n",
+      "notes": []
+    }
+  },
+  {
+    "name": "merge-rule-equivalent",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    rule:\n      expr: p.input + 2\n  p.old:\n    rule:\n      op: add\n      args:\n      - ref: p.input\n      - num: '2'\n",
+    "left": "rule:\n  expr: p.input + 2\n",
+    "right": "rule:\n  op: add\n  args:\n  - ref: p.input\n  - num: '2'\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "rule:\n  expr: p.input + 2\nalso:\n- p.old\n",
+      "notes": []
+    }
+  },
+  {
+    "name": "merge-implicit-rule",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: p.input + 2\n  p.old:\n    rule: p.input + 2\n    name: Math\n",
+    "left": "v: p.input + 2\n",
+    "right": "rule: p.input + 2\nname: Math\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "v: p.input + 2\nname: Math\nalso:\n- p.old\n",
+      "notes": []
+    }
+  },
+  {
+    "name": "merge-aliases",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    v: 1\n    also:\n    - p.was\n    - p.keep\n    distinct_from: p.z,p.q\n  p.old:\n    v: 1\n    also:\n    - p.was\n    - p.before\n    distinct_from: p.q p.last p.keep p.old\n",
+    "left": "v: 1\nalso:\n- p.was\n- p.keep\ndistinct_from: p.z,p.q\n",
+    "right": "v: 1\nalso:\n- p.was\n- p.before\ndistinct_from: p.q p.last p.keep p.old\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "v: 1\nalso:\n- p.was\n- p.before\n- p.old\ndistinct_from: p.z, p.q, p.last\n",
+      "notes": []
+    }
+  },
+  {
+    "name": "merge-same-verdict",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    rests_on:\n    - p.x\n    verdict: Keep\n  p.old:\n    rests_on:\n    - p.x\n    verdict: Keep\n    name: Other\n",
+    "left": "rests_on:\n- p.x\nverdict: Keep\n",
+    "right": "rests_on:\n- p.x\nverdict: Keep\nname: Other\n",
+    "allow": false,
+    "calls": [],
+    "expected": {
+      "body": "rests_on:\n- p.x\nverdict: Keep\nname: Other\nalso:\n- p.old\n",
+      "notes": []
+    }
+  },
+  {
+    "name": "merge-conflicting-verdict",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    rests_on:\n    - p.x\n    verdict: Keep\n  p.old:\n    rests_on:\n    - p.x\n    verdict: Change\n",
+    "left": "rests_on:\n- p.x\nverdict: Keep\n",
+    "right": "rests_on:\n- p.x\nverdict: Change\n",
+    "allow": false,
+    "calls": [
+      [
+        "p.keep",
+        {
+          "rests_on": [
+            "p.x"
+          ],
+          "verdict": "Keep"
+        },
+        {
+          "rests_on": [
+            "p.x"
+          ],
+          "verdict": "Change"
+        },
+        "2026-09-20"
+      ]
+    ],
+    "expected": {
+      "error": "refused - p.keep concludes 'Keep' and p.old 'Change' - oracle admission: two verdicts on one subject are a contradiction, not one subject twice; keep the one that holds, or write the other through add --hypothesis, for a person to fold"
+    }
+  },
+  {
+    "name": "merge-approved-verdict",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    rests_on:\n    - p.x\n    verdict: Keep\n    name: Mine\n  p.old:\n    rests_on:\n    - p.x\n    verdict: Change\n    name: Other\n",
+    "left": "rests_on:\n- p.x\nverdict: Keep\nname: Mine\n",
+    "right": "rests_on:\n- p.x\nverdict: Change\nname: Other\n",
+    "allow": true,
+    "calls": [
+      [
+        "p.keep",
+        {
+          "rests_on": [
+            "p.x"
+          ],
+          "verdict": "Keep",
+          "name": "Mine"
+        },
+        {
+          "rests_on": [
+            "p.x"
+          ],
+          "verdict": "Change",
+          "name": "Other"
+        },
+        "2026-09-20"
+      ]
+    ],
+    "expected": {
+      "body": "rests_on:\n- p.x\nverdict: Change\nname: Other\nalso:\n- p.old\n",
+      "notes": [
+        "p.keep takes p.old's verdict - oracle admission"
+      ]
+    }
+  },
+  {
+    "name": "merge-title-verdict",
+    "kind": "merge",
+    "source": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.keep:\n    rests_on:\n    - p.x\n    title: Keep\n  p.old:\n    rests_on:\n    - p.x\n    title: Change\n",
+    "left": "rests_on:\n- p.x\ntitle: Keep\n",
+    "right": "rests_on:\n- p.x\ntitle: Change\n",
+    "allow": false,
+    "calls": [
+      [
+        "p.keep",
+        {
+          "rests_on": [
+            "p.x"
+          ],
+          "title": "Keep"
+        },
+        {
+          "rests_on": [
+            "p.x"
+          ],
+          "title": "Change"
+        },
+        "2026-09-20"
+      ]
+    ],
+    "expected": {
+      "error": "refused - p.keep concludes 'Keep' and p.old 'Change' - oracle admission: two verdicts on one subject are a contradiction, not one subject twice; keep the one that holds, or write the other through add --hypothesis, for a person to fold"
+    }
+  },
+  {
+    "name": "brief-seen-and-picks",
+    "kind": "brief-file",
+    "source": "sections:\n  - title: Summary\n    text: \"{{p.old}} / {{p.keep}}\"\n    seen: {p.keep: 1, p.old: 2}\n    pick: [p.keep, p.old]\nlabels:\n  p.keep: Kept\n  p.old: Old\ngroups:\n  all: [p.keep, p.old]\n",
+    "record": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1}\n  p.old: {v: 1}\n  p.z: {z: \"{{p.old}}\", a: \"{{p.old}}\", from: p.old, distinct_from: p.old}\n",
+    "expected": "sections:\n  - title: Summary\n    text: \"{{p.keep}} / {{p.keep}}\"\n    seen: {p.keep: 1}\n    pick: [p.keep]\nlabels:\n  p.keep: Kept\ngroups:\n  all: [p.keep]\n",
+    "mentions": [
+      [
+        "text",
+        [
+          "p.z (z)",
+          "p.z (a)"
+        ]
+      ],
+      [
+        "from",
+        [
+          "p.z"
+        ]
+      ],
+      [
+        "distinct_from",
+        [
+          "p.z"
+        ]
+      ],
+      [
+        "the brief",
+        [
+          "section 'Summary' (text, seen, pick)",
+          "groups and labels"
+        ]
+      ]
+    ]
+  },
+  {
+    "name": "brief-tabs-and-aliases",
+    "kind": "brief-file",
+    "source": "tabs:\n  - title: Overview\n    serves: [p.keep, p.old]\n    sections:\n      - title: Detail\n        text: &caption \"{{p.old}}\"\n        seen:\n          p.keep: 1\n          p.old: 2\n        pick: p.old\nsections:\n  - title: Duplicate\n    text: *caption\n",
+    "record": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: 1}\n  p.old: {v: 1}\n  p.z: {z: \"{{p.old}}\", a: \"{{p.old}}\", from: p.old, distinct_from: p.old}\n",
+    "expected": "tabs:\n  - title: Overview\n    serves: [p.keep]\n    sections:\n      - title: Detail\n        text: &caption \"{{p.keep}}\"\n        seen:\n          p.keep: 1\n        pick: p.keep\nsections:\n  - title: Duplicate\n    text: *caption\n",
+    "mentions": [
+      [
+        "text",
+        [
+          "p.z (z)",
+          "p.z (a)"
+        ]
+      ],
+      [
+        "from",
+        [
+          "p.z"
+        ]
+      ],
+      [
+        "distinct_from",
+        [
+          "p.z"
+        ]
+      ],
+      [
+        "the brief",
+        [
+          "tab 'Overview' (serves)",
+          "section 'Duplicate' (text)",
+          "section 'Detail' (text, seen, pick)"
+        ]
+      ]
+    ]
+  }
+]

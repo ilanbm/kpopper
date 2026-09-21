@@ -1,0 +1,26 @@
+{
+  "record": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, v: 1, of: 2026-09-18}\n  p.other: {v: 2, of: 2026-09-18}\nsources:\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\n",
+  "proposal": "known:\n  p.value: {name: Value, v: 3, of: 2026-09-19}\n",
+  "head": {
+    "claim": "what the tree measures",
+    "folds": "never"
+  },
+  "report": "the base with proposal, tree/here laid over it, in name order\n  proposal\n  tree/here (never folds): what the tree measures\n\ncontested (1): an id two hypotheses hold with different claims - the union has no value to lay, so the run stops here\n  p.value:\n    the base holds p.value: 1 (Value) as of 2026-09-18\n    proposal says p.value: 2 as of 2026-09-19\n    tree/here says p.value: 3 (Value) as of 2026-09-19\n\nre-read against the merged tree: pull each id to see every reading beside the base's, then set what holds today - in the base with a later day, or in the hypothesis that read it - or refute one, and consolidate again\n",
+  "red": true,
+  "blocked": true,
+  "hypotheses": {
+    "proposal": {
+      "doc": {
+        "known": {
+          "p.value": {
+            "v": 2,
+            "of": "2026-09-19"
+          }
+        }
+      },
+      "head": {},
+      "path": "captured/proposal.yaml",
+      "error": null
+    }
+  }
+}

@@ -1,0 +1,6 @@
+# pointer index stays an index
+record:
+  alpha: shards/alpha.yaml
+  beta: shards/beta.yaml
+meta:
+  updated: 2026-09-01

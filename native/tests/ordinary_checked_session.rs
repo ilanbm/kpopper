@@ -1,0 +1,792 @@
+use kpop_native::{
+    ordinary_runtime::Program,
+    reasoning_runtime::{OperationalBounds, target_name},
+};
+use serde_json::{Value as J, json};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
+
+const RECORD: &str = "sources:\n  s.note: {file: note.txt, read: 2026-09-20}\nknown:\n  p.a: {v: 12, from: s.note}\n  p.map:\n    v:\n      true: yes\n      1: one\njudgments:\n  d.keep:\n    wrong_if: 'p.a > 20'\n    seen: {p.a: 12}\n    verdict: Keep\n    rests_on: [p.a]\n";
+
+fn copy_resources(root: &Path) {
+    let target = target_name().unwrap();
+    fs::create_dir_all(root.join("resources/reasoning")).unwrap();
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(format!("{target}.kpopper-runtime")),
+        root.join("resources/reasoning")
+            .join(format!("{target}.zip")),
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("resources/ordinary").join(&target)).unwrap();
+    let ordinary = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var_os("HOME").unwrap())
+                .join(".cache/kpopper/lean")
+                .join(&target)
+                .join(env!("KPOP_ORDINARY_SOURCE_SHA256"))
+        });
+    for name in [
+        "build.json",
+        if cfg!(windows) {
+            "epistemic-core.exe"
+        } else {
+            "epistemic-core"
+        },
+    ] {
+        fs::copy(
+            ordinary.join(name),
+            root.join("resources/ordinary").join(&target).join(name),
+        )
+        .unwrap();
+    }
+}
+
+fn fixture() -> tempfile::TempDir {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("GROUNDING.yaml"), RECORD).unwrap();
+    fs::write(root.path().join("note.txt"), "source evidence\n").unwrap();
+    copy_resources(root.path());
+    root
+}
+
+fn command(root: &Path, operation: &str) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    command
+        .args([
+            "--workspace",
+            root.to_str().unwrap(),
+            "--frozen",
+            "session",
+            operation,
+            "--no-settings",
+            "--input",
+            "GROUNDING.yaml",
+            "--project",
+            "fixture",
+            "--state",
+            "state",
+            "--assessment-profile",
+            "checked-reader/v1",
+        ])
+        .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
+        .env("KPOPPER_NATIVE_CACHE", root.join("cache"));
+    command
+}
+
+fn ok(output: std::process::Output) -> String {
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
+}
+
+fn revision(open: &str) -> String {
+    open.lines()
+        .find_map(|line| line.strip_prefix("project=fixture revision="))
+        .unwrap()
+        .into()
+}
+
+#[test]
+fn ordinary_public_open_read_sources_keys_and_stale_inputs() {
+    let temp = fixture();
+    let root = temp.path();
+    let open = ok(command(root, "open")
+        .args(["--tokens", "8000"])
+        .output()
+        .unwrap());
+    assert!(open.contains("d.keep"));
+    let rev = revision(&open);
+    let node = ok(command(root, "read")
+        .args([
+            "--ref",
+            "node:d.keep",
+            "--revision",
+            &rev,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap());
+    let node: J = serde_json::from_str(&node).unwrap();
+    assert_eq!(node["value"]["checked_bundle_ref"], "checked:d.keep");
+    assert!(
+        node["value"]["epistemic_card"]
+            .as_str()
+            .unwrap()
+            .contains("RECORDED CLAIM d.keep")
+    );
+    let scalar = ok(command(root, "read")
+        .args([
+            "--ref",
+            "node:p.map#/body/v",
+            "--revision",
+            &rev,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap());
+    let scalar: J = serde_json::from_str(&scalar).unwrap();
+    assert_eq!(scalar["value"], json!({"true":"one"}));
+    let source = ok(command(root, "read")
+        .args([
+            "--ref",
+            "source:record",
+            "--revision",
+            &rev,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap());
+    let source: J = serde_json::from_str(&source).unwrap();
+    assert_eq!(source["value"]["text"], RECORD);
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        RECORD.replace("v: 12", "v: 13"),
+    )
+    .unwrap();
+    let stale = command(root, "read")
+        .args(["--ref", "node:p.a", "--revision", &rev, "--tokens", "8000"])
+        .output()
+        .unwrap();
+    assert_eq!(stale.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("reopen"));
+}
+
+#[test]
+fn ordinary_verify_claims_returns_acceptance_and_rejected_checks() {
+    let temp = fixture();
+    let root = temp.path();
+    let rev = revision(&ok(command(root, "open")
+        .args(["--tokens", "8000"])
+        .output()
+        .unwrap()));
+    let input=[json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}),json!({"jsonrpc":"2.0","method":"notifications/initialized"}),json!({"jsonrpc":"2.0","id":"accepted","method":"tools/call","params":{"name":"kpopper_verify_claims","arguments":{"judgment":"d.keep","revision":rev,"assertions":[{"kind":"current","id":"p.a","expected":12}]}}}),json!({"jsonrpc":"2.0","id":"rejected","method":"tools/call","params":{"name":"kpopper_verify_claims","arguments":{"judgment":"d.keep","revision":rev,"assertions":[{"kind":"current","id":"p.a","expected":99}]}}})].into_iter().map(|value|value.to_string()+"\n").collect::<String>();
+    let mut child = command(root, "serve")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = ok(child.wait_with_output().unwrap());
+    let messages = output
+        .lines()
+        .map(|line| serde_json::from_str::<J>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(messages[1]["result"]["isError"], false);
+    assert_eq!(
+        serde_json::from_str::<J>(
+            messages[1]["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+        )
+        .unwrap()["accepted"],
+        true
+    );
+    assert_eq!(messages[2]["result"]["isError"], true);
+    assert!(
+        messages[2]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("accepted")
+    );
+}
+
+#[test]
+fn ordinary_search_context_and_proposals_are_revision_bound_and_idempotent() {
+    let temp = fixture();
+    let root = temp.path();
+    let revision = revision(&ok(command(root, "open")
+        .args(["--tokens", "8000"])
+        .output()
+        .unwrap()));
+    let search: J = serde_json::from_str(&ok(command(root, "search")
+        .args([
+            "--query",
+            "p.a",
+            "--revision",
+            &revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(search["hits"][0]["id"], "p.a");
+    let context: J = serde_json::from_str(&ok(command(root, "context")
+        .args([
+            "--id",
+            "d.keep",
+            "--direction",
+            "support",
+            "--revision",
+            &revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(context["reads"].as_array().unwrap().len(), 2);
+    let proposal_args = [
+        "--revision",
+        &revision,
+        "--kind",
+        "question",
+        "--text",
+        "Later?",
+    ];
+    let first = ok(command(root, "propose")
+        .args(proposal_args)
+        .output()
+        .unwrap());
+    let first: J = serde_json::from_str(&first).unwrap();
+    let proposal = root
+        .join("state")
+        .join(format!("proposal-{}.json", first["id"].as_str().unwrap()));
+    let held = fs::read(&proposal).unwrap();
+    let second: J = serde_json::from_str(&ok(command(root, "propose")
+        .args(proposal_args)
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(second, first);
+    assert_eq!(fs::read(&proposal).unwrap(), held);
+    let retained: J = serde_json::from_str(&ok(command(root, "read")
+        .args([
+            "--ref",
+            first["read"].as_str().unwrap(),
+            "--revision",
+            &revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(retained["value"]["id"], first["id"]);
+    assert_eq!(retained["value"]["stale_base"], false);
+    let fresh_open = ok(command(root, "open").output().unwrap());
+    assert!(fresh_open.contains("pending=1 stale=0; native hypotheses=0"));
+    let before = fs::read_dir(root.join("state")).unwrap().count();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        RECORD.replace("v: 12", "v: 13"),
+    )
+    .unwrap();
+    let stale = command(root, "propose")
+        .args(proposal_args)
+        .output()
+        .unwrap();
+    assert_eq!(stale.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("reopen"));
+    assert_eq!(fs::read_dir(root.join("state")).unwrap().count(), before);
+    let stale_open = ok(command(root, "open").output().unwrap());
+    assert!(stale_open.contains("pending=1 stale=1; native hypotheses=0"));
+}
+
+#[test]
+fn ordinary_default_open_folds_and_advertised_handles_are_readable() {
+    let temp = fixture();
+    let root = temp.path();
+    let more = (0..40)
+        .map(|i| format!("  p.extra{i:02}: {{v: {i}, from: s.note}}\n"))
+        .collect::<String>();
+    let record = RECORD
+        .replace("  p.map:", &(more + "  p.map:"))
+        .replace("seen: {p.a: 12}", "seen: {p.a: 5}")
+        + "open:\n  q.later: {text: 'Which evidence is missing?'}\n";
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let opened = ok(command(root, "open").output().unwrap());
+    assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&opened) <= 700);
+    assert!(opened.contains("+ /known/p [42] source_count=41"));
+    assert!(opened.contains("p.a seen=5 current=12"));
+    assert!(opened.contains("questions=1"));
+    assert!(opened.contains("review=1"));
+    let revision = revision(&opened);
+    for (reference, expected) in [
+        ("/known/p", "+ /known/p [42] source_count=41"),
+        ("links:/known/p", "+ links:/known/p [41] source_count=41"),
+    ] {
+        let text = ok(command(root, "read")
+            .args([
+                "--ref",
+                reference,
+                "--revision",
+                &revision,
+                "--tokens",
+                "100",
+            ])
+            .output()
+            .unwrap());
+        assert!(text.contains(expected));
+        assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&text) <= 100);
+    }
+    for reference in [
+        "orientation",
+        "p.a",
+        "p.map#/body/v",
+        "node:d.keep#/state_tags_ref",
+        "node:d.keep#/state_tags_scope",
+    ] {
+        let response: J = serde_json::from_str(&ok(command(root, "read")
+            .args(["--ref", reference, "--revision", &revision])
+            .output()
+            .unwrap()))
+        .unwrap();
+        assert_eq!(response["complete"], true);
+    }
+    let source = command(root, "read")
+        .args(["--ref", "source:p.a", "--revision", &revision])
+        .output()
+        .unwrap();
+    assert_eq!(source.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&source.stderr)
+            .contains("this is a record entry; read node:p.a with this revision")
+    );
+}
+
+#[test]
+fn ordinary_read_directories_preserve_authored_order_and_scalar_key_identity() {
+    let fixture_data: J =
+        serde_json::from_str(include_str!("fixtures/ordinary-session-view-oracle.json")).unwrap();
+    for case in fixture_data["source_order_cases"].as_array().unwrap() {
+        let temp = fixture();
+        let root = temp.path();
+        fs::write(
+            root.join("GROUNDING.yaml"),
+            case["record"].as_str().unwrap(),
+        )
+        .unwrap();
+        if let Some(profile) = case["profile_text"].as_str() {
+            fs::create_dir_all(root.join(".kpopper")).unwrap();
+            fs::write(root.join(".kpopper/session.json"), profile).unwrap();
+        }
+        if let Some(hypothesis) = case["hypothesis"].as_str() {
+            fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+            fs::write(root.join(".kpopper/hypotheses/candidate.yaml"), hypothesis).unwrap();
+        }
+        for (filename, contents) in case["extra_hypotheses"].as_object().unwrap() {
+            fs::write(
+                root.join(".kpopper/hypotheses").join(filename),
+                contents.as_str().unwrap(),
+            )
+            .unwrap();
+        }
+        let opened = ok(command(root, "open").output().unwrap());
+        let revision = revision(&opened);
+        for (reference, keys) in case["directories"].as_object().unwrap() {
+            let response: J = serde_json::from_str(&ok(command(root, "read")
+                .args([
+                    "--ref",
+                    reference,
+                    "--revision",
+                    &revision,
+                    "--tokens",
+                    "300",
+                ])
+                .output()
+                .unwrap()))
+            .unwrap();
+            assert_eq!(response["complete"], false);
+            let prefix = format!(
+                "{reference}{}/",
+                if reference.contains('#') { "" } else { "#" }
+            );
+            let expected = keys
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|key| {
+                    format!(
+                        "{prefix}{}",
+                        key.as_str().unwrap().replace('~', "~0").replace('/', "~1")
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                response["children"],
+                json!(expected),
+                "{} {reference}",
+                case["name"]
+            );
+        }
+        let response: J = serde_json::from_str(&ok(command(root, "read")
+            .args([
+                "--ref",
+                "node:p.map#/body/v",
+                "--revision",
+                &revision,
+                "--tokens",
+                "65536",
+            ])
+            .output()
+            .unwrap()))
+        .unwrap();
+        assert_eq!(response["value"], case["value"], "{}", case["name"]);
+        for (name, expected) in case["hypothesis_values"].as_object().unwrap() {
+            let reference = format!("native#/{name}");
+            let mut response: J = serde_json::from_str(&ok(command(root, "read")
+                .args([
+                    "--ref",
+                    &reference,
+                    "--revision",
+                    &revision,
+                    "--tokens",
+                    "65536",
+                ])
+                .output()
+                .unwrap()))
+            .unwrap();
+            response["value"]["path"] = json!("PATH");
+            assert_eq!(response["value"], *expected, "hypothesis {name}");
+        }
+    }
+}
+
+#[test]
+fn ordinary_runtime_retains_exit_two_but_compute_still_refuses_it() {
+    let temp = fixture();
+    let root = temp.path();
+    let target = target_name().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let _ = cache;
+    let program = Program::open(&root.join("resources/ordinary").join(target)).unwrap();
+    let graph = json!({"nodes":{"p.a":{"kind":"known","states":[],"body":{"v":12}},"d.keep":{"kind":"judgment","states":[],"body":{"verdict":"Keep","rests_on":["p.a"],"seen":{"p.a":12},"wrong_if":"p.a > 20"},"assessment_body":{"verdict":"Keep","rests_on":["p.a"],"seen":{"p.a":12},"wrong_if":"p.a > 20"},"assessment_fields":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"}}},"edges":[],"topics":{"p.a":["known","p"],"d.keep":["judgments","d"]}});
+    let rejected = program
+        .assess(
+            &graph,
+            "d.keep",
+            &[json!({"kind":"current","id":"p.a","expected":99})],
+            &OperationalBounds::default(),
+        )
+        .unwrap();
+    assert_eq!(rejected["assertions_accepted"], false);
+    let legacy = json!({"record":graph,"id":"d.keep","assertions":[{"kind":"current","id":"p.a","expected":99}]});
+    assert_eq!(
+        program
+            .request(&legacy, &OperationalBounds::default())
+            .unwrap_err()
+            .0,
+        "native reasoning process failed"
+    );
+}
+
+#[test]
+#[ignore = "requires immutable Python oracle; set KPOP_PYTHON_SESSION_ORACLE and KPOP_PYTHON_SESSION_ORACLE_SCRIPT"]
+fn pinned_python_oracle_matches_native_open_read_and_verify_packets() {
+    let python = std::env::var_os("KPOP_PYTHON_SESSION_ORACLE")
+        .expect("set KPOP_PYTHON_SESSION_ORACLE to the pinned Python interpreter");
+    let script = std::env::var_os("KPOP_PYTHON_SESSION_ORACLE_SCRIPT")
+        .expect("set KPOP_PYTHON_SESSION_ORACLE_SCRIPT to the immutable oracle driver");
+    let temp = fixture();
+    let root = temp.path();
+    let oracle = Command::new(python)
+        .arg(script)
+        .arg(root.join("GROUNDING.yaml"))
+        .arg(root.join("python-state"))
+        .output()
+        .unwrap();
+    assert!(
+        oracle.status.success(),
+        "{}",
+        String::from_utf8_lossy(&oracle.stderr)
+    );
+    let oracle: J = serde_json::from_slice(&oracle.stdout).unwrap();
+    let open = ok(command(root, "open")
+        .args(["--tokens", "65536"])
+        .output()
+        .unwrap());
+    let revision = revision(&open);
+    let oracle_revision = oracle["revision"].as_str().unwrap();
+    assert_eq!(
+        open.replace(&revision, "REVISION"),
+        oracle["open"]
+            .as_str()
+            .unwrap()
+            .replace(oracle_revision, "REVISION")
+    );
+    assert!(open.contains("d.keep"));
+    for row in oracle["budget_openings"]
+        .as_array()
+        .expect("oracle driver must include default and constrained budget openings")
+    {
+        let budget = row["budget"].to_string();
+        let output = command(root, "open")
+            .args(["--tokens", &budget])
+            .output()
+            .unwrap();
+        if row.get("error").is_some() {
+            assert_eq!(output.status.code(), Some(2));
+            // Context revisions differ between runtimes and can have different
+            // BPE lengths. Exact token/error parity is covered by frozen graphs.
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains("minimum complete opening needs")
+            );
+        } else {
+            assert_eq!(
+                ok(output).replace(&revision, "REVISION"),
+                row["text"]
+                    .as_str()
+                    .unwrap()
+                    .replace(oracle_revision, "REVISION")
+            );
+        }
+    }
+    for (reference, expected) in oracle["handle_reads"]
+        .as_object()
+        .expect("oracle driver must include advertised handles")
+    {
+        let mut actual: J = serde_json::from_str(&ok(command(root, "read")
+            .args([
+                "--ref",
+                reference,
+                "--revision",
+                &revision,
+                "--tokens",
+                "1600",
+            ])
+            .output()
+            .unwrap()))
+        .unwrap();
+        let mut expected = expected.clone();
+        actual["revision"] = json!("REVISION");
+        expected["revision"] = json!("REVISION");
+        assert_eq!(actual, expected, "{reference}");
+    }
+    let mut native: J = serde_json::from_str(&ok(command(root, "read")
+        .args([
+            "--ref",
+            "node:d.keep",
+            "--revision",
+            &revision,
+            "--tokens",
+            "65536",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    native["revision"] = json!("REVISION");
+    let mut expected = oracle["node"].clone();
+    expected["revision"] = json!("REVISION");
+    assert_eq!(native, expected);
+    let mut native: J = serde_json::from_str(&ok(command(root, "read")
+        .args([
+            "--ref",
+            "node:p.map#/body/v",
+            "--revision",
+            &revision,
+            "--tokens",
+            "65536",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    native["revision"] = json!("REVISION");
+    let mut expected = oracle["scalar_key"].clone();
+    expected["revision"] = json!("REVISION");
+    assert_eq!(native, expected);
+    let mut native: J = serde_json::from_str(&ok(command(root, "read")
+        .args([
+            "--ref",
+            "source:record",
+            "--revision",
+            &revision,
+            "--tokens",
+            "65536",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    native["revision"] = json!("REVISION");
+    let mut expected = oracle["source"].clone();
+    expected["revision"] = json!("REVISION");
+    assert_eq!(native, expected);
+
+    let native_search_text = ok(command(root, "search")
+        .args([
+            "--query",
+            "p.a",
+            "--revision",
+            &revision,
+            "--tokens",
+            "65536",
+        ])
+        .output()
+        .unwrap());
+    let mut native_search: J = serde_json::from_str(&native_search_text).unwrap();
+    native_search["revision"] = json!("REVISION");
+    let mut expected_search = oracle["search"].clone();
+    expected_search["revision"] = json!("REVISION");
+    assert_eq!(native_search, expected_search);
+    let native_context_text = ok(command(root, "context")
+        .args([
+            "--id",
+            "d.keep",
+            "--direction",
+            "support",
+            "--revision",
+            &revision,
+            "--tokens",
+            "65536",
+        ])
+        .output()
+        .unwrap());
+    let mut native_context: J = serde_json::from_str(&native_context_text).unwrap();
+    native_context["revision"] = json!("REVISION");
+    let mut expected_context = oracle["context"].clone();
+    expected_context["revision"] = json!("REVISION");
+    assert_eq!(native_context, expected_context);
+    let native_proposal_text = ok(command(root, "propose")
+        .args([
+            "--revision",
+            &revision,
+            "--kind",
+            "question",
+            "--text",
+            "Later?",
+        ])
+        .output()
+        .unwrap());
+    let native_proposal: J = serde_json::from_str(&native_proposal_text).unwrap();
+    let mut normalized_proposal = native_proposal.clone();
+    normalized_proposal["id"] = json!("PROPOSAL");
+    normalized_proposal["read"] = json!("proposal:PROPOSAL");
+    let mut expected_proposal = oracle["proposal"].clone();
+    expected_proposal["id"] = json!("PROPOSAL");
+    expected_proposal["read"] = json!("proposal:PROPOSAL");
+    assert_eq!(normalized_proposal, expected_proposal);
+
+    let input=[json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}),json!({"jsonrpc":"2.0","method":"notifications/initialized"}),json!({"jsonrpc":"2.0","id":"accepted","method":"tools/call","params":{"name":"kpopper_verify_claims","arguments":{"judgment":"d.keep","revision":revision,"assertions":[{"kind":"current","id":"p.a","expected":12}]}}}),json!({"jsonrpc":"2.0","id":"rejected","method":"tools/call","params":{"name":"kpopper_verify_claims","arguments":{"judgment":"d.keep","revision":revision,"assertions":[{"kind":"current","id":"p.a","expected":99}]}}})].into_iter().map(|value|value.to_string()+"\n").collect::<String>();
+    let mut child = command(root, "serve")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = ok(child.wait_with_output().unwrap());
+    let messages = output
+        .lines()
+        .map(|line| serde_json::from_str::<J>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(messages[1]["result"]["isError"], false);
+    assert_eq!(
+        serde_json::from_str::<J>(
+            messages[1]["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+        )
+        .unwrap(),
+        oracle["accepted"]
+    );
+    assert_eq!(messages[2]["result"]["isError"], true);
+    assert_eq!(
+        serde_json::from_str::<J>(
+            messages[2]["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+        )
+        .unwrap(),
+        oracle["rejected"]
+    );
+
+    let input=[json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}),json!({"jsonrpc":"2.0","method":"notifications/initialized"}),json!({"jsonrpc":"2.0","id":"search","method":"tools/call","params":{"name":"kpopper_search","arguments":{"query":"p.a","tokens":65536,"revision":revision}}}),json!({"jsonrpc":"2.0","id":"context","method":"tools/call","params":{"name":"kpopper_context","arguments":{"ids":["d.keep"],"direction":"support","tokens":65536,"revision":revision}}}),json!({"jsonrpc":"2.0","id":"propose","method":"tools/call","params":{"name":"kpopper_propose","arguments":{"revision":revision,"kind":"question","text":"Later?","basis":[],"revisit":""}}})].into_iter().map(|value|value.to_string()+"\n").collect::<String>();
+    let mut child = command(root, "serve")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = ok(child.wait_with_output().unwrap());
+    let messages = output
+        .lines()
+        .map(|line| serde_json::from_str::<J>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        messages[1]["result"],
+        json!({"content":[{"type":"text","text":native_search_text}],"isError":false})
+    );
+    assert_eq!(
+        messages[2]["result"],
+        json!({"content":[{"type":"text","text":native_context_text}],"isError":false})
+    );
+    assert_eq!(
+        messages[3]["result"],
+        json!({"content":[{"type":"text","text":native_proposal_text.trim_end_matches('\n')}],"isError":false})
+    );
+    let mut mcp_search: J = serde_json::from_str(
+        messages[1]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    mcp_search["revision"] = json!("REVISION");
+    assert_eq!(mcp_search, native_search);
+    let mut mcp_context: J = serde_json::from_str(
+        messages[2]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    mcp_context["revision"] = json!("REVISION");
+    assert_eq!(mcp_context, native_context);
+    let mcp_proposal: J = serde_json::from_str(
+        messages[3]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(mcp_proposal, native_proposal);
+    let fresh = ok(command(root, "open").output().unwrap());
+    assert_eq!(
+        fresh.replace(&revision, "REVISION"),
+        oracle["fresh_open"]
+            .as_str()
+            .unwrap()
+            .replace(oracle_revision, "REVISION")
+    );
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        RECORD.replace("v: 12", "v: 13"),
+    )
+    .unwrap();
+    let stale = ok(command(root, "open").output().unwrap());
+    let stale_revision = stale
+        .lines()
+        .find_map(|line| line.strip_prefix("project=fixture revision="))
+        .unwrap();
+    assert_eq!(
+        stale.replace(stale_revision, "REVISION"),
+        oracle["stale_open"]
+            .as_str()
+            .unwrap()
+            .replace(oracle["stale_revision"].as_str().unwrap(), "REVISION")
+    );
+}

@@ -1,0 +1,8 @@
+meta:
+  updated: 2026-09-19
+known:
+  p.alpha:
+    v: "this is a rather long replacement sentence that will certainly exceed the hundred column
+        width limit used by the writer"
+    # why this reading matters
+    of: 2026-09-19

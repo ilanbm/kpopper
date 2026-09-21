@@ -1,0 +1,66 @@
+{
+  "base_revision": "2cfc8cf752ae986de9bc7b83477ea3107948f2998c1ba2de7b7739158d09a431",
+  "cases": [
+    {
+      "name": "inferred",
+      "ok": {
+        "canonical_record_changed": false,
+        "id": "9ebb922cf0c1efa215ee140b8b4aac30f8b0185c162bb64356cfea2e615a9953",
+        "read": "proposal:9ebb922cf0c1efa215ee140b8b4aac30f8b0185c162bb64356cfea2e615a9953",
+        "status": "proposed"
+      }
+    },
+    {
+      "name": "question",
+      "ok": {
+        "canonical_record_changed": false,
+        "id": "92a20b7e2ea371aa46c133df536c7b8b7a83ecf412a2eb40d6d1861cce5c48ed",
+        "read": "proposal:92a20b7e2ea371aa46c133df536c7b8b7a83ecf412a2eb40d6d1861cce5c48ed",
+        "status": "proposed"
+      }
+    },
+    {"name": "unknown-kind", "refused": "unknown epistemic kind"},
+    {"name": "blank-text", "refused": "text must contain 1..8000 characters"},
+    {"name": "observed-no-basis", "refused": "observed/inferred claims need source or premise references"},
+    {"name": "missing-revisit", "refused": "a consequential claim needs a falsifier or human re-opener"},
+    {"name": "missing-node", "refused": "unlisted operation or identifier"},
+    {"name": "missing-source", "refused": "unlisted operation or identifier"},
+    {"name": "unsafe-external-scheme", "refused": "external basis needs an explicit http(s) or file locator"},
+    {"name": "unsafe-external-empty", "refused": "external basis needs an explicit http(s) or file locator"},
+    {"name": "untyped-basis", "refused": "basis must name recorded refs or an external: locator"}
+  ],
+  "proposals": {
+    "92a20b7e2ea371aa46c133df536c7b8b7a83ecf412a2eb40d6d1861cce5c48ed": {
+      "base_revision": "2cfc8cf752ae986de9bc7b83477ea3107948f2998c1ba2de7b7739158d09a431",
+      "basis": [],
+      "claimed_by": "session; not authenticated as a person",
+      "created_at": "2026-09-19T21:03:14.214958+00:00",
+      "id": "92a20b7e2ea371aa46c133df536c7b8b7a83ecf412a2eb40d6d1861cce5c48ed",
+      "kind": "question",
+      "project": "fixture",
+      "revisit": "",
+      "status": "proposed",
+      "text": "What should be checked?",
+      "unverified_external_basis": []
+    },
+    "9ebb922cf0c1efa215ee140b8b4aac30f8b0185c162bb64356cfea2e615a9953": {
+      "base_revision": "2cfc8cf752ae986de9bc7b83477ea3107948f2998c1ba2de7b7739158d09a431",
+      "basis": [
+        "external:https://example.test/evidence",
+        "node:fact.one",
+        "source:source.one"
+      ],
+      "claimed_by": "session; not authenticated as a person",
+      "created_at": "2026-09-19T21:03:14.214209+00:00",
+      "id": "9ebb922cf0c1efa215ee140b8b4aac30f8b0185c162bb64356cfea2e615a9953",
+      "kind": "inferred",
+      "project": "fixture",
+      "revisit": "Changes if the source or node changes.",
+      "status": "proposed",
+      "text": "Observed conclusion",
+      "unverified_external_basis": ["external:https://example.test/evidence"]
+    }
+  },
+  "pending_current_stale_base": false,
+  "pending_stale_stale_base": true
+}

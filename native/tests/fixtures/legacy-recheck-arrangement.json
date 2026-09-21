@@ -1,0 +1,22 @@
+[
+  {
+    "collection": null,
+    "code": 0,
+    "stdout": "supersede d.arr: continue -> stop - its wrong_if holds (graph.entries > 0)\n  kept: the replaced verdict, in .kpopper/replaced.yaml (version 1)\nthe new judgment fired: wrong_if holds (graph.entries > 0) - broken by its own condition\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-19\nsources:\n  s.q: {asked: Inspect this record}\nknown:\n  p.a: {v: 1}\njudgments:\n  d.arr:\n    verdict: stop\n    rests_on: [s.q, graph.entries]\n    wrong_if: \"graph.entries > 0\"\n    because: \"new evidence\"\n    born: \"2026-09-19\"\n    replaced: [\"born undated; its wrong_if holds (graph.entries > 0) on 2026-09-19\"]\n    seen: {s.q: present, graph.entries: 2}\n",
+      ".kpopper/replaced.yaml": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.arr:\n- verdict: continue\n  rests_on:\n  - s.q\n  - graph.entries\n  seen:\n    s.q: Inspect this record\n    graph.entries: 1\n  wrong_if: graph.entries > 0\n  ended: its wrong_if holds (graph.entries > 0)\n  day: '2026-09-19'\n"
+    }
+  },
+  {
+    "collection": "known",
+    "code": 0,
+    "stdout": "supersede d.arr: continue -> stop - its wrong_if holds (graph.entries > 0)\n  kept: the replaced verdict, in .kpopper/replaced.yaml (version 1)\nthe new judgment fired: wrong_if holds (graph.entries > 0) - broken by its own condition\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "files": {
+      "GROUNDING.yaml": "meta:\n  updated: 2026-09-19\nsources:\n  s.q: {asked: Inspect this record}\nknown:\n  p.a: {v: 1}\njudgments:\n  d.arr:\n    verdict: stop\n    rests_on: [s.q, graph.entries]\n    wrong_if: \"graph.entries > 0\"\n    because: \"new evidence\"\n    born: \"2026-09-19\"\n    replaced: [\"born undated; its wrong_if holds (graph.entries > 0) on 2026-09-19\"]\n    seen: {s.q: present, graph.entries: 2}\n",
+      ".kpopper/replaced.yaml": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.arr:\n- verdict: continue\n  rests_on:\n  - s.q\n  - graph.entries\n  seen:\n    s.q: Inspect this record\n    graph.entries: 1\n  wrong_if: graph.entries > 0\n  ended: its wrong_if holds (graph.entries > 0)\n  day: '2026-09-19'\n"
+    }
+  }
+]

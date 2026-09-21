@@ -1,0 +1,121 @@
+[
+  {
+    "name": "page-arrangement-take-dry",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {v: 2, of: 2026-09-18}\nsources:\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0, born: 2026-09-18}\n",
+      ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+      ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+    },
+    "facts": {
+      "v.layout": {
+        "linked": true,
+        "cut": "",
+        "fired": false,
+        "reading": "page.unserved is 0",
+        "stood": 1
+      }
+    }
+  },
+  {
+    "name": "page-arrangement-cut-dry",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {v: 2, of: 2026-09-18}\nsources:\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0, born: 2026-09-18}\n",
+      ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+      ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.absent]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+    },
+    "facts": {
+      "v.layout": {
+        "linked": false,
+        "cut": "no tab's sections earn s.now",
+        "fired": true,
+        "reading": "page.unserved is 1",
+        "stood": 0
+      }
+    }
+  },
+  {
+    "name": "page-arrangement-fired-dry",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {from: s.extra, v: 2, of: 2026-09-18}\nsources:\n  s.extra: {asked: Other request, read: 2026-09-19}\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0, born: 2026-09-18}\n",
+      ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+      ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+    },
+    "facts": {
+      "v.layout": {
+        "linked": true,
+        "cut": "",
+        "fired": true,
+        "reading": "page.unserved is 1",
+        "stood": 1
+      }
+    }
+  },
+  {
+    "name": "metric-covered",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {from: s.extra, v: 2, of: 2026-09-18}\nsources:\n  s.extra: {asked: Other request, read: 2026-09-19}\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.covered], seen: {s.now: read 2026-09-19, page.covered: 0}, wrong_if: page.covered > 0, born: 2026-09-18}\n",
+      ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+      ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+    },
+    "facts": {
+      "v.layout": {
+        "linked": true,
+        "cut": "",
+        "fired": true,
+        "reading": "page.covered is 1",
+        "stood": 1
+      }
+    }
+  },
+  {
+    "name": "metric-spill",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {from: s.extra, v: 2, of: 2026-09-18}\nsources:\n  s.extra: {asked: Other request, read: 2026-09-19}\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.spill], seen: {s.now: read 2026-09-19, page.spill: 0}, wrong_if: page.spill > 0, born: 2026-09-18}\n  d.spilled: {verdict: broken, rests_on: [p.other], seen: {p.other: 2}, wrong_if: p.other > 0}\n",
+      ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+      ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+    },
+    "facts": {
+      "v.layout": {
+        "linked": true,
+        "cut": "",
+        "fired": true,
+        "reading": "page.spill is 1",
+        "stood": 1
+      }
+    }
+  },
+  {
+    "name": "metric-drift",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {from: s.extra, v: 2, of: 2026-09-18}\nsources:\n  s.extra: {asked: Other request, read: 2026-09-19}\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.drift], seen: {s.now: read 2026-09-19, page.drift: 0}, wrong_if: page.drift > 0, born: 2026-09-18}\n",
+      ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+      ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+    },
+    "facts": {
+      "v.layout": {
+        "linked": true,
+        "cut": "",
+        "fired": true,
+        "reading": "page.drift is 0.67",
+        "stood": 1
+      }
+    }
+  },
+  {
+    "name": "metric-recent_unserved",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.value: {name: Value, from: s.now, v: 1, of: 2026-09-18}\n  p.other: {from: s.extra, v: 2, of: 2026-09-18}\nsources:\n  s.extra: {asked: Other request, read: 2026-09-20}\n  s.now: {asked: test the proposal, name: Trial session, read: 2026-09-19}\njudgments:\n  v.layout: {verdict: current, rests_on: [s.now, page.recent_unserved], seen: {s.now: read 2026-09-19, page.recent_unserved: 0}, wrong_if: page.recent_unserved > 0, born: 2026-09-18}\n",
+      ".kpopper/hypotheses/trial.yaml": "judgments:\n  v.layout: {verdict: replacement, rests_on: [s.now, page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 2}\n",
+      ".kpopper/view.yaml": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n"
+    },
+    "facts": {
+      "v.layout": {
+        "linked": true,
+        "cut": "",
+        "fired": true,
+        "reading": "page.recent_unserved is 1",
+        "stood": 1
+      }
+    }
+  }
+]

@@ -1,0 +1,300 @@
+[
+  {
+    "name": "GROUNDING.yaml-0",
+    "record": "GROUNDING.yaml",
+    "sidecar": ".kpopper/replaced.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=stop",
+      "rests_on=[p.x, p.y]",
+      "wrong_if=p.y > 0",
+      "because=second grounds",
+      "--as-of",
+      "2026-09-16",
+      "GROUNDING.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: p.x > 0\n    because: first grounds\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": null,
+    "after": "meta:\n  updated: 2026-09-16\nknown:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nsupersede d.keep: continue -> stop - its wrong_if holds (p.x > 0)\n  kept: the replaced verdict, because, in .kpopper/replaced.yaml (version 1)\nthe new judgment holds: wrong_if does not hold (p.y > 0)\n\nthe record needs a person on 1 judgment (0 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "GROUNDING.yaml-1",
+    "record": "GROUNDING.yaml",
+    "sidecar": ".kpopper/replaced.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "0",
+      "--as-of",
+      "2026-09-17",
+      "GROUNDING.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-16\nknown:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "after": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "stdout": "set p.x: 1 -> 0 (as of 2026-09-17)\nrests on it:\n  MOVED     d.keep: p.x moved 1 -> 0 since it was reviewed - if it still holds: review d.keep\n\nthe record needs a person on 1 judgment (1 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "GROUNDING.yaml-2",
+    "record": "GROUNDING.yaml",
+    "sidecar": ".kpopper/replaced.yaml",
+    "args": [
+      "set",
+      "p.y",
+      "1",
+      "--as-of",
+      "2026-09-17",
+      "GROUNDING.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "after": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "stdout": "set p.y: 0 -> 1 (as of 2026-09-17)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.y > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (1 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "GROUNDING.yaml-3",
+    "record": "GROUNDING.yaml",
+    "sidecar": ".kpopper/replaced.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=continue",
+      "rests_on=[p.x, p.y]",
+      "wrong_if=p.x > 0",
+      "because=first grounds",
+      "--as-of",
+      "2026-09-17",
+      "GROUNDING.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "after": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nsupersede d.keep: stop -> continue - its wrong_if holds (p.y > 0)\n  kept: the replaced verdict, because, in .kpopper/replaced.yaml (version 2)\n  returns to version 1 - it stood until 2026-09-16 and fell because its wrong_if holds (p.x > 0)\nthe new judgment holds: wrong_if does not hold (p.x > 0)\n\nthe record needs a person on 1 judgment (0 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "GROUNDING.yaml-4",
+    "record": "GROUNDING.yaml",
+    "sidecar": ".kpopper/replaced.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "1",
+      "--as-of",
+      "2026-09-18",
+      "GROUNDING.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "after": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "stdout": "set p.x: 0 -> 1 (as of 2026-09-18)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.x > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (0 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "GROUNDING.yaml-5",
+    "record": "GROUNDING.yaml",
+    "sidecar": ".kpopper/replaced.yaml",
+    "args": [
+      "set",
+      "p.y",
+      "0",
+      "--as-of",
+      "2026-09-18",
+      "GROUNDING.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "after": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 0, of: 2026-09-18}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "stdout": "set p.y: 1 -> 0 (as of 2026-09-18)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.x > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (1 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "GROUNDING.yaml-6",
+    "record": "GROUNDING.yaml",
+    "sidecar": ".kpopper/replaced.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=stop",
+      "rests_on=[p.x, p.y]",
+      "wrong_if=p.y > 0",
+      "because=second grounds",
+      "--as-of",
+      "2026-09-18",
+      "GROUNDING.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 0, of: 2026-09-18}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "after": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 0, of: 2026-09-18}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\", \"its wrong_if holds (p.x > 0) on 2026-09-18\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n- same_as: 1\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-18'\n",
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nsupersede d.keep: continue -> stop - its wrong_if holds (p.x > 0)\n  kept: the replaced verdict, because, in .kpopper/replaced.yaml (version 3)\n  returns to version 2 - it stood until 2026-09-17 and fell because its wrong_if holds (p.y > 0)\nthe new judgment holds: wrong_if does not hold (p.y > 0)\n\nthe record needs a person on 1 judgment (0 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "PROVENANCE.yaml-0",
+    "record": "PROVENANCE.yaml",
+    "sidecar": "PROVENANCE.replaced.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=stop",
+      "rests_on=[p.x, p.y]",
+      "wrong_if=p.y > 0",
+      "because=second grounds",
+      "--as-of",
+      "2026-09-16",
+      "PROVENANCE.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: p.x > 0\n    because: first grounds\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": null,
+    "after": "meta:\n  updated: 2026-09-16\nknown:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nsupersede d.keep: continue -> stop - its wrong_if holds (p.x > 0)\n  kept: the replaced verdict, because, in PROVENANCE.replaced.yaml (version 1)\nthe new judgment holds: wrong_if does not hold (p.y > 0)\n\nthe record needs a person on 1 judgment (0 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "PROVENANCE.yaml-1",
+    "record": "PROVENANCE.yaml",
+    "sidecar": "PROVENANCE.replaced.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "0",
+      "--as-of",
+      "2026-09-17",
+      "PROVENANCE.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-16\nknown:\n  p.x: {v: 1, of: 2026-09-01}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "after": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "stdout": "set p.x: 1 -> 0 (as of 2026-09-17)\nrests on it:\n  MOVED     d.keep: p.x moved 1 -> 0 since it was reviewed - if it still holds: review d.keep\n\nthe record needs a person on 1 judgment (1 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "PROVENANCE.yaml-2",
+    "record": "PROVENANCE.yaml",
+    "sidecar": "PROVENANCE.replaced.yaml",
+    "args": [
+      "set",
+      "p.y",
+      "1",
+      "--as-of",
+      "2026-09-17",
+      "PROVENANCE.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 0, of: 2026-09-01}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "after": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "stdout": "set p.y: 0 -> 1 (as of 2026-09-17)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.y > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (1 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "PROVENANCE.yaml-3",
+    "record": "PROVENANCE.yaml",
+    "sidecar": "PROVENANCE.replaced.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=continue",
+      "rests_on=[p.x, p.y]",
+      "wrong_if=p.x > 0",
+      "because=first grounds",
+      "--as-of",
+      "2026-09-17",
+      "PROVENANCE.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n",
+    "after": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nsupersede d.keep: stop -> continue - its wrong_if holds (p.y > 0)\n  kept: the replaced verdict, because, in PROVENANCE.replaced.yaml (version 2)\n  returns to version 1 - it stood until 2026-09-16 and fell because its wrong_if holds (p.x > 0)\nthe new judgment holds: wrong_if does not hold (p.x > 0)\n\nthe record needs a person on 1 judgment (0 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "PROVENANCE.yaml-4",
+    "record": "PROVENANCE.yaml",
+    "sidecar": "PROVENANCE.replaced.yaml",
+    "args": [
+      "set",
+      "p.x",
+      "1",
+      "--as-of",
+      "2026-09-18",
+      "PROVENANCE.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-17\nknown:\n  p.x: {v: 0, of: 2026-09-17}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "after": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "stdout": "set p.x: 0 -> 1 (as of 2026-09-18)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.x > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (0 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "PROVENANCE.yaml-5",
+    "record": "PROVENANCE.yaml",
+    "sidecar": "PROVENANCE.replaced.yaml",
+    "args": [
+      "set",
+      "p.y",
+      "0",
+      "--as-of",
+      "2026-09-18",
+      "PROVENANCE.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 1, of: 2026-09-17}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "after": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 0, of: 2026-09-18}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "stdout": "set p.y: 1 -> 0 (as of 2026-09-18)\nrests on it:\n  FIRED     d.keep: wrong_if holds (p.x > 0) - broken by its own condition\n\nthe record needs a person on 1 judgment (1 moved, 1 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "PROVENANCE.yaml-6",
+    "record": "PROVENANCE.yaml",
+    "sidecar": "PROVENANCE.replaced.yaml",
+    "args": [
+      "add",
+      "d.keep",
+      "verdict=stop",
+      "rests_on=[p.x, p.y]",
+      "wrong_if=p.y > 0",
+      "because=second grounds",
+      "--as-of",
+      "2026-09-18",
+      "PROVENANCE.yaml"
+    ],
+    "before": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 0, of: 2026-09-18}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.x > 0\"}\n    because: \"first grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\"]\n    seen: {p.x: 0, p.y: 1}\n",
+    "kept_before": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n",
+    "after": "meta:\n  updated: 2026-09-18\nknown:\n  p.x: {v: 1, of: 2026-09-18}\n  p.y: {v: 0, of: 2026-09-18}\njudgments:\n  d.keep:\n    verdict: stop\n    rests_on: [p.x, p.y]\n    wrong_if: {expr: \"p.y > 0\"}\n    because: \"second grounds\"\n    replaced: [\"its wrong_if holds (p.x > 0) on 2026-09-16\", \"its wrong_if holds (p.y > 0) on 2026-09-17\", \"its wrong_if holds (p.x > 0) on 2026-09-18\"]\n    seen: {p.x: 1, p.y: 0}\n",
+    "kept_after": "# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.\nd.keep:\n- verdict: continue\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if: p.x > 0\n  because: first grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-16'\n- verdict: stop\n  rests_on:\n  - p.x\n  - p.y\n  wrong_if:\n    expr: p.y > 0\n  because: second grounds\n  seen:\n    p.x: 1\n    p.y: 0\n  ended: its wrong_if holds (p.y > 0)\n  day: '2026-09-17'\n- same_as: 1\n  ended: its wrong_if holds (p.x > 0)\n  day: '2026-09-18'\n",
+    "stdout": "d.keep.wrong_if: stored as a readable expression\nsupersede d.keep: continue -> stop - its wrong_if holds (p.x > 0)\n  kept: the replaced verdict, because, in PROVENANCE.replaced.yaml (version 3)\n  returns to version 2 - it stood until 2026-09-17 and fell because its wrong_if holds (p.y > 0)\nthe new judgment holds: wrong_if does not hold (p.y > 0)\n\nthe record needs a person on 1 judgment (0 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  }
+]

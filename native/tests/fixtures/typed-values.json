@@ -1,0 +1,2900 @@
+{
+  "source_commit": "b639cdbab1e3c624ad52708350166d222821aec1",
+  "source": "scripts/pending_grounding.py:_encode/identity",
+  "source_sha256": "1f6d97fd05c0aba056c2aa4a475b4a1c1d9f748420827f3ff7ba8e296b968452",
+  "cases": [
+    {
+      "name": "null",
+      "typed": [
+        "null"
+      ],
+      "canonical": "[\"null\"]",
+      "sha256": "53b41ab0dae62befcb8708620b6d14794a24fedad6c24c03dd01e51fa698ff0b"
+    },
+    {
+      "name": "bool",
+      "typed": [
+        "bool",
+        true
+      ],
+      "canonical": "[\"bool\",true]",
+      "sha256": "b15e5dc2d0858d7d9f2afcad8bf251f5b807810b68219e7ebcc645cb09c2474c"
+    },
+    {
+      "name": "integer",
+      "typed": [
+        "int",
+        "1"
+      ],
+      "canonical": "[\"int\",\"1\"]",
+      "sha256": "196bf27c76e388ef46771aaf1d4046700dc15d24a773835cc702e42d9e3c03cd"
+    },
+    {
+      "name": "float",
+      "typed": [
+        "float",
+        "0x1.0000000000000p+0"
+      ],
+      "canonical": "[\"float\",\"0x1.0000000000000p+0\"]",
+      "sha256": "6afe0c20b69ca4866e663c3d219f1ba7fd65ac4bb1b41317b6fbb84b8e0ccd6d"
+    },
+    {
+      "name": "text",
+      "typed": [
+        "text",
+        "2026-09-19"
+      ],
+      "canonical": "[\"text\",\"2026-09-19\"]",
+      "sha256": "86842763ba00352d84801f5d061bc21ae968aa84bb25bf7c887021147581e23c"
+    },
+    {
+      "name": "negative-zero",
+      "typed": [
+        "float",
+        "-0x0.0p+0"
+      ],
+      "canonical": "[\"float\",\"-0x0.0p+0\"]",
+      "sha256": "6e8d2a955ef0e767f68e469c464198eeb07c5b3bf54bec7e08ab6f8b8a1f967f"
+    },
+    {
+      "name": "big-positive",
+      "typed": [
+        "int",
+        "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+      ],
+      "canonical": "[\"int\",\"10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001\"]",
+      "sha256": "decc3ba952dec8de3c6d9ff186b0ceff17b0551a6bc153925ac0b765a10f9d78"
+    },
+    {
+      "name": "big-negative",
+      "typed": [
+        "int",
+        "-10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+      ],
+      "canonical": "[\"int\",\"-10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001\"]",
+      "sha256": "09dfd4d442d97a0c980f71930ddbbb61ba993a24664f7d901ed19f89c24a0058"
+    },
+    {
+      "name": "absent",
+      "typed": [
+        "map",
+        []
+      ],
+      "canonical": "[\"map\",[]]",
+      "sha256": "55279606329849b7458b517c195e785721934c903ff91220c728d16b53336cb4"
+    },
+    {
+      "name": "present-null",
+      "typed": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "null"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"v\",[\"null\"]]]]",
+      "sha256": "431adcfb3eb75a27d10bf030fbe0bc40e3063ef90ebca6d19abbec809a0e8682"
+    },
+    {
+      "name": "unicode",
+      "typed": [
+        "map",
+        [
+          [
+            "é",
+            [
+              "text",
+              "combining é"
+            ]
+          ],
+          [
+            "עברית",
+            [
+              "text",
+              "🦀\n\u0001 "
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"é\",[\"text\",\"combining é\"]],[\"עברית\",[\"text\",\"🦀\\n\\u0001 \"]]]]",
+      "sha256": "a13094471dc203180bb40f7fcf38585ed94a6c2d1043e43a2f3ac8d86841af36"
+    },
+    {
+      "name": "date-1-1-1",
+      "typed": [
+        "date",
+        "0001-01-01"
+      ],
+      "canonical": "[\"date\",\"0001-01-01\"]",
+      "sha256": "94199192703e7e22fe3958af2ab28f63a3fc86c457163aaf4f9803a22184ebd8"
+    },
+    {
+      "name": "date-4-2-29",
+      "typed": [
+        "date",
+        "0004-02-29"
+      ],
+      "canonical": "[\"date\",\"0004-02-29\"]",
+      "sha256": "154d3fd83cbe51b8bc8d050f493da5049f37303d8dc6c7f4459e41cdb8afcf6f"
+    },
+    {
+      "name": "date-1900-2-28",
+      "typed": [
+        "date",
+        "1900-02-28"
+      ],
+      "canonical": "[\"date\",\"1900-02-28\"]",
+      "sha256": "5bd19de7fe38f8f4c089186dfdf86d67af51de8bd8f1bb4370300915b5b00be2"
+    },
+    {
+      "name": "date-2000-2-29",
+      "typed": [
+        "date",
+        "2000-02-29"
+      ],
+      "canonical": "[\"date\",\"2000-02-29\"]",
+      "sha256": "186a936d2eff4dc3ef413ca9a9a0587b5b59ddc169c7aafe4105e984181fe6d4"
+    },
+    {
+      "name": "date-2026-9-19",
+      "typed": [
+        "date",
+        "2026-09-19"
+      ],
+      "canonical": "[\"date\",\"2026-09-19\"]",
+      "sha256": "59fdb461e7cb6554759ccd25698075e07c525db58806e08ec7501edb85cec3b1"
+    },
+    {
+      "name": "date-9999-12-31",
+      "typed": [
+        "date",
+        "9999-12-31"
+      ],
+      "canonical": "[\"date\",\"9999-12-31\"]",
+      "sha256": "6ba2652e3e71918f6f30a77dcc0e912f73fa6f1a1f0a369053da68e7b76593db"
+    },
+    {
+      "name": "datetime-0-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58\"]",
+      "sha256": "b424bef4c3ad1ee54b00fc9a10bbbdeb80fc02b300b3c45c9e002c73b29bd0cf"
+    },
+    {
+      "name": "datetime-0-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001\"]",
+      "sha256": "ddafbbd5448635d86404016da8b2a057b2a5dfcc5289f7b1d76e2dc332bb0f9f"
+    },
+    {
+      "name": "datetime-0-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456\"]",
+      "sha256": "e5b577c349d58d1d6f50a95e8b28669d59f067ba7a574189cb477ca93162305a"
+    },
+    {
+      "name": "datetime-0-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999\"]",
+      "sha256": "99b5785b5390a258d97d2b5bfb8984e3aaea83a7bb743ec35e3b554c4f1e12a0"
+    },
+    {
+      "name": "datetime-1-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58+00:00"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58+00:00\"]",
+      "sha256": "450c23fa8f76fb9283eaafb36370508d87523142ee9c3ddb1aa95f586c5ecf67"
+    },
+    {
+      "name": "datetime-1-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001+00:00"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001+00:00\"]",
+      "sha256": "3257aac8ad11ba7176122cb2653b0810030ae1b0468334fb39c5a6844706e8ef"
+    },
+    {
+      "name": "datetime-1-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456+00:00"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456+00:00\"]",
+      "sha256": "7813ba9f315bbb897707c1d53adcb008d43016882f0ccf003d2720d5ff088c6a"
+    },
+    {
+      "name": "datetime-1-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999+00:00"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999+00:00\"]",
+      "sha256": "3c25d036fac7c392f477be785e916415aff908d4a0b1f992f19c715494c2c1a4"
+    },
+    {
+      "name": "datetime-2-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58+05:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58+05:30\"]",
+      "sha256": "4e4f61e459703eb22d6d6cfe58ae596c687c0cb0af9b6b29a3e4eab0e5ac3461"
+    },
+    {
+      "name": "datetime-2-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001+05:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001+05:30\"]",
+      "sha256": "083c646eed8aaaab67e11948ef35c53048692b37b74876764d91693c8cbc3fe3"
+    },
+    {
+      "name": "datetime-2-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456+05:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456+05:30\"]",
+      "sha256": "9a21c73043199b4ac2ca4eafa90261c23cb19e0ac6eda04b11ed93391ea90481"
+    },
+    {
+      "name": "datetime-2-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999+05:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999+05:30\"]",
+      "sha256": "38d2703812402d8bc19b632d8e40081ef6cd25681a2736e154758db3d781e70c"
+    },
+    {
+      "name": "datetime-3-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58-03:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58-03:30\"]",
+      "sha256": "c64df70082d2fba345b6fc91d9c008c8e883522acd6219c30d20c63a62feb33b"
+    },
+    {
+      "name": "datetime-3-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001-03:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001-03:30\"]",
+      "sha256": "625615df9862cda05dd6a3f3996bfaa0f369e86d1af031b57d08851dd6602bd6"
+    },
+    {
+      "name": "datetime-3-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456-03:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456-03:30\"]",
+      "sha256": "5531f9e31323bdba104b9866494b7655864521ff4c17cd165f2635f2c7587a6d"
+    },
+    {
+      "name": "datetime-3-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999-03:30"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999-03:30\"]",
+      "sha256": "aee310fe765f663a6b9ff12706b58940f0fb2c73c292e61c9462819afacb6bf4"
+    },
+    {
+      "name": "datetime-4-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58+00:00:01"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58+00:00:01\"]",
+      "sha256": "4e46b2f68778ec1eb0749455ff7a089ac83b5ef0b47caf58e89890b2fccc5cf3"
+    },
+    {
+      "name": "datetime-4-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001+00:00:01"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001+00:00:01\"]",
+      "sha256": "4cd166f516c26b6be0f7234ed4851da3b9032451082fd9b9c24e3108ce73d321"
+    },
+    {
+      "name": "datetime-4-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456+00:00:01"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456+00:00:01\"]",
+      "sha256": "8827036dfe1121967268d08385135e1856e79652d1f4a574939e13bc047c7a38"
+    },
+    {
+      "name": "datetime-4-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999+00:00:01"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999+00:00:01\"]",
+      "sha256": "5a2ce77ecfc15944c7672b4a0fe76b50998870933e12c514df7e52f450fb3c9e"
+    },
+    {
+      "name": "datetime-5-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58+00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58+00:00:00.000001\"]",
+      "sha256": "82303f6a3de9b972e2d3522197e4a99d26a159da8d6ff6c7d71c9f66320294f5"
+    },
+    {
+      "name": "datetime-5-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001+00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001+00:00:00.000001\"]",
+      "sha256": "1a3fc03b6434a761b93271700ddea685d13d386ccd59ed835837113879933a58"
+    },
+    {
+      "name": "datetime-5-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456+00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456+00:00:00.000001\"]",
+      "sha256": "f9941b193c3d36ee3edcae1ceb0398ba7b1202bf7fe479d9973ce957ab63e00a"
+    },
+    {
+      "name": "datetime-5-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999+00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999+00:00:00.000001\"]",
+      "sha256": "caa7f52eb2dc21704b4ecd2b8609900a747653c2997fb209a72e840b78c5c6c1"
+    },
+    {
+      "name": "datetime-6-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58-00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58-00:00:00.000001\"]",
+      "sha256": "9b34eb2a756a710149082bad88e5f5ea5459b6a61799aee8a5935b9e1bdd9024"
+    },
+    {
+      "name": "datetime-6-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001-00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001-00:00:00.000001\"]",
+      "sha256": "52120428eb945b30185508809a6d3d7dacddcaad6e15bc44e018f3ae717123e4"
+    },
+    {
+      "name": "datetime-6-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456-00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456-00:00:00.000001\"]",
+      "sha256": "8adda4ac67cf9e935127a54e8e41efff4326f6472cfb26e09a5aef39cb256a86"
+    },
+    {
+      "name": "datetime-6-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999-00:00:00.000001"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999-00:00:00.000001\"]",
+      "sha256": "433d11f2b21c0388d048d1e8518a51b986632ab1ba48d05d73a9b9d254c88889"
+    },
+    {
+      "name": "datetime-7-0",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58+23:59:59.999999"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58+23:59:59.999999\"]",
+      "sha256": "6c1f5f2c9c1728e15ef9896a3a6f389018b4693204f06d90ea3ef8778192d5b4"
+    },
+    {
+      "name": "datetime-7-1",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.000001+23:59:59.999999"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.000001+23:59:59.999999\"]",
+      "sha256": "8b8951a553c59aa8663b78c2c4d025391e94e1964a52ec1a922d65bcc6343d31"
+    },
+    {
+      "name": "datetime-7-123456",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.123456+23:59:59.999999"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.123456+23:59:59.999999\"]",
+      "sha256": "e5512d584284de927c14388a4daa71c67da95e7c3d0a9574274514827d58213b"
+    },
+    {
+      "name": "datetime-7-999999",
+      "typed": [
+        "datetime",
+        "2026-09-19T23:59:58.999999+23:59:59.999999"
+      ],
+      "canonical": "[\"datetime\",\"2026-09-19T23:59:58.999999+23:59:59.999999\"]",
+      "sha256": "43e3e2e655d13477fd34922ac88a5a40cc411561e46a9da26175f82a3c8fab78"
+    },
+    {
+      "name": "datetime-min",
+      "typed": [
+        "datetime",
+        "0001-01-01T00:00:00"
+      ],
+      "canonical": "[\"datetime\",\"0001-01-01T00:00:00\"]",
+      "sha256": "e7186d18173a76b0c3b1d91c326139af8d064d4446f68d1298cf6aa5914240a3"
+    },
+    {
+      "name": "datetime-max",
+      "typed": [
+        "datetime",
+        "9999-12-31T23:59:59.999999"
+      ],
+      "canonical": "[\"datetime\",\"9999-12-31T23:59:59.999999\"]",
+      "sha256": "2c4d35d29bd57247c7d82ea8564999d250de9f4dec0c989d3658d9eaef5dfa1b"
+    },
+    {
+      "name": "float-192df8fba22c6164",
+      "typed": [
+        "float",
+        "0x1.df8fba22c6164p-621"
+      ],
+      "canonical": "[\"float\",\"0x1.df8fba22c6164p-621\"]",
+      "sha256": "17669188add4a3e4aa9a1a6f456ccc24925915930468e45f95d2e6787dacb3f9"
+    },
+    {
+      "name": "float-59d80ff6ce6f2a67",
+      "typed": [
+        "float",
+        "0x1.80ff6ce6f2a67p+414"
+      ],
+      "canonical": "[\"float\",\"0x1.80ff6ce6f2a67p+414\"]",
+      "sha256": "211bf5e21b27e1327e400389622beabc24b8ec5b7133fb5fb405a82032c1f15f"
+    },
+    {
+      "name": "float-c9ce82d223b09586",
+      "typed": [
+        "float",
+        "-0x1.e82d223b09586p+157"
+      ],
+      "canonical": "[\"float\",\"-0x1.e82d223b09586p+157\"]",
+      "sha256": "83d0d1e39b94a777be322c8e2712e1696fbbdca37e6f9e990d3b661947d97cc6"
+    },
+    {
+      "name": "float-bf9b906ba7a57cd4",
+      "typed": [
+        "float",
+        "-0x1.b906ba7a57cd4p-6"
+      ],
+      "canonical": "[\"float\",\"-0x1.b906ba7a57cd4p-6\"]",
+      "sha256": "e2899ee0f1daeada37bf3204358b8f565a6552c77a08a30407e459a259a8a026"
+    },
+    {
+      "name": "float-d0b5aa3efd192565",
+      "typed": [
+        "float",
+        "-0x1.5aa3efd192565p+268"
+      ],
+      "canonical": "[\"float\",\"-0x1.5aa3efd192565p+268\"]",
+      "sha256": "d0146ca1ba4134df44fe3952f49a6b306add8e878dc1ec97da01d1faf4fb3fb7"
+    },
+    {
+      "name": "float-56ac493dc42d28cb",
+      "typed": [
+        "float",
+        "0x1.c493dc42d28cbp+363"
+      ],
+      "canonical": "[\"float\",\"0x1.c493dc42d28cbp+363\"]",
+      "sha256": "dafc4046e8f0918fedd8a74e5e8e1749fffd1b77e0abacfa9bfa97978ecc8209"
+    },
+    {
+      "name": "float-b860301666f851ba",
+      "typed": [
+        "float",
+        "-0x1.0301666f851bap-121"
+      ],
+      "canonical": "[\"float\",\"-0x1.0301666f851bap-121\"]",
+      "sha256": "836decbab7c5f79b81814674e2eba9770764e900c8887d99feab3fa4d90c6670"
+    },
+    {
+      "name": "float-47bc09578f758ef6",
+      "typed": [
+        "float",
+        "0x1.c09578f758ef6p+124"
+      ],
+      "canonical": "[\"float\",\"0x1.c09578f758ef6p+124\"]",
+      "sha256": "0c5ff167109ad46c686d6cf0526f741b5c424710bd06bd0d150cc36fe6cc833f"
+    },
+    {
+      "name": "float-e01def980e3168db",
+      "typed": [
+        "float",
+        "-0x1.def980e3168dbp+514"
+      ],
+      "canonical": "[\"float\",\"-0x1.def980e3168dbp+514\"]",
+      "sha256": "1c2bbe84f167fe5a31ff493889b46877fcf45bfc4f14acc6cad5883b25a9f1b3"
+    },
+    {
+      "name": "float-6d92ab221004daf0",
+      "typed": [
+        "float",
+        "0x1.2ab221004daf0p+730"
+      ],
+      "canonical": "[\"float\",\"0x1.2ab221004daf0p+730\"]",
+      "sha256": "a972a5650bf57c1a0ab70cd21cec60e309eaaba88b7ccaf9241337c0ac369e47"
+    },
+    {
+      "name": "float-89b61e7317cc3535",
+      "typed": [
+        "float",
+        "-0x1.61e7317cc3535p-868"
+      ],
+      "canonical": "[\"float\",\"-0x1.61e7317cc3535p-868\"]",
+      "sha256": "8cfd05bc0d1233c605027bbe164d4e48887cbcbb76f240aba5ba2cb4a6ed1fd2"
+    },
+    {
+      "name": "float-f0a6389905c0d84a",
+      "typed": [
+        "float",
+        "-0x1.6389905c0d84ap+779"
+      ],
+      "canonical": "[\"float\",\"-0x1.6389905c0d84ap+779\"]",
+      "sha256": "949d1242f5c65b6d0c416ed27fabc51d3cc8177c69551b22bfaf8205f8255526"
+    },
+    {
+      "name": "float-96c590da516a3007",
+      "typed": [
+        "float",
+        "-0x1.590da516a3007p-659"
+      ],
+      "canonical": "[\"float\",\"-0x1.590da516a3007p-659\"]",
+      "sha256": "18279e0c7c49d5f3e41fd8876a17d2d5f5e0589dbeabd77c1f039cd527a0cb9c"
+    },
+    {
+      "name": "float-afb8a1bff42b1a9a",
+      "typed": [
+        "float",
+        "-0x1.8a1bff42b1a9ap-260"
+      ],
+      "canonical": "[\"float\",\"-0x1.8a1bff42b1a9ap-260\"]",
+      "sha256": "5ff5449ab6f7040e12e23910ea81e2b75e34c3b9e7bd9dd0804a7b6c22f318bc"
+    },
+    {
+      "name": "float-622394ae0602e46e",
+      "typed": [
+        "float",
+        "0x1.394ae0602e46ep+547"
+      ],
+      "canonical": "[\"float\",\"0x1.394ae0602e46ep+547\"]",
+      "sha256": "87bff3339140540f7c78a677310fc398144a406a102d02987f18375434063616"
+    },
+    {
+      "name": "float-094b26cf00f8ae03",
+      "typed": [
+        "float",
+        "0x1.b26cf00f8ae03p-875"
+      ],
+      "canonical": "[\"float\",\"0x1.b26cf00f8ae03p-875\"]",
+      "sha256": "35fb1b547eaf2f4c5868fffdac354cfb5826f58a0d31be66880f2e93bb6afeea"
+    },
+    {
+      "name": "float-a894f50fac949e35",
+      "typed": [
+        "float",
+        "-0x1.4f50fac949e35p-374"
+      ],
+      "canonical": "[\"float\",\"-0x1.4f50fac949e35p-374\"]",
+      "sha256": "57b43610d4fef4f2ec95ec5470730f143569f2bba736ce78112359621a8a0a6a"
+    },
+    {
+      "name": "float-dac9f50c7ffb51de",
+      "typed": [
+        "float",
+        "-0x1.9f50c7ffb51dep+429"
+      ],
+      "canonical": "[\"float\",\"-0x1.9f50c7ffb51dep+429\"]",
+      "sha256": "d0ed7221c31af5acd59ad5f7bcc9526b33f32b9f53e5b69876b7c3f4ec585a8c"
+    },
+    {
+      "name": "float-9e00c3e0f6f6ee02",
+      "typed": [
+        "float",
+        "-0x1.0c3e0f6f6ee02p-543"
+      ],
+      "canonical": "[\"float\",\"-0x1.0c3e0f6f6ee02p-543\"]",
+      "sha256": "4ee40b1e61bed628a9490be86387cca4eea9dd85f7f0fe52075008e805ebe979"
+    },
+    {
+      "name": "float-88e0c22e3b219d77",
+      "typed": [
+        "float",
+        "-0x1.0c22e3b219d77p-881"
+      ],
+      "canonical": "[\"float\",\"-0x1.0c22e3b219d77p-881\"]",
+      "sha256": "5e365dcfae8db445ba13a925116480eb4c1564f6671b89163064af0c2673d789"
+    },
+    {
+      "name": "float-447a70130607ceb0",
+      "typed": [
+        "float",
+        "0x1.a70130607ceb0p+72"
+      ],
+      "canonical": "[\"float\",\"0x1.a70130607ceb0p+72\"]",
+      "sha256": "ee4b34d4c3335e893cf18d634d3d1a6bba5b01ea4caa7fac571f08e35759319d"
+    },
+    {
+      "name": "float-8cebc62ad336c04c",
+      "typed": [
+        "float",
+        "-0x1.bc62ad336c04cp-817"
+      ],
+      "canonical": "[\"float\",\"-0x1.bc62ad336c04cp-817\"]",
+      "sha256": "ca841fdbfe029437c769be4b6b3185d8ba52ad59e67cb66dd22e56398ba42db5"
+    },
+    {
+      "name": "float-2a7c31548980faee",
+      "typed": [
+        "float",
+        "0x1.c31548980faeep-344"
+      ],
+      "canonical": "[\"float\",\"0x1.c31548980faeep-344\"]",
+      "sha256": "33800a2c0c3cc404f54b1348f19f7175bd49c25fbfd320c6fb7acde6521585cf"
+    },
+    {
+      "name": "float-200ab93cb3e39cff",
+      "typed": [
+        "float",
+        "0x1.ab93cb3e39cffp-511"
+      ],
+      "canonical": "[\"float\",\"0x1.ab93cb3e39cffp-511\"]",
+      "sha256": "56f2db014825ee3f3c3be9bb0bd7b4d3f192bb673c7fb20a34508dde07f21e67"
+    },
+    {
+      "name": "float-78b58d245337345a",
+      "typed": [
+        "float",
+        "0x1.58d245337345ap+908"
+      ],
+      "canonical": "[\"float\",\"0x1.58d245337345ap+908\"]",
+      "sha256": "f09a980d9526b8246b20d4a78db96477a573c6db22379b4fa73c26161c895108"
+    },
+    {
+      "name": "float-caf09f7319638db0",
+      "typed": [
+        "float",
+        "-0x1.09f7319638db0p+176"
+      ],
+      "canonical": "[\"float\",\"-0x1.09f7319638db0p+176\"]",
+      "sha256": "e47ff9b95c1e844f5c2b211f8b92a08bb6e672eb980fdb657a5db2b79d1baa1c"
+    },
+    {
+      "name": "float-1553c00119f89e56",
+      "typed": [
+        "float",
+        "0x1.3c00119f89e56p-682"
+      ],
+      "canonical": "[\"float\",\"0x1.3c00119f89e56p-682\"]",
+      "sha256": "9fb9809ae0a6f21e610f2a66a039c4bb94960313939fde7d71917f2abf5875bc"
+    },
+    {
+      "name": "float-011180a8dd1b8250",
+      "typed": [
+        "float",
+        "0x1.180a8dd1b8250p-1006"
+      ],
+      "canonical": "[\"float\",\"0x1.180a8dd1b8250p-1006\"]",
+      "sha256": "3803213977baac940486defc1b9d1823fb0659809449d20c0f9f1c4e8d7e42b9"
+    },
+    {
+      "name": "float-e469a40d0374cfe4",
+      "typed": [
+        "float",
+        "-0x1.9a40d0374cfe4p+583"
+      ],
+      "canonical": "[\"float\",\"-0x1.9a40d0374cfe4p+583\"]",
+      "sha256": "a9d00089525ba126cc07eea7bd588782edf6b957dc7a4209c7f0f7765541934c"
+    },
+    {
+      "name": "float-d501f04835665201",
+      "typed": [
+        "float",
+        "-0x1.1f04835665201p+337"
+      ],
+      "canonical": "[\"float\",\"-0x1.1f04835665201p+337\"]",
+      "sha256": "2b162e090be28a26d82a07691d874e7e4606def4b73cea9c85998a65cd1719d9"
+    },
+    {
+      "name": "float-27ba72e0423735aa",
+      "typed": [
+        "float",
+        "0x1.a72e0423735aap-388"
+      ],
+      "canonical": "[\"float\",\"0x1.a72e0423735aap-388\"]",
+      "sha256": "87f34af38df0c73eb4b60104f66a596f2a00a9938539e17b07e3eb97521aa0db"
+    },
+    {
+      "name": "float-14b45f78d2281d64",
+      "typed": [
+        "float",
+        "0x1.45f78d2281d64p-692"
+      ],
+      "canonical": "[\"float\",\"0x1.45f78d2281d64p-692\"]",
+      "sha256": "f4fe9896f8013b1d2556eaa7a4f65176a52aff6ded03c94a2e007876793dfb8e"
+    },
+    {
+      "name": "float-7e6a4c7fb96dc437",
+      "typed": [
+        "float",
+        "0x1.a4c7fb96dc437p+999"
+      ],
+      "canonical": "[\"float\",\"0x1.a4c7fb96dc437p+999\"]",
+      "sha256": "5e6fd07488a60f7046671d959e486c88809be434f4df7efec5b09525682e6450"
+    },
+    {
+      "name": "float-f89f9a325d928041",
+      "typed": [
+        "float",
+        "-0x1.f9a325d928041p+906"
+      ],
+      "canonical": "[\"float\",\"-0x1.f9a325d928041p+906\"]",
+      "sha256": "22b2a2c12796c34b4abacbb82df0a9d3b2d12dc262d073edde7ff1878fc44a0f"
+    },
+    {
+      "name": "float-02fc2f3e4108e94c",
+      "typed": [
+        "float",
+        "0x1.c2f3e4108e94cp-976"
+      ],
+      "canonical": "[\"float\",\"0x1.c2f3e4108e94cp-976\"]",
+      "sha256": "f32a5121513172bfb8b3995f29c0af2f291e0d92c14d09ebaf56c786fbd01116"
+    },
+    {
+      "name": "float-6c3db12cbf4518cf",
+      "typed": [
+        "float",
+        "0x1.db12cbf4518cfp+708"
+      ],
+      "canonical": "[\"float\",\"0x1.db12cbf4518cfp+708\"]",
+      "sha256": "456ca1718a5334342ace6ec660d63cd7804a96f978afb821e9af7482c1040c01"
+    },
+    {
+      "name": "float-a0794c01af1d250c",
+      "typed": [
+        "float",
+        "-0x1.94c01af1d250cp-504"
+      ],
+      "canonical": "[\"float\",\"-0x1.94c01af1d250cp-504\"]",
+      "sha256": "5fcc0993b7b0e1ced655e579eaa080d3da3b2826ae95c87d4ff5086ddce26972"
+    },
+    {
+      "name": "float-e741e80b6cbf6a87",
+      "typed": [
+        "float",
+        "-0x1.1e80b6cbf6a87p+629"
+      ],
+      "canonical": "[\"float\",\"-0x1.1e80b6cbf6a87p+629\"]",
+      "sha256": "64c034348edba2da65167f02ad2e868339a1106586ff8f2d9c3f2c18b3a19d20"
+    },
+    {
+      "name": "float-827093bb914472f2",
+      "typed": [
+        "float",
+        "-0x1.093bb914472f2p-984"
+      ],
+      "canonical": "[\"float\",\"-0x1.093bb914472f2p-984\"]",
+      "sha256": "5bef6ae5c9995e8f7cca68e537e746daf2c8337c57f7c07f717957508048c256"
+    },
+    {
+      "name": "float-b2e7cbb5c34d45c0",
+      "typed": [
+        "float",
+        "-0x1.7cbb5c34d45c0p-209"
+      ],
+      "canonical": "[\"float\",\"-0x1.7cbb5c34d45c0p-209\"]",
+      "sha256": "6f72d298be0b33307c6d46fe9bedb0f38790655f60ba2d15f689be3a24dcfb98"
+    },
+    {
+      "name": "float-1a09ba15397db5f7",
+      "typed": [
+        "float",
+        "0x1.9ba15397db5f7p-607"
+      ],
+      "canonical": "[\"float\",\"0x1.9ba15397db5f7p-607\"]",
+      "sha256": "437593d9278f73ac39f5882b3136a16d1fb59c81daf5e2e902944bc4e73a0abb"
+    },
+    {
+      "name": "float-9d9d42b411672952",
+      "typed": [
+        "float",
+        "-0x1.d42b411672952p-550"
+      ],
+      "canonical": "[\"float\",\"-0x1.d42b411672952p-550\"]",
+      "sha256": "64561b6d4c384333637b4604d386a83aebd2ad7715679db05ade5a960eb0953f"
+    },
+    {
+      "name": "float-d8ea37f815287717",
+      "typed": [
+        "float",
+        "-0x1.a37f815287717p+399"
+      ],
+      "canonical": "[\"float\",\"-0x1.a37f815287717p+399\"]",
+      "sha256": "4a8dd99cda2ba2d0c6bbdb1ac6b1736ee5f339de0ed6c2344ac857be76d4092f"
+    },
+    {
+      "name": "float-3883a251c47b04e5",
+      "typed": [
+        "float",
+        "0x1.3a251c47b04e5p-119"
+      ],
+      "canonical": "[\"float\",\"0x1.3a251c47b04e5p-119\"]",
+      "sha256": "b3e73f257a218c091e40ed76613fd3ba440a1175e4dd8652b384d383a767fa70"
+    },
+    {
+      "name": "float-0b8769ab2f37e36c",
+      "typed": [
+        "float",
+        "0x1.769ab2f37e36cp-839"
+      ],
+      "canonical": "[\"float\",\"0x1.769ab2f37e36cp-839\"]",
+      "sha256": "78fbe095f0c9f953ca107765b5bdf424725b54629ea9b9b3dfe6f5023c91ae5b"
+    },
+    {
+      "name": "float-bfc6f8387121baa6",
+      "typed": [
+        "float",
+        "-0x1.6f8387121baa6p-3"
+      ],
+      "canonical": "[\"float\",\"-0x1.6f8387121baa6p-3\"]",
+      "sha256": "0c5e660d5a83bf17625c299475063f1086975dbf6f1b9c2ccf4b1abbe7184189"
+    },
+    {
+      "name": "float-fb7778ffdf5cf9fa",
+      "typed": [
+        "float",
+        "-0x1.778ffdf5cf9fap+952"
+      ],
+      "canonical": "[\"float\",\"-0x1.778ffdf5cf9fap+952\"]",
+      "sha256": "4ffbde4ded26fd88a57a459fff6a4b8e02c4aefb8df91267725d884513d20ca1"
+    },
+    {
+      "name": "float-f7990eacc49f42e1",
+      "typed": [
+        "float",
+        "-0x1.90eacc49f42e1p+890"
+      ],
+      "canonical": "[\"float\",\"-0x1.90eacc49f42e1p+890\"]",
+      "sha256": "5b79a669962d7131febdc0e96f9d4060e45a3158703e1371d7086ff6fc0c2146"
+    },
+    {
+      "name": "float-ae8c787b381e6624",
+      "typed": [
+        "float",
+        "-0x1.c787b381e6624p-279"
+      ],
+      "canonical": "[\"float\",\"-0x1.c787b381e6624p-279\"]",
+      "sha256": "bdc478d69d33372fc45365d02e200ab49b09e9ca4aeebaa5d8f7e9e636ff98b2"
+    },
+    {
+      "name": "float-8eae3f932f72f25d",
+      "typed": [
+        "float",
+        "-0x1.e3f932f72f25dp-789"
+      ],
+      "canonical": "[\"float\",\"-0x1.e3f932f72f25dp-789\"]",
+      "sha256": "dc14f63c8deb282fe4918e77657ffd0b9af1d31a65c50d50ed722d319ee6df4c"
+    },
+    {
+      "name": "float-92636efbfa26f992",
+      "typed": [
+        "float",
+        "-0x1.36efbfa26f992p-729"
+      ],
+      "canonical": "[\"float\",\"-0x1.36efbfa26f992p-729\"]",
+      "sha256": "20fcece0e0c858d97759b8aa7e39a948301960b291cf5405a23dbc079ec56761"
+    },
+    {
+      "name": "float-fcd9c957bab46a98",
+      "typed": [
+        "float",
+        "-0x1.9c957bab46a98p+974"
+      ],
+      "canonical": "[\"float\",\"-0x1.9c957bab46a98p+974\"]",
+      "sha256": "8ff866a3f0456c7682eb7cd2c49235b1249a1d9c6b84f4166cad9fa8aef67add"
+    },
+    {
+      "name": "float-6a9e0b6779c095fa",
+      "typed": [
+        "float",
+        "0x1.e0b6779c095fap+682"
+      ],
+      "canonical": "[\"float\",\"0x1.e0b6779c095fap+682\"]",
+      "sha256": "54a7bec10e820625857abbe2bd1f33fcb997951ff4d5f26a6cb1981c3253d7c9"
+    },
+    {
+      "name": "float-2e95c9efdad56839",
+      "typed": [
+        "float",
+        "0x1.5c9efdad56839p-278"
+      ],
+      "canonical": "[\"float\",\"0x1.5c9efdad56839p-278\"]",
+      "sha256": "907f61ee966a077659cd1c9c03b0bd80065931f0d8f28ade50c2fe712b252a84"
+    },
+    {
+      "name": "float-dc86bcf98cfcb314",
+      "typed": [
+        "float",
+        "-0x1.6bcf98cfcb314p+457"
+      ],
+      "canonical": "[\"float\",\"-0x1.6bcf98cfcb314p+457\"]",
+      "sha256": "aab5035c72b718942f50dac655c89060e43cffab593a655c47cb26dc33749041"
+    },
+    {
+      "name": "float-f37d992cc11f0bf0",
+      "typed": [
+        "float",
+        "-0x1.d992cc11f0bf0p+824"
+      ],
+      "canonical": "[\"float\",\"-0x1.d992cc11f0bf0p+824\"]",
+      "sha256": "42de5096aa966c3feba9783bfa47371646bd64f3ec03d50e76b5fccd4c363946"
+    },
+    {
+      "name": "float-e32202df0ca44cbd",
+      "typed": [
+        "float",
+        "-0x1.202df0ca44cbdp+563"
+      ],
+      "canonical": "[\"float\",\"-0x1.202df0ca44cbdp+563\"]",
+      "sha256": "b3fffccd5571d75b7aef5001fa1d1d78ca2acd2a1930d24d7d1e76316db67359"
+    },
+    {
+      "name": "float-89ea3fbcf52d199a",
+      "typed": [
+        "float",
+        "-0x1.a3fbcf52d199ap-865"
+      ],
+      "canonical": "[\"float\",\"-0x1.a3fbcf52d199ap-865\"]",
+      "sha256": "e7188a67c713908a37051fdd65fcc0b8e5ddbd02ac6357580f3d76b81054db32"
+    },
+    {
+      "name": "float-dd83d5a2936d0c0b",
+      "typed": [
+        "float",
+        "-0x1.3d5a2936d0c0bp+473"
+      ],
+      "canonical": "[\"float\",\"-0x1.3d5a2936d0c0bp+473\"]",
+      "sha256": "4e2ffadac0a377c7507c99427656d5808d5b05f64eace267fcc13330f7ef3f20"
+    },
+    {
+      "name": "float-2e413c664fce84d7",
+      "typed": [
+        "float",
+        "0x1.13c664fce84d7p-283"
+      ],
+      "canonical": "[\"float\",\"0x1.13c664fce84d7p-283\"]",
+      "sha256": "f34d3c84ce8f787584ab6cef0435621553ad0bcaffe727d96e868989b66f220b"
+    },
+    {
+      "name": "float-2f767824cdf8d5a7",
+      "typed": [
+        "float",
+        "0x1.67824cdf8d5a7p-264"
+      ],
+      "canonical": "[\"float\",\"0x1.67824cdf8d5a7p-264\"]",
+      "sha256": "7c5eaa725e0ea83c4c4055af7d8510a120f57db2908d41cb733dc75f889f21e5"
+    },
+    {
+      "name": "float-0880e062704dfad3",
+      "typed": [
+        "float",
+        "0x1.0e062704dfad3p-887"
+      ],
+      "canonical": "[\"float\",\"0x1.0e062704dfad3p-887\"]",
+      "sha256": "585c96785088d5f994bd654cdd53b224e80902b0ccfe5881ea38eeecaaea2684"
+    },
+    {
+      "name": "float-b81d3faa991e9a15",
+      "typed": [
+        "float",
+        "-0x1.d3faa991e9a15p-126"
+      ],
+      "canonical": "[\"float\",\"-0x1.d3faa991e9a15p-126\"]",
+      "sha256": "07ece927955d30e3ec98f0c8036c7141cc1afe1144b12241f3f3346c6e2a51e4"
+    },
+    {
+      "name": "float-1e98c605327980be",
+      "typed": [
+        "float",
+        "0x1.8c605327980bep-534"
+      ],
+      "canonical": "[\"float\",\"0x1.8c605327980bep-534\"]",
+      "sha256": "f045a81d0966118ed98c470f8635da6fac9d42d01baa2e733ed22e517f7e5ce4"
+    },
+    {
+      "name": "float-cbff4ba114f91032",
+      "typed": [
+        "float",
+        "-0x1.f4ba114f91032p+192"
+      ],
+      "canonical": "[\"float\",\"-0x1.f4ba114f91032p+192\"]",
+      "sha256": "5e2d984ef4612ce6de5c9d93822172623b0634cae761a65cad08711bbe4c13d0"
+    },
+    {
+      "name": "float-fa528d1fa8bc0474",
+      "typed": [
+        "float",
+        "-0x1.28d1fa8bc0474p+934"
+      ],
+      "canonical": "[\"float\",\"-0x1.28d1fa8bc0474p+934\"]",
+      "sha256": "baef6fd9fb8ae391ff549a18659059931cda4a9a436f72c69e5536ad689fd3ee"
+    },
+    {
+      "name": "float-91e8b4cfc4a91363",
+      "typed": [
+        "float",
+        "-0x1.8b4cfc4a91363p-737"
+      ],
+      "canonical": "[\"float\",\"-0x1.8b4cfc4a91363p-737\"]",
+      "sha256": "7db3ebc864e7f6f9dd3d4ac8bd66b4fdba5e84eec531ff1c87e6b6c418103cd9"
+    },
+    {
+      "name": "float-5d98449a9af80635",
+      "typed": [
+        "float",
+        "0x1.8449a9af80635p+474"
+      ],
+      "canonical": "[\"float\",\"0x1.8449a9af80635p+474\"]",
+      "sha256": "3c2cf6b9369a80dfc91c4cd5cd002aab029ba3c98a472b668cb05fa42404353b"
+    },
+    {
+      "name": "float-c553c950882a4387",
+      "typed": [
+        "float",
+        "-0x1.3c950882a4387p+86"
+      ],
+      "canonical": "[\"float\",\"-0x1.3c950882a4387p+86\"]",
+      "sha256": "36df9b312953d7909b14aa567c74919c0058e78eb452370396fbe91014b263ff"
+    },
+    {
+      "name": "float-146b7f2a896566a3",
+      "typed": [
+        "float",
+        "0x1.b7f2a896566a3p-697"
+      ],
+      "canonical": "[\"float\",\"0x1.b7f2a896566a3p-697\"]",
+      "sha256": "4c999bd4986a96191bb9bc69f31078fc414a04c43e3c836eabdbc8fed1c9b0f2"
+    },
+    {
+      "name": "float-fa2add115e72b1fe",
+      "typed": [
+        "float",
+        "-0x1.add115e72b1fep+931"
+      ],
+      "canonical": "[\"float\",\"-0x1.add115e72b1fep+931\"]",
+      "sha256": "02f84acfc0f92f175b666f2a54ecdedaba47f7d7b3dfa9d1a8b37e437f32502a"
+    },
+    {
+      "name": "float-2ee8df5910512f20",
+      "typed": [
+        "float",
+        "0x1.8df5910512f20p-273"
+      ],
+      "canonical": "[\"float\",\"0x1.8df5910512f20p-273\"]",
+      "sha256": "3f0ff14aa36d87c686c6da1635f14fef97be466de519a55790099c60c8caf8ca"
+    },
+    {
+      "name": "float-277f6fc1687bcdb4",
+      "typed": [
+        "float",
+        "0x1.f6fc1687bcdb4p-392"
+      ],
+      "canonical": "[\"float\",\"0x1.f6fc1687bcdb4p-392\"]",
+      "sha256": "a40bc57955a7894d6c6bead7c543219b7c83bf4704338a437c7f2128de33bb8e"
+    },
+    {
+      "name": "float-b825c4384cf7fa0c",
+      "typed": [
+        "float",
+        "-0x1.5c4384cf7fa0cp-125"
+      ],
+      "canonical": "[\"float\",\"-0x1.5c4384cf7fa0cp-125\"]",
+      "sha256": "b5c21253393372c9baab7acd03d9964f31adf3fb3af65e768c719a80e3812ea4"
+    },
+    {
+      "name": "float-d2703b688f2e1265",
+      "typed": [
+        "float",
+        "-0x1.03b688f2e1265p+296"
+      ],
+      "canonical": "[\"float\",\"-0x1.03b688f2e1265p+296\"]",
+      "sha256": "4622b3249f91daf36dcc1863c2ccca4d297bec9c9789510d0db7161f4fe95c41"
+    },
+    {
+      "name": "float-c08aa97e6638962e",
+      "typed": [
+        "float",
+        "-0x1.aa97e6638962ep+9"
+      ],
+      "canonical": "[\"float\",\"-0x1.aa97e6638962ep+9\"]",
+      "sha256": "a0a10f8dcbd97446bce07937f336f29d5b87b4ab5541796a6e3169bf2607dc38"
+    },
+    {
+      "name": "float-7fb32a08f114c155",
+      "typed": [
+        "float",
+        "0x1.32a08f114c155p+1020"
+      ],
+      "canonical": "[\"float\",\"0x1.32a08f114c155p+1020\"]",
+      "sha256": "8981d3ade1e9b8670dc1018418d134d01c33294976362ac476de3440981a5543"
+    },
+    {
+      "name": "float-317ad81133545e2f",
+      "typed": [
+        "float",
+        "0x1.ad81133545e2fp-232"
+      ],
+      "canonical": "[\"float\",\"0x1.ad81133545e2fp-232\"]",
+      "sha256": "e06da827fc8a1259567fb9c9fb1efdd5191ebf4c23e2707cd3eb67c0cc85cb82"
+    },
+    {
+      "name": "float-8caab8381479feef",
+      "typed": [
+        "float",
+        "-0x1.ab8381479feefp-821"
+      ],
+      "canonical": "[\"float\",\"-0x1.ab8381479feefp-821\"]",
+      "sha256": "691b32e9f4320d26de6a9b2833425c3a040f56337957d728649c12bfd2ba2794"
+    },
+    {
+      "name": "float-5716dc20d72ec2e4",
+      "typed": [
+        "float",
+        "0x1.6dc20d72ec2e4p+370"
+      ],
+      "canonical": "[\"float\",\"0x1.6dc20d72ec2e4p+370\"]",
+      "sha256": "8ea0a2988b0917b1914be4d3be6cf7b93fbf33ae3c9557517b839656e8ad1aa9"
+    },
+    {
+      "name": "float-fb93d68b186a2919",
+      "typed": [
+        "float",
+        "-0x1.3d68b186a2919p+954"
+      ],
+      "canonical": "[\"float\",\"-0x1.3d68b186a2919p+954\"]",
+      "sha256": "228973734e71158c543734ad234e0ad27697857ddf51aab2df9a0365cc3b919c"
+    },
+    {
+      "name": "float-a56cc220d564979c",
+      "typed": [
+        "float",
+        "-0x1.cc220d564979cp-425"
+      ],
+      "canonical": "[\"float\",\"-0x1.cc220d564979cp-425\"]",
+      "sha256": "2cb1bce54de9a5d04248b66c8eb58854c6575c446a72c2b262489f1d837981d6"
+    },
+    {
+      "name": "float-4ea9d91532da338a",
+      "typed": [
+        "float",
+        "0x1.9d91532da338ap+235"
+      ],
+      "canonical": "[\"float\",\"0x1.9d91532da338ap+235\"]",
+      "sha256": "00aa840bc6cef1d3f9456f3c8043939f9a744f870d74fdf09625d66f8f3418b8"
+    },
+    {
+      "name": "float-4ecb9472841fb0e0",
+      "typed": [
+        "float",
+        "0x1.b9472841fb0e0p+237"
+      ],
+      "canonical": "[\"float\",\"0x1.b9472841fb0e0p+237\"]",
+      "sha256": "577a6c82bb988d29cb7fe9274a9988a4c0e35b34bc697dfcbdaa452a7a042139"
+    },
+    {
+      "name": "float-39d9e423b1444566",
+      "typed": [
+        "float",
+        "0x1.9e423b1444566p-98"
+      ],
+      "canonical": "[\"float\",\"0x1.9e423b1444566p-98\"]",
+      "sha256": "68cdc3167fb9970ae0fc75557bfdcf124f5e1a0d84b7b2a940966953770c4cb7"
+    },
+    {
+      "name": "float-315d1009aceb3b03",
+      "typed": [
+        "float",
+        "0x1.d1009aceb3b03p-234"
+      ],
+      "canonical": "[\"float\",\"0x1.d1009aceb3b03p-234\"]",
+      "sha256": "da1aa93dd640dbc56e467575b0669678ee8ebdc8169a268f31c0ef094ae0decd"
+    },
+    {
+      "name": "float-cb39a8f6497cc541",
+      "typed": [
+        "float",
+        "-0x1.9a8f6497cc541p+180"
+      ],
+      "canonical": "[\"float\",\"-0x1.9a8f6497cc541p+180\"]",
+      "sha256": "07bf769b4f76723cedb7257fd8441a3fbbaf19348d7776a3ca40efb847bf83ee"
+    },
+    {
+      "name": "float-b1038f3baa3e0a92",
+      "typed": [
+        "float",
+        "-0x1.38f3baa3e0a92p-239"
+      ],
+      "canonical": "[\"float\",\"-0x1.38f3baa3e0a92p-239\"]",
+      "sha256": "5735ec8c5bd5ce9dd8c4f248ac50b5829705bf06d344f210441635b7c9c57f8f"
+    },
+    {
+      "name": "float-61bfd74ddb622758",
+      "typed": [
+        "float",
+        "0x1.fd74ddb622758p+540"
+      ],
+      "canonical": "[\"float\",\"0x1.fd74ddb622758p+540\"]",
+      "sha256": "fa942cfca5238362a8606fceda7180d996ebbc5c752e3e1c3f234f5ec2a110e8"
+    },
+    {
+      "name": "float-64a3c5ade9122af6",
+      "typed": [
+        "float",
+        "0x1.3c5ade9122af6p+587"
+      ],
+      "canonical": "[\"float\",\"0x1.3c5ade9122af6p+587\"]",
+      "sha256": "be1a6f40cc10ba600f9a9b9ffed82bb26a21b7ecf13959afb1930651792def56"
+    },
+    {
+      "name": "float-439a081a748256cb",
+      "typed": [
+        "float",
+        "0x1.a081a748256cbp+58"
+      ],
+      "canonical": "[\"float\",\"0x1.a081a748256cbp+58\"]",
+      "sha256": "124c15f0495a4a778657d27ea45a5420c5e4b9807d0f8555c1981c8c719a9b71"
+    },
+    {
+      "name": "float-60a746a4145991cd",
+      "typed": [
+        "float",
+        "0x1.746a4145991cdp+523"
+      ],
+      "canonical": "[\"float\",\"0x1.746a4145991cdp+523\"]",
+      "sha256": "003d8b18898bc124b4c41f50e752999b865ef32e0022db88336327bec6c4b43a"
+    },
+    {
+      "name": "float-8d251347b39520c8",
+      "typed": [
+        "float",
+        "-0x1.51347b39520c8p-813"
+      ],
+      "canonical": "[\"float\",\"-0x1.51347b39520c8p-813\"]",
+      "sha256": "5ac25ac5b24933b2bfb2975374bc7fc4e3f725d4d713cbbdcc1d96ea3987154b"
+    },
+    {
+      "name": "float-9a4675d00473474b",
+      "typed": [
+        "float",
+        "-0x1.675d00473474bp-603"
+      ],
+      "canonical": "[\"float\",\"-0x1.675d00473474bp-603\"]",
+      "sha256": "0d2048fe672a7fc6dd2a70506cb5d1be35e0c55a5b112037d06a6c2467b9fc1a"
+    },
+    {
+      "name": "float-faa50afe71e411d3",
+      "typed": [
+        "float",
+        "-0x1.50afe71e411d3p+939"
+      ],
+      "canonical": "[\"float\",\"-0x1.50afe71e411d3p+939\"]",
+      "sha256": "53e36d2754dcb84e8af4c23130ef6d84e139f95c17951b9fbe2cfbf0bb8b3da6"
+    },
+    {
+      "name": "float-03aa54bdc9acc11a",
+      "typed": [
+        "float",
+        "0x1.a54bdc9acc11ap-965"
+      ],
+      "canonical": "[\"float\",\"0x1.a54bdc9acc11ap-965\"]",
+      "sha256": "ac9e6a0e59856502e8567c68b2cc4832ec2e66472b3ec20d47edc842a0f4bbc6"
+    },
+    {
+      "name": "float-b96847a5041c539d",
+      "typed": [
+        "float",
+        "-0x1.847a5041c539dp-105"
+      ],
+      "canonical": "[\"float\",\"-0x1.847a5041c539dp-105\"]",
+      "sha256": "b3ae2ff63de77c5a2148c3a6cf44cf63d9e9c8dd7b327b2ca4d6c96375b223bf"
+    },
+    {
+      "name": "float-8a8c225ba0a5e751",
+      "typed": [
+        "float",
+        "-0x1.c225ba0a5e751p-855"
+      ],
+      "canonical": "[\"float\",\"-0x1.c225ba0a5e751p-855\"]",
+      "sha256": "ee8ea35beccf6fa3c22731085f75af399e107ec8625283d83c26a61223bec915"
+    },
+    {
+      "name": "float-fc4ca62069eba6ff",
+      "typed": [
+        "float",
+        "-0x1.ca62069eba6ffp+965"
+      ],
+      "canonical": "[\"float\",\"-0x1.ca62069eba6ffp+965\"]",
+      "sha256": "6b353eb636d502411ce8338050ec5b931d7a6de03e08a2964b6aee76d4cfd09f"
+    },
+    {
+      "name": "float-56ed4bd0fad9418f",
+      "typed": [
+        "float",
+        "0x1.d4bd0fad9418fp+367"
+      ],
+      "canonical": "[\"float\",\"0x1.d4bd0fad9418fp+367\"]",
+      "sha256": "a059a4f729335a015aab2f2e9455d67be51d990c3d5baabbc72e64256f641b46"
+    },
+    {
+      "name": "float-0bdc3f745024bd03",
+      "typed": [
+        "float",
+        "0x1.c3f745024bd03p-834"
+      ],
+      "canonical": "[\"float\",\"0x1.c3f745024bd03p-834\"]",
+      "sha256": "82a5d39db8401ef7e8e436496142f8ac34586be8235bfa926b2e8c94f70ec733"
+    },
+    {
+      "name": "float-1021e682b82b8212",
+      "typed": [
+        "float",
+        "0x1.1e682b82b8212p-765"
+      ],
+      "canonical": "[\"float\",\"0x1.1e682b82b8212p-765\"]",
+      "sha256": "645b6ea8c74339ef48486007f329ea6fc17c113b2c35df1148bba839b8344d30"
+    },
+    {
+      "name": "float-b1161aa4d4a5577c",
+      "typed": [
+        "float",
+        "-0x1.61aa4d4a5577cp-238"
+      ],
+      "canonical": "[\"float\",\"-0x1.61aa4d4a5577cp-238\"]",
+      "sha256": "2001a90dfae3dd49b009ccf110b9513292e90ff84d37621138a963abd0d66ea7"
+    },
+    {
+      "name": "float-60f999fc5e143992",
+      "typed": [
+        "float",
+        "0x1.999fc5e143992p+528"
+      ],
+      "canonical": "[\"float\",\"0x1.999fc5e143992p+528\"]",
+      "sha256": "ca8f736ceec83de0ca039a226fa08537fae706d0a05a89b77ea5c05aba37f1f7"
+    },
+    {
+      "name": "float-3ae4e6c73cc37847",
+      "typed": [
+        "float",
+        "0x1.4e6c73cc37847p-81"
+      ],
+      "canonical": "[\"float\",\"0x1.4e6c73cc37847p-81\"]",
+      "sha256": "e0564189e88d6671b55f543bbadc4d6d40587603115ddc7e747ef75d2e090c12"
+    },
+    {
+      "name": "float-c57c38e4f5605988",
+      "typed": [
+        "float",
+        "-0x1.c38e4f5605988p+88"
+      ],
+      "canonical": "[\"float\",\"-0x1.c38e4f5605988p+88\"]",
+      "sha256": "4f0a485f83ac3fc9c632df418c7290ac6af67538dada726630282cbefe79ddf5"
+    },
+    {
+      "name": "float-611cd3c90cc890cb",
+      "typed": [
+        "float",
+        "0x1.cd3c90cc890cbp+530"
+      ],
+      "canonical": "[\"float\",\"0x1.cd3c90cc890cbp+530\"]",
+      "sha256": "8fb481a0c82014224f43944d8e61753a7415702331d9a6df55a7b452bfe43f32"
+    },
+    {
+      "name": "float-f71f879e2f062dbc",
+      "typed": [
+        "float",
+        "-0x1.f879e2f062dbcp+882"
+      ],
+      "canonical": "[\"float\",\"-0x1.f879e2f062dbcp+882\"]",
+      "sha256": "bbaf16edae55c859087f8031ac93230684d499582e7750bf7ebb93d1038c0e2f"
+    },
+    {
+      "name": "float-cd0a037362bf32b1",
+      "typed": [
+        "float",
+        "-0x1.a037362bf32b1p+209"
+      ],
+      "canonical": "[\"float\",\"-0x1.a037362bf32b1p+209\"]",
+      "sha256": "ef4f6251118613d15f2479ad6b71b591226b8937b0c5a7c8198850738321f830"
+    },
+    {
+      "name": "float-abed136c3c5020d0",
+      "typed": [
+        "float",
+        "-0x1.d136c3c5020d0p-321"
+      ],
+      "canonical": "[\"float\",\"-0x1.d136c3c5020d0p-321\"]",
+      "sha256": "32205f7b9b4becd8638b0ba3cda4dcf6da4d44ee78278113abe23f391bf80312"
+    },
+    {
+      "name": "float-abae9a058a8abd12",
+      "typed": [
+        "float",
+        "-0x1.e9a058a8abd12p-325"
+      ],
+      "canonical": "[\"float\",\"-0x1.e9a058a8abd12p-325\"]",
+      "sha256": "06bd027459714949c1e962d542e3c04e5610e6ccdad0a070bdb24458711bc0d1"
+    },
+    {
+      "name": "float-27b3a64ff22f3faf",
+      "typed": [
+        "float",
+        "0x1.3a64ff22f3fafp-388"
+      ],
+      "canonical": "[\"float\",\"0x1.3a64ff22f3fafp-388\"]",
+      "sha256": "7e46661f3d843d8c7238d5c7b7b4883ae71aa4651dd7495d8b9d18ee70b5158d"
+    },
+    {
+      "name": "float-429206d7a493c8d6",
+      "typed": [
+        "float",
+        "0x1.206d7a493c8d6p+42"
+      ],
+      "canonical": "[\"float\",\"0x1.206d7a493c8d6p+42\"]",
+      "sha256": "a6382da156ef7cb0e5a2edf94dc5acabe391b36064d5c44fc8d3824a2ccdd9cf"
+    },
+    {
+      "name": "float-0664cc72b7fe4362",
+      "typed": [
+        "float",
+        "0x1.4cc72b7fe4362p-921"
+      ],
+      "canonical": "[\"float\",\"0x1.4cc72b7fe4362p-921\"]",
+      "sha256": "787b1d0ca3807604281a04b3e2940f8f9772878e057320d1430e092d2341f0f0"
+    },
+    {
+      "name": "float-50e32835d7512134",
+      "typed": [
+        "float",
+        "0x1.32835d7512134p+271"
+      ],
+      "canonical": "[\"float\",\"0x1.32835d7512134p+271\"]",
+      "sha256": "8790a8963b04b51a8b312cc6bd35e3c566270e7f49c244f25c9f07e10e93cd77"
+    },
+    {
+      "name": "float-639095ad8bfef0e0",
+      "typed": [
+        "float",
+        "0x1.095ad8bfef0e0p+570"
+      ],
+      "canonical": "[\"float\",\"0x1.095ad8bfef0e0p+570\"]",
+      "sha256": "d353c6c304e2d5f46b842757fdfda2cbd51ba6db38f3177ac51b6258a8a8e344"
+    },
+    {
+      "name": "float-c5d139251fcd21e2",
+      "typed": [
+        "float",
+        "-0x1.139251fcd21e2p+94"
+      ],
+      "canonical": "[\"float\",\"-0x1.139251fcd21e2p+94\"]",
+      "sha256": "c389f98f0fb14aa297c3d080a1f8338e2a214b0e49b1c577e7dff2407c83a275"
+    },
+    {
+      "name": "float-ce4fe91b28b2c5f5",
+      "typed": [
+        "float",
+        "-0x1.fe91b28b2c5f5p+229"
+      ],
+      "canonical": "[\"float\",\"-0x1.fe91b28b2c5f5p+229\"]",
+      "sha256": "4860c0999a35fce36e1668c3a21a90dc028ba19ac50a0ac8cbc0cb740932daf0"
+    },
+    {
+      "name": "float-37dc75b5b3a7763e",
+      "typed": [
+        "float",
+        "0x1.c75b5b3a7763ep-130"
+      ],
+      "canonical": "[\"float\",\"0x1.c75b5b3a7763ep-130\"]",
+      "sha256": "4e5466c79dce7aaea13f47b951ac1d509cc406bd2d0b4c626b0bb1fd1f21577a"
+    },
+    {
+      "name": "float-85543db34c4e85f8",
+      "typed": [
+        "float",
+        "-0x1.43db34c4e85f8p-938"
+      ],
+      "canonical": "[\"float\",\"-0x1.43db34c4e85f8p-938\"]",
+      "sha256": "1fa7f07883707d2402472a794c36e4537574e93316156fd1fd3c025814b50751"
+    },
+    {
+      "name": "float-4cac0fc0332734ad",
+      "typed": [
+        "float",
+        "0x1.c0fc0332734adp+203"
+      ],
+      "canonical": "[\"float\",\"0x1.c0fc0332734adp+203\"]",
+      "sha256": "2f0c6c7b2a3ffccc48df5b37e5f6aa4122e206fa18c701cc96200ce5bca78d97"
+    },
+    {
+      "name": "float-2ce87fc62c3c4883",
+      "typed": [
+        "float",
+        "0x1.87fc62c3c4883p-305"
+      ],
+      "canonical": "[\"float\",\"0x1.87fc62c3c4883p-305\"]",
+      "sha256": "2257d698b8df49ca60c6ff83602e27d860c433e10ccb72c7da8781fd4d8bc9f0"
+    },
+    {
+      "name": "float-114c505f7e9ac5dc",
+      "typed": [
+        "float",
+        "0x1.c505f7e9ac5dcp-747"
+      ],
+      "canonical": "[\"float\",\"0x1.c505f7e9ac5dcp-747\"]",
+      "sha256": "c4a87d53814834682e3286bf7203ba91ea21d92a3f0b48ad78cad4000c262738"
+    },
+    {
+      "name": "float-1c02e8cd3c43f202",
+      "typed": [
+        "float",
+        "0x1.2e8cd3c43f202p-575"
+      ],
+      "canonical": "[\"float\",\"0x1.2e8cd3c43f202p-575\"]",
+      "sha256": "a2b5a8939c23d50d7970bf4dc7d0b2685d69bd3c6af681fa5d94b93926c0f830"
+    },
+    {
+      "name": "float-d81efd5492ed5d05",
+      "typed": [
+        "float",
+        "-0x1.efd5492ed5d05p+386"
+      ],
+      "canonical": "[\"float\",\"-0x1.efd5492ed5d05p+386\"]",
+      "sha256": "4bfa00ee4aaa4e21253b25bf00abcfffa22d4e480ba8967f82527828310012b2"
+    },
+    {
+      "name": "float-9e562096e8030477",
+      "typed": [
+        "float",
+        "-0x1.62096e8030477p-538"
+      ],
+      "canonical": "[\"float\",\"-0x1.62096e8030477p-538\"]",
+      "sha256": "7650702be308ee75009b0dcff00c6c6610ab8c10afd772d3c31823147a5485a4"
+    },
+    {
+      "name": "float-f3e6e813640726bc",
+      "typed": [
+        "float",
+        "-0x1.6e813640726bcp+831"
+      ],
+      "canonical": "[\"float\",\"-0x1.6e813640726bcp+831\"]",
+      "sha256": "ebf2a8ecf0e1c3f2809a2088324d98ec5006d8e29d481c139f0b3194d7f50818"
+    },
+    {
+      "name": "float-eeacc6353c3a2c1b",
+      "typed": [
+        "float",
+        "-0x1.cc6353c3a2c1bp+747"
+      ],
+      "canonical": "[\"float\",\"-0x1.cc6353c3a2c1bp+747\"]",
+      "sha256": "eaee5a49e00d1a6302f7b1800ddf1edd247ce2bc27c9b10fd46852e84ffada5c"
+    },
+    {
+      "name": "float-boundary-0",
+      "typed": [
+        "float",
+        "0x0.0000000000001p-1022"
+      ],
+      "canonical": "[\"float\",\"0x0.0000000000001p-1022\"]",
+      "sha256": "e28ea6cbe069e0740215f99ab1c5cf143bccb4e5a2d10ff30afdc7f26222ad10"
+    },
+    {
+      "name": "float-boundary-1",
+      "typed": [
+        "float",
+        "0x0.fffffffffffffp-1022"
+      ],
+      "canonical": "[\"float\",\"0x0.fffffffffffffp-1022\"]",
+      "sha256": "8bcb614e082ac146cb4ee7c05883a1cd2c8b811f1869903886b3555596dfc363"
+    },
+    {
+      "name": "float-boundary-2",
+      "typed": [
+        "float",
+        "0x1.0000000000000p-1022"
+      ],
+      "canonical": "[\"float\",\"0x1.0000000000000p-1022\"]",
+      "sha256": "f99bf651ae20c9c4035bbb8e7dce92b5bb8ead57c1477162857d968511c2c9d2"
+    },
+    {
+      "name": "float-boundary-3",
+      "typed": [
+        "float",
+        "0x1.fffffffffffffp+1023"
+      ],
+      "canonical": "[\"float\",\"0x1.fffffffffffffp+1023\"]",
+      "sha256": "83630043eb86aade2feb7fd96774f04f14d443e6536c40b12efb98b9fb17992d"
+    },
+    {
+      "name": "float-boundary-4",
+      "typed": [
+        "float",
+        "-0x0.0000000000001p-1022"
+      ],
+      "canonical": "[\"float\",\"-0x0.0000000000001p-1022\"]",
+      "sha256": "6c9edb2af4fb1ebc8b7bc57bb8f2b47396e1af01887f4b76a3bc306fa1a590e3"
+    },
+    {
+      "name": "nested-0",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "0"
+                      ],
+                      [
+                        "int",
+                        "1"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-10"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"0\"],[\"int\",\"1\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-10\"]]]]",
+      "sha256": "73a8600440c6c6bd79825294af3006b1f0ea42715c80e973f7c3df971127be22"
+    },
+    {
+      "name": "nested-1",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "1"
+                      ],
+                      [
+                        "int",
+                        "2"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-100"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"1\"],[\"int\",\"2\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-100\"]]]]",
+      "sha256": "f4ceb8c163f8a3ed6baddb863eef21064cb7bf0cbfadd15d0628408f6a184e9e"
+    },
+    {
+      "name": "nested-2",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "2"
+                      ],
+                      [
+                        "int",
+                        "3"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-1000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"2\"],[\"int\",\"3\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-1000\"]]]]",
+      "sha256": "9165a7eed3f40c0d094e3130bfe379c501f585e9b884124028320b98c8b59906"
+    },
+    {
+      "name": "nested-3",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "3"
+                      ],
+                      [
+                        "int",
+                        "4"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-10000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"3\"],[\"int\",\"4\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-10000\"]]]]",
+      "sha256": "b67f78ce17d77d1fda6bd8745d8d7a33da648fe1e54d8d324d4f9e336f3c05d6"
+    },
+    {
+      "name": "nested-4",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "4"
+                      ],
+                      [
+                        "int",
+                        "5"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-100000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"4\"],[\"int\",\"5\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-100000\"]]]]",
+      "sha256": "7914570584d9ac324894416352d57d0cddd5033c374df09e249b40167dd52e60"
+    },
+    {
+      "name": "nested-5",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "5"
+                      ],
+                      [
+                        "int",
+                        "6"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-1000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"5\"],[\"int\",\"6\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-1000000\"]]]]",
+      "sha256": "9b12e235ee5af0d61faf039bf7cc9162681861997c7560c9032a0b626016b074"
+    },
+    {
+      "name": "nested-6",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "6"
+                      ],
+                      [
+                        "int",
+                        "7"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-10000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"6\"],[\"int\",\"7\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-10000000\"]]]]",
+      "sha256": "161d0b31f4804133417b7c7c8b63fbec81979d4618cfa468e3847113f3b80e0e"
+    },
+    {
+      "name": "nested-7",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "7"
+                      ],
+                      [
+                        "int",
+                        "8"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-100000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"7\"],[\"int\",\"8\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-100000000\"]]]]",
+      "sha256": "74540aada2927909c7022ff9a10179ee22beab01cc3fd7d117f958fa13772631"
+    },
+    {
+      "name": "nested-8",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "8"
+                      ],
+                      [
+                        "int",
+                        "9"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-1000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"8\"],[\"int\",\"9\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-1000000000\"]]]]",
+      "sha256": "c1bc3fbb32fd890617e7971565a4786844d0a28a992e9fba42f00feb21d92b17"
+    },
+    {
+      "name": "nested-9",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "9"
+                      ],
+                      [
+                        "int",
+                        "10"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-10000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"9\"],[\"int\",\"10\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-10000000000\"]]]]",
+      "sha256": "3451107b8abff74892efaa68e1347c00b462d68b36638e07252d91d82a8f8b49"
+    },
+    {
+      "name": "nested-10",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "10"
+                      ],
+                      [
+                        "int",
+                        "11"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-100000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"10\"],[\"int\",\"11\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-100000000000\"]]]]",
+      "sha256": "37260c367b73319589207353339732751d411a9015322b942b6dbdfd788099b7"
+    },
+    {
+      "name": "nested-11",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "11"
+                      ],
+                      [
+                        "int",
+                        "12"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-1000000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"11\"],[\"int\",\"12\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-1000000000000\"]]]]",
+      "sha256": "539ceaa2e72c64cc2a45f6e50495111026c5368b83b7ca6b75480d3aa2eeecb5"
+    },
+    {
+      "name": "nested-12",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "12"
+                      ],
+                      [
+                        "int",
+                        "13"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-10000000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"12\"],[\"int\",\"13\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-10000000000000\"]]]]",
+      "sha256": "752c70c0054582966fa660afc7474afa2a1168f52b2b8e1fc249e18f81ed2b34"
+    },
+    {
+      "name": "nested-13",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "13"
+                      ],
+                      [
+                        "int",
+                        "14"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-100000000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"13\"],[\"int\",\"14\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-100000000000000\"]]]]",
+      "sha256": "f097e702313ee9efdf63c97064c522dfd57e36aeba21e97b72da2e4f6b2db4ca"
+    },
+    {
+      "name": "nested-14",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "14"
+                      ],
+                      [
+                        "int",
+                        "15"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-1000000000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"14\"],[\"int\",\"15\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-1000000000000000\"]]]]",
+      "sha256": "b5b31bc8aecac7f96dfe0c170240b35fe12e24a9d6a25c5b8ff3d259073d3aee"
+    },
+    {
+      "name": "nested-15",
+      "typed": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "list",
+              [
+                [
+                  "date",
+                  "2026-09-19"
+                ],
+                [
+                  "text",
+                  "2026-09-19"
+                ],
+                [
+                  "bool",
+                  false
+                ],
+                [
+                  "int",
+                  "1"
+                ],
+                [
+                  "float",
+                  "0x1.0000000000000p+0"
+                ]
+              ]
+            ]
+          ],
+          [
+            "b",
+            [
+              "map",
+              [
+                [
+                  "ordered",
+                  [
+                    "list",
+                    [
+                      [
+                        "int",
+                        "15"
+                      ],
+                      [
+                        "int",
+                        "16"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "timestamp",
+                  [
+                    "datetime",
+                    "2026-09-19T00:00:00+00:00"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "c",
+            [
+              "int",
+              "-10000000000000000"
+            ]
+          ]
+        ]
+      ],
+      "canonical": "[\"map\",[[\"a\",[\"list\",[[\"date\",\"2026-09-19\"],[\"text\",\"2026-09-19\"],[\"bool\",false],[\"int\",\"1\"],[\"float\",\"0x1.0000000000000p+0\"]]]],[\"b\",[\"map\",[[\"ordered\",[\"list\",[[\"int\",\"15\"],[\"int\",\"16\"]]]],[\"timestamp\",[\"datetime\",\"2026-09-19T00:00:00+00:00\"]]]]],[\"c\",[\"int\",\"-10000000000000000\"]]]]",
+      "sha256": "3f81c949a9387f5c9260fe077ccaab864dfa5caddbeb43c7df23f6ae8c5639cf"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}
+known:
+  p.a: {v: 1}
+judgments:
+  d.block:
+    verdict: wait
+    rests_on: [p.a]
+    seen: {p.a: 1}
+    blocked_on: 'observational: needs more evidence'
+  d.rev:
+    verdict: wait
+    rests_on: [p.a]
+    seen: {p.a: 1}
+    wrong_if: p.a > 9
+    replaced: ['the standing judgment holds, and a person takes this over it by name on 2026-09-18']
+  d.page:
+    verdict: wait
+    rests_on: [p.a]
+    seen: {p.a: 1}
+    wrong_if: page.unserved > 0

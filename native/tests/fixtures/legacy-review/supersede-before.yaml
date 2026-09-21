@@ -1,0 +1,18 @@
+meta:
+  updated: 2026-09-01
+known:
+  p.alpha:
+    v: 2
+    of: 2026-09-01
+  p.beta:
+    v: 30
+    of: 2026-09-01
+judgments:
+  d.keep:
+    verdict: continue
+    rests_on: [p.alpha, p.beta]
+    seen:
+      p.alpha: 2
+      p.beta: 30
+    wrong_if: p.beta > 9
+    reviewed: 2026-09-01

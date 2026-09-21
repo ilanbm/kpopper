@@ -1,0 +1,94 @@
+{
+  "source_commit": "b639cdbab1e3c624ad52708350166d222821aec1",
+  "source": "scripts/pending_grounding.py:identity",
+  "cases": [
+    {
+      "json": "null",
+      "sha256": "53b41ab0dae62befcb8708620b6d14794a24fedad6c24c03dd01e51fa698ff0b"
+    },
+    {
+      "json": "{}",
+      "sha256": "55279606329849b7458b517c195e785721934c903ff91220c728d16b53336cb4"
+    },
+    {
+      "json": "true",
+      "sha256": "b15e5dc2d0858d7d9f2afcad8bf251f5b807810b68219e7ebcc645cb09c2474c"
+    },
+    {
+      "json": "false",
+      "sha256": "38d36ce273c7be1c4d771030a94ce9d9760ca762732855090017581928dacb85"
+    },
+    {
+      "json": "0",
+      "sha256": "d8117918f245aedda9bf1236d1eb30e8958c763caca42418e6e969d561124f07"
+    },
+    {
+      "json": "-1",
+      "sha256": "fcf12c91816824c22a36d802700e4db0a6eeeb29cb55fd3bfcdcac2496fce632"
+    },
+    {
+      "json": "1267650600228229401496703205376",
+      "sha256": "05f099f9d62bca695543ef591beacff583b936d4ee8d949286040378f5671cd6"
+    },
+    {
+      "json": "-1267650600228229401496703205376",
+      "sha256": "04198494c2b3678e03357fc7de6e552d172cc05594a3b1aa5ccbc495cdc035ae"
+    },
+    {
+      "json": "1.0",
+      "sha256": "6afe0c20b69ca4866e663c3d219f1ba7fd65ac4bb1b41317b6fbb84b8e0ccd6d"
+    },
+    {
+      "json": "0.0",
+      "sha256": "6e7d121b1419ad4c150ff2d3445fdc7c8e4a2ff2cb3cc1e2e6290a4ddf83dadb"
+    },
+    {
+      "json": "-0.0",
+      "sha256": "6e8d2a955ef0e767f68e469c464198eeb07c5b3bf54bec7e08ab6f8b8a1f967f"
+    },
+    {
+      "json": "5e-324",
+      "sha256": "e28ea6cbe069e0740215f99ab1c5cf143bccb4e5a2d10ff30afdc7f26222ad10"
+    },
+    {
+      "json": "1.7976931348623157e+308",
+      "sha256": "83630043eb86aade2feb7fd96774f04f14d443e6536c40b12efb98b9fb17992d"
+    },
+    {
+      "json": "\"2026-09-19\"",
+      "sha256": "86842763ba00352d84801f5d061bc21ae968aa84bb25bf7c887021147581e23c"
+    },
+    {
+      "json": "\"é\"",
+      "sha256": "ace4513f3bb04b1863ac3b8666e5792c263669f3b2c6a540bfca51f0702e62b1"
+    },
+    {
+      "json": "\"é\"",
+      "sha256": "5f525e2dd152693b7b367d69bf9e871e7d1dd06204c7c464d65189946babf8fc"
+    },
+    {
+      "json": "\"line\\n\\u0001\"",
+      "sha256": "835412cdf9e5f42bac94f0904d33714c3363f374ae721c9dbd7c625dcc99beec"
+    },
+    {
+      "json": "\"עברית 🦀\"",
+      "sha256": "603b4c0d700b28d9a96c0366a6c8aec51783466a42aa7ddb3d57b2843deaf10e"
+    },
+    {
+      "json": "[1,2]",
+      "sha256": "4fc8da64970cc349eef04c7ac16fde89a5daf73f00e53fde20bc9927093708a4"
+    },
+    {
+      "json": "[2,1]",
+      "sha256": "58f8a50f7c1e84092256fe4c4f576c92489d54b8c012fbbfe378748343e0f7b0"
+    },
+    {
+      "json": "{\"missing\":null}",
+      "sha256": "b85949be3ccb00172ba54e81ce0ca1d9f879ef05d71ae06c3fb45c3999311101"
+    },
+    {
+      "json": "{\"z\":[true,1.0],\"a\":7}",
+      "sha256": "7eb6ab978cb2e76294695f323a464f7316bb33f1ef131db68464c49a9afdbeeb"
+    }
+  ]
+}

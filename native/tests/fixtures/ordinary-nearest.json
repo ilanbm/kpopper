@@ -1,0 +1,626 @@
+[
+  {
+    "name": "parent-premises",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.y",
+          "p.x"
+        ],
+        "verdict": "keep"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  d.keep: rests on p.x too - verdicts differ, a pair to judge\n  one subject: same <id> d.other folds it in · two: distinct d.other <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "d.keep",
+          "rank": 3,
+          "reasons": [
+            "rests on p.x too - verdicts differ, a pair to judge"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "same-verdict",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.x"
+        ],
+        "verdict": "change"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  d.keep: rests on p.x too, with the same verdict - a duplicate\n  one subject: same <id> d.other folds it in · two: distinct d.other <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "d.keep",
+          "rank": 3,
+          "reasons": [
+            "rests on p.x too, with the same verdict - a duplicate"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "numeric-verdict",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: 1,000\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.x"
+        ],
+        "verdict": 1000
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  d.keep: rests on p.x too, with the same verdict - a duplicate\n  one subject: same <id> d.other folds it in · two: distinct d.other <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "d.keep",
+          "rank": 3,
+          "reasons": [
+            "rests on p.x too, with the same verdict - a duplicate"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "source-and-location",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\n  p.old:\n    from: s.evidence\n    at: table 1\n    name: Old reading\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\nsources:\n  s.evidence:\n    file: report.md\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.new",
+      "body": {
+        "v": 3,
+        "from": "s.evidence",
+        "at": " table   1 "
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  p.old: same from and at (s.evidence, \"table 1\") - certain\n  one subject: same <id> p.new folds it in · two: distinct p.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "p.old",
+          "rank": 0,
+          "reasons": [
+            "same from and at (s.evidence, \"table 1\") - certain"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "same-from",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\n  p.old:\n    from: s.evidence\n    at: table 1\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\nsources:\n  s.evidence:\n    file: report.md\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.new",
+      "body": {
+        "v": 3,
+        "from": "s.evidence",
+        "at": "table 2"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  p.old: same from (s.evidence)\n  one subject: same <id> p.new folds it in · two: distinct p.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "p.old",
+          "rank": 1,
+          "reasons": [
+            "same from (s.evidence)"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "file-and-url",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\nsources:\n  s.old:\n    file: long report.md\n    url: https://example.test\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "s.new",
+      "body": {
+        "file": "long report.md",
+        "url": "https://example.test"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  s.old: same url (https://example.test) - certain; same file (long report.md) - certain\n  one subject: same <id> s.new folds it in · two: distinct s.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "s.old",
+          "rank": 0,
+          "reasons": [
+            "same url (https://example.test) - certain",
+            "same file (long report.md) - certain"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "rule-forms",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\n  p.calc:\n    rule:\n      expr: p.x + 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.new",
+      "body": {
+        "rule": "p.x + 2"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  p.calc: same rule (p.x + 2)\n  one subject: same <id> p.new folds it in · two: distinct p.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "p.calc",
+          "rank": 2,
+          "reasons": [
+            "same rule (p.x + 2)"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "implicit-rule",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\n  p.calc:\n    v: p.x + 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.new",
+      "body": {
+        "rule": {
+          "op": "add",
+          "args": [
+            {
+              "ref": "p.x"
+            },
+            {
+              "num": "2"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  p.calc: same rule (p.x + 2)\n  one subject: same <id> p.new folds it in · two: distinct p.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "p.calc",
+          "rank": 2,
+          "reasons": [
+            "same rule (p.x + 2)"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "retired-rule-refs",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n    also:\n    - p.was\n  p.y:\n    v: 2\n  p.calc:\n    rule: p.x + 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.new",
+      "body": {
+        "rule": "p.was + 2"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  p.calc: same rule (p.x + 2)\n  one subject: same <id> p.new folds it in · two: distinct p.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "p.calc",
+          "rank": 2,
+          "reasons": [
+            "same rule (p.x + 2)"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "retired-refusal",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n    also:\n    - p.was\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.was",
+      "body": {
+        "v": 3
+      }
+    },
+    "expected": {
+      "refusals": [
+        "p.was was retired into p.x - write p.x instead; it carries also: [p.was]"
+      ],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "retired-set-refusal",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n    also:\n    - p.was\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "set",
+      "id": "p.was",
+      "body": {}
+    },
+    "expected": {
+      "refusals": [
+        "p.was was retired into p.x - write p.x instead; it carries also: [p.was]"
+      ],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "held-also-not-retired",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n    also:\n    - p.y\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.y",
+      "body": {
+        "v": 3
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "also-deps",
+    "document": "schema:\n  deps: also\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    also:\n    - p.x\n    verdict: keep\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "also": [
+          "p.x"
+        ],
+        "verdict": "keep"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  d.keep: rests on p.x too, with the same verdict - a duplicate\n  one subject: same <id> d.other folds it in · two: distinct d.other <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "d.keep",
+          "rank": 3,
+          "reasons": [
+            "rests on p.x too, with the same verdict - a duplicate"
+          ],
+          "score": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "name": "distinct-existing",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n    distinct_from: d.other\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.x"
+        ],
+        "verdict": "keep"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "distinct-authored",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.x"
+        ],
+        "verdict": "keep",
+        "distinct_from": "d.keep, d.else"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "session-not-premise",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - s.session\n    verdict: keep\nsources:\n  s.session:\n    asked: question\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "s.session"
+        ],
+        "verdict": "keep"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "disjoint-premises",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.y"
+        ],
+        "verdict": "keep"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "set-no-notice",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "set",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.x"
+        ],
+        "verdict": "keep"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "scalar-no-notice",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": "keep"
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "name-never-reason",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\n  p.old:\n    v: 3\n    name: shared title\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.new",
+      "body": {
+        "v": 3,
+        "name": "shared title"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "top-three-ranking",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\nsources:\n  s.0:\n    file: report.md\n    name: Alpha beta\n  s.1:\n    file: report.md\n    name: Alpha\n  s.2:\n    file: report.md\n    name: Other\n  s.3:\n    file: report.md\n    name: Alpha beta gamma\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "s.new",
+      "body": {
+        "file": "report.md",
+        "name": "Alpha beta gamma"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  s.3: same file (report.md) - certain\n  s.0: same file (report.md) - certain\n  s.1: same file (report.md) - certain\n  one subject: same <id> s.new folds it in · two: distinct s.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "s.3",
+          "rank": 0,
+          "reasons": [
+            "same file (report.md) - certain"
+          ],
+          "score": 1.0
+        },
+        {
+          "id": "s.0",
+          "rank": 0,
+          "reasons": [
+            "same file (report.md) - certain"
+          ],
+          "score": 0.6666666666666666
+        },
+        {
+          "id": "s.1",
+          "rank": 0,
+          "reasons": [
+            "same file (report.md) - certain"
+          ],
+          "score": 0.3333333333333333
+        }
+      ]
+    }
+  },
+  {
+    "name": "unicode-ranking",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\nsources:\n  s.one:\n    file: x\n    name: İstanbul alpha\n  s.two:\n    file: x\n    name: istanbul alpha\n  s.three:\n    file: x\n    name: שלום alpha\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "s.new",
+      "body": {
+        "file": "x",
+        "name": "İstanbul alpha"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "nearest existing:\n  s.one: same file (x) - certain\n  s.three: same file (x) - certain\n  s.two: same file (x) - certain\n  one subject: same <id> s.new folds it in · two: distinct s.new <id> \"why\" keeps them apart\n",
+      "candidates": [
+        {
+          "id": "s.one",
+          "rank": 0,
+          "reasons": [
+            "same file (x) - certain"
+          ],
+          "score": 1.0
+        },
+        {
+          "id": "s.three",
+          "rank": 0,
+          "reasons": [
+            "same file (x) - certain"
+          ],
+          "score": 0.3333333333333333
+        },
+        {
+          "id": "s.two",
+          "rank": 0,
+          "reasons": [
+            "same file (x) - certain"
+          ],
+          "score": 0.3333333333333333
+        }
+      ]
+    }
+  },
+  {
+    "name": "hypothesis-retirement",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {
+      "h": "known:\n  p.future:\n    v: 9\n    also:\n    - p.was\n"
+    },
+    "action": {
+      "kind": "add",
+      "id": "p.was",
+      "body": {
+        "v": 3
+      }
+    },
+    "expected": {
+      "refusals": [
+        "p.was was retired into p.future - write p.future instead; it carries also: [p.was]"
+      ],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "hypothesis-distinct",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.x:\n    v: 1\n  p.y:\n    v: 2\njudgments:\n  d.keep:\n    rests_on:\n    - p.x\n    verdict: change\n    wrong_if: p.x > 4\n    seen:\n      p.x: 1\n",
+    "hypotheses": {
+      "h": "judgments:\n  d.keep:\n    rests_on:\n    - p.x\n    distinct_from: d.other\n"
+    },
+    "action": {
+      "kind": "add",
+      "id": "d.other",
+      "body": {
+        "rests_on": [
+          "p.x"
+        ],
+        "verdict": "keep"
+      }
+    },
+    "expected": {
+      "refusals": [],
+      "notice": "",
+      "candidates": []
+    }
+  },
+  {
+    "name": "retirement-source-order",
+    "document": "schema:\n  deps: rests_on\n  predicate: wrong_if\n  snapshot: seen\nknown:\n  p.z:\n    v: 1\n    also:\n    - p.old\n  p.a:\n    v: 1\n    also:\n    - p.old\n",
+    "hypotheses": {},
+    "action": {
+      "kind": "add",
+      "id": "p.old",
+      "body": {
+        "v": 2
+      }
+    },
+    "expected": {
+      "refusals": [
+        "p.old was retired into p.z - write p.z instead; it carries also: [p.old]"
+      ],
+      "notice": "",
+      "candidates": []
+    }
+  }
+]

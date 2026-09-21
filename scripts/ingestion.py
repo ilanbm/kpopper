@@ -455,6 +455,8 @@ def _report_target(record, envelope):
                    and any(body.get(key) for key in ("file", "url", "asked", "read"))
                    for nid, body in members.items()):
                 homes.add(collection)
+    if not homes and doc.get('sources') == {}:
+        homes.add('sources')
     if len(homes) != 1:
         raise ValueError("the batch needs one unambiguous existing source collection")
     fingerprint = _sha(Path(record).read_bytes()) if has_additions else _batch_fingerprint(record, envelope["updates"])

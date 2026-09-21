@@ -1,0 +1,900 @@
+{
+  "oracle_revision": "f480ea6",
+  "cases": [
+    {
+      "name": "remeasure-moved-only",
+      "record": "meta:\n  updated: 2026-09-03\n  name: Greenhouse\n  scope: Whether the old boiler can hold the greenhouse above 12°C through February\n    - the base record, a recipe beside three of its readings, and one hypothesis that\n    reads one of them.\nsources:\n  s.2026_09_02_heating:\n    asked: Can we keep the greenhouse above 12°C through February on the old boiler?\n    name: 'the heating question, as this session read it: a shortfall in kilowatts,\n      not a yes or no'\n    of: this session\n    read: '2026-09-02'\n  doc.boiler_sheet:\n    name: the boiler's service sheet\n    file: boiler/service-2025.pdf\n    read: '2026-09-02'\n  run.night_log:\n    name: the logger's nightly readings - one line per night below -5°C, counted from\n      the file it writes\n    of: readings.txt beside this record, read by the recipe the count names\n    read: '2026-09-02'\nknown:\n  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: boiler output\n    from: doc.boiler_sheet\n    measure: boiler_kw\n  heat.loss_kw:\n    v: 31\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_02_heating\n    at: worked out from the glazing area during the session\n    of: '2026-09-02'\n    measure: loss_kw\n  heat.deficit_kw:\n    rule: heat.loss_kw - heat.boiler_kw\n    name: shortfall on the coldest night\n  log.cold_nights:\n    v: 3\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n  when.first_cold_night:\n    v: '2027-02-01'\n    name: first night that matters\n    from: s.2026_09_02_heating\nopen:\n  q.second_boiler: is a second boiler cheaper than glazing the north wall?\njudgments:\n  c.boiler_short:\n    rests_on:\n    - heat.boiler_kw\n    - heat.loss_kw\n    - heat.deficit_kw\n    verdict: the old boiler cannot hold 12°C on the coldest February night\n    because: It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW\n      - a shortfall of {{heat.deficit_kw}} kW before any wind.\n    wrong_if: heat.loss_kw <= heat.boiler_kw\n    seen:\n      heat.boiler_kw: 24\n      heat.loss_kw: 31\n      heat.deficit_kw: heat.loss_kw - heat.boiler_kw\n  c.short_snap:\n    rests_on:\n    - log.cold_nights\n    - run.night_log\n    verdict: the cold snap is short - a bigger boiler is not worth buying for it\n    because: The logger saw {{log.cold_nights}} nights below -5°C last winter.\n    wrong_if: log.cold_nights > 5\n    seen:\n      log.cold_nights: 3\n      run.night_log: read 2026-09-02\n  c.season_plan:\n    rests_on:\n    - when.first_cold_night\n    - log.cold_nights\n    verdict: the glazing can wait for January\n    because: Nothing matters before {{when.first_cold_night}}, and the snap ran {{log.cold_nights}}\n      nights.\n    wrong_if: when.first_cold_night < \"2027-01-01\"\n    seen:\n      when.first_cold_night: '2027-02-01'\n      log.cold_nights: 3\n",
+      "hypotheses": [],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  log.cold_nights:\n    v: 4\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n    of: '2026-09-17'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-17'\nfolds: never\n"
+        }
+      ],
+      "brief": "title: \"Greenhouse, this winter\"\ntabs:\n  - title: \"The February night\"\n    occasion: \"opened when deciding whether to fire the old boiler or fix the glazing\"\n    serves: [s.2026_09_02_heating]\n    sections:\n      - title: \"What the numbers say\"\n        why: \"the shortfall and the length of the snap are the numbers the decision turns on\"\n        pick: [heat., log., when.first_cold_night, c.]\n        as: cards\n    shape: {entries: 9, judgments: 3, flagged: 0, blocked: 0}\n",
+      "as_of": "2026-09-17",
+      "changed": [
+        "log.cold_nights"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "c.boiler_short",
+          "c.season_plan",
+          "c.short_snap",
+          "doc.boiler_sheet",
+          "heat.boiler_kw",
+          "heat.deficit_kw",
+          "heat.loss_kw",
+          "log.cold_nights",
+          "q.second_boiler",
+          "run.night_log",
+          "s.2026_09_02_heating",
+          "when.first_cold_night"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {},
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [
+          "c.season_plan: log.cold_nights differs from its snapshot (3 -> 4) - re-review, or refresh seen"
+        ],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "c.boiler_short": {
+            "predicate_references": [
+              "heat.boiler_kw",
+              "heat.loss_kw"
+            ],
+            "page_references": []
+          },
+          "c.short_snap": {
+            "predicate_references": [
+              "log.cold_nights"
+            ],
+            "page_references": []
+          },
+          "c.season_plan": {
+            "predicate_references": [
+              "when.first_cold_night"
+            ],
+            "page_references": []
+          }
+        },
+        "red": false,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "remeasure-falsified",
+      "record": "meta:\n  updated: 2026-09-03\n  name: Greenhouse\n  scope: Whether the old boiler can hold the greenhouse above 12°C through February\n    - the base record, a recipe beside three of its readings, and one hypothesis that\n    reads one of them.\nsources:\n  s.2026_09_02_heating:\n    asked: Can we keep the greenhouse above 12°C through February on the old boiler?\n    name: 'the heating question, as this session read it: a shortfall in kilowatts,\n      not a yes or no'\n    of: this session\n    read: '2026-09-02'\n  doc.boiler_sheet:\n    name: the boiler's service sheet\n    file: boiler/service-2025.pdf\n    read: '2026-09-02'\n  run.night_log:\n    name: the logger's nightly readings - one line per night below -5°C, counted from\n      the file it writes\n    of: readings.txt beside this record, read by the recipe the count names\n    read: '2026-09-02'\nknown:\n  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: boiler output\n    from: doc.boiler_sheet\n    measure: boiler_kw\n  heat.loss_kw:\n    v: 31\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_02_heating\n    at: worked out from the glazing area during the session\n    of: '2026-09-02'\n    measure: loss_kw\n  heat.deficit_kw:\n    rule: heat.loss_kw - heat.boiler_kw\n    name: shortfall on the coldest night\n  log.cold_nights:\n    v: 3\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n  when.first_cold_night:\n    v: '2027-02-01'\n    name: first night that matters\n    from: s.2026_09_02_heating\nopen:\n  q.second_boiler: is a second boiler cheaper than glazing the north wall?\njudgments:\n  c.boiler_short:\n    rests_on:\n    - heat.boiler_kw\n    - heat.loss_kw\n    - heat.deficit_kw\n    verdict: the old boiler cannot hold 12°C on the coldest February night\n    because: It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW\n      - a shortfall of {{heat.deficit_kw}} kW before any wind.\n    wrong_if: heat.loss_kw <= heat.boiler_kw\n    seen:\n      heat.boiler_kw: 24\n      heat.loss_kw: 31\n      heat.deficit_kw: heat.loss_kw - heat.boiler_kw\n  c.short_snap:\n    rests_on:\n    - log.cold_nights\n    - run.night_log\n    verdict: the cold snap is short - a bigger boiler is not worth buying for it\n    because: The logger saw {{log.cold_nights}} nights below -5°C last winter.\n    wrong_if: log.cold_nights > 5\n    seen:\n      log.cold_nights: 3\n      run.night_log: read 2026-09-02\n  c.season_plan:\n    rests_on:\n    - when.first_cold_night\n    - log.cold_nights\n    verdict: the glazing can wait for January\n    because: Nothing matters before {{when.first_cold_night}}, and the snap ran {{log.cold_nights}}\n      nights.\n    wrong_if: when.first_cold_night < \"2027-01-01\"\n    seen:\n      when.first_cold_night: '2027-02-01'\n      log.cold_nights: 3\n",
+      "hypotheses": [
+        {
+          "name": "glazing_redo",
+          "document": "sources:\n  s.2026_09_03_recount:\n    asked: Recount the loss with the north wall as it is, not as the plan drew it.\n    name: 'the recount, as this session read it: the same wall at its real U-value'\n    of: this session\n    read: '2026-09-03'\nknown:\n  heat.loss_kw:\n    v: 28\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_03_recount\n    at: the north wall at its measured U-value\n    of: '2026-09-03'\n    measure: loss_kw\n",
+          "head": "claim: the loss was overcounted - the north wall is double glazed already\nwrong_if: heat.loss_kw >= 31\nborn: '2026-09-03'\n",
+          "path": "captured/glazing_redo.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  log.cold_nights:\n    v: 7\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n    of: '2026-09-17'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-17'\nfolds: never\n"
+        }
+      ],
+      "brief": "title: \"Greenhouse, this winter\"\ntabs:\n  - title: \"The February night\"\n    occasion: \"opened when deciding whether to fire the old boiler or fix the glazing\"\n    serves: [s.2026_09_02_heating]\n    sections:\n      - title: \"What the numbers say\"\n        why: \"the shortfall and the length of the snap are the numbers the decision turns on\"\n        pick: [heat., log., when.first_cold_night, c.]\n        as: cards\n    shape: {entries: 9, judgments: 3, flagged: 0, blocked: 0}\n",
+      "as_of": "2026-09-17",
+      "changed": [
+        "log.cold_nights"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "c.boiler_short",
+          "c.season_plan",
+          "c.short_snap",
+          "doc.boiler_sheet",
+          "heat.boiler_kw",
+          "heat.deficit_kw",
+          "heat.loss_kw",
+          "log.cold_nights",
+          "q.second_boiler",
+          "run.night_log",
+          "s.2026_09_02_heating",
+          "when.first_cold_night"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {},
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [
+          "c.season_plan: log.cold_nights differs from its snapshot (3 -> 7) - re-review, or refresh seen"
+        ],
+        "falsified": [
+          "c.short_snap: wrong_if holds (log.cold_nights > 5) - broken by its own condition"
+        ],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "c.boiler_short": {
+            "predicate_references": [
+              "heat.boiler_kw",
+              "heat.loss_kw"
+            ],
+            "page_references": []
+          },
+          "c.short_snap": {
+            "predicate_references": [
+              "log.cold_nights"
+            ],
+            "page_references": []
+          },
+          "c.season_plan": {
+            "predicate_references": [
+              "when.first_cold_night"
+            ],
+            "page_references": []
+          }
+        },
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "remeasure-same-day",
+      "record": "meta:\n  updated: 2026-09-03\n  name: Greenhouse\n  scope: Whether the old boiler can hold the greenhouse above 12°C through February\n    - the base record, a recipe beside three of its readings, and one hypothesis that\n    reads one of them.\nsources:\n  s.2026_09_02_heating:\n    asked: Can we keep the greenhouse above 12°C through February on the old boiler?\n    name: 'the heating question, as this session read it: a shortfall in kilowatts,\n      not a yes or no'\n    of: this session\n    read: '2026-09-02'\n  doc.boiler_sheet:\n    name: the boiler's service sheet\n    file: boiler/service-2025.pdf\n    read: '2026-09-02'\n  run.night_log:\n    name: the logger's nightly readings - one line per night below -5°C, counted from\n      the file it writes\n    of: readings.txt beside this record, read by the recipe the count names\n    read: '2026-09-02'\nknown:\n  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: boiler output\n    from: doc.boiler_sheet\n    measure: boiler_kw\n  heat.loss_kw:\n    v: 31\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_02_heating\n    at: worked out from the glazing area during the session\n    of: '2026-09-17'\n    measure: loss_kw\n  heat.deficit_kw:\n    rule: heat.loss_kw - heat.boiler_kw\n    name: shortfall on the coldest night\n  log.cold_nights:\n    v: 3\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n  when.first_cold_night:\n    v: '2027-02-01'\n    name: first night that matters\n    from: s.2026_09_02_heating\nopen:\n  q.second_boiler: is a second boiler cheaper than glazing the north wall?\njudgments:\n  c.boiler_short:\n    rests_on:\n    - heat.boiler_kw\n    - heat.loss_kw\n    - heat.deficit_kw\n    verdict: the old boiler cannot hold 12°C on the coldest February night\n    because: It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW\n      - a shortfall of {{heat.deficit_kw}} kW before any wind.\n    wrong_if: heat.loss_kw <= heat.boiler_kw\n    seen:\n      heat.boiler_kw: 24\n      heat.loss_kw: 31\n      heat.deficit_kw: heat.loss_kw - heat.boiler_kw\n  c.short_snap:\n    rests_on:\n    - log.cold_nights\n    - run.night_log\n    verdict: the cold snap is short - a bigger boiler is not worth buying for it\n    because: The logger saw {{log.cold_nights}} nights below -5°C last winter.\n    wrong_if: log.cold_nights > 5\n    seen:\n      log.cold_nights: 3\n      run.night_log: read 2026-09-02\n  c.season_plan:\n    rests_on:\n    - when.first_cold_night\n    - log.cold_nights\n    verdict: the glazing can wait for January\n    because: Nothing matters before {{when.first_cold_night}}, and the snap ran {{log.cold_nights}}\n      nights.\n    wrong_if: when.first_cold_night < \"2027-01-01\"\n    seen:\n      when.first_cold_night: '2027-02-01'\n      log.cold_nights: 3\n",
+      "hypotheses": [],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  heat.loss_kw:\n    v: 28\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_02_heating\n    at: measured by test_recipe\n    of: '2026-09-17'\n    measure: loss_kw\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-17'\nfolds: never\n"
+        }
+      ],
+      "brief": "title: \"Greenhouse, this winter\"\ntabs:\n  - title: \"The February night\"\n    occasion: \"opened when deciding whether to fire the old boiler or fix the glazing\"\n    serves: [s.2026_09_02_heating]\n    sections:\n      - title: \"What the numbers say\"\n        why: \"the shortfall and the length of the snap are the numbers the decision turns on\"\n        pick: [heat., log., when.first_cold_night, c.]\n        as: cards\n    shape: {entries: 9, judgments: 3, flagged: 0, blocked: 0}\n",
+      "as_of": "2026-09-17",
+      "changed": [
+        "heat.loss_kw"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "c.boiler_short",
+          "c.season_plan",
+          "c.short_snap",
+          "doc.boiler_sheet",
+          "heat.boiler_kw",
+          "heat.deficit_kw",
+          "heat.loss_kw",
+          "log.cold_nights",
+          "q.second_boiler",
+          "run.night_log",
+          "s.2026_09_02_heating",
+          "when.first_cold_night"
+        ],
+        "contested": {},
+        "refused": {
+          "heat.loss_kw": {
+            "hypothesis": "tree/here",
+            "allowed": false,
+            "reason": "a reading of the same day"
+          }
+        },
+        "reversals": {},
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "c.boiler_short": {
+            "predicate_references": [
+              "heat.boiler_kw",
+              "heat.loss_kw"
+            ],
+            "page_references": []
+          },
+          "c.short_snap": {
+            "predicate_references": [
+              "log.cold_nights"
+            ],
+            "page_references": []
+          },
+          "c.season_plan": {
+            "predicate_references": [
+              "when.first_cold_night"
+            ],
+            "page_references": []
+          }
+        },
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "remeasure-contested",
+      "record": "meta:\n  updated: 2026-09-03\n  name: Greenhouse\n  scope: Whether the old boiler can hold the greenhouse above 12°C through February\n    - the base record, a recipe beside three of its readings, and one hypothesis that\n    reads one of them.\nsources:\n  s.2026_09_02_heating:\n    asked: Can we keep the greenhouse above 12°C through February on the old boiler?\n    name: 'the heating question, as this session read it: a shortfall in kilowatts,\n      not a yes or no'\n    of: this session\n    read: '2026-09-02'\n  doc.boiler_sheet:\n    name: the boiler's service sheet\n    file: boiler/service-2025.pdf\n    read: '2026-09-02'\n  run.night_log:\n    name: the logger's nightly readings - one line per night below -5°C, counted from\n      the file it writes\n    of: readings.txt beside this record, read by the recipe the count names\n    read: '2026-09-02'\nknown:\n  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: boiler output\n    from: doc.boiler_sheet\n    measure: boiler_kw\n  heat.loss_kw:\n    v: 31\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_02_heating\n    at: worked out from the glazing area during the session\n    of: '2026-09-02'\n    measure: loss_kw\n  heat.deficit_kw:\n    rule: heat.loss_kw - heat.boiler_kw\n    name: shortfall on the coldest night\n  log.cold_nights:\n    v: 3\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n  when.first_cold_night:\n    v: '2027-02-01'\n    name: first night that matters\n    from: s.2026_09_02_heating\nopen:\n  q.second_boiler: is a second boiler cheaper than glazing the north wall?\njudgments:\n  c.boiler_short:\n    rests_on:\n    - heat.boiler_kw\n    - heat.loss_kw\n    - heat.deficit_kw\n    verdict: the old boiler cannot hold 12°C on the coldest February night\n    because: It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW\n      - a shortfall of {{heat.deficit_kw}} kW before any wind.\n    wrong_if: heat.loss_kw <= heat.boiler_kw\n    seen:\n      heat.boiler_kw: 24\n      heat.loss_kw: 31\n      heat.deficit_kw: heat.loss_kw - heat.boiler_kw\n  c.short_snap:\n    rests_on:\n    - log.cold_nights\n    - run.night_log\n    verdict: the cold snap is short - a bigger boiler is not worth buying for it\n    because: The logger saw {{log.cold_nights}} nights below -5°C last winter.\n    wrong_if: log.cold_nights > 5\n    seen:\n      log.cold_nights: 3\n      run.night_log: read 2026-09-02\n  c.season_plan:\n    rests_on:\n    - when.first_cold_night\n    - log.cold_nights\n    verdict: the glazing can wait for January\n    because: Nothing matters before {{when.first_cold_night}}, and the snap ran {{log.cold_nights}}\n      nights.\n    wrong_if: when.first_cold_night < \"2027-01-01\"\n    seen:\n      when.first_cold_night: '2027-02-01'\n      log.cold_nights: 3\n",
+      "hypotheses": [
+        {
+          "name": "glazing_redo",
+          "document": "sources:\n  s.2026_09_03_recount:\n    asked: Recount the loss with the north wall as it is, not as the plan drew it.\n    name: 'the recount, as this session read it: the same wall at its real U-value'\n    of: this session\n    read: '2026-09-03'\nknown:\n  heat.loss_kw:\n    v: 28\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_03_recount\n    at: the north wall at its measured U-value\n    of: '2026-09-03'\n    measure: loss_kw\n",
+          "head": "claim: the loss was overcounted - the north wall is double glazed already\nwrong_if: heat.loss_kw >= 31\nborn: '2026-09-03'\n",
+          "path": "captured/glazing_redo.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  heat.loss_kw:\n    v: 30\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_03_recount\n    at: measured by test_recipe\n    of: '2026-09-17'\n    measure: loss_kw\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-17'\nfolds: never\n"
+        }
+      ],
+      "brief": "title: \"Greenhouse, this winter\"\ntabs:\n  - title: \"The February night\"\n    occasion: \"opened when deciding whether to fire the old boiler or fix the glazing\"\n    serves: [s.2026_09_02_heating]\n    sections:\n      - title: \"What the numbers say\"\n        why: \"the shortfall and the length of the snap are the numbers the decision turns on\"\n        pick: [heat., log., when.first_cold_night, c.]\n        as: cards\n    shape: {entries: 9, judgments: 3, flagged: 0, blocked: 0}\n",
+      "as_of": "2026-09-17",
+      "changed": [
+        "heat.loss_kw"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "c.boiler_short",
+          "c.season_plan",
+          "c.short_snap",
+          "doc.boiler_sheet",
+          "heat.boiler_kw",
+          "heat.deficit_kw",
+          "heat.loss_kw",
+          "log.cold_nights",
+          "q.second_boiler",
+          "run.night_log",
+          "s.2026_09_02_heating",
+          "when.first_cold_night"
+        ],
+        "contested": {
+          "heat.loss_kw": [
+            "glazing_redo",
+            "tree/here"
+          ]
+        },
+        "refused": {},
+        "reversals": {},
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {},
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "remeasure-page-bound",
+      "record": "meta:\n  updated: 2026-09-03\n  name: Greenhouse\n  scope: Whether the old boiler can hold the greenhouse above 12°C through February\n    - the base record, a recipe beside three of its readings, and one hypothesis that\n    reads one of them.\nsources:\n  s.2026_09_02_heating:\n    asked: Can we keep the greenhouse above 12°C through February on the old boiler?\n    name: 'the heating question, as this session read it: a shortfall in kilowatts,\n      not a yes or no'\n    of: this session\n    read: '2026-09-02'\n  doc.boiler_sheet:\n    name: the boiler's service sheet\n    file: boiler/service-2025.pdf\n    read: '2026-09-02'\n  run.night_log:\n    name: the logger's nightly readings - one line per night below -5°C, counted from\n      the file it writes\n    of: readings.txt beside this record, read by the recipe the count names\n    read: '2026-09-02'\nknown:\n  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: boiler output\n    from: doc.boiler_sheet\n    measure: boiler_kw\n  heat.loss_kw:\n    v: 31\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_02_heating\n    at: worked out from the glazing area during the session\n    of: '2026-09-02'\n    measure: loss_kw\n  heat.deficit_kw:\n    rule: heat.loss_kw - heat.boiler_kw\n    name: shortfall on the coldest night\n  log.cold_nights:\n    v: 3\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n  when.first_cold_night:\n    v: '2027-02-01'\n    name: first night that matters\n    from: s.2026_09_02_heating\nopen:\n  q.second_boiler: is a second boiler cheaper than glazing the north wall?\njudgments:\n  c.boiler_short:\n    rests_on:\n    - heat.boiler_kw\n    - heat.loss_kw\n    - heat.deficit_kw\n    verdict: the old boiler cannot hold 12°C on the coldest February night\n    because: It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW\n      - a shortfall of {{heat.deficit_kw}} kW before any wind.\n    wrong_if: heat.loss_kw <= heat.boiler_kw\n    seen:\n      heat.boiler_kw: 24\n      heat.loss_kw: 31\n      heat.deficit_kw: heat.loss_kw - heat.boiler_kw\n  c.short_snap:\n    rests_on:\n    - log.cold_nights\n    - run.night_log\n    verdict: the cold snap is short - a bigger boiler is not worth buying for it\n    because: The logger saw {{log.cold_nights}} nights below -5°C last winter.\n    wrong_if: log.cold_nights > 5\n    seen:\n      log.cold_nights: 3\n      run.night_log: read 2026-09-02\n  c.season_plan:\n    rests_on:\n    - when.first_cold_night\n    - log.cold_nights\n    verdict: the glazing can wait for January\n    because: Nothing matters before {{when.first_cold_night}}, and the snap ran {{log.cold_nights}}\n      nights.\n    wrong_if: when.first_cold_night < \"2027-01-01\"\n    seen:\n      when.first_cold_night: '2027-02-01'\n      log.cold_nights: 3\n  c.page_bound:\n    rests_on:\n    - log.cold_nights\n    - page.covered\n    verdict: the page covers more than the snap ran\n    wrong_if: page.covered < log.cold_nights\n    seen:\n      log.cold_nights: 3\n      page.covered: 0\n",
+      "hypotheses": [
+        {
+          "name": "glazing_redo",
+          "document": "sources:\n  s.2026_09_03_recount:\n    asked: Recount the loss with the north wall as it is, not as the plan drew it.\n    name: 'the recount, as this session read it: the same wall at its real U-value'\n    of: this session\n    read: '2026-09-03'\nknown:\n  heat.loss_kw:\n    v: 28\n    unit: kW\n    name: heat loss on a -5°C night\n    from: s.2026_09_03_recount\n    at: the north wall at its measured U-value\n    of: '2026-09-03'\n    measure: loss_kw\n",
+          "head": "claim: the loss was overcounted - the north wall is double glazed already\nwrong_if: heat.loss_kw >= 31\nborn: '2026-09-03'\n",
+          "path": "captured/glazing_redo.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  log.cold_nights:\n    v: 4\n    name: nights below -5°C the logger saw\n    from: run.night_log\n    measure: cold_nights\n    of: '2026-09-17'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-17'\nfolds: never\n"
+        }
+      ],
+      "brief": "title: \"Greenhouse, this winter\"\ntabs:\n  - title: \"The February night\"\n    occasion: \"opened when deciding whether to fire the old boiler or fix the glazing\"\n    serves: [s.2026_09_02_heating]\n    sections:\n      - title: \"What the numbers say\"\n        why: \"the shortfall and the length of the snap are the numbers the decision turns on\"\n        pick: [heat., log., when.first_cold_night, c.]\n        as: cards\n    shape: {entries: 9, judgments: 3, flagged: 0, blocked: 0}\n",
+      "as_of": "2026-09-17",
+      "changed": [
+        "log.cold_nights"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "c.boiler_short",
+          "c.page_bound",
+          "c.season_plan",
+          "c.short_snap",
+          "doc.boiler_sheet",
+          "heat.boiler_kw",
+          "heat.deficit_kw",
+          "heat.loss_kw",
+          "log.cold_nights",
+          "page.covered",
+          "q.second_boiler",
+          "run.night_log",
+          "s.2026_09_02_heating",
+          "when.first_cold_night"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {},
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [
+          "c.page_bound: log.cold_nights differs from its snapshot (3 -> 4) - re-review, or refresh seen",
+          "c.season_plan: log.cold_nights differs from its snapshot (3 -> 4) - re-review, or refresh seen"
+        ],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "c.boiler_short": {
+            "predicate_references": [
+              "heat.boiler_kw",
+              "heat.loss_kw"
+            ],
+            "page_references": []
+          },
+          "c.short_snap": {
+            "predicate_references": [
+              "log.cold_nights"
+            ],
+            "page_references": []
+          },
+          "c.season_plan": {
+            "predicate_references": [
+              "when.first_cold_night"
+            ],
+            "page_references": []
+          },
+          "c.page_bound": {
+            "predicate_references": [
+              "log.cold_nights",
+              "page.covered"
+            ],
+            "page_references": [
+              "page.covered"
+            ]
+          }
+        },
+        "red": false,
+        "page_bound": [
+          {
+            "id": "c.page_bound",
+            "pages": [
+              "page.covered"
+            ],
+            "readings": [
+              "log.cold_nights"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "untaken",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.value:\n    name: Value\n    v: 1\n    of: 2026-09-18\n  p.other:\n    v: 2\n    of: 2026-09-18\nsources:\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\njudgments:\n  d.go:\n    verdict: go\n    because: first grounds\n    rests_on:\n    - p.value\n    seen:\n      p.value: 1\n    wrong_if: p.value > 2\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "judgments:\n  d.go:\n    verdict: stop\n    because: new grounds\n    rests_on:\n    - p.value\n    seen:\n      p.value: 1\n    wrong_if: p.value > 9\n",
+          "head": "{}\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    v: 2\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": null,
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "d.go",
+          "p.other",
+          "p.value",
+          "s.now"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {
+          "d.go": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the standing judgment holds, and its wrong_if has not fired"
+          }
+        },
+        "untaken": {
+          "d.go": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the standing judgment holds, and its wrong_if has not fired"
+          }
+        },
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "d.go": {
+            "predicate_references": [
+              "p.value"
+            ],
+            "page_references": []
+          }
+        },
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "holes",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.value:\n    name: Value\n    v: 1\n    of: 2026-09-18\n  p.other:\n    v: 2\n    of: 2026-09-18\nsources:\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "judgments:\n  d.new:\n    verdict: wait\n    rests_on:\n    - p.absent\n    seen:\n      p.absent: 1\n    wrong_if: p.absent > 2\n",
+          "head": "{}\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    v: 2\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": null,
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "p.other",
+          "p.value",
+          "s.now"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {},
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [],
+        "holes": [
+          "d.new: rests on p.absent, which is not an entry",
+          "d.new: prose, not an evaluable predicate - and nothing says why not, so it can never be re-checked"
+        ],
+        "head_falsified": {},
+        "judgments": {
+          "d.new": {
+            "predicate_references": [
+              "p.absent"
+            ],
+            "page_references": []
+          }
+        },
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "drops-needed",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.value:\n    name: Value\n    v: 1\n    of: 2026-09-18\n  p.other:\n    v: 2\n    of: 2026-09-18\nsources:\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\njudgments:\n  d.go:\n    verdict: go\n    because: first grounds\n    rests_on:\n    - p.value\n    - p.other\n    seen:\n      p.value: 1\n      p.other: 2\n    wrong_if: p.value < 2\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "judgments:\n  d.go:\n    verdict: stop\n    because: new grounds\n    rests_on:\n    - p.value\n    seen:\n      p.value: 1\n    wrong_if: p.value > 9\n",
+          "head": "{}\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    v: 2\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": null,
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "d.go",
+          "p.other",
+          "p.value",
+          "s.now"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {
+          "d.go": {
+            "hypothesis": "trial",
+            "allowed": true,
+            "reason": "its wrong_if holds (p.value < 2)"
+          }
+        },
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {
+          "d.go": [
+            "p.other"
+          ]
+        },
+        "moved": [],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "d.go": {
+            "predicate_references": [
+              "p.value"
+            ],
+            "page_references": []
+          }
+        },
+        "red": false,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "head-fired",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.value:\n    name: Value\n    v: 1\n    of: 2026-09-18\n  p.other:\n    v: 2\n    of: 2026-09-18\nsources:\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "known:\n  p.next:\n    v: 3\n",
+          "head": "claim: A test\nwrong_if: p.value > 0\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    v: 2\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": null,
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "p.other",
+          "p.value",
+          "s.now"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {},
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {
+          "trial": "p.value > 0"
+        },
+        "judgments": {},
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "page-fired",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.value:\n    name: Value\n    from: s.now\n    v: 1\n    of: 2026-09-18\n  p.other:\n    from: s.extra\n    v: 2\n    of: 2026-09-18\nsources:\n  s.extra:\n    asked: Other request\n    read: 2026-09-19\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\njudgments:\n  v.layout:\n    verdict: current\n    rests_on:\n    - s.now\n    - page.unserved\n    seen:\n      s.now: read 2026-09-19\n      page.unserved: 0\n    wrong_if: page.unserved > 0\n    born: 2026-09-18\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "judgments:\n  v.layout:\n    verdict: replacement\n    rests_on:\n    - s.now\n    - page.unserved\n    seen:\n      s.now: read 2026-09-19\n      page.unserved: 0\n    wrong_if: page.unserved > 2\n",
+          "head": "{}\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    from: s.now\n    v: 2\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n",
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "p.other",
+          "p.value",
+          "page.unserved",
+          "s.extra",
+          "s.now",
+          "v.layout"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {
+          "v.layout": {
+            "hypothesis": "trial",
+            "allowed": true,
+            "reason": "its sign holds (page.unserved > 0) with its tab intact - page.unserved is 1"
+          }
+        },
+        "untaken": {},
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "v.layout": {
+            "predicate_references": [
+              "page.unserved"
+            ],
+            "page_references": [
+              "page.unserved"
+            ]
+          }
+        },
+        "red": false,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "page-cut",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.value:\n    name: Value\n    from: s.now\n    v: 1\n    of: 2026-09-18\n  p.other:\n    v: 2\n    of: 2026-09-18\nsources:\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\njudgments:\n  v.layout:\n    verdict: current\n    rests_on:\n    - s.now\n    - page.unserved\n    seen:\n      s.now: read 2026-09-19\n      page.unserved: 0\n    wrong_if: page.unserved > 0\n    born: 2026-09-18\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "judgments:\n  v.layout:\n    verdict: replacement\n    rests_on:\n    - s.now\n    - page.unserved\n    seen:\n      s.now: read 2026-09-19\n      page.unserved: 0\n    wrong_if: page.unserved > 2\n",
+          "head": "{}\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    from: s.now\n    v: 2\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": "tabs:\n- title: Now\n  serves: [s.absent]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n",
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "p.other",
+          "p.value",
+          "page.unserved",
+          "s.now",
+          "v.layout"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {
+          "v.layout": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the brief no longer carries what it decided - no tab's sections earn s.now - restore the tab, then re-decide"
+          }
+        },
+        "untaken": {
+          "v.layout": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the brief no longer carries what it decided - no tab's sections earn s.now - restore the tab, then re-decide"
+          }
+        },
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "v.layout": {
+            "predicate_references": [
+              "page.unserved"
+            ],
+            "page_references": [
+              "page.unserved"
+            ]
+          }
+        },
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "page-base-only",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.value:\n    name: Value\n    from: s.now\n    v: 1\n    of: 2026-09-18\n  p.other:\n    from: s.extra\n    v: 2\n    of: 2026-09-18\nsources:\n  s.extra:\n    asked: Other request\n    read: 2026-09-19\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\njudgments:\n  v.layout:\n    verdict: current\n    rests_on:\n    - s.now\n    - page.spill\n    seen:\n      s.now: read 2026-09-19\n      page.spill: 0\n    wrong_if: page.spill > 1\n    born: 2026-09-18\n  d.bound:\n    verdict: stable\n    rests_on:\n    - p.value\n    seen:\n      p.value: 1\n    wrong_if: p.value > 3\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "judgments:\n  v.layout:\n    verdict: replacement\n    rests_on:\n    - s.now\n    - page.spill\n    seen:\n      s.now: read 2026-09-19\n      page.spill: 0\n    wrong_if: page.spill > 2\n",
+          "head": "{}\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    from: s.now\n    v: 99\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n",
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": false,
+      "expected": {
+        "base_ids": [
+          "d.bound",
+          "p.other",
+          "p.value",
+          "page.spill",
+          "s.extra",
+          "s.now",
+          "v.layout"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {
+          "v.layout": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the standing judgment holds, and its wrong_if has not fired"
+          }
+        },
+        "untaken": {
+          "v.layout": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the standing judgment holds, and its wrong_if has not fired"
+          }
+        },
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [
+          "d.bound: wrong_if holds (p.value > 3) - broken by its own condition"
+        ],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "v.layout": {
+            "predicate_references": [
+              "page.spill"
+            ],
+            "page_references": [
+              "page.spill"
+            ]
+          },
+          "d.bound": {
+            "predicate_references": [
+              "p.value"
+            ],
+            "page_references": []
+          }
+        },
+        "red": true,
+        "page_bound": []
+      }
+    },
+    {
+      "name": "page-base-only-nf",
+      "record": "schema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  p.nonfinite:\n    v: .nan\n  p.value:\n    name: Value\n    from: s.now\n    v: 1\n    of: 2026-09-18\n  p.other:\n    from: s.extra\n    v: 2\n    of: 2026-09-18\nsources:\n  s.extra:\n    asked: Other request\n    read: 2026-09-19\n  s.now:\n    asked: test the proposal\n    name: Trial session\n    read: 2026-09-19\njudgments:\n  v.layout:\n    verdict: current\n    rests_on:\n    - s.now\n    - page.spill\n    seen:\n      s.now: read 2026-09-19\n      page.spill: 0\n    wrong_if: page.spill > 1\n    born: 2026-09-18\n  d.bound:\n    verdict: stable\n    rests_on:\n    - p.value\n    seen:\n      p.value: 1\n    wrong_if: p.value > 3\n",
+      "hypotheses": [
+        {
+          "name": "trial",
+          "document": "judgments:\n  v.layout:\n    verdict: replacement\n    rests_on:\n    - s.now\n    - page.spill\n    seen:\n      s.now: read 2026-09-19\n      page.spill: 0\n    wrong_if: page.spill > 2\n",
+          "head": "{}\n",
+          "path": "captured/trial.yaml"
+        }
+      ],
+      "proposals": [
+        {
+          "name": "tree/here",
+          "document": "known:\n  p.value:\n    name: Value\n    from: s.now\n    v: 99\n    of: '2026-09-19'\n    at: measured by test_recipe\n",
+          "head": "claim: what the tree measures\nborn: '2026-09-19'\nfolds: never\n"
+        }
+      ],
+      "brief": "tabs:\n- title: Now\n  serves: [s.now]\n  sections:\n  - {title: Facts, pick: p.value, as: rows}\n",
+      "as_of": "2026-09-19",
+      "changed": [
+        "p.value"
+      ],
+      "nonfinite": true,
+      "expected": {
+        "base_ids": [
+          "d.bound",
+          "p.nonfinite",
+          "p.other",
+          "p.value",
+          "page.spill",
+          "s.extra",
+          "s.now",
+          "v.layout"
+        ],
+        "contested": {},
+        "refused": {},
+        "reversals": {
+          "v.layout": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the standing judgment holds, and its wrong_if has not fired"
+          }
+        },
+        "untaken": {
+          "v.layout": {
+            "hypothesis": "trial",
+            "allowed": false,
+            "reason": "the standing judgment holds, and its wrong_if has not fired"
+          }
+        },
+        "untakeable": [],
+        "drops_needed": {},
+        "moved": [],
+        "falsified": [
+          "d.bound: wrong_if holds (p.value > 3) - broken by its own condition"
+        ],
+        "holes": [],
+        "head_falsified": {},
+        "judgments": {
+          "v.layout": {
+            "predicate_references": [
+              "page.spill"
+            ],
+            "page_references": [
+              "page.spill"
+            ]
+          },
+          "d.bound": {
+            "predicate_references": [
+              "p.value"
+            ],
+            "page_references": []
+          }
+        },
+        "red": true,
+        "page_bound": []
+      }
+    }
+  ]
+}

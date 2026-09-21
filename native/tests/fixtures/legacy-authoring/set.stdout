@@ -1,0 +1,5 @@
+set p.alpha: 'old text' -> "new text" (as of 2026-09-19)
+rests on it:
+  MOVED     d.keep: p.alpha moved stale -> new text since it was reviewed - if it still holds: review d.keep
+
+the record needs a person on 1 judgment (1 moved, 0 falsified) - check says the rest

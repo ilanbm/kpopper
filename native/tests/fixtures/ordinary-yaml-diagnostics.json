@@ -1,0 +1,45 @@
+{
+  "oracle_revision": "f480ea6",
+  "cases": [
+    {
+      "name": "flow-missing-comma",
+      "source": "known: {p.a: {v: 1} p.b: {v: 2}}\n",
+      "expected": "while parsing a flow mapping in \"<unicode string>\", line 1, column 8: known: {p.a: {v: 1} p.b: {v: 2}} ^ expected ',' or"
+    },
+    {
+      "name": "flow-missing-brace",
+      "source": "known: {p.a: {v: 1}\n",
+      "expected": "while parsing a flow mapping in \"<unicode string>\", line 1, column 8: known: {p.a: {v: 1} ^ expected ',' or '}', but got"
+    },
+    {
+      "name": "block-bad-indent",
+      "source": "known:\n  p.a: {v: 1}\n p.b: {v: 2}\n",
+      "expected": "while parsing a block mapping in \"<unicode string>\", line 1, column 1: known: ^ expected <block end>, but found '<block "
+    },
+    {
+      "name": "missing-colon",
+      "source": "known:\n  p.a:\n    v: 1\n    broken\n",
+      "expected": "while scanning a simple key in \"<unicode string>\", line 4, column 5: broken ^ could not find expected ':' in \"<unicode s"
+    },
+    {
+      "name": "unicode-flow",
+      "source": "known:\n  café: {v: 1}\n  broken: [א, ב\n",
+      "expected": "while parsing a flow sequence in \"<unicode string>\", line 3, column 11: broken: [א, ב ^ expected ',' or ']', but got '<s"
+    },
+    {
+      "name": "unicode-missing-colon",
+      "source": "known:\n  café: {v: 1}\n  שבור\nnext: yes\n",
+      "expected": "while scanning a simple key in \"<unicode string>\", line 3, column 3: שבור ^ could not find expected ':' in \"<unicode str"
+    },
+    {
+      "name": "bad-quote",
+      "source": "known:\n  p.a: \"unterminated\n",
+      "expected": "while scanning a quoted scalar in \"<unicode string>\", line 2, column 8: p.a: \"unterminated ^ found unexpected end of str"
+    },
+    {
+      "name": "long-line",
+      "source": "known: {xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: {v: 1} broken: yes}\n",
+      "expected": "while parsing a flow mapping in \"<unicode string>\", line 1, column 8: known: {xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ... ^ expe"
+    }
+  ]
+}

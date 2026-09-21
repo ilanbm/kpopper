@@ -1,0 +1,14 @@
+meta:
+  updated: 2026-09-19
+known:
+  # the alpha value
+  p.aardvark:
+    v: 5
+  p.alpha:
+    v: 2        # inline note
+    of: 2026-09-01
+  # trailing note for alpha
+
+  p.beta:
+    v: 3
+    of: 2026-09-01

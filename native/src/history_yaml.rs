@@ -1,0 +1,1217 @@
+//! Strict history YAML values. Resolution follows the retained PyYAML 1.1 contract.
+//! The syntax parser does not choose scalar types or collapse mapping entries.
+use crate::{
+    Error, Result, require,
+    value::{Date, DateTime, FiniteFloat, Integer, MAX_DEPTH, MAX_VALUES, TypedValue},
+};
+use libyaml_safer::{EventData as Event, Mark, Parser, ScalarStyle, Scanner, TokenData};
+use num_bigint::BigInt;
+use regex::Regex;
+use std::{collections::BTreeSet, sync::LazyLock};
+
+pub const MAX_DOCUMENT_BYTES: usize = 16 * 1024 * 1024;
+static INT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\A(?:[-+]?0b[0-1_]+|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)|[-+]?0x[0-9a-fA-F_]+|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+)\z").unwrap()
+});
+static FLOAT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\A(?:[-+]?(?:[0-9][0-9_]*)\.[0-9_]*(?:[eE][-+][0-9]+)?|\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))\z").unwrap()
+});
+static STAMP: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\A[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:[Tt]|[ \t]+)[0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]*)?(?:[ \t]*(?:Z|[-+][0-9]{1,2}(?::[0-9]{2})?))?\z").unwrap()
+});
+static TIMESTAMP: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\A(?P<y>[0-9]{4})-(?P<m>[0-9]{1,2})-(?P<d>[0-9]{1,2})(?:(?:[Tt]|[ \t]+)(?P<h>[0-9]{1,2}):(?P<n>[0-9]{2}):(?P<s>[0-9]{2})(?:\.(?P<f>[0-9]*))?(?:[ \t]*(?P<z>Z|(?P<sign>[-+])(?P<zh>[0-9]{1,2})(?::(?P<zm>[0-9]{2}))?))?)?\z").unwrap()
+});
+fn invalid() -> Error {
+    Error("invalid_history_yaml".into())
+}
+fn recursive_alias(anchor: &str, mark: Mark) -> Error {
+    Error(format!(
+        "recursive_yaml_alias: anchor={anchor} at line {} column {}; records are acyclic; recursive YAML aliases cannot be represented",
+        mark.line + 1,
+        mark.column + 1
+    ))
+}
+// Merge/value tags are meaningful only as mapping keys, before flattening.
+#[derive(Clone, Debug)]
+enum Node {
+    Scalar(TypedValue),
+    NonFinite(crate::ordinary_value::NonFiniteFloat, Option<usize>),
+    List(Vec<Node>),
+    Map(Vec<(Node, Node)>),
+    Merge,
+    ValueKey(String),
+}
+/// Source mapping order is distinct from canonical identity ordering. Some retained
+/// readers use the source's printed representation as a clock-group key.
+#[derive(Clone, Debug)]
+pub enum SourceValue {
+    Scalar(TypedValue),
+    List(Vec<SourceValue>),
+    Map(Vec<(String, SourceValue)>),
+}
+impl SourceValue {
+    pub fn from_typed(value: &TypedValue) -> Self {
+        match value {
+            TypedValue::List(a) => Self::List(a.iter().map(Self::from_typed).collect()),
+            TypedValue::Map(m) => Self::Map(
+                m.iter()
+                    .map(|(k, v)| (k.clone(), Self::from_typed(v)))
+                    .collect(),
+            ),
+            _ => Self::Scalar(value.clone()),
+        }
+    }
+    pub fn typed(&self) -> TypedValue {
+        match self {
+            Self::Scalar(v) => v.clone(),
+            Self::List(a) => TypedValue::List(a.iter().map(Self::typed).collect()),
+            Self::Map(a) => {
+                TypedValue::Map(a.iter().map(|(k, v)| (k.clone(), v.typed())).collect())
+            }
+        }
+    }
+    pub fn get(&self, key: &str) -> Option<&Self> {
+        let Self::Map(a) = self else {
+            return None;
+        };
+        a.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
+}
+
+/// A PyYAML mapping key used only by legacy ordinary-record reads. Canonical
+/// history values continue to require text keys through [`SourceValue`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrdinaryKey(TypedValue);
+
+const ORDINARY_KEY_PREFIX: &str = "\0kpopper:ordinary-key:";
+
+fn float_integer(value: f64) -> Option<BigInt> {
+    if value == 0.0 {
+        return Some(BigInt::from(0));
+    }
+    let bits = value.to_bits();
+    let negative = bits >> 63 != 0;
+    let exponent = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1_u64 << 52) - 1);
+    let (significand, power) = if exponent == 0 {
+        (fraction, -1022 - 52)
+    } else {
+        ((1_u64 << 52) | fraction, exponent - 1023 - 52)
+    };
+    let mut integer = BigInt::from(significand);
+    if power >= 0 {
+        integer <<= power as usize;
+    } else {
+        let shift = (-power) as usize;
+        if shift >= 64 || significand & ((1_u64 << shift) - 1) != 0 {
+            return None;
+        }
+        integer >>= shift;
+    }
+    Some(if negative { -integer } else { integer })
+}
+
+fn numeric_key(key: &TypedValue) -> Option<BigInt> {
+    match key {
+        TypedValue::Bool(value) => Some(BigInt::from(u8::from(*value))),
+        TypedValue::Integer(value) => BigInt::parse_bytes(value.as_str().as_bytes(), 10),
+        TypedValue::Float(value) => float_integer(value.get()),
+        _ => None,
+    }
+}
+
+impl OrdinaryKey {
+    fn new(value: TypedValue) -> Result<Self> {
+        require(
+            !matches!(value, TypedValue::Map(_) | TypedValue::List(_)),
+            "invalid_yaml_key",
+        )?;
+        Ok(Self(value))
+    }
+    pub fn scalar(&self) -> &TypedValue {
+        &self.0
+    }
+    pub fn text_key(value: impl Into<String>) -> Self {
+        Self(TypedValue::Text(value.into()))
+    }
+    pub fn text(&self) -> Option<&str> {
+        match &self.0 {
+            TypedValue::Text(value) => Some(value),
+            _ => None,
+        }
+    }
+    pub(crate) fn python_eq(&self, other: &Self) -> bool {
+        match (numeric_key(&self.0), numeric_key(&other.0)) {
+            (Some(left), Some(right)) => left == right,
+            _ => match (&self.0, &other.0) {
+                (TypedValue::Float(left), TypedValue::Float(right)) => left.get() == right.get(),
+                _ => self.0 == other.0,
+            },
+        }
+    }
+    fn projected(&self) -> String {
+        match &self.0 {
+            TypedValue::Text(value) if !value.starts_with(ORDINARY_KEY_PREFIX) => value.clone(),
+            TypedValue::Text(value) => format!("{ORDINARY_KEY_PREFIX}t:{value}"),
+            TypedValue::Null => format!("{ORDINARY_KEY_PREFIX}k:n"),
+            TypedValue::Bool(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:b{}", u8::from(*value))
+            }
+            TypedValue::Integer(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:i{}", value.as_str())
+            }
+            TypedValue::Float(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:f{}", value.hex())
+            }
+            TypedValue::Date(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:d{}", value.as_str())
+            }
+            TypedValue::DateTime(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:z{}", value.as_str())
+            }
+            TypedValue::Map(_) | TypedValue::List(_) => unreachable!(),
+        }
+    }
+}
+
+/// Source-order, scalar-keyed representation for the legacy ordinary reader.
+/// Its projection is internal compatibility data, never a canonical identity.
+#[derive(Clone, Debug)]
+pub enum OrdinaryValue {
+    Scalar(TypedValue),
+    List(Vec<OrdinaryValue>),
+    Map(Vec<(OrdinaryKey, OrdinaryValue)>),
+}
+
+impl OrdinaryValue {
+    pub fn from_typed(value: &TypedValue) -> Self {
+        match value {
+            TypedValue::List(values) => Self::List(values.iter().map(Self::from_typed).collect()),
+            TypedValue::Map(values) => Self::Map(
+                values
+                    .iter()
+                    .map(|(key, value)| {
+                        (
+                            OrdinaryKey(TypedValue::Text(key.clone())),
+                            Self::from_typed(value),
+                        )
+                    })
+                    .collect(),
+            ),
+            _ => Self::Scalar(value.clone()),
+        }
+    }
+    pub fn get(&self, key: &str) -> Option<&Self> {
+        let Self::Map(values) = self else {
+            return None;
+        };
+        values
+            .iter()
+            .find(|(candidate, _)| candidate.text() == Some(key))
+            .map(|(_, value)| value)
+    }
+    pub fn strict_typed(&self) -> Result<TypedValue> {
+        Ok(match self {
+            Self::Scalar(value) => value.clone(),
+            Self::List(values) => TypedValue::List(
+                values
+                    .iter()
+                    .map(Self::strict_typed)
+                    .collect::<Result<_>>()?,
+            ),
+            Self::Map(values) => {
+                let mut out = std::collections::BTreeMap::new();
+                for (key, value) in values {
+                    let Some(key) = key.text() else {
+                        return Err(Error("invalid_yaml_key".into()));
+                    };
+                    require(
+                        out.insert(key.to_owned(), value.strict_typed()?).is_none(),
+                        "invalid_yaml_key",
+                    )?;
+                }
+                TypedValue::Map(out)
+            }
+        })
+    }
+    pub fn projected(&self) -> TypedValue {
+        match self {
+            Self::Scalar(value) => value.clone(),
+            Self::List(values) => TypedValue::List(values.iter().map(Self::projected).collect()),
+            Self::Map(values) => TypedValue::Map(
+                values
+                    .iter()
+                    .map(|(key, value)| (key.projected(), value.projected()))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+/// Recover a projected ordinary key. `None` means an ordinary text key that
+/// needed no escaping.
+pub(crate) fn projected_ordinary_key(key: &str) -> Option<TypedValue> {
+    let encoded = key.strip_prefix(ORDINARY_KEY_PREFIX)?;
+    if let Some(value) = encoded.strip_prefix("t:") {
+        return Some(TypedValue::Text(value.into()));
+    }
+    let value = encoded.strip_prefix("k:")?;
+    let mut value = value.chars();
+    let kind = value.next()?;
+    let text = value.as_str();
+    match kind {
+        'n' if text.is_empty() => Some(TypedValue::Null),
+        'b' => match text {
+            "0" => Some(TypedValue::Bool(false)),
+            "1" => Some(TypedValue::Bool(true)),
+            _ => None,
+        },
+        'i' => Integer::new(text).ok().map(TypedValue::Integer),
+        'f' => FiniteFloat::from_hex(text).ok().map(TypedValue::Float),
+        'd' => Date::new(text).ok().map(TypedValue::Date),
+        'z' => DateTime::new(text).ok().map(TypedValue::DateTime),
+        _ => None,
+    }
+}
+
+/// Convert an ordinary projection back into the strict string-keyed domain.
+/// Escaped text keys are restored; typed keys are rejected at any depth.
+pub(crate) fn strict_ordinary_projection(value: &TypedValue) -> Result<TypedValue> {
+    Ok(match value {
+        TypedValue::List(values) => TypedValue::List(
+            values
+                .iter()
+                .map(strict_ordinary_projection)
+                .collect::<Result<_>>()?,
+        ),
+        TypedValue::Map(values) => {
+            let mut out = std::collections::BTreeMap::new();
+            for (key, value) in values {
+                let key = match projected_ordinary_key(key) {
+                    Some(TypedValue::Text(key)) => key,
+                    Some(_) => return Err(Error("invalid_yaml_key".into())),
+                    None => key.clone(),
+                };
+                require(
+                    out.insert(key, strict_ordinary_projection(value)?)
+                        .is_none(),
+                    "invalid_yaml_key",
+                )?;
+            }
+            TypedValue::Map(out)
+        }
+        _ => value.clone(),
+    })
+}
+/// Scalar construction shared by read-only source identity observers. This does
+/// not alter the strict decoder or broaden its value algebra.
+pub(crate) fn ordinary_scalar(
+    value: &str,
+    style: ScalarStyle,
+    tag: Option<&str>,
+) -> Result<TypedValue> {
+    match scalar(value, style, tag)? {
+        Node::Scalar(v) => Ok(v),
+        Node::ValueKey(v) => Ok(TypedValue::Text(v)),
+        _ => Err(invalid()),
+    }
+}
+pub(crate) fn ordinary_key(value: TypedValue) -> Result<OrdinaryKey> {
+    OrdinaryKey::new(value)
+}
+pub(crate) fn ordinary_key_index(key: &OrdinaryKey) -> String {
+    key.projected()
+}
+/// Complete ordinary scalar construction. Strict scalar callers retain the
+/// finite-only ordinary_scalar/TypedValue façade above.
+pub(crate) fn ordinary_atom(
+    value: &str,
+    style: ScalarStyle,
+    tag: Option<&str>,
+) -> Result<crate::ordinary_value::Scalar> {
+    let explicit = tag.map(tag_name).transpose()?;
+    let kind = if let Some(ref name) = explicit {
+        if name.is_empty() {
+            resolve(value)
+        } else {
+            name
+        }
+    } else if style == ScalarStyle::Plain {
+        resolve(value)
+    } else {
+        "str"
+    };
+    if kind != "float" {
+        return ordinary_scalar(value, style, tag).map(crate::ordinary_value::Scalar::Finite);
+    }
+    let clean = value.replace('_', "").to_ascii_lowercase();
+    let (sign, body) = if let Some(v) = clean.strip_prefix('-') {
+        (-1., v)
+    } else {
+        (1., clean.strip_prefix('+').unwrap_or(&clean))
+    };
+    let parse = |v: &str| numeric_text(v).trim().parse::<f64>().map_err(|_| invalid());
+    let number = if body == ".nan" {
+        f64::NAN
+    } else if body == ".inf" {
+        f64::INFINITY
+    } else if body.contains(':') {
+        let mut value = 0.;
+        let mut base = 1.;
+        for part in body.rsplit(':') {
+            value += parse(part)? * base;
+            base *= 60.;
+        }
+        value
+    } else {
+        parse(body)?
+    };
+    Ok(if number.is_nan() && body != ".nan" {
+        crate::ordinary_value::Scalar::NonFinite(crate::ordinary_value::NonFiniteFloat::fresh_nan())
+    } else {
+        crate::ordinary_value::Scalar::from_float(sign * number)
+    })
+}
+pub(crate) fn ordinary_atom_key(
+    value: crate::ordinary_value::Scalar,
+    constructor: Option<usize>,
+) -> Result<crate::ordinary_source::Key> {
+    crate::ordinary_source::Key::new(value, constructor)
+}
+struct Reader<'a> {
+    parser: Parser<&'a [u8]>,
+    nodes: usize,
+    anchors: BTreeSet<String>,
+    ordinary_aliases: bool,
+    completed: std::collections::BTreeMap<String, Node>,
+    expanded_bytes: usize,
+}
+impl<'a> Reader<'a> {
+    fn next(&mut self) -> Result<(Event, Mark)> {
+        let parsed = self.parser.parse().map_err(|_| invalid())?;
+        let mark = parsed.start_mark;
+        let event = parsed.data;
+        let anchor = match &event {
+            Event::Scalar { anchor, .. }
+            | Event::SequenceStart { anchor, .. }
+            | Event::MappingStart { anchor, .. } => anchor,
+            Event::Alias { .. } if !self.ordinary_aliases => return Err(invalid()),
+            _ => return Ok((event, mark)),
+        };
+        if let Some(anchor) = anchor {
+            require(self.anchors.insert(anchor.clone()), "invalid_history_yaml")?;
+        }
+        Ok((event, mark))
+    }
+    fn node(&mut self, (event, mark): (Event, Mark), depth: usize) -> Result<Node> {
+        self.nodes += 1;
+        // Source keys and merge syntax count here; detached values have their own exact budget.
+        require(
+            depth <= MAX_DEPTH + 1 && self.nodes <= MAX_VALUES * 2,
+            "history_limit",
+        )?;
+        let anchor = match &event {
+            Event::Scalar { anchor, .. }
+            | Event::SequenceStart { anchor, .. }
+            | Event::MappingStart { anchor, .. } => anchor.clone(),
+            _ => None,
+        };
+        let node = match event {
+            Event::Alias { anchor } if self.ordinary_aliases => {
+                // Only completed anchors can be expanded: undefined and recursive
+                // aliases fail before cloning. Charge the complete expansion first.
+                let original = self.completed.get(&anchor).ok_or_else(|| {
+                    if self.anchors.contains(&anchor) {
+                        recursive_alias(&anchor, mark)
+                    } else {
+                        invalid()
+                    }
+                })?;
+                let (nodes, bytes) = node_cost(original, depth)?;
+                self.nodes = self.nodes.saturating_add(nodes);
+                self.expanded_bytes = self.expanded_bytes.saturating_add(bytes);
+                require(
+                    self.nodes <= MAX_VALUES * 2 && self.expanded_bytes <= MAX_DOCUMENT_BYTES,
+                    "history_limit",
+                )?;
+                Ok(original.clone())
+            }
+            Event::Scalar {
+                value, style, tag, ..
+            } => {
+                self.expanded_bytes = self.expanded_bytes.saturating_add(value.len());
+                require(self.expanded_bytes <= MAX_DOCUMENT_BYTES, "history_limit")?;
+                if self.ordinary_aliases {
+                    match ordinary_atom(&value, style, tag.as_deref()) {
+                        Ok(crate::ordinary_value::Scalar::NonFinite(v)) => Ok(Node::NonFinite(
+                            v,
+                            if v == crate::ordinary_value::NonFiniteFloat::NaN {
+                                None
+                            } else {
+                                Some(self.nodes)
+                            },
+                        )),
+                        _ => scalar(&value, style, tag.as_deref()),
+                    }
+                } else {
+                    scalar(&value, style, tag.as_deref())
+                }
+            }
+            Event::SequenceStart { tag, .. } => {
+                collection_tag(tag.as_deref(), "seq")?;
+                let mut values = Vec::new();
+                loop {
+                    let event = self.next()?;
+                    if matches!(event.0, Event::SequenceEnd) {
+                        break;
+                    }
+                    values.push(self.node(event, depth + 1)?);
+                }
+                Ok(Node::List(values))
+            }
+            Event::MappingStart { tag, .. } => {
+                collection_tag(tag.as_deref(), "map")?;
+                let mut pairs = Vec::new();
+                loop {
+                    let event = self.next()?;
+                    if matches!(event.0, Event::MappingEnd) {
+                        break;
+                    }
+                    let key = self.node(event, depth + 1)?;
+                    let event = self.next()?;
+                    pairs.push((key, self.node(event, depth + 1)?));
+                }
+                Ok(Node::Map(pairs))
+            }
+            _ => Err(invalid()),
+        }?;
+        if self.ordinary_aliases
+            && let Some(anchor) = anchor
+        {
+            let (nodes, bytes) = node_cost(&node, depth)?;
+            self.nodes = self.nodes.saturating_add(nodes);
+            self.expanded_bytes = self.expanded_bytes.saturating_add(bytes);
+            require(
+                self.nodes <= MAX_VALUES * 2 && self.expanded_bytes <= MAX_DOCUMENT_BYTES,
+                "history_limit",
+            )?;
+            self.completed.insert(anchor, node.clone());
+        }
+        Ok(node)
+    }
+}
+fn node_cost(node: &Node, depth: usize) -> Result<(usize, usize)> {
+    require(depth <= MAX_DEPTH + 1, "history_limit")?;
+    let mut nodes = 1usize;
+    let mut bytes = 0usize;
+    match node {
+        Node::Scalar(v) => bytes = v.canonical_bytes()?.len(),
+        Node::NonFinite(_, _) => bytes = 24,
+        Node::ValueKey(v) => bytes = v.len(),
+        Node::List(a) => {
+            for child in a {
+                let (n, b) = node_cost(child, depth + 1)?;
+                nodes = nodes.saturating_add(n);
+                bytes = bytes.saturating_add(b);
+            }
+        }
+        Node::Map(a) => {
+            for (key, value) in a {
+                for child in [key, value] {
+                    let (n, b) = node_cost(child, depth + 1)?;
+                    nodes = nodes.saturating_add(n);
+                    bytes = bytes.saturating_add(b);
+                }
+            }
+        }
+        Node::Merge => {}
+    }
+    require(
+        nodes <= MAX_VALUES * 2 && bytes <= MAX_DOCUMENT_BYTES,
+        "history_limit",
+    )?;
+    Ok((nodes, bytes))
+}
+fn tag_name(tag: &str) -> Result<String> {
+    if tag == "!" {
+        return Ok(String::new());
+    }
+    tag.strip_prefix("tag:yaml.org,2002:")
+        .map(str::to_owned)
+        .ok_or_else(invalid)
+}
+fn collection_tag(tag: Option<&str>, expected: &str) -> Result<()> {
+    if let Some(tag) = tag {
+        let name = tag_name(tag)?;
+        require(name.is_empty() || name == expected, "invalid_history_yaml")?;
+    }
+    Ok(())
+}
+fn scalar(text: &str, style: ScalarStyle, tag: Option<&str>) -> Result<Node> {
+    let explicit = tag.map(tag_name).transpose()?;
+    let kind = if let Some(ref name) = explicit {
+        if name.is_empty() { resolve(text) } else { name }
+    } else if style == ScalarStyle::Plain {
+        resolve(text)
+    } else {
+        "str"
+    };
+    Ok(Node::Scalar(match kind {
+        "str" => TypedValue::Text(text.into()),
+        "null" => TypedValue::Null,
+        "bool" => TypedValue::Bool(match text.to_ascii_lowercase().as_str() {
+            "yes" | "true" | "on" => true,
+            "no" | "false" | "off" => false,
+            _ => return Err(invalid()),
+        }),
+        "int" => TypedValue::Integer(integer(text)?),
+        "float" => TypedValue::Float(float(text)?),
+        "timestamp" => timestamp(text)?,
+        "merge" => return Ok(Node::Merge),
+        "value" => return Ok(Node::ValueKey(text.into())),
+        _ => return Err(invalid()),
+    }))
+}
+pub(crate) fn resolve(text: &str) -> &str {
+    match text {
+        "" | "~" | "null" | "Null" | "NULL" => "null",
+        "yes" | "Yes" | "YES" | "no" | "No" | "NO" | "true" | "True" | "TRUE" | "false"
+        | "False" | "FALSE" | "on" | "On" | "ON" | "off" | "Off" | "OFF" => "bool",
+        "<<" => "merge",
+        "=" => "value",
+        _ if INT.is_match(text) => "int",
+        _ if FLOAT.is_match(text) => "float",
+        _ if (text.len() == 10
+            && text.as_bytes()[4] == b'-'
+            && text.as_bytes()[7] == b'-'
+            && text
+                .bytes()
+                .enumerate()
+                .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit()))
+            || STAMP.is_match(text) =>
+        {
+            "timestamp"
+        }
+        _ => "str",
+    }
+}
+// Decimal digits accepted by the pinned Python Unicode 16 database. Implicit YAML
+// resolution remains ASCII-only; these are used only by numeric constructors.
+pub(crate) fn numeric_text(text: &str) -> String {
+    const ZEROES: &[u32] = &[
+        0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66, 0xce6, 0xd66,
+        0xde6, 0xe50, 0xed0, 0xf20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90,
+        0x1b50, 0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50, 0xabf0,
+        0xff10, 0x104a0, 0x10d30, 0x10d40, 0x11066, 0x110f0, 0x11136, 0x111d0, 0x112f0, 0x11450,
+        0x114d0, 0x11650, 0x116c0, 0x116d0, 0x116da, 0x11730, 0x118e0, 0x11950, 0x11bf0, 0x11c50,
+        0x11d50, 0x11da0, 0x11f50, 0x16130, 0x16a60, 0x16ac0, 0x16b50, 0x16d70, 0x1ccf0, 0x1d7ce,
+        0x1d7d8, 0x1d7e2, 0x1d7ec, 0x1d7f6, 0x1e140, 0x1e2f0, 0x1e4f0, 0x1e5f1, 0x1e950, 0x1fbf0,
+    ];
+    text.chars()
+        .map(|c| {
+            if c.is_ascii() {
+                return c;
+            }
+            ZEROES
+                .iter()
+                .find_map(|z| {
+                    (c as u32)
+                        .checked_sub(*z)
+                        .filter(|d| *d < 10)
+                        .map(|d| char::from(b'0' + d as u8))
+                })
+                .unwrap_or(c)
+        })
+        .collect()
+}
+fn integer(text: &str) -> Result<Integer> {
+    let clean = text.replace('_', "");
+    let (negative, value) = if let Some(s) = clean.strip_prefix('-') {
+        (true, s)
+    } else {
+        (false, clean.strip_prefix('+').unwrap_or(&clean))
+    };
+    let parse = |s: &str, base| -> Result<BigInt> {
+        let normalized = numeric_text(s);
+        let digits = normalized.trim();
+        let significant = digits
+            .trim_start_matches(['+', '-'])
+            .trim_start_matches('0');
+        let limit = match base {
+            2 => 14285,
+            8 => 4762,
+            16 => 3572,
+            _ => 4300,
+        };
+        require(significant.len() <= limit, "history_limit")?;
+        BigInt::parse_bytes(digits.as_bytes(), base).ok_or_else(invalid)
+    };
+    let mut number = if let Some(s) = value.strip_prefix("0b") {
+        parse(s, 2)?
+    } else if let Some(s) = value.strip_prefix("0x") {
+        parse(s, 16)?
+    } else if value.starts_with('0') {
+        parse(value, 8)?
+    } else if value.contains(':') {
+        let mut n = BigInt::from(0);
+        for part in value.split(':') {
+            n = n * 60 + parse(part, 10)?;
+            require(n.bits() <= 14285, "history_limit")?;
+        }
+        n
+    } else {
+        parse(value, 10)?
+    };
+    if negative {
+        number = -number;
+    }
+    let decimal = number.to_string();
+    require(
+        decimal.trim_start_matches('-').len() <= 4300,
+        "history_limit",
+    )?;
+    Integer::new(&decimal)
+}
+fn float(text: &str) -> Result<FiniteFloat> {
+    let clean = text.replace('_', "").to_ascii_lowercase();
+    let (sign, value) = if let Some(s) = clean.strip_prefix('-') {
+        (-1., s)
+    } else {
+        (1., clean.strip_prefix('+').unwrap_or(&clean))
+    };
+    let parse = |s: &str| numeric_text(s).trim().parse::<f64>().map_err(|_| invalid());
+    let number = if value.contains(':') {
+        // Python adds from the least significant sexagesimal component.
+        let mut result = 0.;
+        let mut base = 1.;
+        for part in value.rsplit(':') {
+            result += parse(part)? * base;
+            base *= 60.;
+        }
+        result
+    } else {
+        parse(value)?
+    };
+    FiniteFloat::new(sign * number)
+}
+fn timestamp(text: &str) -> Result<TypedValue> {
+    let c = TIMESTAMP.captures(text).ok_or_else(invalid)?;
+    let num = |name: &str| {
+        c.name(name)
+            .map_or(Ok(0), |v| v.as_str().parse::<u32>().map_err(|_| invalid()))
+    };
+    let date = format!("{:04}-{:02}-{:02}", num("y")?, num("m")?, num("d")?);
+    if c.name("h").is_none() {
+        return Ok(TypedValue::Date(Date::new(&date)?));
+    }
+    let mut value = format!("{date}T{:02}:{:02}:{:02}", num("h")?, num("n")?, num("s")?);
+    let fraction = c.name("f").map_or("", |v| v.as_str());
+    let fraction = format!("{:0<6}", &fraction[..fraction.len().min(6)]);
+    if fraction != "000000" {
+        value.push('.');
+        value.push_str(&fraction);
+    }
+    if c.name("z").is_some() {
+        let minutes = num("zh")? * 60 + num("zm")?;
+        require(minutes < 24 * 60, "invalid_history_yaml")?;
+        let sign = if minutes != 0 && c.name("sign").is_some_and(|s| s.as_str() == "-") {
+            '-'
+        } else {
+            '+'
+        };
+        value.push_str(&format!("{sign}{:02}:{:02}", minutes / 60, minutes % 60));
+    }
+    Ok(TypedValue::DateTime(DateTime::new(&value)?))
+}
+fn flatten(pairs: Vec<(Node, Node)>) -> Result<Vec<(Node, Node)>> {
+    let mut merged = Vec::new();
+    let mut own = Vec::new();
+    for (key, value) in pairs {
+        match key {
+            Node::Merge => match value {
+                Node::Map(pairs) => merged.extend(flatten(pairs)?),
+                Node::List(values) => {
+                    for value in values.into_iter().rev() {
+                        if let Node::Map(pairs) = value {
+                            merged.extend(flatten(pairs)?);
+                        } else {
+                            return Err(invalid());
+                        }
+                    }
+                }
+                _ => return Err(invalid()),
+            },
+            Node::ValueKey(text) => own.push((Node::Scalar(TypedValue::Text(text)), value)),
+            _ => own.push((key, value)),
+        }
+    }
+    merged.extend(own);
+    Ok(merged)
+}
+fn construct(node: Node) -> Result<SourceValue> {
+    match node {
+        Node::Scalar(v) => Ok(SourceValue::Scalar(v)),
+        Node::List(values) => Ok(SourceValue::List(
+            values.into_iter().map(construct).collect::<Result<_>>()?,
+        )),
+        Node::Map(pairs) => {
+            let mut values = Vec::new();
+            let mut keys = BTreeSet::new();
+            for (key, value) in flatten(pairs)? {
+                let Node::Scalar(TypedValue::Text(key)) = key else {
+                    return Err(Error("invalid_yaml_key".into()));
+                };
+                require(keys.insert(key.clone()), "invalid_yaml_key")?;
+                values.push((key, construct(value)?));
+            }
+            Ok(SourceValue::Map(values))
+        }
+        _ => Err(invalid()),
+    }
+}
+
+// Pure PyYAML differs from LibYAML in two lexical policies. Tabs may occur in
+// quoted/block content or comments, never token separators or plain scalars.
+// Version directives accept any 1.x; they do not change the 1.1 scalar resolver.
+fn source_for_parser(raw: &[u8]) -> Result<Vec<u8>> {
+    if !raw.contains(&b'\t') && !raw.windows(5).any(|w| w == b"%YAML") {
+        return Ok(raw.to_vec());
+    }
+    fn gap(raw: &[u8]) -> Result<()> {
+        let mut comment = false;
+        for c in std::str::from_utf8(raw).map_err(|_| invalid())?.chars() {
+            match c {
+                '#' => comment = true,
+                '\n' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}' => comment = false,
+                '\t' if !comment => return Err(invalid()),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+    let mut scanner = Scanner::new();
+    scanner.set_input(raw);
+    let mut end = 0;
+    let mut replacements = Vec::new();
+    let mut tokens = 0;
+    loop {
+        tokens += 1;
+        require(tokens <= MAX_VALUES * 8, "history_limit")?;
+        let token = Scanner::scan(&mut scanner).map_err(|_| invalid())?;
+        let start = token.start_mark.index as usize;
+        let stop = token.end_mark.index as usize;
+        require(start <= stop && stop <= raw.len(), "invalid_history_yaml")?;
+        if start > end {
+            gap(&raw[end..start])?;
+        }
+        let source = &raw[start..stop];
+        match token.data {
+            TokenData::Scalar {
+                style: ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted,
+                ..
+            } => {}
+            TokenData::Scalar {
+                style: ScalarStyle::Literal | ScalarStyle::Folded,
+                ..
+            } => {
+                gap(source
+                    .split(|c| *c == b'\n' || *c == b'\r')
+                    .next()
+                    .unwrap_or_default())?;
+            }
+            TokenData::VersionDirective { major: 1, minor } => {
+                require(!source.contains(&b'\t'), "invalid_history_yaml")?;
+                if minor != 1 && minor != 2 {
+                    replacements.push((start, stop));
+                }
+            }
+            TokenData::StreamEnd => break,
+            _ => require(!source.contains(&b'\t'), "invalid_history_yaml")?,
+        }
+        end = end.max(stop);
+    }
+    let mut result = raw.to_vec();
+    for (start, stop) in replacements.into_iter().rev() {
+        result.splice(start..stop, b"%YAML 1.1".iter().copied());
+    }
+    Ok(result)
+}
+
+pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
+    Ok(decode_source_document(raw)?.typed())
+}
+
+pub fn decode_source_document(raw: &[u8]) -> Result<SourceValue> {
+    decode_source(raw, true)
+}
+/// Ordinary physical sources may be empty or scalar; the caller owns their
+/// document-shape rules. History objects still require a mapping.
+pub fn decode_source_value(raw: &[u8]) -> Result<SourceValue> {
+    decode_source(raw, false)
+}
+
+/// Decode the permissive scalar-keyed mapping used by legacy ordinary reads.
+/// Strict history callers must continue to use `decode_source_*` above.
+pub fn decode_ordinary_source_value(raw: &[u8]) -> Result<OrdinaryValue> {
+    decode_full_ordinary_source_value(raw)?.try_finite()
+}
+/// Read ordinary source without claiming that it is a canonical history value.
+pub fn decode_full_ordinary_source_value(raw: &[u8]) -> Result<crate::ordinary_source::Source> {
+    let (node, empty) = decode_node(raw, false, true)?;
+    if empty {
+        return Ok(crate::ordinary_source::Source::from_typed(
+            &TypedValue::Null,
+        ));
+    }
+    let value = construct_full(node.ok_or_else(invalid)?)?;
+    value.projected().validate()?;
+    Ok(value)
+}
+fn construct_full(node: Node) -> Result<crate::ordinary_source::Source> {
+    use crate::{
+        ordinary_source::{Key, Source as S},
+        ordinary_value::Scalar,
+    };
+    Ok(match node {
+        Node::Scalar(v) => S::Scalar(Scalar::Finite(v)),
+        Node::NonFinite(v, _) => S::Scalar(Scalar::NonFinite(v)),
+        Node::List(v) => S::List(v.into_iter().map(construct_full).collect::<Result<_>>()?),
+        Node::Map(v) => {
+            let mut out = Vec::new();
+            for (k, v) in flatten(v)? {
+                let key = match k {
+                    Node::Scalar(v) => Key::new(Scalar::Finite(v), None)?,
+                    Node::NonFinite(v, c) => Key::new(Scalar::NonFinite(v), c)?,
+                    _ => return Err(Error("invalid_yaml_key".into())),
+                };
+                crate::ordinary_source::update(&mut out, key, construct_full(v)?);
+            }
+            S::Map(out)
+        }
+        _ => return Err(invalid()),
+    })
+}
+
+fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
+    let (node, empty) = decode_node(raw, mapping, false)?;
+    if empty {
+        return Ok(SourceValue::Scalar(TypedValue::Null));
+    }
+    let value = construct(node.ok_or_else(invalid)?)?;
+    require(
+        !mapping || matches!(value, SourceValue::Map(_)),
+        "invalid_schema",
+    )?;
+    validate_value(&value.typed(), MAX_DOCUMENT_BYTES)?;
+    Ok(value)
+}
+
+fn decode_node(raw: &[u8], mapping: bool, ordinary_aliases: bool) -> Result<(Option<Node>, bool)> {
+    require(raw.len() <= MAX_DOCUMENT_BYTES, "history_limit")?;
+    std::str::from_utf8(raw).map_err(|_| invalid())?;
+    let source = source_for_parser(raw)?;
+    let mut parser = Parser::new();
+    parser.set_input(source.as_slice());
+    let mut reader = Reader {
+        parser,
+        nodes: 0,
+        anchors: BTreeSet::new(),
+        ordinary_aliases,
+        completed: std::collections::BTreeMap::new(),
+        expanded_bytes: 0,
+    };
+    require(
+        matches!(reader.next()?.0, Event::StreamStart { .. }),
+        "invalid_history_yaml",
+    )?;
+    let start = reader.next()?;
+    if !mapping && matches!(start.0, Event::StreamEnd) {
+        return Ok((None, true));
+    }
+    require(
+        matches!(start.0, Event::DocumentStart { .. }),
+        "invalid_schema",
+    )?;
+    let event = reader.next()?;
+    let node = reader.node(event, 0)?;
+    require(
+        matches!(reader.next()?.0, Event::DocumentEnd { .. })
+            && matches!(reader.next()?.0, Event::StreamEnd),
+        "invalid_history_yaml",
+    )?;
+    Ok((Some(node), false))
+}
+
+/// Match history's compact ASCII JSON accounting, including escaped keys and dates.
+pub(crate) fn validate_value(value: &TypedValue, maximum: usize) -> Result<()> {
+    value.validate()?;
+    let mut pending = vec![value];
+    while let Some(item) = pending.pop() {
+        match item {
+            TypedValue::Integer(v) => require(
+                v.as_str().trim_start_matches('-').len() <= 4300,
+                "history_limit",
+            )?,
+            TypedValue::Map(v) => pending.extend(v.values()),
+            TypedValue::List(v) => pending.extend(v.iter()),
+            _ => {}
+        }
+    }
+    require(compact_json_size(value) <= maximum, "history_limit")
+}
+pub(crate) fn compact_json_size(v: &TypedValue) -> usize {
+    fn string(s: &str) -> usize {
+        2 + s
+            .chars()
+            .map(|c| match c {
+                '"' | '\\' | '\u{8}' | '\u{c}' | '\n' | '\r' | '\t' => 2,
+                c if !('\u{20}'..'\u{7f}').contains(&c) => {
+                    if (c as u32) > 0xffff {
+                        12
+                    } else {
+                        6
+                    }
+                }
+                _ => 1,
+            })
+            .sum::<usize>()
+    }
+    match v {
+        TypedValue::Null => 4,
+        TypedValue::Bool(true) => 4,
+        TypedValue::Bool(false) => 5,
+        TypedValue::Integer(v) => v.as_str().len(),
+        TypedValue::Float(v) => crate::identity::python_float(v.get()).len(),
+        TypedValue::Text(v) => string(v),
+        TypedValue::Date(v) => string(v.as_str()),
+        TypedValue::DateTime(v) => string(v.as_str()),
+        TypedValue::List(v) => {
+            2 + v.len().saturating_sub(1) + v.iter().map(compact_json_size).sum::<usize>()
+        }
+        TypedValue::Map(v) => {
+            2 + v.len().saturating_sub(1)
+                + v.iter()
+                    .map(|(k, v)| string(k) + 1 + compact_json_size(v))
+                    .sum::<usize>()
+        }
+    }
+}
+
+fn quote(text: &str) -> String {
+    // JSON escapes are valid in YAML; YAML line separators must additionally be escaped.
+    let json = serde_json::to_string(text).unwrap();
+    let mut out = String::new();
+    for c in json.chars() {
+        if ('\u{7f}'..='\u{9f}').contains(&c)
+            || matches!(
+                c,
+                '\u{2028}' | '\u{2029}' | '\u{feff}' | '\u{fffe}' | '\u{ffff}'
+            )
+        {
+            out.push_str(&format!("\\u{:04x}", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+pub fn encode_document(value: &TypedValue) -> Result<Vec<u8>> {
+    validate_value(value, MAX_DOCUMENT_BYTES)?;
+    require(matches!(value, TypedValue::Map(_)), "invalid_schema")?;
+    fn write(v: &TypedValue, out: &mut String) {
+        match v {
+            TypedValue::Null => out.push_str("null"),
+            TypedValue::Bool(v) => out.push_str(if *v { "true" } else { "false" }),
+            TypedValue::Integer(v) => out.push_str(&format!("!!int {}", quote(v.as_str()))),
+            TypedValue::Float(v) => out.push_str(&format!(
+                "!!float {}",
+                quote(&crate::identity::python_float(v.get()))
+            )),
+            TypedValue::Text(v) => out.push_str(&quote(v)),
+            TypedValue::Date(v) => out.push_str(&format!("!!timestamp {}", quote(v.as_str()))),
+            TypedValue::DateTime(v) => out.push_str(&format!("!!timestamp {}", quote(v.as_str()))),
+            TypedValue::List(v) => {
+                out.push('[');
+                for (i, v) in v.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    write(v, out);
+                }
+                out.push(']');
+            }
+            TypedValue::Map(v) => {
+                out.push('{');
+                for (i, (k, v)) in v.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str("? ");
+                    out.push_str(&quote(k));
+                    out.push_str(" : ");
+                    write(v, out);
+                }
+                out.push('}');
+            }
+        }
+    }
+    let mut out = String::new();
+    write(value, &mut out);
+    out.push('\n');
+    let raw = out.into_bytes();
+    require(decode_document(&raw)? == *value, "serialization_changed")?;
+    Ok(raw)
+}
+
+#[cfg(test)]
+mod ordinary_tests {
+    use super::*;
+
+    fn map(value: &OrdinaryValue) -> &[(OrdinaryKey, OrdinaryValue)] {
+        let OrdinaryValue::Map(value) = value else {
+            panic!("expected map")
+        };
+        value
+    }
+
+    fn integer(value: &OrdinaryValue) -> &str {
+        let OrdinaryValue::Scalar(TypedValue::Integer(value)) = value else {
+            panic!("expected integer")
+        };
+        value.as_str()
+    }
+
+    #[test]
+    fn ordinary_keys_follow_python_numeric_collisions_and_first_identity() {
+        let value =
+            decode_ordinary_source_value(b"on: 1\ntrue: 2\n1: 3\n1.0: 4\n\"true\": 5\n\"1\": 6\n")
+                .unwrap();
+        let values = map(&value);
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0].0.scalar(), &TypedValue::Bool(true));
+        assert_eq!(integer(&values[0].1), "4");
+        assert_eq!(values[1].0.text(), Some("true"));
+        assert_eq!(integer(&values[1].1), "5");
+        assert_eq!(values[2].0.text(), Some("1"));
+        assert_eq!(integer(&values[2].1), "6");
+    }
+
+    #[test]
+    fn ordinary_projection_escapes_reserved_text_keys() {
+        let raw = b"true: typed\n\"\\0kpopper:ordinary-key:k:b1\": text\n";
+        let value = decode_ordinary_source_value(raw).unwrap();
+        let TypedValue::Map(projected) = value.projected() else {
+            panic!("expected map")
+        };
+        assert_eq!(projected.len(), 2);
+        let decoded = projected
+            .keys()
+            .map(|key| projected_ordinary_key(key).unwrap())
+            .collect::<Vec<_>>();
+        assert!(decoded.contains(&TypedValue::Bool(true)));
+        assert!(decoded.contains(&TypedValue::Text("\0kpopper:ordinary-key:k:b1".into())));
+        assert_eq!(
+            strict_ordinary_projection(&value.projected())
+                .unwrap_err()
+                .0,
+            "invalid_yaml_key"
+        );
+
+        let text_only =
+            decode_ordinary_source_value(b"\"\\0kpopper:ordinary-key:k:b1\": text\n").unwrap();
+        let strict = text_only.strict_typed().unwrap();
+        assert_eq!(
+            strict_ordinary_projection(&text_only.projected()).unwrap(),
+            strict
+        );
+    }
+
+    #[test]
+    fn strict_decoders_still_reject_nontext_keys_recursively() {
+        let raw = b"p:\n  p.a:\n    v: {on: x}\n";
+        let ordinary = decode_ordinary_source_value(raw).unwrap();
+        assert_eq!(ordinary.strict_typed().unwrap_err().0, "invalid_yaml_key");
+        assert_eq!(decode_document(raw).unwrap_err().0, "invalid_yaml_key");
+        assert_eq!(
+            decode_source_document(raw).unwrap_err().0,
+            "invalid_yaml_key"
+        );
+    }
+
+    #[test]
+    fn ordinary_collection_keys_must_still_be_scalar() {
+        let error = decode_ordinary_source_value(b"? [a, b]\n: value\n").unwrap_err();
+        assert_eq!(error.0, "invalid_yaml_key");
+    }
+}
+
+#[cfg(test)]
+mod ordinary_alias_tests {
+    use super::*;
+    #[test]
+    fn ordinary_aliases_preserve_merge_precedence_and_typed_values() {
+        let raw=b"defaults: &base {p.a: {v: 2}, p.b: {v: 3}}\nknown:\n  <<: *base\n  p.a: {v: 4}\nalso_known: *base\n";
+        let actual = decode_ordinary_source_value(raw)
+            .unwrap()
+            .strict_typed()
+            .unwrap();
+        let expected=decode_document(b"defaults: {p.a: {v: 2}, p.b: {v: 3}}\nknown: {p.a: {v: 4}, p.b: {v: 3}}\nalso_known: {p.a: {v: 2}, p.b: {v: 3}}\n").unwrap();
+        assert_eq!(actual, expected);
+        for decode in [decode_source_document, decode_source_value] {
+            assert_eq!(decode(raw).unwrap_err().0, "invalid_history_yaml");
+        }
+        assert_eq!(decode_document(raw).unwrap_err().0, "invalid_history_yaml");
+    }
+    #[test]
+    fn ordinary_aliases_refuse_unknown_duplicate_and_recursive_anchors() {
+        for raw in [b"x: *missing\n".as_slice(), b"x: &x 1\ny: &x 2\n"] {
+            assert_eq!(
+                decode_ordinary_source_value(raw).unwrap_err().0,
+                "invalid_history_yaml"
+            );
+        }
+        for (raw, expected) in [
+            (
+                b"x: &x {next: *x}\n".as_slice(),
+                "recursive_yaml_alias: anchor=x at line 1 column 14; records are acyclic; recursive YAML aliases cannot be represented",
+            ),
+            (
+                b"x: &x [*x]\n",
+                "recursive_yaml_alias: anchor=x at line 1 column 8; records are acyclic; recursive YAML aliases cannot be represented",
+            ),
+            (
+                b"parameters: &loop {p.value: *loop}\n",
+                "recursive_yaml_alias: anchor=loop at line 1 column 29; records are acyclic; recursive YAML aliases cannot be represented",
+            ),
+        ] {
+            assert_eq!(decode_ordinary_source_value(raw).unwrap_err().0, expected);
+        }
+    }
+    #[test]
+    fn ordinary_alias_expansion_is_bounded_before_clone() {
+        let mut raw = "a0: &a0 [one, two, three, four]\n".to_owned();
+        for i in 1..24 {
+            raw += &format!(
+                "a{i}: &a{i} [*a{}, *a{}, *a{}, *a{}]\n",
+                i - 1,
+                i - 1,
+                i - 1,
+                i - 1
+            );
+        }
+        assert_eq!(
+            decode_ordinary_source_value(raw.as_bytes()).unwrap_err().0,
+            "history_limit"
+        );
+        let text = "x".repeat(300_000);
+        let raw = format!(
+            "base: &base '{text}'\naliases: [{}]\n",
+            vec!["*base"; 100].join(", ")
+        );
+        assert_eq!(
+            decode_ordinary_source_value(raw.as_bytes()).unwrap_err().0,
+            "history_limit"
+        );
+    }
+}

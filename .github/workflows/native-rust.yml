@@ -1,0 +1,253 @@
+name: native Rust platform acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'scripts/**'
+      - '.github/workflows/native-rust.yml'
+  workflow_dispatch:
+    inputs:
+      validation:
+        description: Test scope (final-fixes supplements the full 1e75c2c platform run)
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - final-fixes
+      target:
+        description: Platform matrix target to run
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - windows-x86_64
+  push:
+    branches: [codex/rust-platform-ci, codex/rust-checked-store-windows]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform:
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJSON(inputs.target == 'windows-x86_64'
+            && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop-native.exe"}]'
+            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop-native"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop-native"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop-native"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop-native"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop-native.exe"}]') }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      KPOPPER_CI_VALIDATION: ${{ inputs.validation || 'full' }}
+      ELAN_TOOLCHAIN: leanprover/lean4:v4.33.1
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596
+        with:
+          lake-package-directory: scripts/session/lean
+          auto-config: "false"
+          build: "false"
+          test: "false"
+          lint: "false"
+          use-mathlib-cache: "false"
+          use-github-cache: "false"
+      - name: Bind the selected Lean toolchain and record Rust
+        shell: bash
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          KPOPPER_CI_LEAN_ROOT=$(lean --print-prefix)
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            KPOPPER_CI_LEAN_ROOT=$(cygpath -m "$KPOPPER_CI_LEAN_ROOT")
+          fi
+          echo "KPOPPER_LEAN_ROOT=$KPOPPER_CI_LEAN_ROOT" >> "$GITHUB_ENV"
+          echo "$KPOPPER_CI_LEAN_ROOT/bin" >> "$GITHUB_PATH"
+          echo "KPOPPER_CI_RUSTC=$(rustc --version --verbose | tr '\n' ' ')" >> "$GITHUB_ENV"
+      - name: Build the existing ordinary Lean test resource
+        shell: bash
+        run: |
+          KPOPPER_CI_ORDINARY=$(python -c 'import os; from scripts.session.core import setup; print(setup(os.environ["KPOPPER_LEAN_ROOT"])["cache"])')
+          echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
+      - name: Restore Rust dependency and build cache
+        id: rust-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/target
+          key: native-rust-${{ matrix.target }}-${{ hashFiles('native/Cargo.lock') }}
+      - name: Initialize the platform evidence archive
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/native-evidence/commit.txt"
+          rustc --version --verbose > "$RUNNER_TEMP/native-evidence/rustc.txt"
+          printf '%s\n' "$KPOPPER_CI_VALIDATION" > "$RUNNER_TEMP/native-evidence/validation-scope.txt"
+      - name: Prepare resources for native integration tests
+        shell: python
+        env:
+          KPOPPER_CI_TARGET: ${{ matrix.target }}
+        run: |
+          import os, pathlib, shutil
+          root = pathlib.Path.cwd()
+          resources = pathlib.Path(os.environ['RUNNER_TEMP'])/'native-test-resources'
+          reasoning = resources/'reasoning'
+          reasoning.mkdir(parents=True)
+          target = os.environ['KPOPPER_CI_TARGET']
+          shutil.copy2(root/'scripts'/'reasoning'/'native'/(target + '.kpopper-runtime'), reasoning/(target + '.kpopper-runtime'))
+          shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), resources/'ordinary'/target)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
+      - name: Generate Windows history group vectors with the pinned Python reference
+        if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes'
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          oracle = temporary/'native-python-oracle'
+          commit = 'f480ea68f6dfd36c397388bb01844459cc578d81'
+          subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', commit], check=True)
+          subprocess.run(['git', 'worktree', 'add', '--detach', str(oracle), commit], check=True)
+          environment = temporary/'native-oracle-python'
+          subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True)
+          python = environment/'Scripts'/'python.exe'
+          subprocess.run([str(python), '-m', 'pip', 'install', 'PyYAML==6.0.3'], check=True)
+          fixture = temporary/'native-history-group.json'
+          fixture_root = str(temporary/'native-history-group-source')
+          prefix = chr(92)*2 + '?' + chr(92)
+          if not fixture_root.startswith(prefix):
+              fixture_root = prefix + fixture_root
+          subprocess.run([str(python), 'native/ci/generate_history_group_fixture.py',
+              '--oracle-root', str(oracle), '--output', str(fixture),
+              '--source-transaction-fixture', 'native/tests/fixtures/history-transactions.json',
+              '--fixture-root', fixture_root], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_HISTORY_GROUP_FIXTURE=' + str(fixture) + '\n')
+          (temporary/'native-evidence'/'python-group-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
+      - name: Test the native implementation (${{ inputs.validation || 'full' }})
+        working-directory: native
+        shell: bash
+        run: |
+          set -o pipefail
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export GIT_TRACE2_EVENT="$RUNNER_TEMP/native-evidence/git-trace.json"
+          fi
+          set -euo pipefail
+          {
+            case "$KPOPPER_CI_VALIDATION" in
+              full)
+                cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3'
+                ;;
+              final-fixes)
+                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib store::locking_tests
+                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib ingestion_orchestration::tests
+                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test cli --test public_update --test public_ingestion --test ingestion_hooks
+                ;;
+              *)
+                echo "Unsupported validation scope: $KPOPPER_CI_VALIDATION" >&2
+                exit 1
+                ;;
+            esac
+          } 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
+      - name: Compare ingestion and branch commands with the pinned Python reference
+        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          oracle_commit=f480ea68f6dfd36c397388bb01844459cc578d81
+          git fetch --no-tags --depth=1 origin "$oracle_commit"
+          git worktree add --detach "$RUNNER_TEMP/native-python-oracle" "$oracle_commit"
+          python -m venv "$RUNNER_TEMP/native-oracle-python"
+          "$RUNNER_TEMP/native-oracle-python/bin/python" -m pip install 'PyYAML==6.0.3'
+          export KPOP_SESSION_ORACLE_PYTHON="$RUNNER_TEMP/native-oracle-python/bin/python"
+          export KPOP_SESSION_ORACLE_ROOT="$RUNNER_TEMP/native-python-oracle"
+          export KPOPPER_NATIVE_RESOURCES="$RUNNER_TEMP/native-oracle-resources"
+          export KPOP_CONSOLIDATION_RESOURCES="$KPOPPER_NATIVE_RESOURCES"
+          export KPOPPER_NATIVE_CACHE="$RUNNER_TEMP/native-oracle-cache"
+          mkdir -p "$KPOPPER_NATIVE_RESOURCES/reasoning" "$KPOPPER_NATIVE_RESOURCES/ordinary"
+          cp scripts/reasoning/native/linux-x86_64.kpopper-runtime "$KPOPPER_NATIVE_RESOURCES/reasoning/"
+          cp -R "$KPOP_TEST_ORDINARY_PROGRAM" "$KPOPPER_NATIVE_RESOURCES/ordinary/linux-x86_64"
+          printf '%s\n' "$oracle_commit" > "$RUNNER_TEMP/native-evidence/python-oracle-commit.txt"
+          cargo test --manifest-path native/Cargo.toml --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' \
+            --test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation \
+            -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
+      - name: Retain test diagnostics before release compilation
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-test-evidence-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-evidence
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build the platform release
+        id: native-release
+        if: ${{ !cancelled() }}
+        working-directory: native
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
+      - name: Copy the executable and its verified native resources
+        id: native-bundle
+        if: ${{ !cancelled() && steps.native-release.outcome == 'success' }}
+        shell: python
+        env:
+          KPOPPER_CI_TARGET: ${{ matrix.target }}
+          KPOPPER_CI_BINARY: ${{ matrix.binary }}
+        run: |
+          import os, pathlib, shutil
+          root = pathlib.Path.cwd()
+          bundle = pathlib.Path(os.environ['RUNNER_TEMP'])/'native-bundle'
+          reasoning = bundle/'resources'/'reasoning'
+          ordinary = bundle/'resources'/'ordinary'/os.environ['KPOPPER_CI_TARGET']
+          reasoning.mkdir(parents=True)
+          shutil.copy2(root/'native'/'target'/'release'/os.environ['KPOPPER_CI_BINARY'], bundle/os.environ['KPOPPER_CI_BINARY'])
+          shutil.copy2(root/'scripts'/'reasoning'/'native'/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'), reasoning/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'))
+          shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), ordinary)
+      - name: Execute copied binary through public acceptance flows
+        id: native-acceptance
+        if: ${{ !cancelled() && steps.native-bundle.outcome == 'success' }}
+        env:
+          KPOPPER_CI_BINARY: ${{ matrix.binary }}
+        run: >-
+          python native/ci/platform_acceptance.py
+          --binary "${{ runner.temp }}/native-bundle/${{ matrix.binary }}"
+          --output "${{ runner.temp }}/native-evidence"
+      - name: Retain the exercised native bundle
+        if: ${{ !cancelled() && steps.native-acceptance.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-bundle-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-bundle
+          if-no-files-found: error
+          retention-days: 7
+      - name: Archive platform evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-rust-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-evidence
+          if-no-files-found: error
+      - name: Save reusable Rust dependencies after diagnostic runs
+        if: ${{ !cancelled() && steps.rust-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}

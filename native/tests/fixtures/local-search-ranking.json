@@ -1,0 +1,2389 @@
+{
+  "corpus": {
+    "read_mode": "frozen",
+    "record": "/fixture/GROUNDING.yaml",
+    "revision": "fixed",
+    "revision_kind": "search-corpus",
+    "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "rows": [
+      {
+        "ref": "node:p.alpha",
+        "id": "p.alpha",
+        "kind": "entry",
+        "scope": "record",
+        "status": "RECORDED",
+        "name": "Annual forecast",
+        "sources": [],
+        "dependencies": [],
+        "rule_dependencies": [],
+        "content": "Annual forecast grew to 42. Example alpha alpha.\nSecond line."
+      },
+      {
+        "ref": "node:p.other",
+        "id": "p.other",
+        "kind": "entry",
+        "scope": "record",
+        "status": "RECORDED",
+        "name": "α forecast",
+        "sources": [],
+        "dependencies": [],
+        "rule_dependencies": [],
+        "content": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text "
+      },
+      {
+        "ref": "node:s.source",
+        "id": "s.source",
+        "kind": "entry",
+        "scope": "record",
+        "status": "RECORDED",
+        "name": "Source evidence",
+        "sources": [],
+        "dependencies": [],
+        "rule_dependencies": [],
+        "content": "First\n0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line."
+      },
+      {
+        "ref": "node:i.İstanbul",
+        "id": "i.İstanbul",
+        "kind": "entry",
+        "scope": "record",
+        "status": "RECORDED",
+        "name": "İstanbul Kelvin ſ",
+        "sources": [],
+        "dependencies": [],
+        "rule_dependencies": [],
+        "content": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n"
+      },
+      {
+        "ref": "node:p.rule",
+        "id": "p.rule",
+        "kind": "entry",
+        "scope": "record",
+        "status": "RECORDED",
+        "name": "Calculated",
+        "sources": [],
+        "dependencies": [],
+        "rule_dependencies": [],
+        "content": "rule: {expr: p.alpha + 1}\n",
+        "calculation": {
+          "status": "ok",
+          "value": {
+            "rational": [
+              43,
+              1
+            ]
+          }
+        }
+      }
+    ],
+    "unindexed": [
+      {
+        "ref": "source:outside",
+        "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+      }
+    ]
+  },
+  "search": [
+    {
+      "args": {
+        "query": "alpha",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "alpha",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          },
+          {
+            "ref": "node:p.rule",
+            "id": "p.rule",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Calculated",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "calculation": {
+              "status": "ok",
+              "value": {
+                "rational": [
+                  43,
+                  1
+                ]
+              }
+            },
+            "excerpt": "rule: {expr: p.alpha + 1}\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 26,
+            "sha256": "8739994692f9153f0a94a6118cf679c19bb46d16e9312fc31fee0e3d9893d009"
+          },
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 40,
+            "line": 2,
+            "excerpt_truncated": true,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          },
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "alpha",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "alpha",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          }
+        ],
+        "omitted": 3,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "alpha",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "alpha",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          }
+        ],
+        "omitted": 3,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "alpha",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "alpha",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 4,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "forecast",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "forecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          },
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "forecast",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "forecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          }
+        ],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "forecast",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "forecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          }
+        ],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "forecast",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "forecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 2,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "alpha other",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "alpha other",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          },
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          },
+          {
+            "ref": "node:p.rule",
+            "id": "p.rule",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Calculated",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "calculation": {
+              "status": "ok",
+              "value": {
+                "rational": [
+                  43,
+                  1
+                ]
+              }
+            },
+            "excerpt": "rule: {expr: p.alpha + 1}\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 26,
+            "sha256": "8739994692f9153f0a94a6118cf679c19bb46d16e9312fc31fee0e3d9893d009"
+          },
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 40,
+            "line": 2,
+            "excerpt_truncated": true,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "alpha other",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "alpha other",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 3,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "alpha other",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "alpha other",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 3,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "alpha other",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "alpha other",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 4,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "שלום",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "שלום",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "שלום",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "שלום",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "שלום",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "שלום",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "שלום",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "שלום",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "I",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "I",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "I",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "I",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "I",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "I",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "I",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "I",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "İ",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "İ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "İ",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "İ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "İ",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "İ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "İ",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "İ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "ſ",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "ſ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "First\n0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          },
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "ſ",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "ſ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "First\n0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          }
+        ],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "ſ",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "ſ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "First\n0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          }
+        ],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "ſ",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "ſ",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 2,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "ß",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "ß",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "ß",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "ß",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "ß",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "ß",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "ß",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "ß",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "K",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "K",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "K",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "K",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "K",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "K",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:i.İstanbul",
+            "id": "i.İstanbul",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "İstanbul Kelvin ſ",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "I i ı İ K k K S s ſ ß Straße Σ σ ς\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 35,
+            "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "K",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "K",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "43",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "43",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.rule",
+            "id": "p.rule",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Calculated",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "calculation": {
+              "status": "ok",
+              "value": {
+                "rational": [
+                  43,
+                  1
+                ]
+              }
+            },
+            "excerpt": "rule: {expr: p.alpha + 1}\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 26,
+            "sha256": "8739994692f9153f0a94a6118cf679c19bb46d16e9312fc31fee0e3d9893d009"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "43",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "43",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.rule",
+            "id": "p.rule",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Calculated",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "calculation": {
+              "status": "ok",
+              "value": {
+                "rational": [
+                  43,
+                  1
+                ]
+              }
+            },
+            "excerpt": "rule: {expr: p.alpha + 1}\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 26,
+            "sha256": "8739994692f9153f0a94a6118cf679c19bb46d16e9312fc31fee0e3d9893d009"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "43",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "43",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.rule",
+            "id": "p.rule",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Calculated",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "calculation": {
+              "status": "ok",
+              "value": {
+                "rational": [
+                  43,
+                  1
+                ]
+              }
+            },
+            "excerpt": "rule: {expr: p.alpha + 1}\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 26,
+            "sha256": "8739994692f9153f0a94a6118cf679c19bb46d16e9312fc31fee0e3d9893d009"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "43",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "43",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "___",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "___",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "___",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "___",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "___",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "___",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "___",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "___",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "punctuation!!!",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "punctuation!!!",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "punctuation!!!",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "punctuation!!!",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "punctuation!!!",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "punctuation!!!",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "punctuation!!!",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "punctuation!!!",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "α βeta",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "α βeta",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "9 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 59,
+            "line": 2,
+            "excerpt_truncated": true,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          },
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "α βeta",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "α βeta",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "9 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 59,
+            "line": 2,
+            "excerpt_truncated": true,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          }
+        ],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "α βeta",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "α βeta",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "9 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 59,
+            "line": 2,
+            "excerpt_truncated": true,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          }
+        ],
+        "omitted": 1,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "α βeta",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "α βeta",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 2,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "alpha\u001cforecast",
+        "limit": 5,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "alpha\u001cforecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          },
+          {
+            "ref": "node:p.other",
+            "id": "p.other",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "α forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Revenue alpha dropped. יידיש עברית שלום.\nlong text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text long text",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": true,
+            "total_characters": 941,
+            "sha256": "2e9a624ef61627a72878c812e51ae6db7b43c5bbc7c968aa50c3280a6ad7b3de"
+          },
+          {
+            "ref": "node:p.rule",
+            "id": "p.rule",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Calculated",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "calculation": {
+              "status": "ok",
+              "value": {
+                "rational": [
+                  43,
+                  1
+                ]
+              }
+            },
+            "excerpt": "rule: {expr: p.alpha + 1}\n",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 26,
+            "sha256": "8739994692f9153f0a94a6118cf679c19bb46d16e9312fc31fee0e3d9893d009"
+          },
+          {
+            "ref": "node:s.source",
+            "id": "s.source",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Source evidence",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "123456789 0123456789 0123456789 0123456789 0123456789 0123456789 0123456789 the alpha source cites βeta.\nFinal 😀 line.",
+            "offset": 40,
+            "line": 2,
+            "excerpt_truncated": true,
+            "total_characters": 158,
+            "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+          }
+        ],
+        "omitted": 0,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "alpha\u001cforecast",
+        "limit": 1,
+        "chars": 6000
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [
+          {
+            "ref": "source:outside",
+            "reason": "outside allowed source roots; pass --source-root for an authorized directory"
+          }
+        ],
+        "query": "alpha\u001cforecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          }
+        ],
+        "omitted": 3,
+        "unindexed_count": 1,
+        "unindexed_omitted": 0
+      }
+    },
+    {
+      "args": {
+        "query": "alpha\u001cforecast",
+        "limit": 5,
+        "chars": 1200
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "alpha\u001cforecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [
+          {
+            "ref": "node:p.alpha",
+            "id": "p.alpha",
+            "kind": "entry",
+            "scope": "record",
+            "status": "RECORDED",
+            "name": "Annual forecast",
+            "sources": [],
+            "dependencies": [],
+            "rule_dependencies": [],
+            "excerpt": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+            "offset": 0,
+            "line": 1,
+            "excerpt_truncated": false,
+            "total_characters": 61,
+            "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+          }
+        ],
+        "omitted": 3,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    },
+    {
+      "args": {
+        "query": "alpha\u001cforecast",
+        "limit": 5,
+        "chars": 500
+      },
+      "value": {
+        "read_mode": "frozen",
+        "record": "/fixture/GROUNDING.yaml",
+        "revision": "fixed",
+        "revision_kind": "search-corpus",
+        "record_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "unindexed": [],
+        "query": "alpha\u001cforecast",
+        "scope": "Matches locate evidence; recorded claims, hypotheses and captured reports retain their own status. Source truth is not verified.",
+        "results": [],
+        "omitted": 4,
+        "unindexed_count": 1,
+        "unindexed_omitted": 1
+      }
+    }
+  ],
+  "read": [
+    {
+      "args": {
+        "ref": "node:p.alpha",
+        "revision": "fixed",
+        "offset": 0,
+        "length": 4000
+      },
+      "value": {
+        "ref": "node:p.alpha",
+        "revision": "fixed",
+        "scope": "record",
+        "status": "RECORDED",
+        "content": "Annual forecast grew to 42. Example alpha alpha.\nSecond line.",
+        "offset": 0,
+        "next_offset": null,
+        "complete": true,
+        "total_characters": 61,
+        "sha256": "197e458c1128938c9440449b877bf9ef79e0519bffee0ea89447532bc3df46d1"
+      }
+    },
+    {
+      "args": {
+        "ref": "node:i.İstanbul",
+        "revision": "fixed",
+        "offset": 2,
+        "length": 10
+      },
+      "value": {
+        "ref": "node:i.İstanbul",
+        "revision": "fixed",
+        "scope": "record",
+        "status": "RECORDED",
+        "content": "i ı İ K k ",
+        "offset": 2,
+        "next_offset": 12,
+        "complete": false,
+        "total_characters": 35,
+        "sha256": "52c71e2fa49921fdf519569e79b0232b424e1396855114d1ca4e68ba50f64ee9"
+      }
+    },
+    {
+      "args": {
+        "ref": "node:s.source",
+        "revision": "fixed",
+        "offset": 100,
+        "length": 20
+      },
+      "value": {
+        "ref": "node:s.source",
+        "revision": "fixed",
+        "scope": "record",
+        "status": "RECORDED",
+        "content": "6789 0123456789 the ",
+        "offset": 100,
+        "next_offset": 120,
+        "complete": false,
+        "total_characters": 158,
+        "sha256": "e0f2f800616d33f6da9265fbfbc7df7108121b2c6245cf17e036ffdad415fda1"
+      }
+    },
+    {
+      "args": {
+        "ref": "node:missing",
+        "revision": "fixed",
+        "offset": 0,
+        "length": 5
+      },
+      "error": "unknown search reference"
+    },
+    {
+      "args": {
+        "ref": "node:p.alpha",
+        "revision": "stale",
+        "offset": 0,
+        "length": 5
+      },
+      "error": "record, capture state or source changed; search again"
+    },
+    {
+      "args": {
+        "ref": "node:p.alpha",
+        "revision": "fixed",
+        "offset": -1,
+        "length": 5
+      },
+      "error": "offset must address this text; length must be 1..100000"
+    },
+    {
+      "args": {
+        "ref": "node:p.alpha",
+        "revision": "fixed",
+        "offset": 0,
+        "length": 100001
+      },
+      "error": "offset must address this text; length must be 1..100000"
+    }
+  ]
+}

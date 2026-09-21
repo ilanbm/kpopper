@@ -1,0 +1,86 @@
+[
+  {
+    "name": "GROUNDING.yaml:same-numeric-data-keys",
+    "before": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: {1: a}}\n  p.old: {v: {1: a}}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: {1: a}}\n  p.old: {v: {1: a}}\n"
+    },
+    "native_stderr": "invalid_history_value: snapshot mappings require string keys\n",
+    "oracle_failure": "_kpopper_runtime.history_contract.HistoryError: invalid_history_value: snapshot mappings require string keys"
+  },
+  {
+    "name": "GROUNDING.yaml:same-nonfinite-data",
+    "before": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: .inf}\n  p.old: {v: .inf}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "files": {
+      "GROUNDING.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: .inf}\n  p.old: {v: .inf}\n"
+    },
+    "native_stderr": "invalid_history_value: snapshot data contains a nonfinite value\n",
+    "oracle_failure": "_kpopper_runtime.history_contract.HistoryError: invalid_history_value: snapshot data contains a nonfinite value"
+  },
+  {
+    "name": "PROVENANCE.yaml:same-numeric-data-keys",
+    "before": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: {1: a}}\n  p.old: {v: {1: a}}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "files": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: {1: a}}\n  p.old: {v: {1: a}}\n"
+    },
+    "native_stderr": "invalid_history_value: snapshot mappings require string keys\n",
+    "oracle_failure": "_kpopper_runtime.history_contract.HistoryError: invalid_history_value: snapshot mappings require string keys"
+  },
+  {
+    "name": "PROVENANCE.yaml:same-nonfinite-data",
+    "before": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: .inf}\n  p.old: {v: .inf}\n"
+    },
+    "args": [
+      "same",
+      "p.keep",
+      "p.old",
+      "--as-of",
+      "2026-09-20",
+      "PROVENANCE.yaml"
+    ],
+    "code": 1,
+    "stdout": "",
+    "files": {
+      "PROVENANCE.yaml": "schema: {deps: rests_on, predicate: wrong_if, snapshot: seen}\nknown:\n  p.keep: {v: .inf}\n  p.old: {v: .inf}\n"
+    },
+    "native_stderr": "invalid_history_value: snapshot data contains a nonfinite value\n",
+    "oracle_failure": "_kpopper_runtime.history_contract.HistoryError: invalid_history_value: snapshot data contains a nonfinite value"
+  }
+]

@@ -44,7 +44,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
   {
     const ctx = await b.newContext({ viewport: { width: 1100, height: 900 } });
     const p = await ctx.newPage();
-    await p.goto('file://' + require('path').resolve(FILE));
+    await p.goto(require('url').pathToFileURL(require('path').resolve(FILE)).href);
     const core = await p.locator('body[data-profile="core/v1"]').count() === 1;
     await ctx.close();
     if (core) {
@@ -55,7 +55,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
           pageContext = await b.newContext({ viewport: { width: 1100, height: 900 }, colorScheme: theme });
           const page = await pageContext.newPage();
           const errs = []; page.on('pageerror', e => errs.push(String(e)));
-          await page.goto('file://' + require('path').resolve(FILE));
+          await page.goto(require('url').pathToFileURL(require('path').resolve(FILE)).href);
           await page.locator('.core-node[data-id]').first().waitFor();
           const state = await page.evaluate(() => {
             const body = document.body;
@@ -112,7 +112,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
           pageContext = await b.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce' });
           const page = await pageContext.newPage();
           const errs = []; page.on('pageerror', e => errs.push(String(e)));
-          await page.goto('file://' + require('path').resolve(FILE));
+          await page.goto(require('url').pathToFileURL(require('path').resolve(FILE)).href);
           await page.locator('.core-node[data-id]').first().waitFor();
           const animations = await page.evaluate(() => document.getAnimations
             ? document.getAnimations({ subtree: true }).length : 0);
@@ -138,7 +138,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
       ctx = await b.newContext({ viewport: { width: 1100, height: 900 }, colorScheme: theme });
       const p = await ctx.newPage();
       const errs = []; p.on('pageerror', e => errs.push(String(e)));
-      await p.goto('file://' + require('path').resolve(FILE));
+      await p.goto(require('url').pathToFileURL(require('path').resolve(FILE)).href);
       await p.locator('[data-id]').first().waitFor();
       const words = await p.evaluate(() => window.__T || {});
       const hasLabel = (text, keys) => keys.some(k => words[k] && text.includes(words[k]));
@@ -268,7 +268,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
         await p.locator('.tabs button[data-tab=now]').click();
         chk(`${T} switching tabs closes the open card`, await gone(p, '.pop'));
         chk(`${T} and the arrangement is back`, await p.locator('#panel-now').isVisible());
-        await p.goto('file://' + require('path').resolve(FILE) + '#record');
+        await p.goto(require('url').pathToFileURL(require('path').resolve(FILE)).href + '#record');
         chk(`${T} a deep link opens the tab it names`,
             await p.locator('#panel-record td [data-id]').first()
                    .waitFor({ timeout: 4000 }).then(() => true, () => false)
@@ -396,7 +396,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
       ctx = await b.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce' });
       const p = await ctx.newPage();
       const errs = []; p.on('pageerror', e => errs.push(String(e)));
-      await p.goto('file://' + require('path').resolve(FILE) + '#tree');
+      await p.goto(require('url').pathToFileURL(require('path').resolve(FILE)).href + '#tree');
       await p.locator('#panel-tree g[data-id]').first().waitFor();
       const st = await p.evaluate(() => {
         const s = document.querySelector('#panel-tree svg');

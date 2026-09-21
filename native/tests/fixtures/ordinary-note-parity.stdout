@@ -1,0 +1,6 @@
+NOTE d.block: no predicate at all (declared: observational: needs more evidence)
+NOTE d.page: wrong_if reads page.unserved, which is counted when the page is built - `kpop experimental hub --verify` decides it
+NOTE d.rev: reversed on 2026-09-18 - the verdict under this id changed; review it once read, or pull d.rev --history
+FAIL d.page: predicate reads page.unserved, which it does not declare as a dependency - a change to it would never reach this
+
+3 judgments, 4 entries, 1 problems, 3 declared

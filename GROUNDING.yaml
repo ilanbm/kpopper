@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-20
+  updated: 2026-09-21
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -791,6 +791,55 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_native_hypothesis_edit_continuation:
+    name: "Native hypothesis, edit and identity rewrite continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "Opening delegated instruction for task 01a0b7f5-569b-7293-87e3-3bc50a7f29aa"
+    read: "2026-09-19"
+  s.2026_09_19_native_identity_continuation:
+    name: "Native identity and remaining migration continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "Opening delegated instruction for task 01a0b812-a326-77a2-8e09-64ff2fe3815f"
+    read: "2026-09-19"
+  s.2026_09_19_native_import_continuation:
+    name: "Native preserved-authored record import continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the FULL planned native
+            outcome is verified."
+    of: "2026-09-19"
+  s.2026_09_19_native_live_bootstrap_continuation:
+    name: "Native live capture, writer preparation and first-record bootstrap"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "task 01a0b85b-9000-7183-b0dc-7d2b01fd008e"
+  s.2026_09_19_native_ordinary_authoring:
+    name: "Ordinary native migration continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the FULL planned native
+            outcome is verified."
+    of: "2026-09-19"
+  s.2026_09_19_native_snapshot_continuation:
+    name: "Continue the approved native migration"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+  s.2026_09_19_native_temporal_authoring:
+    name: "Native temporal authoring and final scenario continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the FULL planned native
+            outcome is verified."
+    at: "task 01a0b8af-4bc8-7212-8b0e-7a5b7dee6db3; accepted continuation from task
+         01a0b897-a244-78b2-807e-e5209ea88125"
+  s.2026_09_19_native_temporal_continuation:
+    name: "Native temporal contract and captured history continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "task 01a0b897-a244-78b2-807e-e5209ea88125"
+  s.2026_09_19_native_transactions:
+    name: "Prepared native transactions and source-order compatibility"
+    asked: "Continue the approved kpopper Rust migration autonomously through verified completion,
+            preserving existing behavior and source evidence."
+    of: "Continuation task 01a0b716-7ef6-7ac0-91b9-05418f0ac055; retained and verified source-order
+         code provenance originally implemented at 0b6c99a, not the original measurement session."
+    read: "2026-09-19"
   s.2026_09_19_claude_install_request:
     asked: "לא בטוח שהבנתי, אבל בסדר תתקן ותעלה; מאשר לעלות עם --admin ולמזג ישר"
     name: "Request to fix, publish and directly merge the Claude plugin installation repair"
@@ -937,6 +986,272 @@ sources:
     read: "2026-09-16"
     recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
                    captured report."
+  s.native_authoring_envelopes:
+    name: "Native semantic authoring conformance"
+    from: s.2026_09_19_native_snapshot_continuation
+    file: "native/src/history_authoring.rs"
+    of: "2026-09-19: direct, act and proposal preparation with causal-parent replay; conformance
+         fixtures under native/tests/fixtures/history-authoring*.json"
+  s.native_authoring_source:
+    from: s.2026_09_19_native_live_bootstrap_continuation
+    name: "Native writer source and policy ownership evidence"
+    file: "native/src/authoring_source.rs"
+    at: "WriteRoute and CapturedSource stay owned together; actual pending decisions govern profile
+         preparation; tests prove accepted contributions remain active, explicit retirement and
+         unrelated artifacts differ, and the policy lock survives until release"
+    read: "2026-09-19"
+  s.native_authority_lifecycle:
+    name: "Native guarded authority lifecycle conformance"
+    from: s.2026_09_19_native_import_continuation
+    file: "native/tests/history_activation.rs"
+    read: "2026-09-19"
+    at: "task 01a0b92d-ec71-7c20-adea-675373657d06; final Python 1.7 oracle 5acfd0f; 24 exact
+         portable activation and inverse cases, actual Git pending/worktree tests and fault recovery"
+    scope: "Guarded library activation, deactivation and cancellation for single records and
+            explicit worktree groups on macOS arm64; public native CLI routing, browser integration
+            and supported-platform distribution remain pending"
+  s.native_batch_envelopes:
+    name: "Native final-world batch conformance"
+    from: s.2026_09_19_native_snapshot_continuation
+    file: "native/src/history_authoring_batch.rs"
+    of: "2026-09-19: batch preparation and causal-parent replay added after direct-authoring
+         checkpoint 0c757063ab8a2e40f87c3d967dffdbbd3d621cbe"
+  s.native_bootstrap:
+    from: s.2026_09_19_native_live_bootstrap_continuation
+    name: "Native first-record authoring and recovery evidence"
+    file: "native/tests/fixtures/history-bootstrap.json"
+    at: "Seven exact final Python 1.7.0 preparation envelopes, actual native publication, five
+         interruption phases in both directions, restartable rollback, changed-image refusal, and
+         independent intent replay"
+    read: "2026-09-19"
+  s.native_branch_adoption:
+    name: "Native physical proposal import and branch adoption conformance"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/history_branch_adoption.rs"
+    at: "Exact single and atomic source-set envelopes, audit capsules, causal-parent replay, no-op
+         verifier forgery and partial publication recovery tests; physical import and preview
+         fixtures"
+    read: "2026-09-19"
+  s.native_branch_audit:
+    name: "Native committed branch capture and source-free audit evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/history_branch.rs"
+    at: "Branch evidence closure, exact Snapshot and scoped prior-capsule coverage;
+         history_branch_git local capture; history-branch.json 49 Python cases with 30 accepted
+         envelopes and Git SHA1/SHA256 tests"
+    read: "2026-09-19"
+  s.native_checked_token_budgets:
+    name: "Native checked-reader reference token budgets"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-checked-f269506-tests.log"
+    read: "2026-09-19"
+    at: "f269506; checked_session and reasoning_context tests; fixture
+         native/tests/fixtures/checked-token-budgets.json"
+    scope: "Source-free core checked reader and real o200k_base/cl100k_base budgets; 70 actual
+            ff0d02e/tiktoken0.14 outcomes and 26 count vectors. Persistence and MCP dispatch remain
+            open."
+  s.native_context_verification:
+    name: "Native captured history and operation conformance"
+    from: s.2026_09_19_native_snapshot_continuation
+    file: "native/tests/fixtures/reasoning-history-assessment.json"
+    at: "172 adaptations, 348 v2 and 288 v3 schema cases; companion reasoning-context.json has 43
+         retained contexts and reasoning-operations.json has prospective-operation cases"
+    read: "2026-09-19"
+  s.native_core_hub_delivery:
+    name: "Native core Hub and session receipt compatibility"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R5-CORE-HUB-RESULT.md"
+    read: "2026-09-19"
+    at: "cc8beb6; task 01a0b9d7-9fca-7301-ba63-580bfc152fb9"
+    scope: "Core Hub build/verify/browser checks and exact session ownership/delivery APIs. Ordinary
+            Hub, Annotated Documents, complete Session hooks and remaining R4-R6 are open. macOS
+            arm64 execution only."
+  s.native_edit_rewrite:
+    name: "Native view edit and identity rewrite conformance"
+    file: "native/src/history_edits.rs"
+    read: "2026-09-19"
+    at: "history_edits; history_identity_rewrite, history_identity_text and history_identity_brief;
+         their exact fixtures and tests"
+    from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_frozen_preparation:
+    name: "Native frozen writer preparation and portable contribution evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/reasoning_authoring_preparation.rs"
+    at: "Snapshot profile preparation; pending_bundle complete closure and effective overlay tests;
+         reasoning_declaration_text source preservation fixtures"
+    read: "2026-09-19"
+  s.native_identity_conformance:
+    name: "Native identity actions and auxiliary recovery evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/history_identity.rs"
+    at: "Exact Python fixture comparisons, immutable replay and storage recovery regressions;
+         source-aware merge module and current local/UTC date checks"
+    read: "2026-09-19"
+  s.native_live_capture:
+    from: s.2026_09_19_native_live_bootstrap_continuation
+    name: "Native pending and committed target capture evidence"
+    file: "native/tests/fixtures/pending-state.json"
+    at: "15 actual Git fixtures against final Python 1.7.0 commit 5acfd0f; 14 exact complete
+         snapshots and one core-target comparison retaining the verified native runtime fingerprint;
+         semantic-roles.json has 113 role cases"
+    read: "2026-09-19"
+  s.native_main_bridge:
+    name: "Native bridge to merged main"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-MAIN-BRIDGE-RESULT.md"
+    read: "2026-09-19"
+    at: "c54e51de5cc63aea93a544cb5669cbb1d2c295d9; task 01a0b9d7-9fca-7301-ba63-580bfc152fb9"
+    scope: "Core/application read separation, exact session publication receipts, private history
+            origins and runtime inventory; macOS arm64 only. Full migration remains open."
+  s.native_named_authoring:
+    name: "Native named hypothesis preparation and replay"
+    file: "native/src/history_hypothesis_authoring.rs"
+    read: "2026-09-19"
+    at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
+         and history-hypothesis-retained.json"
+    from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_ordinary_authoring:
+    name: "Ordinary native reader and immutable authoring conformance"
+    from: s.2026_09_19_native_ordinary_authoring
+    read: "2026-09-19"
+    file: "native/tests/fixtures/ordinary-authoring.json"
+    at: "task 01a0b8c8-d7ed-7763-b52e-7b5ecafead65; final Python 1.7 oracle 5acfd0f; ordinary
+         reader, counts, direct acts proposals and batches; macOS arm64"
+    scope: "Native ordinary profile retains legacy comparisons and the verified ordinary Lean
+            program; no core assessment or profile promotion is fabricated; public activation and
+            supported-platform distribution remain pending"
+  s.native_ordinary_public_reads:
+    name: "Native ordinary open check and retained-history conformance"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-ORDINARY-OPEN-HISTORY-RESULT.md"
+    read: "2026-09-19"
+    at: "Task 01a0b990; commit af76e3d and final Python 1.7 example parity"
+  s.native_preserved_import:
+    name: "Native preserved-authored import and managed launcher validation"
+    from: s.2026_09_19_native_import_continuation
+    file: "native/tests/history_migration.rs"
+    read: "2026-09-19"
+    at: "task 01a0b8e2-5100-7f33-b77c-c833dbaa1d52; final Python 1.7 oracle 5acfd0f; exact copy,
+         replay and inverse fixtures; native/tests/history_runtime.rs includes explicit managed
+         launcher validation"
+    scope: "Library import and managed Python launcher probes on macOS arm64; live authority
+            orchestration, public native routing and supported-platform distribution remain pending"
+  s.native_project_routing:
+    name: "Native project policy and record routing evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/project_modes.rs"
+    at: "15 Python configuration and routing fixtures; linked worktrees, registered records, policy
+         changes, symlink refusal and held write-route lock tests"
+    read: "2026-09-19"
+  s.native_prospective:
+    name: "Native proposed history and fold conformance"
+    file: "native/src/history_prospective.rs"
+    read: "2026-09-19"
+    at: "Native hypothesis fold and prospective regression tests and history-fold fixtures"
+    from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_public_assessment:
+    name: "Native ordinary assessment and public CLI conformance"
+    from: s.2026_09_19_native_import_continuation
+    file: "native/tests/public_assessment.rs"
+    read: "2026-09-19"
+    at: "Task 01a0b94a-dca7-7283-96c9-7c5d1ed2aeb4; final Python 1.7 baseline 5acfd0f; 56 full
+         ordinary oracle cases under two policies, 14 actual CLI parity cases, 220 passing native
+         tests, actual bundled ordinary and core Lean CLI execution"
+    scope: "Actual assess command only on macOS arm64. Remaining public commands, MCP/hooks, browser
+            and supported-platform distribution remain pending."
+  s.native_public_history_authoring:
+    name: "Native public history and first-write checkpoints"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-AUTHORING-PUBLIC-RESULT.md"
+    from: s.2026_09_19_native_import_continuation
+    read: "2026-09-19"
+    at: "Task 01a0b9d7-9fca-7301-ba63-580bfc152fb9; commits 02a711a, fdadfdc and 0e25621; linked
+         R4-HISTORY-PUBLIC-RESULT.md and retained final-source logs"
+    scope: "Public history maintenance, acts/proposals and recovery; unannotated add/set/review on
+            active history; implicit first-add bootstrap and recovery. Actual execution: macOS arm64
+            only."
+  s.native_public_readers:
+    name: "Native public reader and core page conformance"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-PUBLIC-READERS-RESULT.md"
+    read: "2026-09-19"
+    at: "Task 01a0b961-13a4-7033-afc7-e5bb48720e14; actual CLI and final Python fixture conformance"
+  s.native_scenario_watch:
+    name: "Native captured scenarios and pure history watch conformance"
+    from: s.2026_09_19_native_temporal_authoring
+    file: "native/tests/support/history_watch.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: 20 scenario build/refusal cases with 9 accepted exact
+         Snapshots, 12 rehashed forgeries, 9 actual Lean scenarios; 17 watch records with 14 exact
+         captured unions and 16 exact comparisons plus 5 independent Snapshot binding refusals.
+         Scenario reconstruction rederives captured source overlays without source reads or
+         evaluation; watch retains original committed bytes, physical/named distinction and
+         computational-only scenarios. Six focused tests and all-target Clippy pass. Full native
+         regression suite is running; public CLI and final migration remain incomplete."
+    read: "2026-09-19"
+  s.native_session_lifecycle:
+    name: "Native session lifecycle and source protection"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-SESSION-LIFECYCLE-RESULT.md"
+    read: "2026-09-19"
+    at: "f852fc6; task 01a0b9d7-9fca-7301-ba63-580bfc152fb9"
+    scope: "Native SessionStart/Stop and mark/gate, Python mark compatibility, verified ingestion
+            purpose, core-only public resources and declared Hub source protection. macOS arm64 only;
+            new Opus review pending, full R4-R6 still open."
+  s.native_session_read:
+    name: "Native public session opening and corrected history composition"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-SESSION-READ-RESULT.md"
+    read: "2026-09-19"
+    at: "Task 01a0b990; commits d317c86 and 5daf595"
+  s.native_snapshot_verification:
+    name: "Native snapshot and evaluator conformance"
+    from: s.2026_09_19_native_snapshot_continuation
+    of: "2026-09-19 local macOS arm64 verification of Snapshot replay, scope grants, input identity
+         and actual Lean evaluation envelopes"
+    read: "2026-09-19"
+  s.native_source_capture:
+    from: s.2026_09_19_native_live_bootstrap_continuation
+    name: "Native source capture conformance evidence"
+    file: "native/tests/fixtures/source-capture.json"
+    at: "45 cases; 38 exact accepted snapshots and 7 refusals against b639cdb; source_capture and
+         source_document; guarded inventory and member journals"
+    read: "2026-09-19"
+  s.native_temporal_assessment:
+    name: "Native temporal assessment and frozen evidence conformance"
+    from: s.2026_09_19_native_temporal_continuation
+    file: "native/tests/reasoning_temporal.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: seven exact frozen assessments and consumer views, 42
+         evidence forgeries, 12 rehashed outer-context boolean and basis forgeries, seven actual
+         Lean-backed applicability and roundtrip scenarios. Fresh runtime identity remains explicit;
+         deserialization performs no source read or evaluation. Temporal authoring remains unported."
+    read: "2026-09-19"
+  s.native_temporal_authoring:
+    name: "Native temporal authoring and independent replay conformance"
+    from: s.2026_09_19_native_temporal_authoring
+    file: "native/tests/support/history_temporal_authoring.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: 24 exact authoring cases, 22 accepted native
+         publications and committed retries, 24 rehashed replay/capability forgery refusals. Direct,
+         act, proposal and sequential/final batch evidence binds accepted versions to computational
+         Snapshots with null time preserved. Fresh sequential judgment children use v7; retained v1
+         children require independent whole-mutation replay. 17 authoring tests and all-target Clippy
+         pass. Public CLI remains experimental; ordinary authoring, final scenario/watch and full
+         migration remain open."
+    read: "2026-09-19"
+  s.native_temporal_capture:
+    name: "Native temporal capability and causal capture conformance"
+    from: s.2026_09_19_native_temporal_continuation
+    file: "native/tests/history_temporal.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: 40 contract vectors and 19 complete captured-history
+         comparisons; rehashed receipt and frontier forgery refusals; 64-observation limit reports
+         incomplete coverage. Temporal assessment and authoring remain unsupported at this capture
+         boundary."
+    read: "2026-09-19"
+  s.native_writer_verification:
+    name: "Native writer conformance"
+    from: s.2026_09_19_native_snapshot_continuation
+    file: "native/tests/fixtures/reasoning-authoring.json"
+    at: "230 pinned Python writer scenarios at commit 8c7bc2a; scalar identity corpus is
+         reasoning-authoring-identities.json beside this file"
+    read: "2026-09-19"
+  s.python_final_native_reference:
+    from: s.2026_09_19_native_live_bootstrap_continuation
+    name: "Final Python 1.7.0 native compatibility reference"
+    url: "https://github.com/ilanbm/kpopper/releases/tag/v1.7.0"
+    at: "Tag and PR102 merge 5acfd0f9c7f4d839bb6930b8e1d0a5d1fd315ce4; tree
+         48723a4e183df4d907ac39cbb33040a3179cd1a2; post-merge CI 35427119610 succeeded"
+    read: "2026-09-19"
   s.query_candidate_report_2026_09_18:
     name: "Finite-query candidate verification packet"
     from: s.2026_09_18_continue_reasoning_core
@@ -1077,6 +1392,14 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.history_source_clock_order:
+    name: "Source clock grouping and retained mapping order"
+    from: s.2026_09_19_native_transactions
+    file: "scripts/versions.py"
+    at: "_subject_entry lines 488-492 at b639cdbab1e3c624ad52708350166d222821aec1;
+         native/src/history_reduce.rs lines 281-294 at 0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"
+    read: "2026-09-19"
+    scope: {kind: code, commit: "0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"}
   doc.history_writer_contract_c5cc6a3:
     name: "History writer, replay and branch adoption contract at c5cc6a3"
     file: "docs/history-contract.md"
@@ -1859,6 +2182,16 @@ known:
     at: "docs/history-contract.md; scripts/history_authoring.py; tests/test_history_batch_final_world.py"
     scope: "Source replay admission contract; recorded provenance is not proof of external source
             truth"
+  p.history_source_clock_order:
+    name: "Source mapping order in history clock grouping"
+    v: "Source-clock grouping uses the Python string representation of body.from, which preserves
+        nested mapping order. Captured reduction retains original source mapping order separately
+        from canonical typed identity. Canonicalizing source bytes before reduction can change
+        accepted heads while preserving typed object identity."
+    from: doc.history_source_clock_order
+    "on": "2026-09-19"
+    at: "Python 3.14.5 source-order conformance in native/tests/history_reduction.rs and
+         fixtures/history-reduction.json"
   p.history_temporal_applicability:
     name: "Explicit temporal applicability preserves claim-version counterexamples"
     v: "Opt-in current claims may recover when their current falsifier clears while retaining prior
@@ -1919,6 +2252,190 @@ known:
     at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
     of: "2026-09-04"
     measure: hypothesis_thresholds
+  p.native_batch_budget_refusal:
+    name: "Native evaluator refuses an over-budget batch"
+    v: "Input and output budget overruns refuse the complete evaluation batch, including a bound
+        crossed during actual Lean transport; they do not become runtime-unavailable result
+        envelopes."
+    from: s.native_snapshot_verification
+    at: "native/tests/reasoning_evaluate.rs; actual wire input and stdout bounds regressions"
+  p.native_batch_replay_boundary:
+    name: "Final-world batch admission and retained sequential replay"
+    v: "The batch layer extends the direct-operation boundary recorded at 0c75706. Up to 64 actions
+        are admitted against final computation while replacement checks retain each actual preceding
+        body. New claims pin final dependency versions and cyclic pins refuse. Receipts 2/3 replay
+        sequentially, 6 retains the old final-world behavior, and 8 captures typed seen plus explicit
+        unavailable pins. Full mutation and report-evidence bytes are replayed with fresh Lean."
+    from: s.native_batch_envelopes
+    at: "history_authoring_batch stage, final_world and sequential; reasoning_authoring
+         World.batch_admission; exact batch conformance and
+         native_batch_replay_preserves_final_pins_evidence_and_retry tests"
+  p.native_branch_adoption_boundary:
+    name: "Native branch adoption and physical proposal boundary"
+    v: "Physical hypothesis import preserves original bodies, heads, seen and explicit empty pin
+        gaps while recording new proposal provenance. Single-source and atomic source-set adoption
+        preserve original object bytes, bind complete audit capsules and explicit overlapping
+        choices, and replay against the exact causal parents. The Store requires its branch adapter,
+        independently verifies semantics before callbacks and rechecks target evidence after
+        callbacks. Rehashed intent forgery and partial publication regressions pass. There are 20
+        import cases with 9 exact outputs, 23 adoption cases with 15 exact envelopes, 92 previews and
+        a fresh full run of 148 native tests. Live project routing and public CLI integration remain
+        separate."
+    from: s.native_branch_adoption
+    at: "Native branch audit, adoption, preview, import, transaction and Store tests"
+  p.native_branch_audit_boundary:
+    name: "Native committed branch audit boundary"
+    v: "Source-free branch validation binds exact Git blob identities, current and inactive
+        generations, authored and commit-bound evidence, imported physical hypotheses, scoped prior
+        audit capsules and the complete Snapshot. Local Git capture resolves the ref once, ignores
+        dirty checkout and orphan object bodies, and performs no source writes or fetches. The 49
+        pinned Python cases include 30 exact accepted envelopes. Actual SHA1 and SHA256 Git
+        repositories and detached wire replay pass. This boundary does not yet enable branch adoption
+        publication or expand the public CLI."
+    from: s.native_branch_audit
+    at: "history_branch and history_branch_git focused tests; source-free validation and typed
+         transport"
+  p.native_context_replay_boundary:
+    name: "Captured assessment replay boundary"
+    v: "CapturedAssessment replay rebuilds v2 findings, v3 history projection and the consumer view
+        from the retained Snapshot without source access or evaluation. Snapshot, findings, view and
+        typed transport identities must agree; newly supplied operation conditions still evaluate
+        explicitly."
+    from: s.native_context_verification
+    at: "native/src/reasoning_context.rs; reasoning_operations.rs; forged-view and
+         no-second-runtime-call regressions"
+  p.native_current_main_reference:
+    name: "Current merged Python behavior for the native bridge"
+    v: ff0d02e1678099c4dae551d1d3f6f8f9812c2290
+    from: s.native_main_bridge
+    at: "Immutable baseline-ff0d02e; PR143 still OPEN on 2026-09-19. Historical final 1.7 reference
+         retained separately."
+  p.native_edit_rewrite_boundary:
+    name: "Native view edit and identity rewrite boundary"
+    v: "Edited-view receipt1 captures every body change as proposal5, retains exact UTF-8 source and
+        evidence bytes, and requires fresh causal-parent semantic replay through its storage adapter.
+        Identity rewrite primitives preserve source-map order, protected provenance fields,
+        expression literals and historical seen payloads. 34 edited-view scenarios include 16 exact
+        accepted envelopes; 34 body, 20 brief and 72 text-span cases compare against the pinned
+        reader. Full same/distinct identity action orchestration and auxiliary publication remain
+        unimplemented; these helpers do not expand the experimental CLI."
+    from: s.native_edit_rewrite
+    at: "Native edit replay, storage commit_edits, and identity rewrite regression cases"
+  p.native_frozen_preparation_boundary:
+    name: "Native profile and portable contribution preparation boundary"
+    v: "Frozen writer preparation checks legacy executable migration blockers and preserves the
+        original Snapshot context. Portable v1 identity and complete v2 contribution closure are
+        validated, with v3 delegated to the existing complete history adapter. Accepted pending
+        revisions remain effective until withdrawn, rejected or superseded; explicitly resumed
+        revisions are checked again. YAML declaration changes preserve surrounding text and retain
+        strict alias/duplicate-key refusal. Live project policy-lock capture, source ordering,
+        routing and public CLI integration remain outside these source-free APIs."
+    from: s.native_frozen_preparation
+    at: "Native preparation, pending bundle and declaration source APIs with exact pinned Python
+         fixtures and forgery regressions"
+  p.native_history_decode_boundary:
+    name: "Native historical typed-value authority"
+    v: "Only explicitly versioned computed history envelopes decode typed historical scalar values;
+        unversioned type-tagged mappings remain opaque prior data."
+    from: s.native_snapshot_verification
+    at: "native/tests/reasoning_assessment.rs; historical typed maps and snapshot identity
+         regression cases"
+  p.native_identity_boundary:
+    name: "Native explicit identity migration boundary"
+    v: "Core same/distinct preparation preserves original objects, historical seen and protected
+        source strings across accepted claims and named proposals. Changed pins receive new dependent
+        versions. Storage requires fresh causal-parent semantic replay; an owned auxiliary journal
+        keeps readers blocked until record and brief publication verifies, and cancellation is
+        permitted only before the manifest commits. Dates are checked against current local/UTC days
+        on preparation and replay. The graph builder uses an iterative traversal with cycle refusal.
+        Temporal and ordinary profiles, public CLI integration and installed activation remain
+        outside this checkpoint."
+    from: s.native_identity_conformance
+    at: "history_identity, history_identity_merge, history_store
+         commit_identity/recover_auxiliary/cancel_auxiliary and source_clock latest_day"
+  p.native_named_hypothesis_boundary:
+    name: "Native named hypothesis authoring boundary"
+    v: "Core named add/set/review receipt1/2 and explicit refutation replay complete immutable
+        mutation bytes with fresh Lean. Active physical imports, name authority, archive and
+        post-verifier physical evidence are checked. The b1b6019 checkpoint has 90 differential
+        scenarios and 41 exact accepted envelopes. The old scalar crash is superseded by fixed
+        candidate receipt1/2 support. Fold/prospective and identity/edit remain outside this
+        checkpoint."
+    from: s.native_named_authoring
+    at: "Preparation, replay and test module; exact fixture envelopes at b1b6019"
+  p.native_operation_replay_boundary:
+    name: "Fresh semantic replay before history publication"
+    v: "Supported direct, act and proposal mutations replay with fresh Lean against the original
+        causal parents and must reproduce every mutation byte. Only a witnessed historical adapter
+        source fingerprint may differ; incoming operations and siblings do not witness it. Batch,
+        identity/edit, temporal and ordinary-profile preparation remain outside this library
+        boundary."
+    from: s.native_authoring_envelopes
+    at: "verify_prepared and commit; history_authoring_audit witnessed and ReplayAudit;
+         native/README.md Library authoring"
+  p.native_project_routing_boundary:
+    name: "Native project policy and write-route boundary"
+    v: "Local project discovery preserves Git common-directory policy, worktree defaults, registered
+        records and explicit Simple routing. A write route holds the policy file lock through its
+        caller publication and rechecks exact configuration bytes, project topology and selected
+        paths. It identifies when canonical Advanced routing requires pending overlay capture.
+        Fifteen pinned configuration fixtures and four focused native tests pass. This API does not
+        implement pending ledger capture, live overlays, project transitions or real-record
+        migration, and is not yet connected to the public CLI."
+    from: s.native_project_routing
+    at: "project_modes configuration and WriteRoute tests"
+  p.native_prospective_fold_boundary:
+    name: "Native proposed history and fold boundary"
+    v: "Detached proposed history checks authority, baseline, complete causal closure, original
+        object bytes and renderer output. New named folds assess the proposed history and refuse
+        introduced falsifications or evidence holes; only retained replay supports the earlier
+        assessment version. Branch adoption evidence awaits its separate audit adapter. The
+        checkpoint passes 118 native tests; 84 differential fold scenarios include 30 exact accepted
+        envelopes and four exact Snapshot transports. This does not expand the public experimental
+        CLI."
+    from: s.native_prospective
+    at: "history_prospective and history_hypothesis_authoring fold APIs, fixtures and tests"
+  p.native_public_remaining_scope:
+    name: "Remaining migration scope after the public authoring checkpoint"
+    quoted: "Legacy-record rewriting, named hypotheses/consolidation, explicit contribution routing,
+             remaining argument/error conformance, adoption/runtime declarations, other recovery
+             dispatch, session mark/stop-gate, MCP/hooks/operations/watch, R5 browser, and R6
+             supported-platform/distribution execution remain."
+    from: s.native_public_history_authoring
+    at: "R4-AUTHORING-PUBLIC-RESULT.md, remaining scope at 0e25621"
+    of: "2026-09-19"
+  p.native_python_reference:
+    name: "Final Python commit targeted by native conformance"
+    v: "5acfd0f9c7f4d839bb6930b8e1d0a5d1fd315ce4"
+    from: s.python_final_native_reference
+  p.native_retained_pin_evidence:
+    name: "Historical pin evidence boundary"
+    v: "A recorded pin exposes a historical computation only when its typed value and stored basis
+        validate under its recorded profile. Missing, corrupt or unsupported evidence stays
+        unavailable; support cycles and exhausted traversal budgets never return partial findings."
+    from: s.native_context_verification
+    at: "native/src/reasoning_history_support.rs and reasoning-history-support.json"
+  p.native_snapshot_byte_boundary:
+    name: "Native snapshot identity and byte concurrency evidence"
+    v: "Normalized snapshot identity excludes authored_revision; replay independently validates the
+        exact source-file inventory digest."
+    from: s.native_snapshot_verification
+    at: "native/tests/reasoning_snapshot.rs; byte-only revision and stale revision cases"
+  p.native_writer_observation_boundary:
+    name: "Captured writer admission boundary"
+    v: "World computes through Lean and preserves structural, citation, identity and hypothesis
+        guards over an immutable snapshot. Prospective set requires a captured day; live source
+        capture, routing and history commit authorization remain separate integration work."
+    from: s.native_writer_verification
+    at: "native/src/reasoning_authoring.rs and native/src/reasoning_authoring_guards.rs"
+  p.native_yaml_cycle_contract:
+    name: "Native cyclic YAML input boundary"
+    v: "Ordinary native records support bounded nonrecursive aliases. Recursive aliases in a
+        targeted record or named hypothesis are refused before its source bytes change; arbitrary
+        top-level mapping collections are not discarded."
+    from: "native/README.md"
+    at: "YAML input contract and native/tests/public_readers.rs, native/tests/public_update.rs"
+    of: "2026-09-21"
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"
@@ -2003,6 +2520,274 @@ known:
     from: doc.host_compatibility
     at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
     of: "2026-09-17"
+  m.native_assessment_cli_parity:
+    name: "Native actual ordinary assessment CLI parity cases"
+    v: 14
+    from: s.native_public_assessment
+    of: "2026-09-19"
+    at: "R4-public-python-parity.json; live/frozen, pointers, hypotheses, Git commits and changed
+         candidate branch; exact complete reports and revision identities"
+  m.native_assessment_oracle_cases:
+    name: "Native complete ordinary assessment oracle cases"
+    v: 56
+    from: s.native_public_assessment
+    of: "2026-09-19"
+    at: "native/tests/fixtures/ordinary-assessment.json; 112 complete typed envelopes under two
+         attention policies"
+  m.native_assessment_tests:
+    name: "Full native regression gate after public assessment"
+    v: 220
+    from: s.native_public_assessment
+    of: "2026-09-19"
+    at: "R4-assessment-full-tests.txt; 220 passed, zero failed, two explicit-launcher tests ignored.
+         Actual CLI ordinary and core Lean resource bundle test passed. Clippy all-targets with
+         warnings denied passed."
+  m.native_authority_oracle_cases:
+    name: "Complete native authority activation and inverse cases"
+    v: 24
+    from: s.native_authority_lifecycle
+    at: "native/tests/fixtures/history-activation.json; 28 final Python cases, 24 complete and 4
+         refused; all portable file images and receipts match, excluding host paths, nonce proof and
+         the activation digest that binds them"
+    of: "2026-09-19"
+  m.native_authority_tests:
+    name: "Full native regression gate after guarded authority lifecycle"
+    v: 214
+    from: s.native_authority_lifecycle
+    at: "R2-authority-final-tests.txt: 214 passed, zero failures; two opt-in actual-launcher tests
+         ignored by default, native activation with the actual configured final Python launcher
+         passed separately; Clippy all-targets with warnings denied passed"
+    of: "2026-09-19"
+  m.native_checked_budget_cases:
+    name: "Exact real-token budget outcomes"
+    v: 70
+    from: s.native_checked_token_budgets
+    at: "f269506; R4-checked-f269506-tests.log and committed checked-token-budgets.json"
+    of: "2026-09-19"
+  m.native_checked_tests:
+    name: "Passing checked-reader and context tests"
+    v: 10
+    from: s.native_checked_token_budgets
+    at: "f269506; R4-checked-f269506-tests.log and committed checked-token-budgets.json"
+    of: "2026-09-19"
+  m.native_checked_token_counts:
+    name: "Exact multilingual and special-marker token counts"
+    v: 26
+    from: s.native_checked_token_budgets
+    at: "f269506; R4-checked-f269506-tests.log and committed checked-token-budgets.json"
+    of: "2026-09-19"
+  m.native_core_hub_browser_checks:
+    name: "Passing Chrome checks on native core Hub"
+    v: 16
+    from: s.native_core_hub_delivery
+    at: "R5-final-browser-checks.log; final release; encoded output filename"
+    of: "2026-09-19"
+  m.native_core_hub_error_differences:
+    name: "Retained native versus Python Hub error wrapper differences"
+    v: 2
+    from: s.native_core_hub_delivery
+    at: "R5-core-hub-parity.json; both refuse scalar/non-iterable briefs; native exit 2 diagnostic,
+         Python exit 1 traceback"
+    of: "2026-09-19"
+  m.native_core_hub_exact_cli_cases:
+    name: "Exact native versus Python Hub verification cases"
+    v: 28
+    from: s.native_core_hub_delivery
+    at: "R5-core-hub-parity.json; immutable ff0d02e oracle"
+    of: "2026-09-19"
+  m.native_core_hub_interop_cases:
+    name: "Native and Python session receipt interoperability cases"
+    v: 3
+    from: s.native_core_hub_delivery
+    at: "R4-session-receipt-interop.json; exact owned bodies, later edits, shared once-only
+         delivery"
+    of: "2026-09-19"
+  m.native_core_hub_tests:
+    name: "Passing native tests after core Hub integration"
+    v: 280
+    from: s.native_core_hub_delivery
+    at: "R5-integrated-suite.log; 2 opt-in launcher tests ignored"
+    of: "2026-09-19"
+  m.native_core_page_cases:
+    name: "Native core page conformance cases including expected refusals"
+    v: 1235
+    from: s.native_public_readers
+    at: "Conformance: 1144 complete envelopes and 91 expected refusals"
+  m.native_history_status_tests:
+    name: "Native public history status integration cases"
+    v: 1
+    from: s.native_session_read
+    at: "de0154e native/tests/cli.rs"
+  m.native_import_runtime_tests:
+    name: "Full native regression gate after record import and launcher probes"
+    v: 201
+    from: s.native_preserved_import
+    at: "R2-import-runtime-full-tests.txt: fresh full suite, zero failures, one opt-in launcher
+         probe ignored by default and executed separately; final native source fingerprint"
+    of: "2026-09-19"
+  m.native_import_scenarios:
+    name: "Preserved-authored native import scenarios"
+    v: 28
+    from: s.native_preserved_import
+    at: "native/tests/fixtures/history-migration.json: 27 prepared, 24 complete exact
+         publications/replays/inverses, 3 incomplete aliases, 1 refused"
+    of: "2026-09-19"
+  m.native_live_capture_cases:
+    name: "Native live pending and target capture cases"
+    v: 15
+    from: s.native_live_capture
+  m.native_live_role_cases:
+    name: "Native live comparison field-role cases"
+    v: 113
+    from: s.native_live_capture
+  m.native_main_bridge_core_cli_cases:
+    name: "Core CLI comparisons against merged main"
+    v: 64
+    from: s.native_main_bridge
+    at: "R4-main-read-public-parity.json; scoped oracle adapter normalization plus derived hash
+         checks"
+    of: "2026-09-19"
+  m.native_main_bridge_ordinary_cli_cases:
+    name: "Exact ordinary CLI comparisons against merged main"
+    v: 144
+    from: s.native_main_bridge
+    at: R4-main-ordinary-public-parity.json
+    of: "2026-09-19"
+  m.native_main_bridge_release_cases:
+    name: "Copied native bridge release scenarios"
+    v: 7
+    from: s.native_main_bridge
+    at: "R4-main-bridge-release-smoke.json; only Git on PATH; macOS arm64"
+    of: "2026-09-19"
+  m.native_main_bridge_tests:
+    name: "Native bridge passing tests"
+    v: 262
+    from: s.native_main_bridge
+    at: "106 library tests plus 156 integration tests; 2 opt-in ignored; see result for initial
+         wording assertion and corrected rerun"
+    of: "2026-09-19"
+  m.native_ordinary_open_check_cases:
+    name: "Actual ordinary open and check CLI comparisons with final Python"
+    v: 16
+    from: s.native_ordinary_public_reads
+    at: "All ordinary examples, frozen stdout stderr and exit status"
+  m.native_ordinary_read_cases:
+    name: "Native ordinary pull and affects conformance cases including expected refusals"
+    v: 560
+    from: s.native_public_readers
+    at: "Conformance: 336 complete outputs and 224 expected refusals"
+  m.native_ordinary_tests:
+    name: "Full native regression gate with ordinary authoring"
+    v: 191
+    from: s.native_ordinary_authoring
+    at: "R3-ordinary-full-tests.txt; full native suite, zero failures; final source fingerprint;
+         macOS arm64"
+  m.native_public_authoring_release_cases:
+    name: "Copied native release authoring command executions"
+    v: 6
+    from: s.native_public_history_authoring
+    at: "R4-authoring-release-smoke.json: adjacent core archive, only Git on PATH, macOS arm64;
+         release SHA256 5f8500c0fd8aaf4f3f79d5bff7036434a5c8ea8f88f7fc1929b6000f3239a9fb"
+    of: "2026-09-19"
+  m.native_public_authoring_tests:
+    name: "Full native regression suite at the public authoring checkpoint"
+    v: 247
+    from: s.native_public_history_authoring
+    at: "0e25621; R4-authoring-native-suite.log: 247 passed, 2 opt-in managed-launcher tests
+         ignored. Clippy and release also passed."
+    of: "2026-09-19"
+  m.native_public_history_maintenance_cases:
+    name: "Public history maintenance comparisons with final Python"
+    v: 81
+    from: s.native_public_history_authoring
+    at: "R4-HISTORY-PUBLIC-RESULT.md; R4-history-maintenance-parity.json: exact exit status, full
+         output and resulting record bytes"
+    of: "2026-09-19"
+  m.native_public_history_recovery_cases:
+    name: "Public recovery comparisons over final-Python direct journals"
+    v: 36
+    from: s.native_public_history_authoring
+    at: "R4-HISTORY-PUBLIC-RESULT.md; R4-history-recovery-parity.json: prepared, partial and
+         committed states in both directions; exact output and files, excluding only empty native
+         policy lock"
+    of: "2026-09-19"
+  m.native_public_read_cli_cases:
+    name: "Actual native public reader CLI comparisons with final Python"
+    v: 136
+    from: s.native_public_readers
+    at: "Conformance: 72 exact ordinary CLI outputs and 64 core comparisons preserving actual
+         adapter identities"
+  m.native_public_reader_tests:
+    name: "Native public reader integration tests after ordinary history routing"
+    v: 6
+    from: s.native_ordinary_public_reads
+    at: "native/tests/public_readers.rs"
+  m.native_runtime_declarations:
+    name: "Managed launcher declaration conformance cases"
+    v: 18
+    from: s.native_preserved_import
+    at: "native/tests/fixtures/history-runtime.json; final Python 1.7 declarations and refusal
+         cases"
+    of: "2026-09-19"
+  m.native_scenario_watch_tests:
+    name: "Full native regression gate after temporal authoring and scenarios"
+    v: 185
+    from: s.native_scenario_watch
+    at: "Fresh cargo test --locked completed with 185 passing tests and zero failures on product
+         commit 07871d2, macOS arm64. All-target Clippy with warnings denied, release build and
+         record check also passed. No installed activation or cross-platform acceptance is implied."
+    of: "2026-09-19"
+  m.native_session_browser_checks:
+    name: "Passing final native page Chrome checks"
+    v: 16
+    from: s.native_session_lifecycle
+    at: "R4-session-final-browser.log; release binary
+         cde390b5488a87af8b609d2c31c119537a77b3a58dcd6c35bf8e65306d633233"
+    of: "2026-09-19"
+  m.native_session_purpose_cases:
+    name: "Passing ingestion receipt purpose comparisons"
+    v: 10
+    from: s.native_session_lifecycle
+    at: "R4-recording-receipt-parity.json; real ff0d02e Python comparison"
+    of: "2026-09-19"
+  m.native_session_python_mark_tests:
+    name: "Passing explicit Python-native mark interoperability tests"
+    v: 4
+    from: s.native_session_lifecycle
+    at: "R4-session-final-interop.log; these four were ignored by default and then explicitly run
+         against ff0d02e"
+    of: "2026-09-19"
+  m.native_session_read_tests:
+    name: "Native CLI integration tests after public session routing"
+    v: 14
+    from: s.native_session_read
+    at: "native/tests/cli.rs"
+  m.native_session_release_commands:
+    name: "Passing copied release CLI and hook scenarios"
+    v: 16
+    from: s.native_session_lifecycle
+    at: "R4-session-release-smoke.json; only Git on PATH and core resources"
+    of: "2026-09-19"
+  m.native_session_tests:
+    name: "Passing normal native session integration tests"
+    v: 300
+    from: s.native_session_lifecycle
+    at: "R4-session-gate-summary.json; split completion documented in result; 6 default opt-ins
+         ignored"
+    of: "2026-09-19"
+  m.native_source_capture_cases:
+    name: "Native source capture differential cases"
+    v: 45
+    from: s.native_source_capture
+  m.native_source_capture_exact:
+    name: "Native source capture exact accepted snapshots"
+    v: 38
+    from: s.native_source_capture
+  m.native_writer_conformance_cases:
+    name: "Writer conformance scenarios"
+    v: 230
+    from: s.native_writer_verification
+    at: "reasoning-authoring.json cases; computations use the packaged Lean runtime on macOS arm64"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
@@ -4125,6 +4910,21 @@ judgments:
                              green, distinct_from as an edge that retires the pair"
       alt.sameness_from_names: rejected
       p.candidate_reasons: 4
+  d.native_cycles_refuse:
+    name: "Preserve cyclic YAML source by refusing unsupported writes"
+    verdict: "Keep recursive YAML aliases outside the native finite-value contract and refuse
+              targeted writes without changing source bytes."
+    rests_on: [p.native_yaml_cycle_contract]
+    because: "The native record and history formats use finite values. Dropping cyclic fields would
+              lose meaningful custom collections, while a refusal keeps the original document
+              available for an explicit conversion."
+    reopened_by: "A concrete user workflow requires cyclic object identity, with an agreed lossless
+                  graph representation and round-trip acceptance cases."
+    seen:
+      p.native_yaml_cycle_contract: "Ordinary native records support bounded nonrecursive aliases.
+                                     Recursive aliases in a targeted record or named hypothesis are
+                                     refused before its source bytes change; arbitrary top-level
+                                     mapping collections are not discarded."
   d.native_delivery_scope:
     rests_on: [s.background_ingestion]
     verdict: "A native delivery job binds to the originating host task separately from report
