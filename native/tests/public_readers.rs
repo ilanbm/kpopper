@@ -43,6 +43,11 @@ fn recursive_aliases_fail_closed_in_core_and_custom_collections() {
         for args in &commands {
             let output = cli(root, args, &private);
             assert!(!output.status.success(), "{args:?}");
+            assert_eq!(
+                fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+                semantic_cycle,
+                "{args:?} changed a refused record"
+            );
             let diagnostic = [output.stdout, output.stderr].concat();
             assert!(
                 String::from_utf8_lossy(&diagnostic).contains("recursive_yaml_alias: anchor=x")
@@ -53,6 +58,49 @@ fn recursive_aliases_fail_closed_in_core_and_custom_collections() {
                 "{args:?}: {}",
                 String::from_utf8_lossy(&diagnostic)
             );
+        }
+    }
+}
+
+#[test]
+fn recursive_aliases_refuse_writes_to_the_record_or_selected_hypothesis() {
+    for cycle_in_hypothesis in [false, true] {
+        for mut args in [
+            vec!["add", "p.new", "v=7"],
+            vec!["set", "p.load", "62", "--why", "new observation"],
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path();
+            let entry = root.join("GROUNDING.yaml");
+            let hypothesis = root.join(".kpopper/hypotheses/candidate.yaml");
+            fs::create_dir_all(hypothesis.parent().unwrap()).unwrap();
+            let cycle = "custom: &loop {p.cycle: *loop}\n";
+            let record = if cycle_in_hypothesis {
+                ORDINARY.to_owned()
+            } else {
+                format!("{ORDINARY}{cycle}")
+            };
+            let proposal = if cycle_in_hypothesis {
+                cycle
+            } else {
+                "known:\n  p.proposed: {v: 7}\n"
+            };
+            fs::write(&entry, &record).unwrap();
+            fs::write(&hypothesis, proposal).unwrap();
+            if cycle_in_hypothesis {
+                args.extend(["--hypothesis", "candidate"]);
+            }
+
+            let output = cli(root, &args, &root.join("private"));
+            assert!(!output.status.success(), "{args:?}");
+            let diagnostic = [output.stdout, output.stderr].concat();
+            assert!(
+                String::from_utf8_lossy(&diagnostic).contains("recursive_yaml_alias"),
+                "{args:?}: {}",
+                String::from_utf8_lossy(&diagnostic)
+            );
+            assert_eq!(fs::read(&entry).unwrap(), record.as_bytes());
+            assert_eq!(fs::read(&hypothesis).unwrap(), proposal.as_bytes());
         }
     }
 }

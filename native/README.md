@@ -1,4 +1,4 @@
-# Experimental native history CLI
+# Native Rust CLI (opt-in)
 
 `kpop-native` is an opt-in Rust executable with versioned knowledge assessment and
 an experimental bounded history writer.
@@ -16,6 +16,10 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --locked --release
 ```
+
+Development and test builds optimize SHA-256 hashing because launcher attestation
+verifies complete executable and runtime artifacts within a bounded deadline.
+Run validation separately from other compilation jobs to avoid resource contention.
 
 Core commands and Hub rendering do not require Python, Node, Cargo or Rust on the
 runtime PATH. Rust and downloaded build dependencies are required only for builds.
@@ -156,9 +160,14 @@ unread incident edges. `search` ranks candidate references, prioritizes known ID
 and binds continuation cursors to the exact query, revision and ranking. Branch
 hints only break ties. Native term ordering is deterministic; legacy Python can
 vary its floating-point score sums across processes. Unicode folding retains the
-Python 3.14 Unicode 16 mappings. Semantic/hybrid requests explicitly report lexical
-fallback when local embeddings are unconfigured. This CLI does not yet load optional
-local E5 assets.
+Python 3.14 Unicode 16 mappings. Semantic/hybrid requests can use the optional local
+`Xenova/multilingual-e5-small` model through `--embedding-dir`. The directory must
+contain `model_quantized.onnx` and `tokenizer.json` from revision
+`761b726dd34fb83930e26aab4e9ac3899aa1fa78`; both files are checked against their
+pinned sizes and SHA-256 hashes before loading. The native provider uses tract-onnx
+and tokenizers, keeps its index in memory, and never downloads model files or sends
+record text to a service. Missing, mismatched, unsupported or oversized inputs
+produce an explicit lexical fallback; ordinary record reads do not require the model.
 The stdio MCP server exposes `kpopper_open`, `kpopper_read`, `kpopper_context`
 and `kpopper_search`, plus `kpopper_propose` for private pending proposals.
 The compatibility `kpopper_verify_claims` tool explicitly refuses the legacy
@@ -443,7 +452,9 @@ Python runtime. The CLI and experimental store retain their smaller 1 MiB file/i
 limit. These are bounded input contracts, not a claim to accept every PyYAML source.
 The strict history decoder rejects YAML aliases, including recursive aliases;
 ordinary-source decoding accepts bounded nonrecursive aliases and refuses cycles,
-including cycles in ignored extra fields.
+including cycles in custom collections. A write targeting a cyclic record or named
+hypothesis refuses before changing its source bytes. An invalid, unselected hypothesis
+remains separate from the canonical record; it is not silently folded or discarded.
 
 ## Library authoring
 

@@ -68,6 +68,35 @@ fn captured_id(entry: &Path, event_id: &str) -> String {
 }
 
 #[test]
+fn recursive_alias_refusal_preserves_the_entire_record() {
+    let temp = tempfile::tempdir().unwrap();
+    record(temp.path());
+    let entry = temp.path().join("GROUNDING.yaml");
+    let original = format!(
+        "{}custom: &loop {{p.cycle: *loop}}\n",
+        fs::read_to_string(&entry).unwrap()
+    );
+    fs::write(&entry, &original).unwrap();
+    let output = run(
+        temp.path(),
+        &temp.path().join("state"),
+        &json!({
+            "event_id":"cyclic-record", "date":"2026-09-21", "source_quote":"price 12",
+            "source":"s.old", "at":"entire captured report", "record_sha256":hash(&entry),
+            "updates":[{"kind":"add","id":"p.new","body":{"v":12}}],
+        }),
+    );
+    assert!(!output.status.success());
+    let diagnostic = [output.stdout, output.stderr].concat();
+    assert!(
+        String::from_utf8_lossy(&diagnostic).contains("recursive_yaml_alias"),
+        "{}",
+        String::from_utf8_lossy(&diagnostic)
+    );
+    assert_eq!(fs::read(&entry).unwrap(), original.as_bytes());
+}
+
+#[test]
 fn source_only_custom_collection_accepts_its_first_reading() {
     let temp = tempfile::tempdir().unwrap();
     let entry = temp.path().join("GROUNDING.yaml");

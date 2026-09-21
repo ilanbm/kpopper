@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-20
+  updated: 2026-09-21
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -2148,7 +2148,7 @@ known:
         from canonical typed identity. Canonicalizing source bytes before reduction can change
         accepted heads while preserving typed object identity."
     from: doc.history_source_clock_order
-    on: "2026-09-19"
+    "on": "2026-09-19"
     at: "Python 3.14.5 source-order conformance in native/tests/history_reduction.rs and
          fixtures/history-reduction.json"
   p.history_temporal_applicability:
@@ -2387,6 +2387,14 @@ known:
         capture, routing and history commit authorization remain separate integration work."
     from: s.native_writer_verification
     at: "native/src/reasoning_authoring.rs and native/src/reasoning_authoring_guards.rs"
+  p.native_yaml_cycle_contract:
+    name: "Native cyclic YAML input boundary"
+    v: "Ordinary native records support bounded nonrecursive aliases. Recursive aliases in a
+        targeted record or named hypothesis are refused before its source bytes change; arbitrary
+        top-level mapping collections are not discarded."
+    from: "native/README.md"
+    at: "YAML input contract and native/tests/public_readers.rs, native/tests/public_update.rs"
+    of: "2026-09-21"
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"
@@ -4827,6 +4835,21 @@ judgments:
                              green, distinct_from as an edge that retires the pair"
       alt.sameness_from_names: rejected
       p.candidate_reasons: 4
+  d.native_cycles_refuse:
+    name: "Preserve cyclic YAML source by refusing unsupported writes"
+    verdict: "Keep recursive YAML aliases outside the native finite-value contract and refuse
+              targeted writes without changing source bytes."
+    rests_on: [p.native_yaml_cycle_contract]
+    because: "The native record and history formats use finite values. Dropping cyclic fields would
+              lose meaningful custom collections, while a refusal keeps the original document
+              available for an explicit conversion."
+    reopened_by: "A concrete user workflow requires cyclic object identity, with an agreed lossless
+                  graph representation and round-trip acceptance cases."
+    seen:
+      p.native_yaml_cycle_contract: "Ordinary native records support bounded nonrecursive aliases.
+                                     Recursive aliases in a targeted record or named hypothesis are
+                                     refused before its source bytes change; arbitrary top-level
+                                     mapping collections are not discarded."
   d.native_delivery_scope:
     rests_on: [s.background_ingestion]
     verdict: "A native delivery job binds to the originating host task separately from report

@@ -1,6 +1,11 @@
 name: native Rust platform acceptance
 
 on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'scripts/**'
+      - '.github/workflows/native-rust.yml'
   workflow_dispatch:
     inputs:
       validation:
