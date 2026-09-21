@@ -11,8 +11,10 @@ use std::{
 
 #[derive(Parser)]
 #[command(
+    name = "kpop",
+    bin_name = "kpop",
     version,
-    about = "Experimental native assessment, readers and history tools"
+    about = "Keep what you know, its grounds, and what needs another look"
 )]
 struct Args {
     #[arg(long, global = true)]
