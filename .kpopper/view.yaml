@@ -57,7 +57,10 @@ tabs:
              s.2026_09_19_native_temporal_continuation,
              s.2026_09_19_native_temporal_authoring,
              s.2026_09_19_native_ordinary_authoring,
-             s.2026_09_19_native_import_continuation]
+             s.2026_09_19_native_import_continuation,
+             s.2026_09_19_native_snapshot_continuation,
+             s.2026_09_19_native_identity_continuation,
+             s.2026_09_19_native_hypothesis_edit_continuation]
     sections:
       - title: The questions that pick the next piece of work
         why: each is open on purpose - answering one is how the next thing gets chosen
@@ -182,7 +185,7 @@ tabs:
 
   - title: What this rests on
     occasion: "you are weighing a decision here and want to see the ground under it rather than the reasoning on top"
-    serves: [s.2026_09_18_experimental_applications,
+    serves: [s.2026_09_19_native_transactions, s.2026_09_18_experimental_applications,
              s.2026_09_02_priors, s.2026_09_03_language, s.2026_09_01_consolidation,
              s.2026_09_04_calibration, s.2026_09_10_standalone_html,
              s.2026_09_16_versions_core, s.2026_09_17_host_compatibility]
