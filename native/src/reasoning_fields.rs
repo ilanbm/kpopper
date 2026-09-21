@@ -68,6 +68,21 @@ pub(crate) fn collections(document: &V) -> Result<BTreeMap<String, Map>> {
         })
         .collect())
 }
+fn source_only_collections(collections: &BTreeMap<String, Map>) -> bool {
+    collections.iter().all(|(name, members)| {
+        ["known", "sources", "open", "questions"].contains(&name.as_str())
+            || members.values().all(|body| {
+                map(body).is_ok_and(|body| {
+                    !["v", "quoted", "rule"]
+                        .iter()
+                        .any(|key| body.contains_key(*key))
+                        && ["asked", "file", "url", "read"]
+                            .iter()
+                            .any(|key| body.get(*key).is_some_and(truth))
+                })
+            })
+    })
+}
 fn choose(
     schema: &Map,
     role: &str,
@@ -242,11 +257,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                             && core
                             && m.get("rule").is_some_and(|v| map(v).is_ok()))
                 });
-            let portable = !collections.is_empty()
-                && collections
-                    .keys()
-                    .all(|k| ["known", "sources", "open", "questions"].contains(&k.as_str()))
-                && ["deps", "snapshot", "predicate"]
+            let portable = ["deps", "snapshot", "predicate"]
                     .iter()
                     .all(|k| schema.get(*k).is_some_and(truth))
                 && deps.is_empty()
@@ -262,7 +273,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
     }
     let Some(dep) = choose(schema, "deps", &deps)? else {
         if semantic {
-            let newborn = !doc.is_empty() && doc.keys().all(|k| k == "meta");
+            let header_only = !doc.is_empty() && doc.keys().all(|k| ["meta", "schema"].contains(&k.as_str()));
             let core = doc
                 .get("meta")
                 .and_then(|v| map(v).ok())
@@ -291,11 +302,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                             && m.get("rule").is_some_and(|v| map(v).is_ok()))
                 });
             require(
-                (newborn
-                    || !collections.is_empty()
-                        && collections.keys().all(|k| {
-                            ["known", "sources", "open", "questions"].contains(&k.as_str())
-                        }))
+                (header_only || !collections.is_empty() && source_only_collections(&collections))
                     && unresolved.is_empty()
                     && !shaped,
                 "invalid_snapshot",

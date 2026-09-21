@@ -158,6 +158,13 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
             { source_homes.extend(homes.iter().cloned()); }
         }
     }
+    if source_homes.is_empty()
+        && map(document)?
+            .get("sources")
+            .is_some_and(|sources| map(sources).is_ok_and(|sources| sources.is_empty()))
+    {
+        source_homes.insert("sources".into());
+    }
     require(source_homes.len() == 1, "the batch needs one unambiguous existing source collection")?;
     let fingerprint = if additions { crate::identity::sha256(entry_bytes) } else { body_hash(&V::Map(bodies))? };
     Ok(json!({"body_sha256":fingerprint,"source_collection":source_homes.into_iter().next().unwrap(),"type":"batch"}))
@@ -188,5 +195,24 @@ mod tests {
     fn capture_rejects_untrusted_source_role() {
         let (document, raw) = document();
         assert!(snapshot(&document, &raw, &json!({"source_quote":"bad","target":"p.a","value":2,"date":"2026-09-02","source":"p.b","record_sha256":crate::identity::sha256(&raw)})).unwrap_err().0.contains("not a recorded source"));
+    }
+
+    #[test]
+    fn source_only_custom_collection_accepts_its_first_reading() {
+        let raw = b"evidence:\n  s.old: {file: old.txt, read: 2026-09-01}\n".to_vec();
+        let document = crate::history_yaml::decode_document(&raw).unwrap();
+        let envelope = json!({
+            "source_quote":"new reading",
+            "date":"2026-09-02",
+            "source":"s.old",
+            "at":"entire captured report",
+            "record_sha256":crate::identity::sha256(&raw),
+            "updates":[{"kind":"add","id":"p.value","body":{"v":2}}]
+        });
+
+        let target = snapshot(&document, &raw, &envelope).unwrap();
+
+        assert_eq!(target["type"], "batch");
+        assert_eq!(target["source_collection"], "evidence");
     }
 }

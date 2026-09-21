@@ -42,6 +42,63 @@ class UpdateFlow(unittest.TestCase):
                 'updates': [{'kind': 'set', 'id': 'order.price', 'value': 40},
                             {'kind': 'set', 'id': 'order.quantity', 'value': 2}], **extra}
 
+    def test_source_only_custom_collection_accepts_its_first_reading(self):
+        self.doc = {'evidence': self.doc['sources']}
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        report = self.report(
+            source='s.original',
+            at='entire captured report',
+            record_sha256=I._sha(self.record.read_bytes()),
+            updates=[{'kind': 'add', 'id': 'order.price', 'body': {'v': 40}}],
+        )
+
+        result = I.update(report, self.record)
+
+        self.assertEqual(result['state'], 'applied', result)
+        saved = yaml.safe_load(self.record.read_text())
+        self.assertEqual(saved['evidence']['s.original'], self.doc['evidence']['s.original'])
+        self.assertEqual(saved['known']['order.price']['v'], 40)
+        self.assertNotIn('judgments', saved)
+
+    def test_empty_schema_collections_accept_the_first_batch_update(self):
+        self.doc = {
+            'schema': {'deps': 'rests_on', 'snapshot': 'seen', 'predicate': 'wrong_if'},
+            'sources': {}, 'known': {}, 'judgments': {},
+        }
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        report = self.report(
+            record_sha256=I._sha(self.record.read_bytes()),
+            updates=[{'kind': 'add', 'id': 'order.price', 'body': {'v': 40}}],
+        )
+
+        result = I.update(report, self.record)
+
+        self.assertEqual(result['state'], 'applied', result)
+        saved = yaml.safe_load(self.record.read_text())
+        self.assertEqual(saved['known']['order.price']['v'], 40)
+        self.assertTrue(saved['sources'])
+        self.assertEqual(saved['judgments'], {})
+
+    def test_no_schema_custom_value_collection_stays_unreadable(self):
+        self.doc = {
+            'evidence': self.doc['sources'],
+            'parameters': {'order.existing': {'v': 20}},
+        }
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        before = self.record.read_bytes()
+        report = self.report(
+            source='s.original',
+            at='entire captured report',
+            record_sha256=I._sha(before),
+            updates=[{'kind': 'add', 'id': 'order.price', 'body': {'v': 40}}],
+        )
+
+        result = I.update(report, self.record)
+
+        self.assertEqual(result['state'], 'needs_primary', result)
+        self.assertIn('no dependency field found', result['reason'])
+        self.assertEqual(self.record.read_bytes(), before)
+
     def test_report_with_existing_page_applies_and_surfaces_a_real_contradiction(self):
         before = copy.deepcopy(self.doc['judgments'])
         mark = self.base / 'session-mark.json'

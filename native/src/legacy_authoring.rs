@@ -569,10 +569,18 @@ fn replace_entry(lines: &mut Vec<String>, id: &str, body: &Source) -> Result<()>
 }
 
 fn ensure_collection(lines: &mut Vec<String>, collection: &str) {
-    if collections(lines)
+    if let Some(existing) = collections(lines)
         .iter()
-        .any(|item| item.name == collection)
+        .find(|item| item.name == collection)
     {
+        if inline(&lines[existing.start]) == "{}" {
+            lines[existing.start] = lines[existing.start]
+                .trim_end()
+                .strip_suffix("{}")
+                .unwrap()
+                .trim_end()
+                .to_owned();
+        }
         return;
     }
     while lines.last().is_some_and(|line| line.trim().is_empty()) {

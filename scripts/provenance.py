@@ -1242,14 +1242,12 @@ def infer(doc):
             # nothing to check and the record passes by default - the quiet pass this
             # method refuses. A snapshot or predicate named the same way costs one check.
             if role == "deps" and sch[role] not in present:
-                source_collections = {k: v for k, v in collections.items() if k != 'meta'}
                 judgment_fields = {'rests_on', 'wrong_if', 'seen', 'verdict', 'reopened_by', 'blocked_on'} | \
                                   {sch[k] for k in ('deps', 'snapshot', 'predicate') if sch.get(k)}
-                if source_collections and set(source_collections) <= {'known', 'sources', 'open', 'questions'} \
-                        and all(sch.get(k) for k in ('deps', 'snapshot', 'predicate')) \
+                if all(sch.get(k) for k in ('deps', 'snapshot', 'predicate')) \
                         and not cand['deps'] and set(unresolved) <= {'labels', 'tags', 'v', 'quoted'} \
                         and not any(judgment_shaped(body, judgment_fields)
-                            for group in source_collections.values() for body in group.values()
+                            for group in collections.values() for body in group.values()
                             if isinstance(body, dict)):
                     # A portable source/fact closure may retain the explicit parent
                     # schema without retaining a downstream judgment. An actual
@@ -1282,8 +1280,14 @@ def infer(doc):
         judgment_fields = {"rests_on", "wrong_if", "seen", "verdict", "reopened_by", "blocked_on"}
         # A record born with only its head - meta, and nothing yet - is the moment before
         # the first entry, not a record that lost its graph.
-        newborn = bool(doc) and set(doc) <= {"meta"}
-        if (newborn or source_collections and set(source_collections) <= {"known", "sources", "open", "questions"}) \
+        header_only = bool(doc) and set(doc) <= {"meta", "schema"}
+        conventional = {'known', 'sources', 'open', 'questions'}
+        custom_sources = all(collection in conventional or all(
+            isinstance(body, dict) and not any(key in body for key in ('v', 'quoted', 'rule'))
+            and any(body.get(key) for key in ('asked', 'file', 'url', 'read'))
+            for body in members.values())
+            for collection, members in source_collections.items())
+        if (header_only or source_collections and custom_sources) \
                 and not unresolved and not any(
                     judgment_shaped(body, judgment_fields) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
@@ -4893,8 +4897,11 @@ def _apply_unlocked(paths, action, diagnostics=None, *, project=None):
 def _ensure_collection(lines, collection):
     """The collection opened at the end of the file when it lacks one; the file still ends
     in a newline."""
-    if collection in {n for n, _, _ in _collections_in(lines)}:
-        return
+    for name, start, _ in _collections_in(lines):
+        if name == collection:
+            if _inline(lines[start]) == '{}':
+                lines[start] = lines[start].split(':', 1)[0] + ':'
+            return
     while lines and not lines[-1].strip():
         lines.pop()
     lines += ([""] if lines else []) + [f"{collection}:", ""]

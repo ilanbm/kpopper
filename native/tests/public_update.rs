@@ -68,6 +68,99 @@ fn captured_id(entry: &Path, event_id: &str) -> String {
 }
 
 #[test]
+fn source_only_custom_collection_accepts_its_first_reading() {
+    let temp = tempfile::tempdir().unwrap();
+    let entry = temp.path().join("GROUNDING.yaml");
+    fs::write(
+        &entry,
+        "evidence:\n  s.old: {file: old.txt, read: 2026-09-01}\n",
+    )
+    .unwrap();
+    let output = run(
+        temp.path(),
+        &temp.path().join("state"),
+        &json!({
+            "event_id":"source-only", "date":"2026-09-20", "source_quote":"price 12",
+            "source":"s.old", "at":"entire captured report", "record_sha256":hash(&entry),
+            "updates":[{"kind":"add","id":"p.price","body":{"v":12}}],
+        }),
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(receipt["state"], "applied");
+    let saved = fs::read_to_string(&entry).unwrap();
+    assert!(saved.contains("evidence:\n"));
+    assert!(saved.contains("p.price:\n"));
+    assert!(!saved.contains("judgments:"));
+}
+
+#[test]
+fn empty_schema_collections_accept_the_first_batch_update() {
+    let temp = tempfile::tempdir().unwrap();
+    let entry = temp.path().join("GROUNDING.yaml");
+    fs::write(
+        &entry,
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources: {}\nknown: {}\njudgments: {}\n",
+    )
+    .unwrap();
+    let output = run(
+        temp.path(),
+        &temp.path().join("state"),
+        &json!({
+            "event_id":"empty-schema", "date":"2026-09-20", "source_quote":"price 12",
+            "record_sha256":hash(&entry),
+            "updates":[{"kind":"add","id":"p.price","body":{"v":12}}],
+        }),
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(receipt["state"], "applied");
+    let saved = fs::read_to_string(&entry).unwrap();
+    assert!(saved.contains("sources:\n  s.ingest_"));
+    assert!(saved.contains("known:\n  p.price:\n"));
+    assert!(saved.contains("judgments: {}\n"));
+}
+
+#[test]
+fn no_schema_custom_value_collection_stays_unreadable() {
+    let temp = tempfile::tempdir().unwrap();
+    let entry = temp.path().join("GROUNDING.yaml");
+    fs::write(
+        &entry,
+        "evidence:\n  s.old: {file: old.txt, read: 2026-09-01}\nparameters:\n  p.existing: {v: 1}\n",
+    )
+    .unwrap();
+    let before = fs::read(&entry).unwrap();
+    let output = run(
+        temp.path(),
+        &temp.path().join("state"),
+        &json!({
+            "event_id":"ambiguous-custom", "date":"2026-09-20", "source_quote":"price 12",
+            "source":"s.old", "at":"entire captured report", "record_sha256":hash(&entry),
+            "updates":[{"kind":"add","id":"p.price","body":{"v":12}}],
+        }),
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(receipt["state"], "needs_primary");
+    assert!(receipt["reason"].as_str().unwrap().contains("ordinary_fields_unreadable"));
+    assert_eq!(fs::read(&entry).unwrap(), before);
+}
+
+#[test]
 fn explicit_question_keeps_its_target_and_never_applies_the_value() {
     let temp = tempfile::tempdir().unwrap();
     record(temp.path());

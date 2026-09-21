@@ -371,6 +371,16 @@ fn source_collection(document: &V, report: &Report) -> Result<String> {
         .filter(|(_, members)| members.values().any(is_source))
         .map(|(name, _)| name.clone())
         .collect::<Vec<_>>();
+    let candidates = if candidates.is_empty()
+        && map(document)
+            .ok()
+            .and_then(|document| document.get("sources"))
+            .is_some_and(|sources| map(sources).is_ok_and(|sources| sources.is_empty()))
+    {
+        vec!["sources".into()]
+    } else {
+        candidates
+    };
     crate::require(
         candidates.len() == 1,
         "the batch needs one unambiguous existing source collection",

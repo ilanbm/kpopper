@@ -2,7 +2,14 @@ use std::{fs, process::Command};
 
 #[test]
 fn first_entry_opens_bare_collection_without_changing_the_other_source() {
-    for header in ["known:", "known: # keep collection comment"] {
+    for (header, rendered) in [
+        ("known:", "known:"),
+        (
+            "known: # keep collection comment",
+            "known: # keep collection comment",
+        ),
+        ("known: {}", "known:"),
+    ] {
         for explicit in [true, false] {
             let temp = tempfile::tempdir().unwrap();
             let record = temp.path().join("GROUNDING.yaml");
@@ -41,7 +48,7 @@ fn first_entry_opens_bare_collection_without_changing_the_other_source() {
             assert_eq!(
                 fs::read_to_string(&record).unwrap(),
                 format!(
-                    "meta: {{updated: 2026-09-19}}\nsources:\n  s.source: {{name: A source}}\n{header}\n  p.a:\n    v: 2\n"
+                    "meta: {{updated: 2026-09-19}}\nsources:\n  s.source: {{name: A source}}\n{rendered}\n  p.a:\n    v: 2\n"
                 )
             );
         }
@@ -50,7 +57,7 @@ fn first_entry_opens_bare_collection_without_changing_the_other_source() {
 
 #[test]
 fn scalar_collection_and_invalid_inline_edit_leave_record_unchanged() {
-    for value in ["42", "false", "{}", "null"] {
+    for value in ["42", "false", "null"] {
         let temp = tempfile::tempdir().unwrap();
         let record = temp.path().join("GROUNDING.yaml");
         let before = format!(
