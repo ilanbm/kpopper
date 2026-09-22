@@ -187,8 +187,29 @@ class NativeDistribution(unittest.TestCase):
                                  "--metadata", str(metadata), "--output", str(output)],
                                 text=True, capture_output=True, timeout=20)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("no license, copyright, copying, or notice text", result.stderr)
+        self.assertIn("no primary license text", result.stderr)
         self.assertFalse(output.exists())
+
+    def test_notice_alone_cannot_replace_license_terms(self):
+        manifest, metadata = self.rust_metadata_fixture(missing_text=True)
+        data = json.loads(metadata.read_text())
+        dependency = Path(data["packages"][1]["manifest_path"]).parent
+        (dependency / "NOTICE").write_text("Copyright Example.\n")
+        output = self.root / "notice alone"
+        command = [sys.executable, str(LICENSE_COLLECTOR), "--manifest-path", str(manifest),
+                   "--metadata", str(metadata), "--output", str(output)]
+        refused = subprocess.run(command, text=True, capture_output=True, timeout=20)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("no primary license text", refused.stderr)
+        self.assertFalse(output.exists())
+        overrides = self.root / "overrides" / "dependency-1.2.3"
+        overrides.mkdir(parents=True)
+        (overrides / "LICENSE-MIT").write_text("Reviewed license terms\n")
+        accepted = subprocess.run(command + ["--overrides", str(overrides.parent)],
+                                  text=True, capture_output=True, timeout=20)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertTrue((output / "dependency-1.2.3/NOTICE").is_file())
+        self.assertTrue((output / "dependency-1.2.3/LICENSE-MIT").is_file())
 
     def test_rust_license_collection_accepts_only_explicit_versioned_override(self):
         manifest, metadata = self.rust_metadata_fixture(missing_text=True)

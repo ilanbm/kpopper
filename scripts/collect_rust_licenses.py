@@ -14,11 +14,7 @@ import tempfile
 
 LICENSE_NAME = re.compile(r"^(license|copying|copyright|notice|unlicense|authors?)([._-].*)?$", re.IGNORECASE)
 PRIMARY_LICENSE_NAME = re.compile(r"^(license|copying|unlicense)([._-].*)?$", re.IGNORECASE)
-LICENSE_TERMS = re.compile(
-    r"permission is hereby granted|licensed under the apache license|redistribution and use in source|"
-    r"gnu (lesser )?general public license|mozilla public license",
-    re.IGNORECASE,
-)
+
 
 
 def fail(message):
@@ -92,16 +88,7 @@ def package_files(package, all_packages, overrides=None):
         candidates.extend(path for path in root.iterdir() if LICENSE_NAME.match(path.name))
     except OSError as error:
         fail("cannot inspect dependency package %s %s: %s" % (package["name"], package["version"], error))
-    if not any(PRIMARY_LICENSE_NAME.match(path.name) for path in candidates):
-        readme = root / "README.md"
-        try:
-            readme_text = readme.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            readme_text = ""
-        if (re.search(r"(?im)^#{1,6}\s+license\s*:?\s*$", readme_text) and
-                LICENSE_TERMS.search(readme_text)):
-            candidates.append(readme)
-    if not candidates and package.get("repository") and package.get("license"):
+    if not any(PRIMARY_LICENSE_NAME.match(path.name) for path in candidates) and package.get("repository") and package.get("license"):
         revision = vcs_revision(package)
         for sibling in all_packages:
             if (sibling.get("id") != package.get("id") and
@@ -116,7 +103,7 @@ def package_files(package, all_packages, overrides=None):
                 except OSError:
                     continue
     used_override = False
-    if not candidates and overrides:
+    if not any(PRIMARY_LICENSE_NAME.match(path.name) for path in candidates) and overrides:
         override = overrides / ("%s-%s" % (package["name"], package["version"]))
         if override.exists():
             if override.is_symlink() or not override.is_dir():
@@ -146,8 +133,8 @@ def package_files(package, all_packages, overrides=None):
                 fail("license filename collision for %s %s: %s" % (package["name"], package["version"], name))
             continue
         unique[name.lower()] = resolved
-    if not unique:
-        fail("no license, copyright, copying, or notice text found for %s %s" %
+    if not any(PRIMARY_LICENSE_NAME.match(path.name) for path in unique.values()):
+        fail("no primary license text found for %s %s" %
              (package["name"], package["version"]))
     return sorted(unique.values(), key=lambda path: path.name.lower()), used_override
 
