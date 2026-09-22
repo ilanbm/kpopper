@@ -100,7 +100,7 @@ of the host code page. Captured source text retains its original line endings an
 content hash. The printed command hint targets a POSIX shell, including Git Bash on
 Windows; it is labeled accordingly. MCP requests do not require that shell syntax.
 
-The checked hook includes an executable read hint and budgets that hint together with the view. That command carries its resolved project, input, state and profile with `--no-settings`, so replaying it from another directory cannot pick a different interpreter or project configuration. If enabled checked mode cannot run, the hook reports that limitation and points to the record; it does not silently substitute a truncated result while claiming a checked view. Disabling does not delete the record, proposals or core cache. The Stop gate retains its existing baseline behavior.
+The checked hook includes an executable read hint and budgets that hint together with the view. That command carries its resolved project, input, state and profile with `--no-settings`, so replaying it from another directory cannot pick a different interpreter or project configuration. If enabled checked mode cannot run, the hook reports that limitation and points to the record; it does not silently substitute a truncated result while claiming a checked view. Disabling does not delete the record, proposals or core cache. Prompt diagnostics retain the session-start baseline comparison without a Stop continuation.
 
 Codex also reviews and trusts plugin hook definitions separately from installation. If the
 host asks for that review, inspect the hook definition there before expecting automatic

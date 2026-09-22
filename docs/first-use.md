@@ -91,5 +91,5 @@ without an active start hook use the shared method's `kpop open` instruction ins
 Hook wiring and capabilities remain subject to each adapter's documented limitations.
 
 The temporary session baseline can be recorded before a knowledge file exists. If the session
-then creates a record, the existing Stop gate can check it. This is a consistency check on the
+then creates a record, prompt diagnostics can check it without interrupting the answer. This is a consistency check on the
 record, not a requirement to create one or to finish an onboarding tour.

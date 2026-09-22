@@ -15,10 +15,12 @@ def configuration():
     return {"version": 1, "hooks": {
         event: [{"type": "command", "exec": sys.executable,
                  "args": [str(HERE), mode], "timeoutSec": 65}]
-        for event, mode in (("sessionStart", "start"), ("agentStop", "stop"))}}
+        for event, mode in (("sessionStart", "start"),)}}
 
 
 def handle(mode, payload):
+    if mode == 'stop':
+        return {}  # Legacy installations must never create an agent continuation.
     if not isinstance(payload, dict):
         raise ValueError("the hook payload must be an object")
     payload = dict(payload)
@@ -33,8 +35,6 @@ def handle(mode, payload):
            + os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"}
     result = subprocess.run(command, input=json.dumps(payload), env=env,
                             capture_output=True, text=True, encoding="utf-8", timeout=60)
-    if mode == "stop" and result.returncode == 2:
-        return {"decision": "block", "reason": result.stderr.strip() or result.stdout.strip()}
     if result.stderr:
         print(result.stderr.rstrip(), file=sys.stderr)
     if result.returncode:

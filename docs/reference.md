@@ -394,30 +394,32 @@ a grounding line names at most three entries whose ids, names or verdicts the pr
 touch, with the skill that reads them; an entry is named until it is read, then again only
 when its recorded body changes or the session compacts, and an unread one repeats after a
 cooldown of ten prompts. Before a file is edited, the entries whose source it is, or whose
-reading a recipe takes from it, are said once. The stop gate compares with a session-start
-baseline and reminds once about new failures and entries with no intent. A session that
-changed files of the tree, or ran eight prompts, with the record untouched receives advisory
-`UserPromptSubmit` context, with a ten-prompt cooldown. This reminder preserves the current
-user request, respects record-write authorization and never blocks Stop or creates a new
-continuation request. It uses `additionalContext`, not a user-facing `systemMessage`;
-host interfaces may still expose hook activity. An unchanged judgment whose falsifier fires after a new
-scalar reading can remain flagged while recording finishes; `check` still reports it.
-The Claude/Codex Stop hook attributes entries and intents to a session only when a
-successful direct write retained a private receipt for that exact entry body and source
-file. Git updates and manual edits alone do not establish session authorship. Writers
-use `KPOPPER_AGENT_SESSION` from the opening context (or `CODEX_THREAD_ID` in Codex).
-Legacy and active-history direct writes retain these receipts after publication;
-previews, failed writes and private drafts do not. Missing receipts leave ownership
-unknown. Captured reports retain their own existing source-purpose receipts.
+reading a recipe takes from it, are said once. Diagnostics compare with the session-start
+baseline and are delivered as `UserPromptSubmit` context: new check failures, entries with
+no recorded intent, and an unavailable assessment. At most eight new findings are delivered
+per prompt, each capped at 500 characters with an explicit pointer to `check` when clipped;
+omitted findings remain eligible for the next prompt. The current user request stays active.
+No supplied hook blocks Stop, replaces a tool result, requests a continuation, or wakes an
+idle conversation. Legacy Stop wrappers are silent so older registrations are harmless.
+`check`, direct `gate` commands and write admission retain their failure behavior.
 
-The hook retains a separate delivery receipt for each finding under the session's
-temporary state directory. Repeated stops and resumed sessions do not repeat the same
-finding, even without a host recursion flag; a new finding may still be delivered.
-This controls notification only: `check` and write admission continue to report failures
-on every evaluation. Temporary state loss removes this delivery history and attribution
-evidence; unavailable delivery storage makes the hook yield rather than repeatedly block.
-Adapters differ in their ability to block, remind or deliver asynchronously—consult the
-[capability matrix](../adapters/README.md#capability-matrix).
+A session that changed files or ran eight prompts with the record untouched also receives
+advisory prompt context with a ten-prompt cooldown. Context never requires a bookkeeping
+reply or grants write permission. A user can still explicitly ask about a reminder.
+Diagnostics use `additionalContext`; host interfaces may expose hook activity.
+
+Session attribution requires a successful-write receipt matching the session, source file
+and exact current entry body. Git updates and manual edits alone do not establish authorship.
+Writers use `KPOPPER_AGENT_SESSION` from the opening context (or `CODEX_THREAD_ID` in Codex).
+Legacy and active-history direct writes retain these receipts after publication; previews,
+failed writes and private drafts do not. Missing receipts leave ownership unknown.
+
+Private delivery receipts suppress repeated findings across prompts and resume. Diagnostics
+are reassessed before delivery, so a resolved problem is not replayed from a stale queue.
+Unavailable delivery storage suppresses optional notifications without changing validation.
+Claude and Codex use regular async context for ingestion/watch findings; there is no
+`asyncRewake` route. Other adapters expose current state at startup or through explicit
+checks, as described in the [capability matrix](../adapters/README.md#capability-matrix).
 
 From a source checkout, run `python3 scripts/cli.py <command>` or `scripts/kpopper <command>`.
 When using an installed plugin without a `kpop` command on `PATH`, use the same dispatcher

@@ -2,7 +2,7 @@
 
 The native `.codex-plugin/plugin.json` selects `plugin-hooks.json` from this directory.
 Its commands use `$PLUGIN_ROOT`; the manifest override replaces default discovery of
-`hooks/hooks.json`, which belongs to Claude Code. This keeps Claude's `asyncRewake` configuration
+`hooks/hooks.json`, which belongs to Claude Code. This keeps each host's hook configuration
 out of the Codex path.
 
 ## Native plugin
@@ -10,7 +10,7 @@ out of the Codex path.
 First run the [private Python setup](../../README.md#prepare-python-for-claude-code-and-codex)
 on the machine and OS account that execute Codex's hooks. Plugin installation alone
 does not install Python dependencies. All commands in `plugin-hooks.json`, including
-the Stop gate, select that runtime; they continue to run scripts from `$PLUGIN_ROOT`.
+prompt diagnostics, select that runtime; they continue to run scripts from `$PLUGIN_ROOT`.
 If opening reports missing dependencies, run its exact `setup` command and start a
 new task. Compare `doctor`'s `Hook Python` with `KPOPPER_AGENT_CONTEXT.command[0]`.
 
@@ -20,7 +20,7 @@ The Codex package loads the shared skill and these hooks:
 |---|---|
 | `SessionStart` | The existing record opener and ready important ingestion findings |
 | `PostToolUse`, `UserPromptSubmit` | Asynchronous delivery of newly actionable ingestion results |
-| `Stop` | The existing record gate; no new ingestion wait or approval gate |
+| `UserPromptSubmit` | Current record diagnostics as `additionalContext`; no Stop continuation |
 
 The hooks only read the queue. `kpop ingest capture` retains an explicit report and starts the
 independent processor. Routine completion emits no hook output. Important results enter the next

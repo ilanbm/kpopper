@@ -127,10 +127,9 @@ class Gate(Scratch):
         code, out, err = self.cli("add", "heat.storm_kw", "v=5", "unit=kW", "name=loss in a storm",
                                   "from=doc.boiler_sheet", "--as-of", "2026-09-04")
         self.assertEqual(code, 0, err)
-        code, _, err = self.hook("session_gate.sh", payload)
-        self.assertEqual(code, 2)
-        self.assertIn("recorded no intent", err, "the record's own reminders come first")
-        self.assertNotIn("the record untouched", err)
+        code, out, err = self.hook("session_gate.sh", payload, "--context", "UserPromptSubmit")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("recorded no intent", json.loads(out)["hookSpecificOutput"]["additionalContext"])
         payload = {"session_id": "n3", "cwd": str(self.dir)}
         self.hook("session_open.sh", payload)
         (self.dir / "other.md").write_text("x\n", encoding="utf-8")
