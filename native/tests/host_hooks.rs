@@ -624,14 +624,10 @@ fn watch_native_delivery_is_positive_on_windows_and_matches_python_where_support
     assert!(n.starts_with("KPOPPER_WATCH "), "{}", diagnostic(&nv));
     assert!(n.contains("c.checkout"));
     if cfg!(windows) {
-        // The retained Python waiter has no Windows locking implementation.
+        // Python watch setup requires POSIX locking. Its nonblocking hook may
+        // return silently during availability checks on Windows.
         // Native Windows delivery remains required and is asserted above.
         assert!(p.is_empty(), "{}", diagnostic(&py));
-        assert!(
-            String::from_utf8_lossy(&py.stderr).contains("fcntl"),
-            "{}",
-            diagnostic(&py)
-        );
     } else {
         assert!(p.starts_with("KPOPPER_WATCH "), "{}", diagnostic(&py));
         assert!(p.contains("c.checkout"));
