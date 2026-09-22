@@ -1678,10 +1678,10 @@ fn prepare_with_inventory_mode(
                     }
                 }
                 if let Some(scope) = authored.get("scope") {
-                    let scope = source_body
-                        .and_then(|body| body.get("scope"))
-                        .cloned()
-                        .unwrap_or(ordered_scope(scope)?);
+                    let scope = match source_body.and_then(|body| body.get("scope")) {
+                        Some(written) => written.clone(),
+                        None => ordered_scope(scope)?,
+                    };
                     if let Some((_, value)) = fields.iter_mut().find(|(field, _)| field == "scope") {
                         *value = scope;
                     } else {

@@ -325,6 +325,44 @@ fn feature_scoped_named_writes_match_python() {
 }
 
 #[test]
+fn a_named_add_keeps_its_scope_text() {
+    for advanced in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        copy_resources(root);
+        if advanced {
+            advanced_project(root);
+        }
+        let record = root.join("GROUNDING.yaml");
+        let before = include_bytes!("fixtures/legacy-authoring/simple-before.yaml");
+        fs::write(&record, before).unwrap();
+        assert_eq!(
+            success(
+                kpop(root)
+                    .args([
+                        "add",
+                        "p.gamma",
+                        "v=3",
+                        "scope=local experiment",
+                        "--as-of",
+                        "2026-09-19",
+                        "--hypothesis",
+                        "trial",
+                    ])
+                    .output()
+                    .unwrap()
+            ),
+            "add p.gamma into known, its first entry of hypothesis trial\n\nthe base is untouched; trial holds 1 entry and 0 judgments\n"
+        );
+        assert_eq!(fs::read(&record).unwrap(), before);
+        assert_eq!(
+            fs::read_to_string(root.join(".kpopper/hypotheses/trial.yaml")).unwrap(),
+            "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.gamma:\n    v: 3\n    scope: \"local experiment\"\n"
+        );
+    }
+}
+
+#[test]
 fn private_dependencies_stay_out_of_shared_hypotheses() {
     for existing in [false, true] {
         let temp = tempfile::tempdir().unwrap();

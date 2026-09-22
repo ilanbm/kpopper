@@ -364,10 +364,12 @@ fn prepare_mode(
                 && let Source::Map(fields) = &mut ordered
                 && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
             {
-                *value = source_body
-                    .and_then(|body| body.get("scope"))
-                    .cloned()
-                    .unwrap_or(ordered_scope(scope)?);
+                // Only a routed scope is missing from the authored body, and
+                // routing declares it as a mapping; an authored scope is kept.
+                *value = match source_body.and_then(|body| body.get("scope")) {
+                    Some(written) => written.clone(),
+                    None => ordered_scope(scope)?,
+                };
             }
             if let Ok(m) = map(&body)
                 && m.contains_key(deps)
