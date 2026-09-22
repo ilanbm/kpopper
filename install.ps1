@@ -16,6 +16,25 @@ function Assert-Version([string]$Value) {
         Fail "invalid version: $Value"
     }
 }
+function Get-TreeInventory([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { Fail "managed resource tree is missing: $Path" }
+    $Resolved = (Resolve-Path -LiteralPath $Path).Path.TrimEnd([char[]]"\/")
+    $Rows = [Collections.Generic.List[string]]::new()
+    foreach ($Item in @(Get-ChildItem -LiteralPath $Resolved -Force -Recurse | Sort-Object FullName)) {
+        if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            Fail "managed resource tree contains a link: $($Item.FullName)"
+        }
+        $Relative = $Item.FullName.Substring($Resolved.Length).TrimStart([char[]]"\/").Replace('\', '/')
+        if ($Item.PSIsContainer) {
+            $Rows.Add("D|$Relative")
+        } elseif (Test-Path -LiteralPath $Item.FullName -PathType Leaf) {
+            $Rows.Add("F|$Relative|$((Get-FileHash -LiteralPath $Item.FullName -Algorithm SHA256).Hash)")
+        } else {
+            Fail "managed resource tree contains a special file: $($Item.FullName)"
+        }
+    }
+    return $Rows.ToArray()
+}
 
 if ($Prefix -and $PluginRoot) { Fail "-Prefix and -PluginRoot cannot be combined" }
 if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -notin @('AMD64', 'x86')) {
@@ -127,12 +146,52 @@ try {
         if ((Test-Path -LiteralPath $Public) -and -not (Test-Path -LiteralPath $BinMarker -PathType Leaf)) {
             Fail "refusing to replace unmanaged path: $Public"
         }
+        if ((Test-Path -LiteralPath $Public) -and -not (Test-Path -LiteralPath $Public -PathType Leaf)) {
+            Fail "refusing to replace non-file public path: $Public"
+        }
     }
     if ((Test-Path -LiteralPath $PublicResources) -and -not (Test-Path -LiteralPath $BinMarker -PathType Leaf)) {
         Fail "refusing to replace unmanaged path: $PublicResources"
     }
     if ((Test-Path -LiteralPath $Destination) -and -not (Test-Path -LiteralPath (Join-Path $Destination ".kpopper-managed") -PathType Leaf)) {
         Fail "refusing to replace unmanaged version directory: $Destination"
+    }
+    if (Test-Path -LiteralPath $BinMarker -PathType Leaf) {
+        $MarkerLines = @(Get-Content -LiteralPath $BinMarker)
+        if ($MarkerLines.Count -ne 1 -or $MarkerLines[0] -notmatch '^([A-Za-z0-9._-]+)/windows-x86_64$' -or
+            $Matches[1] -in @('.', '..')) {
+            Fail "public ownership marker is invalid: $BinMarker"
+        }
+        $ManagedVersion = $Matches[1]
+        $Previous = Join-Path $Prefix "lib/kpopper/$ManagedVersion/$Target"
+        $PreviousMarker = Join-Path $Previous ".kpopper-managed"
+        if (-not (Test-Path -LiteralPath $PreviousMarker -PathType Leaf) -or
+            @((Get-Content -LiteralPath $PreviousMarker)).Count -ne 1 -or
+            (Get-Content -LiteralPath $PreviousMarker -Raw).Trim() -ne $ManagedVersion) {
+            Fail "public ownership marker does not resolve to a managed payload"
+        }
+        foreach ($Name in @('kpop.exe', 'kpopper.exe')) {
+            $Public = Join-Path $PublicBin $Name
+            if (Test-Path -LiteralPath $Public -PathType Leaf) {
+                $Managed = Join-Path $Previous "bin/$Name"
+                if (-not (Test-Path -LiteralPath $Managed -PathType Leaf) -or
+                    (Get-FileHash -LiteralPath $Public -Algorithm SHA256).Hash -ne
+                    (Get-FileHash -LiteralPath $Managed -Algorithm SHA256).Hash) {
+                    Fail "refusing to replace modified public path: $Public"
+                }
+            }
+        }
+        if (Test-Path -LiteralPath $PublicResources) {
+            if (-not (Test-Path -LiteralPath $PublicResources -PathType Container)) {
+                Fail "refusing to replace non-directory public path: $PublicResources"
+            }
+            $ManagedResources = Join-Path $Previous "bin/resources"
+            $Differences = @(Compare-Object -ReferenceObject @(Get-TreeInventory $ManagedResources) `
+                                           -DifferenceObject @(Get-TreeInventory $PublicResources))
+            if ($Differences.Count -ne 0) {
+                Fail "refusing to replace modified public resource tree: $PublicResources"
+            }
+        }
     }
     [IO.Directory]::CreateDirectory((Split-Path -Parent $Destination)) | Out-Null
     [IO.Directory]::CreateDirectory($PublicBin) | Out-Null

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import stat
 import subprocess
 import sys
@@ -124,6 +125,43 @@ class NativeDistribution(unittest.TestCase):
         self.assertIn('Move-Item -LiteralPath $TemporaryResources -Destination $PublicResources', script)
         self.assertIn('refusing to replace unmanaged path: $PublicResources', script)
         self.assertIn('Move-Item -LiteralPath $ResourcesBackup -Destination $PublicResources', script)
+
+    @unittest.skipUnless(os.name == "nt", "real PowerShell installer regression")
+    def test_windows_installer_refuses_modified_managed_public_files(self):
+        powershell = shutil.which("pwsh") or shutil.which("powershell")
+        if not powershell:
+            self.skipTest("PowerShell is unavailable")
+        archive, _ = self.package("windows-x86_64")
+        prefix = self.root / "windows prefix"
+        command = [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "install.ps1"),
+                   "-Version", "0.9.0", "-Archive", str(archive), "-Sha256", sha256(archive),
+                   "-Prefix", str(prefix)]
+        installed = subprocess.run(command, text=True, capture_output=True, timeout=30)
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        public_binary = prefix / "bin/kpop.exe"
+        public_binary.write_bytes(b"user replacement")
+        rejected = subprocess.run(command, text=True, capture_output=True, timeout=30)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("modified public path", rejected.stderr)
+        self.assertEqual(public_binary.read_bytes(), b"user replacement")
+
+        managed_binary = prefix / "lib/kpopper/0.9.0/windows-x86_64/bin/kpop.exe"
+        shutil.copy2(managed_binary, public_binary)
+        public_resource = prefix / "bin/resources/ordinary/data.txt"
+        public_resource.write_text("user replacement\n", encoding="utf-8")
+        rejected = subprocess.run(command, text=True, capture_output=True, timeout=30)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("modified public resource tree", rejected.stderr)
+        self.assertEqual(public_resource.read_text(encoding="utf-8"), "user replacement\n")
+
+        managed_resource = prefix / "lib/kpopper/0.9.0/windows-x86_64/bin/resources/ordinary/data.txt"
+        shutil.copy2(managed_resource, public_resource)
+        marker = prefix / "bin/.kpopper-managed"
+        marker.write_text("untrusted/value\n", encoding="ascii")
+        rejected = subprocess.run(command, text=True, capture_output=True, timeout=30)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("ownership marker is invalid", rejected.stderr)
+        self.assertEqual(marker.read_text(encoding="ascii"), "untrusted/value\n")
 
     def test_packager_rejects_symlink_and_extra_resource_root(self):
         os.symlink(self.resources / "ordinary/data.txt", self.resources / "reasoning/link")
