@@ -214,3 +214,4 @@ pub mod watch_store;
 
 mod session_settings;
 pub mod session_admin;
+pub mod host_hooks;

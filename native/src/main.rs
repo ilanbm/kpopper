@@ -90,6 +90,14 @@ enum Command {
     Map(kpop_native::public_map::Options),
     #[command(name = "_agent", hide = true)]
     Agent(kpop_native::public_map::AgentOptions),
+    #[command(name = "_hook", hide = true)]
+    Hook {
+        kind: String,
+        host: Option<String>,
+        mode: Option<String>,
+        #[arg(long, default_value_t = 110.0)]
+        wait_seconds: f64,
+    },
     Remeasure(kpop_native::public_remeasure::Options),
 
     History(kpop_native::public_history::Options),
@@ -521,6 +529,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Watch(_)
         | Command::Map(_)
         | Command::Agent(_)
+        | Command::Hook { .. }
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
@@ -554,6 +563,43 @@ fn main() {
             error.exit();
         }
     };
+    if let Command::Hook {
+        kind,
+        host,
+        mode,
+        wait_seconds,
+    } = &args.command
+    {
+        let result = stdin_bytes()
+            .and_then(|raw| serde_json::from_slice(&raw).map_err(kpop_native::Error::from))
+            .and_then(|payload| {
+                kpop_native::host_hooks::run(
+                    kind,
+                    host.as_deref(),
+                    mode.as_deref(),
+                    &payload,
+                    *wait_seconds,
+                )
+            });
+        match result {
+            Ok(output) => {
+                print!("{}", output.stdout);
+                eprint!("{}", output.stderr);
+                std::process::exit(output.code);
+            }
+            Err(error) => {
+                let prefix = match kind.as_str() {
+                    "followups" => "kpopper followup check unavailable",
+                    "watch" => "kpop watch unavailable",
+                    "ground" => "kpopper grounding unavailable",
+                    "edit" => "kpopper citation check unavailable",
+                    _ => "kpopper hook unavailable",
+                };
+                eprintln!("{prefix}: {error}");
+                return;
+            }
+        }
+    }
     if matches!(args.command, Command::Search(_) | Command::Config(_)) {
         let cwd = match args
             .workspace
