@@ -1,6 +1,6 @@
 //! Ordinary field roles over the source value domain. Canonical snapshot fields remain separate.
 use crate::{
-    Result, history_contract::error, ordinary_value::Value as V, ordinary_value::*, require,
+    Error, Result, history_contract::error, ordinary_value::Value as V, ordinary_value::*, require,
     value::Integer,
 };
 use std::{
@@ -127,6 +127,196 @@ pub(crate) fn semantic_roles(document: &V) -> Result<Option<(BTreeSet<String>, M
     Ok(Some((judgments, fields)))
 }
 
+const NO_DEPENDENCY_FIELD: &str = "no dependency field found: ";
+const UNSEEN_DEPENDENCY_FIELD: &str = " for 'deps', and nothing this reader can see carries it: ";
+
+/// Why a reader cannot take a record's field roles, in the Python reader's words: a
+/// dependency field the schema names and no entry carries, or no field that reads as a
+/// dependency list. Any other cause keeps its code.
+pub(crate) fn unreadable(document: &V) -> Error {
+    let why = || -> Result<Option<String>> {
+        let doc = map(document)?;
+        let lists = dependency_lists(doc, &collections(document)?);
+        let declared = doc
+            .get("schema")
+            .and_then(|v| map(v).ok())
+            .and_then(|schema| schema.get("deps"))
+            .filter(|v| truth(v));
+        Ok(match declared {
+            Some(V::Text(dep)) if !lists.present.contains(dep) => {
+                Some(unseen_dependency_field(dep, &lists.present))
+            }
+            None if lists.votes.is_empty() => Some(no_dependency_field(&lists.unresolved)),
+            _ => None,
+        })
+    };
+    match why() {
+        Ok(Some(why)) => Error(why),
+        _ => error("ordinary_fields_unreadable"),
+    }
+}
+
+/// Whether a failure is `unreadable`'s account rather than a code.
+pub(crate) fn explains_unreadable(failure: &Error) -> bool {
+    failure.0.starts_with(NO_DEPENDENCY_FIELD)
+        || failure.0.starts_with("schema names '") && failure.0.contains(UNSEEN_DEPENDENCY_FIELD)
+}
+
+fn unseen_dependency_field(dep: &str, present: &BTreeSet<String>) -> String {
+    let seen = present
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let shown = if seen.chars().count() < 300 {
+        seen.clone()
+    } else {
+        seen.chars().take(300).collect::<String>() + " ..."
+    };
+    format!(
+        "schema names '{dep}'{UNSEEN_DEPENDENCY_FIELD}no judgment would be found, and the record would pass by having nothing left to check.{}",
+        if seen.is_empty() {
+            String::new()
+        } else {
+            format!("\nFields it can see: {shown}")
+        }
+    )
+}
+
+/// A record whose references are broken looks like one that declares nothing: no list
+/// names only entries, so no field votes for the role. Name the fields that did list
+/// names, and what they named that is not an entry, and leave the choice to a person.
+fn no_dependency_field(unresolved: &BTreeMap<String, Vec<(String, Vec<String>)>>) -> String {
+    if unresolved.is_empty() {
+        return format!(
+            "{NO_DEPENDENCY_FIELD}nothing declares what it rests on, so there is no graph to walk"
+        );
+    }
+    let clip = |text: String| {
+        if text.chars().count() < 90 {
+            text
+        } else {
+            text.chars().take(90).collect::<String>() + " ..."
+        }
+    };
+    let mut ranked = unresolved.iter().collect::<Vec<_>>();
+    ranked.sort_by_key(|(_, holders)| std::cmp::Reverse(holders.len()));
+    let mut lines = ranked
+        .iter()
+        .take(3)
+        .map(|(field, holders)| {
+            let (id, missing) = &holders[0];
+            let names = missing[..missing.len().min(3)].join(", ")
+                + if missing.len() > 3 { " ..." } else { "" };
+            let more = if holders.len() > 1 {
+                format!(", and {} more", holders.len() - 1)
+            } else {
+                String::new()
+            };
+            format!("  {field}: {} (in {id}{more})", clip(names))
+        })
+        .collect::<Vec<_>>();
+    if ranked.len() > 3 {
+        let rest = ranked[3..]
+            .iter()
+            .map(|(field, _)| field.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push(format!(
+            "  ... and {} more: {}",
+            ranked.len() - 3,
+            clip(rest)
+        ));
+    }
+    format!(
+        "{NO_DEPENDENCY_FIELD}no field lists names that are all entries in this record, so there is no graph to walk.\nThese list names that are not entries:\n{}\n\nEither those names are wrong, or one of these is a dependency field this reader cannot see by shape - and it does not guess between them. Fix the names, or say which:\n\nschema:\n  deps: <field name>",
+        lines.join("\n")
+    )
+}
+
+/// How the entries' lists of names read as a dependency field. A list whose names are
+/// all entries votes for its field; one that names anything else votes for nothing and
+/// is kept, holder by holder in the record's own order, with the names that were not
+/// entries.
+struct DependencyLists {
+    ids: BTreeSet<String>,
+    votes: BTreeMap<String, usize>,
+    unresolved: BTreeMap<String, Vec<(String, Vec<String>)>>,
+    present: BTreeSet<String>,
+}
+fn dependency_lists(doc: &Map, collections: &BTreeMap<String, Map>) -> DependencyLists {
+    let mut ids = collections
+        .values()
+        .flat_map(|m| m.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    // Only candidates in direct strings/lists/mapping keys can vote for a field.
+    // Their built-in references establish the same IDs needed by those votes.
+    for body in collections.values().flat_map(|m| m.values()) {
+        let V::Map(body) = body else {
+            continue;
+        };
+        for value in body.values() {
+            let mentions = match value {
+                V::Text(v) => vec![v.as_str()],
+                V::List(v) => v.iter().filter_map(|v| text(v).ok()).collect(),
+                V::Map(v) => v.keys().map(String::as_str).collect(),
+                _ => Vec::new(),
+            };
+            for value in mentions {
+                for name in ID.find_iter(value) {
+                    if BUILTINS.contains(&name.as_str()) {
+                        ids.insert(name.as_str().into());
+                    }
+                }
+            }
+        }
+    }
+    let mut votes = BTreeMap::new();
+    let mut unresolved = BTreeMap::<String, Vec<_>>::new();
+    let mut present = BTreeSet::new();
+    let in_order = doc.keys().filter_map(|name| collections.get(name));
+    for (name, body) in in_order.flat_map(|m| m.iter()) {
+        let V::Map(body) = body else {
+            continue;
+        };
+        for (field, value) in body {
+            present.insert(field.clone());
+            if field == "also"
+                || field == "refutes"
+                    && name.starts_with("hyp.")
+                    && body.get("v").is_some_and(|v| string_is(v, "refuted"))
+            {
+                continue;
+            }
+            if let V::List(a) = value
+                && !a.is_empty()
+                && a.iter().all(|v| text(v).is_ok())
+            {
+                let missing = a
+                    .iter()
+                    .filter_map(|v| text(v).ok())
+                    .filter(|s| !ids.contains(*s))
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                if missing.is_empty() {
+                    *votes.entry(field.clone()).or_insert(0) += 1;
+                } else {
+                    unresolved
+                        .entry(field.clone())
+                        .or_default()
+                        .push((name.clone(), missing));
+                }
+            }
+        }
+    }
+    DependencyLists {
+        ids,
+        votes,
+        unresolved,
+        present,
+    }
+}
+
 fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
     let doc = map(document)?;
     let empty = V::Map(Map::new());
@@ -156,60 +346,12 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
         }
     }
     let collections = collections(document)?;
-    let mut ids = collections
-        .values()
-        .flat_map(|m| m.keys().cloned())
-        .collect::<BTreeSet<_>>();
-    // Only candidates in direct strings/lists/mapping keys can vote for a field.
-    // Their built-in references establish the same IDs needed by those votes.
-    for body in collections.values().flat_map(|m| m.values()) {
-        let V::Map(body) = body else {
-            continue;
-        };
-        for value in body.values() {
-            let mentions = match value {
-                V::Text(v) => vec![v.as_str()],
-                V::List(v) => v.iter().filter_map(|v| text(v).ok()).collect(),
-                V::Map(v) => v.keys().map(String::as_str).collect(),
-                _ => Vec::new(),
-            };
-            for value in mentions {
-                for name in ID.find_iter(value) {
-                    if BUILTINS.contains(&name.as_str()) {
-                        ids.insert(name.as_str().into());
-                    }
-                }
-            }
-        }
-    }
-    let mut deps = BTreeMap::new();
-    let mut unresolved = BTreeSet::new();
-    let mut present = BTreeSet::new();
-    for (name, body) in collections.values().flat_map(|m| m.iter()) {
-        let V::Map(body) = body else {
-            continue;
-        };
-        for (field, value) in body {
-            present.insert(field.clone());
-            if field == "also"
-                || field == "refutes"
-                    && name.starts_with("hyp.")
-                    && body.get("v").is_some_and(|v| string_is(v, "refuted"))
-            {
-                continue;
-            }
-            if let V::List(a) = value
-                && !a.is_empty()
-                && a.iter().all(|v| text(v).is_ok())
-            {
-                if a.iter().all(|v| text(v).is_ok_and(|s| ids.contains(s))) {
-                    *deps.entry(field.clone()).or_insert(0) += 1;
-                } else {
-                    unresolved.insert(field.clone());
-                }
-            }
-        }
-    }
+    let DependencyLists {
+        ids,
+        votes: deps,
+        unresolved,
+        present,
+    } = dependency_lists(doc, &collections);
     if schema
         .get("deps")
         .is_some_and(|v| truth(v) && text(v).is_ok_and(|v| !present.contains(v)))
@@ -259,7 +401,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                     .all(|k| schema.get(k).is_some_and(truth))
                 && deps.is_empty()
                 && unresolved
-                    .iter()
+                    .keys()
                     .all(|k| ["labels", "tags", "v", "quoted"].contains(&k.as_str()))
                 && !shaped;
             if !portable {

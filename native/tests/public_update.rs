@@ -185,7 +185,9 @@ fn no_schema_custom_value_collection_stays_unreadable() {
     assert_eq!(output.status.code(), Some(1));
     let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(receipt["state"], "needs_primary");
-    assert!(receipt["reason"].as_str().unwrap().contains("ordinary_fields_unreadable"));
+    assert!(receipt["reason"].as_str().unwrap().ends_with(
+        "no dependency field found: nothing declares what it rests on, so there is no graph to walk"
+    ));
     assert_eq!(fs::read(&entry).unwrap(), before);
 }
 

@@ -554,3 +554,191 @@ fn actual_ordinary_pull_history_reads_the_retained_versions() {
             &format!("kept in {}", Path::new(".kpopper").join("replaced.yaml").display()), 1)
     );
 }
+
+/// A judgment resting on a name the record does not hold - a shared finding still
+/// pending elsewhere, say - leaves no field that reads as a dependency list.
+const BROKEN_REFERENCE: &str = "known:\n  local.one: {v: 1}\njudgments:\n  d.use_limit:\n    verdict: Batch requests at the vendor limit\n    rests_on: [api.limit]\n    seen: {api.limit: 10}\n    wrong_if: api.limit > 20\n";
+const BROKEN_REFERENCE_REFUSAL: &str = concat!(
+    "no dependency field found: no field lists names that are all entries in this record, so there is no graph to walk.\n",
+    "These list names that are not entries:\n",
+    "  rests_on: api.limit (in d.use_limit)\n",
+    "\n",
+    "Either those names are wrong, or one of these is a dependency field this reader cannot see by shape - and it does not guess between them. Fix the names, or say which:\n",
+    "\n",
+    "schema:\n",
+    "  deps: <field name>\n",
+);
+
+#[test]
+fn a_record_without_a_readable_dependency_field_is_refused_with_the_reason() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, BROKEN_REFERENCE).unwrap();
+    let baseline = root.join("baseline.json");
+    let (baseline, record) = (baseline.to_str().unwrap(), entry.to_str().unwrap());
+    for args in [
+        vec!["check"],
+        vec!["--frozen", "check"],
+        vec!["pull", "d.use_limit"],
+        vec!["--frozen", "pull", "d.use_limit"],
+        vec!["affects", "api.limit"],
+        vec!["--frozen", "affects", "api.limit"],
+        vec!["open"],
+        vec!["assess", "local.one"],
+        vec!["export", "local.one"],
+        vec!["add", "local.two", "2"],
+        vec!["set", "local.one", "3"],
+        vec!["mark", baseline, record],
+    ] {
+        let output = cli(root, &args, &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            BROKEN_REFERENCE_REFUSAL,
+            "{args:?}"
+        );
+    }
+    assert_eq!(fs::read_to_string(&entry).unwrap(), BROKEN_REFERENCE);
+
+    let output = cli(root, &["--json", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    let error: J = serde_json::from_slice(&output.stderr).unwrap();
+    assert_eq!(error["error"], BROKEN_REFERENCE_REFUSAL.trim_end());
+    let output = cli(
+        root,
+        &["--json", "export", "local.one"],
+        &root.join("private"),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], BROKEN_REFERENCE_REFUSAL);
+    // The Hub keeps its own framing and exit status around the same reason.
+    let output = cli(root, &["experimental", "hub"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!("kpop experimental hub: {BROKEN_REFERENCE_REFUSAL}")
+    );
+}
+
+#[test]
+fn the_refusal_names_the_fields_that_listed_names_in_the_record_s_order() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for (record, refusal) in [
+        (
+            "known:\n  local.one: {v: 1}\njudgments:\n  d.use_limit:\n    verdict: Batch requests at the vendor limit\n    wrong_if: local.one > 20\n",
+            "no dependency field found: nothing declares what it rests on, so there is no graph to walk\n",
+        ),
+        (
+            concat!(
+                "zeta:\n",
+                "  d.first:\n",
+                "    verdict: first in the file\n",
+                "    rests_on: [api.limit, api.quota, api.region, api.burst]\n",
+                "    tags: [urgent]\n",
+                "alpha:\n",
+                "  d.second:\n",
+                "    verdict: second\n",
+                "    rests_on: [api.second]\n",
+                "    tags: [later]\n",
+                "    also_named: [a_dependency_whose_name_runs_on.well_past_the_ninety_characters_a_line_of_this_report_shows]\n",
+                "  d.third:\n",
+                "    verdict: third\n",
+                "    rests_on: [api.third, local.one]\n",
+                "    zz_first_of_the_quiet_fields: [x.one]\n",
+                "    zz_second_of_the_quiet_fields: [x.two]\n",
+                "    zz_third_of_the_quiet_fields: [x.three]\n",
+                "    zz_fourth_of_the_quiet_fields: [x.four]\n",
+                "  d.fourth:\n",
+                "    verdict: fourth\n",
+                "    rests_on: [api.fourth]\n",
+                "known:\n",
+                "  local.one: {v: 1}\n",
+            ),
+            concat!(
+                "no dependency field found: no field lists names that are all entries in this record, so there is no graph to walk.\n",
+                "These list names that are not entries:\n",
+                "  rests_on: api.limit, api.quota, api.region ... (in d.first, and 3 more)\n",
+                "  tags: urgent (in d.first, and 1 more)\n",
+                "  also_named: a_dependency_whose_name_runs_on.well_past_the_ninety_characters_a_line_of_this_report_show ... (in d.second)\n",
+                "  ... and 4 more: zz_first_of_the_quiet_fields, zz_fourth_of_the_quiet_fields, zz_second_of_the_quiet_fields ...\n",
+                "\n",
+                "Either those names are wrong, or one of these is a dependency field this reader cannot see by shape - and it does not guess between them. Fix the names, or say which:\n",
+                "\n",
+                "schema:\n",
+                "  deps: <field name>\n",
+            ),
+        ),
+        (
+            "judgments:\n  d.plan:\n    verdict: plan the release\n    rests_on: [ספק.מחיר_ליחידה_בשקלים_לפני_מע״מ_כפי_שנמסר_בהצעת_המחיר_האחרונה_מהספק_הראשי_של_החברה_בחודש_שעבר]\nknown:\n  local.one: {v: 1}\n",
+            concat!(
+                "no dependency field found: no field lists names that are all entries in this record, so there is no graph to walk.\n",
+                "These list names that are not entries:\n",
+                "  rests_on: ספק.מחיר_ליחידה_בשקלים_לפני_מע״מ_כפי_שנמסר_בהצעת_המחיר_האחרונה_מהספק_הראשי_של_החברה_בחודש_ ... (in d.plan)\n",
+                "\n",
+                "Either those names are wrong, or one of these is a dependency field this reader cannot see by shape - and it does not guess between them. Fix the names, or say which:\n",
+                "\n",
+                "schema:\n",
+                "  deps: <field name>\n",
+            ),
+        ),
+        (
+            "schema: {deps: depends_on}\nknown:\n  local.one: {v: 1}\njudgments:\n  d.use_limit:\n    verdict: Batch requests at the vendor limit\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 20\n",
+            "schema names 'depends_on' for 'deps', and nothing this reader can see carries it: no judgment would be found, and the record would pass by having nothing left to check.\nFields it can see: rests_on, seen, v, verdict, wrong_if\n",
+        ),
+    ] {
+        fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+        let output = cli(root, &["check"], &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{record}");
+        assert_eq!(String::from_utf8(output.stderr).unwrap(), refusal);
+    }
+}
+
+#[test]
+fn a_hypothesis_the_base_cannot_read_is_named_with_the_reason_on_one_line() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        BROKEN_REFERENCE
+            .replace("[api.limit]", "[local.one]")
+            .replace("{api.limit: 10}", "{local.one: 1}")
+            .replace("api.limit > 20", "local.one > 20"),
+    )
+    .unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(
+        root.join(".kpopper/hypotheses/vendor.yaml"),
+        BROKEN_REFERENCE.replace("known:\n  local.one: {v: 1}\n", ""),
+    )
+    .unwrap();
+    let why = "cannot be read over the base: no dependency field found: no field lists names that are all entries in this record, so there is no graph to walk. These list names that are not entries: rests_";
+
+    let output = cli(root, &["check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("FAIL hypothesis vendor {why}\n\n1 judgments, 2 entries, 1 problems\n")
+    );
+    let output = cli(root, &["pull", "d.use_limit"], &root.join("private"));
+    assert!(output.status.success());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .starts_with(&format!("! hypothesis vendor {why}\nlocal.one: 1\n"))
+    );
+    let output = cli(
+        root,
+        &["consolidate", "--dry-run", "--as-of", "2026-09-23"],
+        &root.join("private"),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!("refused - hypothesis vendor {why}\n")
+    );
+}
