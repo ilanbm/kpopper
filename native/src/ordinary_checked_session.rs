@@ -1407,6 +1407,13 @@ fn graph(
         }
     }
     let native_hypotheses = session_hypotheses(capture, data.native_hypotheses)?;
+    // Every observed contribution status, not only those still layered as
+    // hypotheses: a retired contribution stays visible with its state.
+    let contributions = capture
+        .contributions()
+        .iter()
+        .map(|contribution| ordinary_reader::json_value(contribution, 0))
+        .collect::<Result<Vec<_>>>()?;
     let mut nodes = Map::from_iter(data.nodes);
     for (id, node) in &mut nodes {
         let section = data.sections.get(id);
@@ -1421,7 +1428,7 @@ fn graph(
         }
     }
     Ok(
-        json!({"nodes":nodes,"edges":data.edges,"topics":data.topics,"scope":data.scope,"sources":sources,"native_hypotheses":native_hypotheses,"contributions":data.contributions,"knowledge_conflicts":data.knowledge_conflicts,"read_mode":map(&capture.ordinary_context())?["read_mode"].to_json()?,"origin":provenance,"project_context":project}),
+        json!({"nodes":nodes,"edges":data.edges,"topics":data.topics,"scope":data.scope,"sources":sources,"native_hypotheses":native_hypotheses,"contributions":contributions,"knowledge_conflicts":data.knowledge_conflicts,"read_mode":map(&capture.ordinary_context())?["read_mode"].to_json()?,"origin":provenance,"project_context":project}),
     )
 }
 

@@ -310,7 +310,8 @@ pub struct GateData {
 }
 
 /// Python-compatible ordinary graph semantics for checked-reader sessions.
-/// Source bytes and handles are attached by the captured-session adapter.
+/// Source bytes, handles and contribution statuses are attached by the
+/// captured-session adapter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OrdinarySessionData {
     pub nodes: BTreeMap<String, serde_json::Value>,
@@ -319,7 +320,6 @@ pub struct OrdinarySessionData {
     pub sections: BTreeMap<String, String>,
     pub scope: String,
     pub native_hypotheses: serde_json::Value,
-    pub contributions: serde_json::Value,
     pub knowledge_conflicts: serde_json::Value,
 }
 
@@ -823,17 +823,6 @@ impl<'a> Projection<'a> {
             .filter(|scope| !scope.is_empty())
             .unwrap_or_else(|| "Epistemic project record.".into());
         let native_hypotheses = R::json_value(&V::Map(self.hypotheses.clone()), 0)?;
-        let contributions = serde_json::Value::Array(
-            self.hypotheses
-                .values()
-                .filter_map(|hypothesis| {
-                    let hypothesis = map(hypothesis).ok()?;
-                    string_is(get(hypothesis, "kind"), "contribution")
-                        .then(|| hypothesis.get("head").cloned().unwrap_or(V::Null))
-                })
-                .map(|value| R::json_value(&value, 0))
-                .collect::<Result<_>>()?,
-        );
         let knowledge_conflicts = serde_json::json!(self.base.reader.knowledge_conflicts);
         Ok(OrdinarySessionData {
             nodes,
@@ -842,7 +831,6 @@ impl<'a> Projection<'a> {
             sections,
             scope,
             native_hypotheses,
-            contributions,
             knowledge_conflicts,
         })
     }

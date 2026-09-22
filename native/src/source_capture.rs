@@ -390,6 +390,14 @@ impl<T> CapturedSource<T> {
     pub(crate) fn pending_observation(&self) -> Option<&crate::pending_state::Observation> {
         self.routing.pending.as_ref()
     }
+    /// Local contribution statuses observed by this read, retired ones included.
+    /// A read without a pending overlay observes none.
+    pub(crate) fn contributions(&self) -> &[V] {
+        self.document
+            .overlay
+            .as_ref()
+            .map_or(&[], |overlay| overlay.contributions.as_slice())
+    }
     /// Exact public knowledge-status fields from this already captured view.
     /// This performs no reads and preserves ordinary records that cannot form a
     /// strict portable Snapshot.
