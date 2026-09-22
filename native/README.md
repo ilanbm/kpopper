@@ -1,4 +1,4 @@
-# Native Rust CLI (default runtime, version 0.9.0)
+# Native Rust CLI (default runtime)
 
 The native distribution provides the public `kpop` CLI and `kpopper` alias. Its
 internal library crate is `kpop_native`; the 0.9.0 native line is the first

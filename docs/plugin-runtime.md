@@ -1,7 +1,7 @@
 # Plugin runtime and Python compatibility mode
 
-The native 0.9.0 bundle is the default plugin runtime. Install it explicitly into the
-active plugin checkout or marketplace cache with the exact command its opener prints,
+The native bundle matching the plugin version is the default runtime. Install it
+explicitly into the active plugin checkout or marketplace cache with the exact command its opener prints,
 typically `sh /absolute/path/to/kpopper/scripts/install_native.sh` on Unix or the
 printed `pwsh -NoProfile -File .../install.ps1 -PluginRoot ...` command on Windows.
 That installer places the exact target under `scripts/runtime/<target>` and can use
