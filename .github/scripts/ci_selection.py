@@ -7,7 +7,8 @@ import subprocess
 
 LANES = ("python", "documents", "session", "installed", "native", "examples")
 TEST_SUITES = ("core", "documents", "reasoning", "session", "other")
-JOB_LANES = {"check": ("python", "documents"), "document-ui": ("documents",),
+JOB_LANES = {
+    "native-cli": ("python", "documents", "session", "installed", "native"),"check": ("python", "documents"), "document-ui": ("documents",),
              "session": ("session",), "reasoning-runtime": ("installed",),
              "examples": ("examples",)}
 RUNTIME = set(LANES) - {"native"}

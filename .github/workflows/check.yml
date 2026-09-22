@@ -15,6 +15,10 @@ concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
 
+# The retained Python suite explicitly exercises the legacy reference.
+env:
+  KPOPPER_RUNTIME: python
+
 jobs:
   changes:
     timeout-minutes: 10
@@ -216,9 +220,14 @@ jobs:
     with:
       rebuild: ${{ needs.changes.outputs.native == 'true' }}
 
+  native-cli:
+    needs: [changes, record]
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true' || needs.changes.outputs.session == 'true' || needs.changes.outputs.installed == 'true' || needs.changes.outputs.native == 'true'
+    uses: ./.github/workflows/native-rust.yml
+
   ci-required:
     timeout-minutes: 10
-    needs: [changes, record, check, examples, document-ui, session, reasoning-runtime]
+    needs: [changes, record, check, examples, document-ui, session, reasoning-runtime, native-cli]
     if: always()
     runs-on: ubuntu-latest
     steps:

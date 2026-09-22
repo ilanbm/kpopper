@@ -34,7 +34,7 @@ fn fixture() -> tempfile::TempDir {
     root
 }
 fn command(root: &Path, operation: &str, runtime: bool) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     #[cfg(unix)]
     command.env("PATH", root.join("tools"));
     command

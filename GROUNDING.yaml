@@ -1064,6 +1064,12 @@ sources:
     scope: "Core Hub build/verify/browser checks and exact session ownership/delivery APIs. Ordinary
             Hub, Annotated Documents, complete Session hooks and remaining R4-R6 are open. macOS
             arm64 execution only."
+  s.native_default_release:
+    name: "Native default and prelaunch release decision"
+    asked: "Paraphrase of the approved product direction on 2026-09-22: make Rust the default,
+            preserve kpopper and kpop names, start the native GitHub release series at 0.9.0 and mark
+            it Latest while retaining previous tags and legacy package releases."
+    read: "2026-09-22"
   s.native_edit_rewrite:
     name: "Native view edit and identity rewrite conformance"
     file: "native/src/history_edits.rs"
@@ -2321,6 +2327,15 @@ known:
     from: s.native_main_bridge
     at: "Immutable baseline-ff0d02e; PR143 still OPEN on 2026-09-19. Historical final 1.7 reference
          retained separately."
+  p.native_distribution_contract:
+    name: "Native prelaunch distribution contract"
+    v: "The native CLI and plugin start at 0.9.0 with GitHub platform archives and explicit
+        installers. Public names are kpopper and kpop. Existing GitHub tags/releases and legacy
+        PyPI/npm versions remain available. Cargo is a source-build route; crates.io publication is
+        separate."
+    from: s.native_default_release
+    at: "Approved native default and versioning choice"
+    fidelity: paraphrase
   p.native_edit_rewrite_boundary:
     name: "Native view edit and identity rewrite boundary"
     v: "Edited-view receipt1 captures every body change as proposal5, retains exact UTF-8 source and
@@ -3326,7 +3341,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22629
+    v: 22542
+    # set 2026-09-22: Measured from the native default skill text by skill_bytes_largest
     # Same-day correction measured after integrating session attribution from main.
     # set 2026-09-19: Measured after merging main plugin-qualified skill guidance with the application names and aliases.
     # Same-day working-tree correction after renaming the application skills.
@@ -3342,7 +3358,7 @@ known:
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-19"
+    of: "2026-09-22"
     measure: skill_bytes_largest
 
   m.t3_blocked_rule_inference_regression:

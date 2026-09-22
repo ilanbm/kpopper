@@ -5,7 +5,7 @@ use std::{
 };
 
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")

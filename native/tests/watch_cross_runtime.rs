@@ -650,7 +650,7 @@ fn python_and_native_active_history_watch_preserves_captured_evidence() {
     h.ok("snapshot", json!({}));
     assert_eq!(h.ok("process", json!({}))["state"], "clear");
     h.ok("status", json!({}));
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .arg("--workspace")
         .arg(&h.root)
         .args(["add", "p.other", "v=2", "--as-of", "2026-09-02"])

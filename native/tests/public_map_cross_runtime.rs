@@ -54,7 +54,7 @@ fn python_and_native_map_packets_match_except_explicit_provenance() {
     let python =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     let t = tempfile::tempdir().unwrap();
     let root = t.path().canonicalize().unwrap();
     let state = root.join("state");
@@ -113,7 +113,7 @@ fn python_and_native_map_packets_match_except_explicit_provenance() {
 
 #[test]
 fn native_protocol_receipt_refusals_and_completion() {
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     let t = tempfile::tempdir().unwrap();
     let root = t.path().canonicalize().unwrap();
     let state = root.join("state");
@@ -229,7 +229,7 @@ fn framing_matches_python_for_no_session_and_text_map() {
     let python =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     let t = tempfile::tempdir().unwrap();
     let root = t.path().canonicalize().unwrap();
     let py_state = root.join("py-state");
@@ -265,7 +265,7 @@ fn framing_matches_python_for_no_session_and_text_map() {
 fn complete_receipts_match_with_and_without_a_record() {
     let python = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").unwrap());
     let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").unwrap());
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     for with_record in [false, true] {
         let t = tempfile::tempdir().unwrap();
         let root = t.path().canonicalize().unwrap();
@@ -328,7 +328,7 @@ fn complete_receipts_match_with_and_without_a_record() {
 fn first_use_context_and_guide_match_python() {
     let python = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").unwrap());
     let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").unwrap());
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     for with_record in [false, true] {
         let t = tempfile::tempdir().unwrap();
         let root = t.path().canonicalize().unwrap();

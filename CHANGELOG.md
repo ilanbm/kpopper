@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0 — 2026-09-22
+
+- Start the native Rust release series at 0.9.0 ahead of the 1.0 launch. The earlier
+  Python 1.x releases remain in history and in their legacy package registries.
+- Make Rust the default plugin runtime, retaining the public `kpop` command and
+  `kpopper` alias. Ship verified native archives and explicit installers for five
+  platforms; end users do not need Python, Node.js or Rust to run the native CLI.
+- Preserve the existing session, ingestion, watch, followup, grounding and edit hook
+  behavior through native adapters, including private state and delivery semantics.
+- Include pinned optional local E5 search, safe recursive-YAML refusal and the
+  concurrent-import temporary-index fix from the native migration.
+
 ## 1.8.1 — 2026-09-19
 
 - Fix Claude plugin installation with packaged runtimes (#144) — patch

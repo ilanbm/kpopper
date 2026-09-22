@@ -31,7 +31,7 @@ fn cli(root: &Path, args: &[&str]) -> std::process::Output {
             fs::copy(program.join(name), ordinary.join(name)).unwrap();
         }
     }
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(args)
         .env("KPOPPER_NATIVE_RESOURCES", resources)

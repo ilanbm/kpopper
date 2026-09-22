@@ -1,0 +1,11 @@
+tiktoken-rs 0.12.0
+
+The published crate omits these license files from its repository root.
+They are reproduced unchanged from the exact source revision recorded in
+its .cargo_vcs_info.json.
+
+Declared license: MIT
+crates.io package SHA256: 027853bbf8c7763b77c5c595f1c271c7d536ced7d6f83452911b944621e57fc2
+
+https://raw.githubusercontent.com/zurawiki/tiktoken-rs/32de8dc0526d67f2c266c4e5e7c6a8ec5a0ce3d7/LICENSE
+SHA256: f7c6ddf9d84fd7b8ad5917e4074d4c05e4c1dfb752a28a0058f06bd0f5e2edcc

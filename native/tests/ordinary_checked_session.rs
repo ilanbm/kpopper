@@ -57,7 +57,7 @@ fn fixture() -> tempfile::TempDir {
 }
 
 fn command(root: &Path, operation: &str) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command
         .args([
             "--workspace",

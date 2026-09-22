@@ -26,7 +26,7 @@ fn options() -> Options {
     }
 }
 fn cli(root: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .env_remove("KPOPPER_NATIVE_RESOURCES")
         .env_remove("KPOPPER_READ_MODE")
@@ -237,7 +237,7 @@ fn actual_cli_runs_bundled_ordinary_and_core_lean_programs() {
         fs::copy(program.join(name), ordinary.join(name)).unwrap();
     }
     let run = |extra: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(root)
             .env("KPOPPER_NATIVE_RESOURCES", &resources)
             .env("KPOPPER_NATIVE_CACHE", root.join("cache"))

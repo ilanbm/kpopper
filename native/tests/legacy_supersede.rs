@@ -60,7 +60,7 @@ fn replacements_and_returning_versions_match_complete_python_images() {
             .iter()
             .map(|a| a.as_str().unwrap())
             .collect::<Vec<_>>();
-        let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(temp.path())
             .args(args)
             .env_remove("KPOPPER_AGENT_SESSION")

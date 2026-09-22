@@ -37,6 +37,8 @@ pub struct StartOptions {
 pub struct HookOptions {
     #[arg(long,value_parser=["claude","codex"])]
     pub host: Option<String>,
+    #[arg(long, default_value="UserPromptSubmit", value_parser=["UserPromptSubmit", "PostToolUse"])]
+    pub event: String,
 }
 pub fn valid_session(sid: &str) -> bool {
     !sid.is_empty()
@@ -70,6 +72,12 @@ pub fn run(kind: &str, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
         session_gate::mark(&request)?;
         return Ok(Output {
             text: String::new(),
+            code: 0,
+        });
+    }
+    if kind == "reminder" {
+        return Ok(Output {
+            text: session_gate::advisory_reminder(&request)?.unwrap_or_default(),
             code: 0,
         });
     }
@@ -231,7 +239,7 @@ pub fn stop(_payload: &Value, _host: Option<&str>, _mode: ReadMode) -> Result<Ou
     })
 }
 
-pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode) -> Result<Output> {
+pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode, event: &str) -> Result<Output> {
     if payload["agent_id"]
         .as_str()
         .is_some_and(|id| !id.is_empty())
@@ -255,7 +263,7 @@ pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode) -> Result<Ou
         format!(
             "{}\n",
             json!({"hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit", "additionalContext": format!("{prefix}{}", text.trim())
+            "hookEventName": event, "additionalContext": format!("{prefix}{}", text.trim())
             }})
         )
     };

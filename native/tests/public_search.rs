@@ -11,7 +11,7 @@ fn invalid_read_mode_preserves_python_argument_error_precedence() {
         serde_json::from_slice(include_bytes!("fixtures/search-mode-errors.json")).unwrap();
     for case in cases.as_array().unwrap() {
         let root = tempfile::tempdir().unwrap();
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(
                 case["args"]
                     .as_array()
@@ -390,7 +390,7 @@ fn actual_search_and_paged_read_cli_match_python() {
             if expected.is_null() {
                 continue;
             }
-            let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
                 .args(
                     expected["argv"]
                         .as_array()
@@ -462,7 +462,7 @@ fn nonfinite_corpora_search_and_paged_read_match_python() {
             if expected.is_null() {
                 continue;
             }
-            let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
                 .args(
                     expected["argv"]
                         .as_array()
@@ -666,7 +666,7 @@ fn live_python_ordinary_cli_matches_without_normalization() {
                 .iter()
                 .map(|v| v.as_str().unwrap())
                 .collect::<Vec<_>>();
-            let native = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            let native = Command::new(env!("CARGO_BIN_EXE_kpop"))
                 .args(&args)
                 .current_dir(root.join("source"))
                 .env("XDG_STATE_HOME", root.join("statehome"))
@@ -715,7 +715,7 @@ fn cli_errors_and_negative_query_match_python() {
             "$REVISION",
             case["expected"]["corpus"]["revision"].as_str().unwrap(),
         );
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(
                 row["argv"]
                     .as_array()

@@ -579,6 +579,51 @@ pub fn mark(options: &GateOptions<'_>) -> Result<()> {
     write_mark(options.state_path, &state)
 }
 
+/// Pure advisory reminder for native prompt hooks; never writes the session mark.
+pub fn advisory_reminder(options: &GateOptions<'_>) -> Result<Option<String>> {
+    let base = read_mark(options.state_path)?;
+    let last = base.nudged_turn.into_iter().chain(options.nudged_at).max();
+    if last.is_some_and(|last| options.turns.saturating_sub(last) < 10) {
+        return Ok(None);
+    }
+    let (capture, _, _) = capture(options, false, None)?;
+    if base.digest.as_deref() != Some(&source_digest(&capture, options.paths)) {
+        return Ok(None);
+    }
+    let now = tree_state(options.workspace);
+    let changed = match (&base.tree, &now) {
+        (Some(was), Some(now)) => {
+            let files = was
+                .files
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .symmetric_difference(&now.files.iter().collect())
+                .count();
+            files.max(usize::from(was.head != now.head))
+        }
+        _ => 0,
+    };
+    if changed == 0 && options.turns < 8 {
+        return Ok(None);
+    }
+    let record = match options.host {
+        Some("claude") => "/kpopper:record",
+        Some("codex") => "$record",
+        _ => "`kpop add`",
+    };
+    let what = if changed == 0 {
+        format!("{} prompts in", options.turns)
+    } else {
+        format!(
+            "{changed} file{} of the tree changed",
+            if changed == 1 { "" } else { "s" }
+        )
+    };
+    Ok(Some(format!(
+        "kpopper: {what}, the record untouched. Complete the user's current request. If useful findings need keeping and a record write is authorized, use {record} within that scope. Do not answer or mention this reminder unless the user asks about it; no record update is required to finish the user's answer."
+    )))
+}
+
 /// Assess the stop gate from one fresh immutable capture. Source or assessment
 /// failure is returned as an error, never converted into a successful gate.
 pub fn gate(options: &GateOptions<'_>) -> Result<GateResult> {

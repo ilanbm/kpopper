@@ -8,7 +8,7 @@ use std::{
 use tempfile::TempDir;
 
 fn binary() -> &'static str {
-    env!("CARGO_BIN_EXE_kpop-native")
+    env!("CARGO_BIN_EXE_kpop")
 }
 fn run(root: &Path, args: &[&str]) -> Output {
     Command::new(binary())

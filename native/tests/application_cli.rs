@@ -13,7 +13,7 @@ fn catalog_boundaries_and_alias_envelopes_match_the_public_contract() {
             .iter()
             .map(|a| a.as_str().unwrap())
             .collect::<Vec<_>>();
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(root.path())
             .args(&args)
             .output()
@@ -48,7 +48,7 @@ fn workspace_argument_values_do_not_become_application_commands() {
     let root = tempfile::tempdir().unwrap();
     let workspace = root.path().join("experimental");
     std::fs::create_dir(&workspace).unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["--workspace", workspace.to_str().unwrap(), "where"])
         .output()
         .unwrap();

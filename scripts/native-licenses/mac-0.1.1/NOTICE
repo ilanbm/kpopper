@@ -1,0 +1,41 @@
+mac 0.1.1
+
+This distribution uses the Apache-2.0 alternative offered by the package's
+Cargo metadata and README ("MIT/Apache-2.0, like rust itself"). The published
+crate does not contain a separate full license text; LICENSE-APACHE reproduces
+the standard terms from https://www.apache.org/licenses/LICENSE-2.0.txt.
+
+Upstream repository: https://github.com/reem/rust-mac.git
+Upstream tag: 0.1.1 (66afc663b68a65633ea165c742b5a9c6734581c2)
+crates.io package SHA256: c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4
+Cargo authors: Jonathan Reem <jonathan.reem@gmail.com>
+
+The upstream README follows unchanged:
+
+# mac
+
+> A collection of great and ubiqutitous macros.
+
+## Overview
+
+This crate contains collections of macros which are useful in many situations,
+and usable independently or together.
+
+## Usage
+
+Use the crates.io repository; add this to your `Cargo.toml` along
+with the rest of your dependencies:
+
+```toml
+[dependencies]
+mac = "*"
+```
+
+## Author
+
+[Jonathan Reem](https://medium.com/@jreem) is the primary author and maintainer of mac.
+
+## License
+
+MIT/Apache-2.0, like rust itself
+

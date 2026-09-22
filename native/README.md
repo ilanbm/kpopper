@@ -1,11 +1,18 @@
-# Native Rust CLI (opt-in)
+# Native Rust CLI (default runtime, version 0.9.0)
 
-`kpop-native` is an opt-in Rust executable with versioned knowledge assessment and
-an experimental bounded history writer.
-It does not replace `kpop`, modify installed plugins, or activate existing records.
-Use disposable workspaces only. Native history locking, recovery and copied-binary
-authoring flows have been exercised on macOS arm64, Linux x86_64 and Windows x86_64.
-Windows network/UNC history roots explicitly refuse; locks coordinate local writers.
+The native distribution provides the public `kpop` CLI and `kpopper` alias. Its
+internal library crate is `kpop_native`; the 0.9.0 native line is the first
+pre-1.0 series and is independent of the legacy Python package's 1.6.0 release.
+Prebuilt GitHub bundles are the primary install and include adjacent reasoning
+resources. Archives carry the project MIT license and dependency license texts and notices
+under `bin/resources/reasoning/notices/`. The exact GMP source and build recipe are
+included at `bin/resources/reasoning/native/gmp-source-and-build.tar.gz`. Python, Node and Rust are not required at runtime. The source-only
+Python implementation remains available only through explicit
+`KPOPPER_RUNTIME=python` compatibility mode.
+
+For source builds, run the commands below from `native/`; the release build can
+also be invoked from the repository root with
+`cargo build --manifest-path native/Cargo.toml --release`.
 
 ## Build and run
 
@@ -14,7 +21,7 @@ With Rust installed, from this directory:
 ```sh
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
-cargo build --locked --release
+cargo build --manifest-path native/Cargo.toml --locked --release
 ```
 
 Development and test builds optimize SHA-256 hashing because launcher attestation
@@ -33,16 +40,27 @@ cargo test --locked --no-fail-fast
 The platform acceptance workflow builds these resources before testing. Tests that
 require an explicitly selected Python oracle or managed deployment remain opt-in.
 
-Core commands and Hub rendering do not require Python, Node, Cargo or Rust on the
-runtime PATH. Rust and downloaded build dependencies are required only for builds.
-Optional Hub browser checks use Node, playwright-core and Chrome.
+Core commands and the compiled Hub/Annotated applications do not require Python,
+Node, Cargo or Rust on the runtime PATH. Optional browser checks use Node,
+playwright-core and Chrome. The applications themselves remain experimental and
+opt-in even though their native runtime is bundled.
+
+To install a checkout or plugin cache, run the explicit installer, which places the
+matching target runtime under `scripts/runtime/<target>`:
+
+```sh
+sh /absolute/path/to/kpopper/scripts/install_native.sh
+```
+
+The same installer accepts an offline archive and SHA-256. Hooks never download or
+compile the runtime; a missing runtime is reported as a diagnostic.
 
 ### Assess an existing record
 
 ```sh
-kpop-native --workspace /absolute/workspace assess d.decision p.input
-kpop-native --frozen assess d.decision --record /absolute/GROUNDING.yaml --attention-only
-kpop-native assess d.decision --profile core/v1 --as-of 2026-09-19 --history
+kpop --workspace /absolute/workspace assess d.decision p.input
+kpop --frozen assess d.decision --record /absolute/GROUNDING.yaml --attention-only
+kpop assess d.decision --profile core/v1 --as-of 2026-09-19 --history
 ```
 
 `assess` discovers the real record within the workspace's ancestor boundary,
@@ -67,8 +85,8 @@ Ordinary records support seeded reads and transitive impact, including physical
 hypotheses, pending contributions, source labels and private-draft counts:
 
 ```sh
-kpop-native --frozen pull p.input d.decision
-kpop-native affects p.input
+kpop --frozen pull p.input d.decision
+kpop affects p.input
 ```
 
 Core records also support `open --json` and `check`. They share one captured
@@ -88,8 +106,8 @@ command compatibility and final distribution acceptance remain in progress.
 Core records can be exported as bounded, read-only Markdown or Mermaid excerpts:
 
 ```sh
-kpop-native --frozen export d.decision --direction support --depth 2
-kpop-native --frozen export d.decision --format markdown-mermaid --details
+kpop --frozen export d.decision --direction support --depth 2
+kpop --frozen export d.decision --format markdown-mermaid --details
 ```
 
 The export uses the complete captured assessment before selecting nodes, keeps
@@ -100,13 +118,13 @@ exit status; it does not turn the excerpt into a new assessment schema.
 Local contribution state can be inspected or materialized without remote reads:
 
 ```sh
-kpop-native knowledge status
-kpop-native --frozen knowledge status
-kpop-native knowledge materialize REVISION --out /absolute/new-snapshot
-kpop-native pending status
-kpop-native pending configure --remote origin --target main --branch contributions --grant
-kpop-native pending pause --reason "review pending changes"
-kpop-native pending resume
+kpop knowledge status
+kpop --frozen knowledge status
+kpop knowledge materialize REVISION --out /absolute/new-snapshot
+kpop pending status
+kpop pending configure --remote origin --target main --branch contributions --grant
+kpop pending pause --reason "review pending changes"
+kpop pending resume
 ```
 
 Status preserves live/frozen contributions, conflicts, cached publication state,
@@ -121,10 +139,10 @@ an explicit destination copy.
 ### Build optional HTML applications
 
 ```sh
-kpop-native experimental hub --out report.html
-kpop-native experimental hub --verify
-kpop-native experimental hub --checks report.html
-kpop-native page --open
+kpop experimental hub --out report.html
+kpop experimental hub --verify
+kpop experimental hub --checks report.html
+kpop page --open
 ```
 
 `page` is a compatibility alias. The native Hub supports ordinary and core/v1 records,
@@ -139,10 +157,10 @@ overwritten. Successful builds replace the output atomically.
 Annotated Documents package authored HTML and explicit source checks in a portable copy:
 
 ```sh
-kpop-native experimental annotated-doc guide
-kpop-native experimental annotated-doc build --html report.html --manifest manifest.json --out checked.html
-kpop-native experimental annotated-doc inspect checked.html
-kpop-native experimental annotated-doc refresh checked.html --sources sources.json --out refreshed.html
+kpop experimental annotated-doc guide
+kpop experimental annotated-doc build --html report.html --manifest manifest.json --out checked.html
+kpop experimental annotated-doc inspect checked.html
+kpop experimental annotated-doc refresh checked.html --sources sources.json --out refreshed.html
 ```
 
 `document` is a compatibility alias. Build and refresh protect their inputs and
@@ -153,12 +171,12 @@ Inspection validates embedded evidence without executing authored scripts.
 ### Retain a checked core session
 
 ```sh
-kpop-native session open --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
-kpop-native session read --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --ref / --revision REVISION
-kpop-native session context --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --id d.decision --direction support --revision REVISION
-kpop-native session search --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --query "decision" --revision REVISION
-kpop-native session propose --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --revision REVISION --kind inferred --text "A proposed reading" --basis node:p.input --revisit "Recheck when the input changes"
-kpop-native session serve --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
+kpop session open --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
+kpop session read --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --ref / --revision REVISION
+kpop session context --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --id d.decision --direction support --revision REVISION
+kpop session search --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --query "decision" --revision REVISION
+kpop session propose --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --revision REVISION --kind inferred --text "A proposed reading" --basis node:p.input --revisit "Recheck when the input changes"
+kpop session serve --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
 ```
 
 Opening a `core/v1` record captures and assesses once, then retains the detached
@@ -204,9 +222,9 @@ and Windows, including physical identity, no-clobber creation and changed-source
 ### Author an active history record
 
 ```sh
-kpop-native add p.hours v=10
-kpop-native set p.hours 12 --as-of 2026-09-19
-kpop-native review d.schedule
+kpop add p.hours v=10
+kpop set p.hours 12 --as-of 2026-09-19
+kpop review d.schedule
 ```
 
 An implicit first `add` creates a core history record through the guarded bootstrap
@@ -230,9 +248,9 @@ journal and recovery boundaries still apply.
 Named hypotheses on active native history can be previewed, folded or refuted:
 
 ```sh
-kpop-native consolidate --dry-run trial
-kpop-native consolidate trial
-kpop-native consolidate --refute trial "tested and refuted"
+kpop consolidate --dry-run trial
+kpop consolidate trial
+kpop consolidate --refute trial "tested and refuted"
 ```
 
 Omitting names selects every active group. Preview preserves record and evidence
@@ -245,13 +263,13 @@ choice and evidence checks. `--json` wraps the command's text, error and exit co
 For the earlier feasibility writer, supply an absolute path to an existing **empty** directory:
 
 ```sh
-kpop-native --workspace /absolute/disposable/workspace init --record-id example
-kpop-native --workspace /absolute/disposable/workspace add p.hours \
+kpop --workspace /absolute/disposable/workspace init --record-id example
+kpop --workspace /absolute/disposable/workspace add p.hours \
   --value 10 --source calendar --operation observation-1 --on 2026-09-19T12:00:00Z
-kpop-native --workspace /absolute/disposable/workspace set p.hours \
+kpop --workspace /absolute/disposable/workspace set p.hours \
   --value 12 --operation observation-2 --on 2026-09-19T13:00:00Z
-kpop-native --workspace /absolute/disposable/workspace open
-kpop-native --workspace /absolute/disposable/workspace history p.hours
+kpop --workspace /absolute/disposable/workspace open
+kpop --workspace /absolute/disposable/workspace history p.hours
 ```
 
 Values use JSON syntax. `null`, booleans, arbitrary-size integers, finite floating
@@ -295,7 +313,7 @@ captures and revalidates the authority, committed objects and reduced subject he
 without writing:
 
 ```sh
-kpop-native --workspace /absolute/workspace history status
+kpop --workspace /absolute/workspace history status
 ```
 
 `history reconcile` describes differences between the rendered history and the
@@ -312,12 +330,12 @@ migration input explicitly; the general reader `--frozen` flag does not override
 Explicit history acts target an immutable version with a recorded reason:
 
 ```sh
-kpop-native history retire --subject p.input --of VERSION --because 'no longer used'
-kpop-native history accept --subject p.input --of VERSION --because 'verified again'
-kpop-native history reconcile --record-proposals --proposal-subject p.input \
+kpop history retire --subject p.input --of VERSION --because 'no longer used'
+kpop history accept --subject p.input --of VERSION --because 'verified again'
+kpop history reconcile --record-proposals --proposal-subject p.input \
   --because 'retain the edited reading for review'
-kpop-native recover --json
-kpop-native recover --rollback --json
+kpop recover --json
+kpop recover --rollback --json
 ```
 
 `refute`, `correct` and `propose` use the same explicit-act interface; `--over`
@@ -388,7 +406,7 @@ Validated scalar constructors prevent invalid dates or non-finite floats from
 entering that model. Converting a date/datetime to ordinary JSON refuses instead
 of silently turning it into text.
 
-`kpop-native identity --typed` reads the canonical tagged representation on stdin,
+`kpop identity --typed` reads the canonical tagged representation on stdin,
 for example `["date","2026-09-19"]`, and returns its exact typed identity and tagged
 value. Plain `identity` retains its JSON-value interface. This is a read-only codec
 boundary: the history writer still accepts JSON-compatible values only.

@@ -1,6 +1,8 @@
 """Lifecycle diagnostics are context, never new prompts or replacement tool results."""
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import unittest
@@ -10,6 +12,7 @@ from tests import test_session_activity as activity_tests
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@unittest.skipUnless(os.name == 'posix', 'POSIX shell hooks; native hooks cover Windows')
 class HookDelivery(unittest.TestCase):
     def setUp(self):
         self.fixture = activity_tests.SessionActivity()
@@ -58,6 +61,35 @@ class HookDelivery(unittest.TestCase):
         self.fixture.record.write_text('not: [valid yaml')
         self.assertEqual(self.call().returncode, 0)
         self.assert_context(self.call('--context', 'UserPromptSubmit'), 'unavailable')
+
+    def test_native_default_dispatches_context_and_never_forwards_child_exit_two(self):
+        from tests.test_native_distribution import host_target
+        target = host_target()
+        if target is None:
+            self.skipTest('native package target unavailable')
+        f = self.fixture
+        scripts = f.root / 'native-plugin' / 'scripts'
+        scripts.mkdir(parents=True)
+        for name in ('hook.sh', 'session_gate.sh', 'native_runtime.sh'):
+            shutil.copy2(ROOT / 'scripts' / name, scripts / name)
+        binary = scripts / 'runtime' / target / 'kpop'
+        binary.parent.mkdir(parents=True)
+        trace = f.root / 'native-args.txt'
+        binary.write_text('#!/bin/sh\nprintf "%s\\n" "$*" > "$HOOK_TRACE"\nprintf native-context\nexit 2\n')
+        binary.chmod(0o755)
+        env = dict(f.env, KPOPPER_RUNTIME='rust', HOOK_TRACE=str(trace))
+        def invoke(name, *args):
+            return subprocess.run(['sh', str(scripts / name), *args], input='{}',
+                cwd=f.work, env=env, text=True, capture_output=True, timeout=10)
+        stopped = invoke('session_gate.sh', '--host', 'codex')
+        self.assertEqual((stopped.returncode, stopped.stdout, stopped.stderr), (0, '', ''))
+        self.assertFalse(trace.exists())
+        context = invoke('session_gate.sh', '--host', 'codex', '--context', 'UserPromptSubmit')
+        self.assertEqual(context.returncode, 0)
+        self.assertEqual(trace.read_text().strip(), 'session-context --event UserPromptSubmit --host codex')
+        launched = invoke('hook.sh', 'watch_hook.py', 'claude', 'wait')
+        self.assertEqual(launched.returncode, 0)
+        self.assertEqual(trace.read_text().strip(), '_hook watch claude wait')
 
     def test_manifests_do_not_register_stop_or_automatic_rewake(self):
         for rel in ('hooks/hooks.json', 'adapters/codex/plugin-hooks.json',

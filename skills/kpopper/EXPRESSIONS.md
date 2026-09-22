@@ -8,11 +8,11 @@ involved in evaluation. The stored expression remains the source of truth.
 ## Reader compatibility
 
 Structured rules and conditions (`expr` or tagged AST), and their `computed` review
-snapshots, require kpopper **1.6.0 or later** in every reader and writer that touches the
-record. Upgrade the standalone CLI, each host's plugin and CI together. Updating a plugin
-does not update a separately installed pip/pipx CLI; restart sessions still using an older
-plugin. For unreleased source, use the same verified revision across these entrypoints:
-the package version alone may still name the previous release.
+snapshots, require the native **0.9.0** runtime (or the legacy Python 1.6.0 reader)
+in every reader and writer that touches the record. Upgrade the standalone CLI, each
+host's plugin and CI together. Updating a plugin does not update a separately installed
+legacy pip/pipx CLI; restart sessions still using an older runtime. For unreleased source,
+use the same verified revision across these entrypoints.
 
 An older writer may mistake a structured rule for an ordinary entry and save an invalid
 historical reading such as `present`, or miss its dependencies. Until a compatible reader

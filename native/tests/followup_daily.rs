@@ -380,7 +380,7 @@ fn cli_routes_complete_host_and_daily_protocol_and_status() {
     )
     .unwrap();
     let call = |args: &[&str], input: Option<serde_json::Value>, success: bool| {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .arg("--workspace")
             .arg(&workspace)
             .arg("followups")
@@ -428,7 +428,7 @@ fn cli_routes_complete_host_and_daily_protocol_and_status() {
     .unwrap();
     assert_eq!(
         payload["runtime"]["command"],
-        json!([env!("CARGO_BIN_EXE_kpop-native")])
+        json!([env!("CARGO_BIN_EXE_kpop")])
     );
     assert_eq!(
         payload["runtime"]["environment"]["XDG_STATE_HOME"],

@@ -24,7 +24,7 @@ fn oracle() -> (PathBuf, PathBuf) {
 }
 
 fn cli(root: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(args)
         .env_remove("KPOPPER_NATIVE_RESOURCES")

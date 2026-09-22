@@ -146,7 +146,7 @@ fn structural_limits_refuse_before_hashing() {
 
 #[test]
 fn typed_cli_roundtrips_and_retains_the_existing_json_identity_interface() {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["identity", "--typed"])
         .env("PATH", "")
         .stdin(Stdio::piped())

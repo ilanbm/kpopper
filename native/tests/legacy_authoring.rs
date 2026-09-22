@@ -20,7 +20,7 @@ fn write(path: &Path, bytes: &[u8]) {
 }
 
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
@@ -206,7 +206,7 @@ fn private_dependency_closure_goes_to_a_draft_and_keeps_the_record() {
     let root = temp.path().canonicalize().unwrap();
     let before = fixture("private-before.yaml");
     write(&root.join("GROUNDING.yaml"), &before);
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&root)
         .env("KPOPPER_PRIVATE_HOME", private.path())
         .env_remove("KPOPPER_AGENT_SESSION")

@@ -1,0 +1,11 @@
+rustpython-parser-vendored 0.4.0
+
+The published crate omits these license files from its repository root.
+They are reproduced unchanged from the exact source revision recorded in
+its .cargo_vcs_info.json.
+
+Declared license: MIT
+crates.io package SHA256: 04fcea49a4630a3a5d940f4d514dc4f575ed63c14c3e3ed07146634aed7f67a6
+
+https://raw.githubusercontent.com/RustPython/Parser/8dd2aea26778d8d6917770f8e32bea1b9cdc0ae8/LICENSE
+SHA256: 0dfeb72ba967794c4ea067b6e67798aefde4fd4cdb10f1882fe1163d2652434d
