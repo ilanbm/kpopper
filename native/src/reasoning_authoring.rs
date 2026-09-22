@@ -699,6 +699,20 @@ impl<'a> World<'a> {
         let b = map(body).ok();
         let deps = text(&self.fields["deps"])?.to_owned();
         let predicate = text(&self.fields["predicate"])?.to_owned();
+        if a.get("reframe") == Some(&V::Bool(true)) && out.is_empty() {
+            let rule = b.and_then(|m| m.get("rule")).ok_or_else(|| Error("reframe needs a rule".into()))?;
+            let refs = L::references(&L::lower(rule)?);
+            if refs.is_empty() {
+                out.push("reframe needs a rule over recorded inputs, not a constant".into());
+            } else {
+                let prior = self.result(id)?;
+                let replacement = self.candidate(action)?.result(id)?;
+                if prior["status"] != "ok" || replacement["status"] != "ok"
+                    || prior["value"] != replacement["value"] {
+                    out.push("reframe must preserve the current scalar type and value; record any source-supported value change first".into());
+                }
+            }
+        }
         if let Some(V::List(d)) = b.and_then(|m| m.get(&deps)) {
             Self::check_builtin(
                 &d.iter()

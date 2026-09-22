@@ -464,6 +464,9 @@ fn run(args: Args) -> Result<Value> {
             let (Command::Add(write) | Command::Set(write)) = command else {
                 unreachable!()
             };
+            if write.reframe || write.expected_record_sha256.is_some() {
+                return Err(kpop_native::Error("reframe is unavailable in feasibility stores; expected-record-sha256 requires active history".into()));
+            }
             let value = json_input(
                 write
                     .value
