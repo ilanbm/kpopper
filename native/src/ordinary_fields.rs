@@ -80,24 +80,49 @@ fn source_only_collections(collections: &BTreeMap<String, Map>) -> bool {
             })
     })
 }
-fn choose(
-    schema: &Map,
-    role: &str,
-    candidates: &BTreeMap<String, usize>,
-) -> Result<Option<String>> {
+/// The votes a role gets, field by field in the order each first voted - the order the
+/// Python reader keeps them in, and names a tie by.
+#[derive(Default)]
+struct Votes(Vec<(String, usize)>);
+impl Votes {
+    fn add(&mut self, field: &str) {
+        match self.0.iter_mut().find(|(name, _)| name == field) {
+            Some((_, count)) => *count += 1,
+            None => self.0.push((field.into(), 1)),
+        }
+    }
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    /// The fields with the most votes, the first to vote first.
+    fn leaders(&self) -> impl Iterator<Item = &str> {
+        let most = self.0.iter().map(|(_, count)| *count).max().unwrap_or(0);
+        self.0
+            .iter()
+            .filter(move |(_, count)| *count == most)
+            .map(|(name, _)| name.as_str())
+    }
+    /// The first two fields that share the most votes, when two do.
+    fn tie(&self) -> Option<(&str, &str)> {
+        let mut leaders = self.leaders();
+        leaders.next().zip(leaders.next())
+    }
+}
+fn choose(schema: &Map, role: &str, votes: &Votes) -> Result<Option<String>> {
     if let Some(value) = schema.get(role).filter(|v| truth(v)) {
         return text(value)
             .map(|s| Some(s.into()))
             .map_err(|_| error("invalid_snapshot"));
     }
-    let max = candidates.values().copied().max().unwrap_or(0);
-    let found = candidates
-        .iter()
-        .filter(|(_, v)| **v == max)
-        .map(|(k, _)| k.clone())
-        .collect::<Vec<_>>();
-    require(found.len() <= 1, "invalid_snapshot")?;
-    Ok(found.into_iter().next())
+    require(votes.tie().is_none(), "invalid_snapshot")?;
+    Ok(votes.leaders().next().map(str::to_owned))
+}
+/// A record's collections in the order the record holds them.
+fn in_order<'a>(
+    doc: &'a Map,
+    collections: &'a BTreeMap<String, Map>,
+) -> impl Iterator<Item = &'a Map> {
+    doc.keys().filter_map(|name| collections.get(name))
 }
 pub fn snapshot_fields(document: &V) -> Result<Map> {
     inferred_fields(document, false)
@@ -129,30 +154,25 @@ pub(crate) fn semantic_roles(document: &V) -> Result<Option<(BTreeSet<String>, M
 
 const NO_DEPENDENCY_FIELD: &str = "no dependency field found: ";
 const UNSEEN_DEPENDENCY_FIELD: &str = " for 'deps', and nothing this reader can see carries it: ";
+const TIED_FIELDS: &str = " and this tool does not guess.\nAdd to the record:";
 
 /// Why a reader cannot take a record's field roles, in the Python reader's words: a
-/// dependency field the schema names and no entry carries, or no field that reads as a
-/// dependency list. Any other cause keeps its code.
+/// dependency field the schema names and no entry carries, no field that reads as a
+/// dependency list, or two fields that fit one role equally well. Any other cause keeps
+/// its code.
 pub(crate) fn unreadable(document: &V) -> Error {
-    let why = || -> Result<Option<String>> {
-        let doc = map(document)?;
-        let lists = dependency_lists(doc, &collections(document)?);
-        let declared = doc
-            .get("schema")
-            .and_then(|v| map(v).ok())
-            .and_then(|schema| schema.get("deps"))
-            .filter(|v| truth(v));
-        Ok(match declared {
-            Some(V::Text(dep)) if !lists.present.contains(dep) => {
-                Some(unseen_dependency_field(dep, &lists.present))
-            }
-            None if lists.votes.is_empty() => Some(no_dependency_field(&lists.unresolved)),
-            _ => None,
-        })
-    };
-    match why() {
-        Ok(Some(why)) => Error(why),
+    match unread(document) {
+        Ok(Some(why)) => Error(why.account()),
         _ => error("ordinary_fields_unreadable"),
+    }
+}
+
+/// A snapshot refused because two fields fit one of the record's roles equally well,
+/// told as the reader tells it. Any other refusal stands as it is.
+pub(crate) fn explain_tie(document: &V, failure: Error) -> Error {
+    match unread(document) {
+        Ok(Some(why @ Unread::Tied(..))) => Error(why.account()),
+        _ => failure,
     }
 }
 
@@ -160,6 +180,57 @@ pub(crate) fn unreadable(document: &V) -> Error {
 pub(crate) fn explains_unreadable(failure: &Error) -> bool {
     failure.0.starts_with(NO_DEPENDENCY_FIELD)
         || failure.0.starts_with("schema names '") && failure.0.contains(UNSEEN_DEPENDENCY_FIELD)
+        || failure.0.starts_with("two fields fit '") && failure.0.contains(TIED_FIELDS)
+}
+
+/// What keeps the Python reader from taking a record's field roles, looked for in its
+/// order: the dependency field first, then the snapshot and the predicate among the
+/// bodies that carry it.
+enum Unread {
+    Unseen(String, BTreeSet<String>),
+    NoDependency(BTreeMap<String, Vec<(String, Vec<String>)>>),
+    Tied(&'static str, String, String),
+}
+impl Unread {
+    fn account(&self) -> String {
+        match self {
+            Self::Unseen(dep, present) => unseen_dependency_field(dep, present),
+            Self::NoDependency(unresolved) => no_dependency_field(unresolved),
+            Self::Tied(role, first, second) => format!(
+                "two fields fit '{role}' ({first}, {second}){TIED_FIELDS}\n\nschema:\n  {role}: <field name>"
+            ),
+        }
+    }
+}
+fn unread(document: &V) -> Result<Option<Unread>> {
+    let doc = map(document)?;
+    let collections = collections(document)?;
+    let lists = dependency_lists(doc, &collections);
+    let schema = doc.get("schema").and_then(|v| map(v).ok());
+    let declared = |role: &str| schema.and_then(|s| s.get(role)).filter(|v| truth(v));
+    let dep = match declared("deps") {
+        Some(V::Text(dep)) if !lists.present.contains(dep) => {
+            return Ok(Some(Unread::Unseen(dep.clone(), lists.present)));
+        }
+        Some(V::Text(dep)) => dep.clone(),
+        Some(_) => return Ok(None),
+        None => match (lists.votes.tie(), lists.votes.leaders().next()) {
+            (Some((first, second)), _) => {
+                return Ok(Some(Unread::Tied("deps", first.into(), second.into())));
+            }
+            (None, Some(dep)) => dep.to_owned(),
+            (None, None) => return Ok(Some(Unread::NoDependency(lists.unresolved))),
+        },
+    };
+    let (snapshots, predicates) = judgment_votes(doc, &collections, &dep, &lists.ids, true)?;
+    for (role, votes) in [("snapshot", snapshots), ("predicate", predicates)] {
+        if declared(role).is_none()
+            && let Some((first, second)) = votes.tie()
+        {
+            return Ok(Some(Unread::Tied(role, first.into(), second.into())));
+        }
+    }
+    Ok(None)
 }
 
 fn unseen_dependency_field(dep: &str, present: &BTreeSet<String>) -> String {
@@ -240,7 +311,7 @@ fn no_dependency_field(unresolved: &BTreeMap<String, Vec<(String, Vec<String>)>>
 /// entries.
 struct DependencyLists {
     ids: BTreeSet<String>,
-    votes: BTreeMap<String, usize>,
+    votes: Votes,
     unresolved: BTreeMap<String, Vec<(String, Vec<String>)>>,
     present: BTreeSet<String>,
 }
@@ -271,11 +342,10 @@ fn dependency_lists(doc: &Map, collections: &BTreeMap<String, Map>) -> Dependenc
             }
         }
     }
-    let mut votes = BTreeMap::new();
+    let mut votes = Votes::default();
     let mut unresolved = BTreeMap::<String, Vec<_>>::new();
     let mut present = BTreeSet::new();
-    let in_order = doc.keys().filter_map(|name| collections.get(name));
-    for (name, body) in in_order.flat_map(|m| m.iter()) {
+    for (name, body) in in_order(doc, collections).flat_map(|m| m.iter()) {
         let V::Map(body) = body else {
             continue;
         };
@@ -299,7 +369,7 @@ fn dependency_lists(doc: &Map, collections: &BTreeMap<String, Map>) -> Dependenc
                     .map(str::to_owned)
                     .collect::<Vec<_>>();
                 if missing.is_empty() {
-                    *votes.entry(field.clone()).or_insert(0) += 1;
+                    votes.add(field);
                 } else {
                     unresolved
                         .entry(field.clone())
@@ -450,15 +520,36 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
         return Ok(roles);
     };
     roles.insert("deps".into(), s(&dep));
-    let (mut snapshots, mut predicates) = (BTreeMap::new(), BTreeMap::new());
-    for body in collections.values().flat_map(|m| m.values()) {
+    let (snapshots, predicates) = judgment_votes(doc, &collections, &dep, &ids, semantic)?;
+    for (role, candidates) in [("snapshot", snapshots), ("predicate", predicates)] {
+        if semantic && let Some(value) = schema.get(role).filter(|v| truth(v)) {
+            roles.insert(role.into(), value.clone());
+        } else if let Some(name) = choose(schema, role, &candidates)? {
+            roles.insert(role.into(), s(&name));
+        } else if semantic {
+            roles.insert(role.into(), V::Null);
+        }
+    }
+    Ok(roles)
+}
+/// How the snapshot and the predicate are voted for, in the record's own order. Both
+/// are judgment fields, so only the bodies that carry the dependency field vote.
+fn judgment_votes(
+    doc: &Map,
+    collections: &BTreeMap<String, Map>,
+    dep: &str,
+    ids: &BTreeSet<String>,
+    semantic: bool,
+) -> Result<(Votes, Votes)> {
+    let (mut snapshots, mut predicates) = (Votes::default(), Votes::default());
+    for body in in_order(doc, collections).flat_map(|m| m.values()) {
         let V::Map(body) = body else {
             continue;
         };
-        if !body.contains_key(&dep) {
+        if !body.contains_key(dep) {
             continue;
         }
-        let dep_value = &body[&dep];
+        let dep_value = &body[dep];
         require(
             !truth(dep_value) || matches!(dep_value, V::Map(_) | V::List(_) | V::Text(_)),
             if semantic {
@@ -473,9 +564,9 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
             }
             if let V::Map(m) = value {
                 if !m.is_empty() && m.keys().all(|k| ids.contains(k)) {
-                    *snapshots.entry(field.clone()).or_insert(0) += 1;
+                    snapshots.add(field);
                 } else if m.contains_key("op") || m.contains_key("expr") || field == "wrong_if" {
-                    *predicates.entry(field.clone()).or_insert(0) += 1;
+                    predicates.add(field);
                 }
             } else if let V::Text(value) = value
                 && !value.is_empty()
@@ -490,21 +581,12 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                     c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
                 });
                 if !named.is_empty() && !named.contains(&trimmed) && EXPR.is_match(value) {
-                    *predicates.entry(field.clone()).or_insert(0) += 1;
+                    predicates.add(field);
                 }
             }
         }
     }
-    for (role, candidates) in [("snapshot", snapshots), ("predicate", predicates)] {
-        if semantic && let Some(value) = schema.get(role).filter(|v| truth(v)) {
-            roles.insert(role.into(), value.clone());
-        } else if let Some(name) = choose(schema, role, &candidates)? {
-            roles.insert(role.into(), s(&name));
-        } else if semantic {
-            roles.insert(role.into(), V::Null);
-        }
-    }
-    Ok(roles)
+    Ok((snapshots, predicates))
 }
 pub fn capabilities(document: &V, profile: Option<&str>) -> Result<V> {
     let doc = map(document)?;

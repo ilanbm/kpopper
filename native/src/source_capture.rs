@@ -680,6 +680,12 @@ fn capture_ordinary_with(
             {
                 (None, Some(error.0))
             }
+            Err(error) if error.0 == "invalid_snapshot" => {
+                return Err(crate::ordinary_fields::explain_tie(
+                    &ordinary_document,
+                    error,
+                ));
+            }
             Err(error) => return Err(error),
         };
     let captured = CapturedSource {
