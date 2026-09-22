@@ -165,6 +165,13 @@ def _check_payload(payload: Dict[str, Tuple[str, int]], manifest: Dict[str, Tupl
             _fail("payload mode does not match manifest: %s" % path)
     executable = ".exe" if target == "windows-x86_64" else ""
     required = {
+        "LICENSE",
+        "bin/resources/reasoning/native/gmp-source-and-build.tar.gz",
+        "bin/resources/reasoning/notices/lean/THIRD_PARTY_NOTICES.txt",
+        "bin/resources/reasoning/notices/rust/INDEX.json",
+        "bin/resources/reasoning/notices/rust-toolchain/COPYRIGHT-library.html",
+        "bin/resources/reasoning/notices/rust-toolchain/licenses/Apache-2.0.txt",
+        "bin/resources/reasoning/notices/rust-toolchain/licenses/MIT.txt",
         "bin/kpop" + executable,
         "bin/kpopper" + executable,
         "bin/resources/reasoning/%s.kpopper-runtime" % target,

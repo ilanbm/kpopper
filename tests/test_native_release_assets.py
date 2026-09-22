@@ -44,6 +44,13 @@ class NativeArtifacts(unittest.TestCase):
         windows = target == "windows-x86_64"
         executable = ".exe" if windows else ""
         names = {
+            "LICENSE": (b"MIT license fixture", 0o644),
+            "bin/resources/reasoning/native/gmp-source-and-build.tar.gz": (b"GMP source fixture", 0o644),
+            "bin/resources/reasoning/notices/lean/THIRD_PARTY_NOTICES.txt": (b"Lean notices fixture", 0o644),
+            "bin/resources/reasoning/notices/rust/INDEX.json": (b'{"packages": []}', 0o644),
+            "bin/resources/reasoning/notices/rust-toolchain/COPYRIGHT-library.html": (b"Rust library attribution fixture", 0o644),
+            "bin/resources/reasoning/notices/rust-toolchain/licenses/Apache-2.0.txt": (b"Apache fixture", 0o644),
+            "bin/resources/reasoning/notices/rust-toolchain/licenses/MIT.txt": (b"MIT fixture", 0o644),
             "bin/kpop" + executable: (b"native-command", 0o755),
             "bin/kpopper" + executable: (b"native-alias", 0o755),
             "bin/resources/reasoning/%s.kpopper-runtime" % target: (b"reasoning", 0o644),
@@ -62,6 +69,19 @@ class NativeArtifacts(unittest.TestCase):
         }
         names["manifest.json"] = ((json.dumps(manifest, sort_keys=True) + "\n").encode(), 0o644)
         return names
+
+    def test_missing_corresponding_source_or_license_index_is_rejected(self):
+        for required in ("LICENSE", "bin/resources/reasoning/native/gmp-source-and-build.tar.gz",
+                         "bin/resources/reasoning/notices/rust/INDEX.json"):
+            with self.subTest(required=required):
+                members = self.members("linux-x86_64")
+                del members[required]
+                manifest = json.loads(members["manifest.json"][0])
+                manifest["files"] = [item for item in manifest["files"] if item["path"] != required]
+                members["manifest.json"] = (json.dumps(manifest).encode(), 0o644)
+                self.write_archive("linux-x86_64", members=members)
+                with self.assertRaises((ValueError, SystemExit)):
+                    N.prepare(self.version, self.commit, self.artifacts, self.output, self.repository)
 
     def write_archive(self, target, *, members=None, archive_version=None, folder=None):
         version = archive_version or self.version

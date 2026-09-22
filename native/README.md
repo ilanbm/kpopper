@@ -4,7 +4,9 @@ The native distribution provides the public `kpop` CLI and `kpopper` alias. Its
 internal library crate is `kpop_native`; the 0.9.0 native line is the first
 pre-1.0 series and is independent of the legacy Python package's 1.6.0 release.
 Prebuilt GitHub bundles are the primary install and include adjacent reasoning
-resources. Python, Node and Rust are not required at runtime. The source-only
+resources. Archives carry the project MIT license and dependency license texts and notices
+under `bin/resources/reasoning/notices/`. The exact GMP source and build recipe are
+included at `bin/resources/reasoning/native/gmp-source-and-build.tar.gz`. Python, Node and Rust are not required at runtime. The source-only
 Python implementation remains available only through explicit
 `KPOPPER_RUNTIME=python` compatibility mode.
 

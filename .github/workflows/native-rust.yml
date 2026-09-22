@@ -238,9 +238,33 @@ jobs:
           shutil.copy2(root/'native'/'target'/'release'/alias, bundle/alias)
           shutil.copy2(root/'scripts'/'reasoning'/'native'/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'), reasoning/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'))
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), ordinary)
+          source = reasoning/'native'
+          source.mkdir()
+          shutil.copy2(root/'scripts/reasoning/native/gmp-source-and-build.tar.gz', source/'gmp-source-and-build.tar.gz')
+          shutil.copytree(root/'scripts/reasoning/third_party', reasoning/'notices'/'lean')
+      - name: Collect Rust dependency license texts
+        id: native-notices
+        if: ${{ !cancelled() && steps.native-bundle.outcome == 'success' }}
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          root = pathlib.Path.cwd()
+          output = pathlib.Path(os.environ['RUNNER_TEMP'])/'native-bundle/resources/reasoning/notices/rust'
+          compiler = subprocess.check_output(['rustc', '-vV'], cwd=root/'native', text=True)
+          host = next(line.removeprefix('host: ') for line in compiler.splitlines() if line.startswith('host: '))
+          subprocess.run([sys.executable, str(root/'scripts/collect_rust_licenses.py'),
+              '--manifest-path', str(root/'native/Cargo.toml'), '--output', str(output), '--filter-platform', host, '--overrides', str(root/'scripts/native-licenses')],
+              cwd=root/'native', check=True)
+          sysroot = pathlib.Path(subprocess.check_output(['rustc', '--print', 'sysroot'], cwd=root/'native', text=True).strip())
+          documentation = sysroot/'share/doc/rust'
+          toolchain_notices = output.parent/'rust-toolchain'
+          toolchain_notices.mkdir()
+          import shutil
+          shutil.copy2(documentation/'COPYRIGHT-library.html', toolchain_notices/'COPYRIGHT-library.html')
+          shutil.copytree(documentation/'licenses', toolchain_notices/'licenses')
       - name: Execute copied binary through public acceptance flows
         id: native-acceptance
-        if: ${{ !cancelled() && steps.native-bundle.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.native-bundle.outcome == 'success' && steps.native-notices.outcome == 'success' }}
         env:
           KPOPPER_CI_BINARY: ${{ matrix.binary }}
         run: >-
