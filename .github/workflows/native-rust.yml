@@ -69,6 +69,14 @@ jobs:
           lint: "false"
           use-mathlib-cache: "false"
           use-github-cache: "false"
+      - name: Install and bind the Python hook reference for parity tests
+        if: inputs.validation != 'distribution'
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, '-m', 'pip', 'install', 'PyYAML==6.0.3', 'tzdata==2025.2'], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_HOST_ORACLE_PYTHON=' + sys.executable + '\n')
       - name: Bind the selected Lean toolchain and record Rust
         shell: bash
         run: |

@@ -24,6 +24,11 @@ fn repo() -> PathBuf {
         .unwrap()
         .to_owned()
 }
+fn oracle_python() -> PathBuf {
+    std::env::var_os("KPOP_HOST_ORACLE_PYTHON")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }))
+}
 fn fixture() -> TempDir {
     let dir = tempfile::tempdir().unwrap();
     for name in [
@@ -117,13 +122,7 @@ fn python(
     ];
     all.extend(args.iter().map(|v| (*v).to_owned()));
     let refs = all.iter().map(String::as_str).collect::<Vec<_>>();
-    process(
-        Path::new("/Users/ilanbm/dev/kpopper-evals/.venv/bin/python"),
-        &refs,
-        payload,
-        cwd,
-        tmp,
-    )
+    process(&oracle_python(), &refs, payload, cwd, tmp)
 }
 fn native(args: &[&str], payload: &serde_json::Value, cwd: &Path, tmp: &Path) -> Output {
     process(
@@ -386,7 +385,7 @@ fn followup_process_matches_python_summary_and_keeps_product_backup_unchanged() 
     let backup = fs::read(store_root.join("followups.previous.yaml")).unwrap();
     let payload_py = json!({"cwd":work,"session_id":sid("follow-python")});
     let payload_nv = json!({"cwd":work,"session_id":sid("follow-native")});
-    let mut py = Command::new("/Users/ilanbm/dev/kpopper-evals/.venv/bin/python")
+    let mut py = Command::new(oracle_python())
         .arg(repo().join("scripts/followups_hook.py"))
         .current_dir(&work)
         .env("XDG_STATE_HOME", &state)
@@ -535,7 +534,7 @@ fn watch_process_matches_python_delivery_and_consumes_each_session_once() {
     ];
     let py_payload =
         json!({"cwd":work,"session_id":sid("watch-python"),"hook_event_name":"PostToolUse"});
-    let mut py = Command::new("/Users/ilanbm/dev/kpopper-evals/.venv/bin/python")
+    let mut py = Command::new(oracle_python())
         .args([
             repo().join("scripts/watch_hook.py").to_str().unwrap(),
             "codex",
