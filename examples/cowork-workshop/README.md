@@ -7,13 +7,27 @@ and ingredients supplied at the venue. A later client brief moves it online.
 The saved plan now spans an agenda, equipment, ingredient preparation, groups
 and supervision, with the source of each assumption attached.
 
-[![The client moves a cooking workshop online while the saved plan still assumes one shared kitchen. The changed format prompts review of equipment, ingredients and activities.](../../assets/stories/cowork-workshop.png)](../../assets/stories/cowork-workshop.png)
+<p align="center">
+  <a href="../../assets/stories/cowork-workshop.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/cowork-workshop-mobile.png">
+      <img src="../../assets/stories/cowork-workshop.png" alt="The client moves a cooking workshop online while the saved plan still assumes one shared kitchen. The changed format prompts review of equipment, ingredients and activities.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/cowork-workshop-mobile.png)
 
 ## Inside the planning record
 
-[![A planning record retains three planning passes, 13 readings, five linked plans and four open questions. The new format is remote while every saved plan still has its onsite review snapshot.](../../assets/stories/cowork-workshop-record.png)](../../assets/stories/cowork-workshop-record.png)
+<p align="center">
+  <a href="../../assets/stories/cowork-workshop-record.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/cowork-workshop-record-mobile.png">
+      <img src="../../assets/stories/cowork-workshop-record.png" alt="A planning record retains three planning passes, 13 readings, five linked plans and four open questions. The new format is remote while every saved plan still has its onsite review snapshot.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/cowork-workshop-record-mobile.png) · [Before record](before/GROUNDING.yaml) · [After record](after/GROUNDING.yaml)
 

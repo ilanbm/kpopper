@@ -16,6 +16,14 @@ The performer pose, clothing and speech bubble are fictional illustration.
 
 See [the visual identity](brand-guide.md).
 
+## Responsive illustrations
+
+Illustrations with desktop and phone layouts use a `picture` element in the README
+and example guides. A `(max-width: 600px)` source selects the phone image; the desktop
+`img` remains the fallback. Direct **Phone layout** links stay available below them.
+Relative paths keep each checkout's assets together. GitHub browser source selection
+is supported; the native iPhone app still needs separate verification.
+
 ## Compact icon
 
 `kpopper-icon.svg` is the selected white geometric k on electric blue, supplied
@@ -51,19 +59,34 @@ comparison; its exact record is supplied alongside it. Separate editable SVG sch
 preserve compact maps of the conversation and time processes; they are not the
 illustration sources.
 
-The opening overview introduces `GROUNDING.yaml` as a file viewer. Its desktop layout
-connects two conversations directly to the saved reason and changed reading; the phone
-layout uses consecutive excerpts from the same file. The displayed YAML preserves the
-values, conclusion, condition and review snapshot in
-[`diagrams/reasoning-check.yaml`](diagrams/reasoning-check.yaml).
+The current opening overview is `diagrams/reasoning-check-v2.png`, with
+`diagrams/reasoning-check-mobile-v2.png` for phones. **Meet GROUNDING.yaml** and the
+handwritten **your new friend!** note introduce the file open in a large code editor.
+The file is the central object through which the story is told. Earlier and later
+session annotations connect the agent's recording actions to the saved verdict and
+the changed seven-day reading. The original 30/30 snapshot remains visible.
 
-The returned diagnostic is actual CLI output from that fictional record. The **0.24 s ·
-local run** badge is the rounded median of five consecutive local invocations on macOS
-arm64, including Python and CLI startup. It is caller-measured metadata, not text emitted
-by the checker or a general latency guarantee. The
-[run evidence](diagrams/reasoning-check-run.json) retains the timestamp, input hash,
-sample durations and exact output. Exit 1 is expected because the example's declared
-condition fires.
+On desktop, the annotations sit to the left in chronological order. Short captions
+say that the agent saves the reason, then updates the record; blue arrows enter the
+relevant lines. A restrained teal connector follows the condition down a blank
+gutter to the local check, with pink reserved for failure. Natural action verbs and
+direction distinguish the operations without read/write badges or an instructional
+legend. On phones, matching editor
+excerpts labelled as a continuation of the same file preserve the code and reading
+order without shrinking the whole desktop image.
+
+The illustration shows the relevant YAML fields and a short diagnostic in an
+illustrated editor, rather than a product screenshot. The full values, conclusion, condition and
+30/30 review snapshot are in
+[`diagrams/reasoning-check.yaml`](diagrams/reasoning-check.yaml).
+`FAIL downloads.availability` is a fragment of that example's actual check output;
+exit 1 is expected because seven days cannot support its 30-day promise. The agent
+chooses whether to change the email or policy. Updating the draft does not deploy it.
+
+The earlier `reasoning-check.png` and phone layout remain available alongside their
+[run evidence](diagrams/reasoning-check-run.json). Their 0.24-second badge describes
+that dated local sample, not a general latency guarantee. The current illustration
+does not carry a timing badge.
 
 ## Dependency-check illustration
 
@@ -78,12 +101,12 @@ and its SVG reflow the same content for phones.
 
 ## Reasoning canvas
 
-`canvas-for-reasoning.png` shows a software agent painting relationships between
-evidence, assumptions, a decision and review conditions on a canvas labelled
-`GROUNDING.yaml`. It illustrates a shared place to develop and preserve reasoning
-across conversations. The caption is "The canvas your AI didn’t know it needed."
-The matching SVG is the editable source. The README displays it outside collapsed
-sections, immediately before **Make it earn its place**.
+`canvas-for-reasoning-v2.png` shows an ink-drawn software artist working at a
+drafting surface labelled `GROUNDING.yaml`. Evidence and assumptions feed a decision;
+the decision connects to what would change it. The agent authors the relationships.
+The caption is "The canvas your AI didn't know it needed." The README displays it
+outside collapsed sections, immediately before **Make it earn its place**.
+The earlier PNG and SVG remain as the previous concept, not the source of the new art.
 
 ## Knowledge-source illustration
 

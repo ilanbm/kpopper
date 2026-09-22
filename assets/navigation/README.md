@@ -2,14 +2,21 @@
 
 The three native `<summary>` elements use wide strips, displayed at up to 960 pixels
 wide and scaled to fit smaller screens. The coding strip is 1800 × 360 (5:1);
-the other two are 1800 × 300 (6:1). Titles, product names
-and **Explore workflows and examples ↓** remain ordinary text outside the images.
+the other two are 1800 × 300 (6:1). Product names and
+**Click to expand workflows and examples ↓** remain ordinary text outside the banners.
 The whole summary toggles its section, including a click on the banner. The banners
 are not separate links to the image files.
 
 GitHub otherwise wraps a bare image in an image-viewer link. Each banner therefore
 has a named `<a id="...">` wrapper with no `href`: GitHub preserves that wrapper,
 and it remains non-interactive so clicking the image activates its parent summary.
+
+Path titles use small SVG labels aligned with the native disclosure marker. GitHub
+removes inline CSS and wraps HTML headings in block elements, so a heading inside
+`summary` places the marker on a separate line. The SVGs retain heading-sized text
+without a block wrapper, provide the title as alt text, and adapt to light and dark
+color schemes. The Cowork title has two inline parts so it can wrap between product
+names on a narrow screen while the marker stays beside its first line.
 
 | Banner | Source | Crop: left, top, right, bottom |
 |---|---|---|
