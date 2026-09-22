@@ -460,9 +460,14 @@ fn busy_processor_does_not_consume_queued_request() {
         .open(w.state.join("processor.lock"))
         .unwrap();
     file.lock_exclusive().unwrap();
+    // A parallel subprocess can briefly inherit this open file description.
+    let inherited = file.try_clone().unwrap();
     assert_eq!(w.process_with(&|_| Ok(())).unwrap()["state"], "busy");
     assert_eq!(fs::read(w.state.join("request.json")).unwrap(), request);
     assert!(!w.state.join("result.json").exists());
+    // Release the lock itself, not only one reference to the open description.
+    FileExt::unlock(&file).unwrap();
     drop(file);
     assert_eq!(w.process_with(&|_| Ok(())).unwrap()["state"], "clear");
+    drop(inherited);
 }

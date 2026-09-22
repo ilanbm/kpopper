@@ -39,7 +39,8 @@ concurrency:
 
 jobs:
   platform:
-    timeout-minutes: 60
+    # Full Intel tests, release compilation and artifact cleanup can exceed an hour.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
