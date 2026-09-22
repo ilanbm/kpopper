@@ -221,16 +221,42 @@ class PublisherBehavior(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "permission denied"):
                 P.published("v" + current_version())
 
+    def test_draft_release_is_looked_up_by_database_id(self):
+        payload = {"id": 123, "tag_name": "v0.9.0", "draft": True, "assets": []}
+
+        def github(*args, **kwargs):
+            if args == ("gh", "release", "view", "v0.9.0", "--repo", "org/repo",
+                        "--json", "databaseId"):
+                return json.dumps({"databaseId": 123})
+            if args == ("gh", "api", "repos/org/repo/releases/123"):
+                return json.dumps(payload)
+            raise SystemExit("GitHub cannot find an unpublished release by tag: HTTP 404")
+
+        with patch.dict(P.os.environ, {"GITHUB_REPOSITORY": "org/repo"}), \
+             patch.object(P.release, "sh", side_effect=github):
+            self.assertEqual(P.release_info("v0.9.0"), payload)
+
     def test_existing_release_assets_are_verified_by_size_and_digest(self):
         with tempfile.TemporaryDirectory() as directory:
             asset = pathlib.Path(directory) / "install.sh"
             asset.write_bytes(b"asset")
-            payload = {"assets": [{"name": asset.name, "size": 5,
+            payload = {"tag_name": "v" + current_version(), "assets": [{"name": asset.name, "size": 5,
                                    "digest": "sha256:" + hashlib.sha256(b"asset").hexdigest()}]}
             with patch.dict(P.os.environ, {"GITHUB_REPOSITORY": "org/repo"}), \
-                 patch.object(P.release, "sh", return_value=json.dumps(payload)) as command:
+                 patch.object(P.release, "sh", side_effect=[json.dumps({"databaseId": 123}),
+                                                           json.dumps(payload)]) as command:
                 P.verify_published("v" + current_version(), [asset])
-            command.assert_called_once_with("gh", "api", "repos/org/repo/releases/tags/v" + current_version())
+            self.assertEqual(command.call_args_list[-1].args,
+                             ("gh", "api", "repos/org/repo/releases/123"))
+
+    def test_release_lookup_refuses_invalid_or_changed_identity(self):
+        for identity, payload in (({}, {}), ({"databaseId": True}, {}),
+                                  ({"databaseId": 123}, {"tag_name": "v9.9.9"})):
+            with self.subTest(identity=identity, payload=payload), \
+                 patch.dict(P.os.environ, {"GITHUB_REPOSITORY": "org/repo"}), \
+                 patch.object(P.release, "sh", side_effect=[json.dumps(identity), json.dumps(payload)]):
+                with self.assertRaises(SystemExit):
+                    P.release_info("v0.9.0")
 
     def test_existing_release_retries_verify_and_never_creates(self):
         calls = []
@@ -321,8 +347,7 @@ class PublisherBehavior(unittest.TestCase):
                     item = dict(expected)
                     item.update(change)
                     payload = {"assets": [item]}
-                    with patch.dict(P.os.environ, {"GITHUB_REPOSITORY": "org/repo"}), \
-                         patch.object(P.release, "sh", return_value=json.dumps(payload)):
+                    with patch.object(P, "release_info", return_value=payload):
                         with self.assertRaisesRegex(SystemExit, "asset"):
                             P.verify_published("v" + current_version(), [asset])
 
