@@ -2,24 +2,23 @@
 
 This project adapter supplies a rule and two native Cursor hook wrappers. The
 wrappers call kpopper's shared reader and checker; they translate opening context
-and a stop follow-up into Cursor's response format.
+into Cursor's response format. It never requests a stop follow-up.
 
 **Status:** wrapper smoke tests pass on macOS. Installation, context delivery and
-follow-up delivery inside Cursor still need a live session test. A passing shell
+opening delivery inside Cursor still need a live session test. A passing shell
 test does not establish desktop, CLI or cloud runtime parity.
 
 ## What this installs
 
 | File | Behavior |
 |---|---|
-| `hooks.json` | `sessionStart` → `gate-open.sh`; `stop` → `gate-stop.sh`. |
+| `hooks.json` | `sessionStart` → `gate-open.sh`; no stop hook. |
 | `scripts/gate-open.sh` | Opens the record in `additional_context` and saves a temporary baseline keyed by `conversation_id`. |
-| `scripts/gate-stop.sh` | Requests a follow-up when the FAIL count exceeds the baseline and `loop_count` is zero; otherwise yields. |
+| `scripts/gate-stop.sh` | Silent compatibility handler for old installations. |
 | `rules/kpopper.mdc` | Condensed method, requested by relevance or attached when a record file is in context. |
 
 This adapter does not install the root plugin's other hooks, optional background
-workers or full skill collection. Its stop check compares failure counts; it is
-not equivalent to all checks performed by the Claude Code stop hook.
+workers or full skill collection. Use explicit `check` for diagnostics during a session.
 
 ## Cursor's documented contract
 
@@ -33,14 +32,13 @@ Checked against [Cursor's hooks reference](https://cursor.com/docs/hooks) on
   guarantee the agent waits for the record before starting work.
 - Native `stop` uses `followup_message` to request another turn. `loop_count`
   counts automatic follow-ups, and `loop_limit` defaults to five. This adapter
-  requests one only while that count is zero.
+  does not register that event or emit follow-up messages.
 - Project hook commands run from the project root. Keep the `.cursor/` prefix in
   `hooks.json`; when the payload has no `cwd`, the wrappers use that working directory.
 - Hosted cloud agents run `stop` but do not run `sessionStart`. Self-hosted workers
   have a different lifecycle contract.
 
-Without the opening baseline, this adapter's stop wrapper exits without a
-follow-up. **Hosted cloud agents therefore do not receive the automatic opening
+The legacy stop wrapper always exits silently. **Hosted cloud agents therefore do not receive the automatic opening
 or stop check from this pair.** Run `kpop open` and `kpop check` explicitly
 there. Local symlink targets also need to exist in any remote execution environment.
 
@@ -83,12 +81,12 @@ for the same kpopper hooks: all matching hooks can run.
 ## Verification
 
 The existing `tests.test_start.FirstUse.test_cursor_first_use_json_and_first_record_stop_use_the_same_baseline`
-checks opening JSON, the first-record baseline and a stop follow-up. A separate
+checks opening JSON, the first-record baseline and silent legacy stops. A separate
 2026-09-16 smoke test also exercised executable symlinks, a project path with
 spaces and documented payload fields without `cwd`.
 
 Before claiming a host is verified, start a fresh conversation in that host,
 confirm the opening reaches the agent, introduce a checker failure in a disposable
-record, and confirm one follow-up reaches the conversation. Test resume and
+record, and confirm no automatic follow-up is created; explicit `check` must still fail. Test resume and
 compaction separately; this adapter installs no compaction hook. Multi-root
 workspace selection and remote execution remain unverified.

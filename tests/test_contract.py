@@ -1469,7 +1469,7 @@ class IntentsTabsCoverage(unittest.TestCase):
             self.assertIn("fails check with 4 problems (2 at session start)", out)
             self.assertNotIn("recorded no intent", out)
 
-    def test_the_hooks_mark_at_open_and_bounce_once_at_stop(self):
+    def test_legacy_stop_never_continues_the_turn(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
             env = dict(os.environ, TMPDIR=d, KPOPPER_AGENT_SESSION="t1",
@@ -1487,8 +1487,7 @@ class IntentsTabsCoverage(unittest.TestCase):
             run(SCRIPTS / "provenance.py", "add", "heat.storm_kw", "v=5", "unit=kW", "name=loss in a storm",
                 "from=doc.boiler_sheet", "--as-of", "2026-09-04", rec, env=env)
             p = hook("session_gate.sh", {"session_id": "t1"})
-            self.assertEqual(p.returncode, 2)
-            self.assertIn("this session wrote 1 entry (heat.storm_kw) and recorded no intent", p.stderr)
+            self.assertEqual((p.returncode, p.stdout, p.stderr), (0, "", ""))
             # once: the second stop goes through
             p = hook("session_gate.sh", {"session_id": "t1"})
             self.assertEqual(p.returncode, 0)

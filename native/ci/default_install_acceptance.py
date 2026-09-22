@@ -161,6 +161,30 @@ def main():
                 index += 1
     if entry.read_bytes() != before:
         raise RuntimeError("installed hooks changed canonical source bytes")
+    # A stock blocking runtime cannot pass this probe merely by printing the same
+    # version: create a real missing-intent finding after the opening baseline.
+    run("30-unattributed-write", [*context["command"], "add", "p.unattributed", "v=1"], env=plugin_environment)
+    before_diagnostics = entry.read_bytes()
+    main_prompt = dict(payload, hook_event_name="UserPromptSubmit", prompt="Which version worked better?")
+    for name, command in (
+        ("31-legacy-shell-stop", [bash, plugin / "scripts/session_gate.sh", "--host", "codex"]),
+        ("32-legacy-native-stop", [*context["command"], "session-stop", "--host", "codex"]),
+    ):
+        stopped = run(name, command, json.dumps(main_prompt), plugin_environment)
+        if stopped.stdout or stopped.stderr:
+            raise RuntimeError("legacy Stop produced feedback")
+    diagnostic = next(hook["command"] for group in commands["UserPromptSubmit"]
+                      for hook in group["hooks"] if "session_gate.sh" in hook["command"])
+    result = run("33-prompt-diagnostics", [bash, "-c", diagnostic], json.dumps(main_prompt), plugin_environment)
+    notice = json.loads(result.stdout)
+    if set(notice) != {"hookSpecificOutput"} or result.stderr:
+        raise RuntimeError("diagnostics contained flow-control or visible warning output")
+    specific = notice["hookSpecificOutput"]
+    if specific.get("hookEventName") != "UserPromptSubmit" or "p.unattributed" not in specific.get("additionalContext", ""):
+        raise RuntimeError("fresh missing-intent diagnostic did not reach prompt context")
+    repeated = run("34-prompt-diagnostics-once", [bash, "-c", diagnostic], json.dumps(main_prompt), plugin_environment)
+    if repeated.stdout or repeated.stderr or entry.read_bytes() != before_diagnostics:
+        raise RuntimeError("diagnostics repeated or changed the canonical record")
     (output / "result.json").write_text(json.dumps({
         "version": args.version, "target": args.target, "archive_sha256": args.sha256,
         "prefix": str(prefix), "plugin": str(plugin), "context": context,

@@ -7,10 +7,10 @@
         "timeout": 15
       }
     ],
-    "Stop": [
+    "UserPromptSubmit": [
       {
         "type": "command",
-        "command": "../../../scripts/session_gate.sh",
+        "command": "../../../scripts/session_gate.sh --context UserPromptSubmit",
         "timeout": 15
       }
     ]

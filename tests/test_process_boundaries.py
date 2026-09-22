@@ -62,16 +62,16 @@ assert result['state']=='applied',result
         self.assertEqual(files[0].read_text(encoding='utf-8'), report['source_quote'])
 
     @unittest.skipUnless(os.name == 'posix', 'shell hook requires sh')
-    def test_stop_hook_bounces_for_a_hebrew_failure_under_ansi_stdio(self):
+    def test_prompt_diagnostics_preserve_hebrew_without_blocking_under_ansi_stdio(self):
         mark = self.work / 'kpopper-base-utf8-test'
         self.assertEqual(self.run_python('provenance.py', 'mark', str(mark), str(self.record)).returncode, 0)
         with self.record.open('a', encoding='utf-8') as stream:
             stream.write('judgments:\n  c.בדיקה:\n    rests_on: [מחיר]\n    seen: {מחיר: 10}\n    verdict: התקציב מתאים\n    wrong_if: מחיר > 5\n')
-        result = subprocess.run(['sh', str(ROOT / 'scripts/session_gate.sh')],
+        result = subprocess.run(['sh', str(ROOT / 'scripts/session_gate.sh'), '--context', 'UserPromptSubmit'],
             input=json.dumps({'session_id':'utf8-test','cwd':str(self.work)}, ensure_ascii=False),
             cwd=self.work, env=self.env, text=True, encoding='utf-8', capture_output=True, timeout=30)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn('c.בדיקה', result.stderr)
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        self.assertIn('c.בדיקה', json.loads(result.stdout)['hookSpecificOutput']['additionalContext'])
 
     @unittest.skipUnless(os.name == 'posix', 'durable ingestion requires POSIX locking')
     def test_notice_hook_delivers_hebrew_once_under_ansi_stdio(self):

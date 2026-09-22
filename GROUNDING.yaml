@@ -1456,6 +1456,12 @@ sources:
       kind: code
       commit: c5cc6a3b873628d08f338e457f09153962d406f8
       environment: "source protocol and disposable regression fixtures"
+  doc.hook_delivery:
+    name: "Nonblocking lifecycle hook delivery contract"
+    file: "tests/test_hook_delivery.py"
+    read: "2026-09-22"
+    at: "Prompt context, silent legacy stops, preserved explicit validation, delivery limits and
+         registered host configurations"
   doc.host_compatibility:
     name: "Host compatibility verification and release acceptance"
     file: "docs/compatibility.md"
@@ -1480,6 +1486,11 @@ sources:
     name: "Explicit Python setup and runtime selection for plugin hooks"
     file: "docs/plugin-runtime.md"
     read: "2026-09-17"
+  doc.prompt_reminders:
+    name: "Advisory recording reminder regression contract"
+    file: "tests/test_nudge.py"
+    read: "2026-09-22"
+    at: "Prompt context, ninth-turn Stop silence, changed files and host skill forms"
   doc.session_activity:
     name: "Session write attribution and Stop delivery contract"
     file: "docs/reference.md"
@@ -3112,7 +3123,9 @@ known:
     from: "scripts/session_start.py: LEGACY_CHARS"
     measure: hook_slot
   p.gate_bounces:
-    v: 1
+    v: 0
+    of: "2026-09-22"
+    # set 2026-09-22: Lifecycle hooks no longer create automatic continuation requests.
     name: "How many times the stop gate blocks before yielding"
     from: "scripts/session_gate.sh"
   p.predicate_shapes:
@@ -3256,14 +3269,15 @@ known:
     reach: general
   p.session_hook_contract:
     name: "Session authorship and Stop delivery scope"
-    v: "The Claude/Codex Stop hook attributes entries and intents only from private successful-write
-        receipts matching the session, source file and current body. Imported and manual changes
-        alone leave authorship unknown. Each finding has a separate per-session delivery receipt;
-        repeated stops and resume do not repeat it. Delivery suppression never changes check or write
-        admission. Missing temporary state loses attribution and delivery history; unavailable
-        delivery storage makes Stop yield."
-    from: doc.session_activity
-    at: "The plugin hooks: session write attribution and delivery receipts"
+    v: "Hook diagnostics use successful-write receipts matching the session, source file and current
+        body. Imported and manual changes alone leave authorship unknown. Current findings are
+        delivered once as additional context on a real prompt, at most eight per delivery. Stop and
+        shutdown wrappers are silent; asynchronous hooks never request a wake or replace tool
+        results. Delivery does not change check or write admission; missing private state loses
+        attribution and delivery history, and unavailable delivery storage suppresses notifications."
+    of: "2026-09-22"
+    from: doc.hook_delivery
+    at: "HookDelivery regression contract"
   p.skills_shipped:
     v: 10
     # set 2026-09-18: Eight canonical skills and two compatibility aliases after the application rename.
@@ -4489,46 +4503,46 @@ judgments:
                           person; only a predicate that holds fails the build"
       s.followups_contract: "read 2026-09-10"
   d.gate_and_opener_against_the_mark:
-    rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
-    verdict: "the opener marks where a session began - failures, judgments, readings, unserved
-              intents and the ids held - and the gate reminds once about new unexcused failures,
-              an intent left unserved, entries written with no intent recorded; of coverage the
-              opener says only the newest unserved intent, in its line about what to do next"
-    because: "What was already red or unserved when a session opened is not its doing, and a gate
-              that bounced for it would teach sessions to fight the gate. The opener's slot is for
-              what needs a person, so coverage takes no line of its own there: the intent goes into
-              the line that already says what to run next, and check carries every unserved intent
-              with a hint each. The gate still yields after {{p.gate_bounces}} bounce."
-    wrong_if: "p.gate_bounces > 1"
+    rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces, doc.hook_delivery]
+    verdict: "The opener records a session-start baseline. Prompt diagnostics compare current
+              failures and session-owned writes with it, without creating a record or continuing a
+              stopped turn."
+    because: "Existing failures are not caused by the new session. Retaining the baseline keeps
+              attribution and newly introduced failures meaningful while advisory delivery preserves
+              the real user request."
+    wrong_if: "p.gate_bounces > 0"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-22"]
     seen:
       s.2026_09_03_coverage: "read 2026-09-03"
-      d.gate_reminds: "the stop gate compares against the session-start mark and yields after one
-                       bounce; unchanged existing judgments falsified by updated readings can stay
-                       flagged while recording finishes, and check still reports their failed
-                       conditions"
+      d.gate_reminds: "Lifecycle hooks never request a continuation. Current findings are advisory
+                       context on real user prompts; explicit check, gate and write-admission
+                       failures remain authoritative."
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
-      p.gate_bounces: 1
+      p.gate_bounces: 0
+      doc.hook_delivery: "read 2026-09-22"
   d.gate_asks_once_after_work:
-    rests_on: [s.2026_09_10_skills_split, run.design_talk, d.gate_reminds, p.gate_bounces]
-    verdict: "a session that changed files of the tree, or ran eight prompts, with the record
-              untouched is asked once whether there was nothing to keep - as a line on the prompt,
-              and as one stop on the turn after a line went unanswered; the gate still yields after
-              one bounce"
-    because: "Seven decisions lived only in chat and the gate could not see a record nobody touched
-              ({{run.design_talk}}). One stop is a question, not a failure, and it comes only after
-              the softer form was ignored for a turn; a stop that repeated would teach sessions to
-              write filler, which the unattributed-entries reminder ({{d.gate_reminds}}) already
-              catches, and {{p.gate_bounces}} stays where it was."
-    wrong_if: "p.gate_bounces > 1"
+    rests_on: [s.2026_09_10_skills_split, run.design_talk, d.gate_reminds, p.gate_bounces, doc.prompt_reminders, doc.hook_delivery]
+    verdict: "A session that changed files or ran eight prompts without updating the record receives
+              advisory prompt context with a ten-prompt cooldown. An untouched record never blocks
+              Stop or creates a continuation request."
+    because: "Useful findings still deserve a bounded reminder, but no lifecycle finding may become
+              a synthetic user request. Prompt context preserves the real request and write
+              authorization; all integrity checks continue through explicit commands and write
+              admission."
+    reopened_by: "A recording reminder causes a synthetic user request, replaces the requested
+                  answer with bookkeeping, encourages unauthorized writes, or stops arriving after
+                  the configured work threshold."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-22", "the standing judgment holds, and a person takes this over it by name on 2026-09-22"]
     seen:
       s.2026_09_10_skills_split: "read 2026-09-10"
       run.design_talk: "read 2026-09-02"
-      d.gate_reminds: "the stop gate compares against the session-start mark and yields after one
-                       bounce; unchanged existing judgments falsified by updated readings can stay
-                       flagged while recording finishes, and check still reports their failed
-                       conditions"
-      p.gate_bounces: 1
+      d.gate_reminds: "Lifecycle hooks never request a continuation. Current findings are advisory
+                       context on real user prompts; explicit check, gate and write-admission
+                       failures remain authoritative."
+      p.gate_bounces: 0
+      doc.prompt_reminders: "read 2026-09-22"
+      doc.hook_delivery: "read 2026-09-22"
   d.gate_by_consequence:
     rests_on: [prior.gate_by_consequence, m.claims.general_held, d.hypothesis_is_a_judgment]
     verdict: "who decides is confidence times the cost of being wrong: high and cheap is decided in
@@ -6518,24 +6532,19 @@ judgments:
     seen: {lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken;
                            every package registry is free; qualified search works"}
   d.gate_reminds:
-    rests_on: [p.gate_bounces, doc.ingestion_contract]
-    verdict: "the stop gate compares against the session-start mark and yields after one bounce;
-              unchanged existing judgments falsified by updated readings can stay flagged while
-              recording finishes, and check still reports their failed conditions"
-    because: "A record that was already red must never block a session that did not touch it,
-              and a gate that cannot be escaped teaches sessions to fight the gate instead of
-              fixing the record. New failures are compared by identity so repairing one old error
-              cannot hide a new one. A judgment whose body and interpretation are unchanged, whose
-              condition became true after being false or unknown, and whose recorded input changed or arrived has
-              encountered new evidence. Retaining that finding is successful recording. Structural
-              errors, new or edited broken judgments and arrangement failures remain gate failures;
-              legacy marks without those observations retain the conservative count comparison.
-              A retained external capture can state its recording purpose in recorded_for on its source;
-              its event, envelope and source bytes must match before it satisfies recording attribution
-              without inventing an asked reading occasion.
-              Real work requests remain subject to the page's existing coverage requirements."
-    wrong_if: "p.gate_bounces > 1"
-    seen: {p.gate_bounces: 1, doc.ingestion_contract: "read 2026-09-07"}
+    rests_on: [p.gate_bounces, doc.ingestion_contract, doc.hook_delivery]
+    verdict: "Lifecycle hooks never request a continuation. Current findings are advisory context on
+              real user prompts; explicit check, gate and write-admission failures remain
+              authoritative."
+    because: "A Stop continuation becomes a new user request in supported hosts, so even a single
+              bookkeeping or validation message can replace the question. Record assessment and
+              notification transport must remain separate."
+    wrong_if: "p.gate_bounces > 0"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-22"]
+    seen:
+      p.gate_bounces: 0
+      doc.ingestion_contract: "read 2026-09-07"
+      doc.hook_delivery: "read 2026-09-22"
   d.one_tree_two_channels:
     rests_on: [skill.two_shapes, p.script_copies]
     verdict: "the command line and the plugin ship the same files - packaging maps the script

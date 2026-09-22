@@ -107,7 +107,7 @@ fn success(output: Output) -> Output {
     output
 }
 #[test]
-fn first_write_stop_is_once_per_finding_and_resume_preserves_the_original_mark() {
+fn prompt_context_is_once_per_finding_and_resume_preserves_the_original_mark() {
     let f = Fixture::new();
     success(f.hook("session-start", json!({})));
     let state = f.private.path().join("kpopper-base-flow");
@@ -120,21 +120,25 @@ fn first_write_stop_is_once_per_finding_and_resume_preserves_the_original_mark()
     success(f.run(&["add", "p.x", "v=1"]));
     success(f.hook("session-start", json!({"source":"resume"})));
     assert_eq!(fs::read(&state).unwrap(), baseline);
-    let first = f.hook("session-stop", json!({}));
+    let stopped = success(f.hook("session-stop", json!({})));
+    assert!(stopped.stdout.is_empty() && stopped.stderr.is_empty());
+    let child = success(f.hook("session-context", json!({"agent_id":"child"})));
+    assert!(child.stdout.is_empty() && child.stderr.is_empty());
+    let first = f.hook("session-context", json!({}));
     assert_eq!(
         first.status.code(),
-        Some(2),
+        Some(0),
         "{}",
-        String::from_utf8_lossy(&first.stderr)
+        String::from_utf8_lossy(&first.stdout)
     );
-    assert!(String::from_utf8_lossy(&first.stderr).contains("p.x"));
-    let repeat = success(f.hook("session-stop", json!({"stop_hook_active":true})));
-    assert!(repeat.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&first.stdout).contains("p.x"));
+    let repeat = success(f.hook("session-context", json!({"stop_hook_active":true})));
+    assert!(repeat.stdout.is_empty());
     success(f.run(&["add", "p.y", "v=2"]));
-    let next = f.hook("session-stop", json!({"stop_hook_active":true}));
-    assert_eq!(next.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&next.stderr).contains("p.y"));
-    assert!(!String::from_utf8_lossy(&next.stderr).contains("p.x"));
+    let next = f.hook("session-context", json!({"stop_hook_active":true}));
+    assert_eq!(next.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&next.stdout).contains("p.y"));
+    assert!(!String::from_utf8_lossy(&next.stdout).contains("p.x"));
     success(
         f.command()
             .env("KPOPPER_AGENT_SESSION", "other")
@@ -142,10 +146,14 @@ fn first_write_stop_is_once_per_finding_and_resume_preserves_the_original_mark()
             .output()
             .unwrap(),
     );
-    assert!(success(f.hook("session-stop", json!({}))).stderr.is_empty());
+    assert!(
+        success(f.hook("session-context", json!({})))
+            .stderr
+            .is_empty()
+    );
 }
 #[test]
-fn ordinary_mark_and_gate_ignore_layout_and_nudge_once() {
+fn ordinary_mark_and_gate_ignore_layout_and_never_block_for_untouched_records() {
     let f = Fixture::new();
     fs::write(
         f.root.path().join("GROUNDING.yaml"),
@@ -160,9 +168,9 @@ fn ordinary_mark_and_gate_ignore_layout_and_nudge_once() {
         "{\"turns\":8}",
     )
     .unwrap();
-    let first = f.hook("session-stop", json!({}));
-    assert_eq!(first.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&first.stderr).contains("8 prompts in"));
+    let first = success(f.hook("session-stop", json!({})));
+    assert!(first.stdout.is_empty());
+    assert!(first.stderr.is_empty());
     assert!(success(f.hook("session-stop", json!({}))).stderr.is_empty());
 }
 #[test]

@@ -121,7 +121,7 @@ class PluginRuntime(unittest.TestCase):
                             self.assertNotIn("unavailable", result.stdout + result.stderr)
         runs = [json.loads(line) for line in trace.read_text().splitlines()]
         scripts = {Path(args[0]).name for _, args in runs}
-        for script in ("session_start.py", "workspace.py", "provenance.py", "ingestion_hooks.py",
+        for script in ("session_start.py", "session_context.py", "provenance.py", "ingestion_hooks.py",
                        "ground_hook.py", "watch_hook.py", "followups_hook.py", "edit_hook.py"):
             self.assertIn(script, scripts)
         self.assertTrue(all(executable == str(python) for executable, _ in runs))
@@ -145,7 +145,7 @@ class PluginRuntime(unittest.TestCase):
         self.assertIn(str(python), result.stdout)
         self.assertNotIn("dependencies unavailable", result.stdout + result.stderr)
 
-    def test_launcher_errors_do_not_block_but_hook_exit_two_is_preserved(self):
+    def test_launcher_and_child_failures_never_block_the_hook(self):
         self.repaired()
         for script in ("nonexistent.py", "../cli.py"):
             with self.subTest(script=script):
@@ -153,7 +153,7 @@ class PluginRuntime(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("requires an existing script", result.stderr)
         (self.plugin / "scripts/exit_two.py").write_text("raise SystemExit(2)\n")
-        self.assertEqual(self.hook("hook.sh", ("exit_two.py",)).returncode, 2)
+        self.assertEqual(self.hook("hook.sh", ("exit_two.py",)).returncode, 0)
 
     def test_runtime_survives_plugin_cache_replacement(self):
         python, _ = self.repaired()
