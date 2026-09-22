@@ -157,33 +157,32 @@ These checks run offline; remote-page availability and GitHub reporting settings
 need verification when preparing a public release.
 
 The `changes` job selects the other checks from the entire PR's diff against its merge
-base, including deleted files and both sides of renames. The selection and changed files
-are printed in its log; the job summary lists the selected families.
+base, including deleted files and both sides of renames. The checks are grouped into lanes,
+and `.github/scripts/ci_selection.py` declares what each lane reads: the tracked files its
+checks open and the directories whose entries they list. A pull request runs the lanes whose
+inputs it changes; the selection and changed files are printed in the `changes` log and its
+job summary lists the selected lanes. [CI selection and execution](docs/ci.md) describes the
+lanes.
 
 | Change | Additional checks |
 |---|---|
-| Skills, Markdown documentation, the project's record, root security/community policies, issue/PR templates or `.gitignore` | None: mandatory contracts and record checks still run. |
-| The CI selector or its regression tests | Selector and workflow-contract tests in the mandatory job; no runtime or native rebuild just for classification changes. |
-| Standalone-document code, assets or tests | Document Python tests on 3.9 and 3.13, and the offline DOM suite. |
-| Shared Python code, other tests/fixtures, adapters, hooks, packaging metadata, or the check/session workflows | Full Python suite on 3.9 and 3.13, document tests, session checks on three operating systems, and installed-distribution checks. |
-| Native sources, build recipes, bundled runtimes, loader, notices or the distribution probe | All checks, including native compilation and modified-GMP replacement checks on five targets. |
-| The native workflow, other CI configuration, an unclassified path, an empty diff or unavailable Git history | All checks. |
+| Documentation, skills, examples, assets, community files or templates, edited in place | None: mandatory contracts and record checks still run. |
+| Rust sources and tests under `native/` | The native command on every platform except Intel macOS. |
+| Shared Python code, tests, fixtures, adapters, hooks or this repository's record | The Python suite on 3.9 and 3.13 and the checks that read the changed file. |
+| Files added or removed | Also the lanes whose tests scan the checkout. |
+| Cargo manifests, the build script, installers, packaging scripts, committed runtimes or platform workflows | The affected lanes on every platform. |
+| The CI selection, the read audit, `check.yml`, an unclaimed path, an empty diff or unavailable Git history | Everything, on every platform. |
 
-The selector lives in `.github/scripts/ci_selection.py`. Keep shared inputs broad and add a
-regression case to `tests/test_ci_selection.py` when changing a classification. It does not
-infer Python dependencies. A change to `pyproject.toml` verifies packaging and installation;
-it does not by itself rebuild unchanged native sources.
+The declarations are checked by what the lanes actually do. On Linux, `.github/scripts/ci_audit.py`
+records every file an audited lane opens and fails the job when the lane read a file, or listed
+a directory, its declaration leaves out; the error names the file to add. A new tracked file
+must be claimed by a lane or declared unread, or the selector contract tests fail. When you add
+a test that reads something new, expect the audit to ask for the declaration in the same pull
+request.
 
-Changes to the selector rely on maintainer review as well as its mandatory regression
-tests. Reviewers must inspect every newly skipped family and the complete PR diff,
-especially when the same PR narrows a classification and changes the affected files.
-The tests validate declared cases; they cannot prove that a new classification covers all
-dependencies. Keep uncertain paths on the full checks, or use manual dispatch for a full
-audit before merging. Main's consumer checks run after merge and do not replace this review.
-
-Every push to `main` runs all test families, with native compilation selected from the push
-diff. Manual dispatch forces the complete native audit. New commits cancel older checks for
-the same ref. Release and publish workflows keep their own cancellation policies.
+Every push to `main` runs every lane on every platform, recompiling the reasoning runtime only
+when its sources changed. Manual dispatch forces the complete audit. New commits cancel older
+checks for the same ref. Release and publish workflows keep their own cancellation policies.
 
 `ci-required` runs even if another job fails or is skipped. It requires every selected job
 to succeed and accepts skips only for unselected jobs. This is the aggregate status to use
