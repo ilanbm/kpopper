@@ -176,6 +176,22 @@ pub(crate) fn explain_tie(document: &V, failure: Error) -> Error {
     }
 }
 
+/// `unreadable`'s account retold over the record as its files hold it. A reader built
+/// from a copy sorted by key would name tied fields, and the first entry holding a name,
+/// in key order rather than the record's.
+pub(crate) fn in_record_order(
+    source: &crate::history_yaml::OrdinaryValue,
+    failure: Error,
+) -> Error {
+    if !explains_unreadable(&failure) {
+        return failure;
+    }
+    match unread(&crate::ordinary_source::Source::from_finite(source).projected()) {
+        Ok(Some(why)) => Error(why.account()),
+        _ => failure,
+    }
+}
+
 /// Whether a failure is `unreadable`'s account rather than a code.
 pub(crate) fn explains_unreadable(failure: &Error) -> bool {
     failure.0.starts_with(NO_DEPENDENCY_FIELD)

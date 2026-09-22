@@ -909,3 +909,52 @@ fn a_hypothesis_whose_fields_tie_over_the_base_is_named_with_the_fields() {
         "FAIL hypothesis vendor cannot be read over the base: two fields fit 'deps' (zz_deps, aa_deps) and this tool does not guess. Add to the record: schema: deps: <field name>\n\n1 judgments, 3 entries, 1 problems\n"
     );
 }
+
+#[test]
+fn export_and_the_write_commands_tell_the_refusal_in_the_record_s_order() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for (record, refusal) in [
+        // Entries out of name order: the first to vote leads.
+        (
+            "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.zeta:\n    verdict: z\n    rests_on: [local.one]\n  d.alpha:\n    verdict: a\n    depends: [local.two]\n".to_owned(),
+            tied("deps", "rests_on", "depends"),
+        ),
+        // Names that are not entries, held first by the record's first entry.
+        (
+            "zeta:\n  d.first:\n    verdict: first in the file\n    rests_on: [api.limit]\nalpha:\n  d.second:\n    verdict: second\n    rests_on: [api.second]\nknown:\n  local.one: {v: 1}\n  local.two: {v: 2}\n".to_owned(),
+            concat!(
+                "no dependency field found: no field lists names that are all entries in this record, so there is no graph to walk.\n",
+                "These list names that are not entries:\n",
+                "  rests_on: api.limit (in d.first, and 1 more)\n",
+                "\n",
+                "Either those names are wrong, or one of these is a dependency field this reader cannot see by shape - and it does not guess between them. Fix the names, or say which:\n",
+                "\n",
+                "schema:\n",
+                "  deps: <field name>\n",
+            )
+            .to_owned(),
+        ),
+    ] {
+        let entry = root.join("GROUNDING.yaml");
+        fs::write(&entry, &record).unwrap();
+        for args in [
+            vec!["export", "local.one"],
+            vec!["add", "local.three", "3"],
+            vec!["set", "local.one", "5"],
+            vec!["review", "local.one"],
+            vec!["same", "local.one", "local.two"],
+            vec!["distinct", "local.one", "local.two", "because"],
+        ] {
+            let output = cli(root, &args, &root.join("private"));
+            assert_eq!(output.status.code(), Some(1), "{args:?}");
+            assert!(output.stdout.is_empty(), "{args:?}");
+            assert_eq!(
+                String::from_utf8(output.stderr).unwrap(),
+                refusal,
+                "{args:?}"
+            );
+        }
+        assert_eq!(fs::read_to_string(&entry).unwrap(), record);
+    }
+}
