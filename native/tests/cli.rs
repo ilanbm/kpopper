@@ -263,12 +263,16 @@ fn symlink_and_directory_lock_protect_the_write_boundary() {
 
 #[test]
 fn hook_uses_absolute_native_command_and_handles_subagents_and_errors() {
-    let (temp, root) = fixture();
+    let (_temp, root) = fixture();
     ok(write(&root, "add", "p.input", "1", "first"));
-    let executable_dir = temp.path().join("binary with spaces");
-    fs::create_dir(&executable_dir).unwrap();
-    let executable = executable_dir.join("native runtime");
-    fs::copy(binary(), &executable).unwrap();
+    // Keep the renamed executable on its original filesystem. A hard link avoids
+    // opening it for writing while other parallel tests are spawning processes.
+    let executable_dir = tempfile::Builder::new()
+        .prefix("binary with spaces ")
+        .tempdir_in(Path::new(binary()).parent().unwrap())
+        .unwrap();
+    let executable = executable_dir.path().join("native runtime");
+    fs::hard_link(binary(), &executable).unwrap();
     let invoke = |payload: Value| {
         let mut child = Command::new(&executable)
             .arg("session-start")
