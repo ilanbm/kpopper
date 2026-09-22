@@ -6,6 +6,7 @@ straight through to provenance.py; page renders the record and can open what it 
   kpop check   [file ...]              does the record still hold together
   kpop affects <entry> [entry ...]     what a change reaches
   kpop pull    <entry|prefix> [...]    values and sources for a subject
+  kpop context <id> [id ...]          records and their declared dependencies
   kpop search  "query"               find claims and source passages with their status
   kpop where                           the record this directory answers for
   kpop map [--deep]                  map the work through an available agent
@@ -60,6 +61,7 @@ COMMANDS = {
     "assess": ("ID [ID ...] [--attention-only]", "Read versioned assessment findings and scoped attention as JSON."),
     "pull": ("SUBJECT [SUBJECT ...] [--from REF] [--history] [--profile core/v1]", "Read a subject and the evidence behind it."),
     "affects": ("SUBJECT [SUBJECT ...] [--profile core/v1]", "Trace what a change reaches."),
+    "context": ("ID [ID ...] [OPTIONS]", "Read records and their declared dependencies from the knowledge graph."),
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
     "update": ("--file JSON|- [--record FILE] [--state-dir PATH]", "Record one or many changes from a source report now; return applied or retained status."),
@@ -192,7 +194,7 @@ def main():
         root.error("Use kpop open, kpop map, or kpop config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent" and not application:
         root.error("unknown command: " + cmd)
-    if not application and cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch", "export", "assess"} and rest in (["--help"], ["-h"]):
+    if not application and cmd not in {"open", "map", "config", "_agent", "session", "context", "ingest", "update", "document", "followups", "watch", "export", "assess"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpop " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
@@ -296,6 +298,12 @@ def main():
     # without reparsing it as evidence or changing what the operation does.
     cutoff = rest.index("--") if "--" in rest else len(rest)
     json_output = options.json or "--json" in rest[:cutoff]
+    if cmd == "context" and json_output:
+        # Context already emits structured evidence; match the native CLI and
+        # avoid wrapping its JSON as an opaque string inside a second envelope.
+        rest = [value for value in rest[:cutoff] if value != "--json"] + rest[cutoff:]
+        cutoff = rest.index("--") if "--" in rest else len(rest)
+        json_output = False
     if json_output:
         forwarded = [value for value in rest[:cutoff] if value != "--json"] + rest[cutoff:]
         result = subprocess.run([sys.executable, str(HERE / "cli.py"), *(["experimental", cmd] if application else [cmd]), *forwarded],
@@ -313,8 +321,8 @@ def main():
         except ImportError:
             from applications.annotated_doc import main as document_main
         sys.exit(document_main(rest))
-    if cmd in {"session", "ingest", "export"}:
-        script = {"session": "session_cli.py", "ingest": "ingestion.py", "export": "export_graph.py"}[cmd]
+    if cmd in {"session", "context", "ingest", "export"}:
+        script = {"session": "session_cli.py", "context": "context_cli.py", "ingest": "ingestion.py", "export": "export_graph.py"}[cmd]
         tool = [sys.executable, str(HERE / script)] + rest
         if os.name == "nt":
             sys.exit(subprocess.run(tool).returncode)

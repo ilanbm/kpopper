@@ -37,13 +37,14 @@ fn command(root: &Path, operation: &str, runtime: bool) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     #[cfg(unix)]
     command.env("PATH", root.join("tools"));
+    command.args(["--workspace", root.to_str().unwrap(), "--frozen"]);
+    if operation == "current-context" {
+        command.arg("context");
+    } else {
+        command.args(["session", operation]);
+    }
     command
         .args([
-            "--workspace",
-            root.to_str().unwrap(),
-            "--frozen",
-            "session",
-            operation,
             "--no-settings",
             "--input",
             "GROUNDING.yaml",
@@ -84,6 +85,97 @@ fn saved(root: &Path) -> (String, PathBuf) {
         .unwrap();
     let value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     (value["revision"].as_str().unwrap().into(), path)
+}
+
+#[test]
+fn public_context_captures_current_record_and_matches_legacy_route() {
+    let temp = fixture();
+    let root = temp.path();
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let direct = ok(command(root, "current-context", true)
+        .arg("d.keep")
+        .output()
+        .unwrap());
+    let packet: Value = serde_json::from_str(&direct).unwrap();
+    assert_eq!(packet["direction"], "support");
+    let revision = packet["revision"].as_str().unwrap();
+    let old = ok(command(root, "context", false)
+        .args([
+            "--id",
+            "d.keep",
+            "--direction",
+            "support",
+            "--revision",
+            revision,
+        ])
+        .output()
+        .unwrap());
+    assert_eq!(direct, old);
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    let names: Vec<_> = packet["reads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"p.a") && names.contains(&"d.keep"));
+}
+
+#[test]
+fn public_context_preserves_explicit_revision_and_limits() {
+    let temp = fixture();
+    let root = temp.path();
+    let direct = ok(command(root, "current-context", true)
+        .args([
+            "node:p.a",
+            "--direction",
+            "impact",
+            "--max-nodes",
+            "1",
+            "--tokens",
+            "1000",
+        ])
+        .output()
+        .unwrap());
+    let packet: Value = serde_json::from_str(&direct).unwrap();
+    assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&direct) <= 1000);
+    assert_eq!(packet["candidate_limit_reached"], true);
+    assert!(!packet["frontier"].as_array().unwrap().is_empty());
+    let revision = packet["revision"].as_str().unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        RECORD.replace("v: 12", "v: 13"),
+    )
+    .unwrap();
+    let stale = command(root, "current-context", false)
+        .args(["p.a", "--revision", revision])
+        .output()
+        .unwrap();
+    assert_eq!(stale.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("changed; reopen"));
+    let current = ok(command(root, "current-context", true)
+        .arg("p.a")
+        .output()
+        .unwrap());
+    let current: Value = serde_json::from_str(&current).unwrap();
+    assert_ne!(current["revision"], revision);
+}
+
+#[test]
+fn public_context_help_needs_no_record_or_runtime() {
+    let root = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "context",
+            "--help",
+        ])
+        .output()
+        .unwrap();
+    let text = ok(output);
+    assert!(text.contains("declared dependencies") && text.contains("--direction"));
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
 }
 
 #[test]
