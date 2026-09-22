@@ -109,8 +109,10 @@ enum Command {
     },
     /// Consume a SessionStart JSON payload; never installs a hook or runtime.
     SessionStart(kpop_native::public_session::StartOptions),
-    /// Consume a Stop payload and deliver each new finding once per session.
+    /// Compatibility no-op for old Stop registrations.
     SessionStop(kpop_native::public_session::HookOptions),
+    /// Supply diagnostics as additional context on a real user prompt.
+    SessionContext(kpop_native::public_session::HookOptions),
     /// Save a private session-start baseline.
     Mark(kpop_native::public_session::Options),
     /// Assess against a saved baseline; --session enables once-only delivery.
@@ -507,6 +509,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::HistoryCapture { .. }
         | Command::SessionStart(_)
         | Command::SessionStop(_)
+        | Command::SessionContext(_)
         | Command::Mark(_)
         | Command::Gate(_) => {
             unreachable!()
@@ -892,7 +895,10 @@ fn main() {
             }
         }
     }
-    if let Command::SessionStop(options) = &args.command {
+    if let Command::SessionStop(_) = &args.command {
+        return;
+    }
+    if let Command::SessionContext(options) = &args.command {
         let result = (|| {
             let payload = stdin()?;
             let mode =
@@ -901,15 +907,16 @@ fn main() {
                 } else {
                     kpop_native::source_capture::ReadMode::Live
                 };
-            kpop_native::public_session::stop(&payload, options.host.as_deref(), mode)
+            kpop_native::public_session::context(&payload, options.host.as_deref(), mode, &options.event)
         })();
         match result {
             Ok(output) => {
-                eprint!("{}", output.text);
+                print!("{}", output.text);
                 std::process::exit(output.code);
             }
             Err(error) => {
-                eprintln!("kpop session-stop: assessment unavailable: {error}");
+                eprintln!("kpop session-context: assessment unavailable: {error}");
+
                 return;
             }
         }

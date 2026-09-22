@@ -52,7 +52,7 @@ class IngestionHooks(unittest.TestCase):
         self.assertEqual(self.handle("codex"), ("", "", 0))
         self.assertEqual(self.handle("claude"), ("", "", 0))
 
-    def test_codex_context_and_claude_rewake_carry_the_same_important_finding(self):
+    def test_both_hosts_carry_the_same_finding_as_context(self):
         self.prepare(True); I.process(self.record, self.state)
         notice = I.pending(self.record, self.state)[0]
         out, err, code = self.handle("codex")
@@ -60,9 +60,9 @@ class IngestionHooks(unittest.TestCase):
         self.assertEqual(json.loads(out)["hookSpecificOutput"]["hookEventName"], "PostToolUse")
         self.assertIn(notice["id"], out)
         out, err, code = self.handle("claude")
-        self.assertEqual((out, code), ("", 2))
-        self.assertIn(notice["id"], err)
-        self.assertIn("contradiction", err)
+        self.assertEqual((err, code), ("", 0))
+        self.assertIn(notice["id"], out)
+        self.assertIn("contradiction", out)
 
     def test_named_claude_main_agent_gets_notice_and_child_does_not_consume_it(self):
         self.prepare(True); I.process(self.record, self.state)
@@ -70,13 +70,13 @@ class IngestionHooks(unittest.TestCase):
         named = {**self.payload, "agent_type": "planner"}
         self.assertEqual(self.handle("claude", payload={**named, "agent_id": "child"}), ("", "", 0))
         out, err, code = self.handle("claude", payload=named)
-        self.assertEqual((out, code), ("", 2))
-        self.assertIn(notice["id"], err)
+        self.assertEqual((err, code), ("", 0))
+        self.assertIn(notice["id"], out)
         self.assertEqual(self.handle("claude", payload=named), ("", "", 0))
 
     def test_task_notification_never_recaptures_or_rewakes_itself(self):
         self.prepare(True); I.process(self.record, self.state)
-        self.assertEqual(self.handle("claude")[2], 2)
+        self.assertEqual(self.handle("claude")[2], 0)
         before = I.status(record=self.record, state_dir=self.state)
         notification = {**self.payload, "hook_event_name": "UserPromptSubmit",
                         "prompt": "<task-notification>" + self.envelope["source_quote"] + "</task-notification>"}
@@ -96,8 +96,8 @@ class IngestionHooks(unittest.TestCase):
         self.prepare()
         notices = [{"id": "notice-%s" % i, "event_id": "e", "category": "question", "reason": "Review %s" % i} for i in range(9)]
         with mock.patch.object(I, "pending", return_value=notices):
-            first = self.handle("claude")[1]
-            second = self.handle("claude")[1]
+            first = self.handle("claude")[0]
+            second = self.handle("claude")[0]
         self.assertIn("notice-7", first)
         self.assertNotIn("notice-8", first)
         self.assertIn("notice-8", second)
@@ -115,13 +115,14 @@ class PlatformConfiguration(unittest.TestCase):
             self.assertNotIn("asyncRewake", hook)
             self.assertIn("codex wait", hook["command"])
 
-    def test_claude_has_rewake_and_both_configs_keep_existing_open_and_stop(self):
+    def test_both_hosts_use_async_context_and_prompt_diagnostics(self):
         for path, host in ((ROOT / "hooks/hooks.json", "claude"), (ROOT / "adapters/codex/plugin-hooks.json", "codex")):
             config = json.loads(path.read_text())["hooks"]
             self.assertIn("session_open.sh", config["SessionStart"][0]["hooks"][0]["command"])
-            self.assertIn("session_gate.sh", config["Stop"][0]["hooks"][0]["command"])
+            self.assertNotIn("Stop", config)
+            self.assertIn("--context UserPromptSubmit", json.dumps(config["UserPromptSubmit"]))
             if host == "claude":
-                self.assertTrue(config["PostToolUse"][0]["hooks"][0]["asyncRewake"])
+                self.assertTrue(config["PostToolUse"][0]["hooks"][0]["async"])
 
 
 if __name__ == "__main__":

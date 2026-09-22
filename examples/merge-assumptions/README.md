@@ -41,13 +41,27 @@ from the assembled example repository, not from the overlay directory alone.
 
 ### Search cache (assumption checks)
 
-[![Private search and shared caching pass their branch tests and merge cleanly. The combined behavior can send Alice's private result to Bob; the recorded public-results assumption fails.](../../assets/stories/cache-privacy.png)](../../assets/stories/cache-privacy.png)
+<p align="center">
+  <a href="../../assets/stories/cache-privacy.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/cache-privacy-mobile.png">
+      <img src="../../assets/stories/cache-privacy.png" alt="Private search and shared caching pass their branch tests and merge cleanly. The combined behavior can send Alice's private result to Bob; the recorded public-results assumption fails.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/cache-privacy-mobile.png)
 
 ### The surrounding design record
 
-[![The cache record retains the query contract, cache hit behavior, isolated test coverage and operational questions. The public-results premise reaches the sharing decision and the authorization assumption of the hit path.](../../assets/stories/cache-privacy-record.png)](../../assets/stories/cache-privacy-record.png)
+<p align="center">
+  <a href="../../assets/stories/cache-privacy-record.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/cache-privacy-record-mobile.png">
+      <img src="../../assets/stories/cache-privacy-record.png" alt="The cache record retains the query contract, cache hit behavior, isolated test coverage and operational questions. The public-results premise reaches the sharing decision and the authorization assumption of the hit path.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/cache-privacy-record-mobile.png) · [Complete PR B record](cache/pr-b/GROUNDING.yaml) · [Design notes](cache/pr-b/cache-notes.md)
 
@@ -288,7 +302,14 @@ test could be added to the application's suite.
 
 ### Premature file deletion (consistency)
 
-[![One branch shortens storage retention to seven days; the other promises 30-day downloads. Both pass separately. Their clean merge leaves a download promise longer than the file's lifetime.](../../assets/stories/download-promise.png)](../../assets/stories/download-promise.png)
+<p align="center">
+  <a href="../../assets/stories/download-promise.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/download-promise-mobile.png">
+      <img src="../../assets/stories/download-promise.png" alt="One branch shortens storage retention to seven days; the other promises 30-day downloads. Both pass separately. Their clean merge leaves a download promise longer than the file's lifetime.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/download-promise-mobile.png)
 

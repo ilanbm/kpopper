@@ -227,14 +227,13 @@ other unrelated files. Normal operation resolves the same record as `kpop where`
 
 | Host | While the primary is working | After its answer, while the client remains open |
 |---|---|---|
-| Claude Code | Background findings return through a hook | An important result uses `asyncRewake` and exit 2 to resume Claude; quiet exit 0 does not wake it |
+| Claude Code | Background findings return through a hook | Results use regular async `additionalContext` with exit 0; hooks never wake an idle session |
 | Codex with native delivery jobs | The native worker sends important findings to the originating task | The same host messaging tool starts a follow-up turn; quiet jobs send no message |
 | Codex with ordinary hooks | Background context enters the next available model request | Async hooks queue context until the next user turn; they do not start a new turn |
 
 When a client closes, the worker and durable outbox remain separate from the delivery hook. On
 startup/resume, ready unresolved findings are offered again. Hooks only read and deliver results:
-even when Claude routes a wake notification through `UserPromptSubmit`, it cannot create a new
-capture or another worker. Compaction within the same session does not repeatedly offer the same
+a returned context notice cannot create a new capture, worker or user request. Compaction within the same session does not repeatedly offer the same
 batch.
 
 The native Codex path uses the host-provided agent messaging tool. The Python worker and hook do

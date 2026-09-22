@@ -52,7 +52,8 @@ judgments:
 
     def hook(self, event, raw=None):
         hooks = json.loads((self.adapter / "hooks" / "hooks.json").read_text())
-        command = hooks["hooks"][event][0]["hooks"][0]["command"]
+        command = (hooks["hooks"][event][0]["hooks"][0]["command"] if event in hooks["hooks"]
+                   else shlex.join([sys.executable, str(self.adapter / "scripts/hook.py"), event]))
         command = command.replace("${extensionPath}", str(self.adapter))
         payload = raw if raw is not None else json.dumps({
             "cwd": str(self.work), "hook_event_name": event, "source": "startup"})
@@ -77,7 +78,7 @@ judgments:
     def test_end_is_advisory_even_when_record_check_fails(self):
         self.record(broken=True)
         output = self.hook("SessionEnd")
-        self.assertIn("decision.ready", output["systemMessage"])
+        self.assertEqual(output, {})
         self.assertNotIn("continue", output)
         self.assertNotIn("decision", output)
 

@@ -8,19 +8,40 @@ inspectable as the work grows.
 
 The original rotation–lensing–CMB illustration introduces the shared-record workflow:
 
-[![The original three-paper ink illustration connects rotation, lensing and the CMB to one argument, retaining assumptions and unresolved questions.](../../assets/stories/dark-matter-intro.png)](../../assets/stories/dark-matter-intro.png)
+<p align="center">
+  <a href="../../assets/stories/dark-matter-intro.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/dark-matter-intro-mobile.png">
+      <img src="../../assets/stories/dark-matter-intro.png" alt="The original three-paper ink illustration connects rotation, lensing and the CMB to one argument, retaining assumptions and unresolved questions.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/dark-matter-intro-mobile.png)
 
 The expanded six-paper view adds the surrounding constraints:
 
-[![Six papers feed a connected account: Rubin rotation, SPARC, the radial acceleration relation, Bullet Cluster lensing, Planck and LZ. Shared data, model assumptions and unresolved particle identity stay visible.](../../assets/stories/dark-matter.png)](../../assets/stories/dark-matter.png)
+<p align="center">
+  <a href="../../assets/stories/dark-matter.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/dark-matter-mobile.png">
+      <img src="../../assets/stories/dark-matter.png" alt="Six papers feed a connected account: Rubin rotation, SPARC, the radial acceleration relation, Bullet Cluster lensing, Planck and LZ. Shared data, model assumptions and unresolved particle identity stay visible.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/dark-matter-mobile.png)
 
 ## Inside the working record
 
-[![The complete research record, with sourced readings, a computed density ratio, linked judgments and open questions. SPARC and RAR share a catalog; a change in the adopted framework reaches several judgments and the synthesis.](../../assets/stories/dark-matter-record.png)](../../assets/stories/dark-matter-record.png)
+<p align="center">
+  <a href="../../assets/stories/dark-matter-record.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/dark-matter-record-mobile.png">
+      <img src="../../assets/stories/dark-matter-record.png" alt="The complete research record, with sourced readings, a computed density ratio, linked judgments and open questions. SPARC and RAR share a catalog; a change in the adopted framework reaches several judgments and the synthesis.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](../../assets/stories/dark-matter-record-mobile.png) · [Complete GROUNDING.yaml](GROUNDING.yaml) · [Prepared inputs](inputs.yaml)
 

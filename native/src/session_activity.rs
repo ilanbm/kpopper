@@ -384,9 +384,16 @@ pub fn deliver_stop(
             Ok(key) => key,
             Err(_) => continue,
         };
-        if !state.contains_key(&key) {
+        if !state.contains_key(&key) && fresh.len() < 8 {
             state.insert(key, Value::Bool(true));
-            fresh.push(message.clone());
+            fresh.push(if message.chars().count() <= 500 {
+                message.clone()
+            } else {
+                format!(
+                    "{}… (see kpop check)",
+                    message.chars().take(500).collect::<String>()
+                )
+            });
         }
     }
     let Ok(data) = serde_json::to_vec(&Value::Object(state)) else {

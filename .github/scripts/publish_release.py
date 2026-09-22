@@ -101,7 +101,17 @@ def build(version):
 def release_info(tag):
     repository = os.environ.get("GITHUB_REPOSITORY") or release.sh(
         "gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
-    return json.loads(release.sh("gh", "api", f"repos/{repository}/releases/tags/{tag}"))
+    # The REST tag endpoint only finds published releases. The CLI also resolves
+    # drafts, whose database ID works before and after publication.
+    identity = json.loads(release.sh("gh", "release", "view", tag, "--repo", repository,
+                                     "--json", "databaseId"))
+    release_id = identity.get("databaseId")
+    if type(release_id) is not int or release_id <= 0:
+        raise SystemExit("GitHub did not identify the release database ID")
+    value = json.loads(release.sh("gh", "api", f"repos/{repository}/releases/{release_id}"))
+    if value.get("tag_name") != tag:
+        raise SystemExit("GitHub release identity changed during lookup")
+    return value
 
 
 def verify_published(tag, files):

@@ -111,24 +111,28 @@ density and visual treatment for the image's purpose.
 - Label project and branch record objects **GROUNDING.yaml**, including the shared
   record in Simple and each branch's record in Advanced, including `main`. Keep
   pending shared findings and hypotheses visually distinct from those records.
-- The opening reasoning overview introduces **Meet GROUNDING.yaml**, with a small
-  handwritten **your new friend!** aside. Make the file viewer the main object.
-  Blue arrows connect the earlier conversation to its recorded reason and the later
-  conversation to the changed reading. A pink arrow follows `wrong_if` to the
-  deterministic check and its actual returned tool result. Preserve the earlier
-  review snapshot. Keep tool output readable at the README's displayed width;
-  reduce headline size before shrinking it.
+- The opening reasoning overview begins with **Meet GROUNDING.yaml** and the small
+  handwritten **your new friend!** note, whose arrow points to the filename. A large
+  file open in a code editor is the basis of the illustration, not a book or one icon
+  among equal story panels. Tell the story through its readable YAML.
+- Put the earlier and later session annotations to the left, in that order. Use
+  natural action captions: the agent saves the reason, then updates the record.
+  Blue connectors enter the relevant code; a restrained teal connector leads from
+  the condition to the integrated check pane. Pink marks the failed condition.
+  Keep this distinction secondary to the story: no read/write badges, instructional
+  legend or repeated explanations of elementary operations. Preserve the 30-day
+  promise, 30/30 review snapshot, seven-day draft-policy reading and
+  `files.days < link.days` condition. Requests alone do not write the record.
 - Close that overview with **Deterministic Reasoning that outlives the conversation.**
-  Set the first two words in large, heavy blue display type, with the same visual
-  weight as the other story punchlines. They may stack on phones. Underline them
-  and connect the underline to the
-  returned result. The timing badge describes the documented local run and stays
-  separate from the CLI output. Keep its evidence beside the example record; it is
-  not a general latency promise.
-- On phones, show consecutive excerpts from the same file, each near the conversation
-  it explains. Label the continuation, preserve all record content, and keep the
-  condition-to-check path separate from the blue recording arrows. The opening
-  visual demonstrates the mechanism; the following stories show its value.
+  Keep the line subordinate to the story. Show a readable fragment of the example's
+  actual failed-check diagnostic and the agent's subsequent review, not a fabricated
+  product screenshot. Detailed YAML and run evidence remain linked beside the image.
+  The current overview carries no timing badge.
+- Give phone layouts their own composition and readable code. Matching editor excerpts
+  may show consecutive parts of the same file; label the continuation and keep the
+  snapshot intact. Reduce redundant prose before shrinking the condition, changed
+  value or check result. The opening visual demonstrates the mechanism; the following
+  stories show its value.
 - Make the status of a decision concrete: an email created with a promised window
   is different from a question about whether that window is possible. Show initial
   recording and subsequent record updates as agent actions, outside the user's
@@ -153,9 +157,12 @@ density and visual treatment for the image's purpose.
 - Check the main message and labels at phone width as well as desktop width.
   Reflow a process diagram whose meaning depends on tiny text. In a source map,
   preserve purposeful detail while keeping the main contrast readable.
-- Use ordinary Markdown image links in repository guides, with an explicit link
-  to the phone layout. This avoids depending on custom `picture` rendering in
-  repository clients. Keep paths relative so branch previews use their own assets.
+- Where an illustration has a phone layout, use a `picture` element with
+  `source media="(max-width: 600px)"` for that asset and the desktop image as the
+  `img` fallback. Keep an explicit **Phone layout** link below it for clients that
+  do not select sources. Keep paths relative so branch previews use their own assets.
+  Verify browser source selection at desktop and phone widths; native-app behavior
+  requires its own check.
 - Product screenshots show actual output. A document produced with kpopper can
   have its own visual identity; its content and evidence states stay intact.
 - Third-party marks such as the Lean logo keep their original treatment.
@@ -180,8 +187,9 @@ native disclosure sections: **Coding agents**, **Claude Cowork / ChatGPT Work**,
 **Research**. Keep Contents open by default; the three paths start closed. Put
 **Claude Code · Codex · Cursor · and more** below the Coding agents title.
 Each summary includes a wide, shallow strip from its existing illustration, with
-**Explore workflows and examples ↓** below it. Keep names and the opening prompt
-as text outside the image. The title, strip and prompt all toggle the section;
+**Click to expand workflows and examples ↓** below it. Keep the opening prompt as
+text outside the banner. Small SVG title labels with alt text keep the large titles
+beside the native disclosure markers. The title, strip and prompt all toggle the section;
 do not wrap the strip in a separate image link. Full illustrations remain linked
 inside the expanded section. Keep the opening record overview, installation, quick reference
 and capability overview visible; group longer explanations under **Go deeper**.
@@ -197,9 +205,9 @@ extended worked example is folded, so following the link immediately answers who
 Let the visual joke stand; that section can introduce his idea without explaining
 each prop or spelling out every piece of the pun.
 The main text heading states the practical value rather than repeating the wordmark.
-Number the illustrated examples by working context: **Coding Agent**,
-**Claude Cowork / ChatGPT Work**, and **Research**. Keep a short parenthetical cue
-for the concept, and name the specific scenario in a subheading. Place the complete
+Use the working-context names **Coding agents**, **Claude Cowork / ChatGPT Work**,
+and **Research** once, in the disclosure summaries. Inside each path, start with
+the specific scenario subheading instead of a duplicate numbered Example title. Place the complete
 **Two working modes** explanation and illustration inside the coding example;
 make clear that the project modes also apply to document and research work.
 Let the image start with the situation

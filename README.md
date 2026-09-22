@@ -1,6 +1,7 @@
 [![kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads - Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!](assets/kpopper-hero.png)](assets/kpopper-hero.png)
 
-[![CI tests and record checks](https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/ilanbm/kpopper/actions/workflows/check.yml) [![Latest release](https://img.shields.io/github/v/release/ilanbm/kpopper)](https://github.com/ilanbm/kpopper/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![reasoning-runtime: Lean 4](https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6)](docs/reasoning-core.md) [![Versioned knowledge: default for new records](https://img.shields.io/badge/Versioned%20knowledge-default%20for%20new%20records-8B5CF6)](docs/history-contract.md)
+[![CI](https://img.shields.io/github/actions/workflow/status/ilanbm/kpopper/check.yml?branch=main&label=CI&logo=github)](https://github.com/ilanbm/kpopper/actions/workflows/check.yml) [![kpopper checks its own record](https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main)](GROUNDING.yaml "kpopper checks its own knowledge record in CI") [![Latest release](https://img.shields.io/github/v/release/ilanbm/kpopper)](https://github.com/ilanbm/kpopper/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![native-runtime: Rust](https://img.shields.io/badge/native--runtime-Rust-DEA584?logo=rust&logoColor=white)](native/README.md) [![reasoning-runtime: Lean 4](https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6)](docs/reasoning-core.md) [![history-engine: versioned records](https://img.shields.io/badge/history--engine-versioned%20records-8B5CF6)](docs/history-contract.md)
 
 <p align="center">
   <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
@@ -12,6 +13,11 @@
 
 **Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#how-it-works).**
 
+> [!IMPORTANT]
+> **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
+>
+> [**Try it and see for yourself →**](#get-started)
+
 kpopper connects decisions to the evidence, assumptions and earlier decisions they
 depend on, and records what would make them worth revisiting. When a recorded premise
 changes, kpopper traces its reach through the record and surfaces what needs another look.
@@ -20,23 +26,32 @@ Agent reasoning costs time and tokens. kpopper runs calculations and dependency 
 deterministically, aiming to turn seconds of model work into milliseconds of
 computation—and focus the agent on decisions that need judgment.
 
-[![A changed recorded assumption is highlighted amber in a dependency graph. Deterministic local checks follow its connections in blue while unrelated nodes fade. Decisions A, B and C are returned to the agent for review. A prominent badge reads: A check that takes an agent 10 seconds runs locally in 4.5 milliseconds. When a recorded assumption changes, deterministic checks show the agent which decisions need another look.](assets/diagrams/dependency-checks.png)](assets/diagrams/dependency-checks.png)
+<p align="center">
+  <a href="assets/diagrams/dependency-checks.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/dependency-checks-mobile.png">
+      <img src="assets/diagrams/dependency-checks.png" alt="A changed recorded assumption is highlighted amber in a dependency graph. Deterministic local checks follow its connections in blue while unrelated nodes fade. Decisions A, B and C are returned to the agent for review. A prominent badge reads: A check that takes an agent 10 seconds runs locally in 4.5 milliseconds. When a recorded assumption changes, deterministic checks show the agent which decisions need another look.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/diagrams/dependency-checks-mobile.png)
-
-> [!IMPORTANT]
-> **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
->
-> [**Try it and see for yourself →**](#get-started)
 
 **[Get started](#get-started)** · [Choose your path](#choose-your-path) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#how-it-works) ·
 [Commands](#quick-reference) ·
 [Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
-[![Meet GROUNDING.yaml, with a handwritten your new friend note. An earlier conversation creates an email with a 30-day promise and records the supporting reason; a later conversation updates a draft retention policy and its recorded value to seven days. Blue arrows connect the conversations to the saved conclusion and changed reading. The YAML retains its 30/30 review snapshot. A pink arrow follows wrong_if to the deterministic check: seven is less than thirty, so the promise is no longer supported. Actual CLI output returns FAIL downloads.availability to the agent, with a caller-measured 0.24-second local-run badge. The closing line reads Deterministic Reasoning that outlives the conversation, with a blue underline pointing to the returned result. The phone layout presents consecutive excerpts from the same file.](assets/diagrams/reasoning-check.png)](assets/diagrams/reasoning-check.png)
+<p align="center">
+  <a href="assets/diagrams/reasoning-check-v2.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/reasoning-check-mobile-v2.png">
+      <img src="assets/diagrams/reasoning-check-v2.png" alt="Meet GROUNDING.yaml, with a handwritten your new friend note pointing to the filename. A large code editor displays the judgment, wrong_if condition, earlier 30/30 review snapshot, and current seven-day retention reading. The earlier session saves the reason supporting a 30-day download email; the later session updates the recorded draft-policy value from 30 to 7. Short blue arrows connect those actions to the relevant lines. A teal connector leads from the condition to kpop check below the code. The pink failure shows 7 less than 30 and FAIL downloads.availability, prompting the agent to review the email or policy. The closing line reads Deterministic Reasoning that outlives the conversation.">
+    </picture>
+  </a>
+</p>
 
-[Phone layout](assets/diagrams/reasoning-check-mobile.png)
+[Phone layout](assets/diagrams/reasoning-check-mobile-v2.png) · [Example record](assets/diagrams/reasoning-check.yaml)
 
 <details open>
 <summary>Contents</summary>
@@ -62,8 +77,9 @@ computation—and focus the agent on decisions that need judgment.
 
 ## Where would you like to start?
 
-Open the path closest to your work. Each section includes workflows, examples and
-the records behind them. You can also [go straight to installation](#get-started).
+Choose your path. Click a title or image to expand.
+Each section includes workflows, examples and the records behind them.
+You can also [go straight to installation](#get-started).
 
 <a id="access-control-and-shared-caching"></a>
 
@@ -74,13 +90,11 @@ the records behind them. You can also [go straight to installation](#get-started
 
 <details>
 <summary>
-<strong>Coding agents</strong><br>
+<a id="coding-title"><img src="assets/navigation/coding-title.svg" width="174" height="36" align="middle" alt="Coding agents"></a><br>
 Claude Code · Codex · Cursor · and more<br><br>
 <a id="coding-preview"><img src="assets/navigation/coding-banner.png" width="960" alt="PR A enables private projects. PR B adds a cache keyed only by query, assuming all results are public. Both changes point to the merged cache, where a private project and a red failure mark show private results exposed."></a><br>
-<strong>Explore workflows and examples ↓</strong>
+<strong>Click to expand workflows and examples ↓</strong>
 </summary>
-
-## Example 1: Coding Agent (assumption checks)
 
 ### Private data exposure
 
@@ -88,7 +102,14 @@ Two agents start from a search service whose results are all public. PR A adds
 private projects and filters results for each user. PR B adds a shared cache keyed
 only by the query, relying on those results being public and identical for everyone.
 
-[![PR A adds private projects in search.py. PR B caches by query in cache.py because all results were public. Tests pass separately and Git merges cleanly. The combination risks serving Alice's private result to Bob. kpopper flags the failed recorded condition and points back to the cache decision. The closing line reads Two green PRs. One data leak.](assets/stories/cache-privacy.png)](assets/stories/cache-privacy.png)
+<p align="center">
+  <a href="assets/stories/cache-privacy.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/cache-privacy-mobile.png">
+      <img src="assets/stories/cache-privacy.png" alt="PR A adds private projects in search.py. PR B caches by query in cache.py because all results were public. Tests pass separately and Git merges cleanly. The combination risks serving Alice's private result to Bob. kpopper flags the failed recorded condition and points back to the cache decision. The closing line reads Two green PRs. One data leak.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/stories/cache-privacy-mobile.png)
 
@@ -97,7 +118,14 @@ The files merge cleanly. **The reason for sharing the cache no longer holds.**
 The same record retains the surrounding design: query matching, cache behavior,
 test coverage, operational limits and open questions.
 
-[![A richer cache record connects the public-results premise to the query-only cache and its hit-path authorization assumption. The minimap is generated from the complete record.](assets/stories/cache-privacy-record.png)](assets/stories/cache-privacy-record.png)
+<p align="center">
+  <a href="assets/stories/cache-privacy-record.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/cache-privacy-record-mobile.png">
+      <img src="assets/stories/cache-privacy-record.png" alt="A richer cache record connects the public-results premise to the query-only cache and its hit-path authorization assumption. The minimap is generated from the complete record.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/stories/cache-privacy-record-mobile.png) · [Full design record](examples/merge-assumptions/cache/pr-b/GROUNDING.yaml)
 
@@ -190,7 +218,14 @@ Simple, and a version kept with each branch, including `main`, in Advanced. New
 history-backed records also keep their supporting history in `.kpopper/`; carry
 that directory with the YAML when sharing or versioning the record.
 
-[![Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.](assets/diagrams/two-working-modes.png)](assets/diagrams/two-working-modes.png)
+<p align="center">
+  <a href="assets/diagrams/two-working-modes.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/two-working-modes-mobile.png">
+      <img src="assets/diagrams/two-working-modes.png" alt="Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/diagrams/two-working-modes-mobile.png)
 
@@ -264,13 +299,11 @@ These project modes also apply to document and research work.
 
 <details>
 <summary>
-<strong>Claude Cowork / ChatGPT Work</strong><br>
+<a id="cowork-title"><img src="assets/navigation/cowork-title.svg" width="192" height="36" align="middle" alt="Claude Cowork /"> <img src="assets/navigation/chatgpt-work-title.svg" width="174" height="36" align="middle" alt="ChatGPT Work"></a><br>
 Keep plans current when the brief changes.<br><br>
 <a id="cowork-preview"><img src="assets/navigation/cowork-banner.png" width="960" alt="A plan built around one venue kitchen meets workshop participants cooking remotely from their own homes."></a><br>
-<strong>Explore workflows and examples ↓</strong>
+<strong>Click to expand workflows and examples ↓</strong>
 </summary>
-
-## Example 2: Claude Cowork / ChatGPT Work (freshness)
 
 ### Outdated planning assumptions
 
@@ -278,7 +311,14 @@ A cooking workshop is planned around the venue's shared kitchen, equipment and
 ingredients. A later client brief moves it entirely online. For ChatGPT Work, see
 the [runtime requirements and current limits](docs/chatgpt-work.md).
 
-[![A later session records the client's change from an onsite cooking workshop to an online event. The saved plan still assumes one shared kitchen with equipment and ingredients provided. kpopper reports that the workshop format moved from onsite to remote. The agent needs to revisit equipment, ingredients and activities; this is a review notice, not an automatically failed conclusion.](assets/stories/cowork-workshop.png)](assets/stories/cowork-workshop.png)
+<p align="center">
+  <a href="assets/stories/cowork-workshop.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/cowork-workshop-mobile.png">
+      <img src="assets/stories/cowork-workshop.png" alt="A later session records the client's change from an onsite cooking workshop to an online event. The saved plan still assumes one shared kitchen with equipment and ingredients provided. kpopper reports that the workshop format moved from onsite to remote. The agent needs to revisit equipment, ingredients and activities; this is a review notice, not an automatically failed conclusion.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/stories/cowork-workshop-mobile.png)
 
@@ -291,7 +331,14 @@ The planning record connects 13 readings to five saved plans and four open quest
 The format change reaches the agenda, equipment, ingredients, group arrangement and
 supervision; the earlier review snapshots remain visible.
 
-[![A complete planning record shows the remote format beside five plans last reviewed as onsite, with unchanged client constraints and unresolved home requirements.](assets/stories/cowork-workshop-record.png)](assets/stories/cowork-workshop-record.png)
+<p align="center">
+  <a href="assets/stories/cowork-workshop-record.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/cowork-workshop-record-mobile.png">
+      <img src="assets/stories/cowork-workshop-record.png" alt="A complete planning record shows the remote format beside five plans last reviewed as onsite, with unchanged client constraints and unresolved home requirements.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/stories/cowork-workshop-record-mobile.png) · [Full planning record](examples/cowork-workshop/after/GROUNDING.yaml)
 
@@ -392,19 +439,24 @@ For another example that needs judgment, explore
 
 <details>
 <summary>
-<strong>Research</strong><br>
+<a id="research-title"><img src="assets/navigation/research-title.svg" width="114" height="36" align="middle" alt="Research"></a><br>
 Connect evidence and revisit conclusions as findings change.<br><br>
 <a id="research-preview"><img src="assets/navigation/research-banner.png" width="960" alt="Galaxy rotation, gravitational lensing and the cosmic microwave background introduce the research evidence."></a><br>
-<strong>Explore workflows and examples ↓</strong>
+<strong>Click to expand workflows and examples ↓</strong>
 </summary>
-
-## Example 3: Research (evidence synthesis)
 
 ### Dark matter across studies
 
 The original three-paper view shows the shared-record idea:
 
-[![Three research tasks connect galaxy rotation, Bullet Cluster lensing and the CMB in a shared record, with assumptions and open questions attached.](assets/stories/dark-matter-intro.png)](assets/stories/dark-matter-intro.png)
+<p align="center">
+  <a href="assets/stories/dark-matter-intro.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/dark-matter-intro-mobile.png">
+      <img src="assets/stories/dark-matter-intro.png" alt="Three research tasks connect galaxy rotation, Bullet Cluster lensing and the CMB in a shared record, with assumptions and open questions attached.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/stories/dark-matter-intro-mobile.png)
 
@@ -413,7 +465,14 @@ between them. This worked example follows **six papers**: Rubin's galaxy rotatio
 SPARC's galaxy catalog, the radial acceleration relation, Bullet Cluster lensing,
 Planck's cosmological fit and the first LZ particle search.
 
-[![Six papers connect galaxy rotation and baryonic structure, cluster mass location, the CMB fit and a particle-search limit. Their assumptions and shared inputs remain attached to the synthesis.](assets/stories/dark-matter.png)](assets/stories/dark-matter.png)
+<p align="center">
+  <a href="assets/stories/dark-matter.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/dark-matter-mobile.png">
+      <img src="assets/stories/dark-matter.png" alt="Six papers connect galaxy rotation and baryonic structure, cluster mass location, the CMB fit and a particle-search limit. Their assumptions and shared inputs remain attached to the synthesis.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/stories/dark-matter-mobile.png)
 
@@ -423,7 +482,14 @@ SPARC and the acceleration paper share data; the Planck density ratio comes from
 one model fit; a null WIMP search constrains specific interactions without settling
 the identity of the astronomical mass component.
 
-[![The research GROUNDING.yaml includes six paper sources, detailed readings, an exact density-ratio calculation, intermediate judgments and the final synthesis. A framework change reaches multiple interpretations.](assets/stories/dark-matter-record.png)](assets/stories/dark-matter-record.png)
+<p align="center">
+  <a href="assets/stories/dark-matter-record.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/dark-matter-record-mobile.png">
+      <img src="assets/stories/dark-matter-record.png" alt="The research GROUNDING.yaml includes six paper sources, detailed readings, an exact density-ratio calculation, intermediate judgments and the final synthesis. A framework change reaches multiple interpretations.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/stories/dark-matter-record-mobile.png) · [Complete research record](examples/dark-matter/GROUNDING.yaml) · [Sources and exact locations](examples/dark-matter/README.md#the-six-sources)
 
@@ -968,7 +1034,14 @@ make it part of the project.
 Keep the work connected across time: the sources and decisions behind it, what needs
 attention now, and the checks or actions to return to later.
 
-[![Three ink panels connect past sources, evidence, decisions, reasons and last-review snapshots; present claims, changes, contradictions and new information; and future followups, daily reviews and time or event triggers when configured. A return loop explicitly says the agent records outcomes as evidence.](assets/diagrams/work-across-time.png)](assets/diagrams/work-across-time.png)
+<p align="center">
+  <a href="assets/diagrams/work-across-time.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/work-across-time-mobile.png">
+      <img src="assets/diagrams/work-across-time.png" alt="Three ink panels connect past sources, evidence, decisions, reasons and last-review snapshots; present claims, changes, contradictions and new information; and future followups, daily reviews and time or event triggers when configured. A return loop explicitly says the agent records outcomes as evidence.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/diagrams/work-across-time-mobile.png)
 
@@ -988,7 +1061,14 @@ New information often arrives halfway through another task. kpopper can retain a
 report and process a supported update in a separate worker. Routine results stay quiet;
 important unresolved findings are available for delivery back to the conversation.
 
-[![The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet. The closing line reads Get notified only when something needs attention.](assets/diagrams/conversation-flow.png)](assets/diagrams/conversation-flow.png)
+<p align="center">
+  <a href="assets/diagrams/conversation-flow.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
+      <img src="assets/diagrams/conversation-flow.png" alt="The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet. The closing line reads Get notified only when something needs attention.">
+    </picture>
+  </a>
+</p>
 
 [Phone layout](assets/diagrams/conversation-flow-mobile.png)
 
@@ -1593,7 +1673,7 @@ authorize. It does not install connectors or scan accounts by itself. See
 
 </details>
 
-[![A software agent holds a palette and paints connections between evidence, assumptions, a decision and conditions for review on an easel labelled GROUNDING.yaml. Earlier notes remain beside the agent. The caption reads: The canvas your AI didn’t know it needed.](assets/canvas-for-reasoning.png)](assets/canvas-for-reasoning.png)
+[![An ink-drawn software artist works at a drafting surface labelled GROUNDING.yaml. Blue arrows connect Evidence and Assumptions to a Decision, then to What would change it. The agent authors the relationships on the shared canvas. The caption reads: The canvas your AI didn't know it needed.](assets/canvas-for-reasoning-v2.png)](assets/canvas-for-reasoning-v2.png)
 
 ## Make it earn its place
 
