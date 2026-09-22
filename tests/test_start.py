@@ -263,7 +263,7 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         self.assertFalse((self.work / "PROVENANCE.yaml").exists())
         self.write_record(broken=True)
         stopped = cursor("gate-stop.sh", {**payload, "loop_count": 0})
-        self.assertIn("no snapshot", json.loads(stopped.stdout)["followup_message"])
+        self.assertEqual((stopped.returncode, stopped.stdout, stopped.stderr), (0, "", ""))
         repeated = cursor("gate-stop.sh", {**payload, "loop_count": 1})
         self.assertEqual(repeated.stdout, "")
 
@@ -290,8 +290,7 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         self.hook()
         self.write_record(broken=True)
         result = self.hook(name="session_gate.sh")
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("no snapshot", result.stderr)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
         again = self.hook({"session_id": "first-use", "stop_hook_active": True}, name="session_gate.sh")
         self.assertEqual(again.returncode, 0)
 

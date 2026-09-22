@@ -205,7 +205,7 @@ measurement recipes and a separate integration probe.
 
 These are executable examples. Checks cover the assumptions the record
 declares and the inputs deliberately measured or recorded. The examples on this page
-retain their compact legacy records, which the native 0.9.0 runtime continues to read without
+retain their compact legacy records, which the native runtime continues to read without
 migration. [New records also preserve immutable history](#how-it-works).
 
 ### Two working modes
@@ -685,19 +685,27 @@ pre-1.0 series: the old Python package numbering is retained for legacy users an
 is not the source of the native version. The primary install is a prebuilt native
 bundle from the GitHub release; it includes `kpop` and the `kpopper` alias and
 needs no Python, Node or Rust at runtime. The release assets are named
-`kpopper-0.9.0-TARGET.tar.gz` (Unix) or `.zip` (Windows).
+`kpopper-VERSION-TARGET.tar.gz` (Unix) or `.zip` (Windows).
 
-Download the bundle for `linux-x86_64`, `linux-aarch64`, `darwin-arm64`,
-`darwin-x86_64` or `windows-x86_64`, verify its SHA-256, and run the bundled
-installer. On Unix:
+Download `install.sh` (Unix) or `install.ps1` (Windows) from the
+[Latest GitHub release](https://github.com/ilanbm/kpopper/releases/latest).
+The installer downloads the matching archive for `linux-x86_64`, `linux-aarch64`,
+`darwin-arm64`, `darwin-x86_64` or `windows-x86_64` and verifies its SHA-256.
+On Unix:
 
 ```sh
-sh install.sh --version 0.9.0 --prefix "$HOME/.local"
+sh install.sh --prefix "$HOME/.local"
 ```
 
-On Windows, run `pwsh -File install.ps1` with the PowerShell parameters
-`-Version 0.9.0 -Prefix`
-arguments. Both installers also accept an explicit offline archive and checksum.
+On Windows:
+
+```powershell
+pwsh -File install.ps1 -Prefix "$HOME/.local"
+```
+
+These commands select the release marked Latest. To pin a release, add
+`--version VERSION` on Unix or `-Version VERSION` on Windows. Both installers also
+accept an explicit offline archive and checksum.
 The installer exposes the binaries under the selected `PREFIX/bin`.
 
 For a plugin checkout or cache, install the exact native runtime explicitly:
@@ -1156,7 +1164,7 @@ The technical term is an **epistemic record**: a record of what is known and how
 grounded. These are roles in the method, not six mandatory YAML sections. Start with
 what the work needs; a source and one finding can be enough.
 
-**The native 0.9.0 runtime preserves immutable versions of new claims and recorded acts.**
+**The native runtime preserves immutable versions of new claims and recorded acts.**
 `GROUNDING.yaml` presents the current readable record; `.kpopper/` holds the history
 and its authority metadata. Retain both together. Supported CLI writes update the
 record through that history, and ordinary reads automatically use `core/v1`. An
@@ -1641,7 +1649,7 @@ original-field details and output options.
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
 updating an older installation; a merged feature may still be awaiting a release.
 
-Use the native **0.9.0** CLI, plugins and CI for the new default history-backed
+Use the native CLI, plugins and CI for the new default history-backed
 records. The [reasoning runtime is packaged](docs/reasoning-core.md); existing
 legacy records require explicit adoption.
 

@@ -18,7 +18,7 @@ sh adapters/_shared/check-drift.sh
 
 **Translate the host protocol explicitly.** Similar event names do not imply the
 same output contract. Gemini requires startup JSON to put text in model context;
-Copilot requires block JSON where the shared shell gate returns exit 2. Installing
+Lifecycle output is advisory context; no adapter requests an automatic continuation. Installing
 a plugin or discovering a hook declaration does not prove it executes.
 
 ## Capability matrix
@@ -28,12 +28,12 @@ checks](../docs/compatibility.md) state which boundaries have actually been test
 
 | Host | Opening | End check | Skills / instructions |
 |---|---|---|---|
-| **Claude Code** | Native `SessionStart` hook | Shared `Stop` gate; yields after one continuation | Native plugin loads the bundled skills. |
-| **Codex CLI / Desktop** | Native plugin hooks, including grounding and ingestion integration | Shared `Stop` gate | Native plugin skills; a separate plain-project configuration is also available. Validate the actual client. |
-| **Cursor local** | Native `sessionStart` wrapper emits `additional_context` | Requests one follow-up when the failure count exceeds the opening baseline | Project rule; this route does not install the bundled skills or the other plugin hooks. |
+| **Claude Code** | Native `SessionStart` hook | Advisory diagnostics on the next user prompt; explicit checks still fail | Native plugin loads the bundled skills. |
+| **Codex CLI / Desktop** | Native plugin hooks, including grounding and ingestion integration | Advisory diagnostics on the next user prompt | Native plugin skills; a separate plain-project configuration is also available. Validate the actual client. |
+| **Cursor local** | Native `sessionStart` wrapper emits `additional_context` | Explicit `check`; legacy stop wrapper is silent | Project rule; this route does not install the bundled skills or the other plugin hooks. |
 | **Cursor hosted cloud** | Explicit command; this hook pair has no startup baseline there | Explicit command | Configure instructions and reachable runtime in the remote environment. |
-| **Gemini CLI** | Extension wrapper supplies JSON startup context | `SessionEnd` is advisory and best effort | Condensed method in `GEMINI.md`; no separate skill catalog in this extension. |
-| **Copilot CLI** | Native `sessionStart` bridge | Native `agentStop` block JSON with one-continuation guard | Canonical skills linked in `.agents/skills` plus shared instructions; no async/background hooks. |
+| **Gemini CLI** | Extension wrapper supplies JSON startup context | Explicit `check`; no shutdown notification | Condensed method in `GEMINI.md`; no separate skill catalog in this extension. |
+| **Copilot CLI** | Native `sessionStart` bridge | Explicit `check`; legacy `agentStop` is silent | Canonical skills linked in `.agents/skills` plus shared instructions; no async/background hooks. |
 | **Copilot VS Code** | Instructions; hook sketch remains unverified | Explicit command until verified in VS Code | `.github/copilot-instructions.md` or existing `AGENTS.md`. |
 | **Copilot cloud agent** | Setup workflow logs the opening | PR check; merge enforcement depends on branch protection | Setup/CI examples require the runtime in the job. Cloud lifecycle hooks are not connected by this adapter. |
 | **OpenClaw** | Explicit command or agent instruction | Explicit `check`; declared bundle hooks are not runnable hook packs | Canonical skills load as a Codex bundle. |

@@ -80,7 +80,8 @@ class NativeShellLaunchers(unittest.TestCase):
     def test_all_hook_routes_use_native_commands(self):
         for script, args, expected in [
             ("session_open.sh", ("--host", "codex"), "<session-start>\n<--host>\n<codex>"),
-            ("session_gate.sh", ("--host", "claude"), "<session-stop>\n<--host>\n<claude>"),
+            ("session_gate.sh", ("--host", "claude", "--context", "UserPromptSubmit"),
+             "<session-context>\n<--event>\n<UserPromptSubmit>\n<--host>\n<claude>"),
             ("ingestion_hook.sh", ("codex", "start"), "<ingestion-hook>\n<codex>\n<start>"),
             ("hook.sh", ("ground_hook.py", "codex", "prompt"), "<_hook>\n<ground>\n<codex>\n<prompt>"),
             ("hook.sh", ("edit_hook.py", "claude"), "<_hook>\n<edit>\n<claude>"),
@@ -94,18 +95,22 @@ class NativeShellLaunchers(unittest.TestCase):
                 self.assertTrue(result.stdout.endswith('"cwd":"/example"}'))
         self.assertFalse(self.python_called.exists())
 
-    def test_deliberate_host_exit_two_is_preserved(self):
-        result = self.invoke("scripts/session_gate.sh", ("--host", "claude"), code=2)
-        self.assertEqual(result.returncode, 2)
+    def test_only_explicit_cli_calls_preserve_exit_two(self):
+        for path, args in (("scripts/session_gate.sh", ("--host", "claude", "--context", "UserPromptSubmit")),
+                           ("scripts/hook.sh", ("watch_hook.py", "claude", "wait"))):
+            self.assertEqual(self.invoke(path, args, code=2).returncode, 0)
+        self.assertEqual(self.invoke("bin/kpop", ("check",), code=2).returncode, 2)
 
     def test_missing_runtime_is_nonblocking_for_hooks_and_fails_cli(self):
         self.binary.unlink()
-        for script in ("session_open.sh", "session_gate.sh"):
-            result = self.invoke("scripts/" + script)
+        for script, args in (("session_open.sh", ()), ("session_gate.sh", ("--context", "UserPromptSubmit"))):
+            result = self.invoke("scripts/" + script, args)
             self.assertEqual(result.returncode, 0)
             self.assertIn("not installed", result.stderr)
             self.assertNotIn("KPOPPER_AGENT_CONTEXT", result.stdout)
         self.assertEqual(self.invoke("bin/kpop").returncode, 1)
+        stopped = self.invoke("scripts/session_gate.sh")
+        self.assertEqual((stopped.returncode, stopped.stdout, stopped.stderr), (0, '', ''))
         self.assertFalse(self.python_called.exists())
 
 

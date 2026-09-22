@@ -33,24 +33,14 @@
         ]
       }
     ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/session_gate.sh\" --host claude"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/ingestion_hook.sh\" claude wait",
-            "asyncRewake": true,
-            "timeout": 130
+            "timeout": 130,
+            "async": true
           }
         ]
       },
@@ -69,7 +59,7 @@
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" claude wait",
             "timeout": 130,
-            "asyncRewake": true
+            "async": true
           }
         ]
       },
@@ -89,8 +79,8 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/ingestion_hook.sh\" claude wait",
-            "asyncRewake": true,
-            "timeout": 130
+            "timeout": 130,
+            "async": true
           }
         ]
       },
@@ -100,7 +90,7 @@
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" claude wait",
             "timeout": 130,
-            "asyncRewake": true
+            "async": true
           }
         ]
       },
@@ -110,6 +100,14 @@
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" claude prompt",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/session_gate.sh\" --host claude --context UserPromptSubmit"
           }
         ]
       }

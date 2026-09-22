@@ -62,13 +62,12 @@ known:
         self.assertTrue((self.root / "kpopper-base-copilot-fixture").exists())
         self.assertEqual(self.call("stop"), {})
 
-    def test_new_failure_blocks_with_json_and_yields_on_continuation(self):
+    def test_legacy_stop_stays_silent_and_checks_still_report_failures(self):
         self.record()
         self.call("start")
         self.record(broken=True)
         result = self.call("stop")
-        self.assertEqual(result["decision"], "block")
-        self.assertIn("no snapshot", result["reason"])
+        self.assertEqual(result, {})
         self.assertEqual(self.call("stop", {**self.payload, "stop_hook_active": True}), {})
         # The same finding stays quiet across later turns, independently of the flag.
         self.assertEqual(self.call("stop", {**self.payload, "stop_hook_active": False}), {})
@@ -80,9 +79,7 @@ known:
     wrong_if: deadline.days < 1
 ''', encoding="utf-8")
         new = self.call("stop", {**self.payload, "stop_hook_active": False})
-        self.assertEqual(new["decision"], "block")
-        self.assertIn("decision.other", new["reason"])
-        self.assertNotIn("decision.ready", new["reason"])
+        self.assertEqual(new, {})
         checked = subprocess.run([sys.executable, str(ROOT / "scripts/provenance.py"), "check"],
                                  cwd=self.work, env=self.env, text=True, capture_output=True)
         self.assertNotEqual(checked.returncode, 0)
@@ -94,7 +91,7 @@ known:
         self.call("start")
         self.record(broken=True)
         self.call("start", {**self.payload, "source": "resume"})
-        self.assertEqual(self.call("stop")["decision"], "block")
+        self.assertEqual(self.call("stop"), {})
 
     def test_first_use_does_not_create_a_record(self):
         self.assertIn("KPOPPER_START", self.call("start")["additionalContext"])
@@ -103,8 +100,8 @@ known:
     def test_config_uses_native_events_and_absolute_executable_arguments(self):
         config = self.call("config")
         self.assertEqual(config["version"], 1)
-        self.assertEqual(set(config["hooks"]), {"sessionStart", "agentStop"})
-        for event, mode in (("sessionStart", "start"), ("agentStop", "stop")):
+        self.assertEqual(set(config["hooks"]), {"sessionStart"})
+        for event, mode in (("sessionStart", "start"),):
             item = config["hooks"][event][0]
             self.assertEqual(item["exec"], sys.executable)
             self.assertEqual(item["args"], [str(HOOK), mode])

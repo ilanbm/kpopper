@@ -1,5 +1,4 @@
-"""The first write creates the record; a session that did real work and never wrote is asked
-once - by the gate as a stop, by the grounding hook as a line - whether there was nothing to keep."""
+"""The first write creates the record; recording reminders never interrupt a reply."""
 import json
 import os
 import pathlib
@@ -105,21 +104,19 @@ class Gate(Scratch):
             self.git("add", "-A")
             self.git("commit", "-q", "-m", "record")
 
-    def test_real_work_with_the_record_untouched_is_asked_once_and_names_the_host_skill(self):
+    def test_file_changes_without_record_writes_never_block_stop(self):
         self.record()
         payload = {"session_id": "n1", "cwd": str(self.dir)}
         self.assertEqual(self.hook("session_open.sh", payload, "--host", "claude")[0], 0)
         self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0, "nothing happened yet")
         (self.dir / "notes.md").write_text("a finding\n", encoding="utf-8")
         code, _, err = self.hook("session_gate.sh", payload, "--host", "claude")
-        self.assertEqual(code, 2)
-        self.assertIn("1 file of the tree changed, the record untouched", err)
-        self.assertIn("/kpopper:record", err)
-        self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0, "asked once")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0)
         (self.dir / "more.md").write_text("more\n", encoding="utf-8")
         self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0, "and not again")
 
-    def test_a_session_that_wrote_is_not_asked_and_a_plain_host_hears_the_command(self):
+    def test_record_writes_keep_attribution_checks(self):
         self.record()
         payload = {"session_id": "n2", "cwd": str(self.dir)}
         _, opened, _ = self.hook("session_open.sh", payload)
@@ -130,44 +127,67 @@ class Gate(Scratch):
         code, out, err = self.cli("add", "heat.storm_kw", "v=5", "unit=kW", "name=loss in a storm",
                                   "from=doc.boiler_sheet", "--as-of", "2026-09-04")
         self.assertEqual(code, 0, err)
-        code, _, err = self.hook("session_gate.sh", payload)
-        self.assertEqual(code, 2)
-        self.assertIn("recorded no intent", err, "the record's own reminders come first")
-        self.assertNotIn("the record untouched", err)
+        code, out, err = self.hook("session_gate.sh", payload, "--context", "UserPromptSubmit")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("recorded no intent", json.loads(out)["hookSpecificOutput"]["additionalContext"])
         payload = {"session_id": "n3", "cwd": str(self.dir)}
         self.hook("session_open.sh", payload)
         (self.dir / "other.md").write_text("x\n", encoding="utf-8")
         code, _, err = self.hook("session_gate.sh", payload)
-        self.assertEqual(code, 2)
-        self.assertIn("`kpop add`", err)
+        self.assertEqual((code, err), (0, ""))
 
     def test_outside_git_the_prompts_count_and_the_soft_line_rides_the_grounding_hook(self):
         self.record(commit=False)
         payload = {"session_id": "n4", "cwd": str(self.dir)}
-        self.hook("session_open.sh", payload, "--host", "claude")
+        self.hook("session_open.sh", payload, "--host", "codex")
         ground = SCRIPTS / "ground_hook.py"
 
         def prompt(text):
-            code, out, err = run(sys.executable, ground, "claude", "prompt", cwd=self.dir, env=self.env,
+            code, out, err = run(sys.executable, ground, "codex", "prompt", cwd=self.dir, env=self.env,
                                  stdin=json.dumps({**payload, "hook_event_name": "UserPromptSubmit", "prompt": text}))
             self.assertEqual(code, 0, err)
-            return json.loads(out)["hookSpecificOutput"]["additionalContext"] if out.strip() else ""
+            self.assertEqual(err, "")
+            if not out.strip():
+                return ""
+            response = json.loads(out)
+            self.assertEqual(set(response), {"hookSpecificOutput"})
+            specific = response["hookSpecificOutput"]
+            self.assertEqual(set(specific), {"hookEventName", "additionalContext"})
+            self.assertEqual(specific["hookEventName"], "UserPromptSubmit")
+            return specific["additionalContext"]
         for i in range(7):
             self.assertNotIn("the record untouched", prompt("unrelated work, turn %d" % i))
         self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0, "seven prompts are not real work yet")
         line = prompt("unrelated work, turn 8")
         self.assertIn("8 prompts in, the record untouched", line)
-        self.assertIn("/kpopper:record", line)
+        self.assertIn("$record", line)
+        self.assertIn("Complete the user's current request", line)
+        self.assertIn("authorized", line)
+        self.assertIn("Do not answer or mention this reminder", line)
         self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0,
                          "not on the turn whose prompt already carried the question")
-        self.assertEqual(prompt("unrelated work, turn 9"), "", "the soft line waits out its cooldown")
-        code, _, err = self.hook("session_gate.sh", payload, "--host", "claude")
-        self.assertEqual(code, 2, "a line that went unanswered for a turn earns one stop")
-        self.assertIn("prompts in, the record untouched", err)
-        self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0, "once")
+        self.assertEqual(prompt("לא הבנתי, איזו גרסה שבדקת עבדה יותר טוב?"), "")
+        for active in (False, True, False):
+            code, out, err = self.hook("session_gate.sh", {**payload, "stop_hook_active": active}, "--host", "codex")
+            self.assertEqual((code, out, err), (0, "", ""), "a reminder must not become a new user prompt")
         asked = [i for i in range(10, 30) if "the record untouched" in prompt("unrelated work, turn %d" % i)]
-        self.assertEqual(asked, [19, 29], "the line returns every ten prompts while nothing is written")
+        self.assertEqual(asked, [18, 28], "only prompt context repeats after its cooldown")
         self.assertEqual(self.hook("session_gate.sh", payload, "--host", "claude")[0], 0, "and the gate stays quiet")
+
+    def test_changed_tree_reminder_names_each_host_without_blocking(self):
+        self.record()
+        for host, skill in (("codex", "$record"), ("claude", "/kpopper:record")):
+            with self.subTest(host=host):
+                payload = {"session_id": "changed-" + host, "cwd": str(self.dir)}
+                self.hook("session_open.sh", payload, "--host", host)
+                (self.dir / (host + ".txt")).write_text("a finding\n")
+                code, out, err = run(sys.executable, SCRIPTS / "ground_hook.py", host, "prompt",
+                    cwd=self.dir, env=self.env, stdin=json.dumps({**payload, "prompt": "Continue the answer"}))
+                self.assertEqual((code, err), (0, ""))
+                text = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+                self.assertIn("1 file of the tree changed", text)
+                self.assertIn(skill, text)
+                self.assertEqual(self.hook("session_gate.sh", payload, "--host", host), (0, "", ""))
 
 
 if __name__ == "__main__":

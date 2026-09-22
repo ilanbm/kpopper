@@ -135,7 +135,8 @@ def owned(reader, doc, sid):
 
 
 def stop(reader, state_path, paths, sid, turns=0, host=None, nudged_at=None):
-    """Assess every time; deliver each finding once per session and resolved record."""
+    """Legacy diagnostic API for the context bridge and explicit gate command.
+    Its status is never forwarded as a lifecycle hook exit code."""
     issues = []
     with contextlib.redirect_stdout(io.StringIO()) as output:
         code = reader.gate(state_path, paths, turns, host, nudged_at,
@@ -152,9 +153,9 @@ def stop(reader, state_path, paths, sid, turns=0, host=None, nudged_at=None):
         fresh = []
         for kind, condition, message in issues:
             key = identity([kind, condition])
-            if key not in state:
+            if key not in state and len(fresh) < 8:
                 state[key] = True
-                fresh.append(message)
+                fresh.append(message if len(message) <= 500 else message[:500] + '… (see kpop check)')
         return fresh
 
     try:

@@ -114,6 +114,63 @@ fn diagnostic(output: &Output) -> String {
         String::from_utf8_lossy(&output.stderr)
     )
 }
+
+#[test]
+fn native_recording_reminder_is_prompt_context_with_cooldown_and_no_mark_write() {
+    let work = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    fs::write(
+        work.path().join("GROUNDING.yaml"),
+        "known:\n  p.sample: {v: 1}\n",
+    )
+    .unwrap();
+    let id = sid("advisory");
+    let payload = json!({"session_id":id,"cwd":work.path(),"prompt":"unrelated discussion","hook_event_name":"UserPromptSubmit"});
+    let opened = native(
+        &["session-start", "--host", "codex"],
+        &payload,
+        work.path(),
+        state.path(),
+    );
+    assert!(opened.status.success(), "{}", diagnostic(&opened));
+    let mark = state.path().join(format!("kpopper-base-{id}"));
+    let before = fs::read(&mark).unwrap();
+    let ground = state.path().join(format!("kpopper-ground-{id}.json"));
+    fs::write(&ground, "{\"turns\":7}").unwrap();
+    let first = native(
+        &["_hook", "ground", "codex", "prompt"],
+        &payload,
+        work.path(),
+        state.path(),
+    );
+    assert!(
+        first.status.success() && first.stderr.is_empty(),
+        "{}",
+        diagnostic(&first)
+    );
+    assert!(context(&first).contains("8 prompts in"));
+    assert!(context(&first).contains("Complete the user's current request"));
+    let next = native(
+        &["_hook", "ground", "codex", "prompt"],
+        &payload,
+        work.path(),
+        state.path(),
+    );
+    assert!(next.status.success() && next.stdout.is_empty() && next.stderr.is_empty());
+    let stop = native(&["session-stop"], &payload, work.path(), state.path());
+    assert!(stop.status.success() && stop.stdout.is_empty() && stop.stderr.is_empty());
+    let mut saved: serde_json::Value = serde_json::from_slice(&fs::read(&ground).unwrap()).unwrap();
+    saved["turns"] = json!(17);
+    fs::write(&ground, serde_json::to_vec(&saved).unwrap()).unwrap();
+    let later = native(
+        &["_hook", "ground", "codex", "prompt"],
+        &payload,
+        work.path(),
+        state.path(),
+    );
+    assert!(context(&later).contains("18 prompts in"));
+    assert_eq!(fs::read(&mark).unwrap(), before);
+}
 fn python(
     script: &str,
     args: &[&str],
@@ -617,6 +674,30 @@ fn watch_native_delivery_is_positive_on_windows_and_matches_python_where_support
         .write_all(serde_json::to_string(&nv_payload).unwrap().as_bytes())
         .unwrap();
     let nv = nv.wait_with_output().unwrap();
+    let claude_payload =
+        json!({"cwd":work,"session_id":sid("watch-claude"),"hook_event_name":"PostToolUse"});
+    let mut claude = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["_hook", "watch", "claude", "wait", "--wait-seconds", "0"])
+        .current_dir(&work)
+        .env("XDG_STATE_HOME", &state)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    claude
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(serde_json::to_string(&claude_payload).unwrap().as_bytes())
+        .unwrap();
+    let claude = claude.wait_with_output().unwrap();
+    assert!(
+        claude.status.success() && claude.stderr.is_empty(),
+        "{}",
+        diagnostic(&claude)
+    );
+    assert!(context(&claude).contains("KPOPPER_WATCH"));
     assert_eq!(py.status.code(), Some(0), "{}", diagnostic(&py));
     assert_eq!(nv.status.code(), Some(0), "{}", diagnostic(&nv));
     let p = context(&py);

@@ -1,4 +1,4 @@
-# Native Rust CLI (default runtime, version 0.9.0)
+# Native Rust CLI (default runtime)
 
 The native distribution provides the public `kpop` CLI and `kpopper` alias. Its
 internal library crate is `kpop_native`; the 0.9.0 native line is the first
@@ -21,7 +21,7 @@ With Rust installed, from this directory:
 ```sh
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
-cargo build --manifest-path native/Cargo.toml --locked --release
+cargo build --locked --release
 ```
 
 Development and test builds optimize SHA-256 hashing because launcher attestation
@@ -297,10 +297,11 @@ preserves that baseline on resume or compaction. An absent record gets an empty
 private mark so its first write can be checked without creating a record at opening.
 The command does not install hooks or establish host trust.
 
-`session-stop` consumes the corresponding host payload and assesses against that
-baseline every time. Private receipts attribute exact published bodies and suppress
-each repeated finding independently. New findings still appear after an earlier
-reminder. An unavailable assessment is reported visibly and cannot trap the host.
+`session-context` consumes a real prompt payload and assesses against that baseline.
+It returns `UserPromptSubmit` `additionalContext` with exit 0. Private receipts attribute
+exact published bodies and suppress repeated findings; child agents do not consume them.
+An unavailable assessment is context rather than a request to continue the conversation.
+`session-stop` is a silent compatibility no-op for older hook registrations.
 `mark STATE [RECORD ...]` and `gate STATE [RECORD ...]` expose the same baseline and
 assessment for explicit callers; `gate --session ID` enables once-only delivery.
 They preserve compatible Python marks, inherited failures and unchanged judgments

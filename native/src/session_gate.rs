@@ -25,7 +25,6 @@ use std::{
 
 const MAX_STATE: usize = 1024 * 1024;
 const TREE_FILES: usize = 500;
-const NUDGE_TURNS: u64 = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Issue {
@@ -580,52 +579,49 @@ pub fn mark(options: &GateOptions<'_>) -> Result<()> {
     write_mark(options.state_path, &state)
 }
 
-fn nudge(
-    base: &MarkState,
-    digest: &str,
-    workspace: &Path,
-    turns: u64,
-    host: Option<&str>,
-    nudged_at: Option<u64>,
-) -> Option<String> {
-    if base.digest.as_deref() != Some(digest)
-        || base.nudged
-        || nudged_at.is_some_and(|at| turns <= at)
-    {
-        return None;
+/// Pure advisory reminder for native prompt hooks; never writes the session mark.
+pub fn advisory_reminder(options: &GateOptions<'_>) -> Result<Option<String>> {
+    let base = read_mark(options.state_path)?;
+    let last = base.nudged_turn.into_iter().chain(options.nudged_at).max();
+    if last.is_some_and(|last| options.turns.saturating_sub(last) < 10) {
+        return Ok(None);
     }
-    let now = tree_state(workspace);
-    let mut changed = 0;
-    if let (Some(was), Some(now)) = (&base.tree, &now) {
-        changed = was
-            .files
-            .iter()
-            .collect::<BTreeSet<_>>()
-            .symmetric_difference(&now.files.iter().collect())
-            .count();
-        if was.head != now.head {
-            changed = changed.max(1);
+    let (capture, _, _) = capture(options, false, None)?;
+    if base.digest.as_deref() != Some(&source_digest(&capture, options.paths)) {
+        return Ok(None);
+    }
+    let now = tree_state(options.workspace);
+    let changed = match (&base.tree, &now) {
+        (Some(was), Some(now)) => {
+            let files = was
+                .files
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .symmetric_difference(&now.files.iter().collect())
+                .count();
+            files.max(usize::from(was.head != now.head))
         }
+        _ => 0,
+    };
+    if changed == 0 && options.turns < 8 {
+        return Ok(None);
     }
-    if changed == 0 && turns < NUDGE_TURNS {
-        return None;
-    }
-    let record = match host {
+    let record = match options.host {
         Some("claude") => "/kpopper:record",
         Some("codex") => "$record",
         _ => "`kpop add`",
     };
     let what = if changed == 0 {
-        format!("{turns} prompts in")
+        format!("{} prompts in", options.turns)
     } else {
         format!(
             "{changed} file{} of the tree changed",
             if changed == 1 { "" } else { "s" }
         )
     };
-    Some(format!(
-        "kpopper: {what}, the record untouched. If a finding, decision or measurement came out of this session, {record} keeps it now; if nothing will be revisited, finish."
-    ))
+    Ok(Some(format!(
+        "kpopper: {what}, the record untouched. Complete the user's current request. If useful findings need keeping and a record write is authorized, use {record} within that scope. Do not answer or mention this reminder unless the user asks about it; no record update is required to finish the user's answer."
+    )))
 }
 
 /// Assess the stop gate from one fresh immutable capture. Source or assessment
@@ -646,7 +642,7 @@ pub fn gate_with_recording_context(
     let saved_base = read_mark(options.state_path)?;
     let mut use_recordings = true;
     loop {
-        let mut base = saved_base.clone();
+        let base = saved_base.clone();
         let (capture, current, recordings) = capture(options, use_recordings, preparing)?;
         if mark_overlaps_capture(options.state_path, &capture, options.paths) {
             return Err(Error("session_mark_overlaps_record".into()));
@@ -801,26 +797,6 @@ pub fn gate_with_recording_context(
                     });
                 }
             }
-        }
-        if lines.is_empty()
-            && let Some(message) = nudge(
-                &base,
-                &source_digest(&capture, options.paths),
-                options.workspace,
-                options.turns,
-                options.host,
-                options.nudged_at,
-            )
-        {
-            lines.push(message.clone());
-            issues.push(Issue {
-                kind: "untouched".into(),
-                subject: "record".into(),
-                text: message,
-            });
-            base.nudged = true;
-            base.nudged_turn = Some(options.turns);
-            let _ = write_mark(options.state_path, &base);
         }
         let allowed_falsifiers = allowed.values().cloned().collect::<Vec<_>>();
         if !allowed_falsifiers.is_empty() {

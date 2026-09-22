@@ -10,7 +10,7 @@ Claude Code's plugin otherwise automates with `session_open.sh` / `session_gate.
 | file | does |
 |---|---|
 | `rules/kpopper.md` | the condensed method + open/close duties in prose, since nothing here can run them for you. |
-| `hooks.json` | `post_write_code`, scoped in-script to writes of `GROUNDING.yaml` (or `PROVENANCE.yaml`), runs `provenance.py check` and surfaces it in the Cascade UI. Advisory only. |
+| `hooks.json` | `post_write_code`, scoped in-script to writes of `GROUNDING.yaml` (or `PROVENANCE.yaml`), runs `provenance.py check` with `show_output: false`. Use explicit `check` to inspect findings. |
 
 ## Verified against docs
 
@@ -31,7 +31,7 @@ Source: `https://docs.devin.ai/desktop/cascade/hooks`, fetched 2026-09-01.
   UI panel... not inserted back into the agent's conversation context." That is why
   this ships as a nudge, not a gate, and why `rules/kpopper.md` (not this file) carries
   the actual close-the-loop obligation.
-- **`show_output: true`** is what makes `check`'s output appear in Cascade's UI at
+- **`show_output: false`** keeps routine output out of the Cascade UI. Previously, `true` showed it at
   all; the default otherwise would run the check invisibly.
 
 ## Install

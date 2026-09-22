@@ -48,17 +48,16 @@ executable is not on PATH, the opening includes the Python command for this chec
 |---|---|
 | `gemini-extension.json` | Extension metadata and `GEMINI.md` context. |
 | `hooks/hooks.json` | Quoted commands anchored to `${extensionPath}`. |
-| `scripts/hook.py` | Wraps the shared opener's text as `hookSpecificOutput.additionalContext`; wraps the end check as `systemMessage`. Stdout contains JSON only. |
+| `scripts/hook.py` | Wraps the shared opener's text as `hookSpecificOutput.additionalContext`; keeps legacy end invocations silent. Stdout contains JSON only. |
 | `scripts/checknote.sh` | Finds the record using the hook payload's `cwd`, runs `check`, and returns an advisory result even when problems exist. |
 
 Gemini's `SessionStart` context reaches the model through `additionalContext`.
 Plain text is insufficient: in CLI 0.43.0 the host converts it to a user-facing
 message without model context. The adapter's JSON wrapper handles this distinction.
 
-**The end check is advisory and best effort.** Gemini does not guarantee completion
-of `SessionEnd`, and it cannot block shutdown. This adapter does not install an
-`AfterAgent` gate. That is a separate per-turn event which can request a retry;
-supporting it would require its own integration and loop-safety tests.
+No `SessionEnd` or `AfterAgent` hook is installed. Old `SessionEnd` invocations return
+empty JSON. Use the startup context and explicit `check` for record diagnostics; this
+adapter never requests a retry or displays unsolicited shutdown bookkeeping.
 
 The [hook reference](https://geminicli.com/docs/hooks/reference/) describes these
 event contracts. The [extension reference](https://geminicli.com/docs/extensions/reference/)

@@ -2,7 +2,7 @@
 
 The native `.codex-plugin/plugin.json` selects `plugin-hooks.json` from this directory.
 Its commands use `$PLUGIN_ROOT`; the manifest override replaces default discovery of
-`hooks/hooks.json`, which belongs to Claude Code. This keeps Claude's `asyncRewake` configuration
+`hooks/hooks.json`, which belongs to Claude Code. This keeps each host's hook configuration
 out of the Codex path.
 
 ## Native plugin
@@ -12,12 +12,13 @@ native runtime, and a globally installed `kpop` is not used by plugin hooks. Sta
 task and run the exact native installer command printed by the active plugin when its
 opener reports the runtime missing (`install_native.sh` on Unix, `install.ps1` on
 Windows). All commands in `plugin-hooks.json`,
-including the Stop gate, invoke the exact native package binary under `$PLUGIN_ROOT`.
+including prompt diagnostics, invoke the exact native package binary under `$PLUGIN_ROOT`.
 For the source-only compatibility path, set `KPOPPER_RUNTIME=python` and follow the
 [private Python setup](../../README.md#python-compatibility-mode-for-claude-code-and-codex).
 If opening reports a missing native runtime, run the exact installer command shown by
 the diagnostic and start a new task. In Python compatibility mode, compare
 `doctor`'s `Hook Python` with `KPOPPER_AGENT_CONTEXT.command[0]`.
+
 
 The Codex package loads the shared skill and these hooks:
 
@@ -25,7 +26,7 @@ The Codex package loads the shared skill and these hooks:
 |---|---|
 | `SessionStart` | The existing record opener and ready important ingestion findings |
 | `PostToolUse`, `UserPromptSubmit` | Asynchronous delivery of newly actionable ingestion results |
-| `Stop` | The existing record gate; no new ingestion wait or approval gate |
+| `UserPromptSubmit` | Current record diagnostics as `additionalContext`; no Stop continuation |
 
 The hooks only read the queue. `kpop ingest capture` retains an explicit report and starts the
 independent processor. Routine completion emits no hook output. Important results enter the next

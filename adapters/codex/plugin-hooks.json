@@ -33,16 +33,6 @@
         ]
       }
     ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$PLUGIN_ROOT/scripts/session_gate.sh\" --host codex"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "hooks": [
@@ -110,6 +100,14 @@
             "type": "command",
             "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" codex prompt",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PLUGIN_ROOT/scripts/session_gate.sh\" --host codex --context UserPromptSubmit"
           }
         ]
       }

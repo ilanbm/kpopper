@@ -14,12 +14,14 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", newline="\n")
     event = sys.argv[1] if len(sys.argv) == 2 else ""
+    if event == 'SessionEnd':
+        print('{}')  # Compatibility for old manifests; no unsolicited shutdown message.
+        return 0
     if sys.stdin is None:
         print("{}")
         return 0
     commands = {
         "SessionStart": [sys.executable, str(ROOT / "scripts" / "session_start.py")],
-        "SessionEnd": ["sh", str(HERE / "checknote.sh")],
     }
     output = {}
     try:
@@ -32,16 +34,13 @@ def main():
             print(result.stderr.rstrip(), file=sys.stderr)
         text = result.stdout.rstrip()
         if text:
-            if event == "SessionStart":
-                output = {"hookSpecificOutput": {
-                    "hookEventName": event, "additionalContext": text}}
-            else:
-                output = {"systemMessage": text}
+            output = {"hookSpecificOutput": {
+                "hookEventName": "SessionStart", "additionalContext": text}}
         elif result.returncode:
-            output = {"systemMessage": "kpopper could not run its " + event + " check."}
+            output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "kpopper could not open the record; check it before relying on it."}}
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print("kpopper Gemini hook: " + str(error), file=sys.stderr)
-        output = {"systemMessage": "kpopper could not run its " + event + " check."}
+        output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "kpopper could not open the record; check it before relying on it."}}
     # Both lifecycle events are advisory. Never put flow-control fields here.
     print(json.dumps(output, ensure_ascii=False))
     return 0

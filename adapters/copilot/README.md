@@ -11,13 +11,12 @@ paths. Use the instructions for the surface you actually run.
 
 ## Copilot CLI
 
-The CLI bridge opens the record at `sessionStart`, including resume, and checks changes
-at `agentStop`. It translates the shared opener's text into `additionalContext` JSON
-and a shared gate failure into `decision: "block"` with a reason. The existing
-`stop_hook_active` guard lets the next completion through. It preserves the session
-identity and resolves the workspace from the hook payload, including paths with spaces.
+The CLI bridge opens the record at `sessionStart`, including resume, as `additionalContext`.
+No `agentStop` hook is installed. Its legacy handler returns empty JSON for old configurations.
+Run `check` explicitly for current diagnostics; failures still return a nonzero exit code.
+The bridge preserves the session identity and resolves the workspace from the payload.
 
-These are Copilot's native hook contracts; exiting with code 2 alone does **not** block
+Historical protocol note (the adapter no longer emits block JSON): exiting with code 2 alone does **not** block
 `agentStop`. [GitHub hook reference](https://docs.github.com/en/copilot/reference/hooks-reference)
 
 The native payload deliberately mixes naming styles: `sessionId` is camelCase,
@@ -25,13 +24,12 @@ The native payload deliberately mixes naming styles: `sessionId` is camelCase,
 snake_case. The bridge translates only the session ID. CLI 1.0.75 emitted
 `source: "new"`, then stop payloads with `stop_hook_active: false` and `true` in
 the recorded two-response probe; resuming emitted `source: "resume"` and the same
-false/true stop sequence. The guard applies to that forced continuation;
-a later user turn can still trigger a new check.
+false/true stop sequence. Those historical continuation probes do not describe the current silent stop handler.
 
 ### Install
 
 Use a local checkout of kpopper and Python 3.9+ with its dependencies installed. The
-bridge calls the existing shell stop gate, so this route requires a POSIX shell
+bridge uses the shared opener; earlier installations also used a POSIX shell
 (macOS, Linux or WSL). Native Windows has not been validated.
 
 From the **project where you want to keep the record**, using the Python environment

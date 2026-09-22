@@ -5793,7 +5793,7 @@ def _gate_judgments(ids, jud, raw):
     }
 
 
-NUDGE_TURNS = 8      # prompts a session may run with the record untouched before it is asked once
+NUDGE_TURNS = 8      # prompts before an advisory recording reminder
 TREE_FILES = 500     # working files the mark keeps, so a dirty tree cannot bloat it
 
 
@@ -5837,15 +5837,12 @@ def tree_state(paths, workspace=None):
     return {"digest": h.hexdigest(), "tree": tree}
 
 
-NUDGE_COOLDOWN = 10  # prompts between two askings, in either form
+NUDGE_COOLDOWN = 10  # prompts between advisory reminders
 
 
 def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
-    """The one thing the gate asks of a session that never wrote: after real work - files
-    of the tree changed since the mark, or enough prompts went by - was there nothing to
-    keep? Asked once, and only while the record is exactly as the session found it. Not on
-    the turn whose prompt already carried the softer form of the question: the turn after,
-    when a line went unanswered, is when a stop is earned."""
+    """Advisory context for the grounding hook, never a reason to continue a stopped turn.
+    Keep old mark fields readable while the prompt hook owns reminder delivery."""
     if not base.get("digest") or base.get("nudged"):
         return None
     if nudged_at is not None and turns <= nudged_at:
@@ -5865,19 +5862,10 @@ def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
     record = form.format("record") if form else "`kpop add`"
     what = (f"{changed} file{'' if changed == 1 else 's'} of the tree changed" if changed
             else f"{turns} prompts in")
-    return (f"kpopper: {what}, the record untouched. If a finding, decision or measurement came "
-            f"out of this session, {record} keeps it now; if nothing will be revisited, finish.")
-
-
-def _persist_nudge(state_path, turns):
-    try:
-        raw_state = json.loads(io.open(state_path, encoding='utf-8').read())
-        if isinstance(raw_state, dict):
-            raw_state['nudged'], raw_state['nudged_turn'] = True, turns
-            with io.open(state_path, 'w', encoding='utf-8') as stream:
-                json.dump(raw_state, stream)
-    except (OSError, ValueError):
-        pass
+    return (f"kpopper: {what}, the record untouched. Complete the user's current request. "
+            f"If useful findings need keeping and a record write is authorized, use {record} "
+            "within that scope. Do not answer or mention this reminder unless the user asks about it; "
+            "no record update is required to finish the user's answer.")
 
 
 def _core_gate_judgments(report):
@@ -5957,8 +5945,8 @@ def _marked(state_path):
 def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_context=None,
          _session_id=None, _issues=None):
     """What a session hears before it can finish, against the mark its opener left: the
-    record failing worse than it found it; entries it wrote with no intent recorded;
-    and, once, real work that left the record untouched. Page coverage is checked by Hub.
+    record failing worse than it found it; entries it wrote with no intent recorded.
+    Recording reminders belong to prompt context. Page coverage is checked by Hub.
     Printed, and 2 when there is anything - the hook bounces once and yields."""
     base = _marked(state_path)
     issues = _issues if _issues is not None else []
@@ -6011,12 +5999,6 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
                 issues.extend(('unattributed', identifier,
                     f'this session wrote 1 entry ({identifier}); verify its recorded intent before finishing')
                     for identifier in new)
-        if not out:
-            nudge = untouched(base, paths, turns, host, nudged_at)
-            if nudge:
-                out.append(nudge)
-                issues.append(('untouched', 'record', nudge))
-                _persist_nudge(state_path, turns)
         for line in out:
             print(line)
         if allowed:
@@ -6102,12 +6084,6 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
             issues.extend(('unattributed', k,
                 f'this session wrote 1 entry ({k}) and recorded no intent: '
                 'add s.<date>_<slug> asked="..." name="...", and from: it on what it wrote') for k in new)
-    if not out:
-        nudge = untouched(base, paths, turns, host, nudged_at)
-        if nudge:
-            out.append(nudge)
-            issues.append(('untouched', 'record', nudge))
-            _persist_nudge(state_path, turns)
     for l in out:
         print(l)
     if allowed:
