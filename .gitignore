@@ -9,3 +9,7 @@ node_modules/
 .pytest_cache/
 test-results/
 record.html
+
+# Explicitly installed/downloaded native payloads
+scripts/runtime/
+native-distribution/

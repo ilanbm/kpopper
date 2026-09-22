@@ -69,7 +69,7 @@ fn native_cli_hook_consumes_payload_cwd_without_python() {
     use std::io::Write;
     use std::process::{Command, Stdio};
     let temp = tempfile::tempdir().unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["ingestion-hook", "codex", "start"])
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
         .spawn().unwrap();

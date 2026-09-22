@@ -86,7 +86,7 @@ fn ordinary_identity_matches_complete_python_commands_and_images() {
             .iter()
             .map(|v| v.as_str().unwrap())
             .collect::<Vec<_>>();
-        let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(root)
             .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
             .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
@@ -141,7 +141,7 @@ fn private_identity_closure_is_retained_outside_shared_files() {
             args.push("different subjects");
         }
         args.push("GROUNDING.yaml");
-        let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(root)
             .env("KPOPPER_PRIVATE_HOME", private.path())
             .env_remove("KPOPPER_AGENT_SESSION")
@@ -191,7 +191,7 @@ fn unsupported_history_values_refuse_without_writes() {
             .iter()
             .map(|v| v.as_str().unwrap())
             .collect::<Vec<_>>();
-        let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(root)
             .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
             .env("KPOPPER_NATIVE_CACHE", root.join("cache"))

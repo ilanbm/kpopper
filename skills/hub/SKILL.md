@@ -5,9 +5,9 @@ description: "kpopper Hub: optional experimental application for exploring the p
 
 # kpopper Hub
 
-This application is experimental and optional. Request it explicitly or honor a standing preference; installation alone does not enable automatic use. Install `kpopper[html]` or run the active plugin's `plugin_runtime.py setup --applications html`.
+This application is experimental and optional. Request it explicitly or honor a standing preference; installation alone does not enable automatic use. Native bundles include the compiled application. In explicit Python compatibility mode, install `kpopper[html]` or run the active plugin's `plugin_runtime.py setup --applications html`.
 
-The page is a visual way to read the record: hover anything for where it came from, click to walk to a dependency. Build it with the shipped renderer and never by hand. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+The page is a visual way to read the record: hover anything for where it came from, click to walk to a dependency. Build it with the native `kpop` command and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH, pip or Python; use the active plugin's Python dispatcher only when `KPOPPER_RUNTIME=python` is explicit. [The method's reference](../kpopper/references/method.md#finding-the-reader) describes the installed copy.
 
 `render_page.py` turns any record into one self-contained HTML file, in two tabs: **Record**,
 which nobody writes, and **Now**, the arrangement this session chose. What makes it worth

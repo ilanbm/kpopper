@@ -5,7 +5,7 @@ use std::{
     process::{Command, Output},
 };
 fn run(root: &Path, json: bool) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command.args(["--workspace", root.to_str().unwrap(), "where"]);
     if json {
         command.arg("--json");

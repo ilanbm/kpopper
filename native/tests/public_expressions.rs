@@ -73,7 +73,7 @@ fn check_case(case: &Value) {
             }
         }
     }
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(
             case["argv"]
                 .as_array()

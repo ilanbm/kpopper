@@ -30,8 +30,11 @@ write. An unavailable registered record must not trigger a duplicate. The guide 
 user/project choices and explanations actually shown, so sessions do not repeat onboarding.
 Run an explicit mapping with `kpop map --json` (`--deep` for deeper work), then accept
 and execute the task using its internal protocol. A ready task is not completed work.
-Use `kpop config --guidance off` to disable explanations. Without `kpop` on PATH,
-run `<plugin>/scripts/cli.py` with Python and the same arguments.
+Use `kpop config --guidance off` to disable explanations. Prefer the canonical
+executable from `KPOPPER_AGENT_CONTEXT.command`. If it is unavailable, resolve the
+active plugin's runtime with `sh <plugin>/scripts/native_runtime.sh --path`; do not
+silently use PATH, pip or Python. The source-only Python dispatcher is available
+only when `KPOPPER_RUNTIME=python` is explicit.
 Ground a subject with `pull`, trace what a change reaches with `affects`, gate on `check`.
 
 Use the project's mode: Simple shares one graph with named hypotheses across sessions;

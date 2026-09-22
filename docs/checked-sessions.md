@@ -2,13 +2,24 @@
 
 The optional session transport opens a complete navigable view of the record, keeps exact field references, and computes assessment fields with a local Lean core. It exposes the same operations through the command line and MCP. It does not apply pending proposals or certify source-world truth.
 
-Install the optional dependencies with Python 3.10 or newer:
+Native 0.9.0 bundles include the checked-session resources. Enable the native
+session path with:
+
+```sh
+kpop session setup
+kpop session enable --tokens 1000
+```
+
+The native path needs no Python or Lean installation at runtime. The source-only
+Python compatibility adapter remains available explicitly; it requires Python 3.10
+or newer and the optional dependencies:
 
 ```sh
 python -m pip install 'kpopper[session]'
 ```
 
-Use Lean 4.33.1, either selected by `elan` on the path or supplied as a toolchain directory:
+For the Python compatibility adapter, use Lean 4.33.1, either selected by `elan` on
+the path or supplied as a toolchain directory:
 
 ```sh
 kpop session setup --lean-root /path/to/lean-4.33.1
@@ -86,14 +97,21 @@ Unassigned IDs remain visible under their namespace. Profiles cannot run code. A
 
 ## Session hooks and rollback
 
-The installed plugin's normal hook keeps its legacy behavior until checked mode is explicitly enabled:
+The installed plugin's native hook uses the bundled session runtime when checked mode
+is explicitly enabled:
 
 ```sh
 kpop session enable --tokens 1000
 kpop session disable
 ```
 
-Enable stores the current Python executable in a project-scoped settings file outside the record, so the hook and later CLI reads use the environment containing the session dependencies. Optional `--profile`, `--project` and `--state` values are project-scoped. `--global` enables or disables the default for this machine without binding all projects to one profile or proposal store. A project setting overrides the global default. `KPOPPER_SESSION_DISABLE=1` temporarily selects the legacy hook.
+Enable stores the native executable and project-scoped settings outside the record, so
+the hook and later CLI reads use the same runtime. Optional `--profile`, `--project`
+and `--state` values are project-scoped. `--global` enables or disables the default
+for this machine without binding all projects to one profile or proposal store. A
+project setting overrides the global default. `KPOPPER_SESSION_DISABLE=1` temporarily
+disables inherited settings. Python compatibility mode stores its Python executable
+instead.
 
 Checked CLI output, hook transport and the Lean JSON protocol use UTF-8 independently
 of the host code page. Captured source text retains its original line endings and

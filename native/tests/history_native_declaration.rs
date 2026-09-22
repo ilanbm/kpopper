@@ -30,7 +30,7 @@ fn package(root: &Path, complete: bool) -> PathBuf {
     } else {
         "native fixture"
     });
-    fs::copy(env!("CARGO_BIN_EXE_kpop-native"), &binary).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_kpop"), &binary).unwrap();
     if complete {
         let target = kpop_native::reasoning_runtime::target_name().unwrap();
         let resources = root.join("resources");

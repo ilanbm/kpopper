@@ -54,7 +54,7 @@ fn invoke(
         c.arg(oracle.join("scripts/kpopper"));
         c
     } else {
-        Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        Command::new(env!("CARGO_BIN_EXE_kpop"))
     };
     cmd.current_dir(root)
         .arg("followups")

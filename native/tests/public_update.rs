@@ -31,7 +31,7 @@ judgments:
 }
 
 fn run(root: &Path, state: &Path, report: &Value) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args([
             "--workspace",
             root.to_str().unwrap(),

@@ -929,8 +929,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "kpop-native"
-version = "0.1.0"
+name = "kpopper"
+version = "0.9.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",

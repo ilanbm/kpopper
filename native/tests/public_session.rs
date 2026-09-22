@@ -60,7 +60,7 @@ impl Fixture {
         }
     }
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
         command
             .current_dir(self.root.path())
             .env("KPOPPER_AGENT_SESSION", "flow")

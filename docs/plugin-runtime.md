@@ -1,4 +1,14 @@
-# Plugin Python runtime
+# Plugin runtime and Python compatibility mode
+
+The native 0.9.0 bundle is the default plugin runtime. Install it explicitly for
+a checkout or plugin cache with `sh /absolute/path/to/kpopper/scripts/install_native.sh`.
+That installer places the exact target under `scripts/runtime/<target>` and can use
+an offline archive plus SHA-256. Hooks never download or compile a runtime. The
+opener's `KPOPPER_AGENT_CONTEXT.command` points to the canonical native executable.
+
+The Python runtime described below is source-only compatibility mode for legacy
+workflows. Select it explicitly with `KPOPPER_RUNTIME=python`; missing native
+runtime must not silently fall back to Python or to a different `kpop` on `PATH`.
 
 Claude Code and Codex copy plugin files; that does not install Python dependencies.
 Their hook commands start a small standard-library-only launcher with `python3`.

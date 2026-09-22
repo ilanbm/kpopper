@@ -76,7 +76,7 @@ fn raw_process(program: &Path, args: &[&str], raw: &[u8], cwd: &Path) -> Output 
     child.wait_with_output().unwrap()
 }
 fn native_command(args: &[&str], cwd: &Path, state: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(args)
         .current_dir(cwd)
         .env("XDG_STATE_HOME", state)
@@ -127,7 +127,7 @@ fn python(
 }
 fn native(args: &[&str], payload: &serde_json::Value, cwd: &Path, tmp: &Path) -> Output {
     process(
-        Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+        Path::new(env!("CARGO_BIN_EXE_kpop")),
         args,
         payload,
         cwd,
@@ -318,7 +318,7 @@ fn native_process_matches_python_citation_selection_and_once_only_state() {
 fn malformed_cli_input_is_nonblocking_for_every_hook() {
     for kind in ["followups", "watch", "ground", "edit"] {
         let output = raw_process(
-            Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+            Path::new(env!("CARGO_BIN_EXE_kpop")),
             &["_hook", kind, "claude", "prompt"],
             b"{not-json",
             Path::new("/tmp"),
@@ -401,7 +401,7 @@ fn followup_process_matches_python_summary_and_keeps_product_backup_unchanged() 
         .write_all(serde_json::to_string(&payload_py).unwrap().as_bytes())
         .unwrap();
     let py = py.wait_with_output().unwrap();
-    let mut nv = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut nv = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "followups"])
         .current_dir(&work)
         .env("XDG_STATE_HOME", &state)
@@ -556,7 +556,7 @@ fn watch_process_matches_python_delivery_and_consumes_each_session_once() {
     let py = py.wait_with_output().unwrap();
     let nv_payload =
         json!({"cwd":work,"session_id":sid("watch-native"),"hook_event_name":"PostToolUse"});
-    let mut nv = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut nv = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "watch", "codex", "wait", "--wait-seconds", "0"])
         .current_dir(&work)
         .env("XDG_STATE_HOME", &state)
@@ -579,7 +579,7 @@ fn watch_process_matches_python_delivery_and_consumes_each_session_once() {
     assert!(n.starts_with("KPOPPER_WATCH "));
     assert!(p.contains("c.checkout"));
     assert!(n.contains("c.checkout"));
-    let mut again = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut again = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "watch", "codex", "wait", "--wait-seconds", "0"])
         .current_dir(&work)
         .env("XDG_STATE_HOME", &state)

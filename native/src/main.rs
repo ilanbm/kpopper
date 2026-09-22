@@ -884,7 +884,7 @@ fn main() {
                 std::process::exit(output.code);
             }
             Err(error) => {
-                eprintln!("kpop-native {kind}: {error}");
+                eprintln!("kpop {kind}: {error}");
                 std::process::exit(1);
             }
         }
@@ -906,7 +906,7 @@ fn main() {
                 std::process::exit(output.code);
             }
             Err(error) => {
-                eprintln!("kpop-native session-stop: assessment unavailable: {error}");
+                eprintln!("kpop session-stop: assessment unavailable: {error}");
                 return;
             }
         }
@@ -934,7 +934,7 @@ fn main() {
             Ok(output) => (output.text, String::new(), output.code),
             Err(error) => (
                 String::new(),
-                format!("kpop-native experimental hub: {error}\n"),
+                format!("kpop experimental hub: {error}\n"),
                 2,
             ),
         };
@@ -1198,7 +1198,7 @@ fn main() {
                 if args.json {
                     eprintln!("{}", json!({"error":error.to_string()}));
                 } else {
-                    eprintln!("kpop-native {command}: {error}");
+                    eprintln!("kpop {command}: {error}");
                 }
                 std::process::exit(2);
             }
@@ -1223,7 +1223,7 @@ fn main() {
         match result {
             Ok(text) => println!("{text}"),
             Err(error) => {
-                eprintln!("kpop-native assess: {error}");
+                eprintln!("kpop assess: {error}");
                 std::process::exit(2);
             }
         }
@@ -1233,7 +1233,7 @@ fn main() {
         let text = match session(options) {
             Ok(text) => text,
             Err(error) => {
-                eprintln!("kpop-native: record was not opened: {error}");
+                eprintln!("kpop: record was not opened: {error}");
                 String::new()
             }
         };

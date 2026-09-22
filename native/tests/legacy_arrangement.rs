@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::{Command, Output}};
 
 fn command(root: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command.current_dir(root).env_remove("KPOPPER_NATIVE_RESOURCES");
     command
 }

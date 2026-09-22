@@ -1,7 +1,8 @@
 # Annotated Documents (experimental)
 
-Install the optional HTML runtime with `python -m pip install 'kpopper[html]'`, or
-use the [plugin application setup](applications.md#installation-and-use). Request
+Native 0.9.0 bundles include the compiled HTML runtime. In explicit Python
+compatibility mode, install the optional HTML runtime with `python -m pip install
+'kpopper[html]'`, or use the [plugin application setup](applications.md#installation-and-use). Request
 Annotated Documents explicitly, or give the agent a standing
 preference to use it. A generic HTML request does not select this application.
 The agent creates the content, design and source/check mapping together. You do not
@@ -61,8 +62,9 @@ numeric formats, supported checks and the read-only integration with existing in
 outcomes. Input manifests are internal authoring work; the delivered file does not
 need them. A document does not require a new knowledge record or workspace survey.
 
-The Python package and editor plugins carry this runtime. The npm package continues to
-provide the existing record-page browser checker, not the document command. Runtime
+The native package carries this runtime. In Python compatibility mode, the Python
+package and editor plugins carry it. The npm package continues to provide the existing
+record-page browser checker, not the document command. Runtime
 checks cover HTML structure, finite source snapshots, portable packaging and copy
 updates. The Node document tests exercise real layer scripts in a DOM model; they are
 not a claim of native browser layout or download verification.

@@ -62,7 +62,7 @@ fn import_command(
     event_id: &str,
     extra: &[&str],
 ) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command
         .args([
             "--workspace",

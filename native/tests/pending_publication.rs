@@ -621,7 +621,7 @@ fn unexpected_managed_head_is_attention_and_never_overwritten() {
 fn real_cli_publish_rejects_non_github_provider_before_any_push() {
     let (_temp, project, provider, _revision) = setup();
     let before = remote_head(&provider.remote, "pending_grounding");
-    let result = std::process::Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args([
             "--workspace",
             project.root.to_str().unwrap(),

@@ -177,7 +177,7 @@ measurement recipes and a separate integration probe.
 
 These are executable examples. Checks cover the assumptions the record
 declares and the inputs deliberately measured or recorded. The examples on this page
-retain their compact legacy records, which kpopper 1.7 continues to read without
+retain their compact legacy records, which the native 0.9.0 runtime continues to read without
 migration. [New records also preserve immutable history](#how-it-works).
 
 ### Two working modes
@@ -614,12 +614,36 @@ assumptions remain explicit, and neither the count nor replay proves the synthes
 
 ## Get started
 
-Install kpopper where your agent works. The guides below cover coding agents and
-project work in Claude Cowork and ChatGPT Work. The package includes the
-[method](skills/kpopper/SKILL.md) with one skill per occasion beside it, record tools and host-specific hooks; setup depends on
-the environment.
+Install kpopper where your agent works. The 0.9.0 release is the first native
+pre-1.0 series: the old Python package numbering is retained for legacy users and
+is not the source of the native version. The primary install is a prebuilt native
+bundle from the GitHub release; it includes `kpop` and the `kpopper` alias and
+needs no Python, Node or Rust at runtime. The release assets are named
+`kpopper-0.9.0-TARGET.tar.gz` (Unix) or `.zip` (Windows).
 
-### Prepare Python for Claude Code and Codex
+Download the bundle for `linux-x86_64`, `linux-aarch64`, `darwin-arm64`,
+`darwin-x86_64` or `windows-x86_64`, verify its SHA-256, and run the bundled
+installer. On Unix:
+
+```sh
+sh install.sh --version 0.9.0 --prefix "$HOME/.local"
+```
+
+On Windows, run `pwsh -File install.ps1` with the PowerShell parameters
+`-Version 0.9.0 -Prefix`
+arguments. Both installers also accept an explicit offline archive and checksum.
+The installer exposes the binaries under the selected `PREFIX/bin`.
+
+For a plugin checkout or cache, install the exact native runtime explicitly:
+
+```sh
+sh /absolute/path/to/kpopper/scripts/install_native.sh
+```
+
+Hooks never download a runtime. If the runtime is missing, the opener reports a
+diagnostic and the session can use the explicit Python compatibility mode below.
+
+### Python compatibility mode for Claude Code and Codex
 
 On macOS or Linux, install **Python 3.9+ with `venv` support**, then run this once
 on the machine where the hooks execute, under the same OS account as the host:
@@ -651,7 +675,9 @@ terminal and start a new session. See [runtime troubleshooting](docs/plugin-runt
 
 ### Claude Code
 
-After the Python setup above, run in a terminal with Claude Code installed:
+After the Python setup above, run in a terminal with Claude Code installed. This
+is the source-only compatibility path, selected explicitly with
+`KPOPPER_RUNTIME=python`; it is not an automatic native fallback:
 
 ```sh
 claude plugin marketplace add ilanbm/kpopper
@@ -670,7 +696,8 @@ Both install from this repository's marketplace. See
 
 ### Codex
 
-After the Python setup above, run in a terminal on the machine where Codex runs:
+After installing the native bundle (or explicitly configuring Python compatibility
+mode), run in a terminal on the machine where Codex runs:
 
 ```sh
 codex plugin marketplace add ilanbm/kpopper
@@ -729,13 +756,12 @@ and limitations; automatic opening and stop behavior differ by host. See the
 
 ### Start working
 
-The local scripts need **Python 3.9+** and the [package dependencies](pyproject.toml).
-For Claude Code and Codex use the [private runtime setup above](#prepare-python-for-claude-code-and-codex).
-Other adapters describe their own interpreter configuration. A Python package installation
-includes dependencies in its own environment; do not run pip against an externally managed
-system Python to repair plugin hooks.
+The native CLI and hooks need no Python, Node or Rust at runtime. Source builds use
+Cargo and the documented reasoning resources. The source-only Python implementation
+needs **Python 3.9+** and the [package dependencies](pyproject.toml); use it only
+with `KPOPPER_RUNTIME=python` and follow the [compatibility setup](#python-compatibility-mode-for-claude-code-and-codex).
 
-New records use the packaged reasoning runtime; you do not need to install the Lean
+New records use the packaged native reasoning runtime; you do not need to install the Lean
 development toolchain. The optional [checked-session mode](docs/checked-sessions.md)
 and [HTML applications](#experimental-applications) have their own setup.
 In a new agent session with the project open, start with:
@@ -765,9 +791,11 @@ ordinary language.
 
 ### CLI
 
-These commands assume an installed `kpop`. From a source checkout with its dependencies
-installed, use `python3 scripts/kpopper` instead. For plugin work, use the command supplied
-by the session's `KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
+These commands assume an installed `kpop`. From a source checkout, build the native
+crate with `cargo build --manifest-path native/Cargo.toml --release` and use the
+resulting `kpop` binary. For plugin work, use the command supplied by the session's
+`KPOPPER_AGENT_CONTEXT`; source-only Python compatibility mode is explicit.
+`<id>` names a record entry, such as
 `workshop.ingredient_plan`; `kpop --help` lists command groups.
 
 | Command | What you need |
@@ -874,8 +902,8 @@ and makes judgments. Your existing documents, tools and memory stay where they a
 
 | What you want to do | Tool and scope | Example |
 | --- | --- | --- |
-| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Requires the optional HTML runtime. [Applications](#experimental-applications). | Open a visual overview of a renovation's quotes, decisions and unresolved questions. |
-| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Requires the optional HTML runtime. [Document workflow](docs/documents.md). | Produce a client report with the source invoices beside each expense total. |
+| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Included in native bundles; the application remains optional and experimental. [Applications](#experimental-applications). | Open a visual overview of a renovation's quotes, decisions and unresolved questions. |
+| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Included in native bundles; the application remains optional and experimental. [Document workflow](docs/documents.md). | Produce a client report with the source invoices beside each expense total. |
 | Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). | An agent refreshes its view after another session changes the recorded API contract. |
 
 
@@ -1041,7 +1069,7 @@ The technical term is an **epistemic record**: a record of what is known and how
 grounded. These are roles in the method, not six mandatory YAML sections. Start with
 what the work needs; a source and one finding can be enough.
 
-**Since 1.7, new records preserve immutable versions of their claims and recorded acts.**
+**The native 0.9.0 runtime preserves immutable versions of new claims and recorded acts.**
 `GROUNDING.yaml` presents the current readable record; `.kpopper/` holds the history
 and its authority metadata. Retain both together. Supported CLI writes update the
 record through that history, and ordinary reads automatically use `core/v1`. An
@@ -1407,19 +1435,20 @@ and the [published proof](https://github.com/anthropics/fermats-last-theorem).
 >
 > — Karl Popper, father of K-pop.
 
-**kpopper uses a compiled Lean 4 runtime for deterministic reasoning in new records.**
+**kpopper uses compiled native reasoning resources for deterministic reasoning in new records.**
 It evaluates supported calculations and conditions from explicit inputs. The
-optional, experimental checked-session mode also uses Lean to check rules about
+optional, experimental checked-session mode also checks rules about
 an agent's view of the record. The language is a theorem prover: its kernel checks
 formal proofs against a precisely defined type theory. [The Lean reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
 explains how proof checking and compiled execution fit together.
 
-For the default reasoning core, Python captures the record and the packaged Lean
-runtime evaluates supported rules. [Reasoning and history](docs/reasoning-core.md)
-describes its scope, supported platforms and formal guarantees.
+For the default reasoning core, the native executable captures the record and uses
+the packaged reasoning resources to evaluate supported rules. [Reasoning and history](docs/reasoning-core.md)
+describes its scope, supported platforms and formal guarantees. Python remains an
+explicit compatibility adapter.
 
-In checked-session mode, Python prepares a normalized snapshot, a separate local Lean
-core checks the proposed session view, and CLI or MCP exposes the result. Reads are
+In checked-session mode, the native executable prepares a normalized snapshot and
+the packaged local core checks the proposed session view; CLI or MCP exposes the result. Reads are
 bound to the revision returned at opening, so a changed record rejects a request
 using the old revision.
 
@@ -1444,10 +1473,12 @@ follows from the evidence, or that an action is permitted. The Python adapter, r
 renderer, compiler and runtime are outside an end-to-end formal proof. You do not need to
 write Lean to maintain a record.
 
-To use checked sessions, install `kpopper[session]` with Python 3.10+, make Lean **4.33.1**
-available, then build and enable the local core. The complete instructions, CLI and MCP
-examples, predicate subset and rollback are in [Checked sessions](docs/checked-sessions.md).
-The ordinary commands remain available without it.
+Native bundles include the checked-session resources. Enable checked sessions with
+`kpop session enable`; no Python or Lean installation is required at runtime. The
+legacy Python adapter still requires `kpopper[session]` and Lean **4.33.1**. The
+complete instructions, CLI and MCP examples, predicate subset and rollback are in
+[Checked sessions](docs/checked-sessions.md). The ordinary commands remain available
+without it.
 
 [Logo source and trademark information](assets/README.md#lean-logo).
 
@@ -1470,7 +1501,9 @@ make decisions worth revisiting. Optional applications build on that core:
 | kpopper Hub (`hub`) | A browsable snapshot of the record, with layouts and an interactive graph. | Experimental |
 | Annotated Documents (`annotated-doc`) | A standalone document with selected evidence and reviewable copy updates. | Experimental |
 
-From a source checkout, install the optional HTML dependencies:
+Native release bundles include the compiled HTML applications. Request them
+explicitly; installation alone does not activate either application. In Python
+compatibility mode, install the optional HTML dependencies:
 
 ```sh
 python -m pip install '.[html]'
@@ -1478,12 +1511,13 @@ kpop experimental hub --open
 kpop experimental annotated-doc guide
 ```
 
-For a release that includes these applications, use `kpopper[html]` instead of
-`.[html]`; check the [changelog](CHANGELOG.md) when using an older installation.
+For a legacy Python release, use `kpopper[html]` instead of `.[html]`; check the
+[changelog](CHANGELOG.md) when using an older installation.
 Request these applications explicitly or give the agent a standing preference. Their
 interfaces and artifact formats may change. Ordinary installation, record checks and
-session hooks work without the HTML runtime. Plugin users can add it with
-`plugin_runtime.py setup --applications html` at their active plugin path.
+session hooks work without activating the HTML applications. Python compatibility-mode
+plugin users can add its dependencies with `plugin_runtime.py setup --applications html`
+at their active plugin path.
 
 [![Experimental Annotated Documents application: the Autumn Garden Workshop report with an evidence card beside its registration-window passage. The author's interpretation is labelled Not checked and linked to the source notes.](assets/standalone-document-reasoning.png)](assets/standalone-document-reasoning.png)
 
@@ -1520,9 +1554,9 @@ original-field details and output options.
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
 updating an older installation; a merged feature may still be awaiting a release.
 
-Use kpopper **1.7 or later** across the CLI, plugins and CI for the new default
-history-backed records. The [reasoning runtime is packaged](docs/reasoning-core.md);
-existing legacy records require explicit adoption.
+Use the native **0.9.0** CLI, plugins and CI for the new default history-backed
+records. The [reasoning runtime is packaged](docs/reasoning-core.md); existing
+legacy records require explicit adoption.
 
 Legacy records with structured expressions and computed snapshots require at least
 1.6.0 and their [documented Lean setup](skills/kpopper/EXPRESSIONS.md#reader-compatibility).

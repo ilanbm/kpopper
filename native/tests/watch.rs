@@ -55,7 +55,7 @@ fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
 #[test]
 fn cli_watch_uses_python_stream_and_pretty_json_contract() {
     let (_temp, root, state) = fixture();
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["--workspace", root.to_str().unwrap(), "watch", "status"])
         .env("XDG_STATE_HOME", &state)
         .output()
@@ -70,7 +70,7 @@ fn cli_watch_uses_python_stream_and_pretty_json_contract() {
 "#
     );
 
-    let refused = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let refused = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args([
             "--workspace",
             root.to_str().unwrap(),
@@ -92,13 +92,13 @@ fn cli_watch_uses_python_stream_and_pretty_json_contract() {
 #[test]
 fn empty_notify_task_is_falsey_and_does_not_reserve_delivery() {
     let (_temp, root, state) = fixture();
-    let setup = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let setup = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["--workspace", root.to_str().unwrap(), "watch", "setup"])
         .env("XDG_STATE_HOME", &state)
         .output()
         .unwrap();
     assert!(setup.status.success());
-    let scan = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let scan = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args([
             "--workspace",
             root.to_str().unwrap(),
@@ -160,7 +160,7 @@ fn queued_pass_completes_and_freshness_is_rechecked() {
 fn actual_native_cli_launches_processor_and_delivers_real_result() {
     let (_temp, root, state) = fixture();
     let invoke = |args: &[&str]| {
-        let out = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let out = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .arg("--workspace")
             .arg(&root)
             .arg("watch")
@@ -272,7 +272,7 @@ fn shared_source_is_captured_applied_and_retained() {
 fn daily_start_queues_real_native_watch_processor() {
     let (_temp, root, state) = fixture();
     let invoke = |family: &str, args: &[&str]| {
-        let out = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let out = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .arg("--workspace")
             .arg(&root)
             .arg(family)
@@ -311,7 +311,7 @@ fn cli_shared_delivery_and_resolution_use_only_retained_receipts() {
     use std::{io::Write, process::Stdio};
     let (_temp, root, state) = fixture();
     let invoke = |args: &[&str], input: Option<Value>, success: bool| {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .arg("--workspace")
             .arg(&root)
             .arg("watch")

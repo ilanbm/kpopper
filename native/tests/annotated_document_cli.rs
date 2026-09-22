@@ -7,7 +7,7 @@ use std::{
 };
 
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["--workspace", root.to_str().unwrap()])
         .args(args)
         .env("PATH", "")
@@ -132,7 +132,7 @@ fn core_document_uses_the_same_runtime_assessment_as_public_check() {
     )
     .unwrap();
     let command = |args: &[&str], runtime: bool| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
         command
             .args(["--workspace", root.to_str().unwrap(), "--frozen"])
             .args(args)
@@ -176,7 +176,7 @@ fn core_document_uses_the_same_runtime_assessment_as_public_check() {
         "operational_error"
     );
 
-    let invalid = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let invalid = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args([
             "--workspace",
             root.to_str().unwrap(),

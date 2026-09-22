@@ -90,7 +90,7 @@ fn named_writes_match_complete_python_commands_and_record_images() {
             .iter()
             .map(|a| a.as_str().unwrap())
             .collect::<Vec<_>>();
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(root)
             .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
             .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
@@ -147,7 +147,7 @@ fn private_dependencies_stay_out_of_shared_hypotheses() {
             .unwrap();
         }
         let original = semantic_files(root);
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(root)
             .env_remove("KPOPPER_AGENT_SESSION")
             .env_remove("CODEX_THREAD_ID")

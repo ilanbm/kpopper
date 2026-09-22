@@ -100,7 +100,7 @@ fn actual_ordinary_consolidation_matches_python_packets_and_complete_record_imag
             fs::create_dir_all(p.parent().unwrap()).unwrap();
             fs::write(p, raw.as_str().unwrap()).unwrap();
         }
-        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
         command
             .current_dir(&root)
             .args(
@@ -196,7 +196,7 @@ fn nonfinite_dry_runs_match_python_packets_without_changing_any_source() {
             fs::write(p, raw.as_str().unwrap()).unwrap();
         }
         let original_files = all_files(&root, Path::new(""));
-        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
         command
             .current_dir(&root)
             .args(
@@ -342,7 +342,7 @@ fn nonfinite_fold_and_refute_remain_closed_and_preserve_every_source_byte() {
                 fs::write(path, raw.as_str().unwrap()).unwrap();
             }
             let before = all_files(&root, Path::new(""));
-            let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
                 .current_dir(&root)
                 .args(args)
                 .env("KPOPPER_PRIVATE_HOME", temp.path().join("private"))

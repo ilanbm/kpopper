@@ -1,11 +1,14 @@
 name: native Rust platform acceptance
 
 on:
-  pull_request:
-    paths:
-      - 'native/**'
-      - 'scripts/**'
-      - '.github/workflows/native-rust.yml'
+  workflow_call:
+    inputs:
+      validation:
+        type: string
+        default: full
+      target:
+        type: string
+        default: all
   workflow_dispatch:
     inputs:
       validation:
@@ -16,6 +19,7 @@ on:
         options:
           - full
           - final-fixes
+          - distribution
       target:
         description: Platform matrix target to run
         required: false
@@ -24,14 +28,12 @@ on:
         options:
           - all
           - windows-x86_64
-  push:
-    branches: [codex/rust-platform-ci, codex/rust-checked-store-windows]
 
 permissions:
   contents: read
 
 concurrency:
-  group: native-rust-${{ github.ref }}
+  group: native-rust-${{ github.ref }}-${{ inputs.validation == 'distribution' && github.sha || 'checks' }}
   cancel-in-progress: true
 
 jobs:
@@ -42,8 +44,8 @@ jobs:
       matrix:
         include: >-
           ${{ fromJSON(inputs.target == 'windows-x86_64'
-            && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop-native.exe"}]'
-            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop-native"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop-native"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop-native"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop-native"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop-native.exe"}]') }}
+            && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]') }}
     runs-on: ${{ matrix.runner }}
     env:
       KPOPPER_CI_VALIDATION: ${{ inputs.validation || 'full' }}
@@ -52,8 +54,10 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596
@@ -83,13 +87,15 @@ jobs:
           echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
       - name: Restore Rust dependency and build cache
         id: rust-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             native/target
           key: native-rust-${{ matrix.target }}-${{ hashFiles('native/Cargo.lock') }}
+          restore-keys: |
+            native-rust-${{ matrix.target }}-
       - name: Initialize the platform evidence archive
         shell: bash
         run: |
@@ -113,7 +119,7 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
       - name: Generate Windows history group vectors with the pinned Python reference
-        if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes'
+        if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution'
         shell: python
         run: |
           import os, pathlib, subprocess, sys
@@ -139,6 +145,7 @@ jobs:
               output.write('KPOP_HISTORY_GROUP_FIXTURE=' + str(fixture) + '\n')
           (temporary/'native-evidence'/'python-group-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
       - name: Test the native implementation (${{ inputs.validation || 'full' }})
+        if: inputs.validation != 'distribution'
         working-directory: native
         shell: bash
         run: |
@@ -164,7 +171,7 @@ jobs:
             esac
           } 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
       - name: Compare ingestion and branch commands with the pinned Python reference
-        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' }}
+        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,12 +194,15 @@ jobs:
             -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
       - name: Retain test diagnostics before release compilation
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: native-test-evidence-${{ matrix.target }}
           path: ${{ runner.temp }}/native-evidence
           if-no-files-found: error
           retention-days: 7
+      - name: Check Windows installer refuses repurposed public files
+        if: matrix.target == 'windows-x86_64'
+        run: python -m unittest -v tests.test_native_distribution.NativeDistribution.test_windows_installer_refuses_modified_managed_public_files
       - name: Build the platform release
         id: native-release
         if: ${{ !cancelled() }}
@@ -216,6 +226,8 @@ jobs:
           ordinary = bundle/'resources'/'ordinary'/os.environ['KPOPPER_CI_TARGET']
           reasoning.mkdir(parents=True)
           shutil.copy2(root/'native'/'target'/'release'/os.environ['KPOPPER_CI_BINARY'], bundle/os.environ['KPOPPER_CI_BINARY'])
+          alias = 'kpopper.exe' if os.environ['KPOPPER_CI_TARGET'].startswith('windows-') else 'kpopper'
+          shutil.copy2(root/'native'/'target'/'release'/alias, bundle/alias)
           shutil.copy2(root/'scripts'/'reasoning'/'native'/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'), reasoning/(os.environ['KPOPPER_CI_TARGET'] + '.kpopper-runtime'))
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), ordinary)
       - name: Execute copied binary through public acceptance flows
@@ -229,22 +241,55 @@ jobs:
           --output "${{ runner.temp }}/native-evidence"
       - name: Retain the exercised native bundle
         if: ${{ !cancelled() && steps.native-acceptance.outcome == 'success' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: native-bundle-${{ matrix.target }}
           path: ${{ runner.temp }}/native-bundle
           if-no-files-found: error
           retention-days: 7
+      - name: Package native command distributions
+        id: native-distribution
+        if: ${{ !cancelled() && steps.native-acceptance.outcome == 'success' }}
+        shell: python
+        env:
+          KPOPPER_CI_TARGET: ${{ matrix.target }}
+          KPOPPER_CI_BINARY: ${{ matrix.binary }}
+        run: |
+          import json, os, pathlib, subprocess, sys
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          bundle = temporary/'native-bundle'
+          target = os.environ['KPOPPER_CI_TARGET']
+          alias = 'kpopper.exe' if target.startswith('windows-') else 'kpopper'
+          version = pathlib.Path('VERSION').read_text().strip()
+          output = temporary/'native-distribution'
+          result = subprocess.run([sys.executable, 'scripts/package_native.py',
+              '--binary', str(bundle/os.environ['KPOPPER_CI_BINARY']), '--alias', str(bundle/alias),
+              '--resources', str(bundle/'resources'), '--target', target,
+              '--version', version, '--commit', os.environ['GITHUB_SHA'], '--output', str(output)],
+              check=True, capture_output=True, text=True)
+          (temporary/'native-evidence'/'distribution.json').write_text(result.stdout)
+          result = json.loads(result.stdout)
+          subprocess.run([sys.executable, 'native/ci/default_install_acceptance.py',
+              '--archive', result['archive'], '--sha256', result['sha256'], '--version', version,
+              '--target', target, '--output', str(temporary/'native-evidence'/'installed-default')], check=True)
+      - name: Retain verified native distributions
+        if: ${{ !cancelled() && steps.native-distribution.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-distribution-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-distribution
+          if-no-files-found: error
+          retention-days: 7
       - name: Archive platform evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: native-rust-${{ matrix.target }}
           path: ${{ runner.temp }}/native-evidence
           if-no-files-found: error
       - name: Save reusable Rust dependencies after diagnostic runs
         if: ${{ !cancelled() && steps.rust-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             ~/.cargo/registry

@@ -1,7 +1,7 @@
 use serde_json::Value as J;
 use std::{fs, path::Path, process::Command};
 fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(args)
         .env_remove("KPOPPER_NATIVE_RESOURCES")
