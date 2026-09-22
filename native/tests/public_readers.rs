@@ -733,7 +733,7 @@ fn a_hypothesis_the_base_cannot_read_is_named_with_the_reason_on_one_line() {
     );
     let output = cli(
         root,
-        &["consolidate", "--dry-run", "--as-of", "2026-09-23"],
+        &["consolidate", "--dry-run", "--as-of", "2026-01-01"],
         &root.join("private"),
     );
     assert_eq!(output.status.code(), Some(1));
