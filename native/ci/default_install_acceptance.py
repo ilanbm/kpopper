@@ -98,7 +98,7 @@ def main():
     result = run("06-update", [binary, "update", "--file", "-"], json.dumps(update), native_environment)
     if json.loads(result.stdout)["state"] != "applied":
         raise RuntimeError("installed update was not applied")
-    run("06-rule", [binary, "add", "r.double_seats", "rule=p.seats * 2", "rests_on=[p.seats]", "name=Twice the seats"], env=native_environment)
+    run("06-rule", [binary, "add", "r.double_seats", "rule=p.seats * 2", "name=Twice the seats"], env=native_environment)
     calculation = run("06-calculation", [binary, "pull", "r.double_seats"], env=native_environment)
     if "38" not in calculation.stdout:
         raise RuntimeError("installed reasoning resources did not calculate the rule")

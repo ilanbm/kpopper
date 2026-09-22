@@ -25,8 +25,9 @@ To run this focused check locally, install the checkout with `python -m pip inst
 make `jq` available, then run `python .github/scripts/check_research_example.py`.
 It uses temporary files and makes no model calls.
 
-The selector emits an explicit list of Python suites: core, documents, reasoning,
-session and other. Shared runtime changes retain all suites; document-only changes
+The selector emits an explicit list of retained Python compatibility suites: core,
+documents, reasoning, session and other. Shared runtime changes retain all suites;
+document-only changes
 select documents. New tests enter the other suite until classified. The execution
 helper discovers importable test files, rejects an empty or unknown selection,
 and splits individual unittest cases by measured duration with pytest-split.
@@ -58,9 +59,10 @@ bundles, their source identity and the corresponding-source archive. All expensi
 families also require the inexpensive record and contract job to succeed. The native
 workflow repeats that inexpensive gate for direct callers. It dispatches one
 reusable workflow per target: its build and installed tests depend only on that
-target. All five native targets and the existing nine Python/platform installation
-combinations remain covered. Installed wheel, sdist and plugin checks still use
-the committed payload, cold runtime caches and no compiler PATH.
+target. All five native targets and the existing nine Python/platform compatibility
+combinations remain covered. Installed wheel, sdist and plugin checks still exercise
+the retained Python distribution; native installed checks use the committed bundles,
+cold runtime caches and no compiler PATH.
 
 Native builds cache pinned download archives and successfully tested GMP prefixes.
 Cache keys include the target, source and recipe hashes, compiler/build tools,

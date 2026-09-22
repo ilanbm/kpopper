@@ -7,14 +7,16 @@ out of the Codex path.
 
 ## Native plugin
 
-Install the native runtime with the explicit [checkout installer](../../README.md#get-started)
-on the machine and OS account that execute Codex's hooks. Plugin installation alone
-does not install or download a runtime. All commands in `plugin-hooks.json`, including
-the Stop gate, invoke the exact native package binary under `$PLUGIN_ROOT`.
+Install the plugin first. Plugin installation alone does not install or download the
+native runtime, and a globally installed `kpop` is not used by plugin hooks. Start a
+task and run the exact native installer command printed by the active plugin when its
+opener reports the runtime missing (`install_native.sh` on Unix, `install.ps1` on
+Windows). All commands in `plugin-hooks.json`,
+including the Stop gate, invoke the exact native package binary under `$PLUGIN_ROOT`.
 For the source-only compatibility path, set `KPOPPER_RUNTIME=python` and follow the
 [private Python setup](../../README.md#python-compatibility-mode-for-claude-code-and-codex).
-If opening reports a missing native runtime, run the exact `install_native.sh` command
-shown by the diagnostic and start a new task. In Python compatibility mode, compare
+If opening reports a missing native runtime, run the exact installer command shown by
+the diagnostic and start a new task. In Python compatibility mode, compare
 `doctor`'s `Hook Python` with `KPOPPER_AGENT_CONTEXT.command[0]`.
 
 The Codex package loads the shared skill and these hooks:
@@ -47,8 +49,10 @@ References: [plugin-bundled hooks](https://learn.chatgpt.com/docs/hooks#plugin-b
 
 ## Plain project configuration
 
-Prepare the same [private runtime](../../docs/plugin-runtime.md) before installing
-project hooks. If using `KPOPPER_RUNTIME_HOME`, pass the same absolute value to setup
+Prepare the same [native runtime or explicit Python compatibility mode](../../docs/plugin-runtime.md)
+before installing project hooks. For native mode, install into the active checkout's
+`scripts/runtime/TARGET`; a global CLI does not satisfy project hooks. If using
+`KPOPPER_RUNTIME_HOME` for Python compatibility, pass the same absolute value to setup
 and the Codex process.
 
 `hooks.json` is also provided for installations using project-level hooks rather than a native

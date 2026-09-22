@@ -640,6 +640,9 @@ For a plugin checkout or cache, install the exact native runtime explicitly:
 sh /absolute/path/to/kpopper/scripts/install_native.sh
 ```
 
+On Windows, use the printed PowerShell command, which invokes `install.ps1` with
+`-PluginRoot`.
+
 Hooks never download a runtime. If the runtime is missing, the opener reports a
 diagnostic and the session can use the explicit Python compatibility mode below.
 
@@ -660,10 +663,10 @@ virtualenv under `~/.local/share/kpopper/runtimes/`. It works with externally ma
 Python installations: system packages are not modified. On Linux distributions that
 package `venv` separately, install that Python's `venv` support first.
 
-The Claude Code and Codex hooks automatically select this runtime, including after
-a plugin cache update. No activation or PATH change is needed. The hooks run code
-from their own installed plugin; this checkout only prepares dependencies. Hooks
-never create environments or install packages. A standalone `pipx` or `uv tool`
+When `KPOPPER_RUNTIME=python` is set, the Claude Code and Codex hooks select this
+runtime, including after a plugin cache update. No activation or PATH change is
+needed. The hooks run code from their own installed plugin; this checkout only
+prepares dependencies. Hooks never create environments or install packages. A standalone `pipx` or `uv tool`
 installation supplies its own CLI environment and does not by itself repair hooks.
 
 `doctor` prints both the bootstrap Python and the selected hook Python. After installing
@@ -675,9 +678,7 @@ terminal and start a new session. See [runtime troubleshooting](docs/plugin-runt
 
 ### Claude Code
 
-After the Python setup above, run in a terminal with Claude Code installed. This
-is the source-only compatibility path, selected explicitly with
-`KPOPPER_RUNTIME=python`; it is not an automatic native fallback:
+Install the plugin from the marketplace in a terminal with Claude Code installed:
 
 ```sh
 claude plugin marketplace add ilanbm/kpopper
@@ -693,20 +694,25 @@ Or run these inside Claude Code:
 
 Both install from this repository's marketplace. See
 [Claude's plugin installation guide](https://code.claude.com/docs/en/discover-plugins).
+The native runtime is installed into that plugin cache separately. Start a task and
+run the exact native installer command printed by the active plugin (PowerShell on
+Windows) if its opener reports the runtime missing. Set `KPOPPER_RUNTIME=python` only for the explicit
+source-only compatibility path described above.
 
 ### Codex
 
-After installing the native bundle (or explicitly configuring Python compatibility
-mode), run in a terminal on the machine where Codex runs:
+Install the plugin in a terminal on the machine where Codex runs:
 
 ```sh
 codex plugin marketplace add ilanbm/kpopper
 codex plugin add kpopper@kpopper
 ```
 
-Start a new Codex task after installation. Review the plugin's hook definitions when
-prompted; hook trust is separate from installation. The repository includes a native Codex
-manifest and host-specific hooks. See [Codex setup and behavior](adapters/codex/README.md)
+Start a new Codex task after installation. If its opener reports the native runtime
+missing, run the exact native installer command printed for the active plugin cache
+(PowerShell on Windows), then start a new task. A native CLI installed globally is not used by
+plugin hooks. Review the plugin's hook definitions when prompted; hook trust is separate
+from installation. See [Codex setup and behavior](adapters/codex/README.md)
 and [OpenAI's plugin guide](https://learn.chatgpt.com/docs/plugins).
 
 ### Claude Cowork
@@ -881,7 +887,7 @@ the earlier evidence available when the work changes.
 | Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#example-2-claude-cowork-and-chatgpt-work). | Resume a job search and recover why three roles were shortlisted. |
 | Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#how-it-works). | Trace the upload queue decision back to the test that exposed request timeouts. |
 | Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
-| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged Lean runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#how-it-works). | Check whether 24 guests fit a venue with 18 seats. |
+| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged native reasoning runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#how-it-works). | Check whether 24 guests fit a venue with 18 seats. |
 | Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). | Find apartments below $2,000 with an elevator and a lease that allows pets. |
 | Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
 | Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
