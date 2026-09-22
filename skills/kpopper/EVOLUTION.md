@@ -9,6 +9,10 @@ Choose the representation that expresses the same source-grounded meaning:
 - A mutable attribute has a stable identity and a value outside its name.
 - A dated historical proposition stays true about its own date; becoming historical
   is not evidence that it was false.
+- A source's date or an entry's `of` timestamp records when it was observed; that
+  alone does not make a current-state proposition permanently historical. Keep the
+  active value current from newer evidence and preserve its earlier truth in version
+  history. An explicitly past-tense or date-scoped proposition is a different subject.
 - A value determined by other entries is a rule, not another manually synchronized
   copy. A boolean proposition may be calculated from a numeric attribute.
 
