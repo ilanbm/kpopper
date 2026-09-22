@@ -4443,7 +4443,7 @@ judgments:
     because: "Existing failures are not caused by the new session. Retaining the baseline keeps
               attribution and newly introduced failures meaningful while advisory delivery preserves
               the real user request."
-    wrong_if: {expr: "p.gate_bounces > 0"}
+    wrong_if: "p.gate_bounces > 0"
     replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-22"]
     seen:
       s.2026_09_03_coverage: "read 2026-09-03"
@@ -6468,7 +6468,7 @@ judgments:
     because: "A Stop continuation becomes a new user request in supported hosts, so even a single
               bookkeeping or validation message can replace the question. Record assessment and
               notification transport must remain separate."
-    wrong_if: {expr: "p.gate_bounces > 0"}
+    wrong_if: "p.gate_bounces > 0"
     replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-22"]
     seen:
       p.gate_bounces: 0
