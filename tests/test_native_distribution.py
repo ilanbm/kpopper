@@ -237,6 +237,18 @@ class NativeDistribution(unittest.TestCase):
         return dict(os.environ, PATH=str(tools) + os.pathsep + os.environ.get("PATH", ""),
                     FAIL_MV_DEST=str(destination), FAIL_MV_STATE=str(tools / "failed-once"), REAL_MV=real_mv)
 
+    def failing_backup_environment(self):
+        tools = self.root / "failing backup mv"
+        tools.mkdir(exist_ok=True)
+        real_mv = subprocess.check_output(["sh", "-c", "command -v mv"], text=True).strip()
+        script = tools / "mv"
+        script.write_text(
+            "#!/bin/sh\nlast=\nfor value do last=$value; done\n"
+            "case \"$last\" in */.previous-*) exit 74;; esac\n"
+            "exec \"$REAL_MV\" \"$@\"\n", encoding="utf-8")
+        script.chmod(0o755)
+        return dict(os.environ, PATH=str(tools) + os.pathsep + os.environ.get("PATH", ""), REAL_MV=real_mv)
+
     @unittest.skipIf(os.name == "nt" or host_target() is None, "POSIX installer contract")
     def test_failed_same_version_activation_restores_payload_and_public_aliases(self):
         prefix = self.root / "rollback prefix"
@@ -275,6 +287,33 @@ class NativeDistribution(unittest.TestCase):
         self.assertIn("cannot activate plugin runtime", result.stderr)
         self.assertEqual((runtime / "kpop").read_bytes(), before)
         self.assertFalse(any(runtime.parent.glob(".previous-*")))
+
+    @unittest.skipIf(os.name == "nt" or host_target() is None, "POSIX installer contract")
+    def test_failed_backup_move_never_removes_original_destination(self):
+        archive, _ = self.package()
+
+        prefix = self.root / "backup failure prefix"
+        self.assertEqual(self.install(archive, prefix).returncode, 0)
+        payload = prefix / "lib/kpopper/0.9.0" / host_target()
+        payload_before = (payload / "bin/kpop").read_bytes()
+        aliases_before = {name: os.readlink(prefix / "bin" / name) for name in ("kpop", "kpopper")}
+        result = self.install(archive, prefix, env=self.failing_backup_environment())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot preserve existing versioned payload", result.stderr)
+        self.assertEqual((payload / "bin/kpop").read_bytes(), payload_before)
+        self.assertEqual({name: os.readlink(prefix / "bin" / name) for name in aliases_before}, aliases_before)
+
+        plugin = self.root / "backup failure plugin"
+        command = ["sh", str(INSTALLER), "--version", "0.9.0", "--archive", str(archive),
+                   "--sha256", sha256(archive), "--plugin-root", str(plugin)]
+        self.assertEqual(subprocess.run(command, text=True, capture_output=True).returncode, 0)
+        runtime = plugin / "scripts/runtime" / host_target()
+        runtime_before = (runtime / "kpop").read_bytes()
+        result = subprocess.run(command, text=True, capture_output=True,
+                                env=self.failing_backup_environment(), timeout=20)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot preserve existing plugin runtime", result.stderr)
+        self.assertEqual((runtime / "kpop").read_bytes(), runtime_before)
 
     @unittest.skipIf(os.name == "nt" or host_target() is None, "POSIX installer contract")
     def test_new_version_retains_previous_version_payload(self):

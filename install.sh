@@ -157,8 +157,10 @@ if [ -n "$PLUGIN_ROOT" ]; then
   printf '%s\n' "$VERSION" > "$STAGE/.kpopper-managed"
   BACKUP=$PLUGIN_ROOT/scripts/runtime/.previous-$TARGET-$$
   [ ! -e "$BACKUP" ] || die "temporary plugin backup already exists: $BACKUP"
+  if [ -e "$DEST" ]; then
+    mv "$DEST" "$BACKUP" || die "cannot preserve existing plugin runtime"
+  fi
   DEST_TOUCHED=1
-  [ ! -e "$DEST" ] || mv "$DEST" "$BACKUP"
   mv "$STAGE" "$DEST" || die "cannot activate plugin runtime"
   SUCCESS=1
   [ ! -e "$BACKUP" ] || rm -rf "$BACKUP"
@@ -189,8 +191,10 @@ cp -R "$PACKAGE_ROOT/." "$STAGE/"
 printf '%s\n' "$VERSION" > "$STAGE/.kpopper-managed"
 BACKUP=$BASE/lib/kpopper/$VERSION/.previous-$TARGET-$$
 [ ! -e "$BACKUP" ] || die "temporary version backup already exists: $BACKUP"
+if [ -e "$DEST" ]; then
+  mv "$DEST" "$BACKUP" || die "cannot preserve existing versioned payload"
+fi
 DEST_TOUCHED=1
-[ ! -e "$DEST" ] || mv "$DEST" "$BACKUP"
 mv "$STAGE" "$DEST" || die "cannot activate versioned payload"
 for NAME in kpop kpopper; do
   LINK=$PUBLIC_BIN/$NAME
