@@ -21,7 +21,7 @@ With Rust installed, from this directory:
 ```sh
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
-cargo build --manifest-path native/Cargo.toml --locked --release
+cargo build --locked --release
 ```
 
 Development and test builds optimize SHA-256 hashing because launcher attestation
