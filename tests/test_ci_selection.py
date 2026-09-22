@@ -95,6 +95,22 @@ class Selection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("rust", lanes([path]))
 
+    def test_rust_lane_reads_what_its_sources_embed_and_the_scripts_its_tests_run(self):
+        # include_str!/include_bytes! targets and the hooks host_hooks.rs executes, with their imports.
+        for path in ("scripts/verify_page.js", "examples/offer-review/after/GROUNDING.yaml", "scripts/expressions.py",
+                     "scripts/ground_hook.py", "scripts/edit_hook.py", "scripts/followups.py"):
+            with self.subTest(path=path):
+                self.assertIn("rust", lanes([path]))
+        self.assertNotIn("rust", lanes(["scripts/render_page.py"]))
+        self.assertTrue(CI.rust_embeds(("native",)) >= {"scripts/verify_page.js", "scripts/session/rules.txt"})
+
+    def test_installed_lane_follows_the_imports_of_the_reasoning_tests_it_runs(self):
+        # Including an import inside code the acceptance test hands to the installed interpreter.
+        for path in ("tests/test_pending_grounding.py", "tests/test_history_authoring.py",
+                     "tests/test_history_snapshot_capture.py", "tests/test_reasoning_contract.py"):
+            with self.subTest(path=path):
+                self.assertIn("installed", lanes([path]))
+
     def test_runtime_sources_rebuild_and_validate_installation(self):
         for path in ("scripts/reasoning/lean/Kernel.lean", "scripts/reasoning/build_runtime.py",
                      "scripts/reasoning/native/linux-x86_64.kpopper-runtime",

@@ -126,8 +126,11 @@ class Recorder(unittest.TestCase):
             (Path(watched) / 'sub').mkdir()
             (Path(watched) / 'sub/file.txt').write_text('content')
             output, ready = Path(watched) / 'reads.json', Path(watched) / 'ready'
+            # A prefix that does not exist yet, like a package installed later in the job.
+            later = str(Path(watched) / 'not-installed-yet/kpopper')
             process = subprocess.Popen([sys.executable, str(ROOT / '.github/scripts/ci_audit.py'), 'record',
-                                        '--output', str(output), '--ready', str(ready), '--prefix', watched])
+                                        '--output', str(output), '--ready', str(ready), '--prefix', watched,
+                                        '--prefix', later])
             deadline = time.monotonic() + 30
             while not (ready.exists() and ready.read_text().strip()):
                 self.assertLess(time.monotonic(), deadline)

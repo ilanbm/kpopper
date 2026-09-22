@@ -35,9 +35,14 @@ def record(output, ready, prefixes):
     if fd < 0:
         raise OSError(ctypes.get_errno(), 'fanotify_init failed')
     for prefix in prefixes:
+        # A filesystem mark covers the whole filesystem, so the nearest existing directory
+        # serves for a prefix that appears only later, such as a package installed mid-job.
+        existing = Path(prefix)
+        while not existing.exists() and existing != existing.parent:
+            existing = existing.parent
         if libc.fanotify_mark(fd, FAN_MARK_ADD | FAN_MARK_FILESYSTEM, FAN_OPEN | FAN_ONDIR,
-                              AT_FDCWD, os.fsencode(prefix)) != 0:
-            raise OSError(ctypes.get_errno(), 'fanotify_mark failed for ' + prefix)
+                              AT_FDCWD, os.fsencode(str(existing))) != 0:
+            raise OSError(ctypes.get_errno(), 'fanotify_mark failed for ' + str(existing))
     stopping = []
     signal.signal(signal.SIGTERM, lambda *_: stopping.append(time.monotonic()))
     seen, events, overflow, me = set(), 0, False, os.getpid()

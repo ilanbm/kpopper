@@ -7,11 +7,11 @@ pull request that makes it read something undeclared, which is also the pull req
 changes the lane already runs for. Every push to main runs every lane on every platform.
 """
 import argparse
-import ast
 import fnmatch
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 
@@ -20,14 +20,17 @@ class Lane:
 
     Patterns are fnmatch patterns over repository paths, and `*` also matches `/`. `ignores`
     carves out of `reads` what the lane never opens. `python_entry_points` are scripts the lane
-    runs from the checkout: they, and every module they import, count as read. The audit of a
-    lane that is not `enforced` reports undeclared reads as warnings instead of failing.
+    runs from the checkout (globs allowed): they, and every module they import, count as read.
+    Files that `include_str!` or `include_bytes!` in the Rust sources under `rust_sources`
+    embed count as read. The audit of a lane that is not `enforced` reports undeclared reads as
+    warnings instead of failing.
     """
 
-    def __init__(self, reads, lists=(), ignores=(), audited=True, enforced=True, python_entry_points=()):
+    def __init__(self, reads, lists=(), ignores=(), audited=True, enforced=True, python_entry_points=(),
+                 rust_sources=()):
         self.reads, self.lists, self.ignores = tuple(reads), tuple(lists), tuple(ignores)
         self.audited, self.enforced = audited, enforced
-        self.python_entry_points = tuple(python_entry_points)
+        self.python_entry_points, self.rust_sources = tuple(python_entry_points), tuple(rust_sources)
 
 
 PYTHON_PACKAGE = ("scripts/*", "pyproject.toml")
@@ -89,7 +92,7 @@ LANES = {
     "installed": Lane(PYTHON_PACKAGE + RUNTIME_SOURCES + (
         "tests/test_reasoning*.py", "tests/reasoning/*", "tests/fixtures/*", "tests/__init__.py",
         "bin/*", "hooks/*", ".claude-plugin/*", ".codex-plugin/*", "package.json", "LICENSE",
-    ), audited=False),
+    ), audited=False, python_entry_points=("tests/test_reasoning*.py",)),
     # Rebuilding the reasoning runtime from source on every target. Reviewed, like installed.
     "runtime": Lane(RUNTIME_SOURCES, audited=False),
     # The native command: compilation, its tests, the release build and installed acceptance.
@@ -106,7 +109,9 @@ LANES = {
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
         # Run from the checkout, with everything they import: the host hooks its tests compare,
         # and the setup that builds the Lean program its tests load.
-        python_entry_points=("scripts/followups_hook.py", "scripts/watch_hook.py", "scripts/session/core.py")),
+        python_entry_points=("scripts/followups_hook.py", "scripts/watch_hook.py", "scripts/ground_hook.py",
+                             "scripts/edit_hook.py", "scripts/session/core.py"),
+        rust_sources=("native",)),
     # The research exercise through the installed package and CLI.
     "examples": Lane(PYTHON_PACKAGE + RESEARCH_EXAMPLE_INPUTS, enforced=False),
 }
@@ -166,23 +171,50 @@ def matches(path, patterns):
 def lane_reads(lane, path, root=None):
     if matches(path, lane.ignores + RECORD_JOB):
         return False
-    return matches(path, lane.reads) or path in python_closure(lane.python_entry_points, root)
+    return (matches(path, lane.reads) or path in python_closure(lane.python_entry_points, root)
+            or path in rust_embeds(lane.rust_sources, root))
+
+
+def repository_root(root=None):
+    return Path(root) if root else Path(__file__).resolve().parents[2]
+
+
+def rust_embeds(directories, root=None):
+    """Tracked files the Rust sources under the directories embed with include_str!/include_bytes!."""
+    root = repository_root(root)
+    key = ("rust", tuple(directories), str(root))
+    if key not in CLOSURES:
+        found = set()
+        for directory in directories:
+            for source in sorted((root / directory).rglob("*.rs")):
+                try:
+                    text = source.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                for literal in EMBED.findall(text):
+                    target = Path(os.path.normpath(str(source.parent / literal)))
+                    if target.is_file() and root in target.parents:
+                        found.add(target.relative_to(root).as_posix())
+        CLOSURES[key] = frozenset(found)
+    return CLOSURES[key]
 
 
 def python_closure(entry_points, root=None):
-    """The entry scripts and every module of the package they import, as tracked paths."""
-    root = Path(root) if root else Path(__file__).resolve().parents[2]
-    key = (tuple(entry_points), str(root))
+    """The entry scripts and every module of the checkout they import, as tracked paths."""
+    root = repository_root(root)
+    key = ("python", tuple(entry_points), str(root))
     if key not in CLOSURES:
         CLOSURES[key] = frozenset(imported_modules(entry_points, root))
     return CLOSURES[key]
 
 
 CLOSURES = {}
+EMBED = re.compile(r'include_(?:str|bytes)!\(\s*"([^"]+)"\s*\)')
 
 
 def imported_modules(entry_points, root):
-    seen, pending = set(), [root / path for path in entry_points]
+    """Follow import statements, including those in code a test passes to another interpreter."""
+    seen, pending = set(), [path for pattern in entry_points for path in sorted(root.glob(pattern))]
     while pending:
         path = pending.pop()
         if path in seen or not path.is_file():
@@ -195,41 +227,40 @@ def imported_modules(entry_points, root):
             if (parent / "__init__.py").is_file() and parent / "__init__.py" not in seen:
                 pending.append(parent / "__init__.py")
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError, UnicodeDecodeError):
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
             continue
-        package = path.parent
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                names = [(alias.name, None) for alias in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                names = [(node.module or "", alias.name) for alias in node.names]
+        statements = [(dots, module, names) for dots, module, names in FROM_IMPORT.findall(text)]
+        statements += [("", module.split(" as ")[0].strip(), "") for line in PLAIN_IMPORT.findall(text)
+                       for module in line.split(",")]
+        for dots, module, names in statements:
+            members = [n.split(" as ")[0].strip() for n in names.strip("()").replace("\n", " ").split(",")]
+            if module.split(".")[0] == "kpopper":
+                module = "scripts" + module[len("kpopper"):]
+            if dots:
+                base = path.parent
+                for _ in range(len(dots) - 1):
+                    base = base.parent
+                bases = [base]
             else:
-                continue
-            level = getattr(node, "level", 0)
-            for module, member in names:
-                if level:
-                    base = package
-                    for _ in range(level - 1):
-                        base = base.parent
-                    bases = [base]
-                else:
-                    first = module.split(".")[0]
-                    # Run as a script, a sibling is importable by its bare name; the package
-                    # itself is `kpopper` once installed and `scripts` in the checkout.
-                    bases = [package] if first not in ("kpopper", "scripts") else [root]
-                    if first == "kpopper":
-                        module = "scripts" + module[len("kpopper"):]
-                parts = [p for p in module.split(".") if p]
-                for base in bases:
-                    target = base.joinpath(*parts) if parts else base
-                    for candidate in (target.with_suffix(".py") if parts else None, target / "__init__.py",
-                                      (target / member).with_suffix(".py") if member else None,
-                                      (target / member / "__init__.py") if member else None):
-                        if candidate is not None and candidate.is_file() and root in candidate.parents:
-                            pending.append(candidate)
+                # A sibling of a script (or of a test on the test path) is importable by its
+                # bare name, and a top-level package from the checkout root; the package is
+                # `kpopper` once installed and `scripts` in the checkout.
+                bases = [path.parent, root]
+            parts = [p for p in module.split(".") if p]
+            for base in bases:
+                target = base.joinpath(*parts) if parts else base
+                candidates = [target / "__init__.py"] + ([target.with_suffix(".py")] if parts else [])
+                candidates += [(target / m).with_suffix(".py") for m in members if m.isidentifier()]
+                candidates += [target / m / "__init__.py" for m in members if m.isidentifier()]
+                for candidate in candidates:
+                    if candidate.is_file() and root in candidate.parents:
+                        pending.append(candidate)
     return {path.relative_to(root).as_posix() for path in seen}
 
+
+FROM_IMPORT = re.compile(r"^[ \t]*from[ \t]+(\.*)([\w.]*)[ \t]+import[ \t]+(\([^)]*\)|[^\n#;]+)", re.M)
+PLAIN_IMPORT = re.compile(r"^[ \t]*import[ \t]+([\w.]+(?:[ \t]+as[ \t]+\w+)?(?:[ \t]*,[ \t]*[\w.]+(?:[ \t]+as[ \t]+\w+)?)*)", re.M)
 
 def lane_lists(lane, directory):
     return matches(directory, lane.lists)
