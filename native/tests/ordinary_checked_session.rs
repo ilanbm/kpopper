@@ -590,8 +590,9 @@ fn ordinary_live_session_reads_entries_pending_contributions_add() {
     }
 }
 
-// A record judgment may rest on an entry that only a pending contribution holds; the
-// live session reads the judgment over it, as the reference session does.
+// The record itself cannot depend on a pending entry: `add` refuses such a judgment and
+// `check` reports it. A judgment written by hand to rest on one still reads over the
+// contributed entry in the live session, as it does in the reference session.
 #[test]
 fn ordinary_live_session_reads_record_judgments_over_pending_entries() {
     let ledgers: J = serde_json::from_str(include_str!("fixtures/pending-state.json")).unwrap();
