@@ -137,6 +137,39 @@ class SessionActivity(unittest.TestCase):
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
         self.assertEqual(self.hook().returncode, 0)
 
+    def test_untouched_legacy_and_core_records_never_continue_the_turn(self):
+        for core in (False, True):
+            with self.subTest(core=core):
+                self.sid = 'untouched-core' if core else 'untouched-legacy'
+                self.mark = self.root / ('kpopper-base-' + self.sid)
+                if core:
+                    self.doc['meta'] = {'reasoning': {'version': 1, 'profile': 'core/v1',
+                                                     'requires': ['arithmetic/v1']}}
+                    self.save()
+                P.mark(str(self.mark), [str(self.record)])
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    code = P.gate(str(self.mark), [str(self.record)], turns=9, nudged_at=8)
+                self.assertEqual((code, output.getvalue()), (0, ''))
+                (self.root / ('kpopper-ground-' + self.sid + '.json')).write_text(
+                    json.dumps({'turns': 9, 'nudged_turn': 8}))
+                result = self.hook()
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+
+    def test_untouched_history_record_never_continues_the_turn(self):
+        from tests.test_history_snapshot_capture import HistorySnapshotCapture
+        fixture = HistorySnapshotCapture()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.record, self.work = fixture.entry, fixture.entry.parent
+        P.mark(str(self.mark), [str(self.record)])
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            code = P.gate(str(self.mark), [str(self.record)], turns=9, nudged_at=8)
+        self.assertEqual((code, output.getvalue()), (0, ''))
+        (self.root / ('kpopper-ground-' + self.sid + '.json')).write_text(
+            json.dumps({'turns': 9, 'nudged_turn': 8}))
+        result = self.hook()
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+
     def test_named_hypothesis_write_is_owned(self):
         self.add('p.hypothesis', hypothesis='proposal')
         first = self.hook()

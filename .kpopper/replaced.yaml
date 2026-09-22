@@ -116,3 +116,26 @@ d.first_meeting_artifact:
     doc.agent_graph: read 2026-09-01
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-18'
+d.gate_asks_once_after_work:
+- rests_on:
+  - s.2026_09_10_skills_split
+  - run.design_talk
+  - d.gate_reminds
+  - p.gate_bounces
+  verdict: a session that changed files of the tree, or ran eight prompts, with the record untouched is
+    asked once whether there was nothing to keep - as a line on the prompt, and as one stop on the turn
+    after a line went unanswered; the gate still yields after one bounce
+  because: Seven decisions lived only in chat and the gate could not see a record nobody touched ({{run.design_talk}}).
+    One stop is a question, not a failure, and it comes only after the softer form was ignored for a turn;
+    a stop that repeated would teach sessions to write filler, which the unattributed-entries reminder
+    ({{d.gate_reminds}}) already catches, and {{p.gate_bounces}} stays where it was.
+  wrong_if: p.gate_bounces > 1
+  seen:
+    s.2026_09_10_skills_split: read 2026-09-10
+    run.design_talk: read 2026-09-02
+    d.gate_reminds: the stop gate compares against the session-start mark and yields after one bounce;
+      unchanged existing judgments falsified by updated readings can stay flagged while recording finishes,
+      and check still reports their failed conditions
+    p.gate_bounces: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-22'

@@ -205,8 +205,7 @@ def prompt_context(payload, host, path):
 
 
 def reminder(record, sid, state, turn, host, workspace=None):
-    """The soft form of the gate's one question, on the prompt after real work left the
-    record untouched, repeated only after a cooldown: a line, never a stop."""
+    """Advisory recording context after work, repeated only after a prompt cooldown."""
     import provenance as P
     mark = Path(tempfile.gettempdir()) / ("kpopper-base-" + sid)
     try:

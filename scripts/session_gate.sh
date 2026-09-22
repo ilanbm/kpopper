@@ -5,9 +5,9 @@
 # finish. Everything is compared against the mark taken at session start, so a record
 # that was already red or already unserved never blocks a session that did not touch
 # it. An unchanged existing judgment falsified by updated readings remains flagged but
-# does not block recording. A session that did real work - files of the tree changed, or
-# enough prompts went by - and never touched the record is asked once whether there was
-# nothing to keep. Private write receipts establish authorship; imported or manual
+# does not block recording. Reminders about an untouched record are advisory prompt
+# context only: a Stop block creates a new continuation request on some hosts.
+# Private write receipts establish authorship; imported or manual
 # changes are not attributed to the session. Delivery receipts suppress each repeated
 # finding independently of the host's stop_hook_active flag. Validation still runs.
 # The host's hook may name itself (--host claude|codex) so the question names the host's
@@ -28,14 +28,8 @@ REC=$(printf '%s' "$IN" | "$PYTHON" "$HERE/workspace.py" --hook --path 2>/dev/nu
 SID=$(printf '%s' "$IN" | "$PYTHON" -c 'import json,re,sys; s=json.load(sys.stdin).get("session_id",""); print(s if isinstance(s,str) and re.fullmatch(r"[A-Za-z0-9_-]{1,200}",s) else "")' 2>/dev/null)
 BASE_FILE="${TMPDIR:-/tmp}/kpopper-base-$SID"
 [ -n "$SID" ] && [ -f "$BASE_FILE" ] || exit 0
-# how many prompts the session ran, and at which the grounding hook last asked its soft
-# question: counted by that hook, 0 and none where it did not run
-GROUND="${TMPDIR:-/tmp}/kpopper-ground-$SID.json"
-TURNS=$("$PYTHON" -c 'import json,sys; print(int(json.load(open(sys.argv[1])).get("turns", 0)))' "$GROUND" 2>/dev/null || echo 0)
-AT=$("$PYTHON" -c 'import json,sys; v=json.load(open(sys.argv[1])).get("nudged_turn"); print("" if v is None else int(v))' "$GROUND" 2>/dev/null || echo "")
-set -- gate "$BASE_FILE" "$REC" --turns "$TURNS" --session "$SID"
+set -- gate "$BASE_FILE" "$REC" --session "$SID"
 [ -n "$HOST" ] && set -- "$@" --host "$HOST"
-[ -n "$AT" ] && set -- "$@" --nudged-at "$AT"
 # 2 is the gate's own answer: something to say. Any other failure is the reader's, and a
 # reader that cannot run must not hold a session at its end.
 OUT=$("$PYTHON" "$HERE/provenance.py" "$@" 2>/dev/null)

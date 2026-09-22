@@ -162,7 +162,7 @@ fn hypothesis_only_ids_are_counted_by_the_gate() {
 }
 
 #[test]
-fn count_only_marks_remain_conservative_and_nudge_is_persisted_once() {
+fn count_only_marks_remain_conservative_and_untouched_records_do_not_block() {
     let (tmp, record, state) = setup(GOOD);
     fs::create_dir_all(state.parent().unwrap()).unwrap();
     fs::write(&state, "0").unwrap();
@@ -173,12 +173,17 @@ fn count_only_marks_remain_conservative_and_nudge_is_persisted_once() {
         0
     );
     session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
-    let mut nudged = options(&state, &record, tmp.path());
-    nudged.turns = 8;
-    let first = session_gate::gate(&nudged).unwrap();
-    assert_eq!(first.code, 2);
-    assert!(first.text.contains("8 prompts in"));
-    assert_eq!(session_gate::gate(&nudged).unwrap().code, 0);
+    let before = fs::read(&state).unwrap();
+    for turns in [8, 9, 28] {
+        let mut opts = options(&state, &record, tmp.path());
+        opts.turns = turns;
+        opts.nudged_at = Some(8);
+        let result = session_gate::gate(&opts).unwrap();
+        assert_eq!(result.code, 0, "{}", result.text);
+        assert!(result.text.is_empty());
+        assert!(result.issues.is_empty());
+        assert_eq!(fs::read(&state).unwrap(), before);
+    }
 }
 
 #[test]
@@ -296,7 +301,7 @@ fn marks_and_gate_rewrites_cannot_replace_recovery_journal_files() {
             );
             assert_eq!(fs::read(&target).unwrap(), retained);
             // Even a valid baseline placed in an owned journal namespace cannot
-            // authorize the gate's nudge rewrite of that pathname.
+            // authorize the gate to use that pathname as session state.
             fs::write(&target, &saved).unwrap();
             overlap.turns = 100;
             assert_eq!(
@@ -578,8 +583,8 @@ fn mixed_marks_preserve_failure_sets_profile_changes_nulls_and_nudges() {
             let mut options = options(&state, &record, tmp.path());
             options.turns = 8;
             let result = session_gate::gate(&options).unwrap();
-            assert_eq!(result.code, 2, "{}", result.text);
-            assert!(result.text.contains("8 prompts in"));
+            assert_eq!(result.code, 0, "{}", result.text);
+            assert!(result.text.is_empty());
         } else {
             session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
             let result = python(
@@ -592,8 +597,8 @@ fn mixed_marks_preserve_failure_sets_profile_changes_nulls_and_nudges() {
                     "8",
                 ],
             );
-            assert_eq!(result.0, 2, "{}", result.1);
-            assert!(result.1.contains("8 prompts in"));
+            assert_eq!(result.0, 0, "{}", result.1);
+            assert!(result.1.is_empty());
         }
     }
 }

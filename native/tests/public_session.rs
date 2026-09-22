@@ -145,7 +145,7 @@ fn first_write_stop_is_once_per_finding_and_resume_preserves_the_original_mark()
     assert!(success(f.hook("session-stop", json!({}))).stderr.is_empty());
 }
 #[test]
-fn ordinary_mark_and_gate_ignore_layout_and_nudge_once() {
+fn ordinary_mark_and_gate_ignore_layout_and_never_block_for_untouched_records() {
     let f = Fixture::new();
     fs::write(
         f.root.path().join("GROUNDING.yaml"),
@@ -160,9 +160,9 @@ fn ordinary_mark_and_gate_ignore_layout_and_nudge_once() {
         "{\"turns\":8}",
     )
     .unwrap();
-    let first = f.hook("session-stop", json!({}));
-    assert_eq!(first.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&first.stderr).contains("8 prompts in"));
+    let first = success(f.hook("session-stop", json!({})));
+    assert!(first.stdout.is_empty());
+    assert!(first.stderr.is_empty());
     assert!(success(f.hook("session-stop", json!({}))).stderr.is_empty());
 }
 #[test]

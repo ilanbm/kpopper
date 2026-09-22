@@ -25,7 +25,6 @@ use std::{
 
 const MAX_STATE: usize = 1024 * 1024;
 const TREE_FILES: usize = 500;
-const NUDGE_TURNS: u64 = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Issue {
@@ -580,54 +579,6 @@ pub fn mark(options: &GateOptions<'_>) -> Result<()> {
     write_mark(options.state_path, &state)
 }
 
-fn nudge(
-    base: &MarkState,
-    digest: &str,
-    workspace: &Path,
-    turns: u64,
-    host: Option<&str>,
-    nudged_at: Option<u64>,
-) -> Option<String> {
-    if base.digest.as_deref() != Some(digest)
-        || base.nudged
-        || nudged_at.is_some_and(|at| turns <= at)
-    {
-        return None;
-    }
-    let now = tree_state(workspace);
-    let mut changed = 0;
-    if let (Some(was), Some(now)) = (&base.tree, &now) {
-        changed = was
-            .files
-            .iter()
-            .collect::<BTreeSet<_>>()
-            .symmetric_difference(&now.files.iter().collect())
-            .count();
-        if was.head != now.head {
-            changed = changed.max(1);
-        }
-    }
-    if changed == 0 && turns < NUDGE_TURNS {
-        return None;
-    }
-    let record = match host {
-        Some("claude") => "/kpopper:record",
-        Some("codex") => "$record",
-        _ => "`kpop add`",
-    };
-    let what = if changed == 0 {
-        format!("{turns} prompts in")
-    } else {
-        format!(
-            "{changed} file{} of the tree changed",
-            if changed == 1 { "" } else { "s" }
-        )
-    };
-    Some(format!(
-        "kpopper: {what}, the record untouched. If a finding, decision or measurement came out of this session, {record} keeps it now; if nothing will be revisited, finish."
-    ))
-}
-
 /// Assess the stop gate from one fresh immutable capture. Source or assessment
 /// failure is returned as an error, never converted into a successful gate.
 pub fn gate(options: &GateOptions<'_>) -> Result<GateResult> {
@@ -646,7 +597,7 @@ pub fn gate_with_recording_context(
     let saved_base = read_mark(options.state_path)?;
     let mut use_recordings = true;
     loop {
-        let mut base = saved_base.clone();
+        let base = saved_base.clone();
         let (capture, current, recordings) = capture(options, use_recordings, preparing)?;
         if mark_overlaps_capture(options.state_path, &capture, options.paths) {
             return Err(Error("session_mark_overlaps_record".into()));
@@ -801,26 +752,6 @@ pub fn gate_with_recording_context(
                     });
                 }
             }
-        }
-        if lines.is_empty()
-            && let Some(message) = nudge(
-                &base,
-                &source_digest(&capture, options.paths),
-                options.workspace,
-                options.turns,
-                options.host,
-                options.nudged_at,
-            )
-        {
-            lines.push(message.clone());
-            issues.push(Issue {
-                kind: "untouched".into(),
-                subject: "record".into(),
-                text: message,
-            });
-            base.nudged = true;
-            base.nudged_turn = Some(options.turns);
-            let _ = write_mark(options.state_path, &base);
         }
         let allowed_falsifiers = allowed.values().cloned().collect::<Vec<_>>();
         if !allowed_falsifiers.is_empty() {

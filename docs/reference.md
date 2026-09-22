@@ -395,10 +395,12 @@ touch, with the skill that reads them; an entry is named until it is read, then 
 when its recorded body changes or the session compacts, and an unread one repeats after a
 cooldown of ten prompts. Before a file is edited, the entries whose source it is, or whose
 reading a recipe takes from it, are said once. The stop gate compares with a session-start
-baseline and reminds once about new failures, intents no tab serves and entries with no intent;
-a session that changed files of the tree, or ran eight prompts, with the record untouched is
-asked once whether there was nothing to keep - as a stop, on the turn after the same
-question rode a prompt unanswered. An unchanged judgment whose falsifier fires after a new
+baseline and reminds once about new failures and entries with no intent. A session that
+changed files of the tree, or ran eight prompts, with the record untouched receives advisory
+`UserPromptSubmit` context, with a ten-prompt cooldown. This reminder preserves the current
+user request, respects record-write authorization and never blocks Stop or creates a new
+continuation request. It uses `additionalContext`, not a user-facing `systemMessage`;
+host interfaces may still expose hook activity. An unchanged judgment whose falsifier fires after a new
 scalar reading can remain flagged while recording finishes; `check` still reports it.
 The Claude/Codex Stop hook attributes entries and intents to a session only when a
 successful direct write retained a private receipt for that exact entry body and source
