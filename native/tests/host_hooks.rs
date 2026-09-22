@@ -315,12 +315,13 @@ fn native_process_matches_python_citation_selection_and_once_only_state() {
 
 #[test]
 fn malformed_cli_input_is_nonblocking_for_every_hook() {
+    let temporary = tempfile::tempdir().unwrap();
     for kind in ["followups", "watch", "ground", "edit"] {
         let output = raw_process(
             Path::new(env!("CARGO_BIN_EXE_kpop")),
             &["_hook", kind, "claude", "prompt"],
             b"{not-json",
-            Path::new("/tmp"),
+            temporary.path(),
         );
         assert_eq!(output.status.code(), Some(0), "{kind}");
         assert!(
@@ -477,16 +478,7 @@ fn watch_process_matches_python_delivery_and_consumes_each_session_once() {
     .unwrap();
     git(&main, &["add", "PROVENANCE.yaml"]);
     git(&main, &["commit", "-m", "initial"]);
-    git(
-        &main,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            "experiment",
-            work.to_str().unwrap(),
-        ],
-    );
+    git(&main, &["worktree", "add", "-b", "experiment", "../work"]);
     let updated = json!({"known":{"api.timeout":{"v":5},"checkout.budget":{"v":10},"other.value":{"v":2}},"judgments":{"c.positive":{"rests_on":["api.timeout"],"seen":{"api.timeout":5},"verdict":"Positive","wrong_if":"api.timeout < 0"},"c.checkout":{"rests_on":["api.timeout","checkout.budget"],"seen":{"api.timeout":5,"checkout.budget":10},"verdict":"Fits","wrong_if":"api.timeout > checkout.budget"}}});
     fs::write(
         main.join("PROVENANCE.yaml"),
