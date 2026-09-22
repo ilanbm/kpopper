@@ -28,10 +28,13 @@ jobs:
       documents: ${{ steps.select.outputs.documents }}
       session: ${{ steps.select.outputs.session }}
       installed: ${{ steps.select.outputs.installed }}
-      native: ${{ steps.select.outputs.native }}
+      runtime: ${{ steps.select.outputs.runtime }}
+      rust: ${{ steps.select.outputs.rust }}
       examples: ${{ steps.select.outputs.examples }}
+      platforms: ${{ steps.select.outputs.platforms }}
       test_suites: ${{ steps.select.outputs.test_suites }}
       test_matrix: ${{ steps.select.outputs.test_matrix }}
+      runtime_targets: ${{ steps.select.outputs.runtime_targets }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +42,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Select checks from the complete change
+      - name: Select the lanes the change reads
         id: select
         env:
           EVENT: ${{ github.event_name }}
@@ -81,8 +84,10 @@ jobs:
 
       - name: Install the package the way a user gets it
         run: pip install .
+      - name: Install the test runner the CI contracts exercise
+        run: python -m pip install -r .github/requirements-test.txt
       - name: Check skill/release contracts and CI selection
-        run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection tests.test_ci_execution tests.test_ci_sharding -v
+        run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection tests.test_ci_execution tests.test_ci_sharding tests.test_ci_audit -v
 
       - name: The record holds together
         run: kpop --frozen check
@@ -135,6 +140,8 @@ jobs:
         run: pip install ".[html]"
       - name: Install the test runner and schema validator
         run: python -m pip install -r .github/requirements-test.txt
+      - name: Record the files the tests open
+        run: python .github/scripts/ci_audit.py start
       - name: The reader and the page keep their contract
         env:
           TEST_SUITES: ${{ needs.changes.outputs.test_suites }}
@@ -152,6 +159,11 @@ jobs:
       - name: The scoped-query example works through the installed writer and CLI
         if: needs.changes.outputs.python == 'true' && matrix.group == 1
         run: python examples/scoped-query/exercise.py
+      - name: The tests read only what their lane declares
+        if: ${{ !cancelled() }}
+        run: >-
+          python .github/scripts/ci_audit.py finish
+          --lane ${{ needs.changes.outputs.python == 'true' && 'python' || 'documents' }}
 
   examples:
     name: research example (${{ matrix.python }})
@@ -170,8 +182,13 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install the package with its committed reasoning runtime
         run: python -m pip install .
+      - name: Record the files the example opens
+        run: python .github/scripts/ci_audit.py start
       - name: Check the research exercise, captured output and CLI projection
         run: python .github/scripts/check_research_example.py
+      - name: The example reads only what its lane declares
+        if: ${{ !cancelled() }}
+        run: python .github/scripts/ci_audit.py finish --lane examples
       - name: The example leaves the source tree unchanged
         run: git diff --exit-code
 
@@ -190,12 +207,17 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: tests/document-support/package-lock.json
-      - name: Install the document runtime and pinned DOM test dependency
-        run: |
-          pip install ".[html]"
-          npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
+      - name: Install the document runtime
+        run: pip install ".[html]"
+      - name: Record the files the DOM suite opens
+        run: python .github/scripts/ci_audit.py start
+      - name: Install the pinned DOM test dependency
+        run: npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
       - name: Check offline evidence, copy choices and export recovery
         run: npm run test:documents
+      - name: The DOM suite reads only what its lane declares
+        if: ${{ !cancelled() }}
+        run: python .github/scripts/ci_audit.py finish --lane documents
       - name: Test setup leaves the source tree unchanged
         run: git diff --exit-code
 
@@ -204,6 +226,7 @@ jobs:
     if: needs.changes.outputs.session == 'true'
     uses: ./.github/workflows/session.yml
     with:
+      audit: true
       # A pull request checks the two platforms nobody here develops on. Darwin
       # bills at ten times the Linux rate per minute, and the branch it would
       # check is the one its author runs on a Darwin machine all day; the push
@@ -213,17 +236,31 @@ jobs:
             && '["ubuntu-latest", "windows-latest"]'
             || '["ubuntu-latest", "macos-latest", "windows-latest"]' }}
 
+  # The targets of reasoning-runtime.yml, called directly so that a pull request can leave
+  # out Intel macOS. That workflow and reasoning-target.yml are recorded in the GMP
+  # corresponding-source archive, so selection lives here rather than in them.
   reasoning-runtime:
+    name: reasoning-runtime (${{ matrix.target }})
     needs: [changes, record]
     if: needs.changes.outputs.installed == 'true'
-    uses: ./.github/workflows/reasoning-runtime.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.changes.outputs.runtime_targets) }}
+    uses: ./.github/workflows/reasoning-target.yml
     with:
-      rebuild: ${{ needs.changes.outputs.native == 'true' }}
+      runner: ${{ matrix.runner }}
+      target: ${{ matrix.target }}
+      python-versions: ${{ matrix.pythons }}
+      rebuild: ${{ needs.changes.outputs.runtime == 'true' }}
 
   native-cli:
     needs: [changes, record]
-    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true' || needs.changes.outputs.session == 'true' || needs.changes.outputs.installed == 'true' || needs.changes.outputs.native == 'true'
+    if: needs.changes.outputs.rust == 'true'
     uses: ./.github/workflows/native-rust.yml
+    with:
+      target: ${{ needs.changes.outputs.platforms == 'all' && 'all' || 'without-darwin-x86_64' }}
+      audit: true
 
   ci-required:
     timeout-minutes: 10

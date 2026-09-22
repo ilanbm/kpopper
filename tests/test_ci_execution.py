@@ -73,7 +73,11 @@ class TestPlans(unittest.TestCase):
         ci = module('ci_selection')
         self.assertEqual(ci.test_suites(ci.select(['scripts/cli.py'])),
                          ['core', 'documents', 'reasoning', 'session', 'other'])
-        self.assertEqual(ci.test_suites(ci.select(['scripts/document/layer.js'])), ['documents'])
+        # The Python suite reads every module of the package, the document layer included;
+        # only the DOM suite's own files are the documents lane's alone.
+        self.assertEqual(ci.test_suites(ci.select(['scripts/document/layer.js'])),
+                         ['core', 'documents', 'reasoning', 'session', 'other'])
+        self.assertEqual(ci.test_suites(ci.select(['tests/test_document_ui.cjs'])), ['documents'])
         self.assertEqual(ci.test_suites(ci.select(['README.md'])), [])
 
     def test_every_test_file_belongs_to_exactly_one_suite_including_new_tests(self):
