@@ -106,6 +106,14 @@ fn context(output: &Output) -> String {
     }
     serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["hookSpecificOutput"]["additionalContext"].as_str().unwrap().to_owned()
 }
+fn diagnostic(output: &Output) -> String {
+    format!(
+        "status={:?}\nstdout={}\nstderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
 fn python(
     script: &str,
     args: &[&str],
@@ -200,7 +208,13 @@ fn native_process_matches_python_ground_state_transitions_and_preserves_record()
     );
     assert_eq!(p.status.code(), Some(0));
     assert_eq!(n.status.code(), Some(0));
-    assert_eq!(context(&n), context(&p));
+    assert_eq!(
+        context(&n),
+        context(&p),
+        "python:\n{}\nnative:\n{}",
+        diagnostic(&p),
+        diagnostic(&n)
+    );
     assert!(context(&n).contains("heat.loss_kw"));
     assert_eq!(
         context(&native(
@@ -332,7 +346,7 @@ fn malformed_cli_input_is_nonblocking_for_every_hook() {
 }
 
 #[test]
-fn followup_process_matches_python_summary_and_keeps_product_backup_unchanged() {
+fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supported() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
     let work = root.join("work");
@@ -416,6 +430,7 @@ fn followup_process_matches_python_summary_and_keeps_product_backup_unchanged() 
         .write_all(serde_json::to_string(&payload_nv).unwrap().as_bytes())
         .unwrap();
     let nv = nv.wait_with_output().unwrap();
+    assert_eq!(py.status.code(), Some(0), "{}", diagnostic(&py));
     assert_eq!(
         nv.status.code(),
         Some(0),
@@ -429,29 +444,69 @@ fn followup_process_matches_python_summary_and_keeps_product_backup_unchanged() 
     );
     let native_text = context(&nv);
     let python_text = context(&py);
-    let native_json = serde_json::from_str::<serde_json::Value>(
-        native_text
-            .strip_prefix("KPOPPER_FOLLOWUPS ")
-            .unwrap()
-            .split_once('\n')
-            .unwrap()
-            .0,
-    )
-    .unwrap();
-    let python_json = serde_json::from_str::<serde_json::Value>(
-        python_text
-            .strip_prefix("KPOPPER_FOLLOWUPS ")
-            .unwrap()
-            .split_once('\n')
-            .unwrap()
-            .0,
-    )
-    .unwrap();
-    assert_eq!(native_json, python_json);
-    assert_eq!(
-        native_text.split_once('\n').unwrap().1,
-        python_text.split_once('\n').unwrap().1
+    assert!(
+        native_text.starts_with("KPOPPER_FOLLOWUPS "),
+        "native hook produced no followup context:\n{}",
+        diagnostic(&nv)
     );
+    assert!(native_text.contains("\"state\":\"ready\""));
+    let mut again = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["_hook", "followups"])
+        .current_dir(&work)
+        .env("XDG_STATE_HOME", &state)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    again
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(serde_json::to_string(&payload_nv).unwrap().as_bytes())
+        .unwrap();
+    let again = again.wait_with_output().unwrap();
+    assert_eq!(again.status.code(), Some(0), "{}", diagnostic(&again));
+    assert!(again.stdout.is_empty(), "{}", diagnostic(&again));
+    if cfg!(windows) {
+        // The retained Python hook explicitly refuses writes without POSIX fcntl.
+        // Native Windows delivery remains required and is asserted above.
+        assert!(python_text.is_empty(), "{}", diagnostic(&py));
+        assert!(
+            String::from_utf8_lossy(&py.stderr).contains("POSIX file locking"),
+            "{}",
+            diagnostic(&py)
+        );
+    } else {
+        assert!(
+            python_text.starts_with("KPOPPER_FOLLOWUPS "),
+            "python oracle produced no followup context:\n{}",
+            diagnostic(&py)
+        );
+        let native_json = serde_json::from_str::<serde_json::Value>(
+            native_text
+                .strip_prefix("KPOPPER_FOLLOWUPS ")
+                .unwrap()
+                .split_once('\n')
+                .unwrap()
+                .0,
+        )
+        .unwrap();
+        let python_json = serde_json::from_str::<serde_json::Value>(
+            python_text
+                .strip_prefix("KPOPPER_FOLLOWUPS ")
+                .unwrap()
+                .split_once('\n')
+                .unwrap()
+                .0,
+        )
+        .unwrap();
+        assert_eq!(native_json, python_json);
+        assert_eq!(
+            native_text.split_once('\n').unwrap().1,
+            python_text.split_once('\n').unwrap().1
+        );
+    }
     assert_eq!(
         fs::read(store_root.join("followups.previous.yaml")).unwrap(),
         backup
@@ -460,7 +515,7 @@ fn followup_process_matches_python_summary_and_keeps_product_backup_unchanged() 
 }
 
 #[test]
-fn watch_process_matches_python_delivery_and_consumes_each_session_once() {
+fn watch_native_delivery_is_positive_on_windows_and_matches_python_where_supported() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
     let main = root.join("main");
@@ -562,14 +617,25 @@ fn watch_process_matches_python_delivery_and_consumes_each_session_once() {
         .write_all(serde_json::to_string(&nv_payload).unwrap().as_bytes())
         .unwrap();
     let nv = nv.wait_with_output().unwrap();
-    assert_eq!(py.status.code(), Some(0));
-    assert_eq!(nv.status.code(), Some(0));
+    assert_eq!(py.status.code(), Some(0), "{}", diagnostic(&py));
+    assert_eq!(nv.status.code(), Some(0), "{}", diagnostic(&nv));
     let p = context(&py);
     let n = context(&nv);
-    assert!(p.starts_with("KPOPPER_WATCH "));
-    assert!(n.starts_with("KPOPPER_WATCH "));
-    assert!(p.contains("c.checkout"));
+    assert!(n.starts_with("KPOPPER_WATCH "), "{}", diagnostic(&nv));
     assert!(n.contains("c.checkout"));
+    if cfg!(windows) {
+        // The retained Python waiter has no Windows locking implementation.
+        // Native Windows delivery remains required and is asserted above.
+        assert!(p.is_empty(), "{}", diagnostic(&py));
+        assert!(
+            String::from_utf8_lossy(&py.stderr).contains("fcntl"),
+            "{}",
+            diagnostic(&py)
+        );
+    } else {
+        assert!(p.starts_with("KPOPPER_WATCH "), "{}", diagnostic(&py));
+        assert!(p.contains("c.checkout"));
+    }
     let mut again = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "watch", "codex", "wait", "--wait-seconds", "0"])
         .current_dir(&work)
@@ -586,7 +652,8 @@ fn watch_process_matches_python_delivery_and_consumes_each_session_once() {
         .write_all(serde_json::to_string(&nv_payload).unwrap().as_bytes())
         .unwrap();
     let again = again.wait_with_output().unwrap();
-    assert!(again.stdout.is_empty());
+    assert_eq!(again.status.code(), Some(0), "{}", diagnostic(&again));
+    assert!(again.stdout.is_empty(), "{}", diagnostic(&again));
     assert_eq!(
         [
             fs::read(main.join("PROVENANCE.yaml")).unwrap(),

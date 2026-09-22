@@ -638,7 +638,7 @@ fn edit(payload: &J, host: Option<&str>) -> Result<Output> {
     let Ok(rel) = path.strip_prefix(base) else {
         return Ok(empty());
     };
-    let rel = rel.to_string_lossy().replace('\\', "/");
+    let rel = rel.to_string_lossy().into_owned();
     let state_file = session(payload).map(state_path);
     let mut state = state_file.as_deref().map(load_json).unwrap_or_default();
     if state

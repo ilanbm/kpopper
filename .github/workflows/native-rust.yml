@@ -19,6 +19,7 @@ on:
         options:
           - full
           - final-fixes
+          - hooks
           - distribution
       target:
         description: Platform matrix target to run
@@ -132,7 +133,7 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
       - name: Generate Windows history group vectors with the pinned Python reference
-        if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution'
+        if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' && inputs.validation != 'hooks'
         shell: python
         run: |
           import os, pathlib, subprocess, sys
@@ -172,6 +173,9 @@ jobs:
               full)
                 cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3'
                 ;;
+              hooks)
+                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test host_hooks --test cli_alias
+                ;;
               final-fixes)
                 cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib store::locking_tests
                 cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib ingestion_orchestration::tests
@@ -184,7 +188,7 @@ jobs:
             esac
           } 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
       - name: Compare ingestion and branch commands with the pinned Python reference
-        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' }}
+        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' && inputs.validation != 'hooks' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -215,10 +219,13 @@ jobs:
           retention-days: 7
       - name: Check Windows installer refuses repurposed public files
         if: matrix.target == 'windows-x86_64'
-        run: python -m unittest -v tests.test_native_distribution.NativeDistribution.test_windows_installer_refuses_modified_managed_public_files
+        run: >-
+          python -m unittest -v
+          tests.test_native_distribution.NativeDistribution.test_windows_installer_refuses_modified_managed_public_files
+          tests.test_native_distribution.NativeDistribution.test_cargo_metadata_utf8_does_not_depend_on_process_locale
       - name: Build the platform release
         id: native-release
-        if: ${{ !cancelled() && steps.native-source.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.native-source.outcome == 'success' && inputs.validation != 'hooks' }}
         working-directory: native
         shell: bash
         run: |
@@ -249,7 +256,7 @@ jobs:
           shutil.copytree(root/'scripts/reasoning/third_party', reasoning/'notices'/'lean')
       - name: Collect Rust dependency license texts
         id: native-notices
-        if: ${{ !cancelled() && steps.native-bundle.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.native-source.outcome == 'success' && (steps.native-bundle.outcome == 'success' || inputs.validation == 'hooks') }}
         shell: python
         run: |
           import os, pathlib, subprocess, sys

@@ -13,6 +13,8 @@ own `scripts/runtime/TARGET` payload.
 The Python runtime described below is source-only compatibility mode for legacy
 workflows. Select it explicitly with `KPOPPER_RUNTIME=python`; missing native
 runtime must not silently fall back to Python or to a different `kpop` on `PATH`.
+The Python followup and watch hooks require POSIX file locking; use the native
+runtime for those deliveries on Windows.
 
 In explicit Python compatibility mode, Claude Code and Codex copy plugin files; that
 does not install Python dependencies.

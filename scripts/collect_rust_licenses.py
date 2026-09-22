@@ -55,7 +55,7 @@ def load_metadata(args):
     if args.filter_platform:
         command.extend(["--filter-platform", args.filter_platform])
     try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        result = subprocess.run(command, check=True, capture_output=True, text=True, encoding="utf-8")
         return json.loads(result.stdout)
     except FileNotFoundError:
         fail("cargo executable was not found")

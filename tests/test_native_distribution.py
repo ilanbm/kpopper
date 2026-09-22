@@ -190,6 +190,24 @@ class NativeDistribution(unittest.TestCase):
         self.assertIn("no primary license text", result.stderr)
         self.assertFalse(output.exists())
 
+    @unittest.skipUnless(hasattr(subprocess, "_text_encoding"), "locale decoder hook requires Python 3.10+")
+    def test_cargo_metadata_utf8_does_not_depend_on_process_locale(self):
+        import importlib.util
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location("license_collector_utf8", LICENSE_COLLECTOR)
+        collector = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(collector)
+        expected = {"description": "עברית 🦀"}
+        data = json.dumps(expected, ensure_ascii=False).encode("utf-8").hex()
+        producer = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(bytes.fromhex(%r))" % data]
+        real_run = subprocess.run
+        args = SimpleNamespace(metadata=None, cargo="cargo", manifest_path=ROOT / "native/Cargo.toml",
+                               filter_platform=None)
+        with patch.object(subprocess, "_text_encoding", return_value="cp1252"), \
+             patch.object(collector.subprocess, "run", side_effect=lambda command, **options: real_run(producer, **options)):
+            self.assertEqual(collector.load_metadata(args), expected)
+
     def test_notice_alone_cannot_replace_license_terms(self):
         manifest, metadata = self.rust_metadata_fixture(missing_text=True)
         data = json.loads(metadata.read_text())

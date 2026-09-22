@@ -44,7 +44,8 @@ python -m pip install -e ".[html]"
 On Windows, create the retained Python environment with `py -m venv .venv` and activate
 it in PowerShell with `.venv\Scripts\Activate.ps1`. Native Rust CLI and durable report
 batching support Windows; the legacy Python compatibility path retains its POSIX file
-locking limitation.
+locking limitation. Python followup/watch hooks also require POSIX; native Windows
+delivery tests check their behavior directly.
 
 | If you are changing… | Start here |
 |---|---|
