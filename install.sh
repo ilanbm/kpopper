@@ -53,8 +53,38 @@ esac
 
 TMP_ROOT=${TMPDIR:-/tmp}
 WORK=$(mktemp -d "$TMP_ROOT/kpopper-install.XXXXXX") || die "cannot create temporary directory"
-cleanup() { rm -rf "$WORK"; }
-trap cleanup EXIT HUP INT TERM
+SUCCESS=0
+DEST=
+BACKUP=
+DEST_TOUCHED=0
+LINKS_TOUCHED=0
+PUBLIC_BIN=
+cleanup() {
+  STATUS=$?
+  set +e
+  if [ "$SUCCESS" -ne 1 ]; then
+    if [ "$LINKS_TOUCHED" -eq 1 ]; then
+      for NAME in kpop kpopper; do
+        LINK=$PUBLIC_BIN/$NAME
+        rm -f "$LINK"
+        if [ -f "$WORK/old-link-$NAME" ]; then
+          OLD=$(sed -n '1p' "$WORK/old-link-$NAME")
+          ln -s "$OLD" "$LINK"
+        fi
+      done
+    fi
+    if [ "$DEST_TOUCHED" -eq 1 ]; then
+      [ ! -e "$DEST" ] || rm -rf "$DEST"
+      [ ! -e "$BACKUP" ] || mv "$BACKUP" "$DEST"
+    fi
+  fi
+  [ -z "$PUBLIC_BIN" ] || rm -f "$PUBLIC_BIN/.install-kpop-$$" "$PUBLIC_BIN/.install-kpopper-$$"
+  rm -rf "$WORK"
+  trap - EXIT
+  exit "$STATUS"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 if [ -n "$ARCHIVE" ]; then
   [ -n "$VERSION" ] || die "--version is required with --archive"
@@ -125,8 +155,13 @@ if [ -n "$PLUGIN_ROOT" ]; then
   mkdir -p "$STAGE"
   cp -R "$SOURCE/." "$STAGE/"
   printf '%s\n' "$VERSION" > "$STAGE/.kpopper-managed"
-  [ ! -e "$DEST" ] || rm -rf "$DEST"
-  mv "$STAGE" "$DEST"
+  BACKUP=$PLUGIN_ROOT/scripts/runtime/.previous-$TARGET-$$
+  [ ! -e "$BACKUP" ] || die "temporary plugin backup already exists: $BACKUP"
+  DEST_TOUCHED=1
+  [ ! -e "$DEST" ] || mv "$DEST" "$BACKUP"
+  mv "$STAGE" "$DEST" || die "cannot activate plugin runtime"
+  SUCCESS=1
+  [ ! -e "$BACKUP" ] || rm -rf "$BACKUP"
   printf 'Installed kpopper %s plugin runtime at %s\n' "$VERSION" "$DEST"
   exit 0
 fi
@@ -140,6 +175,7 @@ for NAME in kpop kpopper; do
     [ -L "$LINK" ] || die "refusing to replace unmanaged path: $LINK"
     OLD=$(readlink "$LINK") || die "cannot inspect existing link: $LINK"
     case "$OLD" in ../lib/kpopper/*/*/bin/$NAME|"$BASE"/lib/kpopper/*/*/bin/$NAME) ;; *) die "refusing to replace unmanaged link: $LINK" ;; esac
+    printf '%s\n' "$OLD" > "$WORK/old-link-$NAME"
   fi
 done
 if [ -e "$DEST" ] && [ ! -f "$DEST/.kpopper-managed" ]; then
@@ -151,11 +187,19 @@ STAGE=$BASE/lib/kpopper/$VERSION/.install-$TARGET-$$
 mkdir "$STAGE"
 cp -R "$PACKAGE_ROOT/." "$STAGE/"
 printf '%s\n' "$VERSION" > "$STAGE/.kpopper-managed"
-[ ! -e "$DEST" ] || rm -rf "$DEST"
-mv "$STAGE" "$DEST"
+BACKUP=$BASE/lib/kpopper/$VERSION/.previous-$TARGET-$$
+[ ! -e "$BACKUP" ] || die "temporary version backup already exists: $BACKUP"
+DEST_TOUCHED=1
+[ ! -e "$DEST" ] || mv "$DEST" "$BACKUP"
+mv "$STAGE" "$DEST" || die "cannot activate versioned payload"
 for NAME in kpop kpopper; do
   LINK=$PUBLIC_BIN/$NAME
-  rm -f "$LINK"
-  ln -s "../lib/kpopper/$VERSION/$TARGET/bin/$NAME" "$LINK"
+  TEMP_LINK=$PUBLIC_BIN/.install-$NAME-$$
+  [ ! -e "$TEMP_LINK" ] && [ ! -L "$TEMP_LINK" ] || die "temporary public path already exists: $TEMP_LINK"
+  ln -s "../lib/kpopper/$VERSION/$TARGET/bin/$NAME" "$TEMP_LINK"
+  mv -f "$TEMP_LINK" "$LINK" || die "cannot activate public command: $LINK"
+  LINKS_TOUCHED=1
 done
+SUCCESS=1
+[ ! -e "$BACKUP" ] || rm -rf "$BACKUP"
 printf 'Installed kpopper %s at %s\nPublic commands: %s/kpop and %s/kpopper\n' "$VERSION" "$DEST" "$PUBLIC_BIN" "$PUBLIC_BIN"

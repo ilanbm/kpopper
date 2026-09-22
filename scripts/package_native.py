@@ -43,7 +43,7 @@ def regular_file(path, label):
         fail("%s must be a regular file: %s" % (label, path))
 
 
-def resource_entries(root):
+def resource_entries(root, windows=False):
     if root.is_symlink() or not root.is_dir():
         fail("resources must be a real directory")
     try:
@@ -70,7 +70,9 @@ def resource_entries(root):
                 safe_component(name, "resource path component")
                 item = current_path / name
                 regular_file(item, "resource")
-                files.append((PurePosixPath("bin/resources") / item.relative_to(root).as_posix(), item, 0o644))
+                executable = bool(item.stat().st_mode & 0o111) or (windows and item.suffix.lower() == ".exe")
+                files.append((PurePosixPath("bin/resources") / item.relative_to(root).as_posix(),
+                              item, 0o755 if executable else 0o644))
     return sorted(set(directories), key=str), sorted(files, key=lambda row: str(row[0]))
 
 
@@ -147,7 +149,7 @@ def main(argv=None):
         fail("binary names for %s must be %s and %s" % (args.target, *expected))
     regular_file(args.binary, "binary")
     regular_file(args.alias, "alias")
-    resource_dirs, resource_files = resource_entries(args.resources)
+    resource_dirs, resource_files = resource_entries(args.resources, windows=windows)
     files = [(PurePosixPath("bin") / expected[0], args.binary, 0o755),
              (PurePosixPath("bin") / expected[1], args.alias, 0o755), *resource_files]
     files.sort(key=lambda row: str(row[0]))

@@ -100,8 +100,19 @@ try {
         $Stage = Join-Path $Parent (".install-$Target-" + [Guid]::NewGuid().ToString('N'))
         Copy-Item -LiteralPath $Source -Destination $Stage -Recurse
         Set-Content -LiteralPath (Join-Path $Stage ".kpopper-managed") -Value $Version -Encoding ASCII
-        if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
-        Move-Item -LiteralPath $Stage -Destination $Destination
+        $Backup = Join-Path $Parent (".previous-$Target-" + [Guid]::NewGuid().ToString('N'))
+        $HadPrevious = Test-Path -LiteralPath $Destination
+        if ($HadPrevious) { Move-Item -LiteralPath $Destination -Destination $Backup }
+        try {
+            Move-Item -LiteralPath $Stage -Destination $Destination
+        } catch {
+            if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
+            if ($HadPrevious -and (Test-Path -LiteralPath $Backup)) {
+                Move-Item -LiteralPath $Backup -Destination $Destination
+            }
+            throw
+        }
+        if (Test-Path -LiteralPath $Backup) { Remove-Item -LiteralPath $Backup -Recurse -Force }
         Write-Output "Installed kpopper $Version plugin runtime at $Destination"
         return
     }
@@ -110,11 +121,15 @@ try {
     $PublicBin = Join-Path $Prefix "bin"
     $Destination = Join-Path $Prefix "lib/kpopper/$Version/$Target"
     $BinMarker = Join-Path $PublicBin ".kpopper-managed"
+    $PublicResources = Join-Path $PublicBin "resources"
     foreach ($Name in @('kpop.exe', 'kpopper.exe')) {
         $Public = Join-Path $PublicBin $Name
         if ((Test-Path -LiteralPath $Public) -and -not (Test-Path -LiteralPath $BinMarker -PathType Leaf)) {
             Fail "refusing to replace unmanaged path: $Public"
         }
+    }
+    if ((Test-Path -LiteralPath $PublicResources) -and -not (Test-Path -LiteralPath $BinMarker -PathType Leaf)) {
+        Fail "refusing to replace unmanaged path: $PublicResources"
     }
     if ((Test-Path -LiteralPath $Destination) -and -not (Test-Path -LiteralPath (Join-Path $Destination ".kpopper-managed") -PathType Leaf)) {
         Fail "refusing to replace unmanaged version directory: $Destination"
@@ -124,11 +139,80 @@ try {
     $Stage = Join-Path (Split-Path -Parent $Destination) (".install-$Target-" + [Guid]::NewGuid().ToString('N'))
     Copy-Item -LiteralPath $PackageRoot -Destination $Stage -Recurse
     Set-Content -LiteralPath (Join-Path $Stage ".kpopper-managed") -Value $Version -Encoding ASCII
-    if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
-    Move-Item -LiteralPath $Stage -Destination $Destination
-    Copy-Item -LiteralPath (Join-Path $Destination "bin/kpop.exe") -Destination (Join-Path $PublicBin "kpop.exe") -Force
-    Copy-Item -LiteralPath (Join-Path $Destination "bin/kpopper.exe") -Destination (Join-Path $PublicBin "kpopper.exe") -Force
-    Set-Content -LiteralPath $BinMarker -Value "$Version/$Target" -Encoding ASCII
+    $Token = [Guid]::NewGuid().ToString('N')
+    $DestinationBackup = Join-Path (Split-Path -Parent $Destination) ".previous-$Target-$Token"
+    $HadDestination = Test-Path -LiteralPath $Destination
+    $OldPublic = @{}
+    foreach ($Name in @('kpop.exe', 'kpopper.exe')) {
+        $Public = Join-Path $PublicBin $Name
+        if (Test-Path -LiteralPath $Public -PathType Leaf) {
+            $Saved = Join-Path $Work "old-$Name"
+            Copy-Item -LiteralPath $Public -Destination $Saved
+            $OldPublic[$Name] = $Saved
+        }
+    }
+    $OldMarker = $null
+    if (Test-Path -LiteralPath $BinMarker -PathType Leaf) {
+        $OldMarker = Join-Path $Work "old-bin-marker"
+        Copy-Item -LiteralPath $BinMarker -Destination $OldMarker
+    }
+    if ($HadDestination) { Move-Item -LiteralPath $Destination -Destination $DestinationBackup }
+    $TemporaryResources = Join-Path $PublicBin ".install-resources-$Token"
+    $ResourcesBackup = Join-Path $PublicBin ".previous-resources-$Token"
+    $HadResources = Test-Path -LiteralPath $PublicResources
+    $ResourcesDisplaced = $false
+    $ResourcesActivated = $false
+    try {
+        Move-Item -LiteralPath $Stage -Destination $Destination
+        Copy-Item -LiteralPath (Join-Path $Destination "bin/resources") -Destination $TemporaryResources -Recurse
+        if ($HadResources) {
+            Move-Item -LiteralPath $PublicResources -Destination $ResourcesBackup
+            $ResourcesDisplaced = $true
+        }
+        Move-Item -LiteralPath $TemporaryResources -Destination $PublicResources
+        $ResourcesActivated = $true
+        foreach ($Name in @('kpop.exe', 'kpopper.exe')) {
+            $Public = Join-Path $PublicBin $Name
+            $TemporaryPublic = Join-Path $PublicBin ".install-$Name-$Token"
+            Copy-Item -LiteralPath (Join-Path $Destination "bin/$Name") -Destination $TemporaryPublic
+            Move-Item -LiteralPath $TemporaryPublic -Destination $Public -Force
+        }
+        $TemporaryMarker = Join-Path $PublicBin ".install-marker-$Token"
+        Set-Content -LiteralPath $TemporaryMarker -Value "$Version/$Target" -Encoding ASCII
+        Move-Item -LiteralPath $TemporaryMarker -Destination $BinMarker -Force
+    } catch {
+        foreach ($Name in @('kpop.exe', 'kpopper.exe')) {
+            $Public = Join-Path $PublicBin $Name
+            if ($OldPublic.ContainsKey($Name)) {
+                Copy-Item -LiteralPath $OldPublic[$Name] -Destination $Public -Force
+            } elseif (Test-Path -LiteralPath $Public) {
+                Remove-Item -LiteralPath $Public -Force
+            }
+        }
+        if ($OldMarker) {
+            Copy-Item -LiteralPath $OldMarker -Destination $BinMarker -Force
+        } elseif (Test-Path -LiteralPath $BinMarker) {
+            Remove-Item -LiteralPath $BinMarker -Force
+        }
+        if ($ResourcesActivated -and (Test-Path -LiteralPath $PublicResources)) {
+            Remove-Item -LiteralPath $PublicResources -Recurse -Force
+        }
+        if ($ResourcesDisplaced -and (Test-Path -LiteralPath $ResourcesBackup)) {
+            Move-Item -LiteralPath $ResourcesBackup -Destination $PublicResources
+        }
+        foreach ($Temporary in @($TemporaryResources, (Join-Path $PublicBin ".install-kpop.exe-$Token"),
+                                  (Join-Path $PublicBin ".install-kpopper.exe-$Token"),
+                                  (Join-Path $PublicBin ".install-marker-$Token"))) {
+            if (Test-Path -LiteralPath $Temporary) { Remove-Item -LiteralPath $Temporary -Recurse -Force }
+        }
+        if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Recurse -Force }
+        if ($HadDestination -and (Test-Path -LiteralPath $DestinationBackup)) {
+            Move-Item -LiteralPath $DestinationBackup -Destination $Destination
+        }
+        throw
+    }
+    if (Test-Path -LiteralPath $ResourcesBackup) { Remove-Item -LiteralPath $ResourcesBackup -Recurse -Force }
+    if (Test-Path -LiteralPath $DestinationBackup) { Remove-Item -LiteralPath $DestinationBackup -Recurse -Force }
     Write-Output "Installed kpopper $Version at $Destination"
     Write-Output "Public commands: $(Join-Path $PublicBin 'kpop.exe') and $(Join-Path $PublicBin 'kpopper.exe')"
 } finally {

@@ -57,8 +57,12 @@ class NativeDistribution(unittest.TestCase):
         self.alias.write_text("#!/bin/sh\nprintf 'kpopper <%s>\\n' \"$*\"\ncat\n", encoding="utf-8")
         self.binary.chmod(0o755)
         self.alias.chmod(0o755)
+        self.resource_executable = self.resources / "ordinary" / "epistemic-core"
+        self.resource_executable.write_text("#!/bin/sh\nprintf 'resource:%s' \"$1\"\n", encoding="utf-8")
+        self.resource_executable.chmod(0o755)
+        (self.resources / "ordinary" / "epistemic-core.exe").write_bytes(b"windows executable")
 
-    def package(self, target=None, output=None):
+    def package(self, target=None, output=None, version="0.9.0"):
         target = target or host_target()
         output = output or (self.root / "output with spaces")
         binary, alias = self.binary, self.alias
@@ -68,18 +72,18 @@ class NativeDistribution(unittest.TestCase):
             alias.write_bytes(self.alias.read_bytes())
         result = subprocess.run([
             sys.executable, str(PACKAGER), "--binary", str(binary), "--alias", str(alias),
-            "--resources", str(self.resources), "--target", target, "--version", "0.9.0",
+            "--resources", str(self.resources), "--target", target, "--version", version,
             "--commit", "e6f58c4", "--output", str(output),
         ], text=True, capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
         return Path(report["archive"]), report
 
-    def install(self, archive, prefix, digest=None, version="0.9.0"):
+    def install(self, archive, prefix, digest=None, version="0.9.0", env=None):
         return subprocess.run([
             "sh", str(INSTALLER), "--version", version, "--archive", str(archive),
             "--sha256", digest or sha256(archive), "--prefix", str(prefix),
-        ], text=True, capture_output=True, timeout=20)
+        ], text=True, capture_output=True, timeout=20, env=env)
 
     def test_packager_emits_deterministic_manifest_and_modes(self):
         target = host_target() or "linux-x86_64"
@@ -96,6 +100,7 @@ class NativeDistribution(unittest.TestCase):
             self.assertEqual(manifest["source_commit"], "e6f58c4")
             self.assertEqual(files["bin/kpop"]["mode"], "0755")
             self.assertEqual(files["bin/resources/ordinary/data.txt"]["mode"], "0644")
+            self.assertEqual(files["bin/resources/ordinary/epistemic-core"]["mode"], "0755")
             for item in manifest["files"]:
                 payload = archive.extractfile(top + "/" + item["path"]).read()
                 self.assertEqual(hashlib.sha256(payload).hexdigest(), item["sha256"])
@@ -109,7 +114,16 @@ class NativeDistribution(unittest.TestCase):
             files = {item["path"]: item for item in manifest["files"]}
             self.assertIn("bin/kpop.exe", files)
             self.assertIn("bin/kpopper.exe", files)
+            self.assertEqual(files["bin/resources/ordinary/epistemic-core.exe"]["mode"], "0755")
             self.assertEqual((source.getinfo(top + "/bin/kpop.exe").external_attr >> 16) & 0o777, 0o755)
+
+    def test_windows_public_install_keeps_resources_adjacent_and_managed(self):
+        script = (ROOT / "install.ps1").read_text(encoding="utf-8")
+        self.assertIn('$PublicResources = Join-Path $PublicBin "resources"', script)
+        self.assertIn('Join-Path $Destination "bin/resources"', script)
+        self.assertIn('Move-Item -LiteralPath $TemporaryResources -Destination $PublicResources', script)
+        self.assertIn('refusing to replace unmanaged path: $PublicResources', script)
+        self.assertIn('Move-Item -LiteralPath $ResourcesBackup -Destination $PublicResources', script)
 
     def test_packager_rejects_symlink_and_extra_resource_root(self):
         os.symlink(self.resources / "ordinary/data.txt", self.resources / "reasoning/link")
@@ -129,6 +143,9 @@ class NativeDistribution(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         installed = prefix / "lib/kpopper/0.9.0" / host_target()
         self.assertTrue((installed / "bin/resources/reasoning/data.txt").is_file())
+        resource = installed / "bin/resources/ordinary/epistemic-core"
+        self.assertTrue(os.access(resource, os.X_OK))
+        self.assertEqual(subprocess.check_output([str(resource), "works"], text=True), "resource:works")
         for name in ("kpop", "kpopper"):
             public = prefix / "bin" / name
             self.assertTrue(public.is_symlink())
@@ -205,6 +222,69 @@ class NativeDistribution(unittest.TestCase):
         self.assertTrue((runtime / "kpop").is_file())
         self.assertTrue((runtime / "resources/ordinary/data.txt").is_file())
         self.assertFalse((runtime / "manifest.json").exists())
+
+    def failing_mv_environment(self, destination):
+        tools = self.root / ("failing mv " + hashlib.sha256(str(destination).encode()).hexdigest()[:8])
+        tools.mkdir()
+        real_mv = subprocess.check_output(["sh", "-c", "command -v mv"], text=True).strip()
+        script = tools / "mv"
+        script.write_text(
+            "#!/bin/sh\nlast=\nfor value do last=$value; done\n"
+            "if [ \"$last\" = \"$FAIL_MV_DEST\" ] && [ ! -e \"$FAIL_MV_STATE\" ]; then\n"
+            "  : > \"$FAIL_MV_STATE\"\n  exit 73\nfi\n"
+            "exec \"$REAL_MV\" \"$@\"\n", encoding="utf-8")
+        script.chmod(0o755)
+        return dict(os.environ, PATH=str(tools) + os.pathsep + os.environ.get("PATH", ""),
+                    FAIL_MV_DEST=str(destination), FAIL_MV_STATE=str(tools / "failed-once"), REAL_MV=real_mv)
+
+    @unittest.skipIf(os.name == "nt" or host_target() is None, "POSIX installer contract")
+    def test_failed_same_version_activation_restores_payload_and_public_aliases(self):
+        prefix = self.root / "rollback prefix"
+        original, _ = self.package()
+        self.assertEqual(self.install(original, prefix).returncode, 0)
+        before = {name: (prefix / "bin" / name).resolve().read_bytes() for name in ("kpop", "kpopper")}
+        self.binary.write_text("#!/bin/sh\nprintf changed\n", encoding="utf-8")
+        replacement, _ = self.package(output=self.root / "replacement")
+        fail_at = prefix / "bin/kpopper"
+        result = self.install(replacement, prefix, env=self.failing_mv_environment(fail_at))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot activate public command", result.stderr)
+        for name in ("kpop", "kpopper"):
+            public = prefix / "bin" / name
+            self.assertTrue(public.is_symlink())
+            self.assertEqual(public.resolve().read_bytes(), before[name])
+        destination = prefix / "lib/kpopper/0.9.0" / host_target()
+        self.assertFalse(any(destination.parent.glob(".previous-*")))
+
+    @unittest.skipIf(os.name == "nt" or host_target() is None, "POSIX installer contract")
+    def test_failed_plugin_activation_restores_previous_runtime(self):
+        plugin = self.root / "rollback plugin"
+        original, _ = self.package()
+        command = ["sh", str(INSTALLER), "--version", "0.9.0", "--archive", str(original),
+                   "--sha256", sha256(original), "--plugin-root", str(plugin)]
+        self.assertEqual(subprocess.run(command, text=True, capture_output=True).returncode, 0)
+        runtime = plugin / "scripts/runtime" / host_target()
+        before = (runtime / "kpop").read_bytes()
+        self.binary.write_text("#!/bin/sh\nprintf changed\n", encoding="utf-8")
+        replacement, _ = self.package(output=self.root / "plugin replacement")
+        command[5] = str(replacement)
+        command[7] = sha256(replacement)
+        result = subprocess.run(command, text=True, capture_output=True,
+                                env=self.failing_mv_environment(runtime), timeout=20)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot activate plugin runtime", result.stderr)
+        self.assertEqual((runtime / "kpop").read_bytes(), before)
+        self.assertFalse(any(runtime.parent.glob(".previous-*")))
+
+    @unittest.skipIf(os.name == "nt" or host_target() is None, "POSIX installer contract")
+    def test_new_version_retains_previous_version_payload(self):
+        prefix = self.root / "versions prefix"
+        old, _ = self.package(output=self.root / "old", version="0.8.0")
+        self.assertEqual(self.install(old, prefix, version="0.8.0").returncode, 0)
+        new, _ = self.package(output=self.root / "new", version="0.9.0")
+        self.assertEqual(self.install(new, prefix, version="0.9.0").returncode, 0)
+        self.assertTrue((prefix / "lib/kpopper/0.8.0" / host_target() / "bin/kpop").is_file())
+        self.assertTrue((prefix / "lib/kpopper/0.9.0" / host_target() / "bin/kpop").is_file())
 
     @unittest.skipIf(os.name == "nt" or host_target() is None, "POSIX installer contract")
     def test_wrong_platform_missing_payload_and_unmanaged_destination_are_rejected(self):
