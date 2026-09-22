@@ -20,6 +20,7 @@ TARGETS = {
     "darwin-x86_64": False,
     "windows-x86_64": True,
 }
+REPOSITORY_LICENSE = Path(__file__).resolve().parents[1] / "LICENSE"
 
 
 def fail(message):
@@ -149,8 +150,10 @@ def main(argv=None):
         fail("binary names for %s must be %s and %s" % (args.target, *expected))
     regular_file(args.binary, "binary")
     regular_file(args.alias, "alias")
+    regular_file(REPOSITORY_LICENSE, "repository license")
     resource_dirs, resource_files = resource_entries(args.resources, windows=windows)
-    files = [(PurePosixPath("bin") / expected[0], args.binary, 0o755),
+    files = [(PurePosixPath("LICENSE"), REPOSITORY_LICENSE, 0o644),
+             (PurePosixPath("bin") / expected[0], args.binary, 0o755),
              (PurePosixPath("bin") / expected[1], args.alias, 0o755), *resource_files]
     files.sort(key=lambda row: str(row[0]))
     manifest = {
