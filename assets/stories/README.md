@@ -34,9 +34,11 @@ Desktop overviews and close-ups use widths suited to their content. Phone images
 the input panels, with connectors that collect independent inputs rather than
 making them sequential.
 Heights follow the content, including any closing statement.
-README images use ordinary Markdown for compatibility with repository clients.
-Each illustration links to its dedicated phone layout. Essential explanations
-also appear as text and image descriptions.
+README illustrations with a phone variant use a `picture` source selected at viewport
+widths of 600 pixels or less, with the desktop image as the fallback. Each retains a
+direct **Phone layout** link for clients that do not select sources. Native-app
+behavior remains a separate verification step. Essential explanations also appear
+as text and image descriptions.
 
 The first two stories use green for the branch tests and clean merge, and red for
 the failed recorded condition. Their consequence scenes are labelled as risks;

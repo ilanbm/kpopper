@@ -912,6 +912,47 @@ sources:
          and Space work, and there is no horizontal overflow."
     url: "codex://threads/01a0bbb2-6339-7121-ad05-3683cb7acad6"
     read: "2026-09-20"
+  s.2026_09_22_readme_editor_clarification:
+    name: "The file open in an editor is the basis of the reasoning illustration"
+    asked: "Paraphrased clarification: show GROUNDING.yaml as an actual file in an editor and tell
+            the story through it. The Meet GROUNDING.yaml title and handwritten your new friend note
+            with its arrow must form the basis of the illustration."
+    of: "Feedback on the initial four-stage redraw in this task. This replaces that layout
+         direction; the main record must not become just one icon or stop among equal panels."
+  s.2026_09_22_readme_hierarchy:
+    name: "README opening and expandable-path heading hierarchy"
+    asked: "Place the complete TL;DR block immediately after Your agents reason. Make the three
+            expandable path names prominent headings in their summaries and remove the duplicate
+            numbered Example headings inside them."
+    of: "Maintainer layout request in this session; existing path anchors, previews and story
+         subheadings are retained."
+  s.2026_09_22_readme_read_write_clarity:
+    name: "Make read and write operations explicit in the reasoning illustration"
+    asked: "Paraphrased maintainer feedback: the GROUNDING.yaml illustration does not clearly
+            distinguish session reads from writes. If both session arrows are writes, make that
+            explicit, potentially using colors as well."
+    of: "Refinement of the editor-centered illustration in this task. Both incoming session arrows
+         are writes; the local checker reads the saved record and returns a result the agent reads."
+  s.2026_09_22_readme_redraw:
+    name: "Redraw constrained README illustrations and clarify their reading order"
+    asked: "Paraphrased maintainer request: review illustrations assembled while image generation
+            was unavailable, redraw them from their purpose rather than overfitting the current
+            assets, and clarify the GROUNDING.yaml story order and arrow destinations."
+    of: "README visual redesign request in task 01a0c822-d854-7f30-b53f-cc291eb775e1 on 2026-09-22."
+  s.2026_09_22_responsive_readme:
+    name: "Restore responsive README images with direct phone-layout fallbacks"
+    asked: "Restore automatic image selection by screen width and keep Phone layout links as a
+            fallback."
+    of: "In the live GitHub browser view of commit 6ab987798f8672868609190773b28fee7a4a3d5a, the
+         reasoning image loaded the desktop asset at 1200 pixels and the mobile asset at 390 pixels.
+         GitHub iPhone app behavior remains unverified."
+    read: "2026-09-22"
+  s.2026_09_22_restore_dependency_original:
+    name: "Retain the original dependency-check illustration"
+    asked: "The maintainer prefers the original dependency-checks illustration over
+            dependency-checks-v2.png and requests its restoration."
+    of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
+         retained as private drafts; the editor-centered reasoning and canvas changes remain."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -3043,6 +3084,16 @@ known:
          counts - 2 to 1 - are the part that is this change's own and still hold. What the two
          changes cost together on main is a measurement neither of them owns; it belongs to whoever
          re-measures there"
+  m.readme_redraw_assets:
+    name: "Refreshed README illustration assets"
+    v: "The README uses refreshed reasoning-check desktop and phone illustrations centered on the
+        file open in an editor, and a new canvas-for-reasoning illustration. The original dependency
+        diagram remains selected. Natural saves/updates captions and restrained blue/teal connectors
+        clarify the story without read/write badges or an instructional legend."
+    from: s.2026_09_22_readme_redraw
+    at: "Final maintainer selection in README.md, assets/diagrams/reasoning-check-v2.png,
+         assets/diagrams/reasoning-check-mobile-v2.png and assets/canvas-for-reasoning-v2.png. The
+         example check returned the expected FAIL downloads.availability."
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -5377,17 +5428,21 @@ judgments:
                                  conversation overview, show a person only in the main-session
                                  scene."
   d.readme_images_use_markdown:
-    name: "Use portable image embedding in repository guides"
-    from: s.2026_09_19_readme_example_depth
-    rests_on: [s.2026_09_19_readme_example_depth]
-    verdict: "Use ordinary Markdown images with relative asset paths and explicit phone-layout links
-              in the README and example guides."
-    because: "This avoids custom picture-element rendering while preserving branch-local assets. The
-              phone layouts remain directly accessible; native-app success still requires
-              verification."
-    reopened_by: "The GitHub mobile app still fails to load the images, phone links are not usable,
-                  or a verified responsive embedding works consistently across the target clients."
-    seen: {s.2026_09_19_readme_example_depth: "read 2026-09-19"}
+    name: "Use responsive illustrations with direct phone-layout fallbacks"
+    from: s.2026_09_22_responsive_readme
+    rests_on: [s.2026_09_19_readme_example_depth, s.2026_09_22_responsive_readme]
+    verdict: "Use picture elements with a max-width 600px phone source and a desktop img fallback
+              for paired illustrations in the README and example guides. Keep relative asset paths
+              and explicit Phone layout links."
+    because: "The live GitHub browser view selected and loaded the desktop image at 1200 pixels and
+              its phone counterpart at 390 pixels. The maintainer chose to restore that automatic
+              selection while retaining direct links. Native iPhone app behavior remains unverified,
+              so browser support must not be presented as native-app verification."
+    reopened_by: "GitHub browser source selection fails, a native client shows neither a useful image
+                  nor a usable fallback link, or relative paths fail in branch previews."
+    seen:
+      s.2026_09_19_readme_example_depth: "read 2026-09-19"
+      s.2026_09_22_responsive_readme: "read 2026-09-22"
   d.readme_layered_explanation:
     rests_on: [s.2026_09_13_readme_depth, d.readme_opens_with_what_it_does, d.readme_story_series, s.2026_09_13_reasoning_emphasis]
     verdict: "Lead with recorded dependencies between decisions, evidence and assumptions, and the
