@@ -13,6 +13,15 @@
 # The host's hook may name itself (--host claude|codex) so the question names the host's
 # record skill.
 export PYTHONIOENCODING=utf-8
+if [ "${KPOPPER_RUNTIME:-rust}" != python ]; then
+  if [ "${KPOPPER_RUNTIME:-rust}" != rust ]; then
+    printf 'kpopper: KPOPPER_RUNTIME must be rust or python\n' >&2
+    exit 0
+  fi
+  HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 0
+  BINARY=$(sh "$HERE/native_runtime.sh" --path) || exit 0
+  exec "$BINARY" session-stop "$@"
+fi
 HOST=
 while [ $# -gt 0 ]; do
   case "$1" in

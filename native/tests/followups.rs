@@ -344,7 +344,7 @@ fn real_cli_uses_disposable_state_and_keeps_status_record_independent() {
     let state = temp.path().join("state");
     fs::create_dir(&workspace).unwrap();
     record(&workspace, 1);
-    let binary = env!("CARGO_BIN_EXE_kpop-native");
+    let binary = env!("CARGO_BIN_EXE_kpop");
     let invoke = |arguments: &[&str]| {
         Command::new(binary)
             .env("HOME", temp.path())

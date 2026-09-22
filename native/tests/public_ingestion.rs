@@ -141,7 +141,7 @@ fn acknowledgement_uses_workspace_state_and_preserves_the_first_handled_time() {
     let signal = notices[0]["id"].as_str().unwrap();
     let elsewhere = tempfile::tempdir().unwrap();
     let acknowledge = || {
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(elsewhere.path())
             .arg("--workspace").arg(temp.path())
             .args(["ingest", "acknowledge", "--record", "PROVENANCE.yaml", "--state-dir", "relstate", signal])
@@ -335,7 +335,7 @@ fn detached_worker_finishes_and_releases_its_lease() {
     let state = temp.path().join("state");
     let report = temp.path().join("report.json");
     fs::write(&report, envelope("detached", json!(4))).unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["ingest", "capture", "--file"])
         .arg(&report)
         .arg("--record")
@@ -578,7 +578,7 @@ fn delivery_cli_reserves_waits_and_completes_one_trusted_recipient() {
     let report = temp.path().join("report.json");
     fs::write(&report, envelope("delivery-cli", json!(false))).unwrap();
     let run = |args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(args)
             .current_dir(temp.path())
             .env("CODEX_SESSION_ID", "trusted-cli-thread")

@@ -185,7 +185,7 @@ fn empty_and_relative_xdg_state_home_match_python() {
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle_root =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     for state in ["", "relative-state"] {
         let native_temp = tempfile::tempdir().unwrap();
         let oracle_temp = tempfile::tempdir().unwrap();
@@ -238,7 +238,7 @@ fn python_and_native_config_match_cli_and_durable_images() {
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle_root =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     for repository in [false, true] {
         let native_temp = tempfile::tempdir().unwrap();
         let oracle_temp = tempfile::tempdir().unwrap();
@@ -468,7 +468,7 @@ fn python_core_migration_forward_and_rollback_match_native_config() {
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle_root =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     let native_temp = tempfile::tempdir().unwrap();
     let oracle_temp = tempfile::tempdir().unwrap();
     let native_root = native_temp.path().canonicalize().unwrap();
@@ -544,7 +544,7 @@ fn python_core_migration_tampering_refusals_match_native_config() {
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle_root =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     for kind in ["receipt", "inventory", "source", "authorship"] {
         let native_temp = tempfile::tempdir().unwrap();
         let oracle_temp = tempfile::tempdir().unwrap();
@@ -652,7 +652,7 @@ fn incomplete_core_plan_precedes_receipt_checks_in_both_directions() {
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle_root =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     for rollback in [false, true] {
         let native_temp = tempfile::tempdir().unwrap();
         let oracle_temp = tempfile::tempdir().unwrap();

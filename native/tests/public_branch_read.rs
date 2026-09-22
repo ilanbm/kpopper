@@ -132,7 +132,7 @@ fn compare(root: &Path, args: &[&str]) {
     let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
     let before = image(root);
     let actual = invoke(
-        Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+        Path::new(env!("CARGO_BIN_EXE_kpop")),
         None,
         root,
         args,

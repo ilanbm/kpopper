@@ -9,7 +9,7 @@ fn run(root: &Path, args: &[&str]) -> Output {
     command(root).args(args).output().unwrap()
 }
 fn run_unbundled(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
@@ -29,7 +29,7 @@ fn command(root: &Path) -> Command {
         resources.join("reasoning").join(format!("{target}.zip")),
     )
     .unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command
         .current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
@@ -431,7 +431,7 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
 fn advanced_private_and_code_routes_never_enter_the_pending_queue() {
     let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
     let private = tempfile::tempdir().unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&root)
         .env_remove("KPOPPER_NATIVE_RESOURCES")
         .env("KPOPPER_PRIVATE_HOME", private.path())
@@ -805,7 +805,7 @@ fn a_private_first_or_later_add_stays_outside_the_record() {
         }
         let path = root.join("GROUNDING.yaml");
         let before = fs::read(&path).ok();
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(&root)
             .env("KPOPPER_NATIVE_RESOURCES", root.join(".test-runtime"))
             .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))

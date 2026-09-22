@@ -6,7 +6,7 @@ use std::{
 };
 
 fn run(root: &Path, resources: Option<&Path>, args: &[&str]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command
         .args(["--workspace", root.to_str().unwrap(), "session"])
         .args(args)
@@ -163,7 +163,7 @@ fn enabled_host_open_uses_checked_native_route_and_keeps_failures_explicit() {
         &["enable", "--tokens", "1200"],
     ));
     let hook = |available: bool| {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .arg("session-start")
             .env("XDG_CONFIG_HOME", root.join("config"))
             .env("XDG_STATE_HOME", root.join("state"))
@@ -245,7 +245,7 @@ fn cursor_start_returns_host_guidance_without_creating_a_record() {
     let root = temp.path().canonicalize().unwrap();
     let private_tmp = root.join("tmp");
     fs::create_dir(&private_tmp).unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["session-start", "--cursor", "--host", "codex"])
         .env("XDG_CONFIG_HOME", root.join("config"))
         .env("XDG_STATE_HOME", root.join("state"))

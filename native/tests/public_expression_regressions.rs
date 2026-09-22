@@ -60,7 +60,7 @@ fn compare(record: Option<&[u8]>, args: &[&str]) {
     let python =
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python"));
     let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     let prepare = || {

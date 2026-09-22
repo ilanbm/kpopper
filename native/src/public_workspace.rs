@@ -115,12 +115,14 @@ pub(crate) fn select_resources(
     configured: Option<&Path>,
     ordinary_required: bool,
 ) -> Result<ResourceSelection> {
-    let root = configured.map(Path::to_path_buf).unwrap_or(
-        executable
+    let root = match configured {
+        Some(root) => root.to_path_buf(),
+        None => executable
+            .canonicalize()?
             .parent()
             .ok_or_else(|| error("native executable has no parent"))?
             .join("resources"),
-    );
+    };
     let target = crate::reasoning_runtime::target_name()?;
     if configured.is_none()
         && std::fs::symlink_metadata(&root).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
@@ -330,4 +332,34 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
         reason,
         key: crate::identity::sha256(identity.as_bytes()),
     })
+}
+
+#[cfg(all(test, unix))]
+mod installed_resource_tests {
+    #[test]
+    fn public_symlink_resolves_resources_beside_the_real_executable() {
+        let temporary = tempfile::tempdir().unwrap();
+        let payload = temporary.path().join("versioned/bin");
+        let public = temporary.path().join("bin");
+        let resources = payload.join("resources/reasoning");
+        std::fs::create_dir_all(&resources).unwrap();
+        std::fs::create_dir_all(&public).unwrap();
+        std::fs::write(payload.join("kpop"), b"fixture").unwrap();
+        let target = crate::reasoning_runtime::target_name().unwrap();
+        std::fs::write(
+            resources.join(format!("{target}.kpopper-runtime")),
+            b"fixture",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(payload.join("kpop"), public.join("kpop")).unwrap();
+        let selection = super::select_resources(&public.join("kpop"), None, false).unwrap();
+        assert_eq!(
+            selection.root,
+            Some(payload.join("resources").canonicalize().unwrap())
+        );
+        assert_eq!(
+            selection.core,
+            Some(format!("reasoning/{target}.kpopper-runtime"))
+        );
+    }
 }

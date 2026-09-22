@@ -76,7 +76,7 @@ fn public_cli_exports_core_findings_and_wraps_the_reference_exit_contract() {
     )
     .unwrap();
     let run = |args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(["--workspace", root.to_str().unwrap(), "--frozen", "export"])
             .args(args)
             .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
@@ -320,7 +320,7 @@ fn ordinary_export_refuses_unsupported_reference_shapes_without_surrogate_leaks(
             .unwrap_err(),
             Err(error) => {
                 assert_eq!(error.0, "invalid_ordinary_structural_key");
-                let output = std::process::Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+                let output = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
                     .current_dir(temp.path())
                     .args(["--frozen", "export", "--json"])
                     .args(&seeds)

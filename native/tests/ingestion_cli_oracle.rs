@@ -42,7 +42,7 @@ fn without_native_provenance(mut value: J) -> J {
 fn capture_process_status_and_retry_match_python_cli() {
     let python = PathBuf::from(std::env::var("KPOP_SESSION_ORACLE_PYTHON").expect("set KPOP_SESSION_ORACLE_PYTHON"));
     let oracle_root = PathBuf::from(std::env::var("KPOP_SESSION_ORACLE_ROOT").expect("set KPOP_SESSION_ORACLE_ROOT"));
-    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop-native"));
+    let native = PathBuf::from(env!("CARGO_BIN_EXE_kpop"));
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     let original = record(&root);

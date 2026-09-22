@@ -16,6 +16,10 @@ concurrency:
 permissions:
   contents: read
 
+# These tests retain the Python reference contract.
+env:
+  KPOPPER_RUNTIME: python
+
 jobs:
   session:
     timeout-minutes: 20

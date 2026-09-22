@@ -357,7 +357,7 @@ fn explicitly_selected_private_branch_hypothesis_retains_source_metadata_and_ref
     let before = image(&root);
     let private_temp = tempfile::tempdir().unwrap();
     let private = private_temp.path().to_path_buf();
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&root)
         .args([
             "consolidate",
@@ -497,7 +497,7 @@ fn ordinary_public_cli_matches_python_complete_output_and_files() {
         fs::write(&pp, dirty).unwrap();
         let ni = image(&native);
         let pi = image(&python);
-        let actual = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let actual = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(&native)
             .args(args)
             .env("KPOPPER_SESSION_DISABLE", "1")
@@ -522,7 +522,7 @@ fn ordinary_public_cli_matches_python_complete_output_and_files() {
         fs::write(np, nb).unwrap();
         fs::write(pp, pb).unwrap();
     }
-    let actual = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let actual = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&native)
         .args(args)
         .env("KPOPPER_SESSION_DISABLE", "1")
@@ -570,7 +570,7 @@ fn ordinary_public_cli_matches_python_complete_output_and_files() {
             .unwrap();
         assert!(committed.success());
     }
-    let again = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let again = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&native)
         .args(args)
         .env("KPOPPER_SESSION_DISABLE", "1")
@@ -664,7 +664,7 @@ print(json.dumps({'source':source,'head':head}))
     };
     let preview_args = ["consolidate", "--dry-run", "--from", source];
     let a = call(
-        Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+        Path::new(env!("CARGO_BIN_EXE_kpop")),
         false,
         &native,
         &preview_args,
@@ -711,7 +711,7 @@ print(json.dumps({'source':source,'head':head}))
         let before_n = image(&native);
         let before_p = image(&python);
         let na = call(
-            Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+            Path::new(env!("CARGO_BIN_EXE_kpop")),
             false,
             &native,
             &args,
@@ -733,7 +733,7 @@ print(json.dumps({'source':source,'head':head}))
     }
     let borrowed = too_many.iter().map(String::as_str).collect::<Vec<_>>();
     let na = call(
-        Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+        Path::new(env!("CARGO_BIN_EXE_kpop")),
         false,
         &native,
         &borrowed,
@@ -744,7 +744,7 @@ print(json.dumps({'source':source,'head':head}))
         (py.status.code(), py.stdout, py.stderr)
     );
     let a = call(
-        Path::new(env!("CARGO_BIN_EXE_kpop-native")),
+        Path::new(env!("CARGO_BIN_EXE_kpop")),
         false,
         &native,
         &args,

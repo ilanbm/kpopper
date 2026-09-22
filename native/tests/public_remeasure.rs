@@ -43,7 +43,7 @@ fn oracle(record: &Path, run: bool) -> ProcessOutput {
 
 #[cfg(unix)]
 fn native(record: &Path, run: bool) -> ProcessOutput {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command.args(["--frozen", "remeasure"]);
     if let Some(resources) = std::env::var_os("KPOP_SESSION_NATIVE_RESOURCES") {
         command.env("KPOPPER_NATIVE_RESOURCES", resources);

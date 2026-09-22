@@ -11,8 +11,10 @@ use std::{
 
 #[derive(Parser)]
 #[command(
+    name = "kpop",
+    bin_name = "kpop",
     version,
-    about = "Experimental native assessment, readers and history tools"
+    about = "Keep what you know, its grounds, and what needs another look"
 )]
 struct Args {
     #[arg(long, global = true)]
@@ -88,6 +90,14 @@ enum Command {
     Map(kpop_native::public_map::Options),
     #[command(name = "_agent", hide = true)]
     Agent(kpop_native::public_map::AgentOptions),
+    #[command(name = "_hook", hide = true)]
+    Hook {
+        kind: String,
+        host: Option<String>,
+        mode: Option<String>,
+        #[arg(long, default_value_t = 110.0)]
+        wait_seconds: f64,
+    },
     Remeasure(kpop_native::public_remeasure::Options),
 
     History(kpop_native::public_history::Options),
@@ -519,6 +529,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Watch(_)
         | Command::Map(_)
         | Command::Agent(_)
+        | Command::Hook { .. }
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
@@ -552,6 +563,43 @@ fn main() {
             error.exit();
         }
     };
+    if let Command::Hook {
+        kind,
+        host,
+        mode,
+        wait_seconds,
+    } = &args.command
+    {
+        let result = stdin_bytes()
+            .and_then(|raw| serde_json::from_slice(&raw).map_err(kpop_native::Error::from))
+            .and_then(|payload| {
+                kpop_native::host_hooks::run(
+                    kind,
+                    host.as_deref(),
+                    mode.as_deref(),
+                    &payload,
+                    *wait_seconds,
+                )
+            });
+        match result {
+            Ok(output) => {
+                print!("{}", output.stdout);
+                eprint!("{}", output.stderr);
+                std::process::exit(output.code);
+            }
+            Err(error) => {
+                let prefix = match kind.as_str() {
+                    "followups" => "kpopper followup check unavailable",
+                    "watch" => "kpop watch unavailable",
+                    "ground" => "kpopper grounding unavailable",
+                    "edit" => "kpopper citation check unavailable",
+                    _ => "kpopper hook unavailable",
+                };
+                eprintln!("{prefix}: {error}");
+                return;
+            }
+        }
+    }
     if matches!(args.command, Command::Search(_) | Command::Config(_)) {
         let cwd = match args
             .workspace
@@ -836,7 +884,7 @@ fn main() {
                 std::process::exit(output.code);
             }
             Err(error) => {
-                eprintln!("kpop-native {kind}: {error}");
+                eprintln!("kpop {kind}: {error}");
                 std::process::exit(1);
             }
         }
@@ -858,7 +906,7 @@ fn main() {
                 std::process::exit(output.code);
             }
             Err(error) => {
-                eprintln!("kpop-native session-stop: assessment unavailable: {error}");
+                eprintln!("kpop session-stop: assessment unavailable: {error}");
                 return;
             }
         }
@@ -886,7 +934,7 @@ fn main() {
             Ok(output) => (output.text, String::new(), output.code),
             Err(error) => (
                 String::new(),
-                format!("kpop-native experimental hub: {error}\n"),
+                format!("kpop experimental hub: {error}\n"),
                 2,
             ),
         };
@@ -1150,7 +1198,7 @@ fn main() {
                 if args.json {
                     eprintln!("{}", json!({"error":error.to_string()}));
                 } else {
-                    eprintln!("kpop-native {command}: {error}");
+                    eprintln!("kpop {command}: {error}");
                 }
                 std::process::exit(2);
             }
@@ -1175,7 +1223,7 @@ fn main() {
         match result {
             Ok(text) => println!("{text}"),
             Err(error) => {
-                eprintln!("kpop-native assess: {error}");
+                eprintln!("kpop assess: {error}");
                 std::process::exit(2);
             }
         }
@@ -1185,7 +1233,7 @@ fn main() {
         let text = match session(options) {
             Ok(text) => text,
             Err(error) => {
-                eprintln!("kpop-native: record was not opened: {error}");
+                eprintln!("kpop: record was not opened: {error}");
                 String::new()
             }
         };

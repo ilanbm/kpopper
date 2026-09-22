@@ -22,27 +22,35 @@ there is no guaranteed response time.
 
 ## Local setup
 
-Use Python 3.9 or newer; Python 3.13 matches the primary CI environment. Fork the
-repository on GitHub, then clone your fork (replace `YOUR-USERNAME`):
+The native Rust runtime is the primary implementation and release artifact. Install
+Rust using the pinned toolchain, then build from `native/`. The Python environment
+below is retained for the source-only compatibility adapter and its test suite.
+Fork the repository on GitHub, then clone your fork (replace `YOUR-USERNAME`):
 
 ```sh
 git clone https://github.com/YOUR-USERNAME/kpopper.git
 cd kpopper
 git remote add upstream https://github.com/ilanbm/kpopper.git
 git switch -c my-change
+rustup show
+cd native
+cargo build --locked --release
+cd ..
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[html]"
 ```
 
-On Windows, create the environment with `py -m venv .venv` and activate it in PowerShell
-with `.venv\Scripts\Activate.ps1`. Ordinary CLI checks work without Lean. Native Windows
-does not support durable report batching, which requires POSIX file locking.
+On Windows, create the retained Python environment with `py -m venv .venv` and activate
+it in PowerShell with `.venv\Scripts\Activate.ps1`. Native Rust CLI and durable report
+batching support Windows; the legacy Python compatibility path retains its POSIX file
+locking limitation. Python followup/watch hooks also require POSIX; native Windows
+delivery tests check their behavior directly.
 
 | If you are changing… | Start here |
 |---|---|
-| The CLI, reader or record writes | `scripts/`, `tests/` and the [reference](docs/reference.md) |
-| kpopper Hub or Annotated Documents | `scripts/applications/`, supporting assets in `scripts/page/` and `scripts/document/`, and `tests/` |
+| The native CLI, reader or record writes | `native/src/`, `native/tests/` and the [reference](docs/reference.md) |
+| kpopper Hub or Annotated Documents | Native application modules in `native/src/`; Python compatibility modules and assets in `scripts/page/` and `scripts/document/` |
 | Agent guidance or integration | `skills/`, `hooks/` and [adapters](adapters/README.md) |
 | An example or explanation | `examples/`, `docs/` and `README.md` |
 | The optional checked-session runtime | `scripts/session/` and [checked sessions](docs/checked-sessions.md) |
@@ -55,16 +63,28 @@ Keep changes focused and preserve compatibility with existing records. Add a reg
 test when a bug fix or behavior change needs one; documentation-only changes need accurate
 examples and working links.
 
-Run the relevant test module while working, for example:
+For native changes, run the relevant Rust test target, then the native suite:
 
 ```sh
-python -m unittest discover -s tests -p 'test_release.py'
+cd native
+cargo test --locked
+cd ..
+```
+
+See [native setup and resources](native/README.md) for tests that require the packaged
+reasoning engines. The required CI matrix also installs and exercises each platform archive.
+
+Run the relevant retained Python compatibility test module while working, for example:
+
+```sh
+KPOPPER_RUNTIME=python python -m unittest discover -s tests -p 'test_release.py'
 ```
 
 Before submitting a code change, run the ordinary test suite and record checks:
 
 ```sh
-python -m unittest discover -s tests
+KPOPPER_RUNTIME=python python -m unittest discover -s tests
+# PowerShell: $env:KPOPPER_RUNTIME = 'python'; python -m unittest discover -s tests
 kpop --frozen check
 kpop --frozen consolidate --dry-run
 kpop --frozen experimental hub --verify
@@ -76,9 +96,10 @@ Read the measurement recipes before running `kpop --frozen remeasure --run`; the
 Optional runtimes may skip tests locally. Changes to them need their documented setup and
 the corresponding CI job; skips are not proof that the integration passes.
 
-If a matching kernel is cached from `kpop session setup`, some tests exercise the
-checked-session runtime. Install its optional dependencies in the same environment before
-running the full suite; some kernel-backed tests otherwise fail on missing imports:
+The retained Python compatibility suite exercises Python hooks and the legacy checked
+session adapter. Set `KPOPPER_RUNTIME=python` for those runs. If a matching kernel is
+cached from `kpop session setup`, some tests exercise the checked-session runtime.
+Install its optional dependencies in the same environment before running that suite:
 
 ```sh
 python -m pip install -e '.[session]'
@@ -88,7 +109,7 @@ Without a matching cached kernel, the integration tests skip. Having Lean on `PA
 alone does not enable them. Set `KPOPPER_REQUIRE_CORE_TESTS=1` when testing this runtime
 to make an unavailable kernel fail instead of silently skipping, as CI does.
 
-For changes to that runtime, follow the full [checked-session setup](docs/checked-sessions.md)
+For changes to that retained Python runtime, follow the full [checked-session setup](docs/checked-sessions.md)
 and use the toolchain pinned in `scripts/session/lean/lean-toolchain`. Python 3.13 matches
 the checked-session CI job. The base package's Python minimum does not imply that every
 optional dependency supports that version.
@@ -240,22 +261,26 @@ Bump: minor
 learn. `minor` adds something — a command, a field the reader accepts, a computed name, a page
 behaviour. `major` removes something or changes its meaning.
 
-Every push to `main` refreshes one pull request, **Release x.y.z**, holding the version files
-(`pyproject.toml`, `package.json`, `plugin.json`, `marketplace.json`) and a changelog entry: what merged
-since the last release, the bump each declared, and the decisions the record gained. The
-version is the largest declared bump. Merging that pull request is the release; several merges
+Every push to `main` refreshes one pull request, **Release x.y.z**, holding the native
+version and plugin manifests plus a changelog entry. The legacy Python and npm version
+files remain compatibility metadata; they do not define the native release number.
+The release pull request records what merged since the last release, the bump each
+declared, and the decisions the record gained. Merging it is the release; several merges
 in a day fold into one release if nobody merges it in between. After it lands:
 
 ```
 claude plugin update kpopper@kpopper
 ```
 
+After updating plugin files, install the matching native runtime into the active plugin
+copy using its printed installer command.
+
 That same push tags the commit `vx.y.z` and opens a GitHub release carrying the changelog
-entry, with the `.whl` and `.tar.gz` built from that very commit attached. Those two files
-are what an upload to PyPI should use: the tag, the text and the files all come from one
-tree, which is not true of anything built by hand afterwards. Only the commit that moves the
-version publishes, so a release that failed is made by rerunning its own run rather than by
-pushing again.
+entry and native bundles for all five targets, plus `SHA256SUMS`, built from that very
+commit. The release assets are the supported user installation route. Existing PyPI/npm
+artifacts remain legacy distributions; this workflow does not claim a native registry
+publication. Only the commit that moves the version publishes, so a failed release is
+made by rerunning its own run rather than by pushing again.
 
 The pull request is opened by the workflow's own token, which runs no checks of its own, so
 the script runs `kpop check` and `kpop experimental hub --verify` on the release tree before pushing

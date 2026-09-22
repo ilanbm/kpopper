@@ -2,7 +2,7 @@
 """Keep the release pull request current.
 
 Runs on every push to main. Finds the last release - the earliest commit on main whose
-pyproject.toml carries the current version - reads every pull request merged since it,
+VERSION carries the current native version - reads every pull request merged since it,
 takes the largest bump they declared (a `Bump: patch | minor | major` line in the pull
 request body), and keeps one branch, release/<next>, holding the version files and the
 changelog entry, with the pull request "Release <next>" open for a person to merge.
@@ -19,12 +19,12 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-# One version number for every channel a user can install from: the Python package, the
-# npm package, and the plugin as the marketplace lists it. A channel left out here is a
-# channel that silently stops moving.
+# The native line and plugin share a version. Published Python/npm1.x packages
+# remain a separate legacy line; resetting the native series must not downgrade them.
 VERSION_FILES = {
-    "pyproject.toml": (re.compile(r'^version = "(\d+\.\d+\.\d+)"', re.M), 'version = "{v}"'),
-    "package.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
+    "VERSION": (re.compile(r'^(\d+\.\d+\.\d+)$', re.M), '{v}'),
+    "native/Cargo.toml": (re.compile(r'^version = "(\d+\.\d+\.\d+)"', re.M), 'version = "{v}"'),
+    "native/Cargo.lock": (re.compile(r'(?<=name = "kpopper"\n)version = "(\d+\.\d+\.\d+)"'), 'version = "{v}"'),
     ".claude-plugin/plugin.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".codex-plugin/plugin.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".claude-plugin/marketplace.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
@@ -115,8 +115,9 @@ def pr_body(version, previous, bump, merged, decisions):
     if decisions:
         lines += ["", "## Decisions the record gained", ""] + [f"- `{d}`" for d in decisions]
     lines += ["", "---", "",
-              "Merging this is the release. After it lands, an installed plugin picks it up with "
-              "`claude plugin update kpopper@kpopper`. This pull request is refreshed on every "
+              "Merging this builds and publishes the native GitHub release. Install its matching "
+              "archive with the release installer; after updating plugin files, install the "
+              "same runtime into the active plugin copy. This pull request is refreshed on every "
               "push to main until it merges; it never merges by itself.", "",
               "Bump: none — this is the release"]
     return "\n".join(lines) + "\n"
@@ -129,8 +130,8 @@ def read_texts():
 
 
 def release_commit(version):
-    out = sh("git", "log", "--reverse", "--format=%H", f'-Sversion = "{version}"',
-             "--", "pyproject.toml")
+    out = sh("git", "log", "--reverse", "--format=%H", f'-S{version}',
+             "--", "VERSION")
     return out.split()[0] if out.split() else None
 
 
@@ -176,10 +177,10 @@ def main(argv):
     found = versions_in(texts)
     if len(set(found.values())) != 1:
         raise SystemExit("the version files disagree: " + json.dumps(found))
-    current = found["pyproject.toml"]
+    current = found["VERSION"]
     rel = release_commit(current)
     if not rel:
-        raise SystemExit(f"no commit carries version {current} in pyproject.toml")
+        raise SystemExit(f"no commit carries version {current} in VERSION")
     merged = merged_since(rel)
     if not merged:
         print(f"nothing merged since {current}; nothing to release")
@@ -208,8 +209,8 @@ def main(argv):
                    encoding="utf-8")
     # the release pull request is opened by a token whose pull requests run no checks,
     # so the record's own checks run here, on the tree the release would ship
-    sh("kpopper", "check")
-    sh("kpopper", "experimental", "hub", "--verify")
+    sh(sys.executable, "scripts/cli.py", "--frozen", "check")
+    sh(sys.executable, "scripts/cli.py", "--frozen", "experimental", "hub", "--verify")
     sh("git", "add", "CHANGELOG.md", *VERSION_FILES)
     sh("git", "commit", "-q", "-m", f"Release {nxt}")
     sh("git", "push", "-f", "origin", branch)

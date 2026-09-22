@@ -6,14 +6,20 @@ is supplied. Run `kpop` for the command summary; the linked guides cover detaile
 
 ## Try it from the command line
 
-The standalone CLI works independently of an agent plugin. With Python 3.9 or newer:
+The standalone native CLI works independently of an agent plugin. Install the
+0.9.0 GitHub bundle and put its `bin` directory on PATH, or use its absolute
+`kpop` path. It needs no Python, Node or Rust at runtime.
+
+The legacy source-only CLI remains available with Python 3.9 or newer, but must be
+selected explicitly as compatibility mode:
 
 ```sh
 pipx install kpopper
 # Alternatively, in a Python environment: python -m pip install kpopper
+# Run the resulting CLI with: KPOPPER_RUNTIME=python kpop ...
 ```
 
-This installs PyYAML with the CLI. The ordinary reader and HTML page need no Lean setup.
+This installs PyYAML with the legacy CLI. The ordinary reader and HTML page need no Lean setup.
 An isolated CLI installation does not supply dependencies to an unrelated Python
 environment used by a host's hooks.
 
