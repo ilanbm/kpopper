@@ -89,7 +89,7 @@ class BothShapesReadAlike(unittest.TestCase):
                 self.assertEqual(code, 0, out + err)
                 self.assertIn("6 entries, 2 judgments", out)
 
-    def test_the_gate_asks_the_same_question(self):
+    def test_untouched_whole_and_sharded_records_both_stay_silent(self):
         with tempfile.TemporaryDirectory() as d:
             said = []
             for where in (WHOLE, SPLIT):
@@ -99,8 +99,7 @@ class BothShapesReadAlike(unittest.TestCase):
                 said.append(run(SCRIPTS / "provenance.py", "gate", state, "PROVENANCE.yaml",
                                 "--turns", "40", "--host", "claude", cwd=where))
             self.assertEqual(said[0], said[1])
-            self.assertEqual(said[0][0], 2)
-            self.assertIn("the record untouched", said[0][1])
+            self.assertEqual(said[0], (0, "", ""))
 
 
 class AWriteLandsWhereItsSubjectIs(unittest.TestCase):

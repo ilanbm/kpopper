@@ -69,14 +69,14 @@ class CoreDefaultGate(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('FAIL d.ready: falsifier holds', output)
 
-    def test_core_nudge_is_persisted_and_only_emitted_once(self):
+    def test_untouched_core_record_stays_silent_without_mutating_the_mark(self):
         self.assertEqual(P.mark(str(self.mark), [str(self.record)]), 0)
+        before = self.mark.read_bytes()
         first, first_output = self.output(P.gate, str(self.mark), [str(self.record)], turns=P.NUDGE_TURNS)
         second, second_output = self.output(P.gate, str(self.mark), [str(self.record)], turns=P.NUDGE_TURNS + 1)
-        self.assertEqual(first, 2)
-        self.assertIn('record untouched', first_output)
+        self.assertEqual((first, first_output), (0, ''))
         self.assertEqual((second, second_output), (0, ''))
-        self.assertTrue(json.loads(self.mark.read_text())['nudged'])
+        self.assertEqual(self.mark.read_bytes(), before)
 
     def test_arbitrary_recorded_for_does_not_satisfy_intent(self):
         self.assertEqual(P.mark(str(self.mark), [str(self.record)]), 0)
