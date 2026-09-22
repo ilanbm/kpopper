@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 — 2026-09-22
+
+- Clarify README navigation and responsive illustrations (#153) — patch
+
 ## 0.9.0 — 2026-09-22
 
 - Start the native Rust release series at 0.9.0 ahead of the 1.0 launch. The earlier
