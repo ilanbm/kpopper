@@ -41,7 +41,7 @@ fn command(root: &Path) -> Command {
         resources.join("reasoning").join(format!("{target}.zip")),
     )
     .unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command
         .current_dir(root)
         .env("KPOPPER_NATIVE_RESOURCES", resources)

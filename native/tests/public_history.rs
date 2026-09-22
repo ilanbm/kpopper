@@ -7,7 +7,7 @@ use std::{
 };
 
 fn run(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(args)
         .output()
@@ -243,7 +243,7 @@ fn private_historical_claim_stays_a_private_draft() {
     let version = status["subjects"]["p.x"]["heads"][0].as_str().unwrap();
     let entry = fs::read(copy.join("GROUNDING.yaml")).unwrap();
     let home = tmp.path().join("private");
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&copy)
         .env("KPOPPER_PRIVATE_HOME", &home)
         .args([

@@ -1,0 +1,33 @@
+unicode-casefold 0.2.0
+
+This distribution uses the Apache-2.0 alternative offered by the package
+Cargo metadata. The published crate omits the separate full license terms;
+LICENSE-APACHE reproduces the standard text from
+https://www.apache.org/licenses/LICENSE-2.0.txt.
+
+Repository: https://github.com/lfairy/unicode-casefold
+crates.io package SHA256: b7f66b1c8f8caa2ab31dc6d3f35386f16efdab89668f93411e565ac368908e8f
+Cargo authors: Chris Wong <lambda.fairy@gmail.com>
+
+The upstream README follows unchanged:
+
+# unicode-casefold
+
+Iterators for case folding text. Provides "simple" and "full" algorithms, with Turkic language options on both.
+
+See [this W3C article][1] for how case folding differs from `.to_lowercase()`.
+
+[1]: https://www.w3.org/International/wiki/Case_folding
+
+
+## Updating the Unicode data tables
+
+The tables used by this library are generated from official Unicode Consortium data. To update them, run the following commands:
+
+```sh
+curl -O http://www.unicode.org/Public/UNIDATA/CaseFolding.txt
+python3 scripts/generate.py < CaseFolding.txt > src/tables.rs
+rm CaseFolding.txt
+```
+
+Then check in any changes.

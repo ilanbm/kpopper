@@ -5,7 +5,7 @@ use std::{
 };
 
 fn command(root: &Path, args: &[&str], zone: &str) -> Output {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_kpop"));
     cmd.current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")

@@ -35,7 +35,7 @@ fn fixture() -> tempfile::TempDir {
     temp
 }
 fn run(temp: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args([
             "--workspace",
             temp.join("workspace").to_str().unwrap(),

@@ -305,7 +305,7 @@ fn registered_cli_surface_matches_python_json_and_exit_codes() {
     let root = temp.path().join("repo");
     std::fs::create_dir(&root).unwrap();
     fixture(&root, ledger_case(&ledgers, "one"));
-    let binary = env!("CARGO_BIN_EXE_kpop-native");
+    let binary = env!("CARGO_BIN_EXE_kpop");
     for arguments in [
         ["knowledge", "status"].as_slice(),
         ["pending", "status"].as_slice(),
@@ -403,7 +403,7 @@ fn knowledge_status_passes_the_configured_runtime_to_a_computed_target() {
         reasoning.join(format!("{target}.zip")),
     )
     .unwrap();
-    let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["--workspace", root.to_str().unwrap(), "knowledge", "status"])
         .env("KPOPPER_NATIVE_RESOURCES", &resources)
         .env("KPOPPER_NATIVE_CACHE", temp.path().join("cache"))
@@ -427,7 +427,7 @@ fn ordinary_live_status_does_not_open_a_broken_optional_runtime() {
     let root = temp.path().join("repo");
     std::fs::create_dir(&root).unwrap();
     fixture(&root, ledger_case(&ledgers, "one"));
-    let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["--workspace", root.to_str().unwrap(), "knowledge", "status"])
         .env(
             "KPOPPER_NATIVE_RESOURCES",

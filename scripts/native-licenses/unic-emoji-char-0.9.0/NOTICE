@@ -1,0 +1,14 @@
+unic-emoji-char 0.9.0
+
+The published crate omits these license files from its repository root.
+They are reproduced unchanged from the exact source revision recorded in
+its .cargo_vcs_info.json.
+
+Declared license: MIT/Apache-2.0
+crates.io package SHA256: 0b07221e68897210270a38bde4babb655869637af0f69407f96053a34f76494d
+
+https://raw.githubusercontent.com/open-i18n/rust-unic/8a6ce83063d90b91ae2ce59eddb803edd393fca9/LICENSE-MIT
+SHA256: 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+https://raw.githubusercontent.com/open-i18n/rust-unic/8a6ce83063d90b91ae2ce59eddb803edd393fca9/LICENSE-APACHE
+SHA256: a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2

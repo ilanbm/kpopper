@@ -3,7 +3,7 @@ use std::{fs, path::Path, process::Command};
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/legacy-layout");
 
 fn run(root: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")

@@ -184,7 +184,7 @@ fn initialize(params: &Value) -> Result<Value, (i32, String, bool)> {
         .copied()
         .unwrap_or(SUPPORTED_PROTOCOL_VERSIONS[2]);
     Ok(
-        json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"kpopper","version":"0.1.0"}}),
+        json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"kpopper","version":env!("CARGO_PKG_VERSION")}}),
     )
 }
 

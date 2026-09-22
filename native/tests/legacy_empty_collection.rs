@@ -28,7 +28,7 @@ fn first_entry_opens_bare_collection_without_changing_the_other_source() {
             if explicit {
                 args.extend(["--in", "known"]);
             }
-            let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
                 .current_dir(temp.path())
                 .args(args)
                 .env_remove("KPOPPER_AGENT_SESSION")
@@ -64,7 +64,7 @@ fn scalar_collection_and_invalid_inline_edit_leave_record_unchanged() {
             "meta: {{updated: 2026-09-01}}\nsources:\n  s.source: {{name: A source}}\nknown: {value}\n"
         );
         fs::write(&record, &before).unwrap();
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(temp.path())
             .args([
                 "add",

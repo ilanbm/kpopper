@@ -34,7 +34,7 @@ impl Fixture {
         Self { root: tempfile::tempdir().unwrap(), runtime }
     }
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(["--workspace", self.root.path().to_str().unwrap()]).args(args)
             .current_dir(self.root.path()).env("HOME", self.root.path())
             .env("XDG_STATE_HOME", self.root.path().join("state"))

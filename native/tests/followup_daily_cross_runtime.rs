@@ -761,7 +761,7 @@ fn python_and_native_cli_match_complete_readonly_payloads() {
             "{}",
             String::from_utf8_lossy(&py.stderr)
         );
-        let rs = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        let rs = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(["--workspace", h.workspace.to_str().unwrap(), "followups"])
             .args(&args)
             .env("XDG_STATE_HOME", &h.state)
@@ -777,7 +777,7 @@ fn python_and_native_cli_match_complete_readonly_payloads() {
         let mut comparison = Comparison::new(&h, &json!({}), &py, &rs);
         comparison.rs_command = format!(
             "\"command\": [{}]",
-            serde_json::to_string(env!("CARGO_BIN_EXE_kpop-native")).unwrap()
+            serde_json::to_string(env!("CARGO_BIN_EXE_kpop")).unwrap()
         );
         comparison.equal(&py, &rs, "CLI");
         assert_eq!(

@@ -86,7 +86,7 @@ fn configure_cli_matches_python_output_and_exact_policy_files() {
         &["remote", "add", "team", remote.to_str().unwrap()],
         None,
     );
-    let binary = env!("CARGO_BIN_EXE_kpop-native");
+    let binary = env!("CARGO_BIN_EXE_kpop");
     for name in ["configure_initial", "configure_grant", "configure_revoke"] {
         let entry = named(&oracle, name);
         let mut command = Process::new(binary);
@@ -159,7 +159,7 @@ fn pause_and_resume_are_real_cli_commands_and_never_touch_a_remote() {
     std::fs::create_dir(&root).unwrap();
     fixture(&root, named(&ledgers, "one"));
     let before = git(&root, &["show-ref"], None);
-    let binary = env!("CARGO_BIN_EXE_kpop-native");
+    let binary = env!("CARGO_BIN_EXE_kpop");
     for action in ["pause", "resume"] {
         let result = Process::new(binary)
             .args(["--workspace", root.to_str().unwrap(), "pending", action])
@@ -248,7 +248,7 @@ fn configure_refuses_scope_change_with_a_pending_ledger_and_preserves_policy() {
 fn simple_pause_cli_refusal_matches_python_and_creates_no_state() {
     let (oracle, _) = fixtures();
     let temp = tempfile::tempdir().unwrap();
-    let result = Process::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let result = Process::new(env!("CARGO_BIN_EXE_kpop"))
         .args([
             "--workspace",
             temp.path().to_str().unwrap(),

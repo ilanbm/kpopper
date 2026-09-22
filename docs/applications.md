@@ -13,7 +13,8 @@ does not relax evidence, isolation or record-integrity checks.
 
 ## Installation and use
 
-Install the core CLI normally. Add the shared HTML application dependencies explicitly:
+Native 0.9.0 bundles include the compiled HTML application runtime. Install the
+bundle normally, then request either application explicitly:
 
 ```sh
 python -m pip install 'kpopper[html]'
@@ -24,11 +25,12 @@ kpop experimental annotated-doc guide
 kpop experimental annotated-doc build --html draft.html --manifest evidence.json --out report.html
 ```
 
-For a source checkout, install `'.[html]'`. The same distribution includes application
-code and assets; the extra installs their runtime dependencies. Applications are not
-separate packages or independently versioned releases.
+For an explicit Python compatibility checkout, install `'.[html]'`. The extra then
+installs the legacy runtime dependencies. Applications are not separate packages or
+independently versioned releases.
 
-For a Claude Code or Codex plugin, use the active plugin's runtime setup:
+For a Claude Code or Codex plugin in Python compatibility mode, use the active
+plugin's runtime setup:
 
 ```sh
 python3 /absolute/path/to/kpopper/scripts/plugin_runtime.py setup --applications html
