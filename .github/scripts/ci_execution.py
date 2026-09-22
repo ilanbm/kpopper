@@ -18,6 +18,13 @@ PATTERNS = {
 }
 
 
+# The record job runs these on every pull request. Leaving them out of the shards keeps the
+# files only they read (the README, community documents, release scripts) out of the Python
+# lane's inputs, and runs each once.
+RECORD_JOB_MODULES = ('test_skills.py', 'test_release.py', 'test_ci_selection.py',
+                      'test_ci_execution.py', 'test_ci_sharding.py', 'test_ci_audit.py')
+
+
 def suite_for(path):
     for suite, patterns in PATTERNS.items():
         if any(fnmatch.fnmatch(path.name, pattern) for pattern in patterns):
@@ -35,6 +42,8 @@ def test_files(suites, root):
         # unittest only descends into importable test packages, not fixture trees.
         if any(not (parent / '__init__.py').is_file()
                for parent in path.parents if parent != root and root in parent.parents):
+            continue
+        if path.name in RECORD_JOB_MODULES and path.parent == root:
             continue
         if suite_for(path) in suites:
             files.append(path)
