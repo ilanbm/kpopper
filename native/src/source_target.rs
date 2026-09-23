@@ -10,7 +10,7 @@ use crate::{
     reasoning_runtime::{OperationalBounds, Runtime},
     reasoning_snapshot::{CaptureOptions, Snapshot},
     require,
-    source_capture::{ReadMode, capture_ordinary_source_with_runtime},
+    source_capture::{ReadMode, capture_ordinary_layer, capture_ordinary_source_with_runtime},
     value::{Integer, TypedValue as V},
 };
 use std::{
@@ -171,6 +171,9 @@ pub(crate) struct OrdinaryRecords {
     pub document: crate::ordinary_value::Value,
     pub hypotheses: crate::ordinary_value::Map,
 }
+/// Another branch's committed record, read to be laid over this one: no snapshot of its
+/// own is formed, so a record whose field roles read only over this one is not refused
+/// here, and one that cannot be read even there is told by the reader that lays it.
 pub(crate) fn records_ordinary(
     root: &Path,
     entry: &str,
@@ -180,7 +183,9 @@ pub(crate) fn records_ordinary(
     std::thread::scope(|scope| {
         scope
             .spawn(|| {
-                let materialized = materialize(root, entry, revision, runtime)?;
+                let materialized = materialize(root, entry, revision, |paths, scratch, mode| {
+                    capture_ordinary_layer(paths, scratch, mode, runtime)
+                })?;
                 Ok(OrdinaryRecords {
                     document: materialized.captured.ordinary_document().clone(),
                     hypotheses: crate::ordinary_value::map(materialized.captured.hypotheses())?
@@ -202,7 +207,11 @@ fn materialize(
     root: &Path,
     entry: &str,
     revision: &str,
-    runtime: Option<&Runtime>,
+    capture: impl FnOnce(
+        &[std::path::PathBuf],
+        &Path,
+        ReadMode,
+    ) -> Result<crate::source_capture::OrdinaryCapture>,
 ) -> Result<Materialized> {
     require(
         [40, 64].contains(&revision.len())
@@ -354,7 +363,7 @@ fn materialize(
         std::fs::create_dir_all(path.parent().unwrap())?;
         std::fs::write(path, raw)?;
     }
-    let captured = capture_ordinary_source_with_runtime(
+    let captured = capture(
         &[scratch.join(&entry)],
         &scratch,
         if active {
@@ -362,8 +371,6 @@ fn materialize(
         } else {
             ReadMode::Live
         },
-        None,
-        runtime,
     )?;
     Ok(Materialized {
         _temp: temp,
@@ -385,7 +392,9 @@ fn records_isolated(
         files,
         raw_names,
         active,
-    } = materialize(root, entry, revision, runtime)?;
+    } = materialize(root, entry, revision, |paths, scratch, mode| {
+        capture_ordinary_source_with_runtime(paths, scratch, mode, None, runtime)
+    })?;
     let captured = captured.try_finite()?;
     let document = captured.strict_document()?;
     let mut hypotheses = vec![];
