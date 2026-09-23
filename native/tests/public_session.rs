@@ -192,6 +192,80 @@ fn direct_gate_reports_new_failures_and_invalid_session_ids_create_no_mark() {
 }
 
 #[test]
+fn an_unreadable_record_keeps_the_session_context_and_leaves_no_baseline() {
+    let f = Fixture::new();
+    fs::write(
+        f.root.path().join("GROUNDING.yaml"),
+        "known:\n  local.one: {v: 1}\njudgments:\n  d.use_limit:\n    verdict: Batch requests at the vendor limit\n    rests_on: [api.limit]\n    seen: {api.limit: 10}\n    wrong_if: api.limit > 20\n",
+    )
+    .unwrap();
+    let opened = success(f.hook("session-start", json!({})));
+    let stdout = String::from_utf8(opened.stdout).unwrap();
+    let stderr = String::from_utf8(opened.stderr).unwrap();
+    let lines = stdout.lines().collect::<Vec<_>>();
+    assert_eq!(lines.len(), 3, "stdout={stdout} stderr={stderr}");
+    assert_eq!(
+        lines[0],
+        format!(
+            "The knowledge record could not be opened. Read it before relying on it: {}",
+            f.root
+                .path()
+                .canonicalize()
+                .unwrap()
+                .join("GROUNDING.yaml")
+                .display()
+        )
+    );
+    let context: Value =
+        serde_json::from_str(lines[1].strip_prefix("KPOPPER_AGENT_CONTEXT ").unwrap()).unwrap();
+    assert_eq!(context["environment"]["KPOPPER_AGENT_SESSION"], "flow");
+    assert!(lines[2].starts_with("Pass this session environment"));
+    // The reader's diagnostic appears once; the baseline it prevented adds nothing.
+    let diagnostic = stderr.lines().next().unwrap();
+    assert_eq!(stderr.matches(diagnostic).count(), 1, "{stderr}");
+    assert!(
+        !stderr.contains("not opened") && !stderr.contains("baseline"),
+        "{stderr}"
+    );
+    // An empty baseline would report the record's existing failures as this
+    // session's once it reads again; without one, prompt diagnostics stay silent.
+    assert!(!f.private.path().join("kpopper-base-flow").exists());
+    let prompt = success(f.hook("session-context", json!({})));
+    assert!(prompt.stdout.is_empty() && prompt.stderr.is_empty());
+}
+
+#[test]
+fn a_baseline_that_cannot_be_saved_leaves_the_opening_unchanged() {
+    let f = Fixture::new();
+    fs::write(
+        f.root.path().join("GROUNDING.yaml"),
+        "known: {p.x: {v: 1}}\n",
+    )
+    .unwrap();
+    let baseline = f.private.path().join("kpopper-base-flow");
+    fs::create_dir(&baseline).unwrap();
+    let blocked = success(f.hook("session-start", json!({})));
+    let stderr = String::from_utf8(blocked.stderr).unwrap();
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.starts_with("kpop: session baseline was not saved: "))
+            .count(),
+        1,
+        "{stderr}"
+    );
+    assert!(baseline.is_dir());
+    fs::remove_dir(&baseline).unwrap();
+    let saved = success(f.hook("session-start", json!({})));
+    assert!(saved.stderr.is_empty());
+    assert!(baseline.is_file());
+    assert_eq!(
+        String::from_utf8(blocked.stdout).unwrap(),
+        String::from_utf8(saved.stdout).unwrap()
+    );
+}
+
+#[test]
 fn core_only_resources_support_public_reads_history_and_sessions() {
     let f = Fixture::new();
     fs::remove_dir_all(f.resources.join("ordinary")).unwrap();

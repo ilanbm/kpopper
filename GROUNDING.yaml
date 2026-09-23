@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-22
+  updated: 2026-09-23
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -953,6 +953,19 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_unsaved_baseline:
+    name: "A session-start baseline that cannot be saved no longer costs the opening"
+    asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
+            when saving the session baseline fails, so the agent loses the could-not-open line,
+            KPOPPER_AGENT_CONTEXT and the environment line. Keep them as the Python opener does,
+            decide from the Python reference and this record whether a failed baseline leaves no
+            baseline or an empty one, and add a regression test."
+    of: "Reproduced on 3454c6b with a record whose judgment rests on a name that is not an entry:
+         native session-start printed nothing on stdout and the reader's diagnostic twice; the Python
+         opener printed the three lines and the diagnostic once, and neither left a baseline. With an
+         empty baseline put in its place, both prompt-context hooks reported the assessment
+         unavailable on every prompt, and once the record read again the native one reported the
+         judgment's existing failure as the session's own."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -6430,6 +6443,27 @@ judgments:
                                     after a line went unanswered; the gate still yields after one
                                     bounce"
       run.design_talk: "read 2026-09-02"
+  d.unsaved_baseline_stays_absent:
+    name: "A session-start baseline that cannot be saved is left absent"
+    verdict: "When the session-start baseline cannot be saved, the opening still reaches the agent
+              and no baseline takes its place; prompt diagnostics stay silent for that session rather
+              than compare against an empty one."
+    because: "An empty baseline claims the record held no failures and no entries when the session
+              began. For a record that could not be read that claim is false: once it reads again,
+              its existing failures would be reported as the session's own, and until then every
+              prompt would carry the unavailable-assessment notice. The Python opener has always
+              ignored a failed baseline, and both prompt-context hooks already stay silent without
+              one."
+    rests_on: [d.gate_and_opener_against_the_mark]
+    reopened_by: "A session that began without a baseline repairs the record, then writes entries
+                  with no recorded intent or introduces a new failure, and nothing reports it before
+                  the work is handed off."
+    from: s.2026_09_23_unsaved_baseline
+    seen:
+      d.gate_and_opener_against_the_mark: "The opener records a session-start baseline. Prompt
+                                           diagnostics compare current failures and session-owned
+                                           writes with it, without creating a record or continuing a
+                                           stopped turn."
   d.watch_async_compatibility:
     rests_on: [s.watch_contract, d.record_is_code, d.no_feed_of_other_branches]
     verdict: "Keep code records with their branches. Opted-in background watch previews only
