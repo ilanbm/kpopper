@@ -24,9 +24,11 @@ terminal command for personal Work accounts.
 
 ## Make the runtime available
 
-kpopper's implementation uses local files and Python scripts. The Work execution
-environment needs the package's scripts, Python 3.9+ with PyYAML, and a writable project
-record in a location that later sessions can also access.
+kpopper runs as a native executable over local files. The Work execution environment
+needs the plugin's scripts, its native runtime for that environment's platform (installed
+with the plugin's `scripts/install_native.sh`; see
+[Install the native runtime](plugin-runtime.md#install-the-native-runtime)), and a writable
+project record in a location that later sessions can also access.
 
 OpenAI documents hooks in the runtime used by Work and Codex, but also states that installing
 a plugin on the web does not deploy its local hook scripts. The scripts must be available

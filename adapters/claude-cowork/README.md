@@ -23,11 +23,13 @@ available to a local Claude Code session must not be assumed to exist there.
 
 1. Confirm the installed skills appear and ask Cowork to open the project's
    existing record. If no hook opening appeared, invoke `/kpopper:ground` explicitly.
-2. Confirm `python3` can run the installed plugin's `scripts/cli.py` and its required
-   dependencies inside the task environment. Use the installed plugin path, not a
-   path copied from a different client's cache. The shared hooks now select the
-   [private runtime](../../docs/plugin-runtime.md); its setup and dependencies must
-   exist inside Cowork's VM. A runtime prepared on the host Mac does not supply it.
+2. Confirm the installed plugin's native runtime runs inside the task environment:
+   `sh "<plugin root>/scripts/install_native.sh"` installs it into that plugin copy
+   ([Install the native runtime](../../docs/plugin-runtime.md#install-the-native-runtime)),
+   and `"<plugin root>/bin/kpop" --version` runs it. Use the installed plugin path, not a
+   path copied from a different client's cache. The shared hooks run that copy's
+   runtime, so run the installer inside Cowork's VM, where it picks the VM's platform;
+   a runtime installed on the host Mac does not supply it.
 3. In a disposable project, save one sourced fact and a judgment, reopen the task,
    then change the fact and run `check` to confirm the judgment is flagged.
 4. Confirm the saved `GROUNDING.yaml` and its `.kpopper/` companions persist in the
@@ -35,10 +37,10 @@ available to a local Claude Code session must not be assumed to exist there.
 
 The root package declares `SessionStart`, `Stop`, tool and prompt hooks, including
 optional asynchronous workers. Still unverified in Cowork: their actual delivery,
-`CLAUDE_PLUGIN_ROOT` resolution, Python dependencies, stop decisions, asynchronous
-rewakes, resume/compaction behavior and the record page's presentation. Installation
-alone does not verify any of these. If automatic hooks are unavailable, explicit
-skill and CLI use can be checked separately.
+`CLAUDE_PLUGIN_ROOT` resolution, the native runtime inside the VM, stop decisions,
+asynchronous rewakes, resume/compaction behavior and the record page's presentation.
+Installation alone does not verify any of these. If automatic hooks are unavailable,
+explicit skill and CLI use can be checked separately.
 
 The documentation was reviewed on 2026-09-16. No live Cowork task or user
 configuration was changed during that review.

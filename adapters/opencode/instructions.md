@@ -11,10 +11,9 @@ unless a current opening was already supplied. Use its resolved record location.
 Run `kpop check` after changing the record and report any remaining issues before
 finishing. These are instructions to execute commands, not a host-enforced gate.
 
-Use `kpopper` from the configured Python environment. If it is unavailable, report
-the missing runtime; do not guess another installed copy or make a duplicate record.
-The checkout's `scripts/cli.py` accepts the same arguments when invoked with a Python
-interpreter that has the checkout's dependencies installed.
+Use `kpop` from the configured checkout's `bin/` directory. If it is unavailable,
+report the missing runtime; do not guess another installed copy or make a duplicate
+record.
 
 Do not treat a discovered skill as evidence that background agents, notifications,
 browser tools, or source connectors are available. Use only capabilities this

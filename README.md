@@ -1576,8 +1576,7 @@ To share a small part of the record in a task, document or pull request, use
 readings and marks values omitted from the selection. From a source checkout:
 
 ```sh
-python3 scripts/cli.py export launch.announcement \
-  --record examples/launch-party/GROUNDING.yaml
+kpop export launch.announcement --record examples/launch-party/GROUNDING.yaml
 ```
 
 Add `--format markdown-mermaid` to keep the text and append a diagram for destinations
