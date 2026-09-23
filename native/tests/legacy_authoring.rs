@@ -399,3 +399,194 @@ fn cli_recovers_a_retained_cross_directory_publication() {
     );
     assert_no_history(&root);
 }
+
+/// Without bundled resources a condition stays text, as the Python writer keeps it when
+/// no expression program is configured. State lives beside the workspace, not in it.
+fn run_unbundled(root: &Path, args: &[&str]) -> Output {
+    let home = root.parent().unwrap();
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root)
+        .env_remove("KPOPPER_AGENT_SESSION")
+        .env_remove("CODEX_THREAD_ID")
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env("KPOPPER_PRIVATE_HOME", home.join("private"))
+        .env("XDG_STATE_HOME", home.join("state"))
+        .env("KPOPPER_NATIVE_CACHE", home.join("cache"))
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+fn text(bytes: Vec<u8>) -> String {
+    String::from_utf8(bytes).unwrap()
+}
+
+const ADD_JUDGMENT: &[&str] = &[
+    "add",
+    "d.z",
+    "verdict=x",
+    "rests_on=[api.limit]",
+    "wrong_if=api.limit > 50",
+    "--as-of",
+    "2026-01-01",
+];
+
+/// Commands on the fixtures under `indent/`, each with the image `scripts/cli.py` leaves
+/// for it: the record, or with a hypothesis the file the write goes to. Fields go at the
+/// column the neighbouring entry's fields use, and at the entry's column plus two only
+/// beside an entry written on one line.
+struct IndentCase {
+    record: &'static str,
+    hypothesis: Option<&'static str>,
+    steps: &'static [(&'static [&'static str], &'static str)],
+}
+
+const INDENT_CASES: &[IndentCase] = &[
+    IndentCase {
+        record: "four-space.yaml",
+        hypothesis: None,
+        steps: &[(ADD_JUDGMENT, "four-space-add.yaml")],
+    },
+    IndentCase {
+        record: "four-space.yaml",
+        hypothesis: Some("four-space-hypothesis.yaml"),
+        steps: &[(
+            &[
+                "add",
+                "d.z",
+                "verdict=x",
+                "rests_on=[api.limit]",
+                "wrong_if=api.limit > 50",
+                "--as-of",
+                "2026-01-01",
+                "--hypothesis",
+                "prop",
+            ],
+            "four-space-hypothesis-add.yaml",
+        )],
+    },
+    IndentCase {
+        record: "three-space.yaml",
+        hypothesis: None,
+        steps: &[(
+            &[
+                "add",
+                "s.zzz",
+                "asked=what now",
+                "read=2026-01-02",
+                "--as-of",
+                "2026-01-01",
+            ],
+            "three-space-add.yaml",
+        )],
+    },
+    IndentCase {
+        record: "unreadable-ids.yaml",
+        hypothesis: None,
+        steps: &[(
+            &["add", "api.window", "v=5", "--as-of", "2026-01-01"],
+            "unreadable-ids-add.yaml",
+        )],
+    },
+    IndentCase {
+        record: "four-space-flow.yaml",
+        hypothesis: None,
+        steps: &[(ADD_JUDGMENT, "four-space-flow-add.yaml")],
+    },
+    IndentCase {
+        record: "four-space-broken.yaml",
+        hypothesis: None,
+        steps: &[
+            (
+                &[
+                    "add",
+                    "d.w",
+                    "verdict=y",
+                    "rests_on=[api.limit]",
+                    "wrong_if=api.limit > 50",
+                    "--as-of",
+                    "2026-01-01",
+                ],
+                "four-space-superseded.yaml",
+            ),
+            (
+                &["review", "d.w", "--as-of", "2026-01-01"],
+                "four-space-reviewed.yaml",
+            ),
+        ],
+    },
+    // A judgment the Python writer replaced: its fields sit at eight.
+    IndentCase {
+        record: "four-space-superseded.yaml",
+        hypothesis: None,
+        steps: &[(
+            &["review", "d.w", "--as-of", "2026-01-01"],
+            "four-space-reviewed.yaml",
+        )],
+    },
+];
+
+/// Runs the case's commands in a fresh workspace and compares the written file with each
+/// image. A hypothesis is named `prop`, and the base must stay as it was.
+fn check_indent_case(case: &IndentCase, run: impl Fn(&Path, &[&str]) -> Output) {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap().join("repo");
+    let base = fixture(&format!("indent/{}", case.record));
+    write(&root.join("GROUNDING.yaml"), &base);
+    let target = match case.hypothesis {
+        Some(hypothesis) => {
+            let path = root.join(".kpopper/hypotheses/prop.yaml");
+            write(&path, &fixture(&format!("indent/{hypothesis}")));
+            path
+        }
+        None => root.join("GROUNDING.yaml"),
+    };
+    for (args, expected) in case.steps {
+        success(run(&root, args));
+        assert_eq!(
+            text(fs::read(&target).unwrap()),
+            text(fixture(&format!("indent/{expected}"))),
+            "{}: {args:?}",
+            case.record
+        );
+    }
+    if case.hypothesis.is_some() {
+        assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), base);
+    }
+    assert_no_history(&root);
+}
+
+#[test]
+fn written_entries_take_the_field_indent_of_their_neighbours_like_python() {
+    for case in INDENT_CASES {
+        check_indent_case(case, run_unbundled);
+    }
+}
+
+#[test]
+#[ignore = "requires KPOP_SESSION_ORACLE_PYTHON and KPOP_SESSION_ORACLE_ROOT pointing at an immutable Python oracle"]
+fn the_field_indent_images_are_what_the_python_writer_leaves() {
+    let python =
+        std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("set KPOP_SESSION_ORACLE_PYTHON");
+    let cli = Path::new(
+        &std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("set KPOP_SESSION_ORACLE_ROOT"),
+    )
+    .join("scripts/cli.py");
+    for case in INDENT_CASES {
+        check_indent_case(case, |root, args| {
+            // No checked-session core, as for the unbundled native binary.
+            let home = root.parent().unwrap();
+            Command::new(&python)
+                .arg(&cli)
+                .args(args)
+                .current_dir(root)
+                .env_remove("KPOPPER_AGENT_SESSION")
+                .env_remove("CODEX_THREAD_ID")
+                .env("XDG_CACHE_HOME", home.join("cache"))
+                .env("XDG_STATE_HOME", home.join("state"))
+                .env("KPOPPER_PRIVATE_HOME", home.join("private"))
+                .output()
+                .unwrap()
+        });
+    }
+}
