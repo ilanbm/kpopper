@@ -317,7 +317,7 @@ fn build_document(
     let PageDocument { capture, document } = input;
     let doc = map(document)?;
     let report = map(assessment)?;
-    let nodes = map(&report["nodes"])?;
+    let nodes = &page_nodes(map(&report["nodes"])?)?;
     let fields = crate::reasoning_fields::snapshot_fields(document)?;
     let dep_field = fields
         .get("deps")
@@ -665,18 +665,7 @@ fn build_document(
         for sec in &tab.sections {
             let mut chosen = BTreeSet::new();
             for s in &sec.pick {
-                let got = select(s, &ids, &judgments, &states);
-                if got.is_empty() {
-                    failures.push(format!(
-                        "section '{}': selector {s} picks nothing",
-                        if sec.title.is_empty() {
-                            "?"
-                        } else {
-                            &sec.title
-                        }
-                    ));
-                }
-                chosen.extend(got);
+                chosen.extend(select(s, &ids, &judgments, &states));
             }
             selected_all.extend(chosen.clone());
             let title = if sec.title.is_empty() {
@@ -765,8 +754,24 @@ fn build_document(
                 )),
                 _ => {}
             }
-            if sec.pick.is_empty() && sec.text.is_empty() {
-                failures.push(format!("section '{title}' is empty"));
+            // A section is judged by what its selectors pick together, as the Python page
+            // judges it: one selector may name a prefix the record does not hold yet.
+            if chosen.is_empty() && (!sec.pick.is_empty() || sec.text.is_empty()) {
+                failures.push(format!(
+                    "section {} picks nothing - it is about something the record no longer holds",
+                    if tab.bare {
+                        format!("'{title}'")
+                    } else {
+                        format!(
+                            "'{title}' (tab '{}')",
+                            if tab.title.is_empty() {
+                                "?"
+                            } else {
+                                &tab.title
+                            }
+                        )
+                    }
+                ));
             }
             panel.push_str(&format!(
                 "<div data-component=\"{}\"><h2 dir=\"auto\">{} <span class=\"n\">{}</span></h2>",
