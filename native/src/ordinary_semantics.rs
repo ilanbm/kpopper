@@ -472,6 +472,8 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// The base with the named hypotheses' entries laid over it by id, each hypothesis's
+/// collections in the order its own file holds them.
 pub(crate) fn layer(base: &V, groups: &V, names: &[String]) -> Result<V> {
     let mut doc = base.clone();
     for name in names {
@@ -480,7 +482,13 @@ pub(crate) fn layer(base: &V, groups: &V, names: &[String]) -> Result<V> {
             !group.get("error").is_some_and(truth),
             "unresolved_history_hypothesis",
         )?;
-        for (collection, members) in F::collections(field(group, "doc")?)? {
+        let hypothesis = field(group, "doc")?;
+        let mut collections = F::collections(hypothesis)?;
+        let in_order = map(hypothesis)?
+            .keys()
+            .filter_map(|collection| collections.remove_entry(collection))
+            .collect::<Vec<_>>();
+        for (collection, members) in in_order {
             for id in members.keys() {
                 for (other, values) in crate::ordinary_value::map_mut(&mut doc)?.iter_mut() {
                     if other != &collection

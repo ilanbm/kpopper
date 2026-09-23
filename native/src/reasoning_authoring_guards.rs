@@ -841,6 +841,26 @@ pub(crate) fn validate_with_page(
     let known = world.raw().contains_key(id);
     let is_jud = judgment(world, id);
     let mut out = vec![];
+    let reframe = a.get("reframe") == Some(&V::Bool(true));
+    if a.contains_key("reframe") && !matches!(a.get("reframe"), Some(V::Bool(_))) {
+        out.push("reframe must be a boolean operation option".into());
+    }
+    if reframe {
+        let old = world.raw().get(id).and_then(|v| map(v).ok());
+        let stored = old.and_then(|m| m.get("v").or_else(|| m.get("quoted")));
+        if kind != "add" || !world.core() || !known || is_jud || builtin(id)
+            || aimed.is_some() || old.is_some_and(|m| m.contains_key("rule"))
+            || !matches!(stored, Some(V::Bool(_) | V::Text(_) | V::Integer(_) | V::Float(_))) {
+            out.push("reframe requires an existing stored scalar in an active core/v1 history; it cannot replace judgments, rules or hypotheses".into());
+        }
+        if !matches!(b.get("rule"), Some(V::Map(_)))
+            || b.keys().any(|k| !["rule", "name"].contains(&k.as_str())) {
+            out.push("reframe needs only a structured rule and optional name; historical citations and snapshots are preserved by the writer".into());
+        }
+        if !a.get("why").and_then(|v| text(v).ok()).is_some_and(|v| !v.trim().is_empty()) {
+            out.push("reframe requires --why explaining why the rule represents the same subject".into());
+        }
+    }
     let diff = if (kind == "add" || kind == "set") && known {
         disagreement(world, a, page)?
     } else {
@@ -888,7 +908,7 @@ pub(crate) fn validate_with_page(
         {
             if let Some(h) = aimed {
                 out.push(format!("{id} is already in hypothesis {} - set changes its value there, review its snapshot",py(h)))
-            } else if diff.is_none() {
+            } else if diff.is_none() && !reframe {
                 out.push(format!(
                     "{id} is already an entry - set changes its value, review its snapshot"
                 ))

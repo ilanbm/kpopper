@@ -1332,6 +1332,10 @@ sources:
     of: "2026-09-18"
     read: "2026-09-18"
     fidelity: quoted
+  s.representation_evolution_contract:
+    name: "Guarded stored-to-derived representation contract"
+    file: "skills/kpopper/EVOLUTION.md"
+    read: "2026-09-22"
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -3429,7 +3433,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22542
+    v: 22757
+    # Same-day code measurement after adding guarded representation guidance.
     # set 2026-09-22: Measured from the native default skill text by skill_bytes_largest
     # Same-day correction measured after integrating session attribution from main.
     # set 2026-09-19: Measured after merging main plugin-qualified skill guidance with the application names and aliases.
@@ -3438,7 +3443,7 @@ known:
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
-    scope: {kind: code, environment: kpopper skill sources, commit: 9f1415584430ad3536a6eef0dd19b657a1aa034c, working_tree: false}
+    scope: {kind: code, environment: kpopper skill sources, commit: d429f4126e74ebb86e1f4d156a431a6165390a46, working_tree: true}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
@@ -5823,6 +5828,19 @@ judgments:
                                     to keep - as a line on the prompt, and as one stop on the turn
                                     after a line went unanswered; the gate still yields after one
                                     bounce"
+  d.reframe_preserves_subject:
+    name: "Keep representation changes separate from factual changes"
+    rests_on: [s.representation_evolution_contract]
+    verdict: "Permit explicit stored-to-derived reframing only on active core history, preserving
+              current type and value, stable identity, immutable evidence and dependent snapshots."
+    because: "Source-grounded authoring may improve representation without changing the subject.
+              Equal current results are a mechanical guard, not proof of meaning for future inputs. A
+              newer factual value must be recorded with its source before reframing; explicitly
+              historical propositions keep their historical scope."
+    reopened_by: "An independently authored source-backed case where an accepted reframe changes the
+                  meaning for later inputs, or where replay or a dependent snapshot loses the earlier
+                  evidence; assess the case before broadening the operation."
+    seen: {s.representation_evolution_contract: "read 2026-09-22"}
   d.refutations_keep_judgment_ids:
     from: s.2026_09_04_prior_reversal_share
     rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]

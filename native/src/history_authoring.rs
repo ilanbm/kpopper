@@ -381,6 +381,14 @@ pub(crate) fn prepare_inner(
     audit: Option<&ReplayAudit>,
 ) -> Result<PreparedMutation> {
     guards(store, capture, options)?;
+    if let Some(expected) = map(action)?.get("expected_record_sha256") {
+        use sha2::Digest;
+        let expected = text(expected)?;
+        require(expected.len() == 64 && expected.bytes().all(|b| b.is_ascii_hexdigit()),
+            "invalid_expected_record_sha256")?;
+        let actual = format!("{:x}", sha2::Sha256::digest(&capture.entry_bytes));
+        require(actual == expected, "record changed since the caller read it")?;
+    }
     crate::history_sources::capture(&store.root, &store.layout.entry, &capture.document)?;
     require(
         options.receipt_version.is_none_or(|v| [1, 7].contains(&v)),
