@@ -324,6 +324,15 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("--verify-results", commands)
         self.assertIn("--matrix", commands)
 
+    def test_record_validates_native_shared_copies_before_cache_restore(self):
+        steps = self.jobs()["record"]["steps"]
+        check = next(i for i, step in enumerate(steps)
+                     if step.get("run") == "python .github/scripts/native_shared.py --check")
+        restore = next(i for i, step in enumerate(steps)
+                       if step.get("uses") == "actions/cache/restore@v4")
+        self.assertLess(check, restore)
+        self.assertNotIn("if", steps[check])
+
 
 if __name__ == "__main__":
     unittest.main()
