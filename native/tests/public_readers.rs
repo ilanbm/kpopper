@@ -1542,6 +1542,118 @@ fn a_branch_record_whose_fields_tie_is_read_over_this_one_as_a_hypothesis_is() {
 }
 
 #[test]
+fn another_branch_s_record_is_laid_over_this_one_as_what_it_holds_differently() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let base = "known:\n  local.one: {v: 1}\n  local.two: {v: 2, of: 2026-09-10}\n  local.three: {v: two  words}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";
+    commit_record(root, base, "base");
+    git(root, &["branch", "same"]);
+    let branches = [
+        // an unchanged claim that gains a list of names
+        (
+            "listed",
+            base.replace("{v: 1}", "{v: 1, tags: [local.two]}"),
+        ),
+        // an id held a second time, in another collection
+        (
+            "twice",
+            format!(
+                "{base}  local.two: {{verdict: dup, rests_on: [local.one], seen: {{local.one: 1}}}}\n"
+            ),
+        ),
+        ("schema", format!("schema: 5\n{base}")),
+        // the same claims written differently
+        (
+            "rewritten",
+            base.replace("{v: 1}", "{v: 1.0}")
+                .replace("two  words", "two words"),
+        ),
+        ("older", base.replace("of: 2026-09-10", "of: 2026-09-01")),
+        ("value", base.replace("{v: 1}", "{v: 9}")),
+        ("newer", base.replace("of: 2026-09-10", "of: 2026-09-12")),
+    ];
+    for (name, record) in &branches {
+        git(root, &["checkout", "-q", "-b", name, "main"]);
+        commit_record(root, record, name);
+        git(root, &["checkout", "-q", "main"]);
+    }
+    // A hypothesis file the branch carries, beside a record that holds what this one does.
+    git(root, &["checkout", "-q", "-b", "idea", "main"]);
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(
+        root.join(".kpopper/hypotheses/idea.yaml"),
+        "known:\n  local.one: {v: 4}\n",
+    )
+    .unwrap();
+    git(root, &["add", ".kpopper"]);
+    commit_record(root, base, "idea");
+    git(root, &["checkout", "-q", "main"]);
+
+    // What this record already holds is not laid again: a list added to an unchanged
+    // claim casts no vote for a field role, a second holder of an id does not contest
+    // the first, the branch's own schema stays the branch's, a claim written another
+    // way or read on an earlier day is the same reading, and a hypothesis file the
+    // branch carries is not contested by the branch's copy of this record.
+    let holds = "+ d.a: a\n    holds\n    wrong_if: local.one > 5\n";
+    let unchanged =
+        format!("local.one: 1\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n{holds}");
+    for (name, expected) in [
+        ("same", unchanged.clone()),
+        ("listed", unchanged.clone()),
+        ("schema", unchanged.clone()),
+        ("rewritten", unchanged.clone()),
+        ("older", unchanged.clone()),
+        (
+            "twice",
+            format!(
+                "local.one: 1\nlocal.three: two  words\n{holds}+ local.two (in hypothesis twice): dup\n    holds\n"
+            ),
+        ),
+        (
+            "value",
+            format!(
+                "local.one: 1\n    proposes 1 -> 9, from value\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n{holds}"
+            ),
+        ),
+        (
+            "newer",
+            format!(
+                "local.one: 1\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n    proposes instead, from newer: 2 as of 2026-09-12\n{holds}"
+            ),
+        ),
+        (
+            "idea",
+            format!(
+                "local.one: 1\n    proposes 1 -> 4, from idea:idea\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n{holds}"
+            ),
+        ),
+    ] {
+        let output = cli(
+            root,
+            &["pull", "--from", name, "local", "d"],
+            &root.join("private"),
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty(), "{name}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            expected + "\naffects <entry> shows what a change reaches\n",
+            "{name}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        base
+    );
+}
+
+#[test]
 fn a_branch_record_whose_fields_tie_is_consolidated_over_this_one() {
     let temp = tempfile::tempdir().unwrap();
     let root = &temp.path().canonicalize().unwrap();
@@ -1652,6 +1764,43 @@ fn a_tie_a_branch_brings_in_new_collections_is_named_in_its_order() {
     let base = format!(
         "{known}judgments:\n  d.z: {{verdict: z, rests_on: [local.one], seen: {{local.one: 1}}, wrong_if: local.one > 5}}\n"
     );
+    commit_record(root, &base, "base");
+    for args in [
+        &["consolidate", "--dry-run", "--from", "other"][..],
+        &["consolidate", "--from", "other"],
+    ] {
+        let output = cli(root, args, &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            tied("deps", "rests_on", "depends"),
+            "{args:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+            base
+        );
+    }
+}
+
+#[test]
+fn a_tie_over_what_the_branch_holds_differently_is_named_over_that() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let a = "  d.a: {verdict: a, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n";
+    let base = format!("known:\n  local.one: {{v: 1}}\n  local.two: {{v: 2}}\njudgments:\n{a}");
+    // The branch adds a list of names to an entry whose claim it leaves alone, which is not
+    // laid again, and a judgment resting on a field of another name, which is.
+    commit_record(
+        root,
+        &format!(
+            "known:\n  local.one: {{v: 1, tags: [local.two]}}\n  local.two: {{v: 2}}\njudgments:\n{a}  d.b: {{verdict: b, depends: [local.two], seen: {{local.two: 2}}, wrong_if: local.two > 5}}\n"
+        ),
+        "branch",
+    );
+    git(root, &["branch", "other"]);
     commit_record(root, &base, "base");
     for args in [
         &["consolidate", "--dry-run", "--from", "other"][..],

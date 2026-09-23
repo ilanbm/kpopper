@@ -3,6 +3,7 @@
 mod branch;
 #[path = "ordinary_consolidation_full.rs"]
 mod full;
+pub(crate) use full::branch_differences;
 #[path = "consolidation_preview_facts.rs"]
 mod preview_facts;
 pub use preview_facts::{

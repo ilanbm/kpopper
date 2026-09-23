@@ -45,14 +45,19 @@ pub(crate) fn entries(document: &V) -> Result<BTreeMap<String, (String, V)>> {
     Ok(result)
 }
 /// What a snapshot holds a document to besides the field roles it infers from that document
-/// alone: a bounded size, and each entry held once across its collections. A document laid
-/// over another record is held to these, and its roles are read over that record.
+/// alone and each entry held once: a bounded size. A document laid over another record is
+/// held to it, and its roles are read over that record; an entry it holds twice is refused
+/// where it is laid, once what that record already holds is left out.
 pub(crate) fn validate_layer(document: &V) -> Result<()> {
     code(document, "invalid_snapshot")?;
     document
         .validate_bounded(MAX_VALUES)
         .map_err(|_| error("limit"))?;
-    require(entries(document)?.len() <= MAX_NODES, "limit")
+    let held = collections(document)?
+        .values()
+        .map(|members| members.len())
+        .sum::<usize>();
+    require(held <= MAX_NODES, "limit")
 }
 fn nodes(document: &V) -> Result<V> {
     let fields = V::Map(snapshot_fields(document)?);
