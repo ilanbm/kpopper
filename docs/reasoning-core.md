@@ -448,9 +448,7 @@ when the aggregate value stays equal. Row expressions read only declared authore
 fields; they do not evaluate member formulas or read another scope.
 
 See [the query specification](query.md) for syntax, empty/unknown/error behavior,
-resource limits and the contributor boundary. The [revisit exercise](../examples/scoped-query/README.md)
-uses an installed package to change two assumptions, add a scope member, retain
-an unknown forecast and replay an earlier snapshot.
+resource limits and the contributor boundary.
 
 ## Runtime, licensing and assurance
 

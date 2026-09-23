@@ -2,10 +2,13 @@
 from pathlib import Path
 import re
 import sys
-import yaml
 
 if sys.argv[1] == "retention":
-    days = yaml.safe_load(Path("storage-policy.yaml").read_text())["retention_days"]
+    text = Path("storage-policy.yaml").read_text()
+    match = re.search(r"^retention_days:\s*(\d+)\s*$", text, re.MULTILINE)
+    if match is None:
+        raise ValueError("Expected an explicit retention_days: N line")
+    days = int(match.group(1))
 else:
     text = Path("download-email.html").read_text()
     matches = re.findall(r"Download available for (\d+) days", text)

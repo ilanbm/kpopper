@@ -303,20 +303,6 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual({r["python"] for r in main}, {"3.13"})
         self.assertEqual(len(main), 4)
 
-    def test_focused_example_runs_installed_package_on_supported_python_versions(self):
-        jobs = self.jobs()
-        example = jobs["examples"]
-        self.assertEqual(set(example["needs"]), {"changes", "record"})
-        self.assertEqual(example["if"], "needs.changes.outputs.examples == 'true'")
-        self.assertEqual(example["strategy"]["matrix"]["python"], ["3.9", "3.13"])
-        commands = [step.get("run", "") for step in example["steps"]]
-        self.assertIn("python -m pip install .", commands)
-        self.assertIn("python .github/scripts/check_research_example.py", commands)
-        self.assertIn("git diff --exit-code", commands)
-        integrity = next(step for step in jobs["changes"]["steps"] if "--check-bundles" in step.get("run", ""))
-        self.assertIn("steps.select.outputs.examples == 'true'", integrity["if"])
-        self.assertIn("steps.select.outputs.installed == 'true'", integrity["if"])
-
     def test_workflow_executes_the_declared_matrix_and_verifies_its_manifests(self):
         jobs = self.jobs()
         self.assertEqual(jobs["check"]["strategy"]["matrix"], "${{ fromJSON(needs.changes.outputs.test_matrix) }}")

@@ -15,7 +15,6 @@ directories.
 | `installed` | Wheel, sdist and plugin installs on each native target | The package, everything the plugin carries, the committed runtimes |
 | `runtime` | Rebuilding the reasoning runtime on each target | Lean sources, build recipe, bundled runtimes and notices |
 | `rust` | Native command on each platform | `native/`, the assets it compiles in, the runtime resources and the setup that builds its Lean test program |
-| `examples` | The research exercise | The package and the exercise's reviewed inputs |
 
 The declarations are checked, not trusted. On Linux, `.github/scripts/ci_audit.py` watches
 every file the audited lanes open, through fanotify, which costs no measurable time. It maps
@@ -42,24 +41,6 @@ behaviour - Cargo manifests, the build script, installers, packaging scripts, th
 runtimes or the platform workflows - takes every target. The final `ci-required` job requires
 successful completion of every selected lane and rejects missing output, incomplete test
 plans, an unexpected platform scope and unexpected skips.
-
-The reviewed inputs for `examples/dark-matter/advanced` select a focused `examples`
-family. That job installs the package and runs the research exercise on Linux with
-Python 3.9 and 3.13, using the committed native runtime. It compares the result with
-the published capture and checks the `jq` projection, including preservation of
-unknown and error states. Example-only PRs keep the mandatory checks but do not
-select the Python test shards, document UI, session matrix, installed-platform
-matrix or native rebuilds. Core changes and pushes to main still run the example
-alongside their existing consumer checks.
-
-Only the exact files in `RESEARCH_EXAMPLE_INPUTS` receive this classification; a
-new helper or fixture must be reviewed and registered. Unknown paths, deletions
-and rename endpoints retain conservative selection. The example job's failure,
-cancellation or unexpected skip fails `ci-required` when selected.
-
-To run this focused check locally, install the checkout with `python -m pip install .`,
-make `jq` available, then run `python .github/scripts/check_research_example.py`.
-It uses temporary files and makes no model calls.
 
 The selector emits an explicit list of retained Python compatibility suites: core,
 documents, reasoning, session and other. The `python` lane runs all suites; the `documents`

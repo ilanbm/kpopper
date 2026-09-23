@@ -198,8 +198,7 @@ meaning. An unrelated write never migrates existing formulas.
 ## Finite-scope queries
 
 An explicit `core/v1` record may declare `query/v1` for `filter`, `project`,
-`select`, `count`, `sum`, `all` and `any`. Follow the [query specification](../../docs/query.md)
-and [runnable revisit example](../../examples/scoped-query/README.md). This
+`select`, `count`, `sum`, `all` and `any`. Follow the [query specification](../../docs/query.md). This
 packaged profile needs no separate Lean installation or checked-session setup.
 
 Name a scope with an explicit collection and sorted authored-field list. A row
