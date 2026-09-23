@@ -120,6 +120,23 @@ class Views(Repository):
         self.assertEqual(digest(before), digest(native_record(self.record, reader, read_mode='frozen')))
         self.assertNotEqual(digest(before), digest(live))
 
+    def test_consolidate_move_counts_hypotheses_and_never_a_pending_contribution(self):
+        # consolidation folds hypotheses only, so a contribution alone sends nobody there
+        self.capture()
+        for host, move in (('claude', '/kpopper:consolidate'), ('codex', '$consolidate')):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                P.opening([str(self.record)], host=host)
+            self.assertIn('PENDING', out.getvalue())
+            self.assertNotIn(move, out.getvalue())
+        hypothesis = Path(P.hypothesis_path([str(self.record)], 'alternate'))
+        hypothesis.parent.mkdir(parents=True)
+        hypothesis.write_text(P.yaml.safe_dump({'known': {'local.other': {'v': 2, 'from': 'measurement'}}}))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            P.opening([str(self.record)], host='claude')
+        self.assertIn('1 hypothesis waits - alternate', out.getvalue())
+        self.assertTrue(out.getvalue().endswith(' · check · /kpopper:consolidate (1 hypothesis waits)\n'),
+                        out.getvalue())
+
     def test_capture_before_first_checkout_record_is_readable(self):
         self.record.unlink()
         self.capture()

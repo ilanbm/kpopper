@@ -23,6 +23,10 @@ pub struct Options {
     pub chars: Option<i64>,
     #[arg(long,value_parser=["claude","codex"],hide=true)]
     pub host: Option<String>,
+    /// Set by the session hook, never by a flag: the hook names its host whatever the
+    /// record, so a core/v1 opening, which has no next moves to name, does not refuse it.
+    #[arg(skip)]
+    pub from_hook: bool,
     #[arg(long)]
     pub history: bool,
     /// Read a pinned committed branch beside the current record.
@@ -159,10 +163,7 @@ fn has_brief(paths: &[PathBuf], inventory: &mut Inventory) -> Result<bool> {
     )?;
     inventory.exists(&first.parent().unwrap().join(layout.view))
 }
-fn replaced(
-    paths: &[PathBuf],
-    inventory: &mut Inventory,
-) -> Result<(Option<crate::value::TypedValue>, String)> {
+fn replaced_path(paths: &[PathBuf]) -> Result<(PathBuf, String)> {
     let first = paths.first().ok_or_else(|| error("record_required"))?;
     let path = if first
         .file_name()
@@ -182,11 +183,96 @@ fn replaced(
         .unwrap_or(&path)
         .to_string_lossy()
         .to_string();
+    Ok((path, relative))
+}
+fn replaced(
+    paths: &[PathBuf],
+    inventory: &mut Inventory,
+) -> Result<(Option<crate::value::TypedValue>, String)> {
+    let (path, relative) = replaced_path(paths)?;
     if !inventory.exists(&path)? || !inventory.file(&path)? {
         return Ok((None, relative));
     }
     let value = crate::history_yaml::decode_document(&inventory.read(&path)?)?;
     Ok((Some(value), relative))
+}
+/// The kept versions of replaced judgments, for the opener. A file the reader cannot
+/// parse holds nothing it can name, as in the Python reader.
+fn kept_versions(
+    paths: &[PathBuf],
+    inventory: &mut Inventory,
+) -> Result<Option<crate::ordinary_value::Value>> {
+    let (path, _) = replaced_path(paths)?;
+    if !inventory.exists(&path)? || !inventory.file(&path)? {
+        return Ok(None);
+    }
+    Ok(
+        crate::history_yaml::decode_document(&inventory.read(&path)?)
+            .ok()
+            .map(|value| crate::ordinary_value::Value::from_typed(&value)),
+    )
+}
+/// The opener's line about a record moved by half: files of the record's other layout
+/// beside the entry file, which nothing reads, named as the Python reader names them.
+fn leftover_head(paths: &[PathBuf], inventory: &mut Inventory) -> Result<Option<String>> {
+    let first = paths.first().ok_or_else(|| error("record_required"))?;
+    let directory = first.parent().ok_or_else(|| error("invalid_path"))?;
+    let legacy = first
+        .file_name()
+        .is_none_or(|name| name != "GROUNDING.yaml");
+    // The other layout's files, in the order the reader names them; hypotheses first.
+    let other = if legacy {
+        [
+            ".kpopper/hypotheses",
+            ".kpopper/view.yaml",
+            ".kpopper/measure.yaml",
+            ".kpopper/session.json",
+            ".kpopper/replaced.yaml",
+            ".kpopper/history",
+            ".kpopper/history-commits",
+            ".kpopper/history.yaml",
+            ".kpopper/history-cancellations",
+        ]
+    } else {
+        [
+            "PROVENANCE.d",
+            "PROVENANCE.view.yaml",
+            "PROVENANCE.measure.yaml",
+            "PROVENANCE.session.json",
+            "PROVENANCE.replaced.yaml",
+            "PROVENANCE.history",
+            "PROVENANCE.history-commits",
+            "PROVENANCE.history.yaml",
+            "PROVENANCE.history-cancellations",
+        ]
+    };
+    let mut left = vec![];
+    for (index, name) in other.into_iter().enumerate() {
+        let path = directory.join(name);
+        if !inventory.exists(&path)? {
+            continue;
+        }
+        if index == 0 {
+            // An empty hypotheses directory holds nothing to lose.
+            if inventory.glob(&path.join("*.y*ml"))?.is_empty() {
+                continue;
+            }
+            left.push(format!("{name}/"));
+        } else {
+            left.push(name.to_owned());
+        }
+    }
+    if left.is_empty() {
+        return Ok(None);
+    }
+    let names = left.join(", ");
+    Ok(Some(if legacy {
+        format!(
+            "{names} not read beside PROVENANCE.yaml - rename the record to GROUNDING.yaml and move its files into .kpopper/"
+        )
+    } else {
+        format!("left under the earlier name, not read: {names} - move into .kpopper/")
+    }))
 }
 fn prefix_order(source: &crate::ordinary_source::Source) -> Vec<String> {
     let Some(crate::ordinary_source::Source::Map(prefixes)) =
@@ -379,12 +465,25 @@ pub fn run(
         )?;
         let prefix_order = prefix_order(capture.source());
         let output = match command {
-            "open" => projection.opening_with_orientation(
-                options.budget.unwrap_or(25),
-                None,
-                &prefix_order,
-                &orientation(capture.source()),
-            )?,
+            "open" => {
+                // A caller that names no files or budgets of its own gets the slot a
+                // session hook fills; one that names any gets exactly what it named.
+                let explicit = !options.subjects.is_empty()
+                    || options.chars.is_some()
+                    || options.budget.is_some();
+                let replaced = kept_versions(&paths, &mut inventory)?;
+                projection.opening(&crate::ordinary_views::Opening {
+                    budget: options.budget.unwrap_or(25),
+                    chars: options
+                        .chars
+                        .or((!explicit).then_some(crate::ordinary_views::OPENING_CHARS)),
+                    host: options.host.as_deref(),
+                    prefix_order: &prefix_order,
+                    orientation: &orientation(capture.source()),
+                    replaced: replaced.as_ref(),
+                    leftover: leftover_head(&paths, &mut inventory)?,
+                })?
+            }
             "check" => {
                 let (mut text, code) = projection.check(None)?;
                 if has_brief(&paths, &mut inventory)? {
@@ -437,7 +536,7 @@ pub fn run(
     let unsupported = [
         ("--chars", options.chars.is_some()),
         ("--budget", options.budget.is_some()),
-        ("--host", options.host.is_some()),
+        ("--host", options.host.is_some() && !options.from_hook),
     ]
     .into_iter()
     .filter(|(_, v)| *v)

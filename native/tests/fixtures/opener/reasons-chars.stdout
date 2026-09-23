@@ -1,0 +1,14 @@
+A record that exercises every line of the opener.
+holds: p (4) · prior (2) · q (2) · and 1 standalone
+prefixes: d=decision made by a person · prior=a session's own confidence, held as a n… · p=parameter
+21 entries, 12 judgments, 2 open questions, updated 2026-09-20
+2 judgments rest on prior.* claims, 1 of them on a prior at 0.8 or above
+1 reading moved that only a replaced judgment listened to: p.dropped (d.gone until 2026-09-18) - pull d.gone --history
+left under the earlier name, not read: PROVENANCE.view.yaml - move into .kpopper/
+
+needs a person (11):
+  d.broken: rests on missing.one, which is not an entry
+  d.broken: rests on missing.two, which is not an entry
+  ... 18 more - raise --chars
+
+next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check
