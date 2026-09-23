@@ -1,11 +1,16 @@
-[![kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads - Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!](assets/kpopper-hero.png)](assets/kpopper-hero.png)
+<p align="center">
+  <a href="assets/kpopper-canvas-hero.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/kpopper-canvas-hero-mobile.png">
+      <img src="assets/kpopper-canvas-hero.png" alt="kpopper. An ink-drawn robot works at a drafting surface labelled GROUNDING.yaml. Blue arrows connect Evidence and Assumptions to a Decision, then to What would change it. The lowercase kpopper wordmark has a blue k. The caption reads: The canvas your AI didn't know it needed.">
+    </picture>
+  </a>
+</p>
+
+[Phone layout](assets/kpopper-canvas-hero-mobile.png)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ilanbm/kpopper/check.yml?branch=main&label=CI&logo=github)](https://github.com/ilanbm/kpopper/actions/workflows/check.yml) [![kpopper checks its own record](https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main)](GROUNDING.yaml "kpopper checks its own knowledge record in CI") [![Latest release](https://img.shields.io/github/v/release/ilanbm/kpopper)](https://github.com/ilanbm/kpopper/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![native-runtime: Rust](https://img.shields.io/badge/native--runtime-Rust-DEA584?logo=rust&logoColor=white)](native/README.md) [![reasoning-runtime: Lean 4](https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6)](docs/reasoning-core.md) [![history-engine: versioned records](https://img.shields.io/badge/history--engine-versioned%20records-8B5CF6)](docs/history-contract.md)
-
-<p align="center">
-  <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
-</p>
 
 <a id="keep-the-reasoning-move-the-work-forward"></a>
 
@@ -40,7 +45,7 @@ computation—and focus the agent on decisions that need judgment.
 **[Get started](#get-started)** · [Choose your path](#choose-your-path) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#how-it-works) ·
 [Commands](#quick-reference) ·
-[Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
+[Contributing](CONTRIBUTING.md) · [Why the name?](#user-content-popper-give-a-conclusion-a-way-to-fail)
 
 <p align="center">
   <a href="assets/diagrams/reasoning-check-v2.png">
@@ -57,19 +62,21 @@ computation—and focus the agent on decisions that need judgment.
 <summary>Contents</summary>
 
 - [Choose your path](#choose-your-path)
-  - [Coding agents](#example-1-coding-agent)
-  - [Claude Cowork / ChatGPT Work](#example-2-claude-cowork-and-chatgpt-work)
-  - [Research](#example-3-research)
+  - [Coding agents](#user-content-example-1-coding-agent)
+  - [Claude Cowork / ChatGPT Work](#user-content-example-2-claude-cowork-and-chatgpt-work)
+  - [Research](#user-content-example-3-research)
 - [Installation and first use](#get-started)
 - [CLI and plugin quick reference](#quick-reference)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
+- [Keep the conversation moving](#keep-the-conversation-moving)
+- [Keep your existing knowledge system](#keep-the-knowledge-system-already-in-use)
 - [What “deterministically checkable” means](#deterministically-checkable)
 - [Go deeper](#go-deeper)
   - [How it works](#how-it-works)
   - [Followups and background checks](#followups-and-background-checks)
   - [Optional experimental applications](#experimental-applications)
-  - [Karl Popper, K-pop and the name](#popper-give-a-conclusion-a-way-to-fail)
   - [Availability and limits](#what-is-available-and-what-is-next)
+  - [Karl Popper and falsifiability](#user-content-popper-give-a-conclusion-a-way-to-fail)
 - [Try it, get help and contribute](#make-it-earn-its-place)
 
 </details>
@@ -78,7 +85,7 @@ computation—and focus the agent on decisions that need judgment.
 
 ## Where would you like to start?
 
-Choose your path. Click a title or image to expand.
+Choose your path. Click a banner to open its section, or a title to open or close it.
 Each section includes workflows, examples and the records behind them.
 You can also [go straight to installation](#get-started).
 
@@ -87,15 +94,19 @@ You can also [go straight to installation](#get-started).
 <a id="example-1-private-data-exposure"></a>
 
 <a id="example-1-private-data-exposure-assumption-checks"></a>
-<a id="example-1-coding-agent"></a>
+<p>
+  <a id="coding-preview" href="#user-content-example-1-coding-agent"><img src="assets/navigation/coding-banner.png" width="960" alt="PR A enables private projects. PR B adds a cache keyed only by query, assuming all results are public. Both changes point to the merged cache, where a private project and a red failure mark show private results exposed."></a>
+</p>
 
 <details>
 <summary>
 <a id="coding-title"><img src="assets/navigation/coding-title.svg" width="174" height="36" align="middle" alt="Coding agents"></a><br>
-Claude Code · Codex · Cursor · and more<br><br>
-<a id="coding-preview"><img src="assets/navigation/coding-banner.png" width="960" alt="PR A enables private projects. PR B adds a cache keyed only by query, assuming all results are public. Both changes point to the merged cache, where a private project and a red failure mark show private results exposed."></a><br>
-<strong>Click to expand workflows and examples ↓</strong>
+Claude Code · Codex · Cursor · and more<br>
+<strong>Explore workflows and examples</strong>
 </summary>
+
+<a id="example-1-coding-agent"></a>
+<a id="user-content-example-1-coding-agent"></a>
 
 ### Private data exposure
 
@@ -291,6 +302,8 @@ These project modes also apply to document and research work.
 
 </details>
 
+---
+
 <a id="revisiting-plans-when-the-brief-changes"></a>
 
 <a id="example-3-outdated-planning-assumptions"></a>
@@ -298,15 +311,19 @@ These project modes also apply to document and research work.
 <a id="example-3-outdated-planning-assumptions-freshness"></a>
 
 <a id="example-2-outdated-planning-assumptions-freshness"></a>
-<a id="example-2-claude-cowork-and-chatgpt-work"></a>
+<p>
+  <a id="cowork-preview" href="#user-content-example-2-claude-cowork-and-chatgpt-work"><img src="assets/navigation/cowork-banner.png" width="960" alt="A plan built around one venue kitchen meets workshop participants cooking remotely from their own homes."></a>
+</p>
 
 <details>
 <summary>
 <a id="cowork-title"><img src="assets/navigation/cowork-title.svg" width="192" height="36" align="middle" alt="Claude Cowork /"> <img src="assets/navigation/chatgpt-work-title.svg" width="174" height="36" align="middle" alt="ChatGPT Work"></a><br>
-Keep plans current when the brief changes.<br><br>
-<a id="cowork-preview"><img src="assets/navigation/cowork-banner.png" width="960" alt="A plan built around one venue kitchen meets workshop participants cooking remotely from their own homes."></a><br>
-<strong>Click to expand workflows and examples ↓</strong>
+Keep plans current when the brief changes.<br>
+<strong>Explore workflows and examples</strong>
 </summary>
+
+<a id="example-2-claude-cowork-and-chatgpt-work"></a>
+<a id="user-content-example-2-claude-cowork-and-chatgpt-work"></a>
 
 ### Outdated planning assumptions
 
@@ -435,18 +452,24 @@ For another example that needs judgment, explore
 
 </details>
 
+---
+
 <a id="example-4-dark-matter-across-studies-evidence-synthesis"></a>
 
 <a id="example-3-dark-matter-across-studies-evidence-synthesis"></a>
-<a id="example-3-research"></a>
+<p>
+  <a id="research-preview" href="#user-content-example-3-research"><img src="assets/navigation/research-banner.png" width="960" alt="Galaxy rotation, gravitational lensing and the cosmic microwave background introduce the research evidence."></a>
+</p>
 
 <details>
 <summary>
 <a id="research-title"><img src="assets/navigation/research-title.svg" width="114" height="36" align="middle" alt="Research"></a><br>
-Connect evidence and revisit conclusions as findings change.<br><br>
-<a id="research-preview"><img src="assets/navigation/research-banner.png" width="960" alt="Galaxy rotation, gravitational lensing and the cosmic microwave background introduce the research evidence."></a><br>
-<strong>Click to expand workflows and examples ↓</strong>
+Connect evidence and revisit conclusions as findings change.<br>
+<strong>Explore workflows and examples</strong>
 </summary>
+
+<a id="example-3-research"></a>
+<a id="user-content-example-3-research"></a>
 
 ### Dark matter across studies
 
@@ -683,66 +706,126 @@ assumptions remain explicit, and neither the count nor replay proves the synthes
 
 ## Get started
 
-kpopper plugs into the agent you already work with, and the agent can follow the steps
-below itself. Send it this, then start a new session when it tells you to:
+**Start in your agent's chat.** Paste this request into any of the agents listed below.
+The agent can carry out the steps its tools allow and guide you through any clicks,
+approvals or administrator steps that need your input.
 
 ```text
-Dear agent, please install kpopper for yourself. Follow the steps for your kind
-of agent at https://github.com/ilanbm/kpopper#get-started, run what you can, and
-tell me what is left for me to do.
+Please install kpopper. Open the guide below and follow the installation
+instructions for your environment:
+https://github.com/ilanbm/kpopper#get-started
+Complete the setup, including the required runtime. Guide me through any
+steps that need my input, and tell me when to start a new session.
 ```
 
+The sections below explain each app's setup and provide manual alternatives.
+
 ### Claude Code
+
+**In the Claude Code chat:** paste the [installation request above](#get-started).
+It covers both the plugin and its required runtime.
+
+<details>
+<summary>Manual alternative: slash commands or terminal commands</summary>
+
+**Inside Claude Code**, enter these slash commands one at a time:
+
+```text
+/plugin marketplace add ilanbm/kpopper
+/plugin install kpopper@kpopper
+```
+
+**Or, in a terminal**, run the equivalent commands:
 
 ```sh
 claude plugin marketplace add ilanbm/kpopper
 claude plugin install kpopper@kpopper --scope user
 ```
 
-Inside Claude Code, `/plugin marketplace add ilanbm/kpopper` and `/plugin install kpopper@kpopper`
-do the same. Either way, the plugin arrives without its native runtime. Install it with
-`sh "<installPath>/scripts/install_native.sh"`, taking `installPath` from kpopper's entry in
-`claude plugin list --json` ([on Windows](docs/plugin-runtime.md#install-the-native-runtime)),
-then start a new session.
+Both routes install the plugin. The native runtime is a separate required step;
+ask Claude Code to finish it, or follow the [manual runtime setup](docs/plugin-runtime.md#install-the-native-runtime).
+That guide explains how to find the installed plugin directory and includes Windows
+instructions. Start a new session after setup is complete.
+
+</details>
 
 ### Codex
+
+**In a Codex task:** paste the [installation request above](#get-started).
+The agent can use its terminal tools for setup when available; it will guide you through
+any client prompts that need your input.
+
+<details>
+<summary>Manual alternative: terminal commands and hook approval</summary>
+
+**In a terminal:**
 
 ```sh
 codex plugin marketplace add ilanbm/kpopper
 codex plugin add kpopper@kpopper
 ```
 
-Install the native runtime with `sh "<plugin root>/scripts/install_native.sh"`, using the
-plugin root that `codex plugin add` prints ([on Windows](docs/plugin-runtime.md#install-the-native-runtime)).
-Then start a new task and trust kpopper's hooks when Codex asks, or in `/hooks`. See
-[Codex setup and behavior](adapters/codex/README.md).
+Install the native runtime in the plugin root printed by `codex plugin add` using the
+[native runtime setup guide](docs/plugin-runtime.md#install-the-native-runtime).
+Then start a new task and review and trust kpopper's hooks when Codex asks.
+You can also inspect the hook definitions **inside Codex** with:
+
+```text
+/hooks
+```
+
+See [Codex setup and behavior](adapters/codex/README.md).
+
+</details>
 
 ### Claude Cowork
 
-Install it in the app: open **Customize → Plugins → Add marketplace**, enter `ilanbm/kpopper`,
-then install **kpopper**. Cowork runs tasks in its own environment, where kpopper has not yet
-been verified end to end; see the [Cowork notes](adapters/claude-cowork/README.md).
+**In Cowork:** paste the [installation request above](#get-started) for guided setup.
+The app installation step is **Customize → Plugins → Add marketplace**: enter
+`ilanbm/kpopper`, then install **kpopper**.
+
+Cowork runs tasks in its own environment, where kpopper has not yet been verified
+end to end; see the [Cowork notes](adapters/claude-cowork/README.md).
 
 ### ChatGPT Work
 
-A workspace administrator imports it from **Admin → Plugins → Add → Import marketplace**, with
-`https://github.com/ilanbm/kpopper` as the source and **Path** left empty; members then install
-it from **Plugins**. kpopper's runtime in Work is not yet validated; see
+**In Work:** paste the [installation request above](#get-started) for guidance through
+the workspace setup. If the plugin is not available, a workspace administrator must
+import it from **Admin → Plugins → Add → Import marketplace**, with
+`https://github.com/ilanbm/kpopper` as the source and **Path** left empty. Members can
+then install it from **Plugins**.
+
+kpopper's runtime in Work is not yet validated; see
 [Work setup and current limits](docs/chatgpt-work.md).
 
 ### Other agents
 
-Clone the repository where it can stay (`git clone https://github.com/ilanbm/kpopper.git`),
-then follow the adapter for your agent:
+**In Cursor, Gemini CLI, Windsurf, GitHub Copilot, OpenClaw or OpenCode:** paste the
+[installation request above](#get-started). The agent should follow the adapter for
+the app and environment you're using:
+
 [Cursor](adapters/cursor/README.md#install-the-project-adapter) ·
 [Gemini CLI](adapters/gemini/README.md#install) ·
 [Windsurf](adapters/windsurf/README.md#install) ·
 [GitHub Copilot](adapters/copilot/README.md#install) ·
 [OpenClaw](adapters/openclaw/README.md#install) ·
 [OpenCode](adapters/opencode/README.md#install).
-Add to the agent's existing configuration rather than replacing it. What runs automatically
-differs by agent; see the [capability matrix](adapters/README.md#capability-matrix) and
+
+<details>
+<summary>Manual alternative: local checkout and adapter setup</summary>
+
+**In a terminal**, clone the repository where it can stay:
+
+```sh
+git clone https://github.com/ilanbm/kpopper.git
+```
+
+Follow the adapter linked above. Add to the agent's existing configuration rather
+than replacing it. What runs automatically differs by agent; see the
+[capability matrix](adapters/README.md#capability-matrix) and
 [verification status](docs/compatibility.md).
+
+</details>
 
 ### After installing
 
@@ -753,6 +836,10 @@ The native runtime needs no Python, Node, Rust or Lean toolchain.
 
 [Use the command line without an agent](docs/reference.md#try-it-from-the-command-line) ·
 [Python compatibility mode and troubleshooting](docs/plugin-runtime.md)
+
+**Installed? See it in your work:** [Coding agents](#user-content-example-1-coding-agent) ·
+[Claude Cowork / ChatGPT Work](#user-content-example-2-claude-cowork-and-chatgpt-work) ·
+[Research](#user-content-example-3-research)
 
 ## Quick reference
 
@@ -852,7 +939,7 @@ the earlier evidence available when the work changes.
 
 | What you want to do | What kpopper provides | Example |
 | --- | --- | --- |
-| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#example-2-claude-cowork-and-chatgpt-work). | Resume a job search and recover why three roles were shortlisted. |
+| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#user-content-example-2-claude-cowork-and-chatgpt-work). | Resume a job search and recover why three roles were shortlisted. |
 | Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#how-it-works). | Trace the upload queue decision back to the test that exposed request timeouts. |
 | Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
 | Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged native reasoning runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#deterministically-checkable). | Check whether 24 guests fit a venue with 18 seats. |
@@ -860,7 +947,7 @@ the earlier evidence available when the work changes.
 | Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
 | Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
 | Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). | Record a babysitter's cancellation and surface the evening plans that depended on it. |
-| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#example-1-coding-agent). | One branch removes password login; another adds a feature that still requires it. |
+| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#user-content-example-1-coding-agent). | One branch removes password login; another adds a feature that still requires it. |
 | Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). | A discarded prototype's documented API limit remains available to the next integration task. |
 | Return to work when its conditions change | Tie followups to dates, changed recorded inputs or earlier work, with scheduling and delivery configured in the host. [Followups](#followups-and-background-checks). | Resume tax preparation once the missing bank statement has been recorded. |
 | Share a focused piece of the reasoning | Export selected entries as Markdown, with earlier/current readings, omitted values marked and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). | Share why you chose a school, including the commute times and fee comparisons. |
@@ -879,6 +966,62 @@ and makes judgments. Your existing documents, tools and memory stay where they a
 | Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Included in native bundles; the application remains optional and experimental. [Applications](#experimental-applications). | Open a visual overview of a renovation's quotes, decisions and unresolved questions. |
 | Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Included in native bundles; the application remains optional and experimental. [Document workflow](docs/documents.md). | Produce a client report with the source invoices beside each expense total. |
 | Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). | An agent refreshes its view after another session changes the recorded API contract. |
+
+<a id="keep-the-conversation-moving"></a>
+
+## Keep the conversation moving
+
+New information often arrives halfway through another task. kpopper can retain an explicit
+report and process a supported update in a separate worker. Routine results stay quiet;
+important unresolved findings are available for delivery back to the conversation.
+
+<p align="center">
+  <a href="assets/diagrams/conversation-flow.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
+      <img src="assets/diagrams/conversation-flow.png" alt="The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet. The closing line reads Get notified only when something needs attention.">
+    </picture>
+  </a>
+</p>
+
+[Phone layout](assets/diagrams/conversation-flow-mobile.png)
+
+**Captured, applied and checked are different states.** If the current answer depends on
+an update, inspect its outcome before relying on it. Background work is useful where the
+conversation can safely continue without that result.
+
+<details>
+<summary><strong>Background updates and delivery</strong></summary>
+
+Supported reports can update stored values and add new readings, rules and judgments.
+Related changes from one source can be applied together. The agent supplies the source
+quotation and explicit updates; background processing does not guess what an ambiguous
+message means. Existing judgments still require deliberate review.
+
+Supported record layouts and authoring limits are described in the
+[background capture guide](skills/kpopper/INGESTION.md). Delivery after an answer requires
+the host capabilities described in the [native delivery guide](skills/kpopper/DELIVERY.md).
+
+</details>
+
+<a id="keep-the-knowledge-system-already-in-use"></a>
+
+## Keep the knowledge system already in use
+
+Your Markdown files, Obsidian vault, project wiki and agent memory can stay where they are.
+Your agent reads relevant material through its available tools and keeps sourced claims
+and decisions in a [project record](#how-it-works).
+
+<details>
+<summary><strong>How existing knowledge connects to the record</strong></summary>
+
+`GROUNDING.yaml` presents the claims the work relies on, with links back to their sources;
+new records retain their history in `.kpopper/`. There is no need to migrate the existing
+notes or replace the agent's memory system. This applies to coding, planning and research.
+
+[![Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.](assets/knowledge-sources.png)](assets/knowledge-sources.png)
+
+</details>
 
 <a id="deterministically-checkable"></a>
 <a id="what-deterministic-reasoning-means-here"></a>
@@ -1078,39 +1221,6 @@ rewrite the knowledge record.
 
 </details>
 
-<a id="keep-the-conversation-moving"></a>
-
-<details>
-<summary><strong>Keep the conversation moving</strong></summary>
-
-New information often arrives halfway through another task. kpopper can retain an explicit
-report and process a supported update in a separate worker. Routine results stay quiet;
-important unresolved findings are available for delivery back to the conversation.
-
-<p align="center">
-  <a href="assets/diagrams/conversation-flow.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
-      <img src="assets/diagrams/conversation-flow.png" alt="The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet. The closing line reads Get notified only when something needs attention.">
-    </picture>
-  </a>
-</p>
-
-[Phone layout](assets/diagrams/conversation-flow-mobile.png)
-
-Today, that worker can update an **existing stored scalar value in a single record file**,
-using a supplied source quote, target, value and report date. It does not infer what an
-ambiguous message refers to. Unresolved identity or meaning remains a question. Delivery
-after an answer requires the host capabilities described in the
-[background capture guide](skills/kpopper/INGESTION.md) and
-[native delivery guide](skills/kpopper/DELIVERY.md).
-
-**Captured, applied and checked are different states.** If the current answer depends on
-an update, inspect its outcome before relying on it. Background work is useful precisely
-where the conversation can safely continue without that result.
-
-</details>
-
 <a id="how-it-works"></a>
 
 <details>
@@ -1253,54 +1363,6 @@ See [setup and host limits](skills/watch/SKILL.md),
 
 </details>
 
-<a id="ready-to-launch-had-a-condition"></a>
-
-<details>
-<summary><strong>“Ready to launch” had a condition</strong></summary>
-
-Karl Popper is releasing his debut K-pop single.
-An agent has prepared Friday's launch-party announcement. The venue has confirmed the
-booking. The decision: **the announcement is ready, provided the booking stays confirmed.**
-
-The next day, the venue cancels. A later session picks up the launch plan. The announcement
-copy is unchanged; the reason it was ready to publish has disappeared.
-
-kpopper preserves that connection:
-
-```yaml
-sources:
-  booking:
-    name: "Venue confirmation"
-    quoted: "Your booking for Friday is confirmed."
-    read: "2026-09-09"
-
-known:
-  venue.status: {v: confirmed, from: booking, as_of: "2026-09-09"}
-
-judgments:
-  launch.announcement:
-    rests_on: [venue.status]
-    verdict: "Friday's announcement is ready, provided the venue booking stays confirmed."
-    because: "The announcement names the date and venue confirmed in the booking email."
-    wrong_if: 'venue.status != "confirmed"'
-    seen: {venue.status: confirmed}
-```
-
-After the session records the cancellation, the next check reports:
-
-```text
-launch.announcement: wrong_if holds (venue.status != "confirmed") - broken by its own condition
-```
-
-The next agent sees **which decision needs review, which premise changed, and what the
-earlier decision was based on**. It knows to revisit the announcement before reusing
-“ready to launch.”
-
-[Try the example](docs/reference.md#try-it-from-the-command-line) ·
-[See a PR and CI case](#coding-check-the-reasoning-behind-a-merge)
-
-</details>
-
 <a id="coding-check-the-reasoning-behind-a-merge"></a>
 
 <details>
@@ -1361,49 +1423,6 @@ unrelated IDs, can still require human review.
 
 </details>
 
-<a id="popper-give-a-conclusion-a-way-to-fail"></a>
-
-## Popper: give a conclusion a way to fail
-
-The man in the banner is **Karl Popper**, cast here as an unlikely K-pop star.
-
-Karl Popper was a philosopher of science who argued that scientific theories should expose
-themselves to tests that could prove them wrong. Surviving a test does not make a theory
-certain. [The Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
-explains the idea and its limits.
-
-kpopper borrows that discipline for agent reasoning: **preserve the evidence, state what
-would undermine a conclusion, and know when to reconsider it.** This is the idea behind
-the name.
-
-<details>
-<summary><strong>How the Popper example works</strong></summary>
-
-**Now prove that Karl Popper isn't the father of K-pop.**
-
-Our imaginary announcement, **“Popper's K-pop debut is out,”** has a more concrete test:
-
-```yaml
-wrong_if: 'popper.single_status != "released"'
-```
-
-If the recorded status is `planned`, that condition fires and `check` fails.
-A green check means no failing condition was found by these checks;
-it does not establish that the recommendation is true, wise, complete or authorized.
-
-This legacy example uses one comparison over declared inputs. The current core also
-supports [compound conditions](docs/reasoning-core.md#composable-conditions). Free-form
-reasoning still needs interpretation. If a condition cannot yet be checked, `blocked_on`
-records why. A decision
-that needs a person's judgment can instead carry `reopened_by`, describing the sign that
-would bring it back for review. Preferences and open questions need no invented scientific
-certainty. See [the checking rules](docs/reference.md#what-check-means).
-
-This is a practical use of falsification, not an automated implementation of the scientific
-method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
-
-</details>
-
 <a id="a-third-brain-for-work-in-progress"></a>
 
 <details>
@@ -1434,16 +1453,6 @@ reconsideration.
 kpopper gives that record structure. It connects conclusions to their grounds, preserves what
 they were reviewed against, and checks declared conditions as recorded facts change. We call
 this reasoning and review layer a **third brain**; the agent supplies the interpretation.
-
-**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
-a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
-reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in the [project record](#how-it-works).
-`GROUNDING.yaml` presents those claims; new records retain their history in `.kpopper/`.
-There is no need to migrate the
-existing notes or replace the agent's memory system.
-
-[![Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.](assets/knowledge-sources.png)](assets/knowledge-sources.png)
 
 | Role | Question it helps answer |
 |---|---|
@@ -1486,54 +1495,27 @@ The achievement was formalizing existing mathematics, building on Wiles's proof 
 community work. See [Anthropic's account](https://www.anthropic.com/research/formalizing-fermats-last-theorem)
 and the [published proof](https://github.com/anthropics/fermats-last-theorem).
 
-> “If it's good enough for Claude, it's good enough for you.”
->
-> — Karl Popper, father of K-pop.
+**Lean is part of kpopper's packaged reasoning runtime. Ordinary use needs no Lean installation.**
+Its kernel checks formal proofs; compiled programs perform the supported calculations and
+checks. These serve related but distinct purposes:
 
-**kpopper uses compiled native reasoning resources for deterministic reasoning in new records.**
-It evaluates supported calculations and conditions from explicit inputs. The
-optional, experimental checked-session mode also checks rules about
-an agent's view of the record. The language is a theorem prover: its kernel checks
-formal proofs against a precisely defined type theory. [The Lean reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
-explains how proof checking and compiled execution fit together.
+- **Deterministic computation.** The default reasoning core evaluates supported arithmetic,
+  compound conditions and collection queries from explicit recorded inputs.
+- **Specific formal guarantees.** Named theorems cover defined properties of the evaluator
+  and checked-session core. For example, successful evaluation of closed rational arithmetic
+  agrees with its mathematical meaning, and an accepted session view preserves declared
+  conflict signals. See [the arithmetic proof scope](docs/reasoning-core.md#runtime-licensing-and-assurance)
+  and [the checked-session guarantees](docs/checked-sessions.md#formal-guarantees).
+- **An optional checked view.** Experimental checked sessions expose a revision-bound view
+  through CLI or MCP. A changed record rejects reads using the old revision. Enable this
+  mode separately with `kpop session enable`; [setup and compatibility instructions](docs/checked-sessions.md)
+  cover the native bundles and the explicit Python adapter.
 
-For the default reasoning core, the native executable captures the record and uses
-the packaged reasoning resources to evaluate supported rules. [Reasoning and history](docs/reasoning-core.md)
-describes its scope, supported platforms and formal guarantees. Python remains an
-explicit compatibility adapter.
-
-In checked-session mode, the native executable prepares a normalized snapshot and
-the packaged local core checks the proposed session view; CLI or MCP exposes the result. Reads are
-bound to the revision returned at opening, so a changed record rejects a request
-using the old revision.
-
-The [checked-session Lean source](scripts/session/lean/Main.lean) contains formal proofs
-of specific properties:
-
-| Property | Why it matters |
-|---|---|
-| A changed premise alone does not count as falsification when the falsifier is false. | “Something changed” and “the condition fired” stay distinct. |
-| An unknown falsifier cannot satisfy an assertion that it is false. | Missing knowledge cannot pass as a negative result. |
-| Every scan row contributes to either the success or error count. | An assessment error remains accounted for. |
-| A view accepted by the core's acceptance predicate preserves declared conflict signals and accounts for every link index. | Folding a large record must retain the declared structure and conflicts. |
-
-The [proof audit](scripts/session/lean/ProofAudit.lean) names these theorems and prints their
-axiom dependencies. Other runtime checks cover such details as exact recovery references,
-topic bindings and event values. The [session CI workflow](.github/workflows/session.yml)
-builds the pinned Lean source and runs integration tests on Linux, macOS and Windows.
-
-These are guarantees about **defined data structures and checks**. They do not prove that
-a source is accurate, that `rests_on` logically implies a verdict, that an agent's prose
-follows from the evidence, or that an action is permitted. The Python adapter, router,
-renderer, compiler and runtime are outside an end-to-end formal proof. You do not need to
-write Lean to maintain a record.
-
-Native bundles include the checked-session resources. Enable checked sessions with
-`kpop session enable`; no Python or Lean installation is required at runtime. The
-legacy Python adapter still requires `kpopper[session]` and Lean **4.33.1**. The
-complete instructions, CLI and MCP examples, predicate subset and rollback are in
-[Checked sessions](docs/checked-sessions.md). The ordinary commands remain available
-without it.
+These guarantees do not establish that a source is accurate, that the recorded premises
+logically imply an agent's verdict, or that an action is permitted. The adapters, renderer,
+compiler and runtime are not covered by an end-to-end formal proof. You do not need to write
+Lean to maintain a record. [Lean's reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
+explains the distinction between proof checking and compiled execution.
 
 [Logo source and trademark information](assets/README.md#lean-logo).
 
@@ -1642,9 +1624,123 @@ authorize. It does not install connectors or scan accounts by itself. See
 
 </details>
 
-[![An ink-drawn software artist works at a drafting surface labelled GROUNDING.yaml. Blue arrows connect Evidence and Assumptions to a Decision, then to What would change it. The agent authors the relationships on the shared canvas. The caption reads: The canvas your AI didn't know it needed.](assets/canvas-for-reasoning-v2.png)](assets/canvas-for-reasoning-v2.png)
+<details>
+<summary><strong>Popper: the philosopher behind falsifiability</strong></summary>
+
+<a id="popper-give-a-conclusion-a-way-to-fail"></a>
+<a id="user-content-popper-give-a-conclusion-a-way-to-fail"></a>
+
+**No, he isn't really the father of K-pop. :) Karl Popper was a philosopher of science**
+who argued that **a scientific theory must be falsifiable**: there must be a possible
+observation or experiment that would contradict it.
+
+So let's put our own claim to the test: **what evidence would make us give it up?**
+If “father of K-pop” means Popper helped create the genre, we can investigate that:
+check his biography, look for songwriting and recording credits, and compare the claim
+with histories of Korean popular music.
+
+But suppose we keep changing what “father” means whenever the evidence disagrees.
+Whatever we find, we invent another explanation that saves the claim.
+**Now it can survive anything. We've made it impossible to test.**
+
+That is the challenge Popper posed to scientific theories: **they must risk being wrong.**
+A theory must rule something out—something an observation or experiment could reveal.
+If every possible result can be made to fit, it fails his criterion for empirical science.
+
+For the historical comparison, the
+[Library of Congress timeline](https://guides.loc.gov/k-pop/history-timeline) traces
+Korean popular music and identifies the emergence of Seo Taiji and Boys as a turning point
+in the 1990s. [Popper's biography](https://plato.stanford.edu/entries/popper/) tells the
+story of his work in philosophy. The banner's pop-star story is our invention.
+
+Surviving tests does not prove a theory true, and an apparent counterexample still needs
+careful checking. The [Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
+explains this distinction between falsifiability and refutation in practice.
+
+**kpopper borrows that discipline to build a working picture of reality for your project.**
+It connects claims and decisions to their evidence and assumptions, and preserves
+**what would make us change that picture.** When new evidence is recorded, its checks show which declared
+conditions fail and which decisions need another look. The person or agent interprets
+the evidence and revises the record. The picture stays open to criticism, refutation
+and revision as the work changes.
+
+<a id="ready-to-launch-had-a-condition"></a>
+
+### “Ready to launch” had a condition
+
+In our fictional launch story, Karl Popper is releasing his debut K-pop single.
+An agent has prepared Friday's launch-party announcement. The venue has confirmed the
+booking. The decision: **the announcement is ready, provided the booking stays confirmed.**
+
+The next day, the venue cancels. A later session picks up the launch plan. The announcement
+copy is unchanged; the reason it was ready to publish has disappeared.
+
+kpopper preserves that connection:
+
+```yaml
+sources:
+  booking:
+    name: "Venue confirmation"
+    quoted: "Your booking for Friday is confirmed."
+    read: "2026-09-09"
+
+known:
+  venue.status: {v: confirmed, from: booking, as_of: "2026-09-09"}
+
+judgments:
+  launch.announcement:
+    rests_on: [venue.status]
+    verdict: "Friday's announcement is ready, provided the venue booking stays confirmed."
+    because: "The announcement names the date and venue confirmed in the booking email."
+    wrong_if: 'venue.status != "confirmed"'
+    seen: {venue.status: confirmed}
+```
+
+After the session records the cancellation, the next check reports:
+
+```text
+launch.announcement: wrong_if holds (venue.status != "confirmed") - broken by its own condition
+```
+
+The next agent sees **which decision needs review, which premise changed, and what the
+earlier decision was based on**. It knows to revisit the announcement before reusing
+“ready to launch.”
+
+[Try the example](docs/reference.md#try-it-from-the-command-line) ·
+[See a PR and CI case](#coding-check-the-reasoning-behind-a-merge)
+
+### What the check establishes
+
+The launch example gives the announcement a concrete condition:
+the venue booking must stay confirmed. It is this declared condition that the check tests.
+
+A green check means no failing condition was found by these checks;
+it does not establish that the recommendation is true, wise, complete or authorized.
+
+This legacy example uses one comparison over declared inputs. The current core also
+supports [compound conditions](docs/reasoning-core.md#composable-conditions). Free-form
+reasoning still needs interpretation. If a condition cannot yet be checked, `blocked_on`
+records why. A decision
+that needs a person's judgment can instead carry `reopened_by`, describing the sign that
+would bring it back for review. Preferences and open questions need no invented scientific
+certainty. See [the checking rules](docs/reference.md#what-check-means).
+
+This is a practical use of falsification, not an automated implementation of the scientific
+method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
+
+</details>
+
+[![kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads - Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!](assets/kpopper-hero.png)](assets/kpopper-hero.png)
+
+<p align="center">
+  <a href="#user-content-popper-give-a-conclusion-a-way-to-fail">Wait, what? kpopper is Karl Popper? Is he really the father of K-pop? Who is this guy?</a>
+</p>
 
 ## Make it earn its place
+
+**Choose a starting point for your project:** [Coding agents](#user-content-example-1-coding-agent) ·
+[Claude Cowork / ChatGPT Work](#user-content-example-2-claude-cowork-and-chatgpt-work) ·
+[Research](#user-content-example-3-research)
 
 Try it on work you will revisit. After several sessions, ask whether returning takes less
 reconstruction, whether a changed premise surfaced a useful question, and whether the
