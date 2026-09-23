@@ -6,9 +6,27 @@ is supplied. Run `kpop` for the command summary; the linked guides cover detaile
 
 ## Try it from the command line
 
-The standalone native CLI works independently of an agent plugin. Install the
-0.9.0 GitHub bundle and put its `bin` directory on PATH, or use its absolute
-`kpop` path. It needs no Python, Node or Rust at runtime.
+The standalone native CLI works independently of an agent plugin and needs no Python,
+Node or Rust at runtime. Download `install.sh` (Unix) or `install.ps1` (Windows) from the
+[Latest GitHub release](https://github.com/ilanbm/kpopper/releases/latest). The installer
+downloads the matching archive for `linux-x86_64`, `linux-aarch64`, `darwin-arm64`,
+`darwin-x86_64` or `windows-x86_64` and verifies its SHA-256. On Unix:
+
+```sh
+sh install.sh --prefix "$HOME/.local"
+```
+
+On Windows:
+
+```powershell
+pwsh -File install.ps1 -Prefix "$HOME/.local"
+```
+
+These commands select the release marked Latest. To pin a release, add `--version VERSION`
+on Unix or `-Version VERSION` on Windows. Both installers also accept an explicit offline
+archive and checksum. The binaries land in `PREFIX/bin`; put that directory on PATH or use
+the absolute `kpop` path. Release assets are named `kpopper-VERSION-TARGET.tar.gz` (Unix)
+or `.zip` (Windows).
 
 The legacy source-only CLI remains available with Python 3.9 or newer, but must be
 selected explicitly as compatibility mode:
@@ -215,7 +233,9 @@ kpop consolidate --from BRANCH_OR_REF --dry-run
 
 The dry run reports changed premises, fired falsifiers, structural gaps, contested IDs and
 possible duplicates. A clean structural check is not enough to fold a hypothesis whose
-premises still need review. Refutation retains a negative finding. `--from` reads another
+premises still need review. In an Advanced project, a live dry run with no hypothesis named
+also tests the pending shared findings against the record: it is red when accepting one would
+break something, adopts none of them, and is left out of a `--frozen` run. Refutation retains a negative finding. `--from` reads another
 branch's committed record; it never pushes to that branch.
 
 These checks can run during work; they do not require a pull request or merge. The receiving

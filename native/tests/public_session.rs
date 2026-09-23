@@ -399,3 +399,72 @@ fn core_only_resources_support_public_reads_history_and_sessions() {
     fs::write(ordinary.join("build.json"), "invalid").unwrap();
     success(f.run(&["check"]));
 }
+
+fn session_start(f: &Fixture, host: &str) -> Output {
+    let mut child = f
+        .command()
+        .args(["session-start", "--host", host])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            json!({"cwd":f.root.path(),"session_id":"flow"})
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+/// The hook's opening is `open` in the 2000-character slot, with the next moves named as
+/// its host invokes them; a core/v1 record, which has no next moves to name, still opens
+/// under a hook that names its host, while a person's `--host` on it is refused.
+#[test]
+fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
+    let f = Fixture::new();
+    fs::write(
+        f.root.path().join("GROUNDING.yaml"),
+        include_str!("fixtures/opener/slot.yaml"),
+    )
+    .unwrap();
+    for (host, next) in [
+        ("claude", "next: /kpopper:ground <entry|prefix>"),
+        ("codex", "next: $ground <entry|prefix>"),
+    ] {
+        let opening = String::from_utf8(success(f.run(&["open", "--host", host])).stdout).unwrap();
+        assert!(
+            opening.contains(&format!("  ... 14 more - raise --chars\n\n{next}")),
+            "{opening}"
+        );
+        let started = String::from_utf8(success(session_start(&f, host)).stdout).unwrap();
+        assert!(started.starts_with(&opening), "{started}");
+        assert!(
+            started[opening.len()..].starts_with("KPOPPER_AGENT_CONTEXT "),
+            "{started}"
+        );
+    }
+    fs::write(
+        f.root.path().join("GROUNDING.yaml"),
+        include_str!("../../tests/fixtures/core-page/GROUNDING.yaml"),
+    )
+    .unwrap();
+    let started = String::from_utf8(success(session_start(&f, "claude")).stdout).unwrap();
+    assert!(
+        started.starts_with("Core page fixture\ncore/v1 snapshot "),
+        "{started}"
+    );
+    let refused = f.run(&["open", "--host", "claude"]);
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&refused.stderr)
+            .contains("core_profile_option_unsupported: --host"),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
+    );
+}

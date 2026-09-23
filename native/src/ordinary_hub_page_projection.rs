@@ -178,6 +178,10 @@ fn page_projection(
             }
         }
         hub = projection.hub_data()?;
+    } else {
+        // An arrangement is held against the brief, so a page with none draws no
+        // arrangement and fails on none, as the Python page does.
+        hub.arrangements.clear();
     }
     let arrangement_owns = hub
         .arrangements

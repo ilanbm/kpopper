@@ -16,3 +16,10 @@ pub(crate) fn legacy_rule(old: &V, current: &V) -> Option<V> {
 pub(crate) fn flags(reader: &Reader<'_>, body: &V) -> Result<BTreeSet<&'static str>> {
     O::flags(&reader.ordinary(), &ordinary(body))
 }
+pub(crate) fn reader_flags(
+    reader: &Reader<'_>,
+    body: &V,
+    defer_counts: bool,
+) -> Result<BTreeSet<&'static str>> {
+    O::reader_flags(&reader.ordinary(), &ordinary(body), defer_counts)
+}

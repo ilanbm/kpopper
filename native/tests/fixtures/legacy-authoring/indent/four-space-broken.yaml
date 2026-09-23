@@ -1,0 +1,9 @@
+known:
+    api.limit:
+        v: 10
+judgments:
+    d.w:
+        verdict: known
+        rests_on: [api.limit]
+        wrong_if: "api.limit > 5"
+        seen: {api.limit: 10}
