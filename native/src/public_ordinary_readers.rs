@@ -611,13 +611,12 @@ impl<'a> Projection<'a> {
                     layers.insert(name.clone(), world);
                 }
                 Err(e) => {
+                    let why = crate::ordinary_semantics::layer_failure(&e);
                     unread_failures.push(format!(
-                        "{label} {name} cannot be read over the base: {}",
-                        e.0
+                        "{label} {name} cannot be read over the base: {why}"
                     ));
                     unread.push(format!(
-                        "! hypothesis {name} cannot be read over the base: {}",
-                        e.0
+                        "! hypothesis {name} cannot be read over the base: {why}"
                     ));
                     continue;
                 }

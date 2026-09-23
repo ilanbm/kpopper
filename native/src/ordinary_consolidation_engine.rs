@@ -112,44 +112,8 @@ fn checks(projection: &Projection<'_>, brief: Option<&V>) -> Result<(Vec<String>
             .collect(),
     ))
 }
-fn ordinary_error(document: &V, failure: crate::Error) -> crate::Error {
-    if failure.0 != "ordinary_fields_unreadable" {
-        return failure;
-    }
-    let Some(dep) = map(get(document, "schema"))
-        .ok()
-        .and_then(|s| s.get("deps"))
-        .and_then(|v| text(v).ok())
-        .filter(|s| !s.is_empty())
-    else {
-        return failure;
-    };
-    let present = entries(document)
-        .unwrap_or_default()
-        .values()
-        .filter_map(|v| map(v).ok())
-        .flat_map(|m| m.keys().cloned())
-        .collect::<BTreeSet<_>>();
-    if present.contains(dep) {
-        return failure;
-    }
-    let seen = present.into_iter().collect::<Vec<_>>().join(", ");
-    let shown = if seen.chars().count() < 300 {
-        seen.clone()
-    } else {
-        seen.chars().take(300).collect::<String>() + " ..."
-    };
-    error(&format!(
-        "schema names '{dep}' for 'deps', and nothing this reader can see carries it: no judgment would be found, and the record would pass by having nothing left to check.{}",
-        if seen.is_empty() {
-            String::new()
-        } else {
-            format!("\nFields it can see: {shown}")
-        }
-    ))
-}
 fn projection<'a>(doc: &V, hyps: &Map, runtime: Option<&'a Runtime>) -> Result<Projection<'a>> {
-    Projection::new(doc, hyps, &Map::new(), vec![], runtime).map_err(|e| ordinary_error(doc, e))
+    Projection::new(doc, hyps, &Map::new(), vec![], runtime)
 }
 
 struct Update {
