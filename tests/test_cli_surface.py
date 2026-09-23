@@ -31,7 +31,7 @@ class PublicCLI(unittest.TestCase):
     def test_public_help_has_operations_and_no_onboarding_protocol(self):
         result = self.cli("--help")
         self.assertEqual(result.returncode, 0, result.stderr)
-        for command in ("open", "map", "config", "check", "pull", "add", "set", "review"):
+        for command in ("open", "map", "config", "check", "pull", "context", "add", "set", "review"):
             self.assertIn("kpop " + command, result.stdout)
         for internal in ("kpopper start", "choose", "shown", "--request", "_agent"):
             self.assertNotIn(internal, result.stdout)
@@ -63,7 +63,7 @@ class PublicCLI(unittest.TestCase):
         self.assertEqual(list(self.workspace.iterdir()), [])
 
     def test_help_never_creates_state_or_attempts_an_operation(self):
-        for command in ("open", "map", "config", "check", "pull", "add", "set", "review"):
+        for command in ("open", "map", "config", "check", "pull", "context", "add", "set", "review"):
             with self.subTest(command=command):
                 result = self.cli(command, "--help")
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -75,6 +75,15 @@ class PublicCLI(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("kpop map", result.stderr)
         self.assertFalse((self.root / "state").exists())
+
+    def test_context_permission_error_names_the_private_cache_option(self):
+        from scripts.session import entry
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error), \
+             patch('scripts.session.view.GroundingService', side_effect=PermissionError('cache denied')):
+            code = entry.main(['example.id', '--no-settings', '--assessment-profile', 'checked-reader/v1'], context=True)
+        self.assertEqual(code, 2)
+        self.assertIn('--state', json.loads(error.getvalue())['hint'])
 
     def test_unknown_options_and_bad_workspace_fail_without_writes(self):
         for args in (("map", "--deeper"), ("config", "--guidance", "maybe"),

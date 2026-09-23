@@ -108,6 +108,26 @@ class CoreSessionContextTests(unittest.TestCase):
         self.assertEqual(CapturedAssessment.from_data(payload['context']).view['version'],
                          'reasoning-projection/v1')
 
+    def test_public_context_uses_core_capture_and_keeps_legacy_session_route(self):
+        import yaml
+        from scripts.session import entry
+        self.record.write_text(yaml.safe_dump(self.document), encoding='utf-8')
+        output = io.StringIO()
+        shared = ['--no-settings', '--input', str(self.record),
+                  '--state', str(self.folder / 'public-context'), '--tokens', '10000']
+        with contextlib.redirect_stdout(output), \
+             mock.patch('scripts.session.view.GroundingService', side_effect=AssertionError('legacy service')):
+            code = entry.main(['d.choice', *shared], context=True)
+        self.assertEqual(code, 0, output.getvalue())
+        direct = json.loads(output.getvalue())
+        self.assertEqual({row['id'] for row in direct['reads']}, {'d.choice', 'p.input'})
+        legacy = io.StringIO()
+        with contextlib.redirect_stdout(legacy):
+            code = entry.main(['context', '--id', 'd.choice', '--direction', 'support',
+                               '--revision', direct['revision'], *shared])
+        self.assertEqual(code, 0, legacy.getvalue())
+        self.assertEqual(json.loads(legacy.getvalue()), direct)
+
     def test_followups_recapture_only_for_staleness_then_read_retained_context(self):
         context = self.context('review-one')
         _, revision = self.open_context(context)

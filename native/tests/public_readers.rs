@@ -502,8 +502,9 @@ fn a_record_that_is_not_there_is_refused_as_the_python_reader_refuses_it() {
 
     let output = cli(root, &["--json", "check"], &private);
     assert_eq!(output.status.code(), Some(1));
-    let error: J = serde_json::from_slice(&output.stderr).unwrap();
-    assert_eq!(error["error"], no_record_here("GROUNDING.yaml").trim_end());
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], no_record_here("GROUNDING.yaml"));
     // The Hub keeps its own framing and exit status around the same reason.
     let output = cli(root, &["experimental", "hub"], &private);
     assert_eq!(output.status.code(), Some(2));
@@ -627,11 +628,9 @@ fn a_record_that_does_not_parse_is_refused_with_the_line_and_column() {
 
     let output = cli(root, &["--json", "check"], &private);
     assert_eq!(output.status.code(), Some(1));
-    let error: J = serde_json::from_slice(&output.stderr).unwrap();
-    assert_eq!(
-        error["error"],
-        broken_yaml_refusal("GROUNDING.yaml").trim_end()
-    );
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], broken_yaml_refusal("GROUNDING.yaml"));
     let output = cli(root, &["experimental", "hub"], &private);
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(
@@ -753,6 +752,238 @@ fn actual_ordinary_cli_opens_and_checks_the_record() {
     );
 }
 
+/// Every reason the Python opener gives a person, in its order: broken, undeclared and
+/// blocked references, a misfiled re-opener, a falsified predicate, a reversed verdict and
+/// a moved reading; and in the head the legend, the priors line, a reading only a replaced
+/// judgment listened to, and a file left under the earlier layout. The expected outputs
+/// are the Python reader's own.
+#[test]
+fn ordinary_open_names_every_reason_the_python_opener_gives_a_person() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        include_str!("fixtures/opener/record.yaml"),
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/replaced.yaml"),
+        include_str!("fixtures/opener/replaced.yaml"),
+    )
+    .unwrap();
+    fs::write(root.join("PROVENANCE.view.yaml"), "title: left behind\n").unwrap();
+    for (args, expected) in [
+        (
+            &["--frozen", "open", "--chars", "40000"][..],
+            include_str!("fixtures/opener/reasons.stdout"),
+        ),
+        (
+            &["--frozen", "open", "--budget", "2"][..],
+            include_str!("fixtures/opener/reasons-budget.stdout"),
+        ),
+        (
+            &["--frozen", "open", "--chars", "700"][..],
+            include_str!("fixtures/opener/reasons-chars.stdout"),
+        ),
+    ] {
+        let output = cli(&root, args, &root.join("private"));
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            expected,
+            "{args:?}"
+        );
+    }
+}
+
+/// A bare `open` fills the 2000-character slot a session hook gets and counts what it cut,
+/// exactly as `--chars 2000` does; a caller naming only an item budget gets neither the
+/// standing verdicts nor a character cut.
+#[test]
+fn ordinary_open_fills_the_session_slot_unless_its_caller_names_a_budget() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        include_str!("fixtures/opener/slot.yaml"),
+    )
+    .unwrap();
+    let private = root.join("private");
+    for args in [
+        &["--frozen", "open"][..],
+        &["--frozen", "open", "--chars", "2000"][..],
+    ] {
+        let output = cli(&root, args, &private);
+        assert!(output.status.success(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            include_str!("fixtures/opener/slot.stdout"),
+            "{args:?}"
+        );
+    }
+    let output = cli(&root, &["--frozen", "open", "--budget", "25"], &private);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        include_str!("fixtures/opener/slot-budget.stdout")
+    );
+    let refused = cli(&root, &["--frozen", "open", "--chars", "0"], &private);
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(refused.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("--chars must be positive"),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
+    );
+}
+
+/// The next moves are named as the host invokes a skill, consolidation among them while a
+/// hypothesis waits; a judgment resting on a prior is counted in the head, in the singular.
+#[test]
+fn ordinary_open_names_the_next_moves_as_the_host_invokes_them() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.x: {v: 1}\n  prior.sure: {v: 0.9}\njudgments:\n  d.one:\n    verdict: stands\n    rests_on: [p.x, prior.sure]\n    seen: {p.x: 1, prior.sure: 0.9}\n    wrong_if: p.x > 5\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(
+        root.join(".kpopper/hypotheses/alt.yaml"),
+        "known:\n  p.y: {v: 2}\n",
+    )
+    .unwrap();
+    let opening = concat!(
+        "3 entries, 1 judgments\n",
+        "1 judgment rests on prior.* claims, 1 of them on a prior at 0.8 or above\n",
+        "1 hypothesis waits - alt (undated, 0 rest on it)\n",
+        "\n",
+        "nothing needs a person right now.\n",
+        "\n",
+        "standing:\n",
+        "  = d.one: stands\n",
+        "\n",
+    );
+    for (host, next) in [
+        (
+            Some("claude"),
+            "next: /kpopper:ground <entry|prefix> (values with sources, what a change reaches) · /kpopper:record (what this session found) · check · /kpopper:consolidate (1 hypothesis waits)\n",
+        ),
+        (
+            Some("codex"),
+            "next: $ground <entry|prefix> (values with sources, what a change reaches) · $record (what this session found) · check · $consolidate (1 hypothesis waits)\n",
+        ),
+        (
+            None,
+            "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n",
+        ),
+    ] {
+        let mut args = vec!["--frozen", "open"];
+        args.extend(host.map(|host| ["--host", host]).into_iter().flatten());
+        let output = cli(&root, &args, &root.join("private"));
+        assert!(output.status.success(), "{host:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!("{opening}{next}"),
+            "{host:?}"
+        );
+    }
+}
+
+#[test]
+fn a_record_with_no_snapshot_field_says_drift_cannot_be_detected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let judgment = "judgments:\n  d.w: {verdict: known, rests_on: [api.limit], wrong_if: \"api.limit > 100\"}\n";
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        format!("known:\n  api.limit: {{v: 10}}\n{judgment}"),
+    )
+    .unwrap();
+    for mode in [&[][..], &["--frozen"][..]] {
+        let check = cli(
+            &root,
+            &[mode, &["check"][..]].concat(),
+            &root.join("private"),
+        );
+        assert!(
+            check.status.success(),
+            "{}",
+            String::from_utf8_lossy(&check.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(check.stdout).unwrap(),
+            concat!(
+                "NOTE no snapshot field anywhere: dependencies are declared but never captured, so drift can never be detected\n",
+                "\n",
+                "1 judgments, 2 entries, 0 problems, 1 declared\n",
+            ),
+            "{mode:?}"
+        );
+        let open = cli(
+            &root,
+            &[mode, &["open"][..]].concat(),
+            &root.join("private"),
+        );
+        assert!(
+            open.status.success(),
+            "{}",
+            String::from_utf8_lossy(&open.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(open.stdout).unwrap(),
+            concat!(
+                "2 entries, 1 judgments\n",
+                "no snapshot field: drift cannot be detected in this record\n",
+                "\n",
+                "nothing needs a person right now.\n",
+                "\n",
+                "standing:\n",
+                "  = d.w: known\n",
+                "\n",
+                "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n",
+            ),
+            "{mode:?}"
+        );
+    }
+
+    // A snapshot field the schema names is a field, even before any judgment carries it:
+    // the missing snapshot is then a problem with the judgment, not with the record.
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        format!("schema: {{snapshot: saw}}\nknown:\n  api.limit: {{v: 10}}\n{judgment}"),
+    )
+    .unwrap();
+    let check = cli(&root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(check.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(check.stdout).unwrap(),
+        concat!(
+            "FAIL d.w: no snapshot for api.limit - never checked against it\n",
+            "\n",
+            "1 judgments, 2 entries, 1 problems\n",
+        )
+    );
+    let open = cli(&root, &["--frozen", "open"], &root.join("private"));
+    assert_eq!(
+        String::from_utf8(open.stdout).unwrap(),
+        concat!(
+            "2 entries, 1 judgments\n",
+            "\n",
+            "needs a person (1):\n",
+            "  d.w: never checked against api.limit\n",
+            "\n",
+            "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n",
+        )
+    );
+}
+
 #[test]
 fn actual_ordinary_pull_history_reads_the_retained_versions() {
     let tmp = tempfile::tempdir().unwrap();
@@ -848,8 +1079,9 @@ fn a_record_without_a_readable_dependency_field_is_refused_with_the_reason() {
 
     let output = cli(root, &["--json", "check"], &root.join("private"));
     assert_eq!(output.status.code(), Some(1));
-    let error: J = serde_json::from_slice(&output.stderr).unwrap();
-    assert_eq!(error["error"], BROKEN_REFERENCE_REFUSAL.trim_end());
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], BROKEN_REFERENCE_REFUSAL);
     let output = cli(
         root,
         &["--json", "export", "local.one"],
@@ -940,6 +1172,226 @@ fn the_refusal_names_the_fields_that_listed_names_in_the_record_s_order() {
         assert_eq!(output.status.code(), Some(1), "{record}");
         assert_eq!(String::from_utf8(output.stderr).unwrap(), refusal);
     }
+}
+
+/// A record before its first judgment, keeping its values under a section name of its own.
+const YOUNG_FACTS: &str = "meta:\n  updated: 2026-09-22\nsources:\n  pricing: {name: \"Acme's pricing page\", url: \"https://example.test/pricing\", read: \"2026-09-20\"}\nfacts:\n  acme.seat_price: {v: 42, from: pricing}\n  acme.seats: {v: 120, from: pricing}\n";
+
+fn check_young(root: &Path, record: &str) -> std::process::Output {
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    cli(root, &["check"], &root.join("private"))
+}
+
+#[test]
+fn a_young_record_reads_a_section_of_values_under_any_name() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for name in ["known", "facts", "parameters", "readings"] {
+        let output = check_young(
+            root,
+            &YOUNG_FACTS.replace("\nfacts:\n", &format!("\n{name}:\n")),
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(0), "{name}: {stderr}");
+        assert!(
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .contains("0 judgments, 3 entries, 0 problems"),
+            "{name}"
+        );
+    }
+    for section in [
+        "  acme.annual: {rule: \"acme.seat_price * acme.seats * 12\"}\n  contract.exit: {quoted: \"Either party may end it on 90 days' notice.\", from: pricing}\n",
+        "  acme.discount: 0.1\n",
+        "  memo: {name: the planning memo, file: memo.md, read: \"2026-09-19\"}\n  acme.term: {v: 12, from: memo}\n",
+    ] {
+        let output = check_young(root, &format!("{YOUNG_FACTS}{section}"));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(0), "{section}: {stderr}");
+    }
+}
+
+#[test]
+fn a_young_record_takes_its_first_judgment_under_a_custom_section() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, YOUNG_FACTS).unwrap();
+    let private = root.join("private");
+    let output = cli(
+        root,
+        &[
+            "add",
+            "why_acme",
+            "rests_on=[acme.seats]",
+            "verdict=prefer Acme",
+            "because=cheaper above 100 seats",
+            "wrong_if=acme.seats < 100",
+            "--as-of",
+            "2026-09-22",
+        ],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let saved = fs::read_to_string(&entry).unwrap();
+    assert!(saved.contains(
+        "facts:\n  acme.seat_price: {v: 42, from: pricing}\n  acme.seats: {v: 120, from: pricing}\n"
+    ));
+    assert!(saved.contains("judgments:\n  why_acme:\n    rests_on: [acme.seats]\n"));
+    assert!(saved.contains("    seen: {acme.seats: 120}\n"));
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 judgments, 4 entries, 0 problems")
+    );
+    // Once a judgment exists, a new value still goes where the values are.
+    let output = cli(
+        root,
+        &[
+            "add",
+            "acme.discount",
+            "v=0.1",
+            "from=pricing",
+            "--as-of",
+            "2026-09-22",
+        ],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fs::read_to_string(&entry)
+            .unwrap()
+            .contains("facts:\n  acme.discount: {v: 0.1, from: pricing}\n")
+    );
+}
+
+#[test]
+fn a_role_the_schema_names_is_the_one_a_young_record_s_first_judgment_takes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(
+        &entry,
+        format!("schema: {{snapshot: reviewed}}\n{YOUNG_FACTS}"),
+    )
+    .unwrap();
+    let private = root.join("private");
+    let output = cli(
+        root,
+        &[
+            "add",
+            "why_acme",
+            "rests_on=[acme.seats]",
+            "verdict=prefer Acme",
+            "because=cheaper above 100 seats",
+            "wrong_if=acme.seats < 100",
+            "--as-of",
+            "2026-09-22",
+        ],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let saved = fs::read_to_string(&entry).unwrap();
+    assert!(
+        saved.contains("    reviewed: {acme.seats: 120}\n"),
+        "{saved}"
+    );
+    assert!(!saved.contains("    seen:"), "{saved}");
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 judgments, 4 entries, 0 problems")
+    );
+}
+
+#[test]
+fn a_value_added_by_position_keeps_a_young_record_readable() {
+    // `add <id> <value>` writes the bare value into the section its prefix already holds.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, YOUNG_FACTS).unwrap();
+    let private = root.join("private");
+    let output = cli(
+        root,
+        &["add", "acme.term", "12", "--as-of", "2026-09-22"],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fs::read_to_string(&entry)
+            .unwrap()
+            .contains("  acme.term: \"12\"\n")
+    );
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("0 judgments, 4 entries, 0 problems")
+    );
+}
+
+#[test]
+fn a_misspelled_dependency_declaration_is_still_refused_in_a_young_record() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    for claim in [
+        // The dependency field misspelled, the judgment's other fields still its own.
+        "{restson: acme.seats, verdict: prefer Acme, wrong_if: \"acme.seats < 100\"}",
+        // A dependency list naming what is not an entry, under either name.
+        "{rests_on: [acme.seat], verdict: prefer Acme}",
+        "{depends_on: [acme.seat], conclusion: prefer Acme}",
+        // A judgment in names of the record's own, holding no value.
+        "{depends: acme.seats, conclusion: prefer Acme, falsified_when: \"acme.seats < 100\"}",
+    ] {
+        let record = format!("{YOUNG_FACTS}claims:\n  why_acme: {claim}\n");
+        let output = check_young(root, &record);
+        assert_eq!(output.status.code(), Some(1), "{claim}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.starts_with("no dependency field found: "),
+            "{claim}: {stderr}"
+        );
+        let output = cli(
+            root,
+            &["add", "acme.discount", "v=0.1", "--as-of", "2026-09-22"],
+            &root.join("private"),
+        );
+        assert_eq!(output.status.code(), Some(1), "{claim}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.starts_with("no dependency field found: "),
+            "{claim}: {stderr}"
+        );
+        assert_eq!(fs::read_to_string(&entry).unwrap(), record);
+    }
+    let output = check_young(root, &format!("schema: {{deps: restson}}\n{YOUNG_FACTS}"));
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8(output.stderr).unwrap().starts_with(
+        "schema names 'restson' for 'deps', and nothing this reader can see carries it"
+    ));
 }
 
 #[test]
@@ -1033,8 +1485,9 @@ fn a_record_whose_field_roles_tie_is_refused_with_the_fields_that_tie() {
 
     let output = cli(root, &["--json", "check"], &root.join("private"));
     assert_eq!(output.status.code(), Some(1));
-    let error: J = serde_json::from_slice(&output.stderr).unwrap();
-    assert_eq!(error["error"], refusal.trim_end());
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], refusal);
     let output = cli(root, &["--json", "export", "d.a"], &root.join("private"));
     assert_eq!(output.status.code(), Some(1));
     let result: J = serde_json::from_slice(&output.stdout).unwrap();
@@ -1238,6 +1691,184 @@ fn a_branch_record_whose_fields_tie_is_read_over_this_one_as_a_hypothesis_is() {
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
         current
     );
+}
+
+#[test]
+fn a_branch_record_whose_fields_tie_is_consolidated_over_this_one() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    let private = &root.join("private");
+    git(root, &["init", "-q", "-b", "main"]);
+    let known = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n";
+    let b = "  d.b: {verdict: b, depends: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    let z = "  d.z: {verdict: z, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n";
+    let c = "  d.c: {verdict: c, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    // The other branch rests d.b on a field of another name, so on its own its record
+    // cannot say which field is its dependency field.
+    commit_record(root, &format!("{known}{b}{z}"), "branch");
+    git(root, &["branch", "other"]);
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "other"])
+        .output()
+        .unwrap()
+        .stdout;
+    let commit = String::from_utf8(commit).unwrap();
+    let base = format!("{known}{z}");
+    commit_record(root, &base, "base");
+
+    // Laid over this record the two fields still tie, so nothing is tested or folded. The
+    // tie is named in the order the records give the fields, this record's first.
+    for args in [
+        &["consolidate", "--dry-run", "--from", "other"][..],
+        &["consolidate", "--from", "other"],
+    ] {
+        let output = cli(root, args, private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            tied("deps", "rests_on", "depends"),
+            "{args:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+            base
+        );
+    }
+
+    // Once this record rests a second judgment on its own field, the tie is the branch's
+    // alone: over this record its roles read, and what it adds is tested and folded.
+    let current = format!("{known}{z}{c}");
+    commit_record(root, &current, "second judgment");
+    let report = "the base with other laid over it\n  other\n\narrived (1): what the fold would add\n  d.b:  - from other\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: other may fold - consolidate other\n";
+    // The second line names the branch's commit, the day it was made and its age.
+    let told = |output: std::process::Output| {
+        assert!(output.stderr.is_empty());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let mut lines = stdout.split('\n').collect::<Vec<_>>();
+        assert!(
+            lines[1].starts_with("  other (born ")
+                && lines[1].ends_with(&format!(
+                    "): what other committed ({}), read as a hypothesis",
+                    &commit[..7]
+                )),
+            "{stdout}"
+        );
+        lines[1] = "  other";
+        lines.join("\n")
+    };
+    let output = cli(
+        root,
+        &["consolidate", "--dry-run", "--from", "other"],
+        private,
+    );
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(told(output), report);
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        current
+    );
+
+    let output = cli(root, &["consolidate", "--from", "other"], private);
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        told(output),
+        format!(
+            "{report}\ncarry d.b from other into judgments, before d.z\nfolded other: 1 entry and 0 judgments - 1 added, 0 replaced\nfiles to commit: GROUNDING.yaml\n  nothing to delete for other: another branch keeps its own record\nnext: git add GROUNDING.yaml && git commit\n  then merge other as you would - its record is folded here, and the merge carries only its code\n\nthe record needs a person on 0 judgments - check says the rest\n"
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        format!("{known}{b}{z}{c}")
+    );
+}
+
+#[test]
+fn a_tie_a_branch_brings_in_new_collections_is_named_in_its_order() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let known = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\n";
+    // Two collections this record does not hold, zeta before alpha, each resting a judgment
+    // on a field of its own name: over this record three fields fit the dependency role.
+    commit_record(
+        root,
+        &format!(
+            "{known}zeta:\n  d.y: {{verdict: y, depends: [local.two], seen: {{local.two: 2}}, wrong_if: local.two > 5}}\nalpha:\n  d.x: {{verdict: x, needs: [local.one], seen: {{local.one: 1}}, wrong_if: local.one > 5}}\n"
+        ),
+        "branch",
+    );
+    git(root, &["branch", "other"]);
+    let base = format!(
+        "{known}judgments:\n  d.z: {{verdict: z, rests_on: [local.one], seen: {{local.one: 1}}, wrong_if: local.one > 5}}\n"
+    );
+    commit_record(root, &base, "base");
+    for args in [
+        &["consolidate", "--dry-run", "--from", "other"][..],
+        &["consolidate", "--from", "other"],
+    ] {
+        let output = cli(root, args, &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            tied("deps", "rests_on", "depends"),
+            "{args:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+            base
+        );
+    }
+}
+
+#[test]
+fn a_branch_record_consolidation_would_lose_or_misread_is_refused() {
+    let known = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\n";
+    let judgments = "judgments:\n  d.a: {verdict: a, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n  d.c: {verdict: c, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    let e = "  d.e: {verdict: e, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    let base = format!("{known}{judgments}");
+    for (branch, refusal) in [
+        // One id in two collections: laid over this record, one of its bodies would go.
+        (
+            format!("{known}  d.e: {{v: 9}}\n{judgments}{e}"),
+            "duplicate_entry",
+        ),
+        // A record the core computes is not read as an ordinary one.
+        (
+            format!(
+                "meta:\n  reasoning: {{version: 1, profile: core/v1, requires: [arithmetic/v1]}}\n{known}{judgments}{e}"
+            ),
+            "unsupported_capability: use core/v1 consumer",
+        ),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = &temp.path().canonicalize().unwrap();
+        let private = &root.join("private");
+        git(root, &["init", "-q", "-b", "main"]);
+        commit_record(root, &branch, "branch");
+        git(root, &["branch", "other"]);
+        commit_record(root, &base, "base");
+        for args in [
+            &["consolidate", "--dry-run", "--from", "other"][..],
+            &["consolidate", "--from", "other"],
+        ] {
+            let output = cli(root, args, private);
+            assert_eq!(output.status.code(), Some(1), "{args:?}");
+            assert!(output.stdout.is_empty(), "{args:?}");
+            assert_eq!(
+                String::from_utf8(output.stderr).unwrap(),
+                format!("{refusal}\n"),
+                "{args:?}"
+            );
+            assert_eq!(
+                fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+                base
+            );
+        }
+    }
 }
 
 #[test]

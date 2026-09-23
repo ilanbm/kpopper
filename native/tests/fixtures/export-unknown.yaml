@@ -1,0 +1,24 @@
+sources:
+  s.heating:
+    asked: Can we keep the greenhouse above 12°C on the old boiler?
+    name: the heating question
+    read: '2026-09-02'
+known:
+  heat.loss_kw: {v: 31, unit: kW, name: heat loss on a cold night, from: s.heating}
+  p.greeting: {v: 1, name: "שָׁלוֹם עוֹלָם, a well-known name with a\x1cseparator"}
+judgments:
+  v.heating_tab:
+    rests_on: [s.heating, graph.flagged, page.spill]
+    verdict: one tab, for the night the greenhouse is decided on
+    wrong_if: page.spill > 0
+    seen: {s.heating: read 2026-09-02, graph.flagged: 0, page.spill: 0}
+  c.coupling:
+    rests_on: [heat.loss_kw]
+    verdict: Require a galaxy-scale explanation to address the tight baryon-acceleration relation
+    wrong_if: heat.loss_kw < 20
+    seen: {heat.loss_kw: 31}
+  d.greeting:
+    rests_on: [p.greeting]
+    verdict: "בְּרֵאשִׁית בָּרָא — a long-standing claim"
+    wrong_if: p.greeting > 5
+    seen: {p.greeting: 1}

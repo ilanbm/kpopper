@@ -1,5 +1,10 @@
 # Checked sessions
 
+To read records with their declared dependencies, start with `kpop context <id>`.
+It captures the current revision automatically; `--revision` can require an existing
+view. [Graph context](retrieval.md#read-a-declared-neighborhood) documents its bounds
+and recovery routes. The `session` commands below remain the transport and setup API.
+
 The optional session transport opens a complete navigable view of the record, keeps exact field references, and computes assessment fields with a local Lean core. It exposes the same operations through the command line and MCP. It does not apply pending proposals or certify source-world truth.
 
 Native 0.9.0 bundles include the checked-session resources. Enable the native

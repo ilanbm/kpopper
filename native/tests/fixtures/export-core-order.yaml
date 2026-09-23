@@ -1,0 +1,15 @@
+meta:
+  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}
+known:
+  p.rate: {v: 50, from: src.cal, name: Hourly rate}
+  p.hours: {v: 10, from: src.cal, name: Weekly hours}
+  p.cost: {rule: {expr: p.hours * p.rate}, name: Weekly cost}
+sources:
+  src.cal: {name: Calendar, read: '2026-09-20'}
+judgments:
+  d.budget:
+    verdict: The weekly budget holds
+    rests_on: [p.rate, p.hours, p.cost]
+    wrong_if: {expr: p.cost > 1000}
+    because: Hours are low
+    seen: {p.rate: 50, p.hours: 10, p.cost: 500}

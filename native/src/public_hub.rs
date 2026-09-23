@@ -382,11 +382,12 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
                 text.push_str(&format!("FAIL {failure}\n"));
             }
             text.push_str(&format!(
-                "{} elements, {} entries, {} judgments, {} tabs, {} problems\n",
+                "{} elements, {} entries, {} judgments, {} tab{}, {} problems\n",
                 page.elements,
                 page.entries,
                 page.judgments,
                 page.tabs,
+                if page.tabs == 1 { "" } else { "s" },
                 page.failures.len()
             ));
             Output {
