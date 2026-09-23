@@ -1140,37 +1140,42 @@ class TheWritePath(unittest.TestCase):
             self.assertIn("what it saw is what the record holds", out)
             self.assertEqual(rec.read_text(encoding="utf-8"), text)
 
-    def test_review_refuses_a_judgment_written_on_one_line_and_leaves_the_record(self):
-        # its fields are inside that line: a line written under it would be read as another
+    def test_review_writes_inside_the_braces_of_a_judgment_written_on_one_line(self):
+        # its fields are inside that line: what the review writes goes there too, and the rest
+        # of the line stays - nothing is written under it, where it would be read as another
         # judgment of the collection (four spaces) or break the file (two)
         judgment = 'verdict: known, requires: [api.limit], fails_if: "api.limit > 100"'
-        cases = ((judgment, "seen"),
-                 (judgment + ", seen: {api.limit: 5}", "seen"),
-                 (judgment + ', seen: {api.limit: 10}, replaced: ["the limit rose on 2025-12-01"]',
-                  "reviewed"),
-                 (judgment + ', seen: {api.limit: 10}, reviewed: "2025-12-01"', "reviewed"))
+        trail = 'replaced: ["the limit rose on 2025-12-01"]'
+        cases = ((judgment, judgment + ", seen: {api.limit: 10}"),
+                 (judgment + ", seen: {api.limit: 5}", judgment + ", seen: {api.limit: 10}"),
+                 (judgment + f", seen: {{api.limit: 10}}, {trail}",
+                  judgment + f', seen: {{api.limit: 10}}, {trail}, reviewed: "2026-01-01"'),
+                 (judgment + f", {trail}, seen: {{api.limit: 5}}",
+                  judgment + f', {trail}, reviewed: "2026-01-01", seen: {{api.limit: 10}}'),
+                 (judgment + ", seen: {api.limit: 10}, reviewed: '2025-12-01'",
+                  judgment + ", seen: {api.limit: 10}, reviewed: '2026-01-01'"),
+                 (judgment + ", seen: {api.limit: 10}", judgment + ", seen: {api.limit: 10}"))
         for pad in ("  ", "    "):
-            for body, field in cases:
+            for body, want in cases:
                 with tempfile.TemporaryDirectory() as d:
                     rec = pathlib.Path(d) / "GROUNDING.yaml"
-                    text = f"known:\n{pad}api.limit: {{v: 10}}\njudgments:\n{pad}d.w: {{{body}}}\n"
-                    rec.write_text(text, encoding="utf-8")
+                    head = f"known:\n{pad}api.limit: {{v: 10}}\njudgments:\n{pad}d.w: {{"
+                    rec.write_text(head + body + "}  # read by hand {x\n", encoding="utf-8")
                     code, out, err = run(SCRIPTS / "provenance.py", "review", "d.w",
                                          "--as-of", "2026-01-01", rec)
-                    self.assertEqual(code, 1, (pad, body, out + err))
-                    self.assertIn(f"refused - d.w is written on one line, and review writes {field}: as a "
-                                  "line of its own - write d.w with one field per line, then review it "
-                                  "again", out + err)
-                    self.assertEqual(rec.read_text(encoding="utf-8"), text)
-        # with nothing to write into it, it is reviewed as before
+                    self.assertEqual(code, 0, (pad, body, out + err))
+                    self.assertEqual(rec.read_text(encoding="utf-8"), head + want + "}  # read by hand {x\n")
+                    self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+        # a judgment that is an alias has no braces of its own to write into
         with tempfile.TemporaryDirectory() as d:
             rec = pathlib.Path(d) / "GROUNDING.yaml"
-            text = (f"known:\n    api.limit: {{v: 10}}\njudgments:\n"
-                    f"    d.w: {{{judgment}, seen: {{api.limit: 10}}}}\n")
+            text = (f"known:\n  api.limit: {{v: 10}}\njudgments:\n"
+                    f"  d.v: &same {{{judgment}, seen: {{api.limit: 5}}}}\n  d.w: *same\n")
             rec.write_text(text, encoding="utf-8")
             code, out, err = run(SCRIPTS / "provenance.py", "review", "d.w", "--as-of", "2026-01-01", rec)
-            self.assertEqual(code, 0, out + err)
-            self.assertIn("review d.w: what it saw is what the record holds (2026-01-01)", out)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - d.w is written on one line, and review writes seen: as a line of its "
+                          "own - write d.w with one field per line, then review it again", out + err)
             self.assertEqual(rec.read_text(encoding="utf-8"), text)
 
     def test_review_of_an_arrangement_rewrites_the_tab_shape(self):
