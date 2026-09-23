@@ -11,7 +11,7 @@
 
 # Your project, more self-aware.
 
-**Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#how-it-works).**
+**Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#deterministically-checkable).**
 
 > [!IMPORTANT]
 > **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
@@ -63,6 +63,7 @@ computation—and focus the agent on decisions that need judgment.
 - [Installation and first use](#get-started)
 - [CLI and plugin quick reference](#quick-reference)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
+- [What “deterministically checkable” means](#deterministically-checkable)
 - [Go deeper](#go-deeper)
   - [How it works](#how-it-works)
   - [Followups and background checks](#followups-and-background-checks)
@@ -793,6 +794,8 @@ guides describe their arguments and review steps.
 | `kpop update --file report.json` | Apply one prepared source report |
 | `kpop review <id>` | Record a completed review |
 | `kpop same <a> <b>` · `kpop distinct <a> <b> "reason"` | Resolve whether two IDs name the same subject |
+| `kpop answer <question> <id>` · `kpop answer <question> --dropped "reason"` | Close an open question with what answered it, or with why it no longer matters |
+| `kpop correct <id> field=value ...` | Fix an entry that no commit holds yet |
 | `kpop consolidate --dry-run` · `kpop consolidate --from <ref> --dry-run` | Test hypotheses or another branch before folding |
 | `kpop consolidate` · `kpop consolidate --refute <name> "reason"` | Fold eligible hypotheses or retain a refutation |
 | `kpop history status` | Inspect committed history acceptance |
@@ -852,7 +855,7 @@ the earlier evidence available when the work changes.
 | Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#example-2-claude-cowork-and-chatgpt-work). | Resume a job search and recover why three roles were shortlisted. |
 | Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#how-it-works). | Trace the upload queue decision back to the test that exposed request timeouts. |
 | Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
-| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged native reasoning runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#how-it-works). | Check whether 24 guests fit a venue with 18 seats. |
+| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged native reasoning runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#deterministically-checkable). | Check whether 24 guests fit a venue with 18 seats. |
 | Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). | Find apartments below $2,000 with an elevator and a lease that allows pets. |
 | Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
 | Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
@@ -877,6 +880,130 @@ and makes judgments. Your existing documents, tools and memory stay where they a
 | Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Included in native bundles; the application remains optional and experimental. [Document workflow](docs/documents.md). | Produce a client report with the source invoices beside each expense total. |
 | Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). | An agent refreshes its view after another session changes the recorded API contract. |
 
+<a id="deterministically-checkable"></a>
+<a id="what-deterministic-reasoning-means-here"></a>
+
+## What “deterministically checkable” means
+
+**A recorded decision can name the values it relied on and a condition that would make
+it wrong. kpopper evaluates that condition itself, without asking a model, so the same
+values always give the same answer.**
+
+Here is the example from the top of this page, step by step.
+
+**1. The agent records the decision and what it relies on.** A download email promises
+a working link for 30 days, because files are kept for 30 days. The agent records both
+numbers, the decision, and the comparison that would break the promise:
+
+```yaml
+known:
+  files.days: {v: 30}
+  link.days: {v: 30}
+judgments:
+  downloads.availability:
+    rests_on: [files.days, link.days]
+    verdict: "Retention supports the promised window"
+    wrong_if: "files.days < link.days"
+    seen: {files.days: 30, link.days: 30}
+```
+
+`known` holds the recorded values, and `judgments` holds the decisions that rest on them.
+`rests_on` names the values the decision depends on. `wrong_if` is the condition that
+would make it wrong. `seen` keeps the values the decision was made with.
+
+**2. A later session changes one value.** A draft policy keeps files for 7 days, and the
+agent records `files.days: 7`.
+
+**3. kpopper evaluates the condition.** `7 < 30` is true, so the promise no longer holds.
+The agent sees the broken decision as soon as it records the new value, the next session
+opens with it under “needs a person”, and `kpop check` fails:
+
+```text
+$ kpop check
+FAIL downloads.availability: wrong_if holds (files.days < link.days) - broken by its own condition
+
+1 judgments, 3 entries, 1 problems
+```
+
+The agent then reviews the email or the policy. Nobody had to remember that the two were
+connected. `kpop check` exits with status 1 when a condition fires, so a CI job can fail
+on it as well: [add reasoning checks to CI](docs/coding-and-ci.md).
+
+**What this asks of you.** You don't write the YAML. The agent writes these entries when
+it records a decision, and you can ask for one directly: “Record this decision and what
+would make it wrong.” The entries stay readable in `GROUNDING.yaml`. When a check fails,
+you and the agent decide what changes; kpopper points to the decision that needs another
+look.
+
+**What the program checks, and what stays judgment:**
+
+- **Checked by the program:** comparisons and calculations over recorded values, such as
+  `files.days < link.days` or `guests > seats`. It also compares each input with the value
+  the decision was made with: a change the condition allows stays quiet, and a change no
+  condition covers is flagged for review.
+- **Left to the agent or a person:** conditions that need reading or judgment, such as
+  “Legal asks us to keep customer files for less time.” The record keeps them as text and
+  shows them for review; the program never evaluates them.
+- **Not checked:** whether a recorded value is still true in the world. kpopper does not
+  watch your documents. A value changes when someone records a new one, or when a
+  [measurement you set up](docs/reference.md#measurement) re-reads it.
+
+**A passing check means that none of the recorded conditions fired. It does not mean the
+decision is right.**
+
+[Supported calculations and conditions](skills/kpopper/EXPRESSIONS.md) ·
+[What `check` reports](docs/reference.md#what-check-means) ·
+[The reasoning core's formal scope](docs/reasoning-core.md)
+
+<a id="same-result-different-basis"></a>
+
+<details>
+<summary><strong>A subtler case: the result stays the same, but its basis changed</strong></summary>
+
+A number can stay the same while the evidence behind it changes. kpopper compares both
+with the last review.
+
+In the [research example](examples/dark-matter/advanced/README.md), a literature review
+relies on a count: five of the collected studies are astronomy studies. A recorded rule
+does the counting: a study counts when it is in the review **and** its field is astronomy.
+
+> **User:** “Include the LZ paper. Does our selection of astronomy studies change?”
+
+LZ is a laboratory experiment, so the rule still selects the same five studies, now out
+of six. The count is unchanged; the collection it was computed from is not.
+
+After you [run the example](examples/dark-matter/advanced/README.md#run-it) with
+`--output /tmp/dark-matter-query`, this command reads the count, a second result and the
+review that relies on them. `jq` keeps four fields of the response for display:
+
+```sh
+kpop assess m.astronomy_count m.particle_identities d.review_scope \
+  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
+  jq -f examples/dark-matter/advanced/assessment-summary.jq
+```
+
+```json
+{
+  "studies_scanned": 6,
+  "astronomy_studies_selected": 5,
+  "particle_identity_status": "unknown",
+  "review_basis": "changed"
+}
+```
+
+- `studies_scanned` and `astronomy_studies_selected`: six studies were checked, and five
+  still match.
+- `review_basis: changed`: the review was saved when the count covered five studies, so
+  it needs another look.
+- `particle_identity_status: unknown`: no study records a dark-matter particle identity,
+  so that result stays unknown instead of being guessed.
+
+The agent can answer: **“The selection is unchanged, but the evidence considered has
+changed. The saved review needs another look.”** The example also replays the earlier
+computation from its saved snapshot, with the source files out of reach, and recovers
+the original five-study result.
+
+</details>
 
 ## Go deeper
 
@@ -987,66 +1114,9 @@ where the conversation can safely continue without that result.
 <a id="how-it-works"></a>
 
 <details>
-<summary><strong>How it works — reasoning, record format and review</strong></summary>
+<summary><strong>How it works — record format and review</strong></summary>
 
-### What deterministic reasoning means here
-
-**Deterministic reasoning applies fixed rules to explicit inputs. A completed
-evaluation of the same inputs and rules gives the same result.**
-
-In kpopper, this means:
-
-- **Repeatable checks.** A $1,200 plan exceeds a $1,000 budget:
-  `total_cost > budget` evaluates to `true` each time those values are checked.
-  No fresh model response is needed to decide that comparison.
-- **Explicit assumptions.** The record names what a conclusion depends on and
-  the condition that would make it fail or deserve another look.
-- **Traceable support.** Follow a result through its recorded inputs, rule,
-  source references and last-review snapshot.
-
-**The same answer can rest on different evidence.** Consider this illustrative
-exchange after adding LZ to the [research example](examples/dark-matter/advanced/README.md):
-
-> **User:** “Include the LZ paper. Does our selection of astronomy studies change?”
->
-> **Agent:** “I'll apply the recorded selection rule and compare its evidence basis
-> with the last review.”
-
-The selection rule requires `in_review` **and** `domain == "astronomy"`.
-The agent runs the following against the generated history-backed record.
-`jq` selects four fields from the actual CLI assessment for display:
-
-```sh
-kpop assess m.astronomy_count m.particle_identities d.review_scope \
-  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
-  jq -f examples/dark-matter/advanced/assessment-summary.jq
-```
-
-```json
-{
-  "studies_scanned": 6,
-  "astronomy_studies_selected": 5,
-  "particle_identity_status": "unknown",
-  "review_basis": "changed"
-}
-```
-
-Five studies matched before; five still match. LZ is recorded as laboratory evidence,
-so it joins the scope without entering that selection. The retained review still names
-the earlier basis, and missing particle-identity readings stay unknown.
-
-The agent can now explain: **“The selection is unchanged, but the evidence considered
-has changed. The saved review needs another look.”** The runnable example also replays
-the earlier Snapshot after removing access to the source files, recovering its original
-five-paper scope and basis. [Run it and inspect the full responses](examples/dark-matter/advanced/README.md#run-it).
-
-Agents still interpret sources, choose which assumptions to record and make
-judgments. The reliability of a conclusion depends on that evidence and those
-choices. A free-text review condition remains a prompt for judgment; it is not
-silently treated as an executable rule.
-
-See the [supported calculations and conditions](skills/kpopper/EXPRESSIONS.md)
-and the [reasoning core's formal scope](docs/reasoning-core.md).
+How a decision gets checked is explained [above](#deterministically-checkable).
 
 ### The knowledge record
 
@@ -1075,7 +1145,7 @@ preserving a basis for review. A judgment needs the values it was reviewed again
 to make drift detectable, and a meaningful condition for reconsideration. A record
 with no judgments yet does not need invented conclusions, snapshots or derivations
 just to fill a template. Field names and project-specific categories are described
-[below](#how-it-works).
+[below](#a-structure-that-grows-with-the-project).
 
 **Change is compared with the last review.** When a recorded scalar differs from a judgment's
 `seen` snapshot, the reader identifies the movement. A supported `wrong_if` comparison says

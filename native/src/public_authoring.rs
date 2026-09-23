@@ -71,10 +71,26 @@ pub struct Options {
     pub evidence_root: Option<PathBuf>,
     #[arg(long = "disclose-locator")]
     pub disclose_locators: Vec<String>,
+    /// Set by `answer` and `correct`: the whole new body of an existing entry.
+    #[arg(skip)]
+    pub amend: Option<Amend>,
+}
+/// A rewrite of one existing entry in place, prepared by `answer` or `correct`.
+#[derive(Clone, Debug)]
+pub struct Amend {
+    /// `answer` or `correct`.
+    pub kind: &'static str,
+    pub body: V,
+    /// Field order for ordinary records; `None` keeps the entry's own order.
+    pub order: Option<SourceValue>,
+    /// The entry that answered a question, pinned at its current head in history.
+    pub by: Option<String>,
+    /// The entry as the command read it; the write refuses if it changed since.
+    pub was: V,
 }
 static NUMBER: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^-?[0-9]+(?:\.[0-9]+)?$").unwrap());
-fn typed(text: &str) -> Result<V> {
+pub(crate) fn typed(text: &str) -> Result<V> {
     // Decimal digit blocks used by the pinned Python Unicode tables. Python's
     // CLI number pattern accepts Nd digits, including mixed scripts.
     const ZEROES: &[u32] = &[
@@ -116,7 +132,7 @@ fn typed(text: &str) -> Result<V> {
         _ => s(text),
     })
 }
-fn yaml(text: &str) -> Result<SourceValue> {
+pub(crate) fn yaml(text: &str) -> Result<SourceValue> {
     crate::history_yaml::decode_source_value(text.as_bytes())
 }
 fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>, Option<SourceValue>)> {
@@ -221,6 +237,16 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>, Option<Sour
     let is_file = |s: &&String| (s.ends_with(".yaml") || s.ends_with(".yml")) && !s.contains('=');
     let paths;
     let mut source_body = None;
+    if let Some(amend) = &options.amend {
+        require(kind == "add", "an amendment rewrites an existing entry")?;
+        let fields = map_mut(&mut a)?;
+        fields.insert("amend".into(), s(amend.kind));
+        if let Some(by) = &amend.by {
+            fields.insert("answer_by".into(), s(by));
+        }
+        fields.insert("body".into(), amend.body.clone());
+        return Ok((a, vec![], amend.order.clone()));
+    }
     if kind == "set" {
         let first = options
             .values
@@ -338,6 +364,19 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     let entry = &route.paths()[0];
     let _lock =
         F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
+    if let Some(amend) = &options.amend {
+        require(entry.exists(), "record not found")?;
+        crate::public_amend::unchanged_or_refuse(
+            route.paths(),
+            &cwd,
+            &options.subject,
+            &amend.was,
+            amend.kind,
+        )?;
+        if amend.kind == "correct" {
+            crate::public_amend::unlanded_or_refuse(route.paths(), &cwd, &options.subject)?;
+        }
+    }
     if entry.exists()
         && crate::legacy_authoring::authority_route(entry)?
             == crate::legacy_authoring::AuthorityRoute::Legacy
@@ -361,12 +400,16 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             ));
         }
         return Ok(format!(
-            "{notice}history committed: {} ({kind} {})\n",
+            "{notice}history committed: {} ({} {})\n",
             text(&map(&result)?["operation"])?,
+            options.amend.as_ref().map_or(kind, |amend| amend.kind),
             options.subject
         ));
     }
-    require(kind == "add" && implicit, "record not found")?;
+    if kind != "add" || !implicit {
+        let named = files.iter().filter_map(|p| p.to_str());
+        return Err(crate::public_readers::no_record_here(named, &cwd, true));
+    }
     let body = map(&action)?["body"].clone();
     if Privacy::private_marker(&action) {
         let document = obj([(

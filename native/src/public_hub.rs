@@ -316,7 +316,11 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     let first = paths.first().ok_or_else(|| error("record_required"))?;
     let runtime = W::runtime_for_paths(&paths, &cwd, options.profile.as_deref())?;
     let captured =
-        source_capture::capture_source_with_runtime(&paths, &cwd, mode, None, runtime.as_ref())?;
+        source_capture::capture_source_with_runtime(&paths, &cwd, mode, None, runtime.as_ref())
+            .map_err(|e| {
+                let named = options.files.iter().filter_map(|p| p.to_str());
+                crate::public_readers::explain_missing(e, named, &cwd, mode == ReadMode::Live)
+            })?;
     let capabilities = crate::reasoning_fields::capabilities(
         captured.ordinary_document(),
         options.profile.as_deref(),

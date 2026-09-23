@@ -202,8 +202,8 @@ pub(crate) fn records_ordinary(
 /// `records` gives them, and the same documents in the order their files hold them, read to
 /// be laid over this one: no snapshot of its own is formed, so its field roles are taken only
 /// over this record, by the reader that lays it there. What else the snapshot refused still
-/// stands - an entry held twice would lose one body when laid - and a record the core
-/// computes is not an ordinary layer.
+/// stands - its size limits here, and an entry held twice where the record is laid, which
+/// would lose one body - and a record the core computes is not an ordinary layer.
 pub(crate) fn records_layer(
     root: &Path,
     entry: &str,

@@ -251,7 +251,7 @@ fn private_unclear_and_private_locator_only_create_private_drafts() {
 #[test]
 fn malformed_nontext_incomplete_and_missing_evidence_fail_without_writes() {
     let cases = [
-        ("known: [\n", "invalid_history_yaml"),
+        ("known: [\n", "legacy.yaml: the record is not valid YAML."),
         (
             "known:\n  fact.import:\n    1: value\n    scope: {kind: external, environment: vendor}\n",
             "invalid_yaml_key",

@@ -953,6 +953,28 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_answer_and_correct:
+    name: "Close questions and correct unlanded writes from the command line"
+    asked: "Paraphrased maintainer request: build answer and correct. The maintainer chose that an
+            answered question stays in open: marked with what answered it; that when its answer later
+            moves, open and check flag it for a person; and that correct rewrites only work no commit
+            holds yet (outside git, written by this session), with what rests on it unlanded too and
+            flagged."
+    read: "2026-09-23"
+  s.2026_09_23_bare_value_placement:
+    name: "Where a new value goes when a record writes its values bare"
+    asked: "Paraphrased maintainer request: placement ignores sections whose values are bare scalars
+            - in a record holding facts: {acme.seats: 120} and a judgment, add beta.price v=3 opens a
+            new known: section instead of joining facts:. Decide whether bare scalars outside open
+            and questions should count as values for placement; if they should, change both runtimes
+            in parity with a test in each suite, and ask the maintainer first when the choice is not
+            obvious. Record the outcome and open a pull request."
+    of: "Reproduced on bf200d6 in both runtimes. Bare scalars are ambiguous in the product itself:
+         add beta.price 3 files a bare value whose prefix has no home into open: as a question. Among
+         the maintainer's live records, bare scalars outside open: appear only as file paths and
+         formula text, beside a much larger section of values written out with v. The maintainer
+         chose to count bare scalars as values only when no section holds a value written out, and
+         never in open, questions or sources."
   s.2026_09_23_crates_io:
     name: "Publish every release to crates.io under the project's name"
     asked: "Paraphrased maintainer request, after asking how kpopper and kpop are listed on
@@ -1002,6 +1024,17 @@ sources:
     of: "The two contributions giving api.limit 10 and 11 against a record whose d.x falls above 10
          were the worked example"
     read: "2026-09-23"
+  s.2026_09_23_readme_checkable_link:
+    name: "Maintainer report on the README link behind deterministically checkable"
+    asked: "the \"deterministically checkable.\" link in the readme: 1. leads to a collapsed section
+            2. that section is really not readable, I'm not sure anyone will understand what we want
+            from them in the explenations there"
+    of: "The tagline linked to the how-it-works anchor, which sat before a closed details block, so
+         the reader landed on a collapsed summary line. Its first subsection defined deterministic
+         reasoning abstractly and then used the dark-matter selection example with a CLI and jq
+         pipeline, without saying what is checked, by what, or what the reader or agent is expected
+         to do."
+    read: "2026-09-23"
   s.2026_09_23_readme_get_started:
     name: "README Get started built on one instruction to the agent"
     asked: "Paraphrased maintainer request: the Get started section is built wrong. Start it with a
@@ -1024,6 +1057,19 @@ sources:
          checked the same once it held a judgment. The README on main at 92703f3 showed known: and
          judgments: in its first excerpt with only their fields explained, and called them the
          documented names only inside the collapsed How it works section."
+  s.2026_09_23_session_hook:
+    name: "The native ground and citation hooks work on macOS again"
+    asked: "Paraphrased maintainer request: check whether the kpopper session-start hook works as it
+            should, say whether what fails is a regression from the Python version, then fix both
+            failures found and open a pull request."
+    of: "Read from this machine's Claude Code transcripts and reproduced with the 0.9.0 plugin
+         binary. Since the native runtime became the default on 2026-09-22, every ground and citation
+         hook failed with 'Operation not permitted' (56 failures on 2026-09-22 and 2026-09-23;
+         grounding lines on prompts fell from 5-79 a day to none), while the Python hooks wrote their
+         state into the same temporary directory. The opener faults found alongside - 17,358
+         characters on this record against the 2,000-character slot, so KPOPPER_AGENT_CONTEXT never
+         reached the agent; a record born by add that could not be opened under a host; a consolidate
+         hint that counted pending contributions - are fixed by PR #184."
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -3342,6 +3388,19 @@ known:
     from: s.2026_09_20_dependency_illustration
     at: "The shortened English paragraph, approved with מושלם."
     fidelity: quoted
+  p.readme_checkable_link_visibility:
+    name: "The deterministically checkable link lands on a visible explanation"
+    v: "The tagline link opens a visible section after the capabilities table, What
+        deterministically checkable means. It walks the opening 30-versus-7-day example with the
+        check output the native CLI prints, says what the agent writes and what is asked of the
+        reader, and separates what the program checks from what stays judgment. The dark-matter case
+        with an unchanged count and a changed basis is folded below it. The link lands on the heading
+        on github.com at desktop width and at a 375-pixel phone width; GitHub scrolls to it a few
+        seconds after the click."
+    from: s.2026_09_23_readme_checkable_link
+    at: "README edit, native check, open and set runs on the example record, and browser checks of a
+         Markdown API render and of the branch on github.com"
+    fidelity: paraphrase
   p.readme_coding_banner_story:
     name: "The coding strip shows both PR changes and their combined consequence"
     v: "PR A adds private projects and PR B caches by query. Large labels identify the two changes,
@@ -3742,6 +3801,10 @@ open:
                   question: "Does the GitHub iPhone app load the Markdown images and their
                              phone-layout links from the updated branch? Native-app rendering remains
                              unverified."
+  q.opener_measured: "what measures the opener a session actually receives, so that d.open_is_a_slot
+                      can fail? m.open_clean is one reading from 2026-09-01 and p.hook_slot reads the
+                      Python constant, so the judgment stood while the native opener ran 17,358
+                      characters against a 2,000-character slot."
   q.prefix_eval: "does a word prefix reach the right entry more often than a letter, and does a
                   legend close the gap? the three-arm eval on the page fixture - the same prompts and
                   trials as the grounding-line harness, under letters, under letters with
@@ -4068,6 +4131,36 @@ judgments:
       d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
                           person; only a predicate that holds fails the build"
       goal.portable: "usable by any session, in any project, with no author present"
+  d.bare_values_place_last:
+    name: "A bare scalar decides where a new value goes only when nothing else does"
+    verdict: "A new value whose prefix no section holds yet goes to the section holding the most
+              values written out (v, quoted or rule). Only when no section holds one does the section
+              holding the most bare scalars take it - never open, questions or sources - and a record
+              holding neither opens known:. Both runtimes place it the same way and break a tie by
+              the first section name."
+    because: "A bare scalar is a value to the reader but not always to the person: add <id> <value>
+              files one as a question when its prefix has no home, and in live records bare text
+              outside the questions is file paths and formulas. Counting bare scalars always would
+              pull new values into such sections; never counting them left a record that writes its
+              values bare with a second, known: section beside them. A misplaced value costs a hand
+              edit, which locks a history-backed record, while an extra known: section is cosmetic,
+              so bare scalars decide only when nothing else can."
+    rests_on: [d.shape_is_read_not_declared, d.add_places_by_prefix]
+    reopened_by: "A record that keeps bare text other than values, with no value written out beside
+                  it, has a new value filed into that text; or a record that writes its values bare
+                  in two sections of its own gets one in the section its person did not mean."
+    from: s.2026_09_23_bare_value_placement
+    seen:
+      d.shape_is_read_not_declared: "what the record's physical form is - its files and shards, the
+                                     field each role is read from, its sidecars, the stores derived
+                                     from it and what reads it - is computed by a read command
+                                     whenever asked and never kept as a declaration; the only
+                                     declared parts are the choices no shape can infer, each a
+                                     judgment with a sign, and the bindings of one machine, which
+                                     stay in that machine's state"
+      d.add_places_by_prefix: "add inserts a new entry beside the entries it shares the longest
+                               dotted prefix with, in id order among them, and at a collection's tail
+                               only when id order puts it there"
   d.brand_on_the_directory:
     verdict: "the brand goes on the directory, the verbs, the check's name and the head line of a
               born record; the concept goes on the entry file's name"
@@ -4382,6 +4475,29 @@ judgments:
       m.door.opposed_verdicts_named_reversed: 2
       m.door.grounds_changes_named: 2
       m.door.future_dated_readings_refused: 3
+  d.correct_is_for_unlanded_work:
+    name: "Correct only what nobody could have read"
+    rests_on: [s.2026_09_23_answer_and_correct, d.fold_passes_the_one_door]
+    verdict: "correct rewrites an entry in place only while no commit holds it - outside git, while
+              this session wrote it - and while everything resting on it is unlanded by the same
+              test; what rests on it is flagged, never rewritten, and landed work goes to a
+              hypothesis a person takes at the fold."
+    because: "A writer's own slip was refused as a second writer or a re-decision, so sessions
+              edited the file by hand, which a history-backed record refuses outright. A correction
+              nobody could have read replaces nothing anyone relied on; anything already in a commit
+              may have been read, and replacing it stays the person's act
+              {{d.fold_passes_the_one_door}} describes."
+    reopened_by: "A correction reaches work someone else had already read, or sessions still edit
+                  the record by hand to fix what they just wrote."
+    seen:
+      s.2026_09_23_answer_and_correct: "read 2026-09-23"
+      d.fold_passes_the_one_door: "a folded reading passes the one door a written one does, asked
+                                   with the base's own readings: a reading newer than the base's
+                                   enters and a same-day or older one is contested; a verdict, or
+                                   other grounds, laid over a standing judgment folds only when the
+                                   base's own condition has broken it on what the base holds, or when
+                                   a person names the id at the fold; a reversal nobody named is red,
+                                   and the trail says which of the two admitted it"
   d.coverage_printed_never_acted:
     rests_on: [s.2026_09_03_coverage, d.intent_is_a_source, d.metrics_derived_builtin, p.coverage_thresholds]
     verdict: "coverage is counted at every build and check and printed as facts - each intent no tab
@@ -4902,6 +5018,24 @@ judgments:
                                       write to an entry goes into the file that holds it; a record in
                                       one file answers that file to all of it"
       p.hypothesis_homes: 1
+  d.hook_state_keeps_its_directory:
+    name: "Hook state leaves the temporary directory's mode alone"
+    verdict: "The hooks keep a session's state in the host's temporary directory without changing
+              that directory: the state file is private, and only a directory a hook creates is made
+              private."
+    because: "The temporary directory belongs to the system. macOS refuses to change the mode of the
+              per-user $TMPDIR even for its owner, so a hook that tried failed before writing
+              anything, and on macOS the grounding line, the recording reminder and the citation
+              check never ran. The Python hooks never changed it, and a state file created private
+              needs nothing from the directory."
+    rests_on: [d.hooks_carry_pointers]
+    reopened_by: "A session's hook state readable by another local user because the directory
+                  holding it kept the mode the system gave it."
+    from: s.2026_09_23_session_hook
+    seen:
+      d.hooks_carry_pointers: "the hooks are the one layer every session gets without choosing; they
+                               name the entries a prompt touches and the skill for the next move, in
+                               the host's own syntax, and never a value"
   d.hooks_carry_pointers:
     rests_on: [s.2026_09_10_skills_split, d.open_is_a_slot]
     verdict: "the hooks are the one layer every session gets without choosing; they name the entries
@@ -5684,6 +5818,20 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.question_closes_in_place:
+    name: "An open question ends with answer, in place"
+    rests_on: [s.2026_09_23_answer_and_correct]
+    verdict: "An open question ends through answer: it stays in open: with what answered it, what
+              that said and the day, or with the reason it no longer matters; the opener stops
+              counting it, and open and check flag it again when its answer moves, breaks or
+              disappears."
+    because: "A question closed by deleting its line leaves no trace: the six this record closed
+              that way left none, and on a history-backed record a hand deletion locks check, open
+              and every later add. Keeping the question with its answer lets pull show both, and lets
+              the reader notice when the answer moves, the way seen does for a judgment."
+    reopened_by: "Sessions keep deleting answered questions by hand once answer exists, or an answer
+                  that moved goes unflagged by open and check."
+    seen: {s.2026_09_23_answer_and_correct: "read 2026-09-23"}
   d.readme_canvas_placement:
     name: "Place the approved canvas illustration before the closing invitation"
     rests_on: [s.2026_09_20_canvas_placement, q.readme_canvas_metaphor]
@@ -5702,6 +5850,31 @@ judgments:
                                  decision and review conditions clarify the product, and where should
                                  that illustration appear? A separate local SVG/PNG concept was
                                  produced; it is not adopted into the README."
+  d.readme_checks_explained_visibly:
+    name: "Explain checks where the opening link lands, with the opening example"
+    from: s.2026_09_23_readme_checkable_link
+    rests_on: [s.2026_09_23_readme_checkable_link, d.readme_reasoning_overview]
+    verdict: "Explain deterministic checks in a visible section that the opening link reaches, using
+              the opening's 30-versus-7-day record: what the agent records, the value that changes,
+              and what the check prints. Say what is asked of the reader, separate what the program
+              checks from what stays judgment, and fold the research case of an unchanged count with
+              a changed basis below it."
+    because: "The maintainer reported that the link landed on a collapsed summary and that the
+              explanation behind it did not say what is asked of the reader. The opening illustration
+              is an example the reader has just seen, so its three steps need no new domain, and
+              printed output shows what the check actually says. The research case teaches a subtler
+              point - a changed basis under an unchanged result - and stays one click away without
+              standing between the reader and the basic answer. Reader comprehension has not been
+              measured."
+    reopened_by: "A reader who follows the link cannot say without coaching what the check compares,
+                  who writes the condition, or what a passing check means; or the opening
+                  illustration stops using the 30-versus-7-day record the section walks through."
+    seen:
+      s.2026_09_23_readme_checkable_link: "read 2026-09-23"
+      d.readme_reasoning_overview: "Use a file-centered Meet GROUNDING.yaml overview: conversations
+                                    point to recorded reasoning and changed inputs; wrong_if leads to
+                                    a returned check result. Preserve the same meaning in dedicated
+                                    desktop and phone layouts."
   d.readme_get_started_is_one_instruction:
     name: "Get started is one instruction the reader sends to their agent"
     verdict: "Open Get started with a short paragraph and one instruction, beginning Dear agent,

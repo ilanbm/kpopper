@@ -1,0 +1,26 @@
+schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}
+sources:
+  s.ask: {name: the request, asked: arrange the tabs, read: "2026-09-10"}
+known:
+  p.a: {v: 1}
+  prior.sure: {v: 0.9}
+  prior.also: {v: 0.85}
+judgments:
+  v.tabs:
+    verdict: keep the tabs
+    rests_on: [s.ask, page.unserved]
+    wrong_if: page.unserved > 0
+    born: "2026-09-14"
+    replaced: ['born 2026-09-10, stood 0 sessions; its sign holds (page.unserved > 0) - page.unserved is 2 on 2026-09-14']
+    seen: {s.ask: read 2026-09-10, page.unserved: 0}
+  d.rev:
+    verdict: wait
+    rests_on: [p.a]
+    seen: {p.a: 1}
+    wrong_if: p.a > 9
+    replaced: ['the standing judgment holds, and a person takes this over it by name on 2026-09-18']
+  d.sure:
+    verdict: go
+    rests_on: [prior.sure, prior.also, p.a]
+    wrong_if: p.a > 5
+    seen: {prior.sure: 0.9, prior.also: 0.85, p.a: 1}

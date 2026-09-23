@@ -1,0 +1,5 @@
+NOTE d.rev: reversed on 2026-09-18 - the verdict under this id changed; review it once read, or pull d.rev --history
+NOTE v.tabs: wrong_if reads page.unserved, which is counted when the page is built - `kpop experimental hub --verify` decides it
+NOTE 1 judgment rests on prior.* claims, 1 of them on a prior at 0.8 or above
+
+3 judgments, 7 entries, 0 problems, 3 declared
