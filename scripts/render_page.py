@@ -367,6 +367,8 @@ def arrangements_of(ids, jud, raw, tabs, picks, cov, flags, doc):
     questions = {}
     for g in P.OPEN:
         for k, v in (doc.get(g) or {}).items():
+            if P.settled(v):
+                continue
             questions[k] = v if isinstance(v, str) else str(v)
     hyps = getattr(doc, "hypotheses", None) or {}
     out = {}

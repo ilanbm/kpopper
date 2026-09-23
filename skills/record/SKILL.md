@@ -196,20 +196,16 @@ kpop add <id> field=value ...         # a new entry or judgment, in id order, se
 kpop set <key> <value> [--why "..."]  # change one value; the reply is the reach
 kpop set <key> <value> --source <id> --at "..."  # a new reading with its new citation
 kpop review <id | "section title">    # it still holds: seen rewritten from the record
+kpop answer <question> <id> [--why "..."] | --dropped "why"   # an open question closed, with what settled it
+kpop correct <id> field=value ...     # your own entry fixed before any commit holds it
 kpop same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
 kpop update --file report.json        # apply related source changes together; return the result
 kpop followups add ...                # deferred work, linked to the knowledge it waits on
 ```
 
-`set`, `add` and `review` are how the record changes from the command line - `same`, `distinct`
-and the fold write through the same path, under the same lock - and each answers with the reach: what is worked out from what it wrote, every judgment resting on it and its
-state now — MOVED, MUTED, FIRED — and the texts of the brief that saw the old value. `set` changes
-one value and stamps its date; `add` inserts a new entry or judgment in id order beside its
-siblings and fills `seen` from what the dependencies hold; `review` says "I read it, it still
-holds" and rewrites `seen` from the record — a judgment's, or a section text's by its title.
-**Never type `seen` by hand once these exist.** The one field the method says no hand writes is
-the one the tool writes, and a hand-typed snapshot is the paraphrase the reader cannot tell from
-a move.
+`set`, `add` and `review` are how the record changes from the command line - `answer`, `correct`, `same`, `distinct` and the fold write through the same path, under the same lock - and each answers with the reach: what is worked out from what it wrote, every judgment resting on it and its state now — MOVED, MUTED, FIRED — and the texts of the brief that saw the old value. `set` changes one value and stamps its date; `add` inserts a new entry or judgment in id order beside its siblings and fills `seen` from what the dependencies hold; `review` says "I read it, it still holds" and rewrites `seen` from the record — a judgment's, or a section text's by its title.
+**Never type `seen` by hand once these exist.** The one field the method says no hand writes is the one the tool writes, and a hand-typed snapshot is the paraphrase the reader cannot tell from a move.
+**A question ends with `answer`, never by deleting it.** `answer q.x d.y` keeps the question in `open:` with what answered it, what that said and the day: `pull` shows it, the opener stops counting it, and if the answer later moves or goes, `open` and `check` put it back in front of a person; `--dropped "why"` closes one that no longer matters. **A slip in what you just wrote is corrected, not superseded:** `correct <id> field=value` rewrites an entry no commit holds yet (outside git, one this session wrote) and flags what rests on it; landed work is a person's decision, so it goes to a hypothesis for the fold. On a history-backed record (`meta.history` in the file) a hand edit locks the record - use these commands instead.
 
 **A correction from a new source changes the citation with the value.** Add the source first,
 then use `set --source <id> --at "<location>"` with the reading's `--as-of` date. Both citation

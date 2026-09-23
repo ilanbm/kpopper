@@ -460,7 +460,9 @@ fn write_with_probe(
         mutation.files(),
         Some(&std::collections::BTreeSet::from([id.to_owned()])),
     );
-    let notice = if kind == "add" {
+    // A rewrite in place by answer or correct names no candidates: its id already stands.
+    let rewrite = map(action)?.get("amend").is_some_and(|v| *v != V::Null);
+    let notice = if kind == "add" && !rewrite {
         nearest_existing(&document, &groups, action, runtime.as_ref())
     } else {
         String::new()

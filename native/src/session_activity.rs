@@ -440,6 +440,39 @@ fn bodies(raw: Option<&[u8]>) -> Result<BTreeMap<String, TypedValue>> {
     }
     Ok(result)
 }
+/// Subjects of one record file whose current body this session's receipt names, for a
+/// file read directly rather than through a capture. Best effort, like `owned`.
+pub fn owned_in_file(tmp: &Path, sid: &str, file: &Path) -> BTreeSet<String> {
+    let Ok(home) = session_home(tmp, sid) else {
+        return BTreeSet::new();
+    };
+    match fs::symlink_metadata(&home) {
+        Ok(meta) if !meta.file_type().is_symlink() && meta.is_dir() => {}
+        _ => return BTreeSet::new(),
+    }
+    let Ok(raw) = fs::read(file) else {
+        return BTreeSet::new();
+    };
+    let Ok(current) = bodies(Some(&raw)) else {
+        return BTreeSet::new();
+    };
+    let Some(origin) = crate::project_modes::resolved(file)
+        .ok()
+        .and_then(|p| p.to_str().map(str::to_owned))
+    else {
+        return BTreeSet::new();
+    };
+    let state = read_state(&home.join(format!("writes-{}.json", sha256(origin.as_bytes()))));
+    current
+        .into_iter()
+        .filter(|(id, body)| {
+            body.digest()
+                .is_ok_and(|digest| state.get(id).and_then(Value::as_str) == Some(digest.as_str()))
+        })
+        .map(|(id, _)| id)
+        .collect()
+}
+
 fn published_with(
     sid: &str,
     tmp: &Path,

@@ -77,6 +77,72 @@ fn day(value: &V) -> Option<String> {
     let date = value.get(..10)?;
     crate::value::Date::new(date).ok().map(|_| date.into())
 }
+/// The day a body was read: its own `of` or `read`, else the `read` or `of` of the source
+/// it names among `raw`. None when nothing dates it.
+fn read_day(body: &V, raw: &Map) -> Option<String> {
+    let m = map(body).ok()?;
+    if let Some(found) = ["of", "read"]
+        .into_iter()
+        .find_map(|key| m.get(key).and_then(day))
+    {
+        return Some(found);
+    }
+    let source = m
+        .get("from")
+        .and_then(|v| text(v).ok())
+        .and_then(|id| raw.get(id))
+        .and_then(|v| map(v).ok())?;
+    ["read", "of"]
+        .into_iter()
+        .find_map(|key| source.get(key).and_then(day))
+}
+/// Another branch's committed record as the hypothesis it is laid over the base as: only
+/// what it holds differently. An id the base does not hold stays, and so does another
+/// claim under an id it does; a judgment stays when the branch decided it again - on other
+/// grounds, or an arrangement re-decided with a new born - and an entry when the branch
+/// read it on a later day. The rest is the base's own and is left out, so it neither votes
+/// on the field roles of the record it is laid over nor contests the branch's other
+/// readings. Only collections are kept; the branch's `schema:` and `meta:` stay the
+/// branch's.
+pub(crate) fn branch_differences(document: &V, base: &World<'_>) -> Result<V> {
+    let collections = F::collections(document)?;
+    let bodies = map(document)?
+        .iter()
+        .filter(|(key, _)| !["meta", "schema", "record", "also"].contains(&key.as_str()))
+        .filter_map(|(_, members)| map(members).ok())
+        .flat_map(|members| members.iter().map(|(id, body)| (id.clone(), body.clone())))
+        .collect::<Map>();
+    let reader = &base.reader;
+    let differs = |id: &str, body: &V| {
+        if !reader.ids.contains(id) {
+            return true;
+        }
+        let old = reader.raw.get(id).unwrap_or(&V::Null);
+        if !same_claim(&claim(body), &claim(old)) {
+            return true;
+        }
+        if base.judgments.contains_key(id) {
+            // the same verdict on other grounds is a decision written again, and an
+            // arrangement re-decided in place carries a new born; the same decision with
+            // its seen refreshed is the branch's own review, which stays with the branch
+            return matches!((body, old), (V::Map(_), V::Map(_)))
+                && (!python_equal(&version_core(body), &version_core(old))
+                    || (G::arrangement(reader, old)
+                        && !python_equal(get(body, "born"), get(old, "born"))));
+        }
+        read_day(body, &bodies)
+            .is_some_and(|read| read_day(old, &reader.raw).is_none_or(|held| read > held))
+    };
+    let mut out = map(document)?.clone();
+    out.retain(|name, members| match members {
+        V::Map(members) if collections.contains_key(name) => {
+            members.retain(|id, body| differs(id, body));
+            !members.is_empty()
+        }
+        _ => false,
+    });
+    Ok(V::Map(out))
+}
 fn layer(base: &V, hypothesis: &V) -> Result<V> {
     let mut out = base.clone();
     for (collection, members) in F::collections(hypothesis)? {

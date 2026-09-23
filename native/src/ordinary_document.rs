@@ -26,7 +26,8 @@ pub(crate) struct Document {
     pub overlay: Option<crate::source_overlay::Overlay<V>>,
 }
 fn parse(inventory: &mut Inventory, path: &Path) -> Result<S> {
-    parse_bytes(&inventory.read(path)?)
+    let raw = inventory.read(path)?;
+    parse_bytes(&raw).map_err(|e| crate::ordinary_yaml_diagnostic::record_error(path, &raw, e))
 }
 fn parse_bytes(raw: &[u8]) -> Result<S> {
     let value = Y::decode_full_ordinary_source_value(raw)?;

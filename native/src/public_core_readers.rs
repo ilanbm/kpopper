@@ -195,6 +195,23 @@ fn findings(context: &CapturedAssessment, page: Option<Result<J>>) -> Result<J> 
             ));
         }
     }
+    let falsified = report["nodes"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(_, node)| node["state"]["falsifier"]["status"] == "holds")
+        .map(|(id, _)| id.clone())
+        .collect::<BTreeSet<_>>();
+    if let Ok(document) = crate::value::TypedValue::from_json(
+        &json_value(&context.snapshot().to_data())?["document"],
+    ) {
+        for (id, flag) in crate::public_amend::document_flags(&document, &falsified) {
+            notes.push(format!(
+                "{id}: {}",
+                flag.text(&|a, b| crate::public_ordinary_readers::apart(a, b, 40))
+            ));
+        }
+    }
     match page {
         Some(Ok(page)) => {
             for (key, label, separator) in [
@@ -308,7 +325,17 @@ pub fn opening(
         format!("findings {}", context.findings_revision()),
         format!("{nodes} computational nodes; {subjects} history subjects"),
     ];
-    let attention_lines = attention
+    let falsified = report["nodes"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(_, node)| node["state"]["falsifier"]["status"] == "holds")
+        .map(|(id, _)| id.clone())
+        .collect::<BTreeSet<_>>();
+    let answered = crate::value::TypedValue::from_json(&snapshot["document"])
+        .map(|document| crate::public_amend::document_flags(&document, &falsified))
+        .unwrap_or_default();
+    let mut attention_lines = attention
         .iter()
         .map(|a| {
             format!(
@@ -324,7 +351,13 @@ pub fn opening(
             )
         })
         .collect::<Vec<_>>();
-    if attention.is_empty() {
+    attention_lines.extend(answered.iter().map(|(id, flag)| {
+        format!(
+            "  {id}: {}",
+            flag.text(&|a, b| crate::public_ordinary_readers::apart(a, b, 28))
+        )
+    }));
+    if attention.is_empty() && answered.is_empty() {
         lines.push(format!(
             "  no attention selected by {}",
             report["attention_policy"].as_str().unwrap()

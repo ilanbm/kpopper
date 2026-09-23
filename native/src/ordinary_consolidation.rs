@@ -45,6 +45,9 @@ struct Hypothesis {
     source: O,
     text: String,
     source_record: V,
+    /// Another branch's whole record, when only what it holds differently is laid: the
+    /// permissions its unchanged entries carry are still read from it.
+    whole: Option<V>,
 }
 pub(crate) struct SuppliedHypothesis {
     pub name: String,
@@ -55,6 +58,8 @@ pub(crate) struct SuppliedHypothesis {
     pub source: O,
     pub text: String,
     pub source_record: V,
+    /// Another branch's committed record, laid over the base as what it holds differently.
+    pub differences_only: bool,
 }
 impl Hypothesis {
     fn path(&self) -> Result<&PathBuf> {
@@ -80,6 +85,7 @@ fn read_hypotheses(
     capture: &CapturedSource,
     requested: &[String],
     supplied: &[SuppliedHypothesis],
+    base: Option<&World<'_>>,
     runtime: Option<&Runtime>,
 ) -> Result<Vec<Hypothesis>> {
     let all = map(capture.hypotheses())?;
@@ -125,6 +131,7 @@ fn read_hypotheses(
                     .map_err(|_| error("invalid_utf8"))?
                     .into(),
                 source_record: V::Map(Map::new()),
+                whole: None,
             },
         );
     }
@@ -137,19 +144,29 @@ fn read_hypotheses(
                 h.name.split(':').next().unwrap_or(&h.name)
             ),
         )?;
-        let raw = entries(&h.document)?;
+        let (doc, whole) = match base {
+            Some(base) if h.differences_only => (
+                branch_differences(&h.document, base)?,
+                Some(h.document.clone()),
+            ),
+            _ => (h.document.clone(), None),
+        };
+        // An id the branch still holds in two collections has no one body to fold.
+        crate::reasoning_snapshot::entries(&doc)?;
+        let raw = entries(&doc)?;
         pool.insert(
             h.name.clone(),
             Hypothesis {
                 name: h.name.clone(),
                 path: None,
-                doc: h.document.clone(),
+                doc,
                 head: h.head.clone(),
                 ids: raw.keys().cloned().collect(),
                 raw,
                 source: h.source.clone(),
                 text: h.text.clone(),
                 source_record: h.source_record.clone(),
+                whole,
             },
         );
     }
@@ -190,6 +207,9 @@ fn in_file_order<'a>(
 ) -> Vec<std::borrow::Cow<'a, crate::ordinary_value::Value>> {
     hyps.iter()
         .map(|h| match supplied.iter().find(|s| s.name == h.name) {
+            Some(s) if h.whole.is_some() => {
+                std::borrow::Cow::Owned(kept_in_order(&s.ordered, &h.doc))
+            }
             Some(s) => std::borrow::Cow::Borrowed(&s.ordered),
             None => {
                 let mut doc = crate::ordinary_source::Source::from_finite(&h.source).projected();
@@ -200,6 +220,22 @@ fn in_file_order<'a>(
             }
         })
         .collect()
+}
+/// A branch's record in the order its file holds it, cut to what is laid from it: each
+/// collection keeps the ids the laid document holds there.
+fn kept_in_order(ordered: &crate::ordinary_value::Value, laid: &V) -> crate::ordinary_value::Value {
+    use crate::ordinary_value::Value as Ordered;
+    let mut kept = ordered.clone();
+    if let (Ordered::Map(collections), Ok(laid)) = (&mut kept, map(laid)) {
+        collections.retain(|name, members| match (members, laid.get(name)) {
+            (Ordered::Map(members), Some(V::Map(held))) => {
+                members.retain(|id, _| held.contains_key(id));
+                !members.is_empty()
+            }
+            _ => false,
+        });
+    }
+    kept
 }
 /// Why the union's field roles cannot be read, told over the union laid in the order its
 /// records hold it - the base's own, then what each hypothesis adds - as the Python reader
@@ -293,11 +329,11 @@ fn privacy(
     let templates =
         regex::Regex::new(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*\}\}").unwrap();
     for h in hyps {
-        combined = layer(&combined, &h.doc)?;
+        combined = layer(&combined, h.whole.as_ref().unwrap_or(&h.doc))?;
     }
     let original_entries = entries(base)?;
     for h in hyps {
-        let context = layer(&combined, &h.doc)?;
+        let context = layer(&combined, h.whole.as_ref().unwrap_or(&h.doc))?;
         let record_metadata = if h.path.is_none() && h.source_record != V::Map(Map::new()) {
             metadata(&h.source_record)
         } else {
@@ -408,6 +444,7 @@ fn one_hypothesis(capture: &CapturedSource, name: &str) -> Result<Hypothesis> {
             .map_err(|_| error("invalid_utf8"))?
             .into(),
         source_record: V::Map(Map::new()),
+        whole: None,
     })
 }
 pub(super) fn run(
@@ -548,7 +585,20 @@ pub(crate) fn run_supplied(
             code: 0,
         });
     }
-    let hyps = read_hypotheses(&capture, &options.names, supplied, runtime)?;
+    // Another branch's record is laid as what it holds differently from this base - the
+    // same base the union reads.
+    let base = if supplied.iter().any(|h| h.differences_only) {
+        Some(captured_projection(&capture, runtime)?)
+    } else {
+        None
+    };
+    let hyps = read_hypotheses(
+        &capture,
+        &options.names,
+        supplied,
+        base.as_ref().map(|base| &base.base),
+        runtime,
+    )?;
     if !options.dry_run {
         privacy(
             &capture,
@@ -585,7 +635,10 @@ pub(crate) fn run_supplied(
         doc: capture.ordinary_document(),
         all: map(capture.hypotheses())?,
         hyps,
-        base: captured_projection(&capture, runtime)?,
+        base: match base {
+            Some(base) => base,
+            None => captured_projection(&capture, runtime)?,
+        },
         runtime,
         stamp: &stamp,
         take: &options.take,
@@ -697,6 +750,7 @@ pub(super) fn preview(
                 source: O::from_typed(doc),
                 text: String::new(),
                 source_record: V::Map(Map::new()),
+                whole: None,
             },
         );
     }
@@ -721,6 +775,7 @@ pub(super) fn preview(
                 source: O::from_typed(&proposal.document),
                 text: String::new(),
                 source_record: V::Map(Map::new()),
+                whole: None,
             },
         );
     }

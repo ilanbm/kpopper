@@ -111,7 +111,7 @@ def native_record(path, reader_path, *, read_mode=None):
     ids={nid for group in collections.values() for nid in group}
     ids.update(nid for nid in all_ids if p.is_builtin(nid))
     sections={nid:section for section,group in collections.items() for nid in group}
-    questions={nid for section in p.OPEN for nid in (doc.get(section) or {})}
+    questions={nid for section in p.OPEN for nid,body in (doc.get(section) or {}).items() if not p.settled(body)}
     disputed=p.contested(doc)
     nodes={}; edges=[]
     for nid in sorted(ids):

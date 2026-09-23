@@ -95,6 +95,44 @@ fn computation_error(reader: &Reader<'_>, pred: &V) -> String {
         .unwrap_or("")
         .into()
 }
+/// A condition as check reads it -> (the evaluator's failure, whether it holds). This is
+/// `computation_error` and `Reader::predicate` together, with the one computation both
+/// would request made once; a failure leaves the condition undecided.
+pub(crate) fn condition(reader: &Reader<'_>, pred: &V) -> Result<(String, Option<bool>)> {
+    let (expression, decidable) = if matches!(pred, V::Map(_)) {
+        (pred.clone(), L::legacy_expression(pred, true).is_ok())
+    } else {
+        let source = py(pred);
+        let computed = R::CMP.captures(&source).is_some_and(|c| {
+            [&c[1], c[3].trim()].iter().any(|key| {
+                reader
+                    .raw
+                    .get(key)
+                    .and_then(|b| map(b).ok())
+                    .is_some_and(|b| matches!(b.get("rule"), Some(V::Map(_))))
+            })
+        });
+        let converted = obj([("expr", s(&source))]);
+        if !computed || L::legacy_expression(&converted, true).is_err() {
+            // Nothing is asked of the evaluator: a plain comparison, or one it cannot read.
+            return Ok((String::new(), reader.predicate(pred)?));
+        }
+        (converted, R::why_undecided(pred).is_empty())
+    };
+    let result = R::compute(
+        &reader.raw,
+        &reader.ids,
+        Some(&expression),
+        reader.program(),
+    );
+    let error = result["error"].as_str().unwrap_or("").to_owned();
+    let holds = if error.is_empty() && decidable {
+        result["predicate"]["holds_on_current_values"].as_bool()
+    } else {
+        None
+    };
+    Ok((error, holds))
+}
 /// Exact ordinary output numbers, without interpreting strings or authored maps
 /// which merely resemble the rational output shape.
 pub(crate) fn number(v: &V) -> Option<(num_bigint::BigInt, num_bigint::BigInt)> {

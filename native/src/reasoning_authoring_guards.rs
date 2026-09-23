@@ -266,12 +266,25 @@ pub(crate) fn collection_for_document(
             .map(|(c, _)| c.clone())
             .unwrap_or_else(|| "sources".into()));
     }
-    Ok(most(&|_, b| {
+    // A value lands where values are.
+    let written = most(&|_, b| {
         !jud(b) && map(b).is_ok_and(|m| ["v", "rule", "quoted"].iter().any(|k| m.contains_key(*k)))
     })
-    .filter(|(_, n)| *n > 0)
-    .map(|(c, _)| c.clone())
-    .unwrap_or_else(|| "known".into()))
+    .filter(|(_, n)| *n > 0);
+    // A record that writes its values bare keeps them together, but a bare scalar is a value
+    // only when no section holds one written out: elsewhere it is as often a path or a
+    // formula, and in the questions and the sources it never is.
+    let bare = || {
+        cols.iter()
+            .filter(|(c, _)| !["open", "questions", "sources"].contains(&c.as_str()))
+            .map(|(c, m)| (c, m.values().filter(|b| !matches!(b, V::Map(_))).count()))
+            .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(a.0)))
+            .filter(|(_, n)| *n > 0)
+    };
+    Ok(written
+        .or_else(bare)
+        .map(|(c, _)| c.clone())
+        .unwrap_or_else(|| "known".into()))
 }
 fn scalar_type(
     world: &impl Admission,
@@ -861,7 +874,86 @@ pub(crate) fn validate_with_page(
             out.push("reframe requires --why explaining why the rule represents the same subject".into());
         }
     }
-    let diff = if (kind == "add" || kind == "set") && known {
+    // `answer` and `correct` rewrite one existing entry in place; the command decides
+    // whether that is allowed, and these checks keep what it writes in the record's shape.
+    let amend = a.get("amend").filter(|v| **v != V::Null).map(py);
+    if let Some(amend) = &amend {
+        let place = entries(world.document())?;
+        let question = |key: &str| {
+            place
+                .get(key)
+                .is_some_and(|(collection, _)| ["open", "questions"].contains(&collection.as_str()))
+        };
+        let old = world.raw().get(id).and_then(|v| map(v).ok());
+        let settled = |m: Option<&Map>| {
+            m.is_some_and(|m| m.contains_key("answered") || m.contains_key("dropped"))
+        };
+        if kind != "add" || !known || builtin(id) || aimed.is_some() || reframe {
+            out.push(format!("{id} is not an entry of the record - {amend} rewrites one that exists"));
+        } else if amend == "answer" {
+            let by = a.get("answer_by").filter(|v| **v != V::Null).map(py);
+            if !question(id) {
+                out.push(format!("{id} is not an open question - answer closes an entry of open:"));
+            } else if settled(old) {
+                out.push(format!("{id} is already answered - its answer is read with pull {id}"));
+            } else if let Some(by) = &by {
+                if by == id || question(by) {
+                    out.push(format!("{by} is a question - an answer is an entry or a judgment of the record"));
+                } else if !world.raw().contains_key(by) {
+                    out.push(format!("{by} is not an entry - record the answer first, then answer {id} {by}"));
+                } else if b
+                    .get("answered")
+                    .and_then(|v| map(v).ok())
+                    .and_then(|m| m.get("by"))
+                    .map(py)
+                    .as_deref()
+                    != Some(by.as_str())
+                {
+                    out.push("the answered question names what answered it under answered: by".into());
+                }
+            } else if !b.get("dropped").is_some_and(truth) {
+                out.push(format!("answer {id} needs the entry that answered it, or --dropped with the reason it no longer matters"));
+            }
+        } else if amend == "correct" {
+            if !is_jud && b.contains_key(&dep) {
+                out.push(format!("{id} is not a judgment - a correction keeps what an entry is; resting it on something is a new decision"));
+            }
+            let changed = |key: &str| {
+                old.and_then(|m| m.get(key)).map(V::digest).transpose().ok().flatten()
+                    != b.get(key).map(V::digest).transpose().ok().flatten()
+            };
+            if ["answered", "dropped"].iter().any(|key| changed(key)) {
+                out.push(format!("{id} records how a question was settled - that is written by answer, never corrected"));
+            }
+            for key in ["replaced", "reviewed", "born"] {
+                if changed(key) {
+                    out.push(format!("{key} is written by this tool - a correction leaves it as it is"));
+                }
+            }
+            let resting = layers
+                .iter()
+                .filter(|(_, m)| {
+                    m.contains_key(id)
+                        || m.values().any(|body| {
+                            map(body).is_ok_and(|m| names(get(m, &dep)).iter().any(|d| d == id))
+                        })
+                })
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>();
+            if !resting.is_empty() {
+                out.push(format!(
+                    "hypothes{} {} hold{} {id} or rest{} on it - a correction there is a decision for the fold",
+                    if resting.len() == 1 { "is" } else { "es" },
+                    resting.join(", "),
+                    if resting.len() == 1 { "s" } else { "" },
+                    if resting.len() == 1 { "s" } else { "" },
+                ));
+            }
+        } else {
+            out.push(format!("{amend} is not a rewrite this reader knows"));
+        }
+    }
+    let diff = if (kind == "add" || kind == "set") && known && amend.is_none() {
         disagreement(world, a, page)?
     } else {
         None
@@ -908,7 +1000,7 @@ pub(crate) fn validate_with_page(
         {
             if let Some(h) = aimed {
                 out.push(format!("{id} is already in hypothesis {} - set changes its value there, review its snapshot",py(h)))
-            } else if diff.is_none() && !reframe {
+            } else if diff.is_none() && !reframe && amend.is_none() {
                 out.push(format!(
                     "{id} is already an entry - set changes its value, review its snapshot"
                 ))
@@ -1166,7 +1258,7 @@ pub(crate) fn validate_with_page(
             }
         }
     }
-    if kind == "add" && !arrangement(world, body) && b.contains_key("replaced") {
+    if kind == "add" && !arrangement(world, body) && b.contains_key("replaced") && amend.is_none() {
         out.push(
             "replaced is written by this tool, when a decision replaces another - leave it out"
                 .into(),

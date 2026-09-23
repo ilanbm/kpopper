@@ -148,6 +148,94 @@ fn ordinary_check_note_families_match_python_fixture() {
     );
 }
 
+/// `check` on a record, against what the Python reader prints for the same record.
+fn assert_check_matches_reference(record: &str, reference: &str, code: i32) {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(
+        output.status.code(),
+        Some(code),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), reference);
+}
+
+#[test]
+fn check_notes_a_declared_hole_and_a_comparison_nothing_decides_as_python_does() {
+    assert_check_matches_reference(
+        include_str!("fixtures/ordinary-note-holes.yaml"),
+        include_str!("fixtures/ordinary-note-holes.stdout"),
+        1,
+    );
+}
+
+#[test]
+fn check_clips_a_moved_reading_at_the_reference_forty_characters() {
+    assert_check_matches_reference(
+        include_str!("fixtures/ordinary-note-moved.yaml"),
+        include_str!("fixtures/ordinary-note-moved.stdout"),
+        0,
+    );
+}
+
+#[test]
+fn check_asks_no_review_of_a_replaced_arrangement_and_counts_judgments_on_priors() {
+    assert_check_matches_reference(
+        include_str!("fixtures/ordinary-note-arrangement.yaml"),
+        include_str!("fixtures/ordinary-note-arrangement.stdout"),
+        0,
+    );
+}
+
+#[test]
+fn a_structured_condition_nothing_can_compute_fails_check_unless_its_hole_is_declared() {
+    // Without the ordinary program a structured condition cannot be computed, and check
+    // says so rather than passing it; a declared hole turns the failure into a note.
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let record = concat!(
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\n",
+        "known:\n",
+        "  order.price: {v: 20}\n",
+        "judgments:\n",
+        "  c.budget:\n",
+        "    verdict: within budget\n",
+        "    rests_on: [order.price]\n",
+        "    seen: {order.price: 20}\n",
+        "    wrong_if: {op: gt, args: [{ref: order.price}, {num: '10'}]}\n",
+    );
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "FAIL c.budget: condition cannot be computed: ordinary expression program is not configured\n",
+            "\n",
+            "1 judgments, 2 entries, 1 problems\n",
+        )
+    );
+
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        format!("{record}    blocked_on: the evaluator is not installed here yet\n"),
+    )
+    .unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "NOTE c.budget: condition cannot be computed: ordinary expression program is not configured\n",
+            "\n",
+            "1 judgments, 2 entries, 0 problems, 1 declared\n",
+        )
+    );
+}
+
 #[test]
 fn declared_blocked_note_does_not_change_the_flagged_counter() {
     let temp = tempfile::tempdir().unwrap();
@@ -202,6 +290,8 @@ fn ordinary_check_rejects_manual_expression_and_dependency_bypasses() {
         .lines()
         .filter(|line| line.starts_with("FAIL "))
         .collect::<Vec<_>>();
+    // This reads without the ordinary program, so the structured condition cannot be
+    // computed and says so; with the program it does not hold, and that line is absent.
     assert_eq!(
         failures,
         vec![
@@ -211,10 +301,11 @@ fn ordinary_check_rejects_manual_expression_and_dependency_bypasses() {
             "FAIL p.unknown: rule: unknown references: p.ghost",
             "FAIL d.reopened: reopened_by reads as a comparison (p.a > 9) - a predicate belongs in wrong_if, where it is evaluated; a re-opener is the sign a person reads",
             "FAIL d.structured: predicate reads p.b, which it does not declare as a dependency - a change to it would never reach this",
+            "FAIL d.structured: condition cannot be computed: ordinary expression program is not configured",
             "FAIL d.text: predicate reads p.b, which it does not declare as a dependency - a change to it would never reach this",
         ]
     );
-    assert!(text.ends_with("3 judgments, 8 entries, 7 problems, 1 declared\n"));
+    assert!(text.ends_with("3 judgments, 8 entries, 8 problems, 1 declared\n"));
 }
 #[test]
 fn actual_ordinary_cli_reads_physical_hypotheses_and_private_metadata_without_writes() {
@@ -426,6 +517,249 @@ fn actual_open_reports_an_empty_workspace_and_explicit_missing_record() {
     assert_eq!(missing.status.code(), Some(1));
     let data: J = serde_json::from_slice(&missing.stdout).unwrap();
     assert_eq!(data["status"], "unavailable");
+}
+
+#[test]
+fn open_refuses_a_named_record_that_is_not_there_on_stderr() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let output = cli(&root, &["open", "missing.yaml"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "The requested record is unavailable: {}\n",
+            root.join("missing.yaml").display()
+        )
+    );
+}
+
+fn no_record_here(name: &str) -> String {
+    format!(
+        "{name}: no record here. Run this from the directory the record sits in, or name the record file as an argument.\n"
+    )
+}
+
+#[test]
+fn a_record_that_is_not_there_is_refused_as_the_python_reader_refuses_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let private = root.join("private");
+    fs::write(root.join("other.yaml"), "known:\n  x.y: {v: 1}\n").unwrap();
+    for (args, named) in [
+        (vec!["check"], "GROUNDING.yaml"),
+        (vec!["--frozen", "check"], "GROUNDING.yaml"),
+        (vec!["pull", "x.y"], "GROUNDING.yaml"),
+        (vec!["--frozen", "pull", "x.y"], "GROUNDING.yaml"),
+        (vec!["affects", "x.y"], "GROUNDING.yaml"),
+        (vec!["--frozen", "affects", "x.y"], "GROUNDING.yaml"),
+        (vec!["assess", "x.y"], "GROUNDING.yaml"),
+        (vec!["export", "x.y"], "GROUNDING.yaml"),
+        (vec!["set", "x.y", "2"], "GROUNDING.yaml"),
+        (vec!["review", "d.x"], "GROUNDING.yaml"),
+        (vec!["consolidate", "--dry-run"], "GROUNDING.yaml"),
+        (vec!["check", "missing.yaml"], "missing.yaml"),
+        (vec!["check", "./missing.yaml"], "./missing.yaml"),
+        (vec!["check", "MISSING.YAML"], "MISSING.YAML"),
+        (vec!["check", "other.yaml", "missing.yaml"], "missing.yaml"),
+        (vec!["pull", "x.y", "missing.yaml"], "missing.yaml"),
+        (vec!["affects", "x.y", "missing.yaml"], "missing.yaml"),
+        (
+            vec!["assess", "x.y", "--record", "missing.yaml"],
+            "missing.yaml",
+        ),
+        (
+            vec!["export", "x.y", "--record", "missing.yaml"],
+            "missing.yaml",
+        ),
+        (vec!["add", "x.z", "v=1", "missing.yaml"], "missing.yaml"),
+        (
+            vec!["consolidate", "--dry-run", "missing.yaml"],
+            "missing.yaml",
+        ),
+    ] {
+        let output = cli(root, &args, &private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            no_record_here(named),
+            "{args:?}"
+        );
+    }
+    assert!(!root.join("GROUNDING.yaml").exists());
+    assert!(!root.join("missing.yaml").exists());
+
+    let output = cli(root, &["--json", "check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], no_record_here("GROUNDING.yaml"));
+    // The Hub keeps its own framing and exit status around the same reason.
+    let output = cli(root, &["experimental", "hub"], &private);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "kpop experimental hub: {}",
+            no_record_here("GROUNDING.yaml")
+        )
+    );
+}
+
+#[test]
+fn a_configured_simple_record_that_is_not_there_is_named_in_full() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let private = root.join("private");
+    let git = Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["init", "-q", "-b", "main"])
+        .output()
+        .unwrap();
+    assert!(git.status.success());
+    fs::create_dir_all(root.join(".git/kpopper/project")).unwrap();
+    fs::create_dir_all(root.join("notes")).unwrap();
+    fs::write(
+        root.join(".git/kpopper/project/project.json"),
+        r#"{"version": 1, "mode": "simple", "record": "notes/knowledge.yaml", "publication": null, "generation": 0}"#,
+    )
+    .unwrap();
+    // A live read takes the project's one record for the entry names at its root, and for
+    // the record named as it is.
+    let configured = root.join("notes/knowledge.yaml");
+    for args in [
+        vec!["check"],
+        vec!["check", "GROUNDING.yaml"],
+        vec!["check", "notes/knowledge.yaml"],
+        vec!["pull", "x.y"],
+        vec!["assess", "x.y"],
+        vec!["set", "x.y", "2"],
+    ] {
+        let output = cli(&root, &args, &private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            no_record_here(configured.to_str().unwrap()),
+            "{args:?}"
+        );
+    }
+    // A frozen read takes the files as the command gave them, and so does a read from
+    // below the project's root.
+    let output = cli(&root, &["--frozen", "check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        no_record_here("GROUNDING.yaml")
+    );
+    let output = cli(&root.join("notes"), &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        no_record_here("GROUNDING.yaml")
+    );
+    assert!(!configured.exists());
+    // The record keeps the root's entry name: it is still named in full.
+    fs::write(
+        root.join(".git/kpopper/project/project.json"),
+        r#"{"version": 1, "mode": "simple", "record": "GROUNDING.yaml", "publication": null, "generation": 0}"#,
+    )
+    .unwrap();
+    let output = cli(&root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        no_record_here(root.join("GROUNDING.yaml").to_str().unwrap())
+    );
+}
+
+const BROKEN_YAML: &str = "known:\n  a.b: {v: 1\n  c.d: [unclosed\n";
+fn broken_yaml_refusal(name: &str) -> String {
+    format!(
+        "{name}: the record is not valid YAML.\nwhile parsing a flow mapping\n  in \"{name}\", line 2, column 8:\n      a.b: {{v: 1\n           ^\nexpected ',' or '}}', but got ':'\n  in \"{name}\", line 3, column 6:\n      c.d: [unclosed\n         ^\n"
+    )
+}
+
+#[test]
+fn a_record_that_does_not_parse_is_refused_with_the_line_and_column() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let private = root.join("private");
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, BROKEN_YAML).unwrap();
+    let baseline = root.join("baseline.json");
+    let (baseline, record) = (baseline.to_str().unwrap(), entry.to_str().unwrap());
+    for args in [
+        vec!["check"],
+        vec!["--frozen", "check"],
+        vec!["pull", "a.b"],
+        vec!["--frozen", "pull", "a.b"],
+        vec!["affects", "a.b"],
+        vec!["open"],
+        vec!["--frozen", "open"],
+        vec!["assess", "a.b"],
+        vec!["export", "a.b"],
+        vec!["add", "x.y", "v=1"],
+        vec!["set", "a.b", "2"],
+        vec!["consolidate", "--dry-run"],
+        vec!["mark", baseline, record],
+    ] {
+        let output = cli(root, &args, &private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            broken_yaml_refusal("GROUNDING.yaml"),
+            "{args:?}"
+        );
+    }
+    assert_eq!(fs::read_to_string(&entry).unwrap(), BROKEN_YAML);
+
+    let output = cli(root, &["--json", "check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], broken_yaml_refusal("GROUNDING.yaml"));
+    let output = cli(root, &["experimental", "hub"], &private);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "kpop experimental hub: {}",
+            broken_yaml_refusal("GROUNDING.yaml")
+        )
+    );
+
+    // A file the record points to is named as the command line would name it, and a
+    // record found above the current directory by its full path.
+    fs::write(&entry, "also: notes/more.yaml\nknown:\n  x.y: {v: 1}\n").unwrap();
+    fs::create_dir_all(root.join("notes")).unwrap();
+    fs::write(root.join("notes/more.yaml"), BROKEN_YAML).unwrap();
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        broken_yaml_refusal("notes/more.yaml")
+    );
+    fs::write(&entry, BROKEN_YAML).unwrap();
+    let output = cli(&root.join("notes"), &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    let full = root.canonicalize().unwrap().join("GROUNDING.yaml");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        broken_yaml_refusal(full.to_str().unwrap())
+    );
+
+    // A tab where PyYAML takes none is refused where it stands.
+    fs::write(&entry, "known:\n\tp.a: 1\n").unwrap();
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "GROUNDING.yaml: the record is not valid YAML.\nwhile scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"GROUNDING.yaml\", line 2, column 1:\n    \tp.a: 1\n    ^\n"
+    );
 }
 
 #[test]
@@ -1451,6 +1785,118 @@ fn a_branch_record_whose_fields_tie_is_read_over_this_one_as_a_hypothesis_is() {
 }
 
 #[test]
+fn another_branch_s_record_is_laid_over_this_one_as_what_it_holds_differently() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let base = "known:\n  local.one: {v: 1}\n  local.two: {v: 2, of: 2026-09-10}\n  local.three: {v: two  words}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";
+    commit_record(root, base, "base");
+    git(root, &["branch", "same"]);
+    let branches = [
+        // an unchanged claim that gains a list of names
+        (
+            "listed",
+            base.replace("{v: 1}", "{v: 1, tags: [local.two]}"),
+        ),
+        // an id held a second time, in another collection
+        (
+            "twice",
+            format!(
+                "{base}  local.two: {{verdict: dup, rests_on: [local.one], seen: {{local.one: 1}}}}\n"
+            ),
+        ),
+        ("schema", format!("schema: 5\n{base}")),
+        // the same claims written differently
+        (
+            "rewritten",
+            base.replace("{v: 1}", "{v: 1.0}")
+                .replace("two  words", "two words"),
+        ),
+        ("older", base.replace("of: 2026-09-10", "of: 2026-09-01")),
+        ("value", base.replace("{v: 1}", "{v: 9}")),
+        ("newer", base.replace("of: 2026-09-10", "of: 2026-09-12")),
+    ];
+    for (name, record) in &branches {
+        git(root, &["checkout", "-q", "-b", name, "main"]);
+        commit_record(root, record, name);
+        git(root, &["checkout", "-q", "main"]);
+    }
+    // A hypothesis file the branch carries, beside a record that holds what this one does.
+    git(root, &["checkout", "-q", "-b", "idea", "main"]);
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(
+        root.join(".kpopper/hypotheses/idea.yaml"),
+        "known:\n  local.one: {v: 4}\n",
+    )
+    .unwrap();
+    git(root, &["add", ".kpopper"]);
+    commit_record(root, base, "idea");
+    git(root, &["checkout", "-q", "main"]);
+
+    // What this record already holds is not laid again: a list added to an unchanged
+    // claim casts no vote for a field role, a second holder of an id does not contest
+    // the first, the branch's own schema stays the branch's, a claim written another
+    // way or read on an earlier day is the same reading, and a hypothesis file the
+    // branch carries is not contested by the branch's copy of this record.
+    let holds = "+ d.a: a\n    holds\n    wrong_if: local.one > 5\n";
+    let unchanged =
+        format!("local.one: 1\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n{holds}");
+    for (name, expected) in [
+        ("same", unchanged.clone()),
+        ("listed", unchanged.clone()),
+        ("schema", unchanged.clone()),
+        ("rewritten", unchanged.clone()),
+        ("older", unchanged.clone()),
+        (
+            "twice",
+            format!(
+                "local.one: 1\nlocal.three: two  words\n{holds}+ local.two (in hypothesis twice): dup\n    holds\n"
+            ),
+        ),
+        (
+            "value",
+            format!(
+                "local.one: 1\n    proposes 1 -> 9, from value\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n{holds}"
+            ),
+        ),
+        (
+            "newer",
+            format!(
+                "local.one: 1\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n    proposes instead, from newer: 2 as of 2026-09-12\n{holds}"
+            ),
+        ),
+        (
+            "idea",
+            format!(
+                "local.one: 1\n    proposes 1 -> 4, from idea:idea\nlocal.three: two  words\nlocal.two: 2 as of 2026-09-10\n{holds}"
+            ),
+        ),
+    ] {
+        let output = cli(
+            root,
+            &["pull", "--from", name, "local", "d"],
+            &root.join("private"),
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty(), "{name}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            expected + "\naffects <entry> shows what a change reaches\n",
+            "{name}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        base
+    );
+}
+
+#[test]
 fn a_branch_record_whose_fields_tie_is_consolidated_over_this_one() {
     let temp = tempfile::tempdir().unwrap();
     let root = &temp.path().canonicalize().unwrap();
@@ -1561,6 +2007,43 @@ fn a_tie_a_branch_brings_in_new_collections_is_named_in_its_order() {
     let base = format!(
         "{known}judgments:\n  d.z: {{verdict: z, rests_on: [local.one], seen: {{local.one: 1}}, wrong_if: local.one > 5}}\n"
     );
+    commit_record(root, &base, "base");
+    for args in [
+        &["consolidate", "--dry-run", "--from", "other"][..],
+        &["consolidate", "--from", "other"],
+    ] {
+        let output = cli(root, args, &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            tied("deps", "rests_on", "depends"),
+            "{args:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+            base
+        );
+    }
+}
+
+#[test]
+fn a_tie_over_what_the_branch_holds_differently_is_named_over_that() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let a = "  d.a: {verdict: a, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n";
+    let base = format!("known:\n  local.one: {{v: 1}}\n  local.two: {{v: 2}}\njudgments:\n{a}");
+    // The branch adds a list of names to an entry whose claim it leaves alone, which is not
+    // laid again, and a judgment resting on a field of another name, which is.
+    commit_record(
+        root,
+        &format!(
+            "known:\n  local.one: {{v: 1, tags: [local.two]}}\n  local.two: {{v: 2}}\njudgments:\n{a}  d.b: {{verdict: b, depends: [local.two], seen: {{local.two: 2}}, wrong_if: local.two > 5}}\n"
+        ),
+        "branch",
+    );
+    git(root, &["branch", "other"]);
     commit_record(root, &base, "base");
     for args in [
         &["consolidate", "--dry-run", "--from", "other"][..],

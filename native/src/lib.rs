@@ -98,6 +98,7 @@ pub mod pending_control;
 pub mod pending_publication;
 pub mod pending_state;
 pub mod project_modes;
+pub mod public_amend;
 pub mod public_annotated_document;
 pub mod public_assessment;
 pub mod public_authoring;
