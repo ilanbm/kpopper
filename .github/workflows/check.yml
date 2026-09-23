@@ -10,10 +10,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch makes the older run irrelevant.
+# A newer push to a pull request makes its older run irrelevant. A run on main always
+# finishes: pull requests merge without being brought up to date, so main's run is the one
+# that checks them together. A later push to main waits, and only the newest one waits.
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # The retained Python suite explicitly exercises the legacy reference.
 env:

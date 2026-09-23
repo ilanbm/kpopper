@@ -140,6 +140,12 @@ Describe the problem, the resulting behavior and how you checked it. Include a
 `Bump: patch`, `Bump: minor` or `Bump: major` line; [Releasing](#releasing) explains the choices.
 Feature pull requests leave version numbers and generated release notes to the release process.
 
+A pull request does not need to be current with `main` to merge: its own checks decide, and
+the run on `main` after each merge checks what landed together. Each push to an open pull
+request starts its checks again from the beginning, so bring `main` into the branch only when
+GitHub reports a conflict, when a failing check is fixed on `main`, or when the change needs
+something that has landed since.
+
 When a change makes a lasting design decision, add it to `GROUNDING.yaml` with its reasons
 and what would prompt reconsideration. Routine fixes need no new decision entry. The
 [recording guide](skills/record/SKILL.md) describes the format; a maintainer can help with it.
@@ -181,8 +187,10 @@ a test that reads something new, expect the audit to ask for the declaration in 
 request.
 
 Every push to `main` runs every lane on every platform, recompiling the reasoning runtime only
-when its sources changed. Manual dispatch forces the complete audit. New commits cancel older
-checks for the same ref. Release and publish workflows keep their own cancellation policies.
+when its sources changed. Manual dispatch forces the complete audit. A new commit on a pull
+request cancels its older checks. A run on `main` always finishes: a later push waits behind
+it, and only the newest waiting push runs next. Release and publish workflows keep their own
+cancellation policies.
 
 `ci-required` runs even if another job fails or is skipped. It requires every selected job
 to succeed and accepts skips only for unselected jobs. This is the aggregate status to use

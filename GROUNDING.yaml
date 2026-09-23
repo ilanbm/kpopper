@@ -953,6 +953,17 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_pr_churn:
+    name: "The session that measured why pull requests kept restarting their checks"
+    asked: "טוב זה לא הגיוני המרדף פה אחרי הPRs שאחד ממוזג וכל השאר נתקעים על ״This branch is
+            out-of-date with the base branch״, או יותר גרוע נמצאים במצב הזה ועדיין ממשיכים להריץ CI
+            checks סתם רק בשביל להתקע בסוף ולהתחיל מחדש אחרי מיזוג (וחוזר חלילה)"
+    fidelity: quoted
+    at: "GitHub Actions runs and jobs API and the rulesets on main for this repository, 05:00 UTC on
+         22 September to 05:20 UTC on 23 September 2026; each job's duration from its own start and
+         finish, each merge's lag from the pull request head against the first parent of its squash
+         commit"
+    of: "2026-09-23"
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -1811,6 +1822,14 @@ known:
     from: run.history_record_measurement_a0e5e9b
     at: "blocked_on_reopeners recipe against GROUNDING.yaml at a0e5e9bbca859db59ccc607de2c3c1fd20fcc886, after adding explicit history authority"
     measure: blocked_on_reopeners
+  m.ci_main_runs_unfinished:
+    name: "Check runs on main cancelled in a row before one finished"
+    v: 14
+    from: s.2026_09_23_pr_churn
+    at: "push runs from the one created at 19:33 UTC on 22 September to the one for a9204aa at 04:54
+         UTC on 23 September; at least 11 cancelled by hand, the others by the next merge or before
+         they started"
+    as_of: "2026-09-23"
   m.ci_native_wait_baseline:
     name: "Late integrity feedback behind all native builds"
     v: "PR 120 run 35288867621 delayed a one-second committed-bundle integrity failure until all
@@ -1818,6 +1837,14 @@ known:
     from: s.ci_execution_evidence
     at: "https://github.com/ilanbm/kpopper/actions/runs/35288867621 ; installed job 105432604343 and
          Windows build 105427309644."
+  m.ci_pr_runs_cancelled:
+    name: "Pull request check runs cancelled before they finished"
+    v: "65 of 111 pull request check runs - 18,182 of 24,869 job minutes - were cancelled before
+        they finished; 16 runs, 4,397 job minutes, gave the result a merge went on"
+    from: s.2026_09_23_pr_churn
+    at: "check workflow runs on pull requests created 05:00 UTC on 22 September to 05:10 UTC on 23
+         September"
+    as_of: "2026-09-23"
   m.ci_python_serial_baseline:
     name: "Measured serial Python suite before execution changes"
     v: 2280.21
@@ -2327,6 +2354,12 @@ known:
     at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
     of: "2026-09-04"
     measure: hypothesis_thresholds
+  p.main_requires_current_branch:
+    name: "Whether main requires a pull request to be current with it before it merges"
+    v: false
+    from: s.2026_09_23_pr_churn
+    at: "ruleset 'main lands through a checked pull request', required status checks:
+         strict_required_status_checks_policy"
   p.native_batch_budget_refusal:
     name: "Native evaluator refuses an over-budget batch"
     v: "Input and output budget overruns refuse the complete evaluation batch, including a bound
@@ -3039,6 +3072,12 @@ known:
     from: s.2026_09_11_read_once
     at: "best of five runs of scripts/ground_hook.py against a synthetic 2.26 MB record - this
          record's collections nine times over under other names - on one laptop, Python 3.14"
+  m.prs_merged_behind_main:
+    name: "Merged pull requests that were behind main when they merged"
+    v: "15 of the last 30 merged pull requests were 1-5 commits behind main when they merged"
+    from: s.2026_09_23_pr_churn
+    at: "pull requests 135-182 merged by 05:00 UTC on 23 September"
+    as_of: "2026-09-23"
   m.reach.assumed_at_high_confidence:
     v: 0
     name: "Unchecked claims about the project that were asserted at a confidence of 0.8 or above"
@@ -4891,6 +4930,31 @@ judgments:
       m.reach.local_checked_held: 83
       m.reach.local_assumed_held: 25
       m.reach.assumed_at_high_confidence: 0
+  d.main_check_runs_finish:
+    name: "A check run on main always finishes"
+    from: s.2026_09_23_pr_churn
+    rests_on: [p.main_requires_current_branch, m.prs_merged_behind_main, m.ci_pr_runs_cancelled, m.ci_main_runs_unfinished]
+    verdict: "A pull request merges on its own checks without being brought up to date with main,
+              and a check run on main finishes: a later push to main waits for it, and only the
+              newest waiting push runs next."
+    because: "Main does not require a current branch ({{p.main_requires_current_branch}}), and pull
+              requests merge behind it ({{m.prs_merged_behind_main}}). Each push to an open pull
+              request restarts its checks and cancels the run in flight, so refreshing a branch that
+              only fell behind throws work away ({{m.ci_pr_runs_cancelled}}) and buys nothing a merge
+              needs. What merges behind main is checked together only by the run on main, and
+              {{m.ci_main_runs_unfinished}} of those runs in a row were cancelled before one
+              finished."
+    wrong_if: "p.main_requires_current_branch == true"
+    reopened_by: "Two pull requests that each passed their own checks leave main red together, or a
+                  merge queue starts checking what merges before it lands."
+    seen:
+      p.main_requires_current_branch: false
+      m.prs_merged_behind_main: "15 of the last 30 merged pull requests were 1-5 commits behind main
+                                 when they merged"
+      m.ci_pr_runs_cancelled: "65 of 111 pull request check runs - 18,182 of 24,869 job minutes -
+                               were cancelled before they finished; 16 runs, 4,397 job minutes, gave
+                               the result a merge went on"
+      m.ci_main_runs_unfinished: 14
   d.measure_names_a_recipe:
     rests_on: [s.2026_09_04_remeasure, m.remeasure.stale_green, run.page_move_three_states, d.record_is_code, p.recipe_runners]
     verdict: "an entry whose value is a fact about the tree names its recipe with measure: - a bare
