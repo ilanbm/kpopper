@@ -644,11 +644,13 @@ pub(crate) fn record_error(path: &Path, raw: &[u8], failure: crate::Error) -> cr
     let Some(diagnostic) = diagnose(raw, source) else {
         return failure;
     };
-    // The directory is resolved as the working directory is, so a path given through a
-    // link to it still reads relative; the file keeps its own name.
+    // The file's directory and the working directory are both resolved, so a path given
+    // through a link, or spelled another way (Windows resolves to its `\\?\` form), still
+    // reads relative; the file keeps its own name.
+    let resolved = |directory: &Path| directory.canonicalize().ok();
     let path = path
         .parent()
-        .and_then(|directory| directory.canonicalize().ok())
+        .and_then(resolved)
         .zip(path.file_name())
         .map_or_else(
             || path.to_path_buf(),
@@ -656,8 +658,9 @@ pub(crate) fn record_error(path: &Path, raw: &[u8], failure: crate::Error) -> cr
         );
     let name = std::env::current_dir()
         .ok()
-        .and_then(|cwd| path.strip_prefix(cwd).ok())
-        .unwrap_or(&path)
+        .and_then(|cwd| resolved(&cwd))
+        .and_then(|cwd| path.strip_prefix(cwd).ok().map(Path::to_path_buf))
+        .unwrap_or(path)
         .display()
         .to_string();
     crate::Error(format!(

@@ -739,9 +739,10 @@ fn a_record_that_does_not_parse_is_refused_with_the_line_and_column() {
     fs::write(root.join("notes/more.yaml"), BROKEN_YAML).unwrap();
     let output = cli(root, &["check"], &private);
     assert_eq!(output.status.code(), Some(1));
+    let pointed = Path::new("notes").join("more.yaml");
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
-        broken_yaml_refusal("notes/more.yaml")
+        broken_yaml_refusal(pointed.to_str().unwrap())
     );
     fs::write(&entry, BROKEN_YAML).unwrap();
     let output = cli(&root.join("notes"), &["check"], &private);
