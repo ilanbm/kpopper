@@ -262,7 +262,8 @@ Suppose a session building an integration discovers a documented change to the v
 API limit. **The feature may be abandoned; the finding can still help the project.** Other
 local worktrees can read it immediately, marked as pending, without waiting for the feature
 to merge. It appears alongside their branch record; reading it does not adopt it or replace
-their recorded premises.
+their recorded premises. Their consolidation dry run tests it against that record too, and turns
+red when accepting it would break a recorded decision, until a person decides the finding.
 
 With the project's publication permission, shared findings accumulate in one knowledge PR.
 Consolidation reconciles the proposed knowledge with the target record before acceptance;

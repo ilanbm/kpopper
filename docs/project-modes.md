@@ -96,6 +96,15 @@ code-world context. A pending claim is not silently substituted for a same-ID br
 claim. Different bodies, sources, schemas and hypotheses remain visible as conflicts;
 unrelated extra branch entries are allowed.
 
+`kpop consolidate --dry-run` tests the same contributions against the branch record, after
+its hypotheses. Each active contribution is laid over the record alone, then all of them
+together; the report names IDs two contributions hold differently, what accepting each
+would change, and the falsifiers, gaps and moved premises that would follow. The run is red
+when accepting one would break something, or when the record cannot read one as it was
+written, or would read its own judgments differently beside it. It adopts nothing:
+rejecting or withdrawing a contribution with its reason retires it from the next run, and
+accepting one stays with the knowledge PR. A frozen run has no pending part.
+
 Use an explicit frozen read for a committed PR or CI artifact. Frozen reads depend on the
 selected record and its portable evidence, without another user's private files or a
 moving local pending ref. Materializing a contribution into a branch is a separate,
