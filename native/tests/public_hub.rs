@@ -280,18 +280,20 @@ fn ordinary_hub_without_a_brief_opens_on_the_record_tab() {
 }
 
 #[test]
-fn ordinary_hub_without_a_brief_holds_no_arrangement_against_the_page() {
+fn ordinary_hub_without_a_brief_says_what_needs_a_person_on_the_record_cards() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     fs::write(
         root.join("GROUNDING.yaml"),
-        "sources:\n  s.2026_09_20_ask: {asked: 'What should the page show?', read: '2026-09-20'}\nknown:\n  p.one: {v: 1, from: s.2026_09_20_ask}\njudgments:\n  v.layout:\n    verdict: Keep the page as it is\n    rests_on: [s.2026_09_20_ask, graph.entries]\n    seen: {s.2026_09_20_ask: 'read 2026-09-20', graph.entries: 2}\n    wrong_if: graph.entries > 0\n    born: '2026-09-20'\n",
+        "sources:\n  s.2026_09_20_ask: {asked: 'What should the page show?', read: '2026-09-20'}\nknown:\n  p.one: {v: 1, from: s.2026_09_20_ask}\njudgments:\n  v.layout:\n    verdict: Keep the page as it is\n    rests_on: [s.2026_09_20_ask, graph.entries]\n    seen: {s.2026_09_20_ask: 'read 2026-09-20', graph.entries: 2}\n    wrong_if: graph.entries > 0\n    born: '2026-09-20'\n  d.wait:\n    verdict: Hold for the survey\n    rests_on: [p.one]\n    seen: {p.one: 2}\n    wrong_if: p.one > 5\n    unverified: nobody has read the survey\n",
     )
     .unwrap();
+    // Without a brief no arrangement is held against the page: the fired one is the
+    // record's to report, and its card says so.
     let verified = ok(root, &["--frozen", "experimental", "hub", "--verify"]);
     assert_eq!(
         String::from_utf8(verified.stdout).unwrap(),
-        "4 elements, 3 entries, 1 judgments, 1 tab, 0 problems\n"
+        "5 elements, 3 entries, 2 judgments, 1 tab, 0 problems\n"
     );
     ok(
         root,
@@ -299,6 +301,11 @@ fn ordinary_hub_without_a_brief_holds_no_arrangement_against_the_page() {
     );
     let html = fs::read_to_string(root.join("page.html")).unwrap();
     assert!(!html.contains("decided <span class=\"fx\" data-id=\"v.layout\">"));
+    assert!(html.contains("data-id=\"v.layout\">Keep the page as it is</div><div class=\"state\" data-warning=\"true\">its own condition for being wrong now holds</div>"));
+    assert!(html.contains(
+        "<div class=\"state\" data-warning=\"true\">unverified: nobody has read the survey</div>"
+    ));
+    assert_eq!(html.matches("class=\"state\"").count(), 2);
 }
 
 #[test]
