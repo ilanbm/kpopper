@@ -26,10 +26,10 @@ fn decode_brief(raw: &[u8]) -> Result<V> {
     Ok(crate::history_yaml::decode_source_value(raw)?.typed())
 }
 
-const CSS: &str = include_str!("../../scripts/page/page.css");
-const COMPONENT_CSS: &str = include_str!("../../scripts/page/components.css");
-const JS: &str = include_str!("../../scripts/page/page.js");
-const DATE_JS: &str = include_str!("../../scripts/page/dates.js");
+const CSS: &str = include_str!("../shared/page/page.css");
+const COMPONENT_CSS: &str = include_str!("../shared/page/components.css");
+const JS: &str = include_str!("../shared/page/page.js");
+const DATE_JS: &str = include_str!("../shared/page/dates.js");
 
 #[derive(Debug)]
 pub struct Page {

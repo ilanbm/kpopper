@@ -363,7 +363,7 @@ impl Program {
             .unwrap_or_else(|| serde_json::json!({}));
         require(
             view["orientation"] == orientation
-                && view["rules"] == include_str!("../../scripts/session/rules.txt").trim(),
+                && view["rules"] == include_str!("../shared/session/rules.txt").trim(),
             "view orientation or rules changed",
         )?;
         let bounds = self.session_bounds(bounds)?;
@@ -506,7 +506,7 @@ mod tests {
     fn empty_view() -> (J, J) {
         let record = serde_json::json!({"project_context":"fixture","nodes":{},"edges":[]});
         let revision = sha256(&serde_json::to_vec(&serde_json::json!({"project":"fixture","graph":sha256(&serde_json::to_vec(&record).unwrap())})).unwrap());
-        let view = serde_json::json!({"project":"fixture","revision":revision,"orientation":{},"rules":include_str!("../../scripts/session/rules.txt").trim()});
+        let view = serde_json::json!({"project":"fixture","revision":revision,"orientation":{},"rules":include_str!("../shared/session/rules.txt").trim()});
         (record, view)
     }
 

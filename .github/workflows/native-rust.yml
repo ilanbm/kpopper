@@ -242,6 +242,25 @@ jobs:
         run: |
           set -o pipefail
           cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
+      - name: The published crate builds from its own files, as the program built here
+        # crates.io receives native/ alone. The crate builds in a target directory of its own:
+        # Cargo gives the packaged crate and this checkout the same artifact names, and in a
+        # shared directory could take one build for the other.
+        if: ${{ !cancelled() && steps.native-release.outcome == 'success' && matrix.target == 'linux-x86_64' && env.KPOPPER_CI_VALIDATION == 'full' }}
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/crate-target
+        run: |
+          set -euo pipefail
+          version=$(cat VERSION)
+          # Inside native/, so that its rust-toolchain.toml selects the compiler.
+          (cd native && cargo package --locked &&
+            cargo install --locked --debug --path "$CARGO_TARGET_DIR/package/kpopper-$version" --root "$RUNNER_TEMP/crate")
+          python native/ci/crate_identity.py --repository native/target/release/kpop \
+            --crate "$RUNNER_TEMP/crate/bin/kpop" --resources "$KPOP_CONSOLIDATION_RESOURCES"
+          KPOPPER_NATIVE_RESOURCES="$KPOP_CONSOLIDATION_RESOURCES" python native/ci/platform_acceptance.py \
+            --binary "$RUNNER_TEMP/crate/bin/kpop" --output "$RUNNER_TEMP/native-evidence/crate-acceptance"
+          rm -rf "$CARGO_TARGET_DIR"
       - name: Copy the executable and its verified native resources
         id: native-bundle
         if: ${{ !cancelled() && steps.native-release.outcome == 'success' && steps.native-source.outcome == 'success' }}

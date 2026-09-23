@@ -15,15 +15,15 @@ const MAX_EXECUTABLE: usize = 256 * 1024 * 1024;
 const SCHEMAS: [(&str, &[u8]); 3] = [
     (
         "assessment.schema.json",
-        include_bytes!("../../scripts/assessment.schema.json"),
+        include_bytes!("../shared/assessment.schema.json"),
     ),
     (
         "reasoning/assessment.schema.json",
-        include_bytes!("../../scripts/reasoning/assessment.schema.json"),
+        include_bytes!("../shared/reasoning/assessment.schema.json"),
     ),
     (
         "reasoning/history_assessment.schema.json",
-        include_bytes!("../../scripts/reasoning/history_assessment.schema.json"),
+        include_bytes!("../shared/reasoning/history_assessment.schema.json"),
     ),
 ];
 fn seal(mut value: J) -> Result<J> {

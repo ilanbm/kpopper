@@ -953,6 +953,15 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_crates_io:
+    name: "Publish every release to crates.io under the project's name"
+    asked: "Paraphrased maintainer request, after asking how kpopper and kpop are listed on
+            crates.io and how to publish them if they are not: prepare the crate for publication; the
+            goal is that every new version is published to crates.io under the project's own name."
+    of: "On 2026-09-22 crates.io answered 404 for kpopper, kpop and kpop_native, and 200 for serde
+         as a control. The crate packaged from 20f9b64 did not build: its build script could not read
+         ../scripts/session/lean/Main.lean from inside the package."
+    read: "2026-09-23"
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -2867,6 +2876,14 @@ known:
     name: "Native source capture exact accepted snapshots"
     v: 38
     from: s.native_source_capture
+  m.native_without_resources:
+    name: "What the native commands do with no verified resources beside them"
+    v: "Reads (check, open, pull, affects) and add on an existing ordinary record succeed; the first
+        add in an empty workspace refuses with: cannot compute core/v1 evidence: runtime_unavailable"
+    from: s.2026_09_23_crates_io
+    at: "The 0.9.0 darwin-arm64 executable copied to a directory with no resources beside it and
+         KPOPPER_NATIVE_RESOURCES unset, on this repository's record, a copy of it, and the platform
+         acceptance flows"
   m.native_writer_conformance_cases:
     name: "Writer conformance scenarios"
     v: 230
@@ -3562,6 +3579,16 @@ known:
     of: "2026-09-11"
 
 open:
+  q.crates_io_resources:
+                         name: "What a crates.io install does about the verified resources"
+                         question: "A crate installed from crates.io carries the two commands
+                                    without the verified reasoning resources a release archive places
+                                    beside them, so it can read and write an existing record but
+                                    cannot start a new one until KPOPPER_NATIVE_RESOURCES names a
+                                    matching bundle. Should it stay that way, fetch the matching
+                                    release's resources on request, or send Cargo users to the
+                                    archive?"
+                         from: s.2026_09_23_crates_io
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
                          a dedicated execution session? No per-item dispatch policy is currently
                          implemented."
@@ -4234,6 +4261,49 @@ judgments:
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
       p.coverage_thresholds: 0
+  d.crate_carries_shared_copies:
+    name: "The published crate carries its own copies of the files it shares"
+    verdict: "native/ builds on its own: the files the crate embeds or fingerprints from scripts/
+              are copied into native/shared/, and the licence into native/LICENSE. scripts/ stays the
+              place to edit them; a stale copy stops a native build in the repository and fails the
+              release tests. A crate built from crates.io declares the adapter fingerprint of the
+              same version built from the repository."
+    because: "crates.io receives native/ alone, while the plugin and the Python reader read these
+              files from scripts/ by path, so the originals cannot move. Cargo publishes a rewritten
+              manifest and keeps the original as Cargo.toml.orig; the build hashes that original, so
+              receipts and the runtime declaration name one program whichever channel built it."
+    rests_on: [d.crates_io_every_release]
+    reopened_by: "A crate built from crates.io refuses the verified resources of the release with
+                  the same version, or declares a different adapter than that release's executable."
+    from: s.2026_09_23_crates_io
+    seen:
+      d.crates_io_every_release: "Each release's crate is published to crates.io as kpopper, from
+                                  the commit its GitHub release was made from and only once that
+                                  release is out. An owner publishes the first version, which claims
+                                  the name; the release workflow publishes every later one through
+                                  trusted publishing, uploading only bytes it built from the packaged
+                                  crate."
+  d.crates_io_every_release:
+    name: "Every release reaches crates.io as kpopper"
+    verdict: "Each release's crate is published to crates.io as kpopper, from the commit its GitHub
+              release was made from and only once that release is out. An owner publishes the first
+              version, which claims the name; the release workflow publishes every later one through
+              trusted publishing, uploading only bytes it built from the packaged crate."
+    because: "kpopper is already the package name on PyPI and npm, and one crate installs both
+              commands, so cargo install kpopper needs no second name. crates.io never takes a
+              version back, so the upload waits for the release it belongs to, repeats nothing the
+              registry already serves, and the repository holds no registry credential."
+    rests_on: [s.2026_09_23_crates_io, p.native_distribution_contract]
+    reopened_by: "crates.io serves a crate named kpopper that this project did not publish, or
+                  refuses a release's crate from the workflow's trusted publisher."
+    from: s.2026_09_23_crates_io
+    seen:
+      s.2026_09_23_crates_io: "read 2026-09-23"
+      p.native_distribution_contract: "The native CLI and plugin start at 0.9.0 with GitHub platform
+                                       archives and explicit installers. Public names are kpopper and
+                                       kpop. Existing GitHub tags/releases and legacy PyPI/npm
+                                       versions remain available. Cargo is a source-build route;
+                                       crates.io publication is separate."
   d.darwin_checked_where_it_lands:
     name: "Where in the life of a change the Darwin check belongs"
     verdict: "Darwin runs on the push to main and at release, not on every pull request commit"

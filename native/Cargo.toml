@@ -2,7 +2,25 @@
 name = "kpopper"
 version = "0.9.0"
 edition = "2024"
-publish = false
+rust-version = "1.98"
+description = "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Installs the kpop and kpopper commands."
+license = "MIT"
+repository = "https://github.com/ilanbm/kpopper"
+readme = "README.md"
+keywords = ["provenance", "epistemic", "falsifiability", "truth-maintenance", "traceability"]
+categories = ["command-line-utilities", "development-tools"]
+# The published crate: what the build reads, and the licence texts. The test suites,
+# their fixtures and the CI helpers stay in the repository.
+include = [
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/build.rs",
+    "/README.md",
+    "/LICENSE",
+    "/src/**",
+    "/shared/**",
+    "/third_party/**",
+]
 autobins = false
 
 [lib]

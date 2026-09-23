@@ -102,7 +102,7 @@ class Selection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("rust", lanes([path]))
         self.assertNotIn("rust", lanes(["scripts/render_page.py"]))
-        self.assertTrue(CI.rust_embeds(("native",)) >= {"scripts/verify_page.js", "scripts/session/rules.txt"})
+        self.assertTrue(CI.rust_embeds(("native",)) >= {"native/shared/verify_page.js", "native/shared/session/rules.txt"})
 
     def test_installed_lane_follows_the_imports_of_the_reasoning_tests_it_runs(self):
         # Including an import inside code the acceptance test hands to the installed interpreter.

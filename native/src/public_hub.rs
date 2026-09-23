@@ -131,7 +131,7 @@ fn browser_checks(page: &Path) -> Result<Output> {
         "The Hub page is unavailable; build it before --checks",
     )?;
     let mut script = tempfile::Builder::new().suffix(".cjs").tempfile()?;
-    script.write_all(include_bytes!("../../scripts/verify_page.js"))?;
+    script.write_all(include_bytes!("../shared/verify_page.js"))?;
     let result = Command::new("node")
         .arg(script.path())
         .arg(page)
