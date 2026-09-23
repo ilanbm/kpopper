@@ -51,6 +51,8 @@ fn open(script: &Path, cwd: &Path, payload: &Value, tmp: &Path, runtime: Option<
         .current_dir(cwd)
         .env("TMPDIR", tmp)
         .env("XDG_STATE_HOME", tmp)
+        .env("XDG_CONFIG_HOME", tmp)
+        .env_remove("KPOPPER_SESSION_CONFIG")
         .env_remove("KPOPPER_ROOT")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
