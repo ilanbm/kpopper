@@ -953,6 +953,17 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_readme_checkable_link:
+    name: "Maintainer report on the README link behind deterministically checkable"
+    asked: "the \"deterministically checkable.\" link in the readme: 1. leads to a collapsed section
+            2. that section is really not readable, I'm not sure anyone will understand what we want
+            from them in the explenations there"
+    of: "The tagline linked to the how-it-works anchor, which sat before a closed details block, so
+         the reader landed on a collapsed summary line. Its first subsection defined deterministic
+         reasoning abstractly and then used the dark-matter selection example with a CLI and jq
+         pipeline, without saying what is checked, by what, or what the reader or agent is expected
+         to do."
+    read: "2026-09-23"
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -3184,6 +3195,18 @@ known:
     from: s.2026_09_20_dependency_illustration
     at: "The shortened English paragraph, approved with מושלם."
     fidelity: quoted
+  p.readme_checkable_link_visibility:
+    name: "The deterministically checkable link lands on a visible explanation"
+    v: "The tagline link opens a visible section after the capabilities table, What
+        deterministically checkable means. It walks the opening 30-versus-7-day example with the
+        check output the native CLI prints, says what the agent writes and what is asked of the
+        reader, and separates what the program checks from what stays judgment. The dark-matter case
+        with an unchanged count and a changed basis is folded below it. Landing and layout were
+        checked in a GitHub Markdown API render at 1024 and 375 pixels, not yet on github.com."
+    from: s.2026_09_23_readme_checkable_link
+    at: "README edit, native check, open and set runs on the example record, and the browser check
+         in this session"
+    fidelity: paraphrase
   p.readme_coding_banner_story:
     name: "The coding strip shows both PR changes and their combined consequence"
     v: "PR A adds private projects and PR B caches by query. Large labels identify the two changes,
@@ -5436,6 +5459,31 @@ judgments:
                                  decision and review conditions clarify the product, and where should
                                  that illustration appear? A separate local SVG/PNG concept was
                                  produced; it is not adopted into the README."
+  d.readme_checks_explained_visibly:
+    name: "Explain checks where the opening link lands, with the opening example"
+    from: s.2026_09_23_readme_checkable_link
+    rests_on: [s.2026_09_23_readme_checkable_link, d.readme_reasoning_overview]
+    verdict: "Explain deterministic checks in a visible section that the opening link reaches, using
+              the opening's 30-versus-7-day record: what the agent records, the value that changes,
+              and what the check prints. Say what is asked of the reader, separate what the program
+              checks from what stays judgment, and fold the research case of an unchanged count with
+              a changed basis below it."
+    because: "The maintainer reported that the link landed on a collapsed summary and that the
+              explanation behind it did not say what is asked of the reader. The opening illustration
+              is an example the reader has just seen, so its three steps need no new domain, and
+              printed output shows what the check actually says. The research case teaches a subtler
+              point - a changed basis under an unchanged result - and stays one click away without
+              standing between the reader and the basic answer. Reader comprehension has not been
+              measured."
+    reopened_by: "A reader who follows the link cannot say without coaching what the check compares,
+                  who writes the condition, or what a passing check means; or the opening
+                  illustration stops using the 30-versus-7-day record the section walks through."
+    seen:
+      s.2026_09_23_readme_checkable_link: "read 2026-09-23"
+      d.readme_reasoning_overview: "Use a file-centered Meet GROUNDING.yaml overview: conversations
+                                    point to recorded reasoning and changed inputs; wrong_if leads to
+                                    a returned check result. Preserve the same meaning in dedicated
+                                    desktop and phone layouts."
   d.readme_illustration_reading_order:
     name: "Show the process before the takeaway"
     from: s.2026_09_18_illustration_titles
