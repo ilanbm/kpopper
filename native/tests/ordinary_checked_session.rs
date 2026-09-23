@@ -848,3 +848,207 @@ fn pinned_python_oracle_matches_native_open_read_and_verify_packets() {
             .replace(oracle["stale_revision"].as_str().unwrap(), "REVISION")
     );
 }
+
+fn live_read(root: &Path, reference: &str, revision: &str) -> J {
+    serde_json::from_str(&ok(live_command(root, "read")
+        .args([
+            "--ref",
+            reference,
+            "--revision",
+            revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap()
+}
+
+// A live session reads the entries a pending contribution adds together with the
+// record. The expected openings, nodes and source texts are the reference session's
+// on the same ledgers.
+#[test]
+fn ordinary_live_session_reads_entries_pending_contributions_add() {
+    let ledgers: J = serde_json::from_str(include_str!("fixtures/pending-state.json")).unwrap();
+    let first = "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd";
+    let second = "b5bea064401e23c2f7f3b95022324ff396479ea22a7663c3da58f7871d4c36cc";
+    let scope = r#"{"environment":"API v2","kind":"external"}"#;
+    let pending = |revision: &str| {
+        format!(
+            "PENDING {} captured locally {scope} @native",
+            &revision[..12]
+        )
+    };
+    let tail = "LINK MAP — folded endpoints; all links counted; exact links at links:/\napi.limit from s.vendor [1]\nCounts describe links: dependency_count=rests_on, source_count=from; not proof. Read node:ID, /topic, links:ID or @ref without @; pass revision.\n";
+    let head = |contested: usize, events: usize| {
+        format!(
+            "record: 3 ids; 0 judgments; contested={contested}; changed=0; unreadable=0\nexecutable falsifiers: triggered=0 not_triggered=0 unknown=0 absent=0\nprose declarations (not evaluated): blocked_on=0 reopened_by=0 @conditions:/\ncurrent=recorded; seen=review snapshot. Not triggered does not mean verified.\nevents={events} @events:/\n"
+        )
+    };
+    let limit = |v: u64| json!({"at":"table 1","from":"s.vendor","name":"Limit","scope":{"environment":"API v2","kind":"external"},"v":v});
+    let vendor = json!({"file":"evidence/vendor.txt","name":"Vendor","read":"2026-09-14"});
+    let local = json!({"body":{"v":1},"kind":"known","record_source":"record","states":[]});
+    let added = |body: J, kind: &str, states: &[&str]| json!({"body":body,"kind":kind,"record_source":format!("contribution.{first}"),"states":states});
+    let source = |v: u64| {
+        format!(
+            "known:\n  api.limit:\n    at: table 1\n    from: s.vendor\n    name: Limit\n    scope:\n      environment: API v2\n      kind: external\n    v: {v}\nsources:\n  s.vendor:\n    file: evidence/vendor.txt\n    name: Vendor\n    read: '2026-09-14'\n"
+        )
+    };
+    let first_source = (
+        first,
+        source(10),
+        "82b7aee5d4977f8750d8bb542c2f0d0001093d23817cbdfdd0d248237ed23763",
+    );
+    let second_source = (
+        second,
+        source(11),
+        "6121e0b44aa4e0ae72dc66ec917ff1e0f92f2f6cea8c1377a5fedced8eb1fd59",
+    );
+    for (case, record, opening, nodes, sources) in [
+        (
+            "one",
+            None,
+            format!(
+                "{}{}\nMAP / — declared navigation; names do not establish claims:\n@ /known/api\n- node:api.limit source_count=1\n@ /known/local\n- node:local.one\n@ /sources/s\n- node:s.vendor\n{tail}",
+                head(0, 0),
+                pending(first)
+            ),
+            [
+                ("api.limit", added(limit(10), "known", &["pending"])),
+                ("s.vendor", added(vendor.clone(), "sources", &["pending"])),
+                ("local.one", local.clone()),
+            ],
+            vec![first_source.clone()],
+        ),
+        // The contributions disagree on api.limit: the first in ledger order supplies
+        // its body, and the id is contested.
+        (
+            "two",
+            None,
+            format!(
+                "{}{}\n{}\n@event:e1 api.limit CONTESTED\nMAP / — declared navigation; names do not establish claims:\n@ /known/api\n- node:api.limit CONTESTED=1 review=1 source_count=1\n@ /known/local\n- node:local.one\n@ /sources/s\n- node:s.vendor\n{tail}",
+                head(1, 1),
+                pending(first),
+                pending(second)
+            ),
+            [
+                (
+                    "api.limit",
+                    added(limit(10), "known", &["contested", "pending"]),
+                ),
+                ("s.vendor", added(vendor.clone(), "sources", &["pending"])),
+                ("local.one", local.clone()),
+            ],
+            vec![first_source.clone(), second_source],
+        ),
+        // An id the record already holds keeps the record's body and is not pending.
+        (
+            "one",
+            Some(
+                "known:\n  local.one: {v: 1}\nsources:\n  s.vendor: {file: other.txt, name: Other vendor, read: 2026-09-01}\n",
+            ),
+            format!(
+                "{}{}\n@event:e1 s.vendor CONTESTED\nMAP / — declared navigation; names do not establish claims:\n@ /known/api\n- node:api.limit source_count=1\n@ /known/local\n- node:local.one\n@ /sources/s\n- node:s.vendor CONTESTED=1 review=1\n{tail}",
+                head(1, 1),
+                pending(first)
+            ),
+            [
+                ("api.limit", added(limit(10), "known", &["pending"])),
+                (
+                    "s.vendor",
+                    json!({"body":{"file":"other.txt","name":"Other vendor","read":"2026-09-01"},"kind":"sources","record_source":"record","states":["contested"]}),
+                ),
+                ("local.one", local.clone()),
+            ],
+            vec![first_source.clone()],
+        ),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let ledger = ledgers
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|ledger| ledger["name"] == case)
+            .unwrap();
+        pending_fixture(&root, ledger);
+        if let Some(record) = record {
+            fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+        }
+        copy_resources(&root);
+        let opened = ok(live_command(&root, "open").output().unwrap());
+        let revision = revision(&opened);
+        assert_eq!(
+            &opened[opened.find("record: ").unwrap()..],
+            opening,
+            "{case} {record:?}"
+        );
+        for (id, expected) in nodes {
+            let node = live_read(&root, &format!("node:{id}#"), &revision);
+            assert_eq!(node["value"], expected, "{case} {record:?} {id}");
+        }
+        for (contribution, text, sha256) in sources {
+            let source = live_read(
+                &root,
+                &format!("source:contribution.{contribution}"),
+                &revision,
+            );
+            assert_eq!(
+                source["value"],
+                json!({"text":text,"sha256":sha256,"location":format!("git:{}:{contribution}", ledger["head"].as_str().unwrap())}),
+                "{case} {record:?} {contribution}"
+            );
+        }
+        let search: J = serde_json::from_str(&ok(live_command(&root, "search")
+            .args([
+                "--query",
+                "limit",
+                "--revision",
+                &revision,
+                "--tokens",
+                "8000",
+            ])
+            .output()
+            .unwrap()))
+        .unwrap();
+        assert_eq!(search["hits"][0]["id"], "api.limit", "{case} {record:?}");
+        let frozen = ok(command(&root, "open").output().unwrap());
+        assert!(frozen.contains("record: "), "{case}");
+        assert!(!frozen.contains("api.limit"), "{case} {record:?}");
+    }
+}
+
+// The record itself cannot depend on a pending entry: `add` refuses such a judgment and
+// `check` reports it. A judgment written by hand to rest on one still reads over the
+// contributed entry in the live session, as it does in the reference session.
+#[test]
+fn ordinary_live_session_reads_record_judgments_over_pending_entries() {
+    let ledgers: J = serde_json::from_str(include_str!("fixtures/pending-state.json")).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    pending_fixture(
+        &root,
+        ledgers
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|ledger| ledger["name"] == "one")
+            .unwrap(),
+    );
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  local.one: {v: 1}\njudgments:\n  d.limit:\n    rests_on: [api.limit]\n    wrong_if: api.limit > 20\n    seen: {api.limit: 10}\n    verdict: The limit is low enough\n",
+    )
+    .unwrap();
+    copy_resources(&root);
+    let opened = ok(live_command(&root, "open").output().unwrap());
+    assert_eq!(
+        &opened[opened.find("record: ").unwrap()..],
+        "record: 4 ids; 1 judgments; contested=0; changed=0; unreadable=0\nexecutable falsifiers: triggered=0 not_triggered=1 unknown=0 absent=0\nprose declarations (not evaluated): blocked_on=0 reopened_by=0 @conditions:/\ncurrent=recorded; seen=review snapshot. Not triggered does not mean verified.\nevents=0 @events:/\nPENDING 8887db9b513d captured locally {\"environment\":\"API v2\",\"kind\":\"external\"} @native\nMAP / — declared navigation; names do not establish claims:\n@ /judgments/d\n- node:d.limit dependency_count=1\n@ /known/api\n- node:api.limit source_count=1\n@ /known/local\n- node:local.one\n@ /sources/s\n- node:s.vendor\nLINK MAP — folded endpoints; all links counted; exact links at links:/\napi.limit from s.vendor [1]\nd.limit rests_on api.limit [1]\nCounts describe links: dependency_count=rests_on, source_count=from; not proof. Read node:ID, /topic, links:ID or @ref without @; pass revision.\n"
+    );
+    let body = json!({"rests_on":["api.limit"],"seen":{"api.limit":10},"verdict":"The limit is low enough","wrong_if":"api.limit > 20"});
+    assert_eq!(
+        live_read(&root, "node:d.limit#", &revision(&opened))["value"],
+        json!({"assessment_body":body,"assessment_fields":{"deps":"rests_on","predicate":"wrong_if","snapshot":"seen"},"body":body,"kind":"judgment","record_source":"record","states":[]})
+    );
+}

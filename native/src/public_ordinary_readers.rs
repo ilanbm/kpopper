@@ -670,7 +670,9 @@ impl<'a> Projection<'a> {
             .collect()
     }
 
-    pub fn session_data(&self) -> Result<OrdinarySessionData> {
+    /// `pending` names the entries a pending contribution added to the document
+    /// this projection reads; an entry the record itself holds is never pending.
+    pub fn session_data(&self, pending: &BTreeSet<String>) -> Result<OrdinarySessionData> {
         let collections = F::collections(&self.base.reader.document)?;
         let sections = collections
             .iter()
@@ -681,15 +683,6 @@ impl<'a> Projection<'a> {
             .iter()
             .filter(|(section, _)| ["open", "questions"].contains(&section.as_str()))
             .flat_map(|(_, members)| members.keys().cloned())
-            .collect::<BTreeSet<_>>();
-        let pending = self
-            .hypotheses
-            .values()
-            .filter_map(|hypothesis| map(hypothesis).ok())
-            .filter(|hypothesis| string_is(get(hypothesis, "kind"), "contribution"))
-            .filter_map(|hypothesis| hypothesis.get("ids").and_then(|ids| list(ids).ok()))
-            .flatten()
-            .filter_map(|id| text(id).ok().map(str::to_owned))
             .collect::<BTreeSet<_>>();
         let mut nodes = BTreeMap::new();
         let mut topics = BTreeMap::new();
