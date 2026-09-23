@@ -137,6 +137,7 @@ fn run_inner(
         )?;
         core_render_packet(&capture, &project(&context, &options.ids, &render_options)?)
     } else {
+        capture.require_ordinary_reader()?;
         crate::require(
             profile == "ordinary-reader/v1",
             "unsupported export profile",

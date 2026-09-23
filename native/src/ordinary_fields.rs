@@ -620,47 +620,75 @@ fn judgment_votes(
     }
     Ok((snapshots, predicates))
 }
+const INVALID_DECLARATION: &str =
+    "invalid_capability: invalid meta.reasoning capability declaration";
+const UNSUPPORTED_PROFILE: &str =
+    "unsupported_capability: unsupported reasoning profile or metadata version";
+const UNSUPPORTED_MODULES: &str = "unsupported_capability: unsupported modules: ";
+const NO_ARITHMETIC: &str = "invalid_capability: core/v1 requires arithmetic/v1";
+const TYPED_HISTORY: &str =
+    "invalid_capability: typed core history requires record metadata version 2";
+/// Whether a failure refuses a document's reasoning declaration, in the contract's words.
+pub fn refuses_declaration(failure: &Error) -> bool {
+    [
+        INVALID_DECLARATION,
+        UNSUPPORTED_PROFILE,
+        NO_ARITHMETIC,
+        TYPED_HISTORY,
+    ]
+    .contains(&failure.0.as_str())
+        || failure.0.starts_with(UNSUPPORTED_MODULES)
+}
+/// A document's declared reasoning capabilities, refusing only with the contract's code.
 pub fn capabilities(document: &V, profile: Option<&str>) -> Result<V> {
+    explained_capabilities(document, profile).map_err(|failure| match failure.0.split_once(": ") {
+        Some((code @ ("invalid_capability" | "unsupported_capability"), _)) => error(code),
+        _ => failure,
+    })
+}
+/// The same reading, refusing in the contract's words, for a reader that says a refusal as
+/// it stands.
+pub fn explained_capabilities(document: &V, profile: Option<&str>) -> Result<V> {
     let doc = map(document)?;
     let empty = Map::new();
     let meta = doc.get("meta").and_then(|v| map(v).ok()).unwrap_or(&empty);
     let mut result = if let Some(value) = meta.get("reasoning") {
-        let d = map(value).map_err(|_| error("invalid_capability"))?;
+        let d = map(value).map_err(|_| error(INVALID_DECLARATION))?;
         require(
             d.len() == 3
                 && ["version", "profile", "requires"]
                     .iter()
                     .all(|k| d.contains_key(k)),
-            "invalid_capability",
+            INVALID_DECLARATION,
         )?;
         require(
             matches!(d["version"], V::Integer(_)) && matches!(d["profile"], V::Text(_)),
-            "invalid_capability",
+            INVALID_DECLARATION,
         )?;
         let V::List(req) = &d["requires"] else {
-            return Err(error("invalid_capability"));
+            return Err(error(INVALID_DECLARATION));
         };
         let names = req
             .iter()
             .map(|v| text(v).map(str::to_owned))
             .collect::<Result<Vec<_>>>()
-            .map_err(|_| error("invalid_capability"))?;
-        require(names.windows(2).all(|w| w[0] < w[1]), "invalid_capability")?;
+            .map_err(|_| error(INVALID_DECLARATION))?;
+        require(names.windows(2).all(|w| w[0] < w[1]), INVALID_DECLARATION)?;
         require(
             (is_int(&d["version"], "1") || is_int(&d["version"], "2"))
                 && string_is(&d["profile"], "core/v1"),
-            "unsupported_capability",
+            UNSUPPORTED_PROFILE,
         )?;
+        let unknown = names
+            .iter()
+            .filter(|s| !["arithmetic/v1", "composition/v1", "query/v1"].contains(&s.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
         require(
-            names
-                .iter()
-                .all(|s| ["arithmetic/v1", "composition/v1", "query/v1"].contains(&s.as_str())),
-            "unsupported_capability",
+            unknown.is_empty(),
+            &format!("{UNSUPPORTED_MODULES}{}", unknown.join(", ")),
         )?;
-        require(
-            names.iter().any(|s| s == "arithmetic/v1"),
-            "invalid_capability",
-        )?;
+        require(names.iter().any(|s| s == "arithmetic/v1"), NO_ARITHMETIC)?;
         d.clone()
     } else {
         Map::from([
@@ -706,7 +734,7 @@ pub fn capabilities(document: &V, profile: Option<&str>) -> Result<V> {
                         .and_then(|m| m.get("version"))
                         .is_some_and(numeric_two)
                     {
-                        return Err(error("invalid_capability"));
+                        return Err(error(TYPED_HISTORY));
                     }
                 }
             }
@@ -715,11 +743,11 @@ pub fn capabilities(document: &V, profile: Option<&str>) -> Result<V> {
     if let Some(profile) = profile {
         require(
             ["ordinary-reader/v1", "checked-reader/v1", "core/v1"].contains(&profile),
-            "unsupported_capability",
+            "unsupported_capability: unsupported requested profile",
         )?;
         require(
             !string_is(&result["profile"], "core/v1") || profile == "core/v1",
-            "unsupported_capability",
+            "unsupported_capability: a declared core profile cannot be read as legacy",
         )?;
         if !string_is(&result["profile"], profile) {
             result.insert("declared_profile".into(), result["profile"].clone());

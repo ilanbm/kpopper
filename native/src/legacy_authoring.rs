@@ -1655,6 +1655,10 @@ fn prepare_with_inventory_mode(
         "history_direct_writer_unsupported: use the history writer",
     )?;
     let source = projected_document(&document.source);
+    crate::source_capture::require_ordinary(
+        &crate::ordinary_value::Value::from_typed(&source),
+        &crate::ordinary_value::Value::from_typed(&document.hypotheses),
+    )?;
     let runtime = crate::public_workspace::runtime_for_document(&source)?;
     let groups = legacy_named::normalize_groups(&document.hypotheses)?;
     let mut reader = Reader::new(&source, runtime.as_ref())

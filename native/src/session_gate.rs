@@ -115,6 +115,7 @@ fn ordinary(
     runtime: Option<&Runtime>,
     recordings: &BTreeSet<String>,
 ) -> Result<Current> {
+    capture.require_ordinary_reader()?;
     let context = capture.ordinary_context();
     let projection = Projection::new(
         capture.ordinary_document(),

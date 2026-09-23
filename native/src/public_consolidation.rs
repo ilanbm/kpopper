@@ -153,6 +153,59 @@ fn drops(values: &[String]) -> Result<V> {
     Ok(V::Map(result))
 }
 
+/// Consolidation over a record that declares core/v1. A hypothesis beside such a record is
+/// read with its own semantics, by a core/v1 consolidation this command does not hold, so
+/// laying one over the record is refused. A hypothesis that cannot be read, or a name
+/// nothing holds, is refused first, as over any record; with none beside the record there
+/// is nothing to lay over it. Pending contributions are not tested here: a core/v1 record
+/// keeps its own account of what contests it.
+fn core_record(
+    hypotheses: &crate::ordinary_value::Value,
+    names: &[String],
+) -> Result<CommandOutput> {
+    use crate::ordinary_value::{map, py, string_is, truth};
+    let mut pool = BTreeSet::new();
+    for (name, hypothesis) in map(hypotheses)? {
+        let hypothesis = map(hypothesis)?;
+        if hypothesis
+            .get("kind")
+            .is_some_and(|kind| string_is(kind, "contribution"))
+        {
+            continue;
+        }
+        if let Some(why) = hypothesis.get("error").filter(|why| truth(why)) {
+            return Err(error(&format!(
+                "refused - hypothesis {name} could not be read: {}",
+                py(why)
+            )));
+        }
+        pool.insert(name.as_str());
+    }
+    let missing = names
+        .iter()
+        .filter(|name| !pool.contains(name.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    require(
+        missing.is_empty(),
+        &format!(
+            "refused - no hypothesis named {} beside the record (there: {})",
+            missing.join(", "),
+            if pool.is_empty() {
+                "none".into()
+            } else {
+                pool.iter().copied().collect::<Vec<_>>().join(", ")
+            }
+        ),
+    )?;
+    require(pool.is_empty(), crate::source_capture::CORE_CONSUMER)?;
+    Ok(CommandOutput {
+        stdout: "no hypotheses beside the record - nothing to consolidate\n".into(),
+        stderr: String::new(),
+        code: 0,
+    })
+}
+
 fn authoring_options(prefix: &str, by: V) -> Result<crate::history_authoring::Options> {
     let now = chrono::Utc::now();
     Ok(crate::history_authoring::Options {

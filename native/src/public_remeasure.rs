@@ -919,6 +919,23 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     } else {
         capture
     };
+    // A record without history is read as an ordinary reader reads it, unless it declares
+    // core/v1 itself; the reader's refusal is said on stderr.
+    if capture.history_capture().is_none()
+        && !map(&crate::ordinary_fields::capabilities(
+            capture.ordinary_document(),
+            None,
+        )?)?
+        .get("profile")
+        .is_some_and(|value| value == &V::Text("core/v1".into()))
+        && let Err(refusal) = capture.require_ordinary_reader()
+    {
+        return Ok(Output {
+            text: String::new(),
+            stderr: format!("{refusal}\n"),
+            code: 1,
+        });
+    }
     let mut history_candidate = None;
     let mut history_document = None;
     let mut history_heads = Vec::new();

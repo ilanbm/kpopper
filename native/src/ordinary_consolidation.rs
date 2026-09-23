@@ -531,13 +531,28 @@ pub(crate) fn run_supplied(
         None,
         runtime,
     )?;
-    require(
-        get(
-            &crate::reasoning_fields::capabilities(capture.ordinary_document(), None)?,
-            "profile",
-        ) != &s("core/v1"),
-        "unsupported_capability: use core/v1 consumer",
-    )?;
+    if get(
+        &crate::reasoning_fields::capabilities(capture.ordinary_document(), None)?,
+        "profile",
+    ) == &s("core/v1")
+    {
+        let hypotheses = crate::ordinary_value::Value::from_typed(capture.hypotheses());
+        if let Some(name) = &options.refute {
+            require(
+                crate::ordinary_value::map(&hypotheses)?.contains_key(name),
+                &format!("refused - no hypothesis named {name} beside the record"),
+            )?;
+        }
+        require(
+            options.refute.is_none() && supplied.is_empty(),
+            crate::source_capture::CORE_CONSUMER,
+        )?;
+        let output = super::core_record(&hypotheses, &options.names)?;
+        capture.verify()?;
+        route.verify()?;
+        return Ok(output);
+    }
+    capture.require_ordinary_reader()?;
     if !options.dry_run {
         capture.snapshot().map_err(|e| {
             if e.0 == "invalid_yaml_key" {
