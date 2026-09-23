@@ -20,8 +20,16 @@ context() {
   printf '{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "%s"}}\n' "$1"
 }
 
-if REPORT=$(sh "$ROOT/scripts/native_runtime.sh" --path 2>&1 >/dev/null); then
-  OUT=$(sh "$ROOT/scripts/native_runtime.sh" --exec session-start --gemini)
+RUNTIME="$ROOT/scripts/native_runtime.sh"
+if REPORT=$(sh "$RUNTIME" --path 2>&1 >/dev/null); then
+  if sh "$RUNTIME" --exec session-start --help 2>/dev/null | grep -q -- '--gemini'; then
+    OUT=$(sh "$RUNTIME" --exec session-start --gemini)
+  else
+    # A runtime released before --gemini: its plain opening, shaped here.
+    TEXT=$(sh "$RUNTIME" --exec session-start)
+    OUT='{}'
+    [ -z "$TEXT" ] || OUT=$(context "$(printf '%s\n' "$TEXT" | json_text)")
+  fi
   if [ -n "$OUT" ]; then
     printf '%s\n' "$OUT"
   else

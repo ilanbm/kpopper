@@ -452,6 +452,46 @@ fn a_checkout_without_its_runtime_reports_the_install_command_as_context() {
 
 #[cfg(unix)]
 #[test]
+fn a_runtime_released_before_the_host_flags_still_opens_the_record() {
+    use checkout::*;
+    let session = Session::with_record();
+    let checkout = Checkout::new("kpopper checkout", false);
+    // An earlier release: session-start without --gemini or --copilot.
+    script(
+        &runtime_binary(&checkout.root),
+        r#"#!/bin/sh
+case "$*" in
+  'session-start --help') printf 'Usage: kpop session-start [OPTIONS]\n      --host <HOST>\n      --cursor\n' ;;
+  session-start) cat >/dev/null; printf 'an earlier "opening"\n\tand its second line\n' ;;
+  *) printf "error: unexpected argument '%s' found\n" "$2" >&2; exit 2 ;;
+esac
+"#,
+    );
+    let payload = json!({"cwd":session.work(),"session_id":"earlier"}).to_string();
+    let expected = "an earlier \"opening\"\n\tand its second line";
+    let gemini = run(
+        session.command("sh").arg(checkout.gemini()),
+        payload.as_bytes(),
+    );
+    let reply = json_output(&gemini);
+    assert_eq!(gemini_context(&reply), expected, "{}", diagnostic(&gemini));
+    let copilot = run(
+        session.command("sh").arg(checkout.copilot()).arg("start"),
+        payload.as_bytes(),
+    );
+    let reply = json_output(&copilot);
+    assert_eq!(
+        copilot_context(&reply),
+        expected,
+        "{}",
+        diagnostic(&copilot)
+    );
+    assert!(gemini.stderr.is_empty(), "{}", diagnostic(&gemini));
+    assert!(copilot.stderr.is_empty(), "{}", diagnostic(&copilot));
+}
+
+#[cfg(unix)]
+#[test]
 fn python_runs_only_when_selected_by_name() {
     use checkout::*;
     let session = Session::with_record();

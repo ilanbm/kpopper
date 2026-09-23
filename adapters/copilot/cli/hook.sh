@@ -26,8 +26,16 @@ case "${KPOPPER_RUNTIME:-rust}" in
   rust) ;;
   *) printf 'kpopper: KPOPPER_RUNTIME must be rust or python\n' >&2; printf '{}\n'; exit 0 ;;
 esac
-if REPORT=$(sh "$ROOT/scripts/native_runtime.sh" --path 2>&1 >/dev/null); then
-  OUT=$(sh "$ROOT/scripts/native_runtime.sh" --exec session-start --copilot)
+RUNTIME="$ROOT/scripts/native_runtime.sh"
+if REPORT=$(sh "$RUNTIME" --path 2>&1 >/dev/null); then
+  if sh "$RUNTIME" --exec session-start --help 2>/dev/null | grep -q -- '--copilot'; then
+    OUT=$(sh "$RUNTIME" --exec session-start --copilot)
+  else
+    # A runtime released before --copilot: its plain opening, shaped here.
+    TEXT=$(sh "$RUNTIME" --exec session-start)
+    OUT=
+    [ -z "$TEXT" ] || OUT=$(printf '{"additionalContext": "%s"}' "$(printf '%s\n' "$TEXT" | json_text)")
+  fi
   [ -n "$OUT" ] || OUT='{}'
   printf '%s\n' "$OUT"
   exit 0
