@@ -90,6 +90,8 @@ jobs:
       # The record is read by the native kpop of this tree. A reader main built from the same
       # native/ sources is reused, so only a change under native/ pays for the build. Only a
       # push to main saves one: pull requests read main's, and keep the cache budget free.
+      - name: Check native shared copies before using a cached reader
+        run: python .github/scripts/native_shared.py --check
       - name: Reuse the native reader built from these sources
         id: reader
         uses: actions/cache/restore@v4
