@@ -2,7 +2,7 @@
 add and found first; PROVENANCE.yaml - the name records were born under before - is still
 found wherever it is. Each keeps its files under its own layout, .kpopper/ beside the new
 name and the PROVENANCE.* names beside the old, and the reader never looks in the other's.
-Runs against the fixtures under tests/fixtures, with no browser and no network:
+Runs against the fixture records, with no browser and no network:
 
     python3 -m unittest discover -s tests
 """
@@ -18,6 +18,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 FIXTURES = ROOT / "tests" / "fixtures"
+# The page fixture records live beside the native tests that embed them.
+PAGE_FIXTURES = ROOT / "native" / "tests" / "fixtures"
+BESIDE_THE_NATIVE_TESTS = ("page", "core-page")
 
 sys.path.insert(0, str(SCRIPTS))
 import cli as C  # noqa: E402
@@ -41,15 +44,20 @@ def git(d, *args):
     return p.stdout
 
 
+def source_of(fixture):
+    """Where a fixture record is kept."""
+    return (PAGE_FIXTURES if fixture in BESIDE_THE_NATIVE_TESTS else FIXTURES) / fixture
+
+
 def legacy(into, fixture="hypotheses"):
     """A scratch copy of a fixture as it is: a record under the old name and its files."""
-    shutil.copytree(FIXTURES / fixture, into, dirs_exist_ok=True)
+    shutil.copytree(source_of(fixture), into, dirs_exist_ok=True)
     return into / "PROVENANCE.yaml"
 
 
 def brought_over(into, fixture="hypotheses"):
     """The same fixture under the new name and layout: GROUNDING.yaml beside .kpopper/."""
-    shutil.copytree(FIXTURES / fixture, into, dirs_exist_ok=True)
+    shutil.copytree(source_of(fixture), into, dirs_exist_ok=True)
     home = into / ".kpopper"
     home.mkdir()
     (into / "PROVENANCE.yaml").rename(into / "GROUNDING.yaml")
