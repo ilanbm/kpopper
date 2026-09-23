@@ -4967,8 +4967,19 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
             return "sources"
         return sorted(homes)[0] if homes else "sources"
     valued = sorted(cols, key=lambda c: -counted(c))
-    # a value lands where values are; a young record holding none yet opens the section
-    return valued[0] if counted(valued[0]) else "known"
+    # a value lands where values are
+    if counted(valued[0]):
+        return valued[0]
+
+    # a record that writes its values bare keeps them together, but a bare scalar is a value
+    # only when no section holds one written out: elsewhere it is as often a path or a formula,
+    # and in the questions and the sources it never is; a record holding neither opens the
+    # section under the method's own name
+    def bare(c):
+        return 0 if c in OPEN or c == "sources" else \
+            sum(1 for b in cols[c].values() if not isinstance(b, dict))
+    plain = sorted(cols, key=lambda c: (-bare(c), c))
+    return plain[0] if bare(plain[0]) else "known"
 
 
 class _Reader:
