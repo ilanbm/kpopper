@@ -9,6 +9,7 @@ use crate::{
     reasoning_runtime::{OperationalBounds, Runtime},
     value::TypedValue as V,
 };
+use std::collections::BTreeSet;
 pub(crate) enum AuthoringReader<'a> {
     Core(Box<World<'a>>),
     Ordinary(Reader<'a>),
@@ -106,28 +107,28 @@ impl<'a> AuthoringReader<'a> {
             Self::Ordinary(w) => w.validate(a),
         }
     }
-    /// The note naming the entries nearest an add. A history write reads its base
-    /// alone, so no hypothesis layer beside it is consulted.
-    pub fn nearest_existing(&self, a: &V) -> Result<String> {
+    /// The note naming the entries nearest an add, read over this world and the
+    /// named hypothesis groups beside it: none for a base write, every group
+    /// for a write into one of them.
+    pub fn nearest_existing(&self, a: &V, hypotheses: &Map) -> Result<String> {
         use crate::public_identity::ordinary_sameness as S;
-        let notice = match self {
-            Self::Core(w) => {
-                let ids = w.raw().keys().cloned().collect();
-                S::nearest_existing(
-                    &S::Inputs {
-                        document: w.document(),
-                        hypotheses: &Map::new(),
-                        deps: text(&w.fields()["deps"])?,
-                        ids: &ids,
-                        raw: w.raw(),
-                    },
-                    a,
-                    &S::Sources::default(),
-                )?
-            }
-            Self::Ordinary(w) => S::nearest_existing_from_sources(w, a, &S::Sources::default())?,
+        let (document, fields, raw, ids) = match self {
+            Self::Core(w) => (
+                w.document(),
+                w.fields(),
+                w.raw(),
+                w.raw().keys().cloned().collect::<BTreeSet<_>>(),
+            ),
+            Self::Ordinary(w) => (w.document(), w.fields(), w.raw(), w.ids.clone()),
         };
-        Ok(notice.text)
+        let inputs = S::Inputs {
+            document,
+            hypotheses,
+            deps: text(&fields["deps"])?,
+            ids: &ids,
+            raw,
+        };
+        Ok(S::nearest_existing(&inputs, a, &S::Sources::default())?.text)
     }
     pub fn candidate_document(&self, a: &V) -> Result<V> {
         match self {

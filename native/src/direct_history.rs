@@ -328,13 +328,14 @@ fn act_with_probe(
 pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<(V, String)> {
     write_with_probe(original, cwd, action, &mut |_| Ok(()))
 }
-/// Read against the base the write was prepared from. The note is advisory: it
-/// never changes the write, and whatever keeps it from being read leaves none.
-fn nearest_existing(document: &V, action: &V, runtime: Option<&Runtime>) -> String {
+/// Read against the document the write was prepared from, with the hypothesis
+/// groups beside it when the write goes into one. The note is advisory: it never
+/// changes the write, and whatever keeps it from being read leaves none.
+fn nearest_existing(document: &V, groups: &Map, action: &V, runtime: Option<&Runtime>) -> String {
     let note = || -> Result<String> {
         let mut world = crate::history_authoring_reader::AuthoringReader::new(document, runtime)?;
         let (action, _) = world.normalize(action)?;
-        world.nearest_existing(&action)
+        world.nearest_existing(&action, groups)
     };
     note().unwrap_or_default()
 }
@@ -365,17 +366,20 @@ fn write_with_probe(
         .filter(|v| **v != V::Null)
         .map(text)
         .transpose()?;
-    let mut document = if let Some(name) = hypothesis {
+    let (mut document, groups) = if let Some(name) = hypothesis {
         let context = HA::capture(&store, &captured, &write_options)?;
-        if map(&context.groups)?.contains_key(name) {
+        let groups = map(&context.groups)?.clone();
+        let document = if groups.contains_key(name) {
             HA::layer(&context.base, &context.groups, &[name.to_owned()])?
         } else {
             context.base
-        }
+        };
+        (document, groups)
     } else {
-        history_adapter::from_store_capture(&captured)?
+        let document = history_adapter::from_store_capture(&captured)?
             .document()
-            .clone()
+            .clone();
+        (document, Map::new())
     };
     if let Some(meta) = map_mut(&mut document)?.get_mut("meta") {
         map_mut(meta)?.remove("history");
@@ -456,8 +460,8 @@ fn write_with_probe(
         mutation.files(),
         Some(&std::collections::BTreeSet::from([id.to_owned()])),
     );
-    let notice = if kind == "add" && hypothesis.is_none() {
-        nearest_existing(&document, action, runtime.as_ref())
+    let notice = if kind == "add" {
+        nearest_existing(&document, &groups, action, runtime.as_ref())
     } else {
         String::new()
     };

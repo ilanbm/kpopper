@@ -668,6 +668,60 @@ fn history_add_names_the_nearest_existing_entries_once_before_the_commit() {
 }
 
 #[test]
+fn history_hypothesis_add_names_the_nearest_existing_entries_under_its_layer() {
+    let (_temp, root) = history_record_with_one_source();
+    let day = ["--as-of", "2026-09-20"];
+    let into = ["--hypothesis", "rates"];
+    let note = |output: &str| {
+        output
+            .split_once("history committed: ")
+            .unwrap()
+            .0
+            .to_owned()
+    };
+    success(run(
+        &root,
+        &[&["add", "p.hours", "v=10", "from=src.c"][..], &day].concat(),
+    ));
+    let output = success(run(
+        &root,
+        &[&["add", "p.rate", "v=50", "from=src.c"][..], &into, &day].concat(),
+    ));
+    assert_eq!(
+        note(&output),
+        "nearest existing:\n  p.hours: same from (src.c)\n  one subject: same <id> p.rate folds it in · two: distinct p.rate <id> \"why\" keeps them apart\n"
+    );
+    assert!(output.ends_with(" (add p.rate)\n"), "{output}");
+    // A later write into the same hypothesis also reads what it alone holds.
+    let output = success(run(
+        &root,
+        &[&["add", "p.rate2", "v=51", "from=src.c"][..], &into, &day].concat(),
+    ));
+    assert_eq!(
+        note(&output),
+        "nearest existing:\n  p.hours: same from (src.c)\n  p.rate: same from (src.c)\n  one subject: same <id> p.rate2 folds it in · two: distinct p.rate2 <id> \"why\" keeps them apart\n"
+    );
+    // The base does not, and neither does another hypothesis.
+    let output = success(run(
+        &root,
+        &[&["add", "p.fee", "v=5", "from=src.c"][..], &day].concat(),
+    ));
+    assert_eq!(
+        note(&output),
+        "nearest existing:\n  p.hours: same from (src.c)\n  one subject: same <id> p.fee folds it in · two: distinct p.fee <id> \"why\" keeps them apart\n"
+    );
+    let other = ["--hypothesis", "other"];
+    let output = success(run(
+        &root,
+        &[&["add", "p.rate3", "v=52", "from=src.c"][..], &other, &day].concat(),
+    ));
+    assert_eq!(
+        note(&output),
+        "nearest existing:\n  p.fee: same from (src.c)\n  p.hours: same from (src.c)\n  one subject: same <id> p.rate3 folds it in · two: distinct p.rate3 <id> \"why\" keeps them apart\n"
+    );
+}
+
+#[test]
 fn history_writes_with_nothing_near_say_only_the_commit() {
     let (_temp, root) = history_record_with_one_source();
     let day = ["--as-of", "2026-09-20"];
