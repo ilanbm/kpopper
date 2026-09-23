@@ -36,7 +36,7 @@ def record(output, ready, prefixes):
         raise OSError(ctypes.get_errno(), 'fanotify_init failed')
     for prefix in prefixes:
         # A filesystem mark covers the whole filesystem, so the nearest existing directory
-        # serves for a prefix that appears only later, such as a package installed mid-job.
+        # serves for a prefix that appears only later, such as a directory the job creates.
         existing = Path(prefix)
         while not existing.exists() and existing != existing.parent:
             existing = existing.parent
@@ -92,28 +92,27 @@ def tracked_paths(root):
     return files, directories
 
 
-def repository_path(path, root, packages):
-    """The tracked path an opened file stands for: the checkout itself or an installed copy."""
+def repository_path(path, root):
+    """The tracked path an opened file stands for, with bytecode read as its source."""
     match = PYC.search(path)
     if match:
         path = path[:match.start()] + ('/' if match.group(0).startswith('/') else '') + match.group(1) + '.py'
-    for prefix, source in [(root, '')] + list(packages):
-        prefix = prefix.rstrip('/')
-        if path == prefix:
-            return source.rstrip('/')
-        if path.startswith(prefix + '/'):
-            return source + path[len(prefix) + 1:]
+    prefix = root.rstrip('/')
+    if path == prefix:
+        return ''
+    if path.startswith(prefix + '/'):
+        return path[len(prefix) + 1:]
     return None
 
 
-def undeclared(lane, opened, root, packages, ignore=(), lanes=None):
+def undeclared(lane, opened, root, ignore=(), lanes=None):
     """Tracked files and directories the lane opened outside its declared inputs."""
     from ci_selection import LANES, lane_reads, lane_lists
     lanes = lanes or LANES
     files, directories = tracked_paths(root)
     missing_files, missing_dirs = set(), set()
     for path in opened:
-        rel = repository_path(path, root, packages)
+        rel = repository_path(path, root)
         if rel is None or rel == '.git' or rel.startswith('.git/') or path in ignore:
             continue
         if rel in files and not lane_reads(lanes[lane], rel):
@@ -123,7 +122,7 @@ def undeclared(lane, opened, root, packages, ignore=(), lanes=None):
     return sorted(missing_files), sorted(missing_dirs)
 
 
-def check(lane, trace, root, packages, canary, lanes=None):
+def check(lane, trace, root, canary, lanes=None):
     from ci_selection import LANES
     enforced = (lanes or LANES)[lane].enforced
     data = json.loads(Path(trace).read_text(encoding='utf-8'))
@@ -133,7 +132,7 @@ def check(lane, trace, root, packages, canary, lanes=None):
     canary = str(Path(canary).resolve()) if canary else None
     if canary and canary not in data['paths']:
         problems.append('the recorder did not see the canary read of ' + canary + '; it was not watching')
-    files, directories = undeclared(lane, data['paths'], root, packages, ignore={canary}, lanes=lanes)
+    files, directories = undeclared(lane, data['paths'], root, ignore={canary}, lanes=lanes)
     for path in files:
         problems.append('%s read %s, which its inputs in .github/scripts/ci_selection.py do not list' % (lane, path))
     for path in directories:
@@ -150,12 +149,6 @@ def state_dir():
     return Path(os.environ.get('RUNNER_TEMP') or '/tmp') / 'kpopper-read-audit'
 
 
-def installed_packages():
-    """Where this interpreter installs the package, and the tracked directory it copies."""
-    import sysconfig
-    return [(str(Path(sysconfig.get_paths()['purelib']) / 'kpopper'), 'scripts/')]
-
-
 def start(root):
     """Launch the recorder as root in its own session and wait until it is watching."""
     state = state_dir()
@@ -164,7 +157,7 @@ def start(root):
     for stale in (ready, output):
         if stale.exists():
             raise SystemExit('a read audit already ran in ' + str(state))
-    prefixes = [root] + [installed for installed, _ in installed_packages()]
+    prefixes = [root]
     # Tests that run git in the checkout would otherwise re-read every file whose index entry
     # is racily clean after checkout, which is not a dependency of anything. A refresh a second
     # after the last write rewrites the index with a newer timestamp than every entry.
@@ -198,7 +191,7 @@ def finish(lane, root):
             raise SystemExit('the file-read recorder did not finish:\n' + (state / 'recorder.log').read_text())
         time.sleep(0.2)
     time.sleep(0.5)
-    return check(lane, output, root, installed_packages(), canary)
+    return check(lane, output, root, canary)
 
 
 def main():
@@ -215,8 +208,6 @@ def main():
     chk.add_argument('--lane', required=True)
     chk.add_argument('--trace', required=True)
     chk.add_argument('--root', default='.')
-    chk.add_argument('--package', action='append', default=[],
-                     help='INSTALLED=SOURCE: an installed copy of a tracked directory')
     chk.add_argument('--canary')
     args = parser.parse_args()
     if args.command == 'record':
@@ -228,12 +219,7 @@ def main():
         return start(workspace)
     if args.command == 'finish':
         return finish(args.lane, workspace)
-    root = str(Path(args.root).resolve())
-    packages = []
-    for item in args.package:
-        installed, _, source = item.partition('=')
-        packages.append((str(Path(installed).resolve()), source.rstrip('/') + '/'))
-    return check(args.lane, args.trace, root, packages, args.canary)
+    return check(args.lane, args.trace, str(Path(args.root).resolve()), args.canary)
 
 
 if __name__ == '__main__':

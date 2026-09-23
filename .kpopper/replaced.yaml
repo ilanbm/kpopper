@@ -307,3 +307,219 @@ d.readme_popper_introduction:
     s.kpop_history_loc: read 2026-09-23
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-23'
+d.checks_ship_with_the_reader:
+- rests_on:
+  - p.checks_in_the_wheel
+  - p.script_copies
+  verdict: the browser checks install with the command line - `kpopper page --checks` runs the copy that
+    came with the reader, wherever it was installed
+  because: The checks are the only thing that answers whether the page actually behaves, and a wheel that
+    leaves them out withholds that answer from everyone who installed the ordinary way. Being Node is
+    a reason to want node on the path, not a reason to live in another registry - and an installed copy
+    sits somewhere nobody would think to look, so the dispatcher finds it instead of the person. The file
+    ships in both packages and is edited in neither.
+  wrong_if: p.checks_in_the_wheel < 1
+  seen:
+    p.checks_in_the_wheel: 1
+    p.script_copies: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.coverage_printed_never_acted:
+- rests_on:
+  - s.2026_09_03_coverage
+  - d.intent_is_a_source
+  - d.metrics_derived_builtin
+  - p.coverage_thresholds
+  verdict: coverage is counted at every build and check and printed as facts - each intent no tab serves
+    with one hint beside it, the prefixes nothing picks, spill, drift, the recent streak - and nothing
+    in the mechanism acts on a number
+  because: 'The hint says how much of what a session wrote already falls inside each tab''s picks, and
+    stops there: whether that makes the intent the same world as the tab is a session''s judgment, recorded
+    as an arrangement decision with its own falsifier. A line drawn in code would be a threshold nobody
+    chose and everybody wants to move; {{p.coverage_thresholds}} of them exist, and the count is what
+    would show one creeping in.'
+  wrong_if: p.coverage_thresholds > 0
+  seen:
+    s.2026_09_03_coverage: read 2026-09-03
+    d.intent_is_a_source: a session records what it was for as a source; a tab is a reading occasion that
+      serves intents, and serving is earned by picks
+    d.metrics_derived_builtin: graph.* and page.* are derived entries the reader computes itself - counts
+      and shares, never stored, thresholds only inside falsifiers
+    p.coverage_thresholds: 0
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.entry_file_is_grounding:
+- verdict: 'the record''s entry file is GROUNDING.yaml: the first add creates it at the workspace root,
+    the locator finds it first and a record kept under the earlier name after it, wherever that record
+    already is, and no command creates the earlier name again'
+  because: 'The name is the one thing a session with no author present reads before anything else, and
+    {{goal.portable}} is the bar: a file named for what it does for the session - what its answers stand
+    on - carries its own instruction, where provenance named the half of the content that is sources and
+    readings and reads, in software now, as a supply-chain attestation. Grounding is the word the method
+    already uses in its skill, its opener and its grounding line, and {{d.prefix_is_a_word}} is the same
+    rule one level up: a name is the link a question takes into the record. Reasoning, the pitch word,
+    names a process and one field, {{d.reasoning_in_record}}, not the state the file holds. The earlier
+    name stays read so that no record has to move, and {{p.entry_names}} counts the names the locator
+    knows - a third would be a second convention.'
+  wrong_if: p.entry_names > 2
+  reopened_by: a session with no author present that found the file and did not read it before answering
+    from memory, or an adopter who asked what the file is, or a live record the locator stopped finding
+    under its earlier name
+  rests_on:
+  - s.2026_09_12_layout
+  - goal.portable
+  - d.prefix_is_a_word
+  - d.reasoning_in_record
+  - p.entry_names
+  seen:
+    s.2026_09_12_layout: read 2026-09-12
+    goal.portable: usable by any session, in any project, with no author present
+    d.prefix_is_a_word: a prefix born from now is a word - the subject a question would name, or the kind
+      spelled out where a record is about one thing - never a letter; an entry joins the prefix its record
+      already holds for its subject, so a record kept under letters keeps them and declares what they
+      stand for in meta.prefixes, which the opener and the page print beside the namespace; check does
+      not fail a letter
+    d.reasoning_in_record: reasoning is the because of the judgment it belongs to, in the record; the
+      page's connective text lives in the brief; both resolve references at build and both carry seen
+    p.entry_names: 2
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.hypotheses_read_beside_the_base:
+- rests_on:
+  - s.2026_09_03_hypotheses
+  - d.consolidation_is_a_test
+  - d.no_feed_of_other_branches
+  - p.hypothesis_thresholds
+  verdict: every command reads the hypotheses beside the record over the base - pull shows what each proposes,
+    check and open say where two disagree, the opener counts what waits with each one's age and reach
+    - and evaluates the base alone; the union is tested by consolidation, and the page draws the base
+  because: 'A hypothesis laid over the base at every check would move every judgment resting on what it
+    proposes, in every session, for a claim nobody has tested - the dry run is where that question is
+    asked, once, with the answer in three lists. Reading it beside the base costs almost nothing: a proposal
+    is a line under the value it would replace, a contested id is the one thing that needs a person now,
+    and the count line says how long each has waited and how much rests on it without drawing a line -
+    {{p.hypothesis_thresholds}} thresholds live in the code, and the count is what would show one creeping
+    in.'
+  wrong_if: p.hypothesis_thresholds > 0
+  seen:
+    s.2026_09_03_hypotheses: read 2026-09-03
+    d.consolidation_is_a_test: 'consolidating hypotheses into the base tests whether the writers worked
+      on the same world: premises re-checked, falsifiers evaluated, contradictions stopped - as a dry
+      run at any moment, and as a step on every pull request'
+    d.no_feed_of_other_branches: the opener adds one line - how many hypotheses wait, and for how long;
+      nothing another branch claims is pushed into a session, it is pulled by seed or surfaces as a collision
+      on the same id
+    p.hypothesis_thresholds: 0
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.parse_kept_by_file_identity:
+- rests_on:
+  - s.2026_09_11_read_once
+  - p.record_parsers
+  - m.prompt_hook_10x_parsing
+  - m.prompt_hook_10x_kept
+  verdict: 'a file of the record is parsed when it changes, not when it is read: its parsed document is
+    kept under the user''s own state directory against what the file is - its path, its length, its last
+    write and the digest of the bytes that were parsed - and every write drops the entry for the file
+    it wrote'
+  because: 'Every command reads the whole record, and the hooks read it at every prompt and every edit:
+    a prompt on a record ten times this one''s cost {{m.prompt_hook_10x_parsing}} seconds, {{m.prompt_hook_10x_kept}}
+    once the parse is kept. Reading the bytes is a millisecond and parsing them is the whole cost, so
+    what is kept is the parse. The bytes are in the key because a length and a nanosecond cannot tell
+    apart a rewrite of the same length inside one tick - and a tick is a whole second where a filesystem
+    keeps its timestamps coarsely - while digesting them costs a thousandth of the parse they save. The
+    files remain the authority: an entry that is missing, truncated, about another file, of an older shape
+    or holding anything but a document is a parse, never an error, and nothing read back from one is ever
+    built into an object, so a file under the state directory cannot become code. One function of the
+    reader opens a file of a record and parses it; a second would read a record without ever seeing what
+    was kept for it, and {{p.record_parsers}} is the count that would show one.'
+  wrong_if: p.record_parsers > 1
+  seen:
+    s.2026_09_11_read_once: read 2026-09-11
+    p.record_parsers: 1
+    m.prompt_hook_10x_parsing: 1.3
+    m.prompt_hook_10x_kept: 0.15
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.predicate_shape_is_one_reading:
+- rests_on:
+  - s.2026_09_04_falsifier_shape
+  - p.predicate_shapes
+  - d.arrangement_sign_is_one_comparison
+  verdict: 'what shape a predicate must have to be decided is one reading, asked wherever a predicate
+    is written, reported or evaluated: one comparison, which is a right-hand side carrying no second comparison
+    - text inside quotes is a literal and is not read for one - and a predicate that is not one is declined
+    by the reader and reported where an empty predicate is, never answered false'
+  because: 'The comparison shape takes everything after the operator as its value, so a == false, or b
+    == false was decided against the text after the first operator - false in every state of the record,
+    a falsifier that reads as evaluable and can never fire. {{d.arrangement_sign_is_one_comparison}} refused
+    that for an arrangement''s sign and named it there; every other judgment inherited it, and check passed
+    over them because a predicate that names an entry was taken as one it could read. {{p.predicate_shapes}}
+    counts the places that decide the shape: a second one drifts from the first, and it drifts both ways.
+    The path that had a shape test read a quoted value by looking inside the quotes for operators, so
+    a date - one value, written with hyphens - was refused there while the path with no test compared
+    it happily; a rule any narrower than ''carries no second comparison'' refuses values the reader compares
+    perfectly well, and silencing a falsifier that works is this same failure from the other side.'
+  wrong_if: p.predicate_shapes > 1
+  seen:
+    s.2026_09_04_falsifier_shape: read 2026-09-04
+    p.predicate_shapes: 1
+    d.arrangement_sign_is_one_comparison: an arrangement's sign is one comparison over a count that can
+      hold - a name, an operator, one value; a compound or an impossible one is refused, and a re-opener
+      stands beside it, never in its place
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.priors_counted_at_the_matrix_line:
+- rests_on:
+  - s.2026_09_04_priors_count
+  - d.computed_names_when_named
+  - d.metrics_derived_builtin
+  - d.prior_carries_its_own_falsifier
+  - p.prior_count_thresholds
+  verdict: how much of a record stands on a session's own confidence is counted at every check and every
+    open and printed as two numbers - the judgments resting on a prior.* claim, and how many of those
+    on a prior at 0.8 or above - and nothing in the mechanism acts on either
+  because: 'The rule that would demote the kind is a share, and a share needs a denominator someone can
+    see; until the reader counts them, how many judgments stand on a prior is read by hand off the file.
+    The line the count splits at is the matrix''s own, not one the count invents, and it is printed inside
+    the line rather than kept in the code where nobody can disagree with it - {{p.prior_count_thresholds}}
+    of them lives there, and the count is what would show a second creeping in: an age past which a prior
+    goes stale, a share past which the line turns red. Neither number gets a computed name, because {{d.computed_names_when_named}}
+    and none is rested on yet - the judgment that will rest on one is the demotion rule itself, once refuted
+    findings make reversals countable.'
+  wrong_if: p.prior_count_thresholds > 1
+  seen:
+    s.2026_09_04_priors_count: read 2026-09-04
+    d.computed_names_when_named: a computed name becomes an entry only when something in the record mentions
+      it; a count nobody rests on does not exist
+    d.metrics_derived_builtin: graph.* and page.* are derived entries the reader computes itself - counts
+      and shares, never stored, thresholds only inside falsifiers
+    d.prior_carries_its_own_falsifier: 'the prior kind carries its own falsifier: if judgments resting
+      on priors at 0.8 or above are reversed more than about one in five, the confidences carry no information
+      and prior.* is demoted to a note'
+    p.prior_count_thresholds: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.shape_move_read_by_its_sign:
+- rests_on:
+  - s.2026_09_03_arrangements
+  - d.arrangement_replaced_by_trigger
+  - d.coverage_printed_never_acted
+  - p.coverage_thresholds
+  verdict: a tab's shape move is muted or fired by its arrangement's own sign, with the counts beside
+    it as facts; the mechanism draws no line of its own
+  because: The first draft classified a move by spill, unserved and drift all at zero - three comparisons
+    outside a falsifier, where the coverage report carries {{p.coverage_thresholds}} - and a drift of
+    one entry in fifty would have fired every tab until someone wanted 0.1. The arrangement's own wrong_if
+    is the line its author drew; the counts are printed beside it and never acted on.
+  wrong_if: p.coverage_thresholds > 0
+  seen:
+    s.2026_09_03_arrangements: read 2026-09-03
+    d.arrangement_replaced_by_trigger: an arrangement is replaced only when its falsifier fires, a coverage
+      gap exists, or a person asks
+    d.coverage_printed_never_acted: coverage is counted at every build and check and printed as facts
+      - each intent no tab serves with one hint beside it, the prefixes nothing picks, spill, drift, the
+      recent streak - and nothing in the mechanism acts on a number
+    p.coverage_thresholds: 0
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'

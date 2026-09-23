@@ -365,7 +365,6 @@ class PublisherBehavior(unittest.TestCase):
 
 
 C = _load("publish_crate")
-N = _load("native_shared")
 CI = _load("ci_selection")
 
 
@@ -380,9 +379,6 @@ def package_field(name):
 
 class TheCrate(unittest.TestCase):
     """crates.io receives native/ alone, from the commit each GitHub release is made from."""
-
-    def test_the_crate_carries_current_copies_of_what_it_shares(self):
-        self.assertEqual(N.stale(), [], "refresh the copies with: " + N.FIX)
 
     def test_the_crate_embeds_only_its_own_files(self):
         embedded = CI.rust_embeds(("native/src",))

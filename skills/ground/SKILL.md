@@ -5,7 +5,7 @@ description: "Read the project's knowledge record before answering from memory o
 
 # Ground
 
-The record answers what is known here, with its sources, and what a change reaches. Ask it before restating or changing a recorded value. Run `kpop` (or its `kpopper` alias) from the native runtime, using the exact `KPOPPER_AGENT_CONTEXT.command` when supplied; examples abbreviate it as `kpop`. Do not guess a path or silently use PATH, pip or Python. Explicit Python compatibility mode uses the active plugin's `scripts/cli.py` only with `KPOPPER_RUNTIME=python`. [The method's reference](../kpopper/references/method.md#finding-the-reader) locates the installed copy.
+The record answers what is known here, with its sources, and what a change reaches. Ask it before restating or changing a recorded value. Run `kpop` (or its `kpopper` alias) from the native runtime, using the exact `KPOPPER_AGENT_CONTEXT.command` when supplied; examples abbreviate it as `kpop`. Do not guess a path or silently use PATH. [The method's reference](../kpopper/references/method.md#finding-the-reader) locates the installed copy.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:ground` or "ground from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 

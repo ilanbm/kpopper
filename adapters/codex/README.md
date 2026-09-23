@@ -13,10 +13,6 @@ native runtime, and a globally installed `kpop` is not used by plugin hooks. Run
 prints ([Windows](../../docs/plugin-runtime.md#install-the-native-runtime)), then start a
 new task. All commands in `plugin-hooks.json`,
 including prompt diagnostics, invoke the exact native package binary under `$PLUGIN_ROOT`.
-For the source-only compatibility path, set `KPOPPER_RUNTIME=python` and follow the
-[private Python setup](../../docs/plugin-runtime.md#python-compatibility-mode).
-In Python compatibility mode, compare `doctor`'s `Hook Python` with
-`KPOPPER_AGENT_CONTEXT.command[0]`.
 
 
 The Codex package loads the shared skill and these hooks:
@@ -49,11 +45,9 @@ References: [plugin-bundled hooks](https://learn.chatgpt.com/docs/hooks#plugin-b
 
 ## Plain project configuration
 
-Prepare the same [native runtime or explicit Python compatibility mode](../../docs/plugin-runtime.md)
-before installing project hooks. For native mode, install into the active checkout's
-`scripts/runtime/TARGET`; a global CLI does not satisfy project hooks. If using
-`KPOPPER_RUNTIME_HOME` for Python compatibility, pass the same absolute value to setup
-and the Codex process.
+Prepare the same [runtime](../../docs/plugin-runtime.md) before installing project
+hooks: install it into the active checkout's `scripts/runtime/TARGET`; a global CLI does
+not satisfy project hooks.
 
 `hooks.json` is also provided for installations using project-level hooks rather than a native
 plugin. Codex resolves command paths against the session's working directory, not against the
@@ -80,4 +74,4 @@ for s in <kpopper>/skills/*/; do ln -s "$s" .agents/skills/"$(basename "$s")"; d
 A plain project hook does not receive `$PLUGIN_ROOT`. Keep the existing record or registered
 record pointer in place; do not migrate it for this adapter. Desktop/IDE client behavior should
 be validated in the actual client. Native task messaging is a host capability; a host without
-that messaging tool does not gain it by installing these Python scripts.
+that messaging tool does not gain it by installing these hooks.

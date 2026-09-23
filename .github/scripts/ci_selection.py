@@ -33,87 +33,26 @@ class Lane:
         self.python_entry_points, self.rust_sources = tuple(python_entry_points), tuple(rust_sources)
 
 
-PYTHON_PACKAGE = ("scripts/*", "pyproject.toml")
-PYTHON_RUNNER = (".github/scripts/ci_execution.py", ".github/requirements-test.txt", ".github/test-durations.json",
-                 "tests/__init__.py", "tests/ci_pytest.py")
-# Imported by the release-asset tests in the suite.
-RELEASE_ASSETS = (".github/scripts/native_assets.py",)
-# The fixture record the page tests read. It lives beside the native tests that embed it, so the
-# lanes that read it name it explicitly rather than reaching it through the test tree.
-PAGE_FIXTURE = ("native/tests/fixtures/page/*", "native/tests/fixtures/core-page/*")
-# Read by the Python suite beyond the package and its tests, as the audit observed them: hook and
-# plugin surfaces, installers, this repository's own record (the contract, priors and remeasure
-# tests check it), the ignore files the workspace scan honours, the reasoning workflows the
-# distribution test compares, and the workflows and pre-push hook the record's count of automatic
-# dry runs reads when the remeasure test runs its recipes.
-PYTHON_TESTED = PYTHON_PACKAGE + PYTHON_RUNNER + RELEASE_ASSETS + PAGE_FIXTURE + (
-    "tests/*", "adapters/*", "hooks/*", "bin/*", ".claude-plugin/*", ".codex-plugin/*",
-    "package.json", "LICENSE", "install.sh", "install.ps1", "native/Cargo.toml", "native/Cargo.lock",
-    "GROUNDING.yaml", ".kpopper/hypotheses/*", ".kpopper/measure.yaml",
-    ".gitignore", "*/.gitignore", ".gitattributes",
-    ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
-    ".github/workflows/check.yml", ".github/workflows/native-rust.yml",
-    ".github/workflows/publish.yml", ".github/workflows/release.yml",
-    ".github/workflows/session.yml", ".githooks/pre-push",
-)
-# Compiling the reasoning runtime and auditing what it links.
-RUNTIME_SOURCES = (
-    "scripts/reasoning/lean/*", "scripts/reasoning/native/*", "scripts/reasoning/third_party/*",
-    "scripts/reasoning/build_runtime.py", "scripts/reasoning/runtime.py",
-    "tests/test_reasoning_runtime.py", "tests/test_reasoning_distribution.py",
-    "tests/test_reasoning_composition_kernel.py", "tests/test_reasoning_composition_review.py",
-    "tests/test_reasoning_composition_acceptance.py", "tests/test_core_composition.py",
-    ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
-)
-# The offline DOM suite's own files, which only the documents lane runs.
-DOM_SUITE = ("tests/document-support/*", "tests/document_ui_fixture.py", "tests/test_document_ui.cjs")
-DOCUMENT_INPUTS = DOM_SUITE + PAGE_FIXTURE + (
-    "scripts/document/*", "scripts/documents.py", "scripts/document_cli.py", "scripts/document_html.py",
-    "scripts/document-guide.md", "tests/test_document*.py", "tests/fixtures/*", "package.json",
-    ".gitignore", "*/.gitignore", ".gitattributes",
-)
-
 LANES = {
-    # The Python suite on 3.9 and 3.13. Several of its tests scan the checkout, so a file
-    # added or removed anywhere can change what they see.
-    "python": Lane(PYTHON_TESTED, lists=("*",), ignores=DOM_SUITE),
-    # Standalone documents: their Python tests and the offline DOM suite.
-    "documents": Lane(PYTHON_PACKAGE + PYTHON_RUNNER + DOCUMENT_INPUTS, lists=("*",), enforced=False),
-    # The checked session with the reviewed Lean kernel, on the operating systems.
-    "session": Lane(PYTHON_TESTED + (".github/workflows/session.yml",), lists=("*",), ignores=DOM_SUITE,
-                    enforced=False),
-    # Wheel, sdist and plugin installs on every native target, and the reasoning tests against
-    # them. Its reusable workflow is recorded in the corresponding-source archive and cannot
-    # record reads, so this declaration is reviewed rather than audited: the package, what the
-    # installed tests run, the plugin's own surfaces and the committed runtimes. The plugin copy
-    # carries every file, but none outside these decide whether the installs work.
-    "installed": Lane(PYTHON_PACKAGE + RUNTIME_SOURCES + PAGE_FIXTURE + (
-        "tests/test_reasoning*.py", "tests/reasoning/*", "tests/fixtures/*", "tests/__init__.py",
-        "bin/*", "hooks/*", ".claude-plugin/*", ".codex-plugin/*", "package.json", "LICENSE",
-    ), audited=False, python_entry_points=("tests/test_reasoning*.py",)),
-    # Rebuilding the reasoning runtime from source on every target. Reviewed, like installed.
-    "runtime": Lane(RUNTIME_SOURCES, audited=False),
     # The native command: compilation, its tests, the release build and installed acceptance.
     "rust": Lane((
         "native/*", ".github/workflows/native-rust.yml",
-        # The originals of what native/shared/ and native/LICENSE copy: the build script
-        # refuses a copy that differs from them.
-        "scripts/session/rules.txt", "scripts/start-guide.md", "scripts/page/*", "scripts/document/*",
-        "scripts/assessment.schema.json", "scripts/reasoning/*.schema.json",
-        "scripts/session/lean/*", "scripts/reasoning/lean/*", "scripts/verify_page.js",
-        "scripts/expressions.py", "LICENSE",
-        # Read at test time and by the packaging steps.
-        "scripts/reasoning/native/*", "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
-        "install.sh", "install.ps1", "VERSION",
-        # The Cursor opener its tests run against this build.
-        "adapters/cursor/scripts/gate-open.sh", "scripts/native_runtime.sh",
+        # The plugin's shell plumbing, the host wrappers and the packaging tools its tests run:
+        # installed acceptance stages a plugin from these and drives its hooks.
+        "scripts/*.sh", "adapters/codex/plugin-hooks.json",
+        "adapters/cursor/scripts/gate-open.sh", "adapters/gemini/scripts/session-start.sh",
+        "adapters/gemini/hooks/hooks.json", "adapters/copilot/cli/hook.sh",
+        "adapters/windsurf/hooks.json",
         "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
-        # The host adapter scripts and manifests its tests run.
-        "adapters/gemini/scripts/session-start.sh", "adapters/gemini/hooks/hooks.json",
-        "adapters/copilot/cli/hook.sh", "adapters/windsurf/hooks.json",
+        "tests/test_native_distribution.py", "install.sh", "install.ps1", "VERSION", "LICENSE",
+        # Read at test time, by the packaging steps, and by the bundle check, which compares the
+        # committed corresponding-source archive with the recipe and workflows recorded inside it.
+        "scripts/session/lean/*", "scripts/reasoning/lean/*", "scripts/reasoning/native/*",
+        "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
+        ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
         # The ordinary Lean program its tests load is compiled from the source beside the crate.
-        # The Python hooks its tests compare run from the pinned v0.10.0 reference.
+        # The hooks its tests compare with run from the pinned v0.10.0 reference.
         rust_sources=("native",)),
 }
 LANE_NAMES = tuple(LANES)
@@ -124,14 +63,18 @@ UNREAD = (
     "*.md", "assets/*", "docs/*", "skills/*", "examples/*", "GROUNDING.yaml", ".kpopper/*",
     ".github/ISSUE_TEMPLATE/*", ".github/pull_request_template.md", ".githooks/*",
     ".github/workflows/release.yml", ".github/workflows/publish.yml",
+    "adapters/*", "hooks/*", "bin/*",
+    ".claude-plugin/*", ".codex-plugin/*", "package.json",
+    ".gitignore", "*/.gitignore", ".gitattributes",
 )
 
 # Run by the record job alone, on every pull request; no lane reads them.
 RECORD_JOB = (
-    "tests/test_skills.py", "tests/test_release.py", "tests/test_ci_selection.py",
-    "tests/test_ci_execution.py", "tests/test_ci_sharding.py", "tests/test_ci_audit.py",
+    "tests/__init__.py", "tests/test_skills.py", "tests/test_release.py",
+    "tests/test_ci_selection.py", "tests/test_ci_audit.py", "tests/test_native_release_assets.py",
+    "tests/test_native_launcher.py", "tests/test_hook_delivery.py", ".github/requirements-test.txt",
     ".github/scripts/release.py", ".github/scripts/publish_release.py",
-    ".github/scripts/publish_crate.py", ".github/scripts/native_shared.py",
+    ".github/scripts/publish_crate.py", ".github/scripts/native_assets.py",
 )
 
 # CI's own machinery decides what every lane means, so a change to it runs everything.
@@ -139,30 +82,20 @@ CI_MACHINERY = (
     ".github/workflows/check.yml", ".github/scripts/ci_selection.py", ".github/scripts/ci_audit.py",
 )
 
-# A pull request normally leaves out the Intel macOS target, the slowest leg of both platform
-# matrices; main keeps it. A change to what decides platform behaviour takes every target.
+# A pull request normally leaves out the Intel macOS target, the slowest leg of the platform
+# matrix; main keeps it. A change to what decides platform behaviour takes every target.
 PLATFORM_INPUTS = (
     "native/Cargo.toml", "native/Cargo.lock", "native/build.rs", "native/rust-toolchain.toml",
     "native/ci/*", ".github/workflows/native-rust.yml", "install.sh", "install.ps1",
     "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
-    "scripts/native_launcher.py", "scripts/install_native.sh", "scripts/native_runtime.sh",
-    "scripts/reasoning/native/*", "scripts/reasoning/build_runtime.py", "scripts/reasoning/runtime.py",
+    "scripts/install_native.sh", "scripts/native_runtime.sh",
+    "scripts/reasoning/native/*", "scripts/reasoning/build_runtime.py",
     "scripts/reasoning/third_party/*", ".github/workflows/reasoning-runtime.yml",
-    ".github/workflows/reasoning-target.yml", "pyproject.toml", ".claude-plugin/*", ".codex-plugin/*",
+    ".github/workflows/reasoning-target.yml", ".claude-plugin/*", ".codex-plugin/*",
 ) + CI_MACHINERY
 INTEL_MACOS = "darwin-x86_64"
-# The platform matrix of reasoning-runtime.yml, which check.yml runs directly.
-RUNTIME_TARGETS = (
-    {"runner": "ubuntu-24.04", "target": "linux-x86_64", "pythons": '["3.9", "3.13"]'},
-    {"runner": "ubuntu-24.04-arm", "target": "linux-aarch64", "pythons": '["3.9", "3.13"]'},
-    {"runner": "macos-15", "target": "darwin-arm64", "pythons": '["3.13"]'},
-    {"runner": "macos-15-intel", "target": INTEL_MACOS, "pythons": '["3.9", "3.13"]'},
-    {"runner": "windows-2022", "target": "windows-x86_64", "pythons": '["3.9", "3.13"]'},
-)
 
-TEST_SUITES = ("core", "documents", "reasoning", "session", "other")
-JOB_LANES = {"check": ("python", "documents"), "document-ui": ("documents",), "session": ("session",),
-             "reasoning-runtime": ("installed", "runtime"), "native-cli": ("rust",)}
+JOB_LANES = {"native-cli": ("rust",)}
 
 
 def matches(path, patterns):
@@ -322,10 +255,8 @@ def select(changes, full=False, push=False, base_dirs=None, head_dirs=None):
         for status, path in changes:
             chosen |= lanes_for(status, path, base_dirs, head_dirs)
     if push:
-        # Main checks every consumer; recompiling unchanged runtime sources adds no coverage.
-        chosen |= set(LANE_NAMES) - {"runtime"}
-    if "runtime" in chosen:
-        chosen.add("installed")
+        # Main checks every consumer.
+        chosen |= set(LANE_NAMES)
     return {lane: lane in chosen for lane in LANE_NAMES}
 
 
@@ -334,32 +265,6 @@ def platforms(changes, full=False, push=False):
     if full or push or not changes or any(matches(path, PLATFORM_INPUTS) for _, path in changes):
         return "all"
     return "pull-request"
-
-
-def runtime_targets(scope):
-    return [dict(row) for row in RUNTIME_TARGETS if scope == "all" or row["target"] != INTEL_MACOS]
-
-
-def test_suites(selected):
-    # Shared readers can reach every consumer. Keep their full coverage while
-    # giving the runner concrete, disjoint suites to execute and report.
-    if selected["python"]:
-        return list(TEST_SUITES)
-    return ["documents"] if selected["documents"] else []
-
-
-def test_matrix(selected, pull_request=True):
-    if not (selected["python"] or selected["documents"]):
-        return {"include": []}
-    rows = []
-    for python in (("3.9", "3.13") if pull_request else ("3.13",)):
-        # The slower interpreter gets more machines and CPU headroom for the
-        # subprocess-heavy history tests. Document-only changes need one group.
-        splits = (8 if python == "3.9" else 4) if selected["python"] else 1
-        workers = 2 if python == "3.9" else 4
-        rows.extend({"python": python, "group": group, "splits": splits, "workers": workers}
-                    for group in range(1, splits + 1))
-    return {"include": rows}
 
 
 def tree_directories(revision, cwd=None):
@@ -399,27 +304,9 @@ def required_failures(needs, pull_request=True):
         if outputs.get(lane) not in ("true", "false"):
             failures.append("missing or invalid selection: " + lane)
     selected = {lane: outputs.get(lane) == "true" for lane in LANE_NAMES}
-    try:
-        if json.loads(outputs.get("test_suites", "null")) != test_suites(selected):
-            failures.append("test plan does not cover the selected CI lanes")
-    except (TypeError, ValueError):
-        failures.append("missing or invalid test plan")
-    try:
-        if json.loads(outputs.get("test_matrix", "null")) != test_matrix(selected, pull_request):
-            failures.append("test matrix omits a required Python version or shard")
-    except (TypeError, ValueError):
-        failures.append("missing or invalid test matrix")
     scope = outputs.get("platforms")
     if scope not in ("all", "pull-request") or (scope != "all" and not pull_request):
         failures.append("missing or invalid platform scope")
-    else:
-        try:
-            if json.loads(outputs.get("runtime_targets", "null")) != runtime_targets(scope):
-                failures.append("runtime targets do not match the platform scope")
-        except (TypeError, ValueError):
-            failures.append("missing or invalid runtime targets")
-    if selected["runtime"] and not selected["installed"]:
-        failures.append("a runtime rebuild requires installed checks")
     for job, lanes in JOB_LANES.items():
         expected = "success" if any(selected[lane] for lane in lanes) else "skipped"
         actual = needs.get(job, {}).get("result")
@@ -446,19 +333,12 @@ def main():
         changed_files(args.base, args.head, merge_base=not args.push)
     selected = select(changes, full=args.full, push=args.push, base_dirs=base_dirs, head_dirs=head_dirs)
     scope = platforms(changes, full=args.full, push=args.push)
-    suites = test_suites(selected)
-    matrix = test_matrix(selected, pull_request=not (args.push or args.full))
-    targets = runtime_targets(scope)
-    print(json.dumps({"changes": changes, "selected": selected, "platforms": scope,
-                      "test_suites": suites, "test_matrix": matrix, "runtime_targets": targets}, indent=2))
+    print(json.dumps({"changes": changes, "selected": selected, "platforms": scope}, indent=2))
     if os.environ.get("GITHUB_OUTPUT"):
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
             for lane, enabled in selected.items():
                 stream.write("%s=%s\n" % (lane, str(enabled).lower()))
             stream.write("platforms=" + scope + "\n")
-            stream.write("test_suites=" + json.dumps(suites) + "\n")
-            stream.write("test_matrix=" + json.dumps(matrix) + "\n")
-            stream.write("runtime_targets=" + json.dumps(targets) + "\n")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
             stream.write("| CI lane | Selected |\n|---|---|\n")
@@ -467,8 +347,6 @@ def main():
             stream.write("\nRecord, skill/release contracts and CI selection tests always run.\n")
             stream.write("\nPlatforms: " + ("every target" if scope == "all" else
                                              "every target except " + INTEL_MACOS) + ".\n")
-            stream.write("\nPython test suites: " + (", ".join(suites) or "none") + ".\n")
-            stream.write("Python test jobs: " + str(len(matrix["include"])) + ".\n")
     return 0
 
 

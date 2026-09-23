@@ -1,14 +1,12 @@
 # Native Rust CLI (default runtime)
 
 The native distribution provides the public `kpop` CLI and `kpopper` alias. Its
-internal library crate is `kpop_native`; the 0.9.0 native line is the first
-pre-1.0 series and is independent of the legacy Python package's 1.6.0 release.
+internal library crate is `kpop_native`; the 0.9.0 line is the first pre-1.0 series.
 Prebuilt GitHub bundles are the primary install and include adjacent reasoning
 resources. Archives carry the project MIT license and dependency license texts and notices
 under `bin/resources/reasoning/notices/`. The exact GMP source and build recipe are
-included at `bin/resources/reasoning/native/gmp-source-and-build.tar.gz`. Python, Node and Rust are not required at runtime. The source-only
-Python implementation remains available only through explicit
-`KPOPPER_RUNTIME=python` compatibility mode.
+included at `bin/resources/reasoning/native/gmp-source-and-build.tar.gz`. Python, Node and
+Rust are not required at runtime, and `KPOPPER_RUNTIME` accepts `rust` alone.
 
 ## Install from crates.io
 

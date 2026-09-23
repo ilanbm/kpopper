@@ -23,11 +23,6 @@ installs one: without it, the opening says so and names the install command. Sta
 from a shell with that `PATH`, so `kpop` names this checkout's command; the hook itself
 does not depend on `PATH`.
 
-Python is only an explicit compatibility mode. With `KPOPPER_RUNTIME=python` in the
-environment Gemini starts hooks with, the hook runs `scripts/hook.py` with `python3`,
-which then needs kpopper's dependencies. See
-[Python compatibility mode](../../docs/plugin-runtime.md#python-compatibility-mode).
-
 Accept Gemini's extension prompt after reviewing the checkout, then restart Gemini
 in the project you want to work on. The extension list should show `kpopper` enabled
 and its `GEMINI.md` context file. Inspect `/hooks list` inside Gemini if the opening
@@ -54,8 +49,7 @@ on PATH, the opening names this checkout's runtime in `KPOPPER_AGENT_CONTEXT`.
 |---|---|
 | `gemini-extension.json` | Extension metadata and `GEMINI.md` context. |
 | `hooks/hooks.json` | Runs `scripts/session-start.sh` at `SessionStart`, quoted and anchored to `${extensionPath}`. |
-| `scripts/session-start.sh` | Runs the checkout's native `kpop session-start --gemini`, which finds the record from the hook payload's `cwd` and returns the opening as `hookSpecificOutput.additionalContext`. A missing runtime is reported in the same field. With `KPOPPER_RUNTIME=python` it runs `hook.py` instead. Stdout contains JSON only. |
-| `scripts/hook.py` | Python compatibility mode: wraps the Python opener's text the same way and keeps legacy end invocations silent. |
+| `scripts/session-start.sh` | Runs the checkout's native `kpop session-start --gemini`, which finds the record from the hook payload's `cwd` and returns the opening as `hookSpecificOutput.additionalContext`. A missing runtime is reported in the same field. Stdout contains JSON only. |
 
 Gemini's `SessionStart` context reaches the model through `additionalContext`.
 Plain text is insufficient: in CLI 0.43.0 the host converts it to a user-facing
@@ -71,8 +65,8 @@ documents linking, context loading, and path substitution. Checked 2026-09-16.
 
 ## Validation and limits
 
-Tested on 2026-09-16/17 with **Gemini CLI 0.43.0**, Node 24.14.0, Python 3.14.5 and
-macOS (Darwin 25.4.0), when the hook ran `scripts/hook.py`:
+Tested on 2026-09-16/17 with **Gemini CLI 0.43.0**, Node 24.14.0 and
+macOS (Darwin 25.4.0), against the bridge this extension shipped then:
 
 - Linked and listed the extension using an isolated `GEMINI_CLI_HOME`; Gemini
   discovered the context file and enabled the extension.
@@ -86,15 +80,13 @@ The native hook, `scripts/session-start.sh`, has not yet run inside Gemini CLI.
 Repository tests cover `kpop session-start --gemini` itself (record opening, first-use
 guidance without creating a record, subagent and malformed payloads) and run the
 manifest's command against a checkout layout: the opening from the checkout's own
-runtime, a missing runtime, and Python compatibility selection. Run them with:
+runtime, a missing runtime, and the refusal of any other runtime choice. Run them with:
 
 ```sh
 cargo test --manifest-path native/Cargo.toml --test host_adapters
-python3 -m unittest tests.test_gemini_adapter -v
 ```
 
-The Python tests cover `scripts/hook.py` in compatibility mode. These are
-CLI-management and hook-component checks. A model-driven session,
+These are CLI-management and hook-component checks. A model-driven session,
 resume/reopen behavior, actual shutdown delivery, sandboxed execution, Linux/WSL,
 and native Windows remain unverified. Do not treat successful linking as proof of
 an end-to-end session.

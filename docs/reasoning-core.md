@@ -50,7 +50,7 @@ load code or change the installed module registry. A read never activates
 authoring or migrates stored content.
 
 The new assessment envelope has `schema_version: 2` and the schema at
-`scripts/reasoning/assessment.schema.json`. Existing ordinary assessments retain
+`native/shared/reasoning/assessment.schema.json`. Existing ordinary assessments retain
 their original v1 schema. `checked-reader/v1` names the existing checked-session
 semantics for compatibility documentation; older checked-session responses did
 not carry that identifier. Missing metadata keeps the existing surface's legacy
@@ -58,7 +58,7 @@ interpretation. An assessment's explicit `--profile core/v1` override does not
 rewrite a record.
 
 The optional `--history` route returns combined `schema_version: 3`, defined by
-`scripts/reasoning/history_assessment.schema.json`. It computes schema v2 once from one
+`native/shared/reasoning/history_assessment.schema.json`. It computes schema v2 once from one
 immutable Snapshot, then adds captured history subjects, pins, coverage, assurance and support
 reservations without a second evaluator or source read. `findings_revision` is the semantic
 identity; `envelope_revision` also binds policy and display selection. Existing core v2 and both

@@ -38,9 +38,8 @@ if [ ! -f "$RUNTIME" ]; then
 fi
 
 case "${KPOPPER_RUNTIME:-rust}" in
-  python) printf '%s' "$IN" | python3 "$ROOT/scripts/session_start.py" --cursor; exit 0 ;;
   rust) ;;
-  *) printf 'gate-open.sh: KPOPPER_RUNTIME must be rust or python\n' >&2; exit 0 ;;
+  *) printf 'gate-open.sh: KPOPPER_RUNTIME must be rust\n' >&2; exit 0 ;;
 esac
 
 # Cursor gives the agent additional_context and never shows it standard error, so a

@@ -813,7 +813,7 @@ Windows, under WSL). To start from what already exists, ask your agent to map th
 The native runtime needs no Python, Node, Rust or Lean toolchain.
 
 [Use the command line without an agent](docs/reference.md#try-it-from-the-command-line) ·
-[Python compatibility mode and troubleshooting](docs/plugin-runtime.md)
+[Runtime setup and troubleshooting](docs/plugin-runtime.md)
 
 **Installed? See it in your work:** [Coding agents](#user-content-example-1-coding-agent) ·
 [Claude Cowork / ChatGPT Work](#user-content-example-2-claude-cowork-and-chatgpt-work) ·
@@ -830,8 +830,7 @@ ordinary language.
 These commands assume an installed `kpop`. From a source checkout, build the native
 crate with `cargo build --manifest-path native/Cargo.toml --release` and use the
 resulting `kpop` binary. For plugin work, use the command supplied by the session's
-`KPOPPER_AGENT_CONTEXT`; source-only Python compatibility mode is explicit.
-`<id>` names a record entry, such as
+`KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
 `workshop.ingredient_plan`; `kpop --help` lists command groups.
 
 | Command | What you need |
@@ -1435,7 +1434,7 @@ checks. These serve related but distinct purposes:
 - **An optional checked view.** Experimental checked sessions expose a revision-bound view
   through CLI or MCP. A changed record rejects reads using the old revision. Enable this
   mode separately with `kpop session enable`; [setup and compatibility instructions](docs/checked-sessions.md)
-  cover the native bundles and the explicit Python adapter.
+  cover the packaged bundles.
 
 These guarantees do not establish that a source is accurate, that the recorded premises
 logically imply an agent's verdict, or that an action is permitted. The adapters, renderer,
@@ -1464,23 +1463,18 @@ make decisions worth revisiting. Optional applications build on that core:
 | kpopper Hub (`hub`) | A browsable snapshot of the record, with layouts and an interactive graph. | Experimental |
 | Annotated Documents (`annotated-doc`) | A standalone document with selected evidence and reviewable copy updates. | Experimental |
 
-Native release bundles include the compiled HTML applications. Request them
-explicitly; installation alone does not activate either application. In Python
-compatibility mode, install the optional HTML dependencies:
+Release bundles include the compiled HTML applications. Request them explicitly;
+installation alone does not activate either application.
 
 ```sh
-python -m pip install '.[html]'
 kpop experimental hub --open
 kpop experimental annotated-doc guide
 ```
 
-For a legacy Python release, use `kpopper[html]` instead of `.[html]`; check the
-[changelog](CHANGELOG.md) when using an older installation.
+Check the [changelog](CHANGELOG.md) when using an older installation.
 Request these applications explicitly or give the agent a standing preference. Their
 interfaces and artifact formats may change. Ordinary installation, record checks and
-session hooks work without activating the HTML applications. Python compatibility-mode
-plugin users can add its dependencies with `plugin_runtime.py setup --applications html`
-at their active plugin path.
+session hooks work without activating the HTML applications.
 
 [![Experimental Annotated Documents application: the Autumn Garden Workshop report with an evidence card beside its registration-window passage. The author's interpretation is labelled Not checked and linked to the source notes.](assets/standalone-document-reasoning.png)](assets/standalone-document-reasoning.png)
 

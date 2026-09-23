@@ -5,55 +5,6 @@
 # The Python ones run isolated (-I), so a file in the checkout cannot stand in for a module
 # they import. Each is the narrow count its entry's at: describes, and nothing more.
 
-# m.page_string_lines - lines of render_page.py inside top-level string constants of three lines
-# or more, from the syntax tree: the count run.constants_measured took by hand
-page_string_lines:
-  - python3
-  - -I
-  - -c
-  - |
-    import ast
-    t = ast.parse(open('scripts/render_page.py', encoding='utf-8').read())
-    print(sum(n.value.end_lineno - n.value.lineno + 1 for n in t.body
-              if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
-              and isinstance(n.value.value, str) and n.value.end_lineno - n.value.lineno >= 2))
-
-# p.recipe_runners - files under scripts/ that call the recipe runner: the layout names the
-# allowlist file for every reader, so naming it no longer tells a runner apart, and a second
-# executor shows here by the call
-recipe_runners:
-  - python3
-  - -I
-  - -c
-  - |
-    import glob
-    print(sum('run_recipe(' in open(f, encoding='utf-8').read() for f in glob.glob('scripts/*.py')))
-
-# p.record_parsers - functions of the reader that open a file and hand it to the YAML parser.
-# Every file of a record is read through one of them, which is what keeps a kept parse from
-# being bypassed; a second would read a file without ever looking at what was kept for it.
-# Counted from the syntax tree: a function that calls open (or io.open, os.open) anywhere in
-# its body and yaml.safe_load on anything.
-record_parsers:
-  - python3
-  - -I
-  - -c
-  - |
-    import ast
-    t = ast.parse(open('scripts/provenance.py', encoding='utf-8').read())
-    def both(fn):
-        opens = parses = False
-        for x in ast.walk(fn):
-            if not isinstance(x, ast.Call):
-                continue
-            f = x.func
-            opens = opens or (isinstance(f, ast.Name) and f.id == 'open') \
-                or (isinstance(f, ast.Attribute) and f.attr == 'open')
-            parses = parses or (isinstance(f, ast.Attribute) and f.attr == 'safe_load'
-                                and isinstance(f.value, ast.Name) and f.value.id == 'yaml')
-        return opens and parses
-    print(sum(both(n) for n in ast.walk(t) if isinstance(n, ast.FunctionDef)))
-
 # p.skills_shipped - skill directories the plugin ships: each is one occasion, with its SKILL.md
 skills_shipped:
   - python3
@@ -69,45 +20,12 @@ skill_bytes_largest:
   - -c
   - "import glob, os; print(max(os.path.getsize(f) for f in glob.glob('skills/*/SKILL.md')))"
 
-# p.hook_slot - the character budget the opener hands to `open --chars`
-hook_slot:
-  - python3
-  - -I
-  - -c
-  - |
-    import ast
-    t = ast.parse(open('scripts/session_start.py', encoding='utf-8').read())
-    print(next(ast.literal_eval(n.value) for n in t.body if isinstance(n, ast.Assign)
-    and any(isinstance(x, ast.Name) and x.id == 'LEGACY_CHARS' for x in n.targets)))
-
 # p.npm_files - entries of package.json's files list
 npm_files:
   - python3
   - -I
   - -c
   - "import json; print(len(json.load(open('package.json', encoding='utf-8'))['files']))"
-
-# p.checks_in_the_wheel - package-data entries of pyproject.toml that end in verify_page.js
-checks_in_the_wheel:
-  - python3
-  - -I
-  - -c
-  - |
-    import re
-    t = open('pyproject.toml', encoding='utf-8').read()
-    m = re.search(r'^kpopper = \[(.*?)\]', t, re.M)
-    print(sum(1 for s in re.findall(r'"([^"]*)"', m.group(1)) if s.endswith('verify_page.js')))
-
-# p.predicate_shapes - places that decide whether a predicate is one comparison this reader
-# can decide: a refusal says so in those words, so a second shape test shows here
-predicate_shapes:
-  - python3
-  - -I
-  - -c
-  - |
-    import glob
-    print(sum(open(f, encoding='utf-8').read().count('is not one comparison this reader decides')
-              for f in glob.glob('scripts/*.py')))
 
 # m.blocked_on_reopeners - judgments of this record that declare a hole: an entry carrying both
 # rests_on and blocked_on, counted from the record's own text. Nothing is imported from the
@@ -148,77 +66,6 @@ blocked_on_implementation:
             kind = m.group(1)
     print(n + (deps and kind == "implementation"))
 
-# The lines a count draws, inside the functions the entry's at: names and nowhere else: a
-# module-level number the function reads by name, and any number other than zero or one it
-# compares against - a line worth arguing about is named or is not zero or one, and zero and one
-# are how this code says empty and singular. A function the file no longer has is a hole, not a
-# zero. Serves p.prior_count_thresholds, p.hypothesis_thresholds and p.coverage_thresholds; the
-# module and the functions are the arguments.
-prior_count_thresholds:
-  - python3
-  - -I
-  - -c
-  - &threshold_count |
-    import ast, sys
-    t = ast.parse(open(sys.argv[1], encoding='utf-8').read())
-    named = set()
-    for n in t.body:
-        if not isinstance(n, (ast.Assign, ast.AnnAssign)) or not isinstance(n.value, ast.Constant) \
-                or type(n.value.value) not in (int, float):
-            continue
-        for g in (n.targets if isinstance(n, ast.Assign) else [n.target]):
-            if isinstance(g, ast.Name):
-                named.add(g.id)
-    have = {n.name for n in t.body if isinstance(n, ast.FunctionDef)}
-    gone = [w for w in sys.argv[2:] if w not in have]
-    if gone:
-        sys.exit(sys.argv[1] + " has no " + ", ".join(gone))
-    drawn = set()
-    for n in t.body:
-        if not isinstance(n, ast.FunctionDef) or n.name not in sys.argv[2:]:
-            continue
-        for x in ast.walk(n):
-            if isinstance(x, ast.Name) and x.id in named:
-                drawn.add(x.id)
-            elif isinstance(x, ast.Compare):
-                for y in [x.left] + list(x.comparators):
-                    if isinstance(y, ast.Constant) and type(y.value) in (int, float) \
-                            and y.value not in (0, 1):
-                        drawn.add(y.value)
-    print(len(drawn))
-  - scripts/provenance.py
-  - priors_line
-
-# p.hypothesis_thresholds - the same count over the line the opener prints about hypotheses.
-hypothesis_thresholds:
-  - python3
-  - -I
-  - -c
-  - *threshold_count
-  - scripts/provenance.py
-  - hypothesis_line
-
-# p.coverage_thresholds - the same count over the coverage report, which computes and prints.
-coverage_thresholds:
-  - python3
-  - -I
-  - -c
-  - *threshold_count
-  - scripts/render_page.py
-  - coverage
-  - coverage_lines
-
-# p.entry_names - the names the locator recognizes for the entry file: a third would be a
-# second convention, and it shows here
-entry_names:
-  - python3
-  - -I
-  - -c
-  - |
-    import ast
-    t = ast.parse(open('scripts/workspace.py', encoding='utf-8').read())
-    print(len(next(n.value.elts for n in ast.walk(t) if isinstance(n, ast.Assign) and any(getattr(x, 'id', '') == 'NAMES' for x in n.targets))))
-
 # p.live_dry_run_gates - lines in the CI workflows, the pre-push guard and the plugin's hooks
 # that run the consolidation dry run without --frozen: each would let a pending finding hold up
 # someone's run, where the live dry run only reports what it would break
@@ -231,3 +78,37 @@ live_dry_run_gates:
     files = glob.glob('.github/workflows/*.yml') + glob.glob('.githooks/*') + glob.glob('hooks/*')
     print(sum('consolidate' in line and '--dry-run' in line and '--frozen' not in line
               for name in files for line in open(name, encoding='utf-8')))
+
+# p.hook_slot - the character budget the opener fills, read from the reader that fills it
+hook_slot:
+  - python3
+  - -I
+  - -c
+  - |
+    import re
+    t = open('native/src/ordinary_views.rs', encoding='utf-8').read()
+    print(re.search(r'^pub\(crate\) const OPENING_CHARS: i64 = (\d+);', t, re.M).group(1))
+
+# p.recipe_runners - files of the reader that run a measurement recipe: one runner is what
+# keeps a command that reads the record from running one, and a second shows here by the call
+recipe_runners:
+  - python3
+  - -I
+  - -c
+  - |
+    import glob
+    print(sum('run_recipe(' in open(f, encoding='utf-8').read() for f in glob.glob('native/src/*.rs')))
+
+# p.product_python_modules - Python modules of the product under scripts/. The build,
+# packaging and licence tools there are named out: they carry no product code and import
+# none. Anything else under scripts/ written in Python is a second implementation starting
+# again, and this count is what says so.
+product_python_modules:
+  - python3
+  - -I
+  - -c
+  - |
+    import glob
+    tools = {'scripts/reasoning/build_runtime.py', 'scripts/package_native.py',
+             'scripts/collect_rust_licenses.py'}
+    print(sum(f not in tools for f in glob.glob('scripts/**/*.py', recursive=True)))

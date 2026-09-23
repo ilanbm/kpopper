@@ -5,9 +5,8 @@
 HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P) || { printf '{}\n'; exit 0; }
 ROOT=$(CDPATH='' cd -- "$HERE/../../.." && pwd -P) || { printf '{}\n'; exit 0; }
 case "${KPOPPER_RUNTIME:-rust}" in
-  python) python3 "$HERE/hook.py" SessionStart; exit 0 ;;
   rust) ;;
-  *) printf 'kpopper: KPOPPER_RUNTIME must be rust or python\n' >&2; printf '{}\n'; exit 0 ;;
+  *) printf 'kpopper: KPOPPER_RUNTIME must be rust\n' >&2; printf '{}\n'; exit 0 ;;
 esac
 
 # Standard input as the body of a JSON string, its lines joined with \n.

@@ -22,9 +22,8 @@ case "${1:-}" in
   *) printf 'usage: hook.sh config|start|stop\n' >&2; exit 2 ;;
 esac
 case "${KPOPPER_RUNTIME:-rust}" in
-  python) python3 "$HERE/hook.py" start; exit 0 ;;
   rust) ;;
-  *) printf 'kpopper: KPOPPER_RUNTIME must be rust or python\n' >&2; printf '{}\n'; exit 0 ;;
+  *) printf 'kpopper: KPOPPER_RUNTIME must be rust\n' >&2; printf '{}\n'; exit 0 ;;
 esac
 RUNTIME="$ROOT/scripts/native_runtime.sh"
 if REPORT=$(sh "$RUNTIME" --path 2>&1 >/dev/null); then

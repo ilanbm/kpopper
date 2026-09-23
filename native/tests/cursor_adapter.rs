@@ -168,20 +168,24 @@ fn a_missing_runtime_is_reported_to_the_agent_with_its_install_command() {
 }
 
 #[test]
-fn an_unknown_runtime_choice_stays_silent_on_standard_output() {
+fn a_runtime_choice_other_than_rust_stays_silent_on_standard_output() {
     let root = tempfile::tempdir().unwrap();
     let script = checkout(root.path(), true);
     let tmp = tempfile::tempdir().unwrap();
-    let output = open(
-        &script,
-        tmp.path(),
-        &json!({"conversation_id": "unknown", "cwd": tmp.path()}),
-        tmp.path(),
-        Some("java"),
-    );
-    assert!(output.status.success());
-    assert!(output.stdout.is_empty());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("KPOPPER_RUNTIME must be rust or python")
-    );
+    for choice in ["python", "java"] {
+        let output = open(
+            &script,
+            tmp.path(),
+            &json!({"conversation_id": "unknown", "cwd": tmp.path()}),
+            tmp.path(),
+            Some(choice),
+        );
+        assert!(output.status.success());
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("KPOPPER_RUNTIME must be rust"),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
