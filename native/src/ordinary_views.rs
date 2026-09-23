@@ -1449,6 +1449,9 @@ impl Projection<'_> {
         if let Some(waiting) = self.hypothesis_line()? {
             head.push(waiting);
         }
+        if !truth(&self.base.reader.fields["snapshot"]) {
+            head.push("no snapshot field: drift cannot be detected in this record".into());
+        }
 
         let mut items = vec![];
         for (id, body) in &self.base.judgments {
@@ -1726,6 +1729,9 @@ impl Projection<'_> {
                     }
                 }
             }
+        }
+        if !truth(&self.base.reader.fields["snapshot"]) {
+            note.push("no snapshot field anywhere: dependencies are declared but never captured, so drift can never be detected".into());
         }
 
         for (id, body) in &self.base.judgments {
