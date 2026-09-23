@@ -11,6 +11,7 @@ history assessments and do not recursively hash their own commit receipt.
 import copy
 import contextvars
 import datetime
+import hashlib
 from dataclasses import replace
 from pathlib import Path
 import uuid
@@ -253,6 +254,12 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
     """
     store = H.Store(entry)
     captured = capture or store.capture()
+    if action.get('expected_record_sha256') is not None:
+        expected = action['expected_record_sha256']
+        C._require(isinstance(expected, str) and len(expected) == 64
+                   and all(c in '0123456789abcdef' for c in expected), 'invalid_expected_record_sha256')
+        C._require(hashlib.sha256(captured.entry_bytes).hexdigest() == expected,
+                   'record changed since the caller read it')
     C._require(captured.commits, 'history_bootstrap_required')
     C._require(identity(captured.document['meta']['history']) == identity(captured.baseline), 'stale_view')
     C._require(captured.entry_bytes == store.render(captured), 'unresolved_view_edit')

@@ -33,6 +33,12 @@ pub struct Options {
     pub at: Option<String>,
     #[arg(long)]
     pub why: Option<String>,
+    /// Replace a stored scalar by an equal-valued rule, preserving its identity and history.
+    #[arg(long)]
+    pub reframe: bool,
+    /// Refuse if the locked active-history record differs from the caller's read.
+    #[arg(long)]
+    pub expected_record_sha256: Option<String>,
     #[arg(long)]
     pub as_of: Option<String>,
     #[arg(long = "in")]
@@ -151,6 +157,15 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>, Option<Sour
     ]);
     if let Some(profile) = &options.profile {
         map_mut(&mut a)?.insert("profile".into(), s(profile));
+    }
+    if options.reframe {
+        require(kind == "add", "--reframe goes with add and a derived rule")?;
+        map_mut(&mut a)?.insert("reframe".into(), V::Bool(true));
+    }
+    if let Some(expected) = &options.expected_record_sha256 {
+        require(expected.len() == 64 && expected.bytes().all(|b| b.is_ascii_hexdigit()),
+            "--expected-record-sha256 needs a SHA-256 digest")?;
+        map_mut(&mut a)?.insert("expected_record_sha256".into(), s(&expected.to_ascii_lowercase()));
     }
     for (key, value) in [
         ("shareability", options.shareability.as_deref()),
@@ -290,6 +305,18 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     };
     let route = WriteRoute::capture(&original, &cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
+    if options.reframe || options.expected_record_sha256.is_some() {
+        let entry = &route.paths()[0];
+        require(entry.exists() && crate::legacy_authoring::authority_route(entry)?
+            == crate::legacy_authoring::AuthorityRoute::History,
+            "reframe and expected-record-sha256 require active core/v1 history")?;
+        if let Some(expected) = &options.expected_record_sha256 {
+            use sha2::Digest;
+            let bytes = std::fs::read(entry)?;
+            require(format!("{:x}", sha2::Sha256::digest(&bytes)) == expected.to_ascii_lowercase(),
+                "record changed since the caller read it")?;
+        }
+    }
     let action =
         match contribution_routing::route(kind, options, action, source_body.as_ref(), route)? {
             contribution_routing::Outcome::Handled(value) => {
@@ -315,6 +342,8 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
         && crate::legacy_authoring::authority_route(entry)?
             == crate::legacy_authoring::AuthorityRoute::Legacy
     {
+        require(!options.reframe && options.expected_record_sha256.is_none(),
+            "reframe and expected-record-sha256 require active core/v1 history; migrate explicitly before reframing")?;
         return if route.pending_required()? {
             crate::legacy_authoring::write_advanced_local(&action, &route, source_body.as_ref())
         } else {

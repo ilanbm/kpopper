@@ -89,6 +89,13 @@ When the target or meaning is unresolved, preserve the quote without inventing a
 This stays as a captured report needing a decision. No fact is guessed or overwritten. This
 version does not invoke a language model to infer missing identity, intent, time, or relationships.
 
+A type or representation refusal is a decision for the primary, not an invitation to
+cast the submitted value. Follow [live representation evolution](EVOLUTION.md): inspect
+the subject and its dependencies, choose a source-grounded representation, and use
+supported guarded authoring. `add --reframe` is an explicit primary operation for an
+equal-valued scalar-to-rule transition on active core history, not an extra batch kind.
+Read back and check the resulting record before declaring the task complete.
+
 ## Several related changes from one source
 
 The primary agent can supply `updates` instead of `target`/`value`, using `update` now or
