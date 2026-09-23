@@ -743,10 +743,10 @@ differs by agent; see the [capability matrix](adapters/README.md#capability-matr
 
 ### After installing
 
-In Claude Code and Codex, kpopper opens with each new session. Installing creates no record:
-the first finding worth keeping creates `GROUNDING.yaml` (on native Windows, create it under
-WSL). To start from what already exists, ask your agent to map the project. The native
-runtime needs no Python, Node, Rust or Lean toolchain.
+In Claude Code and Codex, kpopper opens with each new session. Installing creates no record;
+your agent starts `GROUNDING.yaml` when it records the first finding worth keeping (on native
+Windows, under WSL). To start from what already exists, ask your agent to map the project.
+The native runtime needs no Python, Node, Rust or Lean toolchain.
 
 [Use the command line without an agent](docs/reference.md#try-it-from-the-command-line) ·
 [Python compatibility mode and troubleshooting](docs/plugin-runtime.md)
