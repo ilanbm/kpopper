@@ -100,7 +100,7 @@ jobs:
       - name: Build the existing ordinary Lean test resource
         shell: bash
         run: |
-          KPOPPER_CI_ORDINARY=$(python -c 'import os; from scripts.session.core import setup; print(setup(os.environ["KPOPPER_LEAN_ROOT"])["cache"])')
+          KPOPPER_CI_ORDINARY=$(sh native/ci/build_ordinary_program.sh "$KPOPPER_LEAN_ROOT")
           echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
       # Compiled Rust dependencies are kept per target and build profile, so the release-only
       # build of a publish run and the test build of a check run each restore their own. The
