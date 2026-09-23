@@ -173,7 +173,7 @@ lanes.
 |---|---|
 | Documentation, skills, examples, assets, community files or templates, edited in place | None: mandatory contracts and record checks still run. |
 | Rust sources and tests under `native/` | The native command on every platform except Intel macOS. |
-| Shared Python code, tests, fixtures, adapters, hooks or this repository's record | The Python suite on 3.9 and 3.13 and the checks that read the changed file. |
+| Shared Python code, tests, fixtures, adapters, hooks or this repository's record | The Python suite on 3.13 and the checks that read the changed file. |
 | Files added or removed | Also the lanes whose tests scan the checkout. |
 | Cargo manifests, the build script, installers, packaging scripts, committed runtimes or platform workflows | The affected lanes on every platform. |
 | The CI selection, the read audit, `check.yml`, an unclaimed path, an empty diff or unavailable Git history | Everything, on every platform. |

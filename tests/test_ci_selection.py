@@ -195,14 +195,14 @@ class GitRange(unittest.TestCase):
 
 
 class RequiredResults(unittest.TestCase):
-    def results(self, changes, pull_request=True):
+    def results(self, changes):
         selected = CI.select(changes)
         scope = CI.platforms(changes)
         return {"changes": {"result": "success", "outputs": {
                     **{k: str(v).lower() for k, v in selected.items()},
                     "platforms": scope,
                     "test_suites": json.dumps(CI.test_suites(selected)),
-                    "test_matrix": json.dumps(CI.test_matrix(selected, pull_request)),
+                    "test_matrix": json.dumps(CI.test_matrix(selected)),
                     "runtime_targets": json.dumps(CI.runtime_targets(scope))}},
                 "record": {"result": "success"},
                 **{job: {"result": "success" if any(selected[lane] for lane in lanes) else "skipped"}
@@ -238,7 +238,7 @@ class RequiredResults(unittest.TestCase):
                 self.assertTrue(CI.required_failures(needs))
 
     def test_main_cannot_run_the_pull_request_platform_subset(self):
-        needs = self.results(["scripts/cli.py"], pull_request=False)
+        needs = self.results(["scripts/cli.py"])
         self.assertTrue(CI.required_failures(needs, pull_request=False))
 
     def test_truncated_plans_and_matrices_cannot_pass(self):
@@ -267,10 +267,12 @@ class WorkflowCoverage(unittest.TestCase):
                          ALL | {"platforms", "test_suites", "test_matrix", "runtime_targets"})
         self.assertEqual({lane for lanes in CI.JOB_LANES.values() for lane in lanes}, ALL)
 
-    def test_runtime_targets_are_the_producer_matrix_called_directly(self):
+    def test_runtime_targets_are_the_producer_platforms_called_directly_on_one_interpreter(self):
         producer = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
-        self.assertEqual([dict(row) for row in producer["jobs"]["target"]["strategy"]["matrix"]["include"]],
-                         [dict(row) for row in CI.RUNTIME_TARGETS])
+        rows = producer["jobs"]["target"]["strategy"]["matrix"]["include"]
+        self.assertEqual([(row["runner"], row["target"]) for row in rows],
+                         [(row["runner"], row["target"]) for row in CI.RUNTIME_TARGETS])
+        self.assertEqual({row["pythons"] for row in CI.RUNTIME_TARGETS}, {'["3.13"]'})
         job = self.jobs()["reasoning-runtime"]
         self.assertEqual(job["uses"], "./.github/workflows/reasoning-target.yml")
         self.assertEqual(job["strategy"]["matrix"]["include"], "${{ fromJSON(needs.changes.outputs.runtime_targets) }}")
@@ -289,23 +291,20 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("without-darwin-x86_64", job["with"]["target"])
         self.assertIn("needs.changes.outputs.platforms == 'all'", job["with"]["target"])
 
-    def test_shards_cover_supported_interpreters_and_docs_avoid_extra_machines(self):
+    def test_shards_run_on_one_interpreter_and_docs_use_one_machine(self):
         rows = CI.test_matrix(CI.select(["scripts/cli.py"]))["include"]
-        self.assertEqual({r["group"] for r in rows if r["python"] == "3.9"}, set(range(1, 9)))
-        self.assertEqual({r["group"] for r in rows if r["python"] == "3.13"}, set(range(1, 5)))
+        self.assertEqual({r["python"] for r in rows}, {"3.13"})
+        self.assertEqual({r["group"] for r in rows}, set(range(1, 5)))
         docs = CI.test_matrix({lane: lane == "documents" for lane in CI.LANE_NAMES})["include"]
-        self.assertEqual(len(docs), 2)
+        self.assertEqual(len(docs), 1)
         self.assertTrue(all(r["splits"] == 1 for r in docs))
-        main = CI.test_matrix(CI.select(["scripts/cli.py"]), pull_request=False)["include"]
-        self.assertEqual({r["python"] for r in main}, {"3.13"})
-        self.assertEqual(len(main), 4)
 
-    def test_focused_example_runs_installed_package_on_supported_python_versions(self):
+    def test_focused_example_runs_installed_package_on_the_tested_python(self):
         jobs = self.jobs()
         example = jobs["examples"]
         self.assertEqual(set(example["needs"]), {"changes", "record"})
         self.assertEqual(example["if"], "needs.changes.outputs.examples == 'true'")
-        self.assertEqual(example["strategy"]["matrix"]["python"], ["3.9", "3.13"])
+        self.assertEqual(example["strategy"]["matrix"]["python"], ["3.13"])
         commands = [step.get("run", "") for step in example["steps"]]
         self.assertIn("python -m pip install .", commands)
         self.assertIn("python .github/scripts/check_research_example.py", commands)

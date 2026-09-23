@@ -80,8 +80,8 @@ DOCUMENT_INPUTS = DOM_SUITE + (
 )
 
 LANES = {
-    # The Python suite on 3.9 and 3.13. Several of its tests scan the checkout, so a file
-    # added or removed anywhere can change what they see.
+    # The Python suite, on 3.13. Several of its tests scan the checkout, so a file added or
+    # removed anywhere can change what they see.
     "python": Lane(PYTHON_TESTED, lists=("*",), ignores=DOM_SUITE),
     # Standalone documents: their Python tests and the offline DOM suite.
     "documents": Lane(PYTHON_PACKAGE + PYTHON_RUNNER + DOCUMENT_INPUTS, lists=("*",), enforced=False),
@@ -156,13 +156,15 @@ PLATFORM_INPUTS = (
     ".github/workflows/reasoning-target.yml", "pyproject.toml", ".claude-plugin/*", ".codex-plugin/*",
 ) + CI_MACHINERY
 INTEL_MACOS = "darwin-x86_64"
-# The platform matrix of reasoning-runtime.yml, which check.yml runs directly.
+# The platforms of reasoning-runtime.yml, which check.yml runs directly on the one interpreter
+# the retained Python distribution is tested on. That workflow keeps its own interpreter list:
+# it is recorded in the corresponding-source archive.
 RUNTIME_TARGETS = (
-    {"runner": "ubuntu-24.04", "target": "linux-x86_64", "pythons": '["3.9", "3.13"]'},
-    {"runner": "ubuntu-24.04-arm", "target": "linux-aarch64", "pythons": '["3.9", "3.13"]'},
+    {"runner": "ubuntu-24.04", "target": "linux-x86_64", "pythons": '["3.13"]'},
+    {"runner": "ubuntu-24.04-arm", "target": "linux-aarch64", "pythons": '["3.13"]'},
     {"runner": "macos-15", "target": "darwin-arm64", "pythons": '["3.13"]'},
-    {"runner": "macos-15-intel", "target": INTEL_MACOS, "pythons": '["3.9", "3.13"]'},
-    {"runner": "windows-2022", "target": "windows-x86_64", "pythons": '["3.9", "3.13"]'},
+    {"runner": "macos-15-intel", "target": INTEL_MACOS, "pythons": '["3.13"]'},
+    {"runner": "windows-2022", "target": "windows-x86_64", "pythons": '["3.13"]'},
 )
 
 TEST_SUITES = ("core", "documents", "reasoning", "session", "other")
@@ -354,18 +356,13 @@ def test_suites(selected):
     return ["documents"] if selected["documents"] else []
 
 
-def test_matrix(selected, pull_request=True):
+def test_matrix(selected):
     if not (selected["python"] or selected["documents"]):
         return {"include": []}
-    rows = []
-    for python in (("3.9", "3.13") if pull_request else ("3.13",)):
-        # The slower interpreter gets more machines and CPU headroom for the
-        # subprocess-heavy history tests. Document-only changes need one group.
-        splits = (8 if python == "3.9" else 4) if selected["python"] else 1
-        workers = 2 if python == "3.9" else 4
-        rows.extend({"python": python, "group": group, "splits": splits, "workers": workers}
-                    for group in range(1, splits + 1))
-    return {"include": rows}
+    # Document-only changes need one group.
+    splits = 4 if selected["python"] else 1
+    return {"include": [{"python": "3.13", "group": group, "splits": splits, "workers": 4}
+                        for group in range(1, splits + 1)]}
 
 
 def tree_directories(revision, cwd=None):
@@ -411,7 +408,7 @@ def required_failures(needs, pull_request=True):
     except (TypeError, ValueError):
         failures.append("missing or invalid test plan")
     try:
-        if json.loads(outputs.get("test_matrix", "null")) != test_matrix(selected, pull_request):
+        if json.loads(outputs.get("test_matrix", "null")) != test_matrix(selected):
             failures.append("test matrix omits a required Python version or shard")
     except (TypeError, ValueError):
         failures.append("missing or invalid test matrix")
@@ -453,7 +450,7 @@ def main():
     selected = select(changes, full=args.full, push=args.push, base_dirs=base_dirs, head_dirs=head_dirs)
     scope = platforms(changes, full=args.full, push=args.push)
     suites = test_suites(selected)
-    matrix = test_matrix(selected, pull_request=not (args.push or args.full))
+    matrix = test_matrix(selected)
     targets = runtime_targets(scope)
     print(json.dumps({"changes": changes, "selected": selected, "platforms": scope,
                       "test_suites": suites, "test_matrix": matrix, "runtime_targets": targets}, indent=2))

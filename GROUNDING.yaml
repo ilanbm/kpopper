@@ -1048,6 +1048,14 @@ sources:
          without unlikely; introduce falsification through ways to challenge the historical claim;
          use a direct and accurate title describing his contribution; explain that kpopper uses this
          discipline for a picture of reality that can be challenged and revised."
+  s.2026_09_23_python_versions_in_ci:
+    name: "The Python version checks, once Python is on its way out"
+    asked: "Paraphrased maintainer request: Python is to be removed soon, so the checks on Python
+            versions may no longer be needed; after seeing the numbers, remove Python 3.9 from CI
+            completely, with no smaller job in its place."
+    of: "check.yml runs created 2026-09-16 to 2026-09-23 (422 runs, 8,968 jobs) and every failed
+         check.yml run since 2026-09-03 (68 runs), read through the GitHub Actions API on 2026-09-23"
+    read: "2026-09-23"
   s.2026_09_23_readme_checkable_link:
     name: "Maintainer report on the README link behind deterministically checkable"
     asked: "the \"deterministically checkable.\" link in the readme: 1. leads to a collapsed section
@@ -2049,6 +2057,23 @@ known:
     from: s.ci_execution_evidence
     at: "https://github.com/ilanbm/kpopper/actions/runs/35288867621 ; installed job 105432604343 and
          Windows build 105427309644."
+  m.ci_python39_only_failures:
+    name: "Failed checks that Python 3.9 alone caught"
+    v: "2 of 68 failed runs, and neither was a Python incompatibility: a remeasure test that crossed
+        midnight UTC, and two command timeouts on the slower interpreter. In the 32 runs where both
+        interpreters failed, the same tests failed on each"
+    from: s.2026_09_23_python_versions_in_ci
+    at: "every failed check.yml run from 3 to 23 September 2026, failing tests compared by name
+         within each run"
+    as_of: "2026-09-23"
+  m.ci_python39_share:
+    name: "Share of the checks spent on Python 3.9"
+    v: "30,141 of 75,930 job-minutes (40 percent) and 2,968 of 8,968 jobs ran on Python 3.9; so did
+        5,943 of the 21,198 Darwin job-minutes, all of them on Intel"
+    from: s.2026_09_23_python_versions_in_ci
+    at: "check.yml runs created 16-23 September 2026, each job timed from its start to its
+         completion"
+    as_of: "2026-09-23"
   m.ci_python_serial_baseline:
     name: "Measured serial Python suite before execution changes"
     v: 2280.21
@@ -5885,6 +5910,28 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.python_checked_on_one_interpreter:
+    name: "The retained Python is checked on one interpreter"
+    verdict: "CI runs the retained Python - its suite, the installed wheel, sdist and plugin, and
+              the research example - on Python 3.13 only"
+    because: "The native runtime is the default since 0.9.0, so Claude Code and Codex run no Python,
+              and the PyPI line is not built from this tree. The Python 3.9 jobs took two fifths of
+              the checks and caught nothing 3.13 missed."
+    rests_on: [m.ci_python39_share, m.ci_python39_only_failures, s.native_default_release]
+    reopened_by: "Code that passed CI on 3.13 breaks on Python 3.9 to 3.12 for someone who runs this
+                  checkout's Python - the legacy runtime, or an adapter that calls python3 on a stock
+                  macOS, where python3 is 3.9.6 - before Python leaves the repository."
+    from: s.2026_09_23_python_versions_in_ci
+    as_of: "2026-09-23"
+    seen:
+      m.ci_python39_share: "30,141 of 75,930 job-minutes (40 percent) and 2,968 of 8,968 jobs ran on
+                            Python 3.9; so did 5,943 of the 21,198 Darwin job-minutes, all of them on
+                            Intel"
+      m.ci_python39_only_failures: "2 of 68 failed runs, and neither was a Python incompatibility: a
+                                    remeasure test that crossed midnight UTC, and two command
+                                    timeouts on the slower interpreter. In the 32 runs where both
+                                    interpreters failed, the same tests failed on each"
+      s.native_default_release: "read 2026-09-22"
   d.question_closes_in_place:
     name: "An open question ends with answer, in place"
     rests_on: [s.2026_09_23_answer_and_correct]

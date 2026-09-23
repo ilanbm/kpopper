@@ -9,7 +9,7 @@ directories.
 
 | Lane | Jobs | Reads |
 |---|---|---|
-| `python` | Python suite, 3.9 and 3.13 shards | The package, tests, fixtures, skills, adapters, hooks and plugin manifests |
+| `python` | Python suite on 3.13, in shards | The package, tests, fixtures, skills, adapters, hooks and plugin manifests |
 | `documents` | Document tests and the offline DOM suite | The package and the standalone-document sources and tests |
 | `session` | Checked session with the reviewed Lean kernel | The package, its session tests and the Lean kernel |
 | `installed` | Wheel, sdist and plugin installs on each native target | The package, everything the plugin carries, the committed runtimes |
@@ -45,7 +45,7 @@ plans, an unexpected platform scope and unexpected skips.
 
 The reviewed inputs for `examples/dark-matter/advanced` select a focused `examples`
 family. That job installs the package and runs the research exercise on Linux with
-Python 3.9 and 3.13, using the committed native runtime. It compares the result with
+Python 3.13, using the committed native runtime. It compares the result with
 the published capture and checks the `jq` projection, including preservation of
 unknown and error states. Example-only PRs keep the mandatory checks but do not
 select the Python test shards, document UI, session matrix, installed-platform
@@ -66,16 +66,14 @@ documents, reasoning, session and other. The `python` lane runs all suites; the 
 lane alone runs the documents suite. New tests enter the other suite until classified. The execution
 helper discovers importable test files, rejects an empty or unknown selection,
 and splits individual unittest cases by measured duration with pytest-split.
-Full PRs use eight Linux machines with two processes each for Python 3.9, and four
-machines with four processes each for Python 3.13. A push to main uses 3.13 for these shards.
-Document-only selections use one machine per interpreter. At most twelve Python
-jobs run concurrently, leaving capacity for the native and session checks.
+The shards run on Python 3.13, on four Linux machines with four processes each, for
+pull requests and main alike. Document-only selections use one machine.
 pytest-xdist uses work stealing inside each machine so a slow file cannot hold an
-entire group on one process. Dependencies are pinned to versions supporting Python
-3.9; they are CI dependencies, not package dependencies.
+entire group on one process. The runner and its plugins are pinned CI dependencies,
+not package dependencies.
 
-`.github/test-durations.json` contains the maximum observed per-test durations
-across both interpreters from [run 35345933376](https://github.com/ilanbm/kpopper/actions/runs/35345933376).
+`.github/test-durations.json` contains the maximum per-test durations observed on
+Python 3.9 and 3.13 in [run 35345933376](https://github.com/ilanbm/kpopper/actions/runs/35345933376).
 The 3.9 sample includes two CLI timeout failures; these are scheduling weights,
 not claims of successful execution. New tests receive the average duration and
 are still selected. Refresh weights from complete JUnit reports when the suite
@@ -92,13 +90,13 @@ unexecuted tests fail the gate.
 Before provisioning expensive jobs, `changes` validates the committed native
 bundles, their source identity and the corresponding-source archive. All expensive
 lanes also require the inexpensive record and contract job to succeed. `check.yml` runs
-`reasoning-target.yml` once per selected target, with the matrix of `reasoning-runtime.yml`;
-selection lives in `check.yml` because both reasoning workflows are recorded in the
-corresponding-source archive. Each target's build and installed tests depend only on that
-target. On main all five native targets and the nine Python/platform compatibility
-combinations are covered. Installed wheel, sdist and plugin checks still exercise
-the retained Python distribution; native installed checks use the committed bundles,
-cold runtime caches and no compiler PATH.
+`reasoning-target.yml` once per selected target, on the platforms of `reasoning-runtime.yml`
+and Python 3.13; selection lives in `check.yml` because both reasoning workflows are recorded
+in the corresponding-source archive, so `reasoning-runtime.yml` keeps its own interpreter
+list for runs started by hand. Each target's build and installed tests depend only on that
+target. On main all five native targets are covered. Installed wheel, sdist and plugin
+checks still exercise the retained Python distribution; native installed checks use the
+committed bundles, cold runtime caches and no compiler PATH.
 
 Native builds cache pinned download archives and successfully tested GMP prefixes.
 Cache keys include the target, source and recipe hashes, compiler/build tools,

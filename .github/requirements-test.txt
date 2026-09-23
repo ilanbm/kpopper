@@ -1,4 +1,4 @@
-# Keep Python 3.9 support while using the same runner on both CI interpreters.
+# The test runner and its plugins, pinned for the Python suite's CI shards.
 pytest==8.4.2
 pytest-xdist==3.8.0
 pytest-split==0.10.0
