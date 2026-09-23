@@ -1937,8 +1937,14 @@ impl Projection<'_> {
             {
                 continue;
             }
+            // Only a reading some kept version rested on can have moved under it, and a
+            // computed value costs a run of the ordinary program: ask for it only then.
+            let listeners = listened_until(&kept, id);
+            if listeners.is_empty() {
+                continue;
+            }
             let now = reader.value(id)?;
-            if let Some((judgment, day)) = listened_until(&kept, id)
+            if let Some((judgment, day)) = listeners
                 .into_iter()
                 .find(|(_, _, saw)| {
                     **saw != V::Null && now != V::Null && !R::same_legacy(saw, &now)
