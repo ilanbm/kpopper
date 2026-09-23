@@ -29,24 +29,78 @@ pub struct Options {
     #[arg(long = "from", value_name = "REF")]
     pub from_ref: Option<String>,
 }
+/// Whether a reader's subject names a record file rather than an entry. pull and affects
+/// read the extension as given; the other readers read it in either case.
+fn names_a_file(command: &str, subject: &str) -> bool {
+    let filename = if ["pull", "affects"].contains(&command) {
+        subject.to_owned()
+    } else {
+        subject.to_lowercase()
+    };
+    filename.ends_with(".yaml") || filename.ends_with(".yml")
+}
+/// Where a named record file is looked for: under HOME for `~/`, else in `cwd`.
+fn located(name: &str, cwd: &Path) -> Result<PathBuf> {
+    Ok(if let Some(name) = name.strip_prefix("~/") {
+        PathBuf::from(std::env::var_os("HOME").ok_or_else(|| error("home_directory_unavailable"))?)
+            .join(name)
+    } else {
+        cwd.join(name)
+    })
+}
+const NO_RECORD_HERE: &str = ": no record here. Run this from the directory the record sits in, or name the record file as an argument.";
+/// The Python reader's refusal for a record that is not there. It names the first file
+/// the command named that is not there, as it was typed, or GROUNDING.yaml when it named
+/// none. A live read of a configured Simple project takes its one record for the entry
+/// names at the project's root, and names that record in full.
+pub(crate) fn no_record_here<'a>(
+    named: impl IntoIterator<Item = &'a str>,
+    cwd: &Path,
+    live: bool,
+) -> crate::Error {
+    let mut files = named
+        .into_iter()
+        .map(|name| (name.to_owned(), located(name, cwd).ok()))
+        .collect::<Vec<_>>();
+    if files.is_empty() {
+        files.push(("GROUNDING.yaml".into(), Some(cwd.join("GROUNDING.yaml"))));
+    }
+    if live
+        && let Some(first) = &files[0].1
+        && let Ok(Some(record)) =
+            crate::project_modes::simple_record(std::slice::from_ref(first), cwd)
+    {
+        files[0] = (record.display().to_string(), Some(record));
+    }
+    let missing = files.iter().find(|(_, path)| {
+        path.as_ref().is_some_and(|path| {
+            !path.exists()
+                && crate::source_inventory::glob(path).is_ok_and(|found| found.is_empty())
+        })
+    });
+    let name = &missing.unwrap_or(&files[0]).0;
+    crate::Error(format!("{name}{NO_RECORD_HERE}"))
+}
+/// A capture that found no record file, told as `no_record_here` tells it. Any other
+/// failure stands as it is.
+pub(crate) fn explain_missing<'a>(
+    failure: crate::Error,
+    named: impl IntoIterator<Item = &'a str>,
+    cwd: &Path,
+    live: bool,
+) -> crate::Error {
+    if failure.0 == "missing_record" {
+        no_record_here(named, cwd, live)
+    } else {
+        failure
+    }
+}
 fn files(options: &Options, cwd: &Path, command: &str) -> Result<(Vec<PathBuf>, Vec<String>)> {
     let mut paths = vec![];
     let mut seeds = vec![];
     for s in &options.subjects {
-        let filename = if ["pull", "affects"].contains(&command) {
-            s.clone()
-        } else {
-            s.to_lowercase()
-        };
-        if filename.ends_with(".yaml") || filename.ends_with(".yml") {
-            let expanded = if let Some(s) = s.strip_prefix("~/") {
-                PathBuf::from(
-                    std::env::var_os("HOME").ok_or_else(|| error("home_directory_unavailable"))?,
-                )
-                .join(s)
-            } else {
-                cwd.join(s)
-            };
+        if names_a_file(command, s) {
+            let expanded = located(s, cwd)?;
             let found = crate::source_inventory::glob(&expanded)?;
             if found.is_empty() {
                 paths.push(absolute(&expanded)?);
@@ -245,10 +299,13 @@ fn orientation(source: &crate::ordinary_source::Source) -> Vec<String> {
         vec![format!("  {}", places.join(" | "))]
     }
 }
-/// Whether a failure is the reader's account of a record whose field roles it cannot
-/// read. Commands print it as it stands, with exit status 1, as the Python reader does.
+/// Whether a failure is the reader's account of a record it cannot read: one whose field
+/// roles it cannot take, one that is not there, or one whose file does not parse. Commands
+/// print it as it stands, with exit status 1, as the Python reader does.
 pub fn unreadable_record(failure: &crate::Error) -> bool {
     crate::ordinary_fields::explains_unreadable(failure)
+        || failure.0.ends_with(NO_RECORD_HERE)
+        || crate::ordinary_yaml_diagnostic::explains_record(failure)
 }
 pub fn run_auto(
     command: &str,
@@ -329,7 +386,11 @@ pub fn run(
         }
     }
     let capture =
-        source_capture::capture_ordinary_source_with_runtime(&paths, &cwd, mode, None, runtime)?;
+        source_capture::capture_ordinary_source_with_runtime(&paths, &cwd, mode, None, runtime)
+            .map_err(|e| {
+                let named = options.subjects.iter().filter(|s| names_a_file(command, s));
+                explain_missing(e, named.map(String::as_str), &cwd, mode == ReadMode::Live)
+            })?;
     if let Some(reference) = options.from_ref.as_deref() {
         crate::require(command == "pull", "--from is available only with pull")?;
         crate::require(!options.history, "--from cannot be combined with --history")?;

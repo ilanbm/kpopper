@@ -1206,7 +1206,13 @@ fn main() {
         })();
         match result {
             Ok(output) => {
-                print!("{}", output.text);
+                // open's reply that the record is unavailable is a refusal: stderr, as
+                // Python writes it. Its JSON form stays on stdout.
+                if command == "open" && output.code != 0 && !args.json {
+                    eprint!("{}", output.text);
+                } else {
+                    print!("{}", output.text);
+                }
                 if output.code != 0 {
                     std::process::exit(output.code);
                 }

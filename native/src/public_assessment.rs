@@ -140,7 +140,10 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
     };
     let runtime =
         crate::public_workspace::runtime_for_paths(&paths, cwd, options.profile.as_deref())?;
-    let report = report_value(options, cwd, mode, runtime.as_ref())?;
+    let report = report_value(options, cwd, mode, runtime.as_ref()).map_err(|e| {
+        let named = options.records.iter().filter_map(|p| p.to_str());
+        crate::public_readers::explain_missing(e, named, cwd, mode == ReadMode::Live)
+    })?;
     if string_is(&map(&report)?["assessment_profile"], A::PROFILE) {
         report.python_pretty_json()
     } else {

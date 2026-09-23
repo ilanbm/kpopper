@@ -83,7 +83,13 @@ pub fn run(
                 "export requires string entry and dependency IDs; quote numeric IDs in YAML".into(),
             )
         } else {
-            error
+            let named = options.records.iter().filter_map(|p| p.to_str());
+            crate::public_readers::explain_missing(
+                error,
+                named,
+                cwd,
+                mode == crate::source_capture::ReadMode::Live,
+            )
         }
     })
 }
