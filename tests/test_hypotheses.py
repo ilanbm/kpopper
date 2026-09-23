@@ -20,7 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 FIXTURE = ROOT / "tests" / "fixtures" / "hypotheses"
 RECORD = FIXTURE / "PROVENANCE.yaml"
-PAGE_FIXTURE = ROOT / "tests" / "fixtures" / "page"
+PAGE_FIXTURE = ROOT / "native" / "tests" / "fixtures" / "page"
 
 sys.path.insert(0, str(SCRIPTS))
 import provenance as P  # noqa: E402

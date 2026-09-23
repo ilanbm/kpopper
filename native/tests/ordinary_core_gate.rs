@@ -136,11 +136,11 @@ fn core_page() -> Vec<(&'static str, &'static str)> {
     vec![
         (
             "GROUNDING.yaml",
-            include_str!("../../tests/fixtures/core-page/GROUNDING.yaml"),
+            include_str!("fixtures/core-page/GROUNDING.yaml"),
         ),
         (
             ".kpopper/view.yaml",
-            include_str!("../../tests/fixtures/core-page/view.yaml"),
+            include_str!("fixtures/core-page/view.yaml"),
         ),
     ]
 }

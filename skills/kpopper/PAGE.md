@@ -488,7 +488,7 @@ ambiguity is an error and never a skip.
 
 Everything below is read, checked and reported now; where the page does not yet draw a field,
 `--verify` says so in a note rather than staying silent. A new field goes into the fixture
-record in `tests/fixtures/page` first, so the reader, the page and the tests agree on its shape.
+record in `native/tests/fixtures/page` first, so the reader, the page and the tests agree on its shape.
 
 **In the brief**
 

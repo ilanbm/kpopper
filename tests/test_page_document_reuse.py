@@ -9,7 +9,7 @@ every call, because the counts taken before a write, the arrangement facts taken
 and the read-back after it must each see the record as it stands at that moment - the write
 itself changes what the page counts. That asymmetry is the whole subject of this file.
 
-Runs against the fixture record in tests/fixtures/page with no browser and no network:
+Runs against the fixture record in native/tests/fixtures/page with no browser and no network:
 
     python3 -m unittest discover -s tests
 """
@@ -29,7 +29,7 @@ from scripts import pending_grounding as G, pending_publication as C, project_mo
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
-FIXTURE = ROOT / "tests" / "fixtures" / "page"
+FIXTURE = ROOT / "native" / "tests" / "fixtures" / "page"
 
 sys.path.insert(0, str(SCRIPTS))
 import provenance as P      # noqa: E402
@@ -390,7 +390,7 @@ class AnAdvancedRecordWithSomethingPending(HandoverMixin, unittest.TestCase):
                     doc=P.load(self.paths, read_mode="frozen"))
 
 
-CORE_FIXTURE = ROOT / "tests" / "fixtures" / "core-page" / "GROUNDING.yaml"
+CORE_FIXTURE = ROOT / "native" / "tests" / "fixtures" / "core-page" / "GROUNDING.yaml"
 
 LEGACY_BASE = """\
 meta:

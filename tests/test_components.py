@@ -18,7 +18,7 @@ import render_page as R
 from page_lint import Surface, lint_output
 from page_words import WORDS
 
-FIXTURE = ROOT / 'tests/fixtures/page'
+FIXTURE = ROOT / 'native/tests/fixtures/page'
 
 
 class Components(unittest.TestCase):
