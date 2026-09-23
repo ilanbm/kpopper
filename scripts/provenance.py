@@ -1272,27 +1272,38 @@ def infer(doc):
 
     fields = {"deps": pick("deps")}
     if not fields["deps"]:
-        # The checked-session transport already accepts this narrow starting shape.
-        # Let the reader/writer do so too: a first source and finding need not invent
-        # a judgment. Unknown collections or judgment-shaped fields still require
-        # role inference; this must never hide a misspelled dependency declaration.
+        # A record before its first judgment has no graph yet, and that is not a lost one:
+        # a first source and finding need not invent a judgment. Its sections are read by
+        # what their entries are, as they are once a judgment exists, so `facts:` holding
+        # values reads as `known:` does. A misspelled dependency declaration must still
+        # never pass: a judgment's own fields, or a list naming what is not an entry,
+        # refuse the record in any section, and a section under a name of the record's
+        # own reads only when every entry in it is a value or a source.
         source_collections = {k: v for k, v in collections.items() if k != "meta"}
         judgment_fields = {"rests_on", "wrong_if", "seen", "verdict", "reopened_by", "blocked_on"}
         # A record born with only its head - meta, and nothing yet - is the moment before
         # the first entry, not a record that lost its graph.
         header_only = bool(doc) and set(doc) <= {"meta", "schema"}
+        # The method's own sections read whatever their entries hold, as they always have.
         conventional = {'known', 'sources', 'open', 'questions'}
-        custom_sources = all(collection in conventional or all(
-            isinstance(body, dict) and not any(key in body for key in ('v', 'quoted', 'rule'))
-            and any(body.get(key) for key in ('asked', 'file', 'url', 'read'))
-            for body in members.values())
-            for collection, members in source_collections.items())
-        if (header_only or source_collections and custom_sources) \
+
+        def value_or_source(body):
+            """A value - a bare scalar, or `v`, `quoted` or `rule` - or a source."""
+            if not isinstance(body, dict):
+                return True
+            return any(key in body for key in ('v', 'quoted', 'rule')) \
+                or any(body.get(key) for key in ('asked', 'file', 'url', 'read'))
+
+        plain_sections = all(collection in conventional or all(map(value_or_source, members.values()))
+                             for collection, members in source_collections.items())
+        if (header_only or source_collections and plain_sections) \
                 and not unresolved and not any(
                     judgment_shaped(body, judgment_fields) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
+            # A role the schema already names is the one the first judgment is written with.
             return {nid for group in source_collections.values() for nid in group} | (ids & set(COMPUTED)), {}, \
-                {"deps": "rests_on", "snapshot": "seen", "predicate": "wrong_if"}
+                {role: sch.get(role) or default for role, default in
+                 (("deps", "rests_on"), ("snapshot", "seen"), ("predicate", "wrong_if"))}
         raise SystemExit(_no_deps(unresolved))
     # The snapshot and the predicate are judgment fields, so they are voted on among the
     # bodies that carry the dependency field: a derived entry's rule has a predicate's
