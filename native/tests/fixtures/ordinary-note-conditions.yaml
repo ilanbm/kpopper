@@ -1,0 +1,32 @@
+schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}
+known:
+  p.a: {v: 1}
+  p.b: {v: 12}
+  p.total: {rule: {op: add, args: [{ref: p.a}, {ref: p.b}]}}
+  p.pending: {name: awaiting the reading}
+judgments:
+  d.holds:
+    verdict: over the line
+    rests_on: [p.b]
+    seen: {p.b: 12}
+    wrong_if: {op: gt, args: [{ref: p.b}, {num: '10'}]}
+  d.quiet:
+    verdict: under the line
+    rests_on: [p.a]
+    seen: {p.a: 1}
+    wrong_if: {op: gt, args: [{ref: p.a}, {num: '10'}]}
+  d.sum:
+    verdict: the sum stays small
+    rests_on: [p.total]
+    seen: {p.total: 13}
+    wrong_if: p.total > 20
+  d.sum_over:
+    verdict: the sum is past five
+    rests_on: [p.total]
+    seen: {p.total: 13}
+    wrong_if: p.total > 5
+  d.open:
+    verdict: nothing read yet
+    rests_on: [p.pending]
+    seen: {p.pending: none}
+    wrong_if: {op: gt, args: [{ref: p.pending}, {num: '1'}]}

@@ -148,6 +148,94 @@ fn ordinary_check_note_families_match_python_fixture() {
     );
 }
 
+/// `check` on a record, against what the Python reader prints for the same record.
+fn assert_check_matches_reference(record: &str, reference: &str, code: i32) {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(
+        output.status.code(),
+        Some(code),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), reference);
+}
+
+#[test]
+fn check_notes_a_declared_hole_and_a_comparison_nothing_decides_as_python_does() {
+    assert_check_matches_reference(
+        include_str!("fixtures/ordinary-note-holes.yaml"),
+        include_str!("fixtures/ordinary-note-holes.stdout"),
+        1,
+    );
+}
+
+#[test]
+fn check_clips_a_moved_reading_at_the_reference_forty_characters() {
+    assert_check_matches_reference(
+        include_str!("fixtures/ordinary-note-moved.yaml"),
+        include_str!("fixtures/ordinary-note-moved.stdout"),
+        0,
+    );
+}
+
+#[test]
+fn check_asks_no_review_of_a_replaced_arrangement_and_counts_judgments_on_priors() {
+    assert_check_matches_reference(
+        include_str!("fixtures/ordinary-note-arrangement.yaml"),
+        include_str!("fixtures/ordinary-note-arrangement.stdout"),
+        0,
+    );
+}
+
+#[test]
+fn a_structured_condition_nothing_can_compute_fails_check_unless_its_hole_is_declared() {
+    // Without the ordinary program a structured condition cannot be computed, and check
+    // says so rather than passing it; a declared hole turns the failure into a note.
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let record = concat!(
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\n",
+        "known:\n",
+        "  order.price: {v: 20}\n",
+        "judgments:\n",
+        "  c.budget:\n",
+        "    verdict: within budget\n",
+        "    rests_on: [order.price]\n",
+        "    seen: {order.price: 20}\n",
+        "    wrong_if: {op: gt, args: [{ref: order.price}, {num: '10'}]}\n",
+    );
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "FAIL c.budget: condition cannot be computed: ordinary expression program is not configured\n",
+            "\n",
+            "1 judgments, 2 entries, 1 problems\n",
+        )
+    );
+
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        format!("{record}    blocked_on: the evaluator is not installed here yet\n"),
+    )
+    .unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "NOTE c.budget: condition cannot be computed: ordinary expression program is not configured\n",
+            "\n",
+            "1 judgments, 2 entries, 0 problems, 1 declared\n",
+        )
+    );
+}
+
 #[test]
 fn declared_blocked_note_does_not_change_the_flagged_counter() {
     let temp = tempfile::tempdir().unwrap();
@@ -202,6 +290,8 @@ fn ordinary_check_rejects_manual_expression_and_dependency_bypasses() {
         .lines()
         .filter(|line| line.starts_with("FAIL "))
         .collect::<Vec<_>>();
+    // This reads without the ordinary program, so the structured condition cannot be
+    // computed and says so; with the program it does not hold, and that line is absent.
     assert_eq!(
         failures,
         vec![
@@ -211,10 +301,11 @@ fn ordinary_check_rejects_manual_expression_and_dependency_bypasses() {
             "FAIL p.unknown: rule: unknown references: p.ghost",
             "FAIL d.reopened: reopened_by reads as a comparison (p.a > 9) - a predicate belongs in wrong_if, where it is evaluated; a re-opener is the sign a person reads",
             "FAIL d.structured: predicate reads p.b, which it does not declare as a dependency - a change to it would never reach this",
+            "FAIL d.structured: condition cannot be computed: ordinary expression program is not configured",
             "FAIL d.text: predicate reads p.b, which it does not declare as a dependency - a change to it would never reach this",
         ]
     );
-    assert!(text.ends_with("3 judgments, 8 entries, 7 problems, 1 declared\n"));
+    assert!(text.ends_with("3 judgments, 8 entries, 8 problems, 1 declared\n"));
 }
 #[test]
 fn actual_ordinary_cli_reads_physical_hypotheses_and_private_metadata_without_writes() {

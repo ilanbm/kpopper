@@ -1,0 +1,28 @@
+schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}
+sources:
+  s.doc: {name: doc, read: "2026-09-01"}
+known:
+  a.value: {v: 3, from: s.doc}
+  b.value: {v: 4, from: s.doc}
+judgments:
+  j.waiting:
+    verdict: holds while the paper is missing
+    rests_on: [a.value, missing.paper]
+    wrong_if: "missing.paper != ''"
+    blocked_on: {missing.paper: not yet received}
+    seen: {a.value: 3}
+  j.order:
+    verdict: stands on what is there
+    rests_on: [gone.first, b.value, gone.second]
+    wrong_if: b.value > 10
+    seen: {}
+  j.view:
+    verdict: attention fits
+    rests_on: [graph.flagged, graph.attention_budget]
+    wrong_if: graph.flagged > graph.attention_budget
+    seen: {graph.flagged: 0}
+  j.truth:
+    verdict: the count is no flag
+    rests_on: [a.value]
+    wrong_if: a.value == true
+    seen: {a.value: 3}

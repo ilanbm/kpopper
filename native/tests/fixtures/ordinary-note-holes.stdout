@@ -1,0 +1,11 @@
+NOTE j.truth: nothing decides wrong_if (a.value == true) - a side holds no value to compare, or a truth value is held against a value that is not one
+NOTE j.view: nothing decides wrong_if (graph.flagged > graph.attention_budget) - a side holds no value to compare, or a truth value is held against a value that is not one
+NOTE j.waiting: rests on missing.paper, which is not an entry - declared: not yet received
+NOTE j.waiting: prose, not an evaluable predicate (declared: not yet received)
+MOVED j.view: graph.flagged differs from its snapshot (0 -> 4) - re-review, or refresh seen
+FAIL j.order: rests on gone.first, which is not an entry
+FAIL j.order: no snapshot for b.value - never checked against it
+FAIL j.order: rests on gone.second, which is not an entry
+FAIL j.view: rests on graph.attention_budget, which is not an entry
+
+4 judgments, 7 entries, 4 problems, 1 moved, 4 declared
