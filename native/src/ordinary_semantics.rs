@@ -319,56 +319,64 @@ impl<'a> Reader<'a> {
     /// Followups retain source-only records even when no judgment field roles
     /// can be inferred, matching the legacy graph reader's explicit fallback.
     pub(crate) fn for_followups(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
-        match Self::new(document, runtime) {
-            Ok(reader) => Ok(reader),
-            Err(error) if error.0 == "ordinary_fields_unreadable" => {
-                let raw = F::collections(document)?
-                    .into_values()
-                    .flatten()
-                    .collect::<Map>();
-                let keys = raw
-                    .values()
-                    .filter_map(|v| map(v).ok())
-                    .flat_map(|m| m.keys())
-                    .collect::<BTreeSet<_>>();
-                let mut suffix = 0usize;
-                let role = loop {
-                    let key = format!("__followup_unassigned_role_{suffix}");
-                    if !keys.contains(&key) {
-                        break key;
-                    }
-                    suffix += 1;
-                };
-                let fields = ["deps", "snapshot", "predicate"]
-                    .into_iter()
-                    .map(|name| (name.to_owned(), s(&role)))
-                    .collect();
-                let mut reader = Self {
-                    document: document.clone(),
-                    fields,
-                    ids: raw.keys().cloned().collect(),
-                    raw,
-                    hypotheses: Map::new(),
-                    knowledge_conflicts: BTreeSet::new(),
-                    runtime,
-                };
-                reader
-                    .raw
-                    .extend(crate::ordinary_domain_counts::builtins(&reader)?);
-                Ok(reader)
-            }
-            Err(error) => Err(error),
+        if let Some(fields) = Self::roles(document)? {
+            return Self::with_roles(document, fields, runtime);
         }
+        let raw = F::collections(document)?
+            .into_values()
+            .flatten()
+            .collect::<Map>();
+        let keys = raw
+            .values()
+            .filter_map(|v| map(v).ok())
+            .flat_map(|m| m.keys())
+            .collect::<BTreeSet<_>>();
+        let mut suffix = 0usize;
+        let role = loop {
+            let key = format!("__followup_unassigned_role_{suffix}");
+            if !keys.contains(&key) {
+                break key;
+            }
+            suffix += 1;
+        };
+        let fields = ["deps", "snapshot", "predicate"]
+            .into_iter()
+            .map(|name| (name.to_owned(), s(&role)))
+            .collect();
+        let mut reader = Self {
+            document: document.clone(),
+            fields,
+            ids: raw.keys().cloned().collect(),
+            raw,
+            hypotheses: Map::new(),
+            knowledge_conflicts: BTreeSet::new(),
+            runtime,
+        };
+        reader
+            .raw
+            .extend(crate::ordinary_domain_counts::builtins(&reader)?);
+        Ok(reader)
     }
 
+    /// A record whose field roles cannot be read is refused with the reader's account of
+    /// why, so the person holding it has something to act on.
     pub fn new(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
+        let fields = Self::roles(document)?.ok_or_else(|| F::unreadable(document))?;
+        Self::with_roles(document, fields, runtime)
+    }
+
+    /// The field roles of an ordinary record, or none when they cannot be read.
+    fn roles(document: &V) -> Result<Option<Map>> {
         require(
             map(&F::capabilities(document, None)?)?["profile"] == s("ordinary-reader/v1"),
             "ordinary_reader_requires_ordinary_profile",
         )?;
-        let (_, fields) = F::semantic_roles(document)?
-            .filter(|(_, f)| !f.is_empty())
-            .ok_or_else(|| Error("ordinary_fields_unreadable".into()))?;
+        Ok(F::semantic_roles(document)?
+            .map(|(_, fields)| fields)
+            .filter(|fields| !fields.is_empty()))
+    }
+
+    fn with_roles(document: &V, fields: Map, runtime: Option<&'a Runtime>) -> Result<Self> {
         let raw = map(document)?
             .iter()
             .filter(|(k, _)| !["meta", "schema", "record", "also"].contains(&k.as_str()))
@@ -492,6 +500,18 @@ pub(crate) fn layer(base: &V, groups: &V, names: &[String]) -> Result<V> {
         }
     }
     Ok(doc)
+}
+/// Why the base cannot be read under a hypothesis, on one line of at most 160
+/// characters beside the other findings.
+pub(crate) fn layer_failure(failure: &Error) -> String {
+    failure
+        .0
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(160)
+        .collect()
 }
 pub(crate) fn arrangement(reader: &Reader<'_>, body: &V) -> bool {
     let Ok(m) = map(body) else { return false };

@@ -37,11 +37,59 @@ fn copy_resources(root: &Path) {
     }
 }
 
+fn kpop(root: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+    command
+        .current_dir(root)
+        .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
+        .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
+        .env_remove("KPOPPER_AGENT_SESSION")
+        .env_remove("CODEX_THREAD_ID")
+        .env("TZ", "UTC");
+    command
+}
+
+fn success(output: std::process::Output) -> String {
+    assert!(
+        output.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
+}
+
+/// A Git project without a configuration is an Advanced one.
+fn advanced_project(root: &Path) {
+    let init = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["init", "-q"])
+        .output()
+        .unwrap();
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+}
+
+fn project_mode(root: &Path) -> String {
+    let config: Value = serde_json::from_str(&success(
+        kpop(root).args(["config", "--json"]).output().unwrap(),
+    ))
+    .unwrap();
+    config["project"]["mode"].as_str().unwrap().to_owned()
+}
+
 fn semantic_files(root: &Path) -> std::collections::BTreeMap<String, String> {
     fn walk(root: &Path, path: &Path, out: &mut std::collections::BTreeMap<String, String>) {
         for entry in fs::read_dir(path).unwrap() {
             let path = entry.unwrap().path();
             if path.is_dir() {
+                if path.file_name().is_some_and(|name| name == ".git") {
+                    continue;
+                }
                 walk(root, &path, out);
             } else if path.extension().is_some_and(|e| e == "yaml" || e == "yml") {
                 out.insert(
@@ -59,14 +107,16 @@ fn semantic_files(root: &Path) -> std::collections::BTreeMap<String, String> {
     out
 }
 
-#[test]
-fn named_writes_match_complete_python_commands_and_record_images() {
+fn assert_named_cases_match_python(advanced: bool) {
     let cases: Value =
         serde_json::from_slice(include_bytes!("fixtures/legacy-named.json")).unwrap();
     for case in cases.as_array().unwrap() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         copy_resources(root);
+        if advanced {
+            advanced_project(root);
+        }
         fs::write(
             root.join(case["record"].as_str().unwrap()),
             case["before"].as_str().unwrap(),
@@ -90,16 +140,7 @@ fn named_writes_match_complete_python_commands_and_record_images() {
             .iter()
             .map(|a| a.as_str().unwrap())
             .collect::<Vec<_>>();
-        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
-            .current_dir(root)
-            .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
-            .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
-            .args(&args)
-            .env_remove("KPOPPER_AGENT_SESSION")
-            .env_remove("CODEX_THREAD_ID")
-            .env("TZ", "UTC")
-            .output()
-            .unwrap();
+        let output = kpop(root).args(&args).output().unwrap();
         assert_eq!(
             output.status.code().map(i64::from),
             case["code"].as_i64(),
@@ -125,6 +166,198 @@ fn named_writes_match_complete_python_commands_and_record_images() {
             case["files"],
             "{}: images",
             case["name"]
+        );
+        if advanced {
+            assert_eq!(project_mode(root), "advanced", "{}", case["name"]);
+        }
+    }
+}
+
+#[test]
+fn named_writes_match_complete_python_commands_and_record_images() {
+    assert_named_cases_match_python(false);
+}
+
+#[test]
+fn named_writes_in_an_advanced_project_match_the_same_python_images() {
+    assert_named_cases_match_python(true);
+}
+
+#[test]
+fn a_same_day_refusal_names_a_hypothesis_write_an_advanced_project_folds() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    copy_resources(root);
+    advanced_project(root);
+    let record = root.join("GROUNDING.yaml");
+    let before = "sources:\n  s.doc:\n    name: \"A document\"\n    file: \"doc.txt\"\n    read: \"2026-09-02\"\nknown:\n  p.hours:\n    name: \"Hours\"\n    v: 10\n    from: s.doc\n    at: \"line 1\"\n";
+    fs::write(&record, before).unwrap();
+    assert_eq!(project_mode(root), "advanced");
+
+    let refused = kpop(root)
+        .args([
+            "set",
+            "p.hours",
+            "12",
+            "--source",
+            "s.doc",
+            "--at",
+            "line 2",
+            "--as-of",
+            "2026-09-02",
+            "--why",
+            "reread",
+        ])
+        .output()
+        .unwrap();
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8(refused.stderr).unwrap();
+    let (_, suggestion) = stderr
+        .trim_end()
+        .split_once("a hypothesis holds the other: ")
+        .unwrap_or_else(|| panic!("{stderr}"));
+    let args = shlex::split(suggestion).unwrap();
+    let name = args
+        .iter()
+        .skip_while(|arg| *arg != "--hypothesis")
+        .nth(1)
+        .unwrap()
+        .clone();
+
+    success(kpop(root).args(&args).output().unwrap());
+    assert_eq!(fs::read_to_string(&record).unwrap(), before);
+    let hypothesis = root
+        .join(".kpopper/hypotheses")
+        .join(format!("{name}.yaml"));
+    assert!(
+        fs::read_to_string(&hypothesis)
+            .unwrap()
+            .contains("    v: 12\n")
+    );
+
+    // The same-day reading is contested; the dry run names a later reading,
+    // set in the hypothesis, as the way on.
+    let contested = kpop(root)
+        .args(["consolidate", "--dry-run"])
+        .output()
+        .unwrap();
+    assert!(!contested.status.success());
+    assert!(
+        String::from_utf8_lossy(&contested.stdout)
+            .contains("set it in the base or in the hypothesis with --as-of")
+    );
+    success(
+        kpop(root)
+            .args([
+                "set",
+                "p.hours",
+                "12",
+                "--as-of",
+                "2026-09-03",
+                "--hypothesis",
+                &name,
+            ])
+            .output()
+            .unwrap(),
+    );
+    success(kpop(root).args(["consolidate", &name]).output().unwrap());
+    assert_eq!(
+        fs::read_to_string(&record).unwrap(),
+        "sources:\n  s.doc:\n    name: \"A document\"\n    file: \"doc.txt\"\n    read: \"2026-09-02\"\nknown:\n  p.hours:\n    name: \"Hours\"\n    v: 12\n    of: \"2026-09-03\"\n    # set 2026-09-02: reread\n    from: s.doc\n    at: \"line 2\"\n"
+    );
+    assert!(!hypothesis.exists());
+}
+
+#[test]
+fn feature_scoped_named_writes_match_python() {
+    for advanced in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        copy_resources(root);
+        if advanced {
+            advanced_project(root);
+        }
+        let record = root.join("GROUNDING.yaml");
+        let before = include_bytes!("fixtures/legacy-authoring/simple-before.yaml");
+        fs::write(&record, before).unwrap();
+        let scoped = [
+            "--as-of",
+            "2026-09-03",
+            "--hypothesis",
+            "scoped",
+            "--shareability",
+            "project",
+            "--scope",
+            "feature",
+            "--environment",
+            "checkout",
+        ];
+        assert_eq!(
+            success(
+                kpop(root)
+                    .args(["set", "p.beta", "3"])
+                    .args(scoped)
+                    .output()
+                    .unwrap()
+            ),
+            "carry p.beta into known, its first entry of hypothesis scoped\nset p.beta in hypothesis scoped: 2 -> 3 (as of 2026-09-03)\nrests on it, under scoped:\n  MUTED     d.keep: p.beta moved 2 -> 3, inside wrong_if (p.beta > 3) - nothing is asked\n\nthe base is untouched; scoped holds 1 entry and 0 judgments\n"
+        );
+        assert_eq!(
+            success(
+                kpop(root)
+                    .args(["add", "p.gamma", "v=5"])
+                    .args(scoped)
+                    .output()
+                    .unwrap()
+            ),
+            "add p.gamma into known, after p.beta of hypothesis scoped\n\nthe base is untouched; scoped holds 2 entries and 0 judgments\n"
+        );
+        assert_eq!(fs::read(&record).unwrap(), before);
+        assert_eq!(
+            fs::read_to_string(root.join(".kpopper/hypotheses/scoped.yaml")).unwrap(),
+            "hypothesis: {born: \"2026-09-03\"}\n\nknown:\n  p.beta:\n    v: 3\n    of: 2026-09-03\n\n  p.gamma:\n    v: 5\n    scope: {kind: feature, environment: checkout}\n"
+        );
+        assert_eq!(
+            project_mode(root),
+            if advanced { "advanced" } else { "simple" }
+        );
+    }
+}
+
+#[test]
+fn a_named_add_keeps_its_scope_text() {
+    for advanced in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        copy_resources(root);
+        if advanced {
+            advanced_project(root);
+        }
+        let record = root.join("GROUNDING.yaml");
+        let before = include_bytes!("fixtures/legacy-authoring/simple-before.yaml");
+        fs::write(&record, before).unwrap();
+        assert_eq!(
+            success(
+                kpop(root)
+                    .args([
+                        "add",
+                        "p.gamma",
+                        "v=3",
+                        "scope=local experiment",
+                        "--as-of",
+                        "2026-09-19",
+                        "--hypothesis",
+                        "trial",
+                    ])
+                    .output()
+                    .unwrap()
+            ),
+            "add p.gamma into known, its first entry of hypothesis trial\n\nthe base is untouched; trial holds 1 entry and 0 judgments\n"
+        );
+        assert_eq!(fs::read(&record).unwrap(), before);
+        assert_eq!(
+            fs::read_to_string(root.join(".kpopper/hypotheses/trial.yaml")).unwrap(),
+            "hypothesis: {born: \"2026-09-19\"}\n\nknown:\n  p.gamma:\n    v: 3\n    scope: \"local experiment\"\n"
         );
     }
 }

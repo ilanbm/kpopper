@@ -246,7 +246,9 @@ bootstrap and on active records, including recovery of its own receipts.
 Existing Simple-mode ordinary records support byte-preserving `add`, `set` and
 `review`, including pointer/shard ownership, comments, quoted Unicode values,
 private-draft refusals and interrupted-write recovery. These writes preserve the
-existing record format. Named hypotheses, legacy hypothesis files and advanced
+existing record format. An Advanced project's own ordinary record takes the same
+local writes, named hypotheses included; a write routed to the project is captured
+as a contribution instead. Named hypotheses, legacy hypothesis files and advanced
 contribution routing are available through `add/set/review --hypothesis NAME`,
 `consolidate`, and `history adopt --revision REVISION`; their privacy, source,
 journal and recovery boundaries still apply.

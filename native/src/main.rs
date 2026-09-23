@@ -757,6 +757,9 @@ fn main() {
         })();
         let (output, error, code) = match result {
             Ok(output) => (output, String::new(), 0),
+            Err(error) if kpop_native::public_readers::unreadable_record(&error) => {
+                (String::new(), format!("{error}\n"), 1)
+            }
             Err(error) => (
                 String::new(),
                 kpop_native::public_export::command_error(&error.to_string()),
@@ -913,7 +916,11 @@ fn main() {
                 std::process::exit(output.code);
             }
             Err(error) => {
-                eprintln!("kpop {kind}: {error}");
+                if kpop_native::public_readers::unreadable_record(&error) {
+                    eprintln!("{error}");
+                } else {
+                    eprintln!("kpop {kind}: {error}");
+                }
                 std::process::exit(1);
             }
         }
@@ -1232,9 +1239,11 @@ fn main() {
                 }
             }
             Err(error) => {
+                let unreadable = kpop_native::public_readers::unreadable_record(&error);
                 if error
                     .0
                     .contains("is not an entry or a prefix in this record.")
+                    || unreadable && !args.json
                 {
                     eprintln!("{error}");
                     std::process::exit(1);
@@ -1248,7 +1257,7 @@ fn main() {
                 } else {
                     eprintln!("kpop {command}: {error}");
                 }
-                std::process::exit(2);
+                std::process::exit(if unreadable { 1 } else { 2 });
             }
         }
         return;
@@ -1270,6 +1279,10 @@ fn main() {
         })();
         match result {
             Ok(text) => println!("{text}"),
+            Err(error) if kpop_native::public_readers::unreadable_record(&error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
             Err(error) => {
                 eprintln!("kpop assess: {error}");
                 std::process::exit(2);
