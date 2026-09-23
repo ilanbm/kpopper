@@ -117,21 +117,48 @@ pub(crate) struct Notice {
     pub candidates: Vec<Candidate>,
     pub text: String,
 }
+/// What the note reads of a record: its base document, the readable hypothesis
+/// layers beside it, the dependency field, and every entry's body by id.
+pub(crate) struct Inputs<'a> {
+    pub document: &'a V,
+    pub hypotheses: &'a Map,
+    pub deps: &'a str,
+    pub ids: &'a BTreeSet<String>,
+    pub raw: &'a Map,
+}
 /// Retain source order when duplicate retirement claims need the reference's first holder.
 pub(crate) fn nearest_existing_from_sources(
     reader: &Reader<'_>,
     action: &V,
     sources: &Sources<'_>,
 ) -> Result<Notice> {
+    nearest_existing(
+        &Inputs {
+            document: reader.document(),
+            hypotheses: &reader.hypotheses,
+            deps: text(&reader.fields()["deps"])?,
+            ids: &reader.ids,
+            raw: reader.raw(),
+        },
+        action,
+        sources,
+    )
+}
+/// The same note over any record's inputs; `sources` orders retirement claims as above.
+pub(crate) fn nearest_existing(
+    record: &Inputs<'_>,
+    action: &V,
+    sources: &Sources<'_>,
+) -> Result<Notice> {
     let id = text(get(action, "id"))?;
-    let base = bodies(reader.document());
+    let base = bodies(record.document);
     let mut raws = vec![(base.clone(), sources.base)];
     let mut live = base
         .keys()
         .filter(|id| !F::BUILTINS.contains(&id.as_str()))
         .cloned()
         .collect::<BTreeSet<_>>();
-    for (name, hyp) in &reader.hypotheses {
+    for (name, hyp) in record.hypotheses {
         if truth(get(hyp, "error")) {
             continue;
         }
@@ -157,7 +184,7 @@ pub(crate) fn nearest_existing_from_sources(
         });
         raws.push((raw, sources.hypotheses.get(name).copied()));
     }
-    let deps = text(&reader.fields()["deps"])?;
+    let deps = record.deps;
     let mut retired = BTreeMap::new();
     if deps != "also" {
         for (raw, source) in &raws {
@@ -171,7 +198,7 @@ pub(crate) fn nearest_existing_from_sources(
         }
     }
     if let Some(into) = retired.get(id)
-        && !reader.ids.contains(id)
+        && !record.ids.contains(id)
     {
         return Ok(Notice {
             refusals: vec![format!(
@@ -199,11 +226,11 @@ pub(crate) fn nearest_existing_from_sources(
     for other in ids(get(body, "distinct_from")) {
         distinct.insert(pair(id, &other));
     }
-    let pool = reader
-        .raw()
+    let pool = record
+        .raw
         .iter()
         .filter(|(key, body)| {
-            key.as_str() != id && reader.ids.contains(*key) && matches!(body, V::Map(_))
+            key.as_str() != id && record.ids.contains(*key) && matches!(body, V::Map(_))
         })
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
@@ -212,7 +239,7 @@ pub(crate) fn nearest_existing_from_sources(
         body,
         &pool,
         deps,
-        reader.raw(),
+        record.raw,
         &retired,
         &distinct,
         Some(3),

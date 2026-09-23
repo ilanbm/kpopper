@@ -26,10 +26,13 @@ use guards as G;
 mod candidates;
 #[path = "ordinary_consolidation_page.rs"]
 mod page;
+#[path = "ordinary_consolidation_pending.rs"]
+mod pending;
 use candidates::near;
 fn s(value: &str) -> V {
     V::Text(value.into())
 }
+#[derive(Clone)]
 struct Hypothesis {
     name: String,
     path: Option<PathBuf>,
@@ -294,7 +297,11 @@ pub(super) fn run(
     let capture = crate::source_capture::capture_ordinary_source_with_runtime(
         route.paths(),
         &route.project().root,
-        ReadMode::Live,
+        if options.frozen {
+            ReadMode::Frozen
+        } else {
+            ReadMode::Live
+        },
         None,
         runtime,
     )?;
@@ -306,7 +313,14 @@ pub(super) fn run(
         "unsupported_capability: use core/v1 consumer",
     )?;
     let hyps = read_hypotheses(&capture, &options.names, runtime)?;
-    if hyps.is_empty() {
+    // The run over every hypothesis also tests what the pending ledger would bring; a run
+    // asked about named hypotheses is about those alone.
+    let finds = if options.names.is_empty() {
+        pending::findings(&capture)?
+    } else {
+        vec![]
+    };
+    if hyps.is_empty() && finds.is_empty() {
         capture.verify()?;
         route.verify()?;
         return Ok(CommandOutput {
@@ -332,37 +346,57 @@ pub(super) fn run(
         .and_then(|raw| crate::history_yaml::decode_full_ordinary_source_value(raw).ok())
         .map(|v| v.projected())
         .unwrap_or(V::Null);
-    let page =
-        if let Some(raw) = &brief_raw {
-            let base = captured_projection(&capture, runtime)?;
-            let relevant = needs_page(capture.ordinary_document(), &base, &hyps, runtime)?;
-            if relevant {
-                Some(page::facts(&capture, raw, runtime).map_err(|e| {
-                    error(&format!("presentation contribution cannot be checked: {e}"))
-                })?)
-            } else {
-                None
-            }
-        } else {
-            None
+    let page_for = |proposals: &[Hypothesis]| -> Result<Option<V>> {
+        let Some(raw) = &brief_raw else {
+            return Ok(None);
         };
-    let c = union(UnionInput {
-        doc: capture.ordinary_document(),
-        all: map(capture.hypotheses())?,
-        hyps,
-        base: captured_projection(&capture, runtime)?,
-        runtime,
-        stamp: &stamp,
-        take: &options.take,
-        drops: map(&drops)?,
-        brief: Some(&brief),
-        page: page.as_ref(),
-    })?;
-    let mut output = report::lines(&c, chrono::Local::now().date_naive())?.join("\n") + "\n";
+        let base = captured_projection(&capture, runtime)?;
+        if !needs_page(capture.ordinary_document(), &base, proposals, runtime)? {
+            return Ok(None);
+        }
+        page::facts(&capture, raw, runtime)
+            .map(Some)
+            .map_err(|e| error(&format!("presentation contribution cannot be checked: {e}")))
+    };
+    let (mut output, mut red, mut stray) = (String::new(), false, None);
+    if hyps.is_empty() {
+        output.push_str("no hypotheses beside the record - nothing to consolidate\n");
+    } else {
+        let page = page_for(&hyps)?;
+        let c = union(UnionInput {
+            doc: capture.ordinary_document(),
+            all: map(capture.hypotheses())?,
+            hyps,
+            base: captured_projection(&capture, runtime)?,
+            runtime,
+            stamp: &stamp,
+            take: &options.take,
+            drops: map(&drops)?,
+            brief: Some(&brief),
+            page: page.as_ref(),
+        })?;
+        output = report::lines(&c, chrono::Local::now().date_naive())?.join("\n") + "\n";
+        red = c.red() || !c.drops_needed.is_empty();
+        stray = report::stray(&c, &options.take);
+    }
+    if !finds.is_empty() {
+        let p = pending::test(
+            &pending::Input {
+                capture: &capture,
+                stamp: &stamp,
+                brief: Some(&brief),
+                page_for: &page_for,
+            },
+            finds,
+            runtime,
+        )?;
+        output.push('\n');
+        output.push_str(&(pending::lines(&p)?.join("\n") + "\n"));
+        red |= p.red();
+    }
     capture.verify()?;
     inventory.verify()?;
     route.verify()?;
-    let stray = report::stray(&c, &options.take);
     if let Some(why) = &stray {
         output.push('\n');
         output.push_str(why);
@@ -371,6 +405,6 @@ pub(super) fn run(
     Ok(CommandOutput {
         stdout: output,
         stderr: String::new(),
-        code: i32::from(stray.is_some() || c.red() || !c.drops_needed.is_empty()),
+        code: i32::from(stray.is_some() || red),
     })
 }

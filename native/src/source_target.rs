@@ -10,7 +10,9 @@ use crate::{
     reasoning_runtime::{OperationalBounds, Runtime},
     reasoning_snapshot::{CaptureOptions, Snapshot},
     require,
-    source_capture::{ReadMode, capture_ordinary_source_with_runtime},
+    source_capture::{
+        CapturedSource, ReadMode, capture_ordinary_layer, capture_ordinary_source_with_runtime,
+    },
     value::{Integer, TypedValue as V},
 };
 use std::{
@@ -171,6 +173,9 @@ pub(crate) struct OrdinaryRecords {
     pub document: crate::ordinary_value::Value,
     pub hypotheses: crate::ordinary_value::Map,
 }
+/// Another branch's committed record, read to be laid over this one: no snapshot of its
+/// own is formed, so a record whose field roles read only over this one is not refused
+/// here, and one that cannot be read even there is told by the reader that lays it.
 pub(crate) fn records_ordinary(
     root: &Path,
     entry: &str,
@@ -180,12 +185,64 @@ pub(crate) fn records_ordinary(
     std::thread::scope(|scope| {
         scope
             .spawn(|| {
-                let materialized = materialize(root, entry, revision, runtime)?;
+                let materialized = materialize(root, entry, revision, |paths, scratch, mode| {
+                    capture_ordinary_layer(paths, scratch, mode, runtime)
+                })?;
                 Ok(OrdinaryRecords {
                     document: materialized.captured.ordinary_document().clone(),
                     hypotheses: crate::ordinary_value::map(materialized.captured.hypotheses())?
                         .clone(),
                 })
+            })
+            .join()
+            .map_err(|_| error("target_replay_failed"))?
+    })
+}
+/// Another branch's committed record with its hypotheses and file text, in finite values as
+/// `records` gives them, and the same documents in the order their files hold them, read to
+/// be laid over this one: no snapshot of its own is formed, so its field roles are taken only
+/// over this record, by the reader that lays it there. What else the snapshot refused still
+/// stands - an entry held twice would lose one body when laid - and a record the core
+/// computes is not an ordinary layer.
+pub(crate) fn records_layer(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<(V, OrdinaryRecords)> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let Materialized {
+                    _temp,
+                    captured,
+                    files,
+                    raw_names,
+                    active,
+                } = materialize(root, entry, revision, |paths, scratch, mode| {
+                    capture_ordinary_layer(paths, scratch, mode, runtime)
+                })?;
+                let ordered = OrdinaryRecords {
+                    document: captured.ordinary_document().clone(),
+                    hypotheses: crate::ordinary_value::map(captured.hypotheses())?.clone(),
+                };
+                let (document, hypotheses) = contents(&captured.try_finite()?, active)?;
+                require(
+                    active || !crate::reasoning_operations::selected(&document)?,
+                    "unsupported_capability: use core/v1 consumer",
+                )?;
+                crate::reasoning_snapshot::validate_layer(&document)?;
+                for hypothesis in &hypotheses {
+                    crate::reasoning_snapshot::validate_layer(&map(hypothesis)?["doc"])?;
+                }
+                Ok((
+                    obj([
+                        ("doc", document),
+                        ("hypotheses", V::List(hypotheses)),
+                        ("files", texts(&files, &raw_names)?),
+                    ]),
+                    ordered,
+                ))
             })
             .join()
             .map_err(|_| error("target_replay_failed"))?
@@ -202,7 +259,11 @@ fn materialize(
     root: &Path,
     entry: &str,
     revision: &str,
-    runtime: Option<&Runtime>,
+    capture: impl FnOnce(
+        &[std::path::PathBuf],
+        &Path,
+        ReadMode,
+    ) -> Result<crate::source_capture::OrdinaryCapture>,
 ) -> Result<Materialized> {
     require(
         [40, 64].contains(&revision.len())
@@ -354,7 +415,7 @@ fn materialize(
         std::fs::create_dir_all(path.parent().unwrap())?;
         std::fs::write(path, raw)?;
     }
-    let captured = capture_ordinary_source_with_runtime(
+    let captured = capture(
         &[scratch.join(&entry)],
         &scratch,
         if active {
@@ -362,8 +423,6 @@ fn materialize(
         } else {
             ReadMode::Live
         },
-        None,
-        runtime,
     )?;
     Ok(Materialized {
         _temp: temp,
@@ -385,32 +444,11 @@ fn records_isolated(
         files,
         raw_names,
         active,
-    } = materialize(root, entry, revision, runtime)?;
+    } = materialize(root, entry, revision, |paths, scratch, mode| {
+        capture_ordinary_source_with_runtime(paths, scratch, mode, None, runtime)
+    })?;
     let captured = captured.try_finite()?;
-    let document = captured.strict_document()?;
-    let mut hypotheses = vec![];
-    for (name, hyp) in map(captured.hypotheses())? {
-        let hyp = map(hyp)?;
-        require(
-            !hyp.get("error").is_some_and(truth),
-            "unreadable_target_hypothesis",
-        )?;
-        let mut value = obj([
-            ("name", s(name)),
-            (
-                "doc",
-                hyp.get("doc")
-                    .or_else(|| hyp.get("document"))
-                    .ok_or_else(|| error("invalid_target_hypothesis"))?
-                    .clone(),
-            ),
-            ("head", hyp["head"].clone()),
-        ]);
-        if active && let Some(kind) = hyp.get("kind").filter(|v| truth(v)) {
-            map_mut(&mut value)?.insert("kind".into(), kind.clone());
-        }
-        hypotheses.push(value);
-    }
+    let (document, hypotheses) = contents(&captured, active)?;
     let hashes = V::Map(
         files
             .iter()
@@ -484,22 +522,52 @@ fn records_isolated(
         .to_data()
     };
     map_mut(&mut output)?.insert("snapshot".into(), snapshot);
-    map_mut(&mut output)?.insert(
-        "files".into(),
-        V::Map(
-            files
-                .iter()
-                .filter(|(p, _)| !raw_names.contains(*p))
-                .map(|(p, r)| {
-                    Ok((
-                        p.clone(),
-                        s(std::str::from_utf8(r).map_err(|_| error("invalid_target_text"))?),
-                    ))
-                })
-                .collect::<Result<Map>>()?,
-        ),
-    );
+    map_mut(&mut output)?.insert("files".into(), texts(&files, &raw_names)?);
     Ok(output)
+}
+/// A captured record's document, and each hypothesis beside it by name with its document
+/// and head.
+fn contents(captured: &CapturedSource, active: bool) -> Result<(V, Vec<V>)> {
+    let document = captured.strict_document()?;
+    let mut hypotheses = vec![];
+    for (name, hyp) in map(captured.hypotheses())? {
+        let hyp = map(hyp)?;
+        require(
+            !hyp.get("error").is_some_and(truth),
+            "unreadable_target_hypothesis",
+        )?;
+        let mut value = obj([
+            ("name", s(name)),
+            (
+                "doc",
+                hyp.get("doc")
+                    .or_else(|| hyp.get("document"))
+                    .ok_or_else(|| error("invalid_target_hypothesis"))?
+                    .clone(),
+            ),
+            ("head", hyp["head"].clone()),
+        ]);
+        if active && let Some(kind) = hyp.get("kind").filter(|v| truth(v)) {
+            map_mut(&mut value)?.insert("kind".into(), kind.clone());
+        }
+        hypotheses.push(value);
+    }
+    Ok((document, hypotheses))
+}
+/// The text of each file read, the history's own objects aside.
+fn texts(files: &Files, raw_names: &BTreeSet<String>) -> Result<V> {
+    Ok(V::Map(
+        files
+            .iter()
+            .filter(|(p, _)| !raw_names.contains(*p))
+            .map(|(p, r)| {
+                Ok((
+                    p.clone(),
+                    s(std::str::from_utf8(r).map_err(|_| error("invalid_target_text"))?),
+                ))
+            })
+            .collect::<Result<Map>>()?,
+    ))
 }
 
 #[cfg(test)]
