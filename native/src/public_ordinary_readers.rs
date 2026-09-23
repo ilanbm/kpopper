@@ -682,7 +682,12 @@ impl<'a> Projection<'a> {
         let questions = collections
             .iter()
             .filter(|(section, _)| ["open", "questions"].contains(&section.as_str()))
-            .flat_map(|(_, members)| members.keys().cloned())
+            .flat_map(|(_, members)| {
+                members
+                    .iter()
+                    .filter(|(_, question)| !crate::public_amend::settled(question))
+                    .map(|(id, _)| id.clone())
+            })
             .collect::<BTreeSet<_>>();
         let mut nodes = BTreeMap::new();
         let mut topics = BTreeMap::new();

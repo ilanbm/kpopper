@@ -85,6 +85,8 @@ pub struct Amend {
     pub order: Option<SourceValue>,
     /// The entry that answered a question, pinned at its current head in history.
     pub by: Option<String>,
+    /// The entry as the command read it; the write refuses if it changed since.
+    pub was: V,
 }
 static NUMBER: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^-?[0-9]+(?:\.[0-9]+)?$").unwrap());
@@ -364,6 +366,13 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
         F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
     if let Some(amend) = &options.amend {
         require(entry.exists(), "record not found")?;
+        crate::public_amend::unchanged_or_refuse(
+            route.paths(),
+            &cwd,
+            &options.subject,
+            &amend.was,
+            amend.kind,
+        )?;
         if amend.kind == "correct" {
             crate::public_amend::unlanded_or_refuse(route.paths(), &cwd, &options.subject)?;
         }

@@ -163,6 +163,15 @@ class Rewrites(unittest.TestCase):
                       "d.one_boiler on " + answered["of"] + " - the insp", pulled)
         self.assertIn("0 problems", self.ok("check"))
 
+    def test_a_closed_question_leaves_the_open_count(self):
+        self.write(RECORD.replace("judgments:\n", "judgments:\n  d.few_open:\n    rests_on: [graph.open]\n"
+                                  "    verdict: at most one question stays open\n"
+                                  "    wrong_if: \"graph.open > 1\"\n    seen: {graph.open: 2}\n"))
+        self.assertNotEqual(self.run_cli("check").returncode, 0)
+        self.ok("answer", "q.second_boiler", "d.one_boiler")
+        done = self.run_cli("check")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+
     def test_answering_keeps_a_questions_own_fields(self):
         self.write(RECORD.replace("  q.annex_floor: Will the annex add a second floor?\n",
                                   "  q.annex_floor:\n    name: Annex floor\n    v: Will the annex add a second floor?\n"
@@ -310,6 +319,8 @@ class Rewrites(unittest.TestCase):
         self.refused("m.boiler_age is not a judgment", "correct", "m.boiler_age", "rests_on=[src.inspection]")
         self.refused("rests on something", "correct", "d.one_boiler", "--unset", "rests_on")
         self.refused("seen is written by this tool", "correct", "d.one_boiler", "seen={m.boiler_age: 15}")
+        self.refused("seen is written by this tool", "correct", "d.one_boiler", "because=it holds",
+                     "--unset", "seen")
         self.refused("reviewed is written by this tool", "correct", "d.one_boiler", "reviewed=2026-09-21")
         self.refused("born broken", "correct", "d.one_boiler", "wrong_if=m.boiler_age >= 10")
         self.refused("nothing to correct", "correct", "m.boiler_age", "v=14")

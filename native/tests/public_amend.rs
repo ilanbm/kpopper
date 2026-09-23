@@ -274,6 +274,21 @@ fn answering_keeps_a_question_s_own_fields() {
 }
 
 #[test]
+fn a_closed_question_leaves_the_open_count() {
+    let (_temp, root) = ordinary();
+    let file = record(&root).replace(
+        "judgments:\n",
+        "judgments:\n  d.few_open:\n    rests_on: [graph.open]\n    verdict: at most one question stays open\n    wrong_if: \"graph.open > 1\"\n    seen: {graph.open: 2}\n",
+    );
+    fs::write(root.join("GROUNDING.yaml"), file).unwrap();
+    let before = run(&root, &["check"]);
+    assert!(!before.status.success(), "{}", text(&before));
+    success(run(&root, &["answer", "q.second_boiler", "d.one_boiler"]));
+    let after = run(&root, &["check"]);
+    assert!(after.status.success(), "{}", text(&after));
+}
+
+#[test]
 fn a_question_is_dropped_with_its_reason() {
     let (_temp, root) = ordinary();
     success(run(
@@ -519,6 +534,19 @@ fn correct_keeps_what_an_entry_is_and_what_the_tool_writes() {
     refused(
         run(&root, &["correct", "m.boiler_age", "v=14"]),
         "nothing to correct",
+    );
+    refused(
+        run(
+            &root,
+            &[
+                "correct",
+                "d.one_boiler",
+                "because=it holds",
+                "--unset",
+                "seen",
+            ],
+        ),
+        "written by this tool",
     );
     refused(
         run(&root, &["correct", "m.missing", "v=1"]),

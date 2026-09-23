@@ -1979,7 +1979,8 @@ def counts(doc, ids, jud, fields, raw):
     those judgments - check, the opener, the page - decides them against the same numbers.
     `raw` here is the record's own bodies, without the counts."""
     _legacy_computation(doc)
-    open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
+    open_ids = {k for g in OPEN if isinstance(doc.get(g), dict)
+                for k, b in doc[g].items() if not settled(b)}
     held = [k for k in ids if k not in jud and not is_builtin(k)]
     fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)}, defer_counts=True)
 
@@ -6707,10 +6708,18 @@ def _rewrite_roles(doc):
             fields.get("snapshot") or "seen")
 
 
-def _rewrite_action(amend, nid, body, why=None, as_of=None):
-    """The add a rewrite goes through: its whole new body, and which rewrite it is."""
-    return {"kind": "add", "id": nid, "as_of": as_of, "why": why, "into": None, "hypothesis": None,
-            "source": None, "at": None, "amend": amend, "body": body}
+def _rewrite_action(amend, nid, body, why=None, as_of=None, was=None, paths=None):
+    """The add a rewrite goes through: its whole new body, and which rewrite it is. What the
+    command read travels beside it (never into the record), so the write can refuse under
+    the lock if the entry changed in between; on active history the view file's digest
+    does the same inside the history writer."""
+    action = {"kind": "add", "id": nid, "as_of": as_of, "why": why, "into": None,
+              "hypothesis": None, "source": None, "at": None, "amend": amend, "body": body,
+              "_was": copy.deepcopy(was)}
+    if paths and _peer('history_direct').active(paths):
+        with open(_first_of(paths), "rb") as f:
+            action["expected_record_sha256"] = hashlib.sha256(f.read()).hexdigest()
+    return action
 
 
 def answer_command(rest):
@@ -6758,7 +6767,7 @@ def answer_command(rest):
         body["answered"] = closing
     else:
         body["dropped"] = {"of": day, "because": dropped.strip()}
-    action = _rewrite_action("answer", nid, body, because, as_of)
+    action = _rewrite_action("answer", nid, body, because, as_of, was=old, paths=paths)
     if by is not None:
         action["answer_by"] = by
     return apply(paths, action)
@@ -6807,6 +6816,9 @@ def correct_command(rest):
                 value = typed(value)
             body[field] = value
         for field in unset:
+            if field == snapshot:
+                raise Refused(f"refused - {snapshot} is written by this tool, from what the "
+                              f"dependencies hold - leave it out")
             if field not in body:
                 raise Refused(f"refused - {nid} has no field {field}")
             del body[field]
@@ -6815,17 +6827,21 @@ def correct_command(rest):
     unchanged = {f: v for f, v in old.items() if f != snapshot} if isinstance(old, dict) else old
     if _typed_same(body, unchanged):
         raise Refused(f"{nid} already says that; nothing to correct")
-    return apply(paths, _rewrite_action("correct", nid, body, why))
+    return apply(paths, _rewrite_action("correct", nid, body, why, was=old, paths=paths))
 
 
 def _rewrite_ready(paths, action):
     """Under the record's lock: a rewrite needs the record it rewrites, and a correction goes
     through only while nothing landed rests on what it corrects."""
     amend = action.get("amend")
+    was = action.pop("_was", None)
     if amend is None:
         return
     if not os.path.exists(_first_of(paths)):
         raise Refused("record not found")
+    place = _rewrite_entries(_rewrite_document(paths))
+    if action["id"] not in place or not _typed_same(place[action["id"]][1], was):
+        raise Refused(f"refused - {action['id']} changed since {amend} read it - run {amend} again")
     if amend == "correct":
         unlanded_or_refuse(paths, action["id"])
 

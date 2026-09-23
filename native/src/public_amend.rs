@@ -74,6 +74,9 @@ struct Record {
     entry: PathBuf,
     doc: V,
     capture: Option<CapturedSource>,
+    /// For active history, the digest of the view file as read: the history writer
+    /// refuses under its lock if the file changed since.
+    view_sha256: Option<String>,
 }
 
 fn captured(paths: &[PathBuf], cwd: &Path) -> Result<Record> {
@@ -88,10 +91,15 @@ fn captured(paths: &[PathBuf], cwd: &Path) -> Result<Record> {
         {
             meta.remove("history");
         }
+        let view_sha256 = {
+            use sha2::Digest;
+            Some(format!("{:x}", sha2::Sha256::digest(&raw)))
+        };
         return Ok(Record {
             entry,
             doc,
             capture: None,
+            view_sha256,
         });
     }
     let capture = capture_source(paths, cwd, ReadMode::Frozen, None)?;
@@ -100,7 +108,25 @@ fn captured(paths: &[PathBuf], cwd: &Path) -> Result<Record> {
         entry,
         doc,
         capture: Some(capture),
+        view_sha256: None,
     })
+}
+
+/// Under the record's lock: the entry still says what the command read, or the write
+/// is refused rather than laid over a change made in between.
+pub(crate) fn unchanged_or_refuse(
+    paths: &[PathBuf],
+    cwd: &Path,
+    subject: &str,
+    was: &V,
+    kind: &str,
+) -> Result<()> {
+    let record = captured(paths, cwd)?;
+    let now = entries(&record.doc)?.remove(subject).map(|(_, body)| body);
+    require(
+        now.as_ref() == Some(was),
+        &format!("refused - {subject} changed since {kind} read it - run {kind} again"),
+    )
 }
 
 /// The role names this record's reader inferred: dependencies, condition, snapshot.
@@ -327,11 +353,13 @@ pub fn answer(options: &AnswerOptions, cwd: &Path) -> Result<String> {
         subject: id.clone(),
         why: options.why.clone().or_else(|| options.dropped.clone()),
         as_of: options.as_of.clone(),
+        expected_record_sha256: record.view_sha256.clone(),
         amend: Some(Amend {
             kind: "answer",
             body,
             order: Some(SourceValue::Map(order)),
             by: options.by.clone(),
+            was: old.clone(),
         }),
         ..Options::default()
     };
@@ -388,6 +416,12 @@ pub fn correct(options: &CorrectOptions, cwd: &Path) -> Result<String> {
         }
         for field in &options.unset {
             require(
+                field.trim() != snapshot,
+                &format!(
+                    "refused - {snapshot} is written by this tool, from what the dependencies hold - leave it out"
+                ),
+            )?;
+            require(
                 body.remove(field.trim()).is_some(),
                 &format!("refused - {id} has no field {}", field.trim()),
             )?;
@@ -407,11 +441,13 @@ pub fn correct(options: &CorrectOptions, cwd: &Path) -> Result<String> {
     let write = Options {
         subject: id.clone(),
         why: options.why.clone(),
+        expected_record_sha256: record.view_sha256.clone(),
         amend: Some(Amend {
             kind: "correct",
             body,
             order: None,
             by: None,
+            was: old.clone(),
         }),
         ..Options::default()
     };
