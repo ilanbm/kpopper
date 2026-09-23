@@ -82,7 +82,7 @@ tabs:
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
-    serves: [s.2026_09_23_pr_churn, s.2026_09_23_unsaved_baseline,
+    serves: [s.2026_09_23_pr_churn, s.2026_09_23_pending_dry_run, s.2026_09_23_unsaved_baseline,
              s.2026_09_22_responsive_readme, s.2026_09_22_readme_redraw,
              s.2026_09_20_canvas_placement, s.2026_09_20_dependency_illustration,
              s.2026_09_20_readme_path_banners, s.2026_09_19_claude_install_request,

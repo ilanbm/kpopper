@@ -535,10 +535,18 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         } else {
             if let Some(cap) = missing_reference.captures(&line) {
                 let key = &cap[1];
+                // A hypothesis holding the missing id folds together with this one; a
+                // pending finding folds with nothing here, and a finding's own test names none.
+                let finding = |name: &str| {
+                    all.get(name)
+                        .is_some_and(|h| get(h, "kind") == &s("contribution"))
+                };
                 let others = all
                     .iter()
                     .filter(|(name, h)| {
-                        !c.hyps.iter().any(|x| &x.name == *name)
+                        !c.hyps.iter().any(|x| finding(&x.name))
+                            && !finding(name)
+                            && !c.hyps.iter().any(|x| &x.name == *name)
                             && entries(get(h, "doc")).is_ok_and(|e| e.contains_key(key))
                     })
                     .map(|(n, _)| n.clone())

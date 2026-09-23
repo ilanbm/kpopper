@@ -396,9 +396,12 @@ def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=(), drops=N
         if "falsified" in fl.get(name, ()):
             c.falsified.append(line)
         else:
+            # a hypothesis holding the missing id folds together with this one; a pending
+            # finding folds with nothing here, and a finding's own test names none
             m = re.search(r"rests on (\S+), which is not an entry", line)
-            others = [n for n in (P._held_by(doc, m.group(1)) if m else [])
-                      if n not in holders.hypotheses]
+            pending = any(h.get("kind") == PENDING for h in c.hyps)
+            others = [n for n in (P._held_by(doc, m.group(1)) if m and not pending else [])
+                      if n not in holders.hypotheses and doc.hypotheses[n].get("kind") != PENDING]
             if others:
                 line += (f" - held by hypothes{'is' if len(others) == 1 else 'es'} "
                          f"{', '.join(others)}: consolidate them together")
@@ -643,6 +646,293 @@ def report(c, today=None):
                    + " ".join(foldable) + " removes the file" + ("s" if len(foldable) > 1 else ""))
     else:
         out.append("clean: " + ", ".join(foldable) + " may fold - consolidate " + " ".join(foldable))
+    return out
+
+
+# ── pending findings, tested beside the record ───────────────────────────────
+PENDING = "contribution"
+# the reader's own words for why a layer cannot be read differ between runtimes; check says them
+UNREAD = "check says why"
+TOGETHER_UNREAD = "their fields cannot be told apart"
+
+
+def pending_findings(doc):
+    """The shared findings a live read lays beside the record -> [finding], in name order:
+    the pending ledger's contributions the reader keeps active, since it has already left
+    out every one withdrawn, rejected or superseded. A frozen read has none, and a record in
+    the checked core keeps its own account of what contests it."""
+    if P._peer('reasoning.operations').selected(doc):
+        return []
+    return [h for _, h in sorted((getattr(doc, "hypotheses", None) or {}).items())
+            if h.get("kind") == PENDING and not h.get("error")]
+
+
+class Pending(object):
+    """The pending findings laid over the base the way hypotheses are - and never written: a
+    finding reaches the record through the knowledge PR, and nothing here adopts one.
+
+      finds                     every active finding, in name order
+      base                      the base's own (doc, ids, jud, fields, raw)
+      unreadable                {finding: why} - a finding the reader cannot lay over the base,
+                                or would read otherwise than it says, is reported, never
+                                tested, and never stops the run
+      alone                     {finding: Consolidation} - each readable finding laid over the
+                                base by itself
+      contested                 {id: [(finding, claim)]} - two findings hold one id with
+                                different bodies, so at most one of them is accepted
+      together                  why every readable finding together cannot be read, or None
+      falsified, holes, moved   what only all of them together break or move, when none
+                                contests another
+
+    `red` is what makes the dry run fail: a finding that cannot be read, a contested id, and
+    anything that makes a hypothesis's own test red, or would name a dropped dependency, for
+    one finding alone or for all of them together."""
+
+    def __init__(self):
+        self.finds, self.alone, self.unreadable, self.contested = [], {}, {}, {}
+        self.falsified, self.holes, self.moved = [], [], []
+        self.base = self.together = None
+
+    @property
+    def red(self):
+        return bool(self.unreadable or self.together is not None or self.contested
+                    or self.falsified or self.holes
+                    or any(c.red or c.drops_needed for c in self.alone.values()))
+
+
+def _roles(document):
+    """What a document reads as judgments, and by which fields -> (judgments, fields), or None
+    when its fields cannot be told apart."""
+    try:
+        return P._peer('pending_grounding').semantic_roles(document)
+    except (Exception, SystemExit):
+        return None
+
+
+def _misread(finds, base, layered):
+    """Why the base with `finds` laid over it would read an id otherwise than what holds it -
+    the finding that brings it, or the base - reads it -> a reason, or None: an entry taken for
+    a judgment or the reverse, or a judgment's dependencies, snapshot or condition read from
+    another field. A finding tested under a reading its author did not give it would pass for
+    what it never said, and one that changes how the base is read would hide a judgment from
+    the test. `base` is the record and its own roles."""
+    over = _roles(layered)
+    if over is None:
+        return None
+    over_jud, over_fields = over
+    who, holds, reads = ("it", "holds", "reads") if len(finds) == 1 else ("they", "hold", "read")
+    doc, base_roles = base
+    readers = {nid: (body, base_roles, False) for nid, body in P.bodies(doc).items()}
+    for h in finds:
+        roles = _roles(h["doc"])
+        for nid in h["ids"]:
+            readers[nid] = (h["raw"].get(nid), roles, True)
+    for nid in sorted(readers):
+        body, roles, brought = readers[nid]
+        if roles is None:
+            continue
+        jud, fields = roles
+        mine, theirs = nid in jud, nid in over_jud
+        was, becomes = ("a judgment", "an entry") if mine else ("an entry", "a judgment")
+        if mine != theirs:
+            return (f"{who} {holds} {nid} as {was}, and the base would read {becomes}" if brought
+                    else f"laid over the base, {who} would turn the base's {nid} from {was} into "
+                         f"{becomes}")
+        if not mine or not isinstance(body, dict):
+            continue
+        for role in ("deps", "snapshot", "predicate"):
+            field, other = fields.get(role), over_fields.get(role) or "nothing"
+            if field and field in body and over_fields.get(role) != field:
+                return (f"{who} {reads} {nid}'s {role} from {field}, and the base from {other}"
+                        if brought else f"laid over the base, {who} would read the base's {nid} "
+                                        f"{role} from {other} instead of {field}")
+    return None
+
+
+def _cannot_read(document):
+    """Whether the reader cannot read a document laid over the base."""
+    try:
+        P.view(document)
+    except SystemExit:
+        return True
+    return False
+
+
+def _contested_findings(finds):
+    """Ids two findings hold with different bodies -> {id: [(finding, claim)]}, holders in name
+    order: two findings of one id that differ in anything are two versions, and at most one of
+    them is accepted - even when they agree on the value."""
+    G = P._peer('pending_grounding')
+    held = {}
+    for h in finds:
+        for nid, pair in G.entries(h["doc"]).items():
+            held.setdefault(nid, []).append((h["name"], pair))
+    return {nid: [(name, P.claim_of(pair[1])) for name, pair in holders]
+            for nid, holders in sorted(held.items())
+            if len({G.identity(list(pair)) for _, pair in holders}) > 1}
+
+
+def pending_of(doc, finds, base_check=None, as_of=None, page_for=None):
+    """The pending findings tested -> Pending: each readable one over the base alone, for
+    what accepting it would change and break; the ids two of them contest; and, when none
+    contests another, what only all of them together break beyond any one. `base_check` and
+    `as_of` are as `union_of` takes them; `page_for`, given findings, returns what the brief
+    holds an arrangement to, and is asked only of findings the base can read. Nothing is
+    written."""
+    p = Pending()
+    p.finds = list(finds)
+    p.base = (doc,) + tuple(_view(doc))
+    base = (doc, _roles(doc))
+    readable = []
+    for h in p.finds:
+        layered = P.layered(doc, h)
+        why = UNREAD if _cannot_read(layered) else _misread([h], base, layered)
+        if why is not None:
+            p.unreadable[h["name"]] = why
+        else:
+            readable.append(h)
+    page = next((facts for facts in (page_for([h]) for h in readable) if facts), None) \
+        if page_for else None
+    p.alone = {h["name"]: union_of(doc, [h], base_check, as_of, page) for h in readable}
+    if len(readable) < 2:
+        return p
+    p.contested = _contested_findings(readable)
+    if p.contested:
+        return p
+    combined = doc
+    for h in readable:
+        combined = P.layered(combined, h)
+    p.together = TOGETHER_UNREAD if _cannot_read(combined) else _misread(readable, base, combined)
+    if p.together is not None:
+        return p
+    whole = union_of(doc, readable, base_check, as_of, page)
+    # a line one finding already brings is its own, whatever the union files it under
+    seen = {line for c in p.alone.values() for kind in ("falsified", "holes", "moved")
+            for line in getattr(c, kind)}
+    for kind in ("falsified", "holes", "moved"):
+        setattr(p, kind, [line for line in getattr(whole, kind) if line not in seen])
+    return p
+
+
+def _pending_name(h):
+    """A finding as the report names it: its revision cut to the twelve characters the
+    PENDING line shows."""
+    return h["name"][:len("pending-") + 12]
+
+
+def _if_accepted(c):
+    """What one finding laid over the base changes and breaks -> lines, empty when it changes
+    nothing the base holds; in the words of the hypotheses' report."""
+    _, _, bjud, _, _ = c.base
+    out = []
+    added = [k for k, _ in c.arrived]
+    for k, h, old, new, may, why in c.updates:
+        if k in bjud:
+            continue
+        out.append(f"  {k}: {P.short(old, 36)} -> {P.short(new, 36)}")
+        out.append(f"    {why}" + ("" if may else " - the base keeps what it holds"))
+    for k, h, old, new, may, why in c.reversed:
+        ov, nv = P._verdict_of(old), P._verdict_of(new)
+        out.append(f"  {k}: " + (f"{P.short(ov, 36)} -> {P.short(nv, 36)}" if not P._same(ov, nv)
+                                 else "the same verdict on other grounds"))
+        if may:
+            out.append(f"    by its own condition - {why}")
+        elif k in c.untakeable:
+            out.append(f"    {why}")
+        else:
+            out.append(f"    {why} - a person decides whether it stands")
+        for d in c.drops_needed.get(k, []):
+            out.append(f"    no longer rests on {d} - accepting it names the reason")
+    out += ["  FALSIFIED " + line for line in c.falsified]
+    out += ["  FAIL " + line for line in c.holes]
+    out += ["  MOVED " + line for line in c.moved]
+    if out and added:
+        out.insert(0, _cut("  adds " + ", ".join(added)))
+    return out
+
+
+def pending_report(p):
+    """The dry run's part for the pending findings, after the hypotheses' -> lines: the
+    findings, the ids two of them contest, what each would change and break if accepted, what
+    only all of them together break; then whether accepting them breaks anything, and that
+    nothing but this run waits on it."""
+    doc, bids, _, bfields, braw = p.base
+    names = {h["name"]: _pending_name(h) for h in p.finds}
+    out = [f"pending ({len(p.finds)}): shared findings, each laid over the base alone - tested "
+           f"here, never written"]
+    for h in p.finds:
+        status = h["head"]["publication"]
+        scope = status["scope"]
+        out.append(f"  {names[h['name']]} · {status['state']} · {scope['kind']}: "
+                   f"{scope['environment']} · " + ", ".join(status["roots"]))
+    out.append("")
+    if p.contested:
+        out.append(f"contested ({len(p.contested)}): an id two pending findings hold differently - at "
+                   f"most one of them is accepted")
+        for k, hs in p.contested.items():
+            out.append(f"  {k}:")
+            if k in bids:
+                out.append("    the base holds " + _describe(k, braw.get(k), braw, bids, bfields))
+            for name, _ in hs:
+                h = next(x for x in p.finds if x["name"] == name)
+                out.append(f"    {names[name]} says " + _sources_of(k, h, doc, bids, bfields))
+    for h in p.finds:
+        name = names[h["name"]]
+        if h["name"] in p.unreadable:
+            out.append(f"{name}, if accepted: it cannot be read over the base - "
+                       + p.unreadable[h["name"]])
+            continue
+        c = p.alone[h["name"]]
+        lines = _if_accepted(c)
+        if lines:
+            out.append(f"{name}, if accepted:")
+            out += lines
+        elif c.arrived:
+            out.append(_cut(f"{name}, if accepted: nothing breaks - it adds "
+                            + ", ".join(k for k, _ in c.arrived)))
+        else:
+            out.append(f"{name}, if accepted: nothing changes - the base already holds what it says")
+    if p.together is not None:
+        out.append("together, if every one is accepted: they cannot be read over the base as one - "
+                   + p.together)
+    elif p.falsified or p.holes or p.moved:
+        out.append("together, if every one is accepted:")
+        out += ["  FALSIFIED " + line for line in p.falsified]
+        out += ["  FAIL " + line for line in p.holes]
+        out += ["  MOVED " + line for line in p.moved]
+    out.append("")
+    alone = list(p.alone.values())
+    what = []
+    if p.unreadable:
+        what.append("a finding that cannot be read over the base")
+    if p.together is not None:
+        what.append("findings that cannot be read together")
+    if p.contested:
+        what.append("an id two findings contest")
+    if p.falsified or any(c.falsified or c.head_falsified for c in alone):
+        what.append("a falsifier holds on a pending value")
+    if p.holes or any(c.holes for c in alone):
+        what.append("a hole")
+    if any(c.refused for c in alone):
+        what.append("a contested reading")
+    untaken = sum(len(c.untaken) for c in alone)
+    if untaken:
+        what.append(f"{untaken} reversal{'s' if untaken != 1 else ''} a person decides")
+    if any(c.drops_needed for c in alone):
+        what.append("a dropped dependency to name")
+    moved = len(p.moved) + sum(len(c.moved) for c in alone)
+    if what:
+        out.append("pending not clean: " + ", ".join(what) + " - the pending findings alone make "
+                   "this run red; no fold, commit or merge waits on it")
+        out.append("  a person decides each: one that is wrong is rejected with its reason (pending "
+                   "reject <revision> --reason \"<why>\"); one that stands is read again and set in "
+                   "the base, or accepted in the knowledge PR")
+    elif moved:
+        out.append(f"pending: {moved} judgment{'s' if moved != 1 else ''} to re-review when "
+                   f"accepted - a premise moved under {'them' if moved != 1 else 'it'}")
+    else:
+        out.append(f"pending clean: accepting {'it' if len(p.finds) == 1 else 'them'} breaks "
+                   f"nothing the base holds")
     return out
 
 
@@ -1469,6 +1759,15 @@ against the merged tree. The exit code is non-zero on a contested id, a reversal
 named, a falsifier that holds, or a hole; a premise that moved under a judgment leaves it
 green and blocks the fold, since a move is for a person to re-review.
 
+In an Advanced project a live dry run with no hypothesis named and no --from then tests the
+pending findings the same way, under their own heading: each active contribution of the
+pending ledger laid over the base alone, then all of them together - the ids two of them
+hold differently, what accepting each would change, what it would falsify, leave without
+ground or move. A finding that would break something, or that the base cannot read as it
+says or would read its own judgments otherwise beside, makes the run red, though nothing
+adopts it and nothing else waits on it: a person rejects it with a reason, reads again, or
+accepts it in the knowledge PR. A frozen run has no pending part.
+
 The fold - no --dry-run - runs the same test first and writes only when it is clean: every
 id carried over whole from its hypothesis into the base, in id order beside its siblings,
 through the reader's own edits; the files read back and checked; the folded files deleted;
@@ -1646,19 +1945,34 @@ def main(argv=None):
                         print('  candidate ' + kind + ': ' + line)
         return 0
     doc, hyps = read(paths, names, refs, as_of=as_of)
-    if not hyps:
+    # the run over every hypothesis also tests what the pending ledger would bring; a run
+    # asked about named hypotheses, or another branch's record, is about those alone
+    finds = [] if names or refs else pending_findings(doc)
+    if not hyps and not finds:
         print("no hypotheses beside the record - nothing to consolidate")
         return 0
     fail_b, moved_b = _base_check(paths, doc)
-    c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths, hyps, doc=doc), take, drops)
-    for l in report(c):
-        print(l)
-    stray = _stray(c, take)
+    code, c = 0, None
+    if hyps:
+        c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths, hyps, doc=doc), take, drops)
+        for l in report(c):
+            print(l)
+        code = 1 if c.red or c.drops_needed else 0
+    else:
+        print("no hypotheses beside the record - nothing to consolidate")
+    if finds:
+        p = pending_of(doc, finds, (fail_b, moved_b), as_of,
+                       lambda proposals: page_of(paths, proposals, doc=doc))
+        print()
+        for l in pending_report(p):
+            print(l)
+        code = code or (1 if p.red else 0)
+    stray = _stray(c, take) if c is not None else None
     if stray:
         print()
         print(stray)
         return 1
-    return 1 if c.red or c.drops_needed else 0
+    return code
 
 
 if __name__ == "__main__":
