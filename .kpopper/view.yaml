@@ -111,6 +111,7 @@ tabs:
              s.2026_09_15_link_spelling, s.2026_09_16_page_address,
              s.2026_09_17_selective_ci, s.2026_09_17_history_reasoning_integration,
              s.2026_09_17_t3_integration, s.2026_09_18_ci_cost,
+             s.2026_09_23_bare_value_placement,
              s.2026_09_18_continue_reasoning_core, s.2026_09_18_remeasure_midnight,
              s.2026_09_18_illustration_titles,
              s.2026_09_19_reasoning_overview,
