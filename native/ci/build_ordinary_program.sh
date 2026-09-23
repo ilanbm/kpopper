@@ -47,6 +47,21 @@ manifest_field() {
     sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" "$2"
 }
 
+# A leading ~/ names the home directory, and a relative path is taken from here; the
+# compiler runs in a temporary directory, so every path it is given is absolute first.
+settled_path() {
+    settled=$1
+    case "$settled" in
+        # The pattern is quoted so it matches a literal leading ~/ rather than expanding.
+        "~/"*) settled="$HOME/${settled#"~/"}" ;;
+    esac
+    case "$settled" in
+        /*) ;;
+        *) settled="$PWD/$settled" ;;
+    esac
+    printf '%s\n' "$settled"
+}
+
 # Hosts whose shell and native tools disagree about path syntax carry a translator.
 if command -v cygpath >/dev/null 2>&1; then
     shell_path() { cygpath -u "$1"; }
@@ -67,7 +82,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 [ -n "$lean_root" ] || lean_root="${KPOPPER_LEAN_ROOT:-}"
-[ -z "$lean_root" ] || lean_root=$(shell_path "$lean_root")
+[ -z "$lean_root" ] || lean_root=$(settled_path "$(shell_path "$lean_root")")
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 source_file="$here/../shared/session/lean/Main.lean"
@@ -100,14 +115,7 @@ else
 fi
 
 cache_root="${KPOPPER_CORE_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/kpopper/lean}"
-case "$cache_root" in
-    "~/"*) cache_root="$HOME/${cache_root#~/}" ;;
-esac
-cache_root=$(shell_path "$cache_root")
-case "$cache_root" in
-    /*) ;;
-    *) cache_root="$PWD/$cache_root" ;;
-esac
+cache_root=$(settled_path "$(shell_path "$cache_root")")
 parent="$cache_root/$target"
 destination="$parent/$source_sha256"
 
@@ -116,11 +124,15 @@ publish() {
     host_path "$1"
 }
 
+# A published directory holds an executable and a manifest that describe each other.
+matches_its_manifest() {
+    [ -f "$1/build.json" ] && [ -f "$1/$program" ] &&
+        [ "$(manifest_field source_sha256 "$1/build.json")" = "$source_sha256" ] &&
+        [ "$(manifest_field binary_sha256 "$1/build.json")" = "$(sha256_of "$1/$program")" ]
+}
+
 if [ -d "$destination" ] && [ -z "$rebuild" ]; then
-    [ -f "$destination/build.json" ] && [ -f "$destination/$program" ] ||
-        fail "the cached program at $destination is incomplete; rerun with --rebuild"
-    [ "$(manifest_field source_sha256 "$destination/build.json")" = "$source_sha256" ] &&
-        [ "$(manifest_field binary_sha256 "$destination/build.json")" = "$(sha256_of "$destination/$program")" ] ||
+    matches_its_manifest "$destination" ||
         fail "the cached program at $destination does not match its manifest; rerun with --rebuild"
     publish "$destination"
     exit 0
@@ -133,7 +145,7 @@ else
     lean=$(command -v lean || true)
     [ -n "$lean" ] || fail "Lean $LEAN_VERSION is required; pass its toolchain prefix"
     # Resolve the toolchain a proxy selects, under its own invocation name.
-    lean_root=$(shell_path "$("$lean" --print-prefix)")
+    lean_root=$(settled_path "$(shell_path "$("$lean" --print-prefix)")")
     lean="$lean_root/bin/lean$suffix"
 fi
 leanc="$lean_root/bin/leanc$suffix"
@@ -164,13 +176,18 @@ printf '{"binary_sha256":"%s","lean_version":"%s","platform":"%s","source_sha256
     "$source_sha256" > "$work/build.json"
 rm -f "$work/Main.lean" "$work/Main.c" "$work/Main.olean"
 
-# Renaming the directory publishes a matching executable and manifest at once.
+# Renaming the directory publishes a matching executable and manifest at once. Only a
+# rebuild replaces what is already published; a build that arrived first while this one
+# was compiling keeps the directory, and this one is discarded rather than interleaved.
 backup=""
-if [ -d "$destination" ]; then
+if [ -n "$rebuild" ] && [ -d "$destination" ]; then
     backup="$destination.replaced-$$"
     mv "$destination" "$backup"
 fi
-if mv "$work" "$destination"; then
+if [ -d "$destination" ]; then
+    matches_its_manifest "$destination" ||
+        fail "another build published $destination and it does not match its manifest; rerun with --rebuild"
+elif mv "$work" "$destination"; then
     work=""
     [ -z "$backup" ] || rm -rf "$backup"
 else
