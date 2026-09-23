@@ -10,6 +10,12 @@ opener's `KPOPPER_AGENT_CONTEXT.command` points to the canonical native executab
 A globally installed CLI does not satisfy plugin hooks; each active cache needs its
 own `scripts/runtime/TARGET` payload.
 
+When the runtime is missing, the session opener prints the diagnostic and that exact
+command on standard output, which Claude Code and Codex add to the agent's context at
+session start. The agent can then offer to run it and ask for a new session, which opens
+with kpopper. The opener still exits 0. Every other hook stays silent and leaves the same
+diagnostic on standard error, which neither host shows the model.
+
 The Python runtime described below is source-only compatibility mode for legacy
 workflows. Select it explicitly with `KPOPPER_RUNTIME=python`; missing native
 runtime must not silently fall back to Python or to a different `kpop` on `PATH`.
