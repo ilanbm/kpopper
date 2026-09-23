@@ -1790,6 +1790,8 @@ fn another_branch_s_record_is_laid_over_this_one_as_what_it_holds_differently() 
     let temp = tempfile::tempdir().unwrap();
     let root = &temp.path().canonicalize().unwrap();
     git(root, &["init", "-q", "-b", "main"]);
+    // Checking a branch out keeps the record's bytes as written, on every platform.
+    git(root, &["config", "core.autocrlf", "false"]);
     let base = "known:\n  local.one: {v: 1}\n  local.two: {v: 2, of: 2026-09-10}\n  local.three: {v: two  words}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";
     commit_record(root, base, "base");
     git(root, &["branch", "same"]);
