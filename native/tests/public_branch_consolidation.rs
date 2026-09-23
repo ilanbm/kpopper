@@ -144,6 +144,9 @@ fn branched(branches: &[(&str, String)]) -> (tempfile::TempDir, PathBuf) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
+    // Checking a branch out keeps the record's bytes as written, on every platform: a record
+    // turned into CRLF lines on checkout is one neither reader folds into.
+    git(&root, &["config", "core.autocrlf", "false"]);
     fs::write(root.join("GROUNDING.yaml"), BRANCHED).unwrap();
     commit(&root, "base");
     for (name, record) in branches {

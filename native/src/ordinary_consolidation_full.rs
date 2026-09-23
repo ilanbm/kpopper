@@ -305,13 +305,17 @@ pub(super) fn run(
         None,
         runtime,
     )?;
-    require(
-        get(
-            &F::capabilities(capture.ordinary_document(), None)?,
-            "profile",
-        ) != &s("core/v1"),
-        "unsupported_capability: use core/v1 consumer",
-    )?;
+    if get(
+        &F::capabilities(capture.ordinary_document(), None)?,
+        "profile",
+    ) == &s("core/v1")
+    {
+        let output = super::core_record(capture.hypotheses(), &options.names)?;
+        capture.verify()?;
+        route.verify()?;
+        return Ok(output);
+    }
+    capture.require_ordinary_reader()?;
     let hyps = read_hypotheses(&capture, &options.names, runtime)?;
     // The run over every hypothesis also tests what the pending ledger would bring; a run
     // asked about named hypotheses is about those alone.

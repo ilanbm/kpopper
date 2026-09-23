@@ -6,10 +6,14 @@ use crate::{
     ordinary_document::Document,
     ordinary_value::{Map, Value as V, is_int, map, map_mut, string_is, text, truth},
     pending_state::Observation,
-    source_overlay::Overlay,
+    require,
+    source_overlay::{Comparison, Overlay},
     value::TypedValue as CV,
 };
 use std::collections::{BTreeMap, BTreeSet};
+/// How an ordinary reader leaves a target kept by its history unverified.
+const HISTORY_CONSUMER: &str =
+    "unsupported_history_consumer: history target needs captured consumer";
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
@@ -123,31 +127,97 @@ fn layered(base: &V, hypothesis: &V) -> Result<V> {
     }
     Ok(out)
 }
-type Holders = BTreeMap<String, Vec<(String, String, V)>>;
-fn observe(
-    holders: &mut Holders,
-    meanings: &mut BTreeMap<String, BTreeSet<String>>,
-    label: &str,
-    document: &V,
-    comparison: &V,
-    history: Option<&CV>,
-) -> Result<()> {
-    let mut context = None;
-    for (id, (collection, body)) in entries(document)? {
-        // Retain the first holder even if its comparison context is unreadable.
-        holders
-            .entry(id.clone())
-            .or_default()
-            .push((label.into(), collection, body));
-        if context.is_none() {
-            context = Some(Meaning::new(comparison, history)?);
+/// Who holds each id, and with which comparison meanings, in one group of readings.
+#[derive(Default)]
+struct Held {
+    holders: BTreeMap<String, Vec<(String, String, V)>>,
+    meanings: BTreeMap<String, BTreeSet<String>>,
+}
+impl Held {
+    fn observe(
+        &mut self,
+        label: &str,
+        document: &V,
+        comparison: &V,
+        history: Option<&CV>,
+    ) -> Result<()> {
+        let mut context = None;
+        for (id, (collection, body)) in entries(document)? {
+            // Retain the first holder even if its comparison context is unreadable.
+            self.holders
+                .entry(id.clone())
+                .or_default()
+                .push((label.into(), collection, body));
+            if context.is_none() {
+                context = Some(Meaning::new(comparison, history)?);
+            }
+            self.meanings
+                .entry(id.clone())
+                .or_default()
+                .insert(context.as_ref().unwrap().identity(&id)?);
         }
-        meanings
-            .entry(id.clone())
-            .or_default()
-            .insert(context.as_ref().unwrap().identity(&id)?);
+        Ok(())
+    }
+}
+/// The active ids that the groups hold in more than one body or meaning, each with every
+/// holder in the order the groups were read.
+fn conflicts(active: &BTreeSet<String>, groups: &[&Held]) -> Result<CV> {
+    let mut conflicts = Map::new();
+    for id in active {
+        let variants = groups
+            .iter()
+            .flat_map(|group| group.holders.get(id).into_iter().flatten())
+            .collect::<Vec<_>>();
+        let bodies = variants
+            .iter()
+            .map(|(_, collection, body)| {
+                shared_identity(&V::List(vec![s(collection), body.clone()]))
+            })
+            .collect::<Result<BTreeSet<_>>>()?;
+        let meanings = groups
+            .iter()
+            .flat_map(|group| group.meanings.get(id).into_iter().flatten())
+            .collect::<BTreeSet<_>>();
+        if bodies.len() > 1 || meanings.len() > 1 {
+            conflicts.insert(
+                id.clone(),
+                V::List(
+                    variants
+                        .iter()
+                        .map(|(name, _, body)| V::List(vec![s(name), body.clone()]))
+                        .collect(),
+                ),
+            );
+        }
+    }
+    V::Map(conflicts).try_typed()
+}
+/// The core/v1 consumer's boundary over the target's documents: a declaration the contract
+/// refuses stops it.
+fn core_reads(documents: &[&V]) -> Result<()> {
+    for document in documents {
+        crate::ordinary_fields::capabilities(document, None)?;
     }
     Ok(())
+}
+/// The ordinary reader's boundary over the same documents, in order: a declaration the
+/// contract refuses, said in the contract's words, or a core/v1 declaration stops it.
+fn ordinary_reads(documents: &[&V]) -> Result<()> {
+    for document in documents {
+        let capabilities = crate::ordinary_fields::explained_capabilities(document, None)?;
+        require(
+            !string_is(&map(&capabilities)?["profile"], "core/v1"),
+            crate::source_capture::CORE_CONSUMER,
+        )?;
+    }
+    Ok(())
+}
+fn reason(error: &crate::Error) -> String {
+    error
+        .0
+        .strip_prefix("invalid_history_value: ")
+        .unwrap_or(&error.0)
+        .to_owned()
 }
 pub(crate) fn apply(
     document: &mut Document,
@@ -157,11 +227,12 @@ pub(crate) fn apply(
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<Overlay<V>> {
     let base = document.source.projected();
-    let mut holders = Holders::new();
-    let mut meanings = BTreeMap::new();
-    observe(
-        &mut holders,
-        &mut meanings,
+    // The checkout and its hypotheses, the configured target, and the pending ledger, read
+    // in that order: an ordinary reader leaves out the target's group when it may not read it.
+    let mut local = Held::default();
+    let mut target_held = Held::default();
+    let mut pending = Held::default();
+    local.observe(
         "checkout",
         &base,
         &base,
@@ -176,9 +247,7 @@ pub(crate) fn apply(
             .get("doc")
             .or_else(|| hypothesis.get("document"))
             .ok_or_else(|| error("invalid_snapshot"))?;
-        observe(
-            &mut holders,
-            &mut meanings,
+        local.observe(
             &format!("hypothesis:{name}"),
             body,
             &layered(&base, body)?,
@@ -186,23 +255,56 @@ pub(crate) fn apply(
         )?;
     }
     let mut unavailable = None;
+    // Why an ordinary reader leaves the target unverified where a core/v1 consumer compares
+    // it: the target is kept by its history, or declares core/v1 in its record or in one of
+    // its hypotheses. None when both readers see the same comparison.
+    let mut ordinary_refusal = None;
     let mut target_snapshot = None;
     let target_observation = observation.target.as_ref().map(V::from_typed);
     if let Some(target) = &target_observation {
         if map(target)?.get("revision").is_some_and(truth) {
+            let revision = text(&map(target)?["revision"])?;
             let captured = (|| -> Result<()> {
-                let target_doc = crate::source_target::records(
-                    root,
-                    record,
-                    text(&map(target)?["revision"])?,
-                    runtime,
-                )?;
-                let target_doc = V::from_typed(&target_doc);
+                let target_doc =
+                    match crate::source_target::records(root, record, revision, runtime) {
+                        Ok(target_doc) => V::from_typed(&target_doc),
+                        Err(e) => {
+                            // An ordinary reader stops at a history target's authority marker,
+                            // before anything later in the reading could fail, and reads the
+                            // other targets' declarations without computing them, so a target
+                            // it may not read is never replayed for it.
+                            ordinary_refusal =
+                                if crate::source_target::kept_by_history(root, record, revision)
+                                    .unwrap_or(false)
+                                {
+                                    Some(error(HISTORY_CONSUMER))
+                                } else {
+                                    crate::source_target::records_ordinary(
+                                        root, record, revision, runtime,
+                                    )
+                                    .ok()
+                                    .and_then(|declared| {
+                                        let mut documents = vec![&declared.document];
+                                        documents.extend(declared.hypotheses.values().filter_map(
+                                            |hypothesis| map(hypothesis).ok()?.get("doc"),
+                                        ));
+                                        ordinary_reads(&documents).err()
+                                    })
+                                };
+                            return Err(e);
+                        }
+                    };
                 let target_map = map(&target_doc)?;
-                crate::ordinary_fields::capabilities(&target_map["doc"], None)?;
+                let mut documents = vec![&target_map["doc"]];
                 for hyp in crate::ordinary_value::list(&target_map["hypotheses"])? {
-                    crate::ordinary_fields::capabilities(&map(hyp)?["doc"], None)?;
+                    documents.push(&map(hyp)?["doc"]);
                 }
+                ordinary_refusal = if target_map.contains_key("history") {
+                    Some(error(HISTORY_CONSUMER))
+                } else {
+                    ordinary_reads(&documents).err()
+                };
+                core_reads(&documents)?;
                 target_snapshot = Some(target_doc.clone());
                 let history = target_map
                     .get("history")
@@ -211,9 +313,7 @@ pub(crate) fn apply(
                     .map(|v| v.try_typed())
                     .transpose()?;
                 let label = format!("target:{}", text(&map(target)?["ref"])?);
-                observe(
-                    &mut holders,
-                    &mut meanings,
+                target_held.observe(
                     &label,
                     &target_map["doc"],
                     &target_map["doc"],
@@ -241,9 +341,7 @@ pub(crate) fn apply(
                             .or_insert_with(empty);
                         map_mut(meta)?.insert("reasoning".into(), reasoning.clone());
                     }
-                    observe(
-                        &mut holders,
-                        &mut meanings,
+                    target_held.observe(
                         &format!("{label}:hypothesis:{}", text(&hyp["name"])?),
                         &layered,
                         &layered,
@@ -253,11 +351,7 @@ pub(crate) fn apply(
                 Ok(())
             })();
             if let Err(e) = captured {
-                unavailable = Some(
-                    e.0.strip_prefix("invalid_history_value: ")
-                        .unwrap_or(&e.0)
-                        .to_owned(),
-                );
+                unavailable = Some(reason(&e));
             }
         } else {
             unavailable = Some("configured target has no locally available observation".into());
@@ -393,36 +487,19 @@ pub(crate) fn apply(
             ("error", V::Null),
         ]);
         map_mut(&mut document.hypotheses)?.insert(name.clone(), hyp);
-        observe(
-            &mut holders,
-            &mut meanings,
-            &name,
-            &body,
-            &body,
-            history.as_ref(),
-        )?;
+        pending.observe(&name, &body, &body, history.as_ref())?;
     }
-    let mut conflicts = Map::new();
-    for id in active {
-        let variants = holders.get(&id).map(Vec::as_slice).unwrap_or(&[]);
-        let bodies = variants
-            .iter()
-            .map(|(_, collection, body)| {
-                shared_identity(&V::List(vec![s(collection), body.clone()]))
-            })
-            .collect::<Result<BTreeSet<_>>>()?;
-        if bodies.len() > 1 || meanings.get(&id).is_some_and(|m| m.len() > 1) {
-            conflicts.insert(
-                id,
-                V::List(
-                    variants
-                        .iter()
-                        .map(|(name, _, body)| V::List(vec![s(name), body.clone()]))
-                        .collect(),
-                ),
-            );
-        }
-    }
+    let core = Comparison {
+        conflicts: conflicts(&active, &[&local, &target_held, &pending])?,
+        unavailable,
+    };
+    let ordinary = match ordinary_refusal {
+        Some(refusal) => Comparison {
+            conflicts: conflicts(&active, &[&local, &pending])?,
+            unavailable: Some(reason(&refusal)),
+        },
+        None => core.clone(),
+    };
     Ok(Overlay {
         pending: observation.ledger.portable(),
         publication: observation.publication.clone(),
@@ -430,10 +507,10 @@ pub(crate) fn apply(
             .iter()
             .map(|v| v.try_typed())
             .collect::<Result<_>>()?,
-        conflicts: V::Map(conflicts).try_typed()?,
+        core,
+        ordinary,
         target: observation.target.clone(),
         target_snapshot,
-        unavailable,
         history_contributions: V::Map(history_contributions).try_typed()?,
     })
 }

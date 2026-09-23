@@ -2131,8 +2131,12 @@ def _core_check_findings(paths, context):
             notes.append(nid + ': support reserved (' + ', '.join(states) + ')')
     falsified = {nid for nid, node in report['nodes'].items()
                  if node['state']['falsifier']['status'] == 'holds'}
-    for nid, flag in document_flags(context.snapshot.to_data()['document'], falsified):
-        notes.append(nid + ': ' + answer_flag_text(flag, 40))
+    # A closed question's moved answer is read from the captured document; a context that
+    # carries only the assessment has no document to read it from, and no note to add.
+    snapshot = getattr(context, 'snapshot', None)
+    if snapshot is not None:
+        for nid, flag in document_flags(snapshot.to_data()['document'], falsified):
+            notes.append(nid + ': ' + answer_flag_text(flag, 40))
     return failures, notes
 
 

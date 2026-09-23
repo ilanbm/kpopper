@@ -739,9 +739,10 @@ fn a_record_that_does_not_parse_is_refused_with_the_line_and_column() {
     fs::write(root.join("notes/more.yaml"), BROKEN_YAML).unwrap();
     let output = cli(root, &["check"], &private);
     assert_eq!(output.status.code(), Some(1));
+    let pointed = Path::new("notes").join("more.yaml");
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
-        broken_yaml_refusal("notes/more.yaml")
+        broken_yaml_refusal(pointed.to_str().unwrap())
     );
     fs::write(&entry, BROKEN_YAML).unwrap();
     let output = cli(&root.join("notes"), &["check"], &private);
@@ -1789,6 +1790,8 @@ fn another_branch_s_record_is_laid_over_this_one_as_what_it_holds_differently() 
     let temp = tempfile::tempdir().unwrap();
     let root = &temp.path().canonicalize().unwrap();
     git(root, &["init", "-q", "-b", "main"]);
+    // Checking a branch out keeps the record's bytes as written, on every platform.
+    git(root, &["config", "core.autocrlf", "false"]);
     let base = "known:\n  local.one: {v: 1}\n  local.two: {v: 2, of: 2026-09-10}\n  local.three: {v: two  words}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";
     commit_record(root, base, "base");
     git(root, &["branch", "same"]);

@@ -268,6 +268,10 @@ pub(super) fn run(
     let mut inventory = Inventory::default();
     let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
     let source = document.source.projected();
+    crate::source_capture::require_ordinary(
+        &crate::ordinary_value::Value::from_typed(&source),
+        &crate::ordinary_value::Value::from_typed(&document.hypotheses),
+    )?;
     let hypotheses = map(&document.hypotheses)?;
     let retained = selected_privacy(&source, hypotheses, &request.a, &request.b)?;
     if crate::recording_privacy::private_marker(&retained) {
@@ -283,10 +287,6 @@ pub(super) fn run(
         )));
     }
     let capabilities = crate::reasoning_fields::capabilities(&source, None)?;
-    require(
-        get(&capabilities, "profile") != &s("core/v1"),
-        "unsupported_capability: use core/v1 consumer",
-    )?;
     let loaded_runtime;
     let runtime = if runtime_override.is_some() {
         runtime_override

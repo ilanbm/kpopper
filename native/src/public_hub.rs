@@ -326,6 +326,9 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
         options.profile.as_deref(),
     )?;
     let core = string_is(&map(&capabilities)?["profile"], "core/v1");
+    if !core {
+        captured.require_ordinary_reader()?;
+    }
     let brief = match &options.brief {
         Some(path) => absolute(&cwd.join(path))?,
         None => first.parent().unwrap().join(

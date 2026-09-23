@@ -169,6 +169,11 @@ pub fn status(workspace: &Path, mode: ReadMode, _options: &StatusOptions) -> Res
                 Some(&runtime),
             )?;
         }
+        if record.exists() {
+            // The status reads the record as an ordinary reader does, so a record or a
+            // layer that declares core/v1 is refused rather than reported.
+            capture.require_ordinary_reader()?;
+        }
         context = capture.knowledge_status_context();
         capture.verify()?;
     } else if mode == ReadMode::Live && project.is_git() && map(&config)?["mode"] == s("advanced") {
@@ -425,6 +430,20 @@ pub fn run(options: &Options, workspace: &Path, mode: ReadMode) -> Result<V> {
 pub fn dispatch(options: &Options, workspace: &Path, mode: ReadMode) -> CommandOutput {
     let value = match run(options, workspace, mode) {
         Ok(value) => (value.to_json(), 0),
+        // The status reader's refusal of a declared reasoning profile is said on stderr, as
+        // the reader says it everywhere else, not as a structured result.
+        Err(error)
+            if matches!(options.command, Command::Status(_))
+                && ["unsupported_capability", "invalid_capability"]
+                    .iter()
+                    .any(|code| error.0.starts_with(code)) =>
+        {
+            return CommandOutput {
+                stdout: String::new(),
+                stderr: format!("{error}\n"),
+                code: 1,
+            };
+        }
         Err(error) => (
             Ok(serde_json::json!({"state":"needs attention","error":error.to_string()})),
             2,
