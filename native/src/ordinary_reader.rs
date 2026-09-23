@@ -169,6 +169,14 @@ impl<'a> Reader<'a> {
     pub fn fields(&self) -> &Map {
         &self.fields
     }
+    /// The field a written judgment keeps what it saw in: the record's own, or
+    /// `seen` while no judgment in the record carries one to infer it from.
+    pub(crate) fn snapshot_field(&self) -> Result<&str> {
+        match self.fields.get("snapshot") {
+            Some(value) if crate::history_view::truth(value) => text(value),
+            _ => Ok("seen"),
+        }
+    }
     pub fn raw(&self) -> &Map {
         &self.raw
     }
