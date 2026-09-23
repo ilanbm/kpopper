@@ -931,6 +931,226 @@ fn the_refusal_names_the_fields_that_listed_names_in_the_record_s_order() {
     }
 }
 
+/// A record before its first judgment, keeping its values under a section name of its own.
+const YOUNG_FACTS: &str = "meta:\n  updated: 2026-09-22\nsources:\n  pricing: {name: \"Acme's pricing page\", url: \"https://example.test/pricing\", read: \"2026-09-20\"}\nfacts:\n  acme.seat_price: {v: 42, from: pricing}\n  acme.seats: {v: 120, from: pricing}\n";
+
+fn check_young(root: &Path, record: &str) -> std::process::Output {
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    cli(root, &["check"], &root.join("private"))
+}
+
+#[test]
+fn a_young_record_reads_a_section_of_values_under_any_name() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for name in ["known", "facts", "parameters", "readings"] {
+        let output = check_young(
+            root,
+            &YOUNG_FACTS.replace("\nfacts:\n", &format!("\n{name}:\n")),
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(0), "{name}: {stderr}");
+        assert!(
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .contains("0 judgments, 3 entries, 0 problems"),
+            "{name}"
+        );
+    }
+    for section in [
+        "  acme.annual: {rule: \"acme.seat_price * acme.seats * 12\"}\n  contract.exit: {quoted: \"Either party may end it on 90 days' notice.\", from: pricing}\n",
+        "  acme.discount: 0.1\n",
+        "  memo: {name: the planning memo, file: memo.md, read: \"2026-09-19\"}\n  acme.term: {v: 12, from: memo}\n",
+    ] {
+        let output = check_young(root, &format!("{YOUNG_FACTS}{section}"));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(0), "{section}: {stderr}");
+    }
+}
+
+#[test]
+fn a_young_record_takes_its_first_judgment_under_a_custom_section() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, YOUNG_FACTS).unwrap();
+    let private = root.join("private");
+    let output = cli(
+        root,
+        &[
+            "add",
+            "why_acme",
+            "rests_on=[acme.seats]",
+            "verdict=prefer Acme",
+            "because=cheaper above 100 seats",
+            "wrong_if=acme.seats < 100",
+            "--as-of",
+            "2026-09-22",
+        ],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let saved = fs::read_to_string(&entry).unwrap();
+    assert!(saved.contains(
+        "facts:\n  acme.seat_price: {v: 42, from: pricing}\n  acme.seats: {v: 120, from: pricing}\n"
+    ));
+    assert!(saved.contains("judgments:\n  why_acme:\n    rests_on: [acme.seats]\n"));
+    assert!(saved.contains("    seen: {acme.seats: 120}\n"));
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 judgments, 4 entries, 0 problems")
+    );
+    // Once a judgment exists, a new value still goes where the values are.
+    let output = cli(
+        root,
+        &[
+            "add",
+            "acme.discount",
+            "v=0.1",
+            "from=pricing",
+            "--as-of",
+            "2026-09-22",
+        ],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fs::read_to_string(&entry)
+            .unwrap()
+            .contains("facts:\n  acme.discount: {v: 0.1, from: pricing}\n")
+    );
+}
+
+#[test]
+fn a_role_the_schema_names_is_the_one_a_young_record_s_first_judgment_takes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(
+        &entry,
+        format!("schema: {{snapshot: reviewed}}\n{YOUNG_FACTS}"),
+    )
+    .unwrap();
+    let private = root.join("private");
+    let output = cli(
+        root,
+        &[
+            "add",
+            "why_acme",
+            "rests_on=[acme.seats]",
+            "verdict=prefer Acme",
+            "because=cheaper above 100 seats",
+            "wrong_if=acme.seats < 100",
+            "--as-of",
+            "2026-09-22",
+        ],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let saved = fs::read_to_string(&entry).unwrap();
+    assert!(
+        saved.contains("    reviewed: {acme.seats: 120}\n"),
+        "{saved}"
+    );
+    assert!(!saved.contains("    seen:"), "{saved}");
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 judgments, 4 entries, 0 problems")
+    );
+}
+
+#[test]
+fn a_value_added_by_position_keeps_a_young_record_readable() {
+    // `add <id> <value>` writes the bare value into the section its prefix already holds.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, YOUNG_FACTS).unwrap();
+    let private = root.join("private");
+    let output = cli(
+        root,
+        &["add", "acme.term", "12", "--as-of", "2026-09-22"],
+        &private,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fs::read_to_string(&entry)
+            .unwrap()
+            .contains("  acme.term: \"12\"\n")
+    );
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("0 judgments, 4 entries, 0 problems")
+    );
+}
+
+#[test]
+fn a_misspelled_dependency_declaration_is_still_refused_in_a_young_record() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    for claim in [
+        // The dependency field misspelled, the judgment's other fields still its own.
+        "{restson: acme.seats, verdict: prefer Acme, wrong_if: \"acme.seats < 100\"}",
+        // A dependency list naming what is not an entry, under either name.
+        "{rests_on: [acme.seat], verdict: prefer Acme}",
+        "{depends_on: [acme.seat], conclusion: prefer Acme}",
+        // A judgment in names of the record's own, holding no value.
+        "{depends: acme.seats, conclusion: prefer Acme, falsified_when: \"acme.seats < 100\"}",
+    ] {
+        let record = format!("{YOUNG_FACTS}claims:\n  why_acme: {claim}\n");
+        let output = check_young(root, &record);
+        assert_eq!(output.status.code(), Some(1), "{claim}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.starts_with("no dependency field found: "),
+            "{claim}: {stderr}"
+        );
+        let output = cli(
+            root,
+            &["add", "acme.discount", "v=0.1", "--as-of", "2026-09-22"],
+            &root.join("private"),
+        );
+        assert_eq!(output.status.code(), Some(1), "{claim}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.starts_with("no dependency field found: "),
+            "{claim}: {stderr}"
+        );
+        assert_eq!(fs::read_to_string(&entry).unwrap(), record);
+    }
+    let output = check_young(root, &format!("schema: {{deps: restson}}\n{YOUNG_FACTS}"));
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8(output.stderr).unwrap().starts_with(
+        "schema names 'restson' for 'deps', and nothing this reader can see carries it"
+    ));
+}
+
 #[test]
 fn a_hypothesis_the_base_cannot_read_is_named_with_the_reason_on_one_line() {
     let temp = tempfile::tempdir().unwrap();
