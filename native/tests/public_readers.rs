@@ -509,6 +509,150 @@ fn actual_ordinary_cli_opens_and_checks_the_record() {
     );
 }
 
+/// Every reason the Python opener gives a person, in its order: broken, undeclared and
+/// blocked references, a misfiled re-opener, a falsified predicate, a reversed verdict and
+/// a moved reading; and in the head the legend, the priors line, a reading only a replaced
+/// judgment listened to, and a file left under the earlier layout. The expected outputs
+/// are the Python reader's own.
+#[test]
+fn ordinary_open_names_every_reason_the_python_opener_gives_a_person() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        include_str!("fixtures/opener/record.yaml"),
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/replaced.yaml"),
+        include_str!("fixtures/opener/replaced.yaml"),
+    )
+    .unwrap();
+    fs::write(root.join("PROVENANCE.view.yaml"), "title: left behind\n").unwrap();
+    for (args, expected) in [
+        (
+            &["--frozen", "open", "--chars", "40000"][..],
+            include_str!("fixtures/opener/reasons.stdout"),
+        ),
+        (
+            &["--frozen", "open", "--budget", "2"][..],
+            include_str!("fixtures/opener/reasons-budget.stdout"),
+        ),
+        (
+            &["--frozen", "open", "--chars", "700"][..],
+            include_str!("fixtures/opener/reasons-chars.stdout"),
+        ),
+    ] {
+        let output = cli(&root, args, &root.join("private"));
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            expected,
+            "{args:?}"
+        );
+    }
+}
+
+/// A bare `open` fills the 2000-character slot a session hook gets and counts what it cut,
+/// exactly as `--chars 2000` does; a caller naming only an item budget gets neither the
+/// standing verdicts nor a character cut.
+#[test]
+fn ordinary_open_fills_the_session_slot_unless_its_caller_names_a_budget() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        include_str!("fixtures/opener/slot.yaml"),
+    )
+    .unwrap();
+    let private = root.join("private");
+    for args in [
+        &["--frozen", "open"][..],
+        &["--frozen", "open", "--chars", "2000"][..],
+    ] {
+        let output = cli(&root, args, &private);
+        assert!(output.status.success(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            include_str!("fixtures/opener/slot.stdout"),
+            "{args:?}"
+        );
+    }
+    let output = cli(&root, &["--frozen", "open", "--budget", "25"], &private);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        include_str!("fixtures/opener/slot-budget.stdout")
+    );
+    let refused = cli(&root, &["--frozen", "open", "--chars", "0"], &private);
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(refused.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("--chars must be positive"),
+        "{}",
+        String::from_utf8_lossy(&refused.stderr)
+    );
+}
+
+/// The next moves are named as the host invokes a skill, consolidation among them while a
+/// hypothesis waits; a judgment resting on a prior is counted in the head, in the singular.
+#[test]
+fn ordinary_open_names_the_next_moves_as_the_host_invokes_them() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.x: {v: 1}\n  prior.sure: {v: 0.9}\njudgments:\n  d.one:\n    verdict: stands\n    rests_on: [p.x, prior.sure]\n    seen: {p.x: 1, prior.sure: 0.9}\n    wrong_if: p.x > 5\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(
+        root.join(".kpopper/hypotheses/alt.yaml"),
+        "known:\n  p.y: {v: 2}\n",
+    )
+    .unwrap();
+    let opening = concat!(
+        "3 entries, 1 judgments\n",
+        "1 judgment rests on prior.* claims, 1 of them on a prior at 0.8 or above\n",
+        "1 hypothesis waits - alt (undated, 0 rest on it)\n",
+        "\n",
+        "nothing needs a person right now.\n",
+        "\n",
+        "standing:\n",
+        "  = d.one: stands\n",
+        "\n",
+    );
+    for (host, next) in [
+        (
+            Some("claude"),
+            "next: /kpopper:ground <entry|prefix> (values with sources, what a change reaches) · /kpopper:record (what this session found) · check · /kpopper:consolidate (1 hypothesis waits)\n",
+        ),
+        (
+            Some("codex"),
+            "next: $ground <entry|prefix> (values with sources, what a change reaches) · $record (what this session found) · check · $consolidate (1 hypothesis waits)\n",
+        ),
+        (
+            None,
+            "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n",
+        ),
+    ] {
+        let mut args = vec!["--frozen", "open"];
+        args.extend(host.map(|host| ["--host", host]).into_iter().flatten());
+        let output = cli(&root, &args, &root.join("private"));
+        assert!(output.status.success(), "{host:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!("{opening}{next}"),
+            "{host:?}"
+        );
+    }
+}
+
 #[test]
 fn actual_ordinary_pull_history_reads_the_retained_versions() {
     let tmp = tempfile::tempdir().unwrap();
