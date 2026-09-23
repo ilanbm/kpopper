@@ -1,3 +1,5 @@
+mod support;
+
 use kpop_native::{
     ordinary_runtime::Program,
     reasoning_runtime::{OperationalBounds, target_name},
@@ -9,6 +11,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use support::pending::fixture as pending_fixture;
 
 const RECORD: &str = "sources:\n  s.note: {file: note.txt, read: 2026-09-20}\nknown:\n  p.a: {v: 12, from: s.note}\n  p.map:\n    v:\n      true: yes\n      1: one\njudgments:\n  d.keep:\n    wrong_if: 'p.a > 20'\n    seen: {p.a: 12}\n    verdict: Keep\n    rests_on: [p.a]\n";
 
@@ -57,12 +60,17 @@ fn fixture() -> tempfile::TempDir {
 }
 
 fn command(root: &Path, operation: &str) -> Command {
+    let mut command = live_command(root, operation);
+    command.arg("--frozen");
+    command
+}
+
+fn live_command(root: &Path, operation: &str) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     command
         .args([
             "--workspace",
             root.to_str().unwrap(),
-            "--frozen",
             "session",
             operation,
             "--no-settings",
@@ -76,7 +84,8 @@ fn command(root: &Path, operation: &str) -> Command {
             "checked-reader/v1",
         ])
         .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
-        .env("KPOPPER_NATIVE_CACHE", root.join("cache"));
+        .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
+        .env_remove("KPOPPER_READ_MODE");
     command
 }
 
@@ -361,6 +370,55 @@ fn ordinary_default_open_folds_and_advertised_handles_are_readable() {
         String::from_utf8_lossy(&source.stderr)
             .contains("this is a record entry; read node:p.a with this revision")
     );
+}
+
+#[test]
+fn ordinary_live_open_reports_each_local_contribution() {
+    let ledgers: J = serde_json::from_str(include_str!("fixtures/pending-state.json")).unwrap();
+    let scope = r#"{"environment":"API v2","kind":"external"}"#;
+    for (case, expected) in [
+        (
+            "one",
+            vec![format!(
+                "PENDING 8887db9b513d captured locally {scope} @native"
+            )],
+        ),
+        (
+            "two",
+            vec![
+                format!("PENDING 8887db9b513d captured locally {scope} @native"),
+                format!("PENDING b5bea064401e captured locally {scope} @native"),
+            ],
+        ),
+        // A withdrawn contribution is no longer a hypothesis; its status is still reported.
+        (
+            "retired",
+            vec![format!(
+                "PENDING 8887db9b513d accepted (last observed) {scope} @native"
+            )],
+        ),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        pending_fixture(
+            &root,
+            ledgers
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|ledger| ledger["name"] == case)
+                .unwrap(),
+        );
+        copy_resources(&root);
+        let opened = ok(live_command(&root, "open").output().unwrap());
+        let pending = opened
+            .lines()
+            .filter(|line| line.starts_with("PENDING "))
+            .collect::<Vec<_>>();
+        assert_eq!(pending, expected, "{case}");
+        let frozen = ok(command(&root, "open").output().unwrap());
+        assert!(!frozen.contains("PENDING "), "{case}");
+    }
 }
 
 #[test]
