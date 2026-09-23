@@ -290,12 +290,9 @@ fn ordinary(
             &route.project().root,
             reference,
         )?;
-        let captured = crate::source_target::records_layered(&root, &relative, &oid, runtime)?;
+        let (captured, ordered) =
+            crate::source_target::records_layer(&root, &relative, &oid, runtime)?;
         let data = map(&captured)?;
-        require(
-            !crate::reasoning_operations::selected(&data["doc"])?,
-            "unsupported_capability: use core/v1 consumer",
-        )?;
         let files = map(&data["files"])?;
         let raw = text(
             files
@@ -314,6 +311,7 @@ fn ordinary(
         supplied.push(crate::public_consolidation::ordinary::SuppliedHypothesis {
             name: reference.clone(),
             document: data["doc"].clone(),
+            ordered: ordered.document.clone(),
             source_record: source_record.clone(),
             head: V::Map(Map::from([
                 (
@@ -343,9 +341,20 @@ fn ordinary(
                 .find_map(|path| files.get(path))
                 .and_then(|v| text(v).ok())
                 .unwrap_or("");
+            let file = crate::ordinary_value::map(
+                ordered
+                    .hypotheses
+                    .get(name)
+                    .ok_or_else(|| error("invalid_target_hypothesis"))?,
+            )?;
             supplied.push(crate::public_consolidation::ordinary::SuppliedHypothesis {
                 name: qualified,
                 document: item["doc"].clone(),
+                ordered: file
+                    .get("doc")
+                    .or_else(|| file.get("document"))
+                    .ok_or_else(|| error("invalid_target_hypothesis"))?
+                    .clone(),
                 head: item["head"].clone(),
                 source_record: source_record.clone(),
                 source: crate::history_yaml::OrdinaryValue::from_typed(&item["doc"]),

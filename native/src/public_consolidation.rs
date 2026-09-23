@@ -88,6 +88,8 @@ pub struct Options {
     pub by: Option<String>,
     pub choices: Vec<String>,
     pub source_revision: Option<String>,
+    /// Read committed files only: the dry run then has no pending findings to test.
+    pub frozen: bool,
 }
 
 fn validate(options: &Options) -> Result<()> {

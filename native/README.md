@@ -294,6 +294,7 @@ private mark so its first write can be checked without creating a record at open
 The command does not install hooks or establish host trust.
 
 `session-context` consumes a real prompt payload and assesses against that baseline.
+In a workspace without a record it prints nothing until the session's first write creates one.
 It returns `UserPromptSubmit` `additionalContext` with exit 0. Private receipts attribute
 exact published bodies and suppress repeated findings; child agents do not consume them.
 An unavailable assessment is context rather than a request to continue the conversation.

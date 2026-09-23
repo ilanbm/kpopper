@@ -10,7 +10,9 @@ use crate::{
     reasoning_runtime::{OperationalBounds, Runtime},
     reasoning_snapshot::{CaptureOptions, Snapshot},
     require,
-    source_capture::{ReadMode, capture_ordinary_layer, capture_ordinary_source_with_runtime},
+    source_capture::{
+        CapturedSource, ReadMode, capture_ordinary_layer, capture_ordinary_source_with_runtime,
+    },
     value::{Integer, TypedValue as V},
 };
 use std::{
@@ -196,15 +198,18 @@ pub(crate) fn records_ordinary(
             .map_err(|_| error("target_replay_failed"))?
     })
 }
-/// Another branch's committed record as `consolidate --from` lays it over this one: its
-/// document, hypotheses and files. As for `pull --from`, no snapshot of its own is formed,
-/// so its field roles are read only over this record.
-pub(crate) fn records_layered(
+/// Another branch's committed record with its hypotheses and file text, in finite values as
+/// `records` gives them, and the same documents in the order their files hold them, read to
+/// be laid over this one: no snapshot of its own is formed, so its field roles are taken only
+/// over this record, by the reader that lays it there. What else the snapshot refused still
+/// stands - its size limits here, and an entry held twice where the record is laid, which
+/// would lose one body - and a record the core computes is not an ordinary layer.
+pub(crate) fn records_layer(
     root: &Path,
     entry: &str,
     revision: &str,
     runtime: Option<&Runtime>,
-) -> Result<V> {
+) -> Result<(V, OrdinaryRecords)> {
     std::thread::scope(|scope| {
         scope
             .spawn(|| {
@@ -217,12 +222,27 @@ pub(crate) fn records_layered(
                 } = materialize(root, entry, revision, |paths, scratch, mode| {
                     capture_ordinary_layer(paths, scratch, mode, runtime)
                 })?;
-                let captured = captured.try_finite()?;
-                Ok(obj([
-                    ("doc", captured.strict_document()?),
-                    ("hypotheses", V::List(target_hypotheses(&captured, active)?)),
-                    ("files", text_files(&files, &raw_names)?),
-                ]))
+                let ordered = OrdinaryRecords {
+                    document: captured.ordinary_document().clone(),
+                    hypotheses: crate::ordinary_value::map(captured.hypotheses())?.clone(),
+                };
+                let (document, hypotheses) = contents(&captured.try_finite()?, active)?;
+                require(
+                    active || !crate::reasoning_operations::selected(&document)?,
+                    "unsupported_capability: use core/v1 consumer",
+                )?;
+                crate::reasoning_snapshot::validate_layer(&document)?;
+                for hypothesis in &hypotheses {
+                    crate::reasoning_snapshot::validate_layer(&map(hypothesis)?["doc"])?;
+                }
+                Ok((
+                    obj([
+                        ("doc", document),
+                        ("hypotheses", V::List(hypotheses)),
+                        ("files", texts(&files, &raw_names)?),
+                    ]),
+                    ordered,
+                ))
             })
             .join()
             .map_err(|_| error("target_replay_failed"))?
@@ -428,8 +448,7 @@ fn records_isolated(
         capture_ordinary_source_with_runtime(paths, scratch, mode, None, runtime)
     })?;
     let captured = captured.try_finite()?;
-    let document = captured.strict_document()?;
-    let hypotheses = target_hypotheses(&captured, active)?;
+    let (document, hypotheses) = contents(&captured, active)?;
     let hashes = V::Map(
         files
             .iter()
@@ -503,14 +522,13 @@ fn records_isolated(
         .to_data()
     };
     map_mut(&mut output)?.insert("snapshot".into(), snapshot);
-    map_mut(&mut output)?.insert("files".into(), text_files(&files, &raw_names)?);
+    map_mut(&mut output)?.insert("files".into(), texts(&files, &raw_names)?);
     Ok(output)
 }
-/// The hypothesis files a committed record carries, each with its name, document and head.
-fn target_hypotheses(
-    captured: &crate::source_capture::CapturedSource,
-    active: bool,
-) -> Result<Vec<V>> {
+/// A captured record's document, and each hypothesis beside it by name with its document
+/// and head.
+fn contents(captured: &CapturedSource, active: bool) -> Result<(V, Vec<V>)> {
+    let document = captured.strict_document()?;
     let mut hypotheses = vec![];
     for (name, hyp) in map(captured.hypotheses())? {
         let hyp = map(hyp)?;
@@ -534,10 +552,10 @@ fn target_hypotheses(
         }
         hypotheses.push(value);
     }
-    Ok(hypotheses)
+    Ok((document, hypotheses))
 }
-/// The text of each file a committed record was read from, its raw history files aside.
-fn text_files(files: &Files, raw_names: &BTreeSet<String>) -> Result<V> {
+/// The text of each file read, the history's own objects aside.
+fn texts(files: &Files, raw_names: &BTreeSet<String>) -> Result<V> {
     Ok(V::Map(
         files
             .iter()

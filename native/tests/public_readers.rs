@@ -1109,6 +1109,221 @@ fn another_branch_s_record_is_laid_over_this_one_as_what_it_holds_differently() 
 }
 
 #[test]
+fn a_branch_record_whose_fields_tie_is_consolidated_over_this_one() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    let private = &root.join("private");
+    git(root, &["init", "-q", "-b", "main"]);
+    let known = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n";
+    let b = "  d.b: {verdict: b, depends: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    let z = "  d.z: {verdict: z, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n";
+    let c = "  d.c: {verdict: c, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    // The other branch rests d.b on a field of another name, so on its own its record
+    // cannot say which field is its dependency field.
+    commit_record(root, &format!("{known}{b}{z}"), "branch");
+    git(root, &["branch", "other"]);
+    let commit = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "other"])
+        .output()
+        .unwrap()
+        .stdout;
+    let commit = String::from_utf8(commit).unwrap();
+    let base = format!("{known}{z}");
+    commit_record(root, &base, "base");
+
+    // Laid over this record the two fields still tie, so nothing is tested or folded. The
+    // tie is named in the order the records give the fields, this record's first.
+    for args in [
+        &["consolidate", "--dry-run", "--from", "other"][..],
+        &["consolidate", "--from", "other"],
+    ] {
+        let output = cli(root, args, private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            tied("deps", "rests_on", "depends"),
+            "{args:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+            base
+        );
+    }
+
+    // Once this record rests a second judgment on its own field, the tie is the branch's
+    // alone: over this record its roles read, and what it adds is tested and folded.
+    let current = format!("{known}{z}{c}");
+    commit_record(root, &current, "second judgment");
+    let report = "the base with other laid over it\n  other\n\narrived (1): what the fold would add\n  d.b:  - from other\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: other may fold - consolidate other\n";
+    // The second line names the branch's commit, the day it was made and its age.
+    let told = |output: std::process::Output| {
+        assert!(output.stderr.is_empty());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let mut lines = stdout.split('\n').collect::<Vec<_>>();
+        assert!(
+            lines[1].starts_with("  other (born ")
+                && lines[1].ends_with(&format!(
+                    "): what other committed ({}), read as a hypothesis",
+                    &commit[..7]
+                )),
+            "{stdout}"
+        );
+        lines[1] = "  other";
+        lines.join("\n")
+    };
+    let output = cli(
+        root,
+        &["consolidate", "--dry-run", "--from", "other"],
+        private,
+    );
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(told(output), report);
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        current
+    );
+
+    let output = cli(root, &["consolidate", "--from", "other"], private);
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        told(output),
+        format!(
+            "{report}\ncarry d.b from other into judgments, before d.z\nfolded other: 1 entry and 0 judgments - 1 added, 0 replaced\nfiles to commit: GROUNDING.yaml\n  nothing to delete for other: another branch keeps its own record\nnext: git add GROUNDING.yaml && git commit\n  then merge other as you would - its record is folded here, and the merge carries only its code\n\nthe record needs a person on 0 judgments - check says the rest\n"
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        format!("{known}{b}{z}{c}")
+    );
+}
+
+#[test]
+fn a_tie_a_branch_brings_in_new_collections_is_named_in_its_order() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let known = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\n";
+    // Two collections this record does not hold, zeta before alpha, each resting a judgment
+    // on a field of its own name: over this record three fields fit the dependency role.
+    commit_record(
+        root,
+        &format!(
+            "{known}zeta:\n  d.y: {{verdict: y, depends: [local.two], seen: {{local.two: 2}}, wrong_if: local.two > 5}}\nalpha:\n  d.x: {{verdict: x, needs: [local.one], seen: {{local.one: 1}}, wrong_if: local.one > 5}}\n"
+        ),
+        "branch",
+    );
+    git(root, &["branch", "other"]);
+    let base = format!(
+        "{known}judgments:\n  d.z: {{verdict: z, rests_on: [local.one], seen: {{local.one: 1}}, wrong_if: local.one > 5}}\n"
+    );
+    commit_record(root, &base, "base");
+    for args in [
+        &["consolidate", "--dry-run", "--from", "other"][..],
+        &["consolidate", "--from", "other"],
+    ] {
+        let output = cli(root, args, &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            tied("deps", "rests_on", "depends"),
+            "{args:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+            base
+        );
+    }
+}
+
+#[test]
+fn a_tie_over_what_the_branch_holds_differently_is_named_over_that() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let a = "  d.a: {verdict: a, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n";
+    let base = format!("known:\n  local.one: {{v: 1}}\n  local.two: {{v: 2}}\njudgments:\n{a}");
+    // The branch adds a list of names to an entry whose claim it leaves alone, which is not
+    // laid again, and a judgment resting on a field of another name, which is.
+    commit_record(
+        root,
+        &format!(
+            "known:\n  local.one: {{v: 1, tags: [local.two]}}\n  local.two: {{v: 2}}\njudgments:\n{a}  d.b: {{verdict: b, depends: [local.two], seen: {{local.two: 2}}, wrong_if: local.two > 5}}\n"
+        ),
+        "branch",
+    );
+    git(root, &["branch", "other"]);
+    commit_record(root, &base, "base");
+    for args in [
+        &["consolidate", "--dry-run", "--from", "other"][..],
+        &["consolidate", "--from", "other"],
+    ] {
+        let output = cli(root, args, &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            tied("deps", "rests_on", "depends"),
+            "{args:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+            base
+        );
+    }
+}
+
+#[test]
+fn a_branch_record_consolidation_would_lose_or_misread_is_refused() {
+    let known = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\n";
+    let judgments = "judgments:\n  d.a: {verdict: a, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n  d.c: {verdict: c, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    let e = "  d.e: {verdict: e, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    let base = format!("{known}{judgments}");
+    for (branch, refusal) in [
+        // One id in two collections: laid over this record, one of its bodies would go.
+        (
+            format!("{known}  d.e: {{v: 9}}\n{judgments}{e}"),
+            "duplicate_entry",
+        ),
+        // A record the core computes is not read as an ordinary one.
+        (
+            format!(
+                "meta:\n  reasoning: {{version: 1, profile: core/v1, requires: [arithmetic/v1]}}\n{known}{judgments}{e}"
+            ),
+            "unsupported_capability: use core/v1 consumer",
+        ),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = &temp.path().canonicalize().unwrap();
+        let private = &root.join("private");
+        git(root, &["init", "-q", "-b", "main"]);
+        commit_record(root, &branch, "branch");
+        git(root, &["branch", "other"]);
+        commit_record(root, &base, "base");
+        for args in [
+            &["consolidate", "--dry-run", "--from", "other"][..],
+            &["consolidate", "--from", "other"],
+        ] {
+            let output = cli(root, args, private);
+            assert_eq!(output.status.code(), Some(1), "{args:?}");
+            assert!(output.stdout.is_empty(), "{args:?}");
+            assert_eq!(
+                String::from_utf8(output.stderr).unwrap(),
+                format!("{refusal}\n"),
+                "{args:?}"
+            );
+            assert_eq!(
+                fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+                base
+            );
+        }
+    }
+}
+
+#[test]
 fn export_and_the_write_commands_tell_the_refusal_in_the_record_s_order() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

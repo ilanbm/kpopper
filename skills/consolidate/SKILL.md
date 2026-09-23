@@ -73,6 +73,19 @@ onto a committed base only, and the fold ends with the commit that makes it a co
 result is read back and undone whole if `check` then says anything new; what the fold replaced is
 kept beside the record; the folded files go, and what to commit is printed.
 
+**Pending findings, in the same run.** In an Advanced project a live dry run over every hypothesis -
+none named, no `--from` - then lays each active finding of the pending ledger over the base alone,
+under its own `pending` heading: the ids two findings hold differently, what accepting each would
+change and break, and what only all of them together break. A finding that would falsify a judgment,
+leave a hole, bring a reading the door refuses or reverse a standing verdict makes the run red, and
+so does one the base cannot read as written, or would read its own judgments otherwise beside
+(`check` names why a finding cannot be read at all); a premise it moves leaves it green. Nothing
+adopts a finding and nothing else waits on it - the fold, commits and merges go on - and a frozen
+run, which CI makes, has no pending part. Put what breaks in front of the person in the work's words
+and ask whether the finding is right: a wrong one is rejected with their reason (`kpop pending reject
+<revision> --reason "<why>"`, the revision from `kpop pending status`), run by the session; one that
+stands is read again and `set` in the base, or accepted in the knowledge PR.
+
 Before accepting a material consolidation, examine affected judgments for a failure that arises
 only when the changes are combined, even if each change passes separately. Use the same
 [failure search](../kpopper/references/falsifiers.md#look-for-a-failure-the-current-check-would-miss) to expose shared assumptions

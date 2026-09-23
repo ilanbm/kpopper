@@ -186,7 +186,19 @@ pub(crate) fn in_record_order(
     if !explains_unreadable(&failure) {
         return failure;
     }
-    match unread(&crate::ordinary_source::Source::from_finite(source).projected()) {
+    in_order_of(
+        &crate::ordinary_source::Source::from_finite(source).projected(),
+        failure,
+    )
+}
+
+/// `unreadable`'s account retold over a document kept in the order its records hold it,
+/// such as a record with hypotheses laid over it.
+pub(crate) fn in_order_of(document: &V, failure: Error) -> Error {
+    if !explains_unreadable(&failure) {
+        return failure;
+    }
+    match unread(document) {
         Ok(Some(why)) => Error(why.account()),
         _ => failure,
     }
