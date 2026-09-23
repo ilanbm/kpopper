@@ -614,17 +614,59 @@ fn replace_field_ordered(
         lines.splice(span.start..span.end, replacement);
         Ok(new_end)
     } else {
-        let replacement = field_lines_ordered(field, value, member.indent + 2)?;
+        // A missing field closes the block, at the indent of the fields before it.
+        // An entry written on one line has no block to close: the field then lands
+        // under the key, and the write is refused as unreadable, not as a sibling.
+        let end = block_end(lines, member);
+        let field_indent = lines[member.start + 1..end]
+            .iter()
+            .find(|line| !blank(line))
+            .map_or(member.indent + 2, |line| indent(line));
+        let replacement = field_lines_ordered(field, value, field_indent)?;
         let len = replacement.len();
-        let mut insertion = member.start + 1;
-        for candidate in ["v", "quoted", "of", "from", "at"] {
-            if let Some(span) = field_span(lines, member, candidate) {
-                insertion = insertion.max(span.end);
-            }
-        }
-        lines.splice(insertion..insertion, replacement);
-        Ok(insertion + len)
+        lines.splice(end..end, replacement);
+        Ok(end + len)
     }
+}
+
+/// The fields a write adds follow the authored ones, in the order they are added:
+/// the requested scope, an arrangement's birth day, then what the judgment saw.
+/// An authored field keeps its place, except the two an arrangement always renews.
+fn order_added_fields(
+    fields: &mut [(String, Source)],
+    authored: Option<&Source>,
+    snapshot: &str,
+    arrangement: bool,
+) {
+    let given = |key: &str| match authored {
+        Some(Source::Map(given)) => given.iter().any(|(name, _)| name == key),
+        _ => false,
+    };
+    fields.sort_by_key(|(key, _)| match key.as_str() {
+        "born" if arrangement => 2,
+        key if key == snapshot && (arrangement || !given(key)) => 3,
+        "scope" if !given("scope") => 1,
+        _ => 0,
+    });
+}
+
+/// The line after an entry's block: every line indented under the entry,
+/// a trailing comment included, and the blank lines between them.
+fn block_end(lines: &[String], member: &Member) -> usize {
+    let mut end = member.start + 1;
+    while end < lines.len() {
+        if separator_blank(&lines[end]) {
+            match (end..lines.len()).find(|&next| !separator_blank(&lines[next])) {
+                Some(next) if indent(&lines[next]) > member.indent => end = next,
+                _ => break,
+            }
+        } else if indent(&lines[end]) > member.indent {
+            end += 1;
+        } else {
+            break;
+        }
+    }
+    end
 }
 
 fn replace_date_field(
@@ -1480,6 +1522,7 @@ fn prepare_with_inventory_mode(
     let mut supersede = false;
     let mut supersede_ended = None::<String>;
     let mut supersede_old = None::<V>;
+    let mut born = false;
     if kind == "add" {
         collection = Some(collection_for(&reader, &action)?);
         if let Ok(body) = map(field(&action, "body")?) {
@@ -1487,17 +1530,14 @@ fn prepare_with_inventory_mode(
             if body.contains_key(deps) {
                 seen = dependency_snapshot(&reader, body)?;
                 seen_order = ordered_snapshot(&reader, body, &seen, &document.source)?;
-                let snapshot = text(&reader.fields()["snapshot"])?;
+                let snapshot = reader.snapshot_field()?;
                 map_mut(action.get_mut("body").unwrap())?
                     .insert(snapshot.into(), V::Map(seen.clone()));
             }
         }
-        if !entries.contains_key(&id)
-            && crate::reasoning_authoring_guards::arrangement(
-                &reader,
-                field(&action, "body")?,
-            )
-        {
+        born = !entries.contains_key(&id)
+            && crate::reasoning_authoring_guards::arrangement(&reader, field(&action, "body")?);
+        if born {
             map_mut(action.get_mut("body").unwrap())?.insert("born".into(), s(&stamp));
         }
         if let Some((_, old)) = entries.get(&id)
@@ -1533,7 +1573,7 @@ fn prepare_with_inventory_mode(
                     )?
                 };
                 if old_arrangement && new_arrangement {
-                    let snapshot = text(&reader.fields()["snapshot"])?;
+                    let snapshot = reader.snapshot_field()?;
                     map_mut(&mut renewed)?.insert(snapshot.into(), V::Map(seen.clone()));
                 }
                 action.insert("body".into(), renewed);
@@ -1567,7 +1607,7 @@ fn prepare_with_inventory_mode(
             &source,
             &collection,
             &id,
-            text(&reader.fields()["snapshot"])?,
+            reader.snapshot_field()?,
             &seen,
             stamp_review.then_some(stamp.as_str()),
         )?
@@ -1688,7 +1728,7 @@ fn prepare_with_inventory_mode(
                         fields.push(("scope".into(), scope));
                     }
                 }
-                let snapshot = text(&reader.fields()["snapshot"])?;
+                let snapshot = reader.snapshot_field()?;
                 if !seen.is_empty() {
                     if let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == snapshot) {
                         *value = seen_order.clone();
@@ -1696,11 +1736,14 @@ fn prepare_with_inventory_mode(
                         fields.push((snapshot.into(), seen_order.clone()));
                     }
                 }
+                if !supersede {
+                    order_added_fields(fields, source_body, snapshot, born);
+                }
             }
             if supersede {
                 let old = supersede_old.as_ref().unwrap();
                 if let Source::Map(fields) = &mut body {
-                    let snapshot = text(&reader.fields()["snapshot"])?;
+                    let snapshot = reader.snapshot_field()?;
                     fields.retain(|(key, _)| key != "replaced" && key != snapshot);
                     fields.push((
                         "replaced".into(),
@@ -1830,7 +1873,7 @@ fn prepare_with_inventory_mode(
         "review" => {
             let (_, member) = locate(&lines, &id)
                 .ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
-            let snapshot = text(&reader.fields()["snapshot"])?;
+            let snapshot = reader.snapshot_field()?;
             let old_seen = map(map(&entries[&id].1)?
                 .get(snapshot)
                 .unwrap_or(&V::Map(Map::new())))?

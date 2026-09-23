@@ -699,7 +699,7 @@ impl World<'_> {
                 ),
             );
         }
-        let snapshot = text(&fields["snapshot"])?;
+        let snapshot = text(&fields["snapshot"]).unwrap_or("");
         let seen = field(body, snapshot);
         let unchecked = deps
             .iter()

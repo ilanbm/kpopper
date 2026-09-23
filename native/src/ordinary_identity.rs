@@ -346,8 +346,10 @@ pub(super) fn run(
         .collect::<BTreeSet<_>>();
     let fields = before.base.reader.fields();
     let deps = text(&fields["deps"])?;
-    let snapshot = text(&fields["snapshot"])?;
-    let predicate = text(&fields["predicate"])?;
+    // A record whose judgments carry no snapshot or predicate yet has no such
+    // field to rewrite.
+    let snapshot = text(&fields["snapshot"]).unwrap_or("");
+    let predicate = text(&fields["predicate"]).unwrap_or("");
     let retired = retirement(&worlds, &sources, &live, deps);
     let same = matches!(request.action, crate::history_identity::Action::Same { .. });
     require(

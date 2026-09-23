@@ -968,3 +968,310 @@ fn session_receipts_follow_successful_publication_and_cannot_break_a_write() {
     success(output);
     assert_eq!(fs::read(bad).unwrap(), b"not a directory");
 }
+
+const CUSTOM_ROLES: &str = "schema: {deps: requires, predicate: fails_if}\n";
+const CUSTOM_RECORD: &str = "known:\n  api.limit: {v: 10}\njudgments:\n  d.w: {verdict: known, requires: [api.limit], fails_if: \"api.limit > 100\"}\n";
+const CUSTOM_JUDGMENT: &[&str] = &[
+    "add",
+    "d.z",
+    "verdict=x",
+    "requires=[api.limit]",
+    "fails_if=api.limit > 50",
+];
+
+fn simple_workspace(source: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    fs::write(root.join("GROUNDING.yaml"), source).unwrap();
+    (temp, root)
+}
+
+fn record(root: &Path) -> String {
+    fs::read_to_string(root.join("GROUNDING.yaml")).unwrap()
+}
+
+// The expected records in the tests below are what the Python writer leaves
+// for the same commands. Where no judgment carries a snapshot yet, the first
+// judgment written keeps what it saw under `seen`.
+
+#[test]
+fn custom_dependency_and_predicate_fields_write_as_the_python_writer_does() {
+    for declared in [CUSTOM_ROLES, ""] {
+        let (_temp, root) = simple_workspace(&format!("{declared}{CUSTOM_RECORD}"));
+        assert_eq!(
+            success(run_unbundled(&root, &["add", "api.window", "v=5"])),
+            "add api.window into known, after api.limit\n\nthe record needs a person on 0 judgments - check says the rest\n"
+        );
+        assert_eq!(
+            record(&root),
+            format!(
+                "{declared}known:\n  api.limit: {{v: 10}}\n  api.window: {{v: 5}}\njudgments:\n  d.w: {{verdict: known, requires: [api.limit], fails_if: \"api.limit > 100\"}}\n"
+            )
+        );
+
+        let (_temp, root) = simple_workspace(&format!("{declared}{CUSTOM_RECORD}"));
+        let output = success(run_unbundled(&root, CUSTOM_JUDGMENT));
+        assert!(
+            output.contains("add d.z into judgments, after d.w\nthe new judgment holds: wrong_if does not hold (api.limit > 50)\n"),
+            "{output}"
+        );
+        assert_eq!(
+            record(&root),
+            format!(
+                "{declared}{CUSTOM_RECORD}\n  d.z:\n    verdict: x\n    requires: [api.limit]\n    fails_if: \"api.limit > 50\"\n    seen: {{api.limit: 10}}\n"
+            )
+        );
+    }
+}
+
+#[test]
+fn a_record_without_snapshots_is_set_reviewed_and_proposed_to_as_the_python_writer_does() {
+    let (_temp, root) = simple_workspace(&format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
+    assert_eq!(
+        success(run_unbundled(
+            &root,
+            &["set", "api.limit", "11", "--as-of", "2026-01-01"]
+        )),
+        "set api.limit: 10 -> 11 (as of 2026-01-01)\nrests on it:\n  HOLDS     d.w: wrong_if does not hold (api.limit > 100)\n\nthe record needs a person on 0 judgments - check says the rest\n"
+    );
+    assert_eq!(
+        record(&root),
+        format!(
+            "{CUSTOM_ROLES}known:\n  api.limit: {{v: 11, of: \"2026-01-01\"}}\njudgments:\n  d.w: {{verdict: known, requires: [api.limit], fails_if: \"api.limit > 100\"}}\n"
+        )
+    );
+
+    // The snapshot a review takes closes the judgment's block, after its comment.
+    let block = "known:\n  api.limit: {v: 10}\njudgments:\n  d.w:\n    verdict: known\n    requires: [api.limit]\n    fails_if: \"api.limit > 100\"\n    # kept with the judgment\n";
+    let (_temp, root) = simple_workspace(block);
+    assert_eq!(
+        success(run_unbundled(
+            &root,
+            &["review", "d.w", "--as-of", "2026-01-01"]
+        )),
+        "review d.w: seen rewritten from what the record holds (2026-01-01)\n  api.limit: 10 (never checked against it before)\n  d.w holds: wrong_if does not hold (api.limit > 100)\n"
+    );
+    assert_eq!(
+        record(&root),
+        format!("{block}    seen: {{api.limit: 10}}\n")
+    );
+
+    let (_temp, root) = simple_workspace(&format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
+    let mut proposal = CUSTOM_JUDGMENT.to_vec();
+    proposal.extend(["--hypothesis", "proposal", "--as-of", "2026-01-01"]);
+    let output = success(run_unbundled(&root, &proposal));
+    assert!(
+        output.ends_with("\nthe base is untouched; proposal holds 0 entries and 1 judgment\n"),
+        "{output}"
+    );
+    assert_eq!(record(&root), format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
+    assert_eq!(
+        fs::read_to_string(root.join(".kpopper/hypotheses/proposal.yaml")).unwrap(),
+        "hypothesis: {born: \"2026-01-01\"}\n\njudgments:\n  d.z:\n    verdict: x\n    requires: [api.limit]\n    fails_if: \"api.limit > 50\"\n    seen: {api.limit: 10}\n"
+    );
+}
+
+#[test]
+fn a_review_that_cannot_add_a_snapshot_to_a_flow_judgment_leaves_the_record() {
+    for indent in ["  ", "    "] {
+        let source = format!(
+            "known:\n{indent}api.limit: {{v: 10}}\njudgments:\n{indent}d.w: {{verdict: known, requires: [api.limit], fails_if: \"api.limit > 100\"}}\n"
+        );
+        let (_temp, root) = simple_workspace(&source);
+        let output = run_unbundled(&root, &["review", "d.w", "--as-of", "2026-01-01"]);
+        assert!(!output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "invalid_history_yaml\n"
+        );
+        assert_eq!(record(&root), source);
+    }
+}
+
+#[test]
+fn a_snapshot_written_by_hand_is_replaced_in_place_as_the_python_writer_does() {
+    let mut add = CUSTOM_JUDGMENT.to_vec();
+    add.insert(4, "seen={api.limit: 1}");
+    let judgment = "  d.z:\n    verdict: x\n    requires: [api.limit]\n    seen: {api.limit: 10}\n    fails_if: \"api.limit > 50\"\n";
+    let (_temp, root) = simple_workspace(&format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
+    success(run_unbundled(&root, &add));
+    assert_eq!(
+        record(&root),
+        format!("{CUSTOM_ROLES}{CUSTOM_RECORD}\n{judgment}")
+    );
+
+    let (_temp, root) = simple_workspace(&format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
+    add.extend(["--hypothesis", "proposal", "--as-of", "2026-01-01"]);
+    success(run_unbundled(&root, &add));
+    assert_eq!(record(&root), format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
+    assert_eq!(
+        fs::read_to_string(root.join(".kpopper/hypotheses/proposal.yaml")).unwrap(),
+        format!("hypothesis: {{born: \"2026-01-01\"}}\n\njudgments:\n{judgment}")
+    );
+}
+
+#[test]
+fn custom_field_roles_contribute_what_the_python_writer_captures() {
+    use kpop_native::value::{Integer, TypedValue as V};
+    let (_temp, root) = advanced_ordinary(&format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let mut args = CUSTOM_JUDGMENT.to_vec();
+    args.extend([
+        "--shareability",
+        "project",
+        "--scope",
+        "external",
+        "--environment",
+        "vendor",
+        "--event-id",
+        "e1",
+    ]);
+    let output = success(run_unbundled(&root, &args));
+    let receipt: Value = serde_json::from_str(output.trim_end().lines().last().unwrap()).unwrap();
+    assert_eq!(receipt["state"], "captured");
+    // The Python writer captures this revision for the same command.
+    assert_eq!(
+        receipt["revision"],
+        "ee81ab5b470e7b3ffe1bcb11c73da80058ea74de93492fbdb8557c39dfcf4e93"
+    );
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    let V::Map(manifest) = pending_manifest(&root, receipt["revision"].as_str().unwrap()) else {
+        panic!("manifest")
+    };
+    let V::Map(document) = &manifest["document"] else {
+        panic!("document")
+    };
+    let V::Map(judgments) = &document["judgments"] else {
+        panic!("judgments")
+    };
+    let V::Map(body) = &judgments["d.z"] else {
+        panic!("body")
+    };
+    assert_eq!(body["requires"], V::List(vec![V::Text("api.limit".into())]));
+    let V::Map(seen) = &body["seen"] else {
+        panic!("seen")
+    };
+    assert_eq!(seen["api.limit"], V::Integer(Integer::new("10").unwrap()));
+}
+
+#[test]
+fn added_fields_follow_the_authored_ones_in_the_python_writers_order() {
+    let scope = [
+        "--shareability",
+        "project",
+        "--scope",
+        "feature",
+        "--environment",
+        "checkout",
+    ];
+    // A snapshot field named before `scope` still comes after it.
+    let saw = "known:\n  api.limit: {v: 10}\njudgments:\n  d.w: {verdict: known, requires: [api.limit], fails_if: \"api.limit > 100\", saw: {api.limit: 10}}\n";
+    let (_temp, root) = simple_workspace(saw);
+    success(run_unbundled(&root, &[CUSTOM_JUDGMENT, &scope].concat()));
+    assert_eq!(
+        record(&root),
+        format!(
+            "{saw}\n  d.z:\n    verdict: x\n    requires: [api.limit]\n    fails_if: \"api.limit > 50\"\n    scope: {{kind: feature, environment: checkout}}\n    saw: {{api.limit: 10}}\n"
+        )
+    );
+
+    // An arrangement's birth day follows the scope and precedes the snapshot.
+    let arrangement = "known:\n  s.ask: {asked: \"what next\", read: 2026-01-01}\njudgments:\n  d.plan: {verdict: go, rests_on: [s.ask, graph.open], wrong_if: \"graph.open > 3\", seen: {s.ask: present, graph.open: 0}}\n";
+    let (_temp, root) = simple_workspace(arrangement);
+    let add = [
+        "add",
+        "d.next",
+        "verdict=wait",
+        "rests_on=[s.ask, graph.open]",
+        "wrong_if=graph.open > 5",
+        "--as-of",
+        "2026-01-01",
+    ];
+    success(run_unbundled(&root, &[&add[..], &scope].concat()));
+    assert_eq!(
+        record(&root),
+        "known:\n  s.ask: {asked: \"what next\", read: 2026-01-01}\njudgments:\n  d.next:\n    verdict: wait\n    rests_on: [s.ask, graph.open]\n    wrong_if: \"graph.open > 5\"\n    scope: {kind: feature, environment: checkout}\n    born: \"2026-01-01\"\n    seen: {s.ask: \"read 2026-01-01\", graph.open: 0}\n  d.plan: {verdict: go, rests_on: [s.ask, graph.open], wrong_if: \"graph.open > 3\", seen: {s.ask: present, graph.open: 0}}\n"
+    );
+}
+
+#[test]
+fn same_and_distinct_rewrite_a_record_without_snapshots() {
+    let two = "known:\n  api.limit: {v: 10}\n  api.cap: {v: 10}\njudgments:\n  d.w:\n    verdict: known\n    requires: [api.limit, api.cap]\n    fails_if: \"api.cap > 100\"\n";
+    let (_temp, root) = simple_workspace(two);
+    let output = success(run_unbundled(&root, &["same", "api.limit", "api.cap"]));
+    assert!(
+        output.starts_with("same api.limit api.cap: api.cap retired into api.limit\n  rewritten - requires: d.w · fails_if: d.w\n"),
+        "{output}"
+    );
+    assert_eq!(
+        record(&root),
+        "known:\n  api.limit: {v: 10, also: [api.cap]}\njudgments:\n  d.w:\n    verdict: known\n    requires: [api.limit]\n    fails_if: \"api.limit > 100\"\n"
+    );
+
+    let (_temp, root) = simple_workspace(two);
+    assert_eq!(
+        success(run_unbundled(
+            &root,
+            &[
+                "distinct",
+                "api.limit",
+                "api.cap",
+                "different endpoints",
+                "--as-of",
+                "2026-01-01"
+            ]
+        )),
+        "distinct api.limit from api.cap: different endpoints\n  the pair returns as no candidate; api.limit carries distinct_from: api.cap\nrests on it:\n  HOLDS     d.w: wrong_if does not hold (api.cap > 100)\n\nthe record needs a person on 0 judgments - check says the rest\n"
+    );
+    assert_eq!(
+        record(&root),
+        "known:\n  api.limit: {v: 10, distinct_from: api.cap}\n    # distinct 2026-01-01: different endpoints\n  api.cap: {v: 10}\njudgments:\n  d.w:\n    verdict: known\n    requires: [api.limit, api.cap]\n    fails_if: \"api.cap > 100\"\n"
+    );
+}
+
+#[test]
+#[ignore = "requires KPOP_SESSION_ORACLE_PYTHON and KPOP_SESSION_ORACLE_ROOT pointing at an immutable Python oracle"]
+fn custom_field_roles_match_the_python_writer_oracle() {
+    let python =
+        std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("set KPOP_SESSION_ORACLE_PYTHON");
+    let cli = Path::new(
+        &std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("set KPOP_SESSION_ORACLE_ROOT"),
+    )
+    .join("scripts/cli.py");
+    let block = "known:\n  api.limit: {v: 10}\njudgments:\n  d.w:\n    verdict: known\n    requires: [api.limit]\n    fails_if: \"api.limit > 100\"\n";
+    let mut cases = vec![];
+    for declared in [CUSTOM_ROLES, ""] {
+        let flow = format!("{declared}{CUSTOM_RECORD}");
+        cases.push((flow.clone(), vec!["add", "api.window", "v=5"]));
+        cases.push((flow.clone(), CUSTOM_JUDGMENT.to_vec()));
+        cases.push((
+            flow,
+            vec!["set", "api.limit", "11", "--as-of", "2026-01-01"],
+        ));
+        let block = format!("{declared}{block}");
+        cases.push((
+            block.clone(),
+            vec!["review", "d.w", "--as-of", "2026-01-01"],
+        ));
+        cases.push((block, CUSTOM_JUDGMENT.to_vec()));
+    }
+    for (source, args) in cases {
+        let (_native_temp, native) = simple_workspace(&source);
+        success(run_unbundled(&native, &args));
+        let (_oracle_temp, oracle) = simple_workspace(&source);
+        // No checked-session core, as for the unbundled native binary.
+        let cache = tempfile::tempdir().unwrap();
+        success(
+            Command::new(&python)
+                .arg(&cli)
+                .args(&args)
+                .current_dir(&oracle)
+                .env_remove("KPOPPER_AGENT_SESSION")
+                .env_remove("CODEX_THREAD_ID")
+                .env("XDG_CACHE_HOME", cache.path())
+                .output()
+                .unwrap(),
+        );
+        assert_eq!(record(&native), record(&oracle), "{args:?} on {source}");
+    }
+}
