@@ -205,6 +205,32 @@ class Routing(Views):
         self.assertEqual(before, legacy.read_bytes())
         self.assertIsNone(G.Store(self.root).head())
 
+    def test_import_run_from_another_repositorys_hook_captures_into_the_workspace(self):
+        # Git runs hooks and `rebase --exec` in a linked worktree with its GIT_DIR exported.
+        other = self.base / 'other'
+        other.mkdir()
+        M.git(other, 'init', '-b', 'trunk')
+        M.git(other, '-c', 'user.name=Test', '-c', 'user.email=test@example.test', '-c', 'commit.gpgsign=false',
+              'commit', '--allow-empty', '-m', 'Initial')
+        M.git(other, 'worktree', 'add', '--detach', str(self.base / 'other-feature'))
+        admin = other / '.git' / 'worktrees' / 'other-feature'
+        legacy = self.base / 'legacy.yaml'
+        legacy.write_text(P.yaml.safe_dump({'sources': {'s.vendor': {'name': 'Vendor'}},
+                                            'known': {'fact.import': {'v': 10, 'from': 's.vendor',
+                                                      'scope': {'kind': 'external', 'environment': 'vendor'}}}}))
+        command = [sys.executable, str(Path(P.__file__).with_name('cli.py')),
+                   '--workspace', str(self.root), 'knowledge', 'import', str(legacy),
+                   '--shareability', 'project', '--scope', 'external', '--environment', 'vendor']
+        out = subprocess.run(command, cwd=self.base / 'other-feature', text=True, capture_output=True,
+                             env=dict(os.environ, GIT_DIR=str(admin), GIT_INDEX_FILE=str(admin / 'index'),
+                                      KPOPPER_PRIVATE_HOME=str(self.base / 'private')))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        receipt = json.loads(out.stdout)
+        self.assertEqual(receipt['state'], 'captured')
+        self.assertEqual(G.Store(self.root).head(), receipt['ledger_commit'])
+        self.assertIsNone(G.Store(other).head())
+        self.assertFalse((other / '.git' / 'kpopper').exists())
+
     def test_invalid_private_marker_is_retained_privately(self):
         action = self.action(shareability='project', scope='project', environment='project')
         action['body']['private'] = 'unknown'
