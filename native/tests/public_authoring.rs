@@ -1072,20 +1072,97 @@ fn a_record_without_snapshots_is_set_reviewed_and_proposed_to_as_the_python_writ
 }
 
 #[test]
-fn a_review_that_cannot_add_a_snapshot_to_a_flow_judgment_leaves_the_record() {
+fn a_review_writes_inside_the_braces_of_a_judgment_written_on_one_line() {
+    // Nothing is written under it: there it would be read as another judgment of the
+    // collection, or break the file.
+    let judgment = r#"verdict: known, requires: [api.limit], fails_if: "api.limit > 100""#;
+    let trail = r#"replaced: ["the limit rose on 2025-12-01"]"#;
+    let cases = [
+        (
+            judgment.to_owned(),
+            format!("{judgment}, seen: {{api.limit: 10}}"),
+        ),
+        (
+            format!("{judgment}, seen: {{api.limit: 5}}"),
+            format!("{judgment}, seen: {{api.limit: 10}}"),
+        ),
+        (
+            format!("{judgment}, seen: {{api.limit: 10}}, {trail}"),
+            format!(r#"{judgment}, seen: {{api.limit: 10}}, {trail}, reviewed: "2026-01-01""#),
+        ),
+        (
+            format!("{judgment}, {trail}, seen: {{api.limit: 5}}"),
+            format!(r#"{judgment}, {trail}, reviewed: "2026-01-01", seen: {{api.limit: 10}}"#),
+        ),
+        (
+            format!("{judgment}, seen: {{api.limit: 10}}, reviewed: '2025-12-01'"),
+            format!("{judgment}, seen: {{api.limit: 10}}, reviewed: '2026-01-01'"),
+        ),
+    ];
     for indent in ["  ", "    "] {
-        let source = format!(
-            "known:\n{indent}api.limit: {{v: 10}}\njudgments:\n{indent}d.w: {{verdict: known, requires: [api.limit], fails_if: \"api.limit > 100\"}}\n"
-        );
-        let (_temp, root) = simple_workspace(&source);
-        let output = run_unbundled(&root, &["review", "d.w", "--as-of", "2026-01-01"]);
-        assert!(!output.status.success());
-        assert_eq!(
-            String::from_utf8_lossy(&output.stderr),
-            "invalid_history_yaml\n"
-        );
-        assert_eq!(record(&root), source);
+        for (body, want) in &cases {
+            let head = format!("known:\n{indent}api.limit: {{v: 10}}\njudgments:\n{indent}d.w: {{");
+            let (_temp, root) = simple_workspace(&format!("{head}{body}}}  # read by hand {{x\n"));
+            success(run_unbundled(
+                &root,
+                &["review", "d.w", "--as-of", "2026-01-01"],
+            ));
+            assert_eq!(
+                record(&root),
+                format!("{head}{want}}}  # read by hand {{x\n")
+            );
+        }
     }
+}
+
+#[test]
+fn a_review_in_a_named_hypothesis_writes_inside_the_braces_of_a_one_line_judgment() {
+    let judgment = r#"verdict: known, requires: [api.limit], fails_if: "api.limit > 100""#;
+    for indent in ["  ", "    "] {
+        for (body, want) in [
+            (
+                judgment.to_owned(),
+                format!("{judgment}, seen: {{api.limit: 10}}"),
+            ),
+            (
+                format!(r#"{judgment}, seen: {{api.limit: 10}}, reviewed: "2025-12-01""#),
+                format!(r#"{judgment}, seen: {{api.limit: 10}}, reviewed: "2026-01-01""#),
+            ),
+        ] {
+            let base = format!("known:\n{indent}api.limit: {{v: 10}}\n");
+            let (_temp, root) = simple_workspace(&base);
+            let path = root.join(".kpopper/hypotheses/limit.yaml");
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let head =
+                format!("hypothesis: {{born: \"2025-12-01\"}}\n\njudgments:\n{indent}d.w: {{");
+            fs::write(&path, format!("{head}{body}}}\n")).unwrap();
+            success(run_unbundled(
+                &root,
+                &[
+                    "review",
+                    "d.w",
+                    "--as-of",
+                    "2026-01-01",
+                    "--hypothesis",
+                    "limit",
+                ],
+            ));
+            assert_eq!(
+                fs::read_to_string(&path).unwrap(),
+                format!("{head}{want}}}\n")
+            );
+            assert_eq!(record(&root), base);
+        }
+    }
+}
+
+#[test]
+fn a_review_of_a_judgment_that_is_an_alias_leaves_the_record() {
+    let source = "known:\n  api.limit: {v: 10}\njudgments:\n  d.v: &same {verdict: known, requires: [api.limit], fails_if: \"api.limit > 100\", seen: {api.limit: 5}}\n  d.w: *same\n";
+    let (_temp, root) = simple_workspace(source);
+    let output = run_unbundled(&root, &["review", "d.w", "--as-of", "2026-01-01"]);
+    assert!(!output.status.success());
+    assert_eq!(record(&root), source);
 }
 
 #[test]

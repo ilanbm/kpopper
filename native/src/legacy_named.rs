@@ -413,7 +413,11 @@ fn prepare_mode(
                 replace_field_ordered(&mut lines, &member, snapshot, &order)?;
             }
             let (_, member) = locate(&lines, &id).unwrap();
-            if field_span(&lines, &member, "reviewed").is_some() {
+            if inline(&lines[member.start]).starts_with('{') {
+                if body.contains_key("reviewed") {
+                    in_braces(&mut lines, &member, "reviewed", "", None, Some(&stamp))?;
+                }
+            } else if field_span(&lines, &member, "reviewed").is_some() {
                 replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
             }
             output.push(format!(
