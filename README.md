@@ -696,11 +696,11 @@ claude plugin marketplace add ilanbm/kpopper
 claude plugin install kpopper@kpopper --scope user
 ```
 
-The plugin arrives without its native runtime. Install it with
+Inside Claude Code, `/plugin marketplace add ilanbm/kpopper` and `/plugin install kpopper@kpopper`
+do the same. Either way, the plugin arrives without its native runtime. Install it with
 `sh "<installPath>/scripts/install_native.sh"`, taking `installPath` from kpopper's entry in
 `claude plugin list --json` ([on Windows](docs/plugin-runtime.md#install-the-native-runtime)),
-then start a new session. Inside Claude Code, `/plugin marketplace add ilanbm/kpopper` and
-`/plugin install kpopper@kpopper` also install the plugin.
+then start a new session.
 
 ### Codex
 
