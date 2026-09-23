@@ -405,27 +405,39 @@ class TheCrate(unittest.TestCase):
         channel = pinned.split('channel = "', 1)[1].split('"', 1)[0]
         self.assertEqual(json.loads(package_field("rust-version")), ".".join(channel.split(".")[:2]))
 
-    def test_plan_claims_publishes_or_leaves_a_version_alone(self):
-        answers = {
-            "claim": {"/crates/kpopper": None},
-            "published": {"/crates/kpopper": {}, "/crates/kpopper/1.2.3": {"version": {}}},
-            "publish": {"/crates/kpopper": {}, "/crates/kpopper/1.2.3": None},
-        }
-        for action, registry in answers.items():
-            with self.subTest(action=action), patch.object(C, "fetch", side_effect=registry.__getitem__):
-                found, reason = C.decide("1.2.3")
-                self.assertEqual(found, action)
-                if action == "claim":
-                    self.assertIn("v1.2.3", reason)
+    def test_plan_claims_publishes_or_holds_the_registry_to_the_verified_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            crate = pathlib.Path(directory) / "kpopper-1.2.3.crate"
+            crate.write_bytes(b"crate")
+            verified = hashlib.sha256(b"crate").hexdigest()
+            answers = {
+                "claim": {"/crates/kpopper": None},
+                "published": {"/crates/kpopper": {},
+                              "/crates/kpopper/1.2.3": {"version": {"checksum": verified}}},
+                "publish": {"/crates/kpopper": {}, "/crates/kpopper/1.2.3": None},
+            }
+            for action, registry in answers.items():
+                with self.subTest(action=action), patch.object(C, "fetch", side_effect=registry.__getitem__):
+                    found, reason = C.decide("1.2.3", crate)
+                    self.assertEqual(found, action)
+                    self.assertIn(verified, reason)
+                    if action == "claim":
+                        self.assertIn("v1.2.3", reason)
+            other = {"/crates/kpopper": {}, "/crates/kpopper/1.2.3": {"version": {"checksum": "0" * 64}}}
+            with patch.object(C, "fetch", side_effect=other.__getitem__):
+                with self.assertRaisesRegex(SystemExit, "not the verified"):
+                    C.decide("1.2.3", crate)
 
     def test_registry_answers_other_than_found_or_missing_stop_the_run(self):
         import urllib.error
         for code in (403, 500, 503):
-            error = urllib.error.HTTPError("https://crates.io", code, "no", {}, io.BytesIO())
+            error = urllib.error.HTTPError("https://crates.io", code, "no", {}, None)
+            self.addCleanup(error.close)
             with self.subTest(code=code), patch.object(C.urllib.request, "urlopen", side_effect=error):
                 with self.assertRaisesRegex(SystemExit, str(code)):
                     C.fetch("/crates/kpopper")
-        missing = urllib.error.HTTPError("https://crates.io", 404, "no", {}, io.BytesIO())
+        missing = urllib.error.HTTPError("https://crates.io", 404, "no", {}, None)
+        self.addCleanup(missing.close)
         with patch.object(C.urllib.request, "urlopen", side_effect=missing):
             self.assertIsNone(C.fetch("/crates/kpopper"))
 
@@ -446,7 +458,10 @@ class TheCrate(unittest.TestCase):
     def test_plan_refuses_a_version_the_release_planner_did_not_publish(self):
         with patch.object(C, "fetch") as fetch:
             with self.assertRaisesRegex(SystemExit, "planner published 0.0.1"):
-                C.main(["--plan", "--version", "0.0.1"])
+                C.main(["--plan", "--version", "0.0.1", "--crate", "kpopper-0.0.1.crate"])
+            with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), \
+                 patch("sys.stderr", io.StringIO()):
+                C.main(["--plan"])
         fetch.assert_not_called()
 
     def test_one_job_holds_the_registry_identity_and_uploads_only_verified_bytes(self):
@@ -455,29 +470,40 @@ class TheCrate(unittest.TestCase):
         jobs = yaml.safe_load((workflows / "publish.yml").read_text(encoding="utf-8"))["jobs"]
         identity = [name for name, job in jobs.items() if (job.get("permissions") or {}).get("id-token")]
         self.assertEqual(identity, ["crate-publish"])
-        crate, publish = jobs["crate"], jobs["crate-publish"]
-        self.assertIn("publish", crate["needs"])
+        crate, publish, served = jobs["crate"], jobs["crate-publish"], jobs["crate-served"]
+        # The crate goes after its GitHub release, from bytes the build job verified.
+        self.assertTrue({"build", "publish"} <= set(crate["needs"]))
+        plan = " ".join(step.get("run", "") for step in crate["steps"])
+        self.assertIn("publish_crate.py --plan", plan)
+        self.assertIn("--crate", plan)
+        # The job that can publish runs no repository script, no Python and no build.
         self.assertIn("crate", publish["needs"])
         self.assertEqual(publish["environment"], "crates-io")
         runs = [step.get("run", "") for step in publish["steps"]]
         uses = [step.get("uses", "") for step in publish["steps"]]
+        self.assertFalse(any("python" in run or ".github/scripts" in run for run in runs))
+        self.assertFalse(any(use.startswith("actions/setup-python") for use in uses))
+        self.assertFalse(any(word in run for run in runs for word in ("cargo build", "cargo test", "cargo install")))
         upload = next((i for i, run in enumerate(runs) if "cargo publish" in run), None)
-        compare = next((i for i, run in enumerate(runs) if "cmp " in run), None)
+        compare = next((i for i, run in enumerate(runs) if "cmp " in run and "cargo publish" not in run), None)
         auth = next((i for i, use in enumerate(uses) if use.startswith("rust-lang/crates-io-auth-action@")), None)
-        self.assertNotIn(None, (upload, compare, auth), "publish, compare the verified bytes, authenticate")
-        asked = next((i for i, run in enumerate(runs) if "publish_crate.py --plan" in run), None)
-        self.assertIsNotNone(asked, "the publishing job asks the registry again before uploading")
+        self.assertNotIn(None, (upload, compare, auth), "compare the verified bytes, authenticate, publish")
         self.assertLess(compare, auth)
-        self.assertLess(asked, auth)
         self.assertLess(auth, upload)
-        for step in (auth, upload):
-            self.assertEqual(publish["steps"][step].get("if"), "steps.registry.outputs.action == 'publish'")
         self.assertRegex(uses[auth], r"@[0-9a-f]{40}$")
-        self.assertIn("--no-verify", runs[upload])
-        self.assertIn("--locked", runs[upload])
-        self.assertFalse(any("cargo build" in run or "cargo test" in run for run in runs))
-        self.assertTrue(any("cargo package --locked" in step.get("run", "") and "--no-verify" not in step["run"]
-                            for step in crate["steps"]))
+        self.assertIn("cargo publish --locked --no-verify", runs[upload])
+        self.assertIn("cmp ", runs[upload].split("cargo publish", 1)[1])
+        # The registry is read back without the identity, against the verified bytes.
+        self.assertIn("crate-publish", served["needs"])
+        self.assertFalse((served.get("permissions") or {}).get("id-token"))
+        check = " ".join(step.get("run", "") for step in served["steps"])
+        self.assertIn("--served", check)
+        self.assertIn("verified-crate", check)
+        # The release build runs the crate check and hands its bytes on.
+        native = (workflows / "native-rust.yml").read_text(encoding="utf-8")
+        step = native.split("The published crate builds from its own files", 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("'distribution'", step)
+        self.assertIn("name: verified-crate", native)
         for workflow in workflows.glob("*.yml"):
             self.assertNotIn("CARGO_REGISTRY_TOKEN: ${{ secrets", workflow.read_text(encoding="utf-8"))
 

@@ -4281,18 +4281,23 @@ judgments:
                                   the commit its GitHub release was made from and only once that
                                   release is out. An owner publishes the first version, which claims
                                   the name; the release workflow publishes every later one through
-                                  trusted publishing, uploading only bytes it built from the packaged
-                                  crate."
+                                  trusted publishing. Only bytes equal to the package the release
+                                  build verified are uploaded, and a version crates.io already serves
+                                  must be those bytes."
   d.crates_io_every_release:
     name: "Every release reaches crates.io as kpopper"
     verdict: "Each release's crate is published to crates.io as kpopper, from the commit its GitHub
               release was made from and only once that release is out. An owner publishes the first
               version, which claims the name; the release workflow publishes every later one through
-              trusted publishing, uploading only bytes it built from the packaged crate."
+              trusted publishing. Only bytes equal to the package the release build verified are
+              uploaded, and a version crates.io already serves must be those bytes."
     because: "kpopper is already the package name on PyPI and npm, and one crate installs both
               commands, so cargo install kpopper needs no second name. crates.io never takes a
               version back, so the upload waits for the release it belongs to, repeats nothing the
-              registry already serves, and the repository holds no registry credential."
+              registry already serves, and the repository holds no registry credential. Cargo
+              packages the commit again when it publishes, so the job that holds the registry
+              identity compares that package with the verified bytes before and after the upload, and
+              runs no repository script."
     rests_on: [s.2026_09_23_crates_io, p.native_distribution_contract]
     reopened_by: "crates.io serves a crate named kpopper that this project did not publish, or
                   refuses a release's crate from the workflow's trusted publisher."

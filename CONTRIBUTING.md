@@ -285,17 +285,24 @@ commit. The release assets are the supported user installation route. Existing P
 artifacts remain legacy distributions. Only the commit that moves the version publishes, so
 a failed release is made by rerunning its own run rather than by pushing again.
 
-Once the GitHub release is out, the same run publishes that commit's crate to crates.io as
-`kpopper`. One job builds the crate from its packaged files alone; a second job, the only one
-that can publish, uploads exactly those bytes with a token crates.io issues to the run
-(trusted publishing) and checks that the registry serves them. A version crates.io already
-serves is left alone. crates.io never takes a version back; it can only yank one.
+The release build also builds the crate from its packaged files alone, requires it to be the
+program the release ships (the same adapter and schemas, the same verified resources accepted,
+the platform acceptance flows), and keeps that `.crate`. Once the GitHub release is out, the
+same run publishes it to crates.io as `kpopper`. A version crates.io already serves must be
+exactly those bytes. One it lacks is uploaded by a job that runs no repository script, holds a
+token crates.io issues to the run (trusted publishing), and requires Cargo's package of the
+commit to equal the verified bytes before and after the upload; a last job, without that
+token, checks that the registry serves them. crates.io never takes a version back; it can
+only yank one.
 
 The first version on crates.io claims the name, so an owner publishes it once by hand; until
-then the run says so and skips the upload. Check out that release's tag, then from `native/`
-run `cargo login` with a crates.io token and `cargo publish --locked`. In the crate's settings
-on crates.io, add a trusted publisher: repository `ilanbm/kpopper`, workflow `publish.yml`,
-environment `crates-io`. Every later release publishes from the workflow.
+then the run says so, names the verified crate's checksum, and skips the upload. Check out that
+release's tag, then from `native/` run `cargo login` with a crates.io token and
+`cargo publish --locked`, with the toolchain `native/rust-toolchain.toml` pins. Rerun the
+release's `crate` job, which then requires crates.io to serve the verified bytes. In the
+crate's settings on crates.io, add a trusted publisher: repository `ilanbm/kpopper`, workflow
+`publish.yml`, environment `crates-io`; in this repository's settings, limit the `crates-io`
+environment to `main`. Every later release publishes from the workflow.
 
 The pull request is opened by the workflow's own token, which runs no checks of its own, so
 the script runs `kpop check` and `kpop experimental hub --verify` on the release tree before pushing

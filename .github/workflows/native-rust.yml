@@ -245,8 +245,10 @@ jobs:
       - name: The published crate builds from its own files, as the program built here
         # crates.io receives native/ alone. The crate builds in a target directory of its own:
         # Cargo gives the packaged crate and this checkout the same artifact names, and in a
-        # shared directory could take one build for the other.
-        if: ${{ !cancelled() && steps.native-release.outcome == 'success' && matrix.target == 'linux-x86_64' && env.KPOPPER_CI_VALIDATION == 'full' }}
+        # shared directory could take one build for the other. A release build runs it too, so
+        # no crate reaches crates.io that this check has not passed at the release commit.
+        id: native-crate
+        if: ${{ !cancelled() && steps.native-release.outcome == 'success' && matrix.target == 'linux-x86_64' && (env.KPOPPER_CI_VALIDATION == 'full' || env.KPOPPER_CI_VALIDATION == 'distribution') }}
         shell: bash
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/crate-target
@@ -260,7 +262,17 @@ jobs:
             --crate "$RUNNER_TEMP/crate/bin/kpop" --resources "$KPOP_CONSOLIDATION_RESOURCES"
           KPOPPER_NATIVE_RESOURCES="$KPOP_CONSOLIDATION_RESOURCES" python native/ci/platform_acceptance.py \
             --binary "$RUNNER_TEMP/crate/bin/kpop" --output "$RUNNER_TEMP/native-evidence/crate-acceptance"
+          mkdir -p "$RUNNER_TEMP/verified-crate"
+          cp "$CARGO_TARGET_DIR/package/kpopper-$version.crate" "$RUNNER_TEMP/verified-crate/"
           rm -rf "$CARGO_TARGET_DIR"
+      - name: Retain the verified crate for publication
+        if: ${{ !cancelled() && steps.native-crate.outcome == 'success' && env.KPOPPER_CI_VALIDATION == 'distribution' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-crate
+          path: ${{ runner.temp }}/verified-crate
+          if-no-files-found: error
+          retention-days: 7
       - name: Copy the executable and its verified native resources
         id: native-bundle
         if: ${{ !cancelled() && steps.native-release.outcome == 'success' && steps.native-source.outcome == 'success' }}

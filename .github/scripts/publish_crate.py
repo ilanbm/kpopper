@@ -2,14 +2,16 @@
 """Publish a release's crate to crates.io, from the commit its GitHub release was made from.
 
 Runs in the publish workflow once that release is out, and only for the version this commit
-moved to. crates.io never takes a version back, so a version the registry already serves is
-left alone, and nothing is uploaded that the workflow did not build from its packaged files
-first. The first publication claims the name and needs an owner's own token; until the crate
-exists this says so and publishes nothing. Later versions are published with a short-lived
-token the workflow's identity is exchanged for, so the repository holds no registry credential.
+moved to. The build job has already built the crate from its packaged files and checked that it
+is the program the release ships; its .crate is the verified bytes. crates.io never takes a
+version back, so a version the registry already serves must be exactly those bytes, and a
+version it lacks is published next. The first publication claims the name and needs an owner's
+own token; until the crate exists this says so and publishes nothing. Later versions are
+published with a short-lived token the workflow's identity is exchanged for, so the repository
+holds no registry credential.
 
-    python3 .github/scripts/publish_crate.py --plan                  # what this commit asks of crates.io
-    python3 .github/scripts/publish_crate.py --served FILE.crate     # crates.io serves exactly these bytes
+    python3 .github/scripts/publish_crate.py --plan --crate FILE.crate    # what crates.io takes
+    python3 .github/scripts/publish_crate.py --served FILE.crate          # it serves these bytes
 """
 import argparse
 import hashlib
@@ -33,9 +35,11 @@ AGENT = "kpopper release workflow (https://github.com/ilanbm/kpopper)"
 PACKAGE_NAME = re.compile(r'^\[package\]\n(?:[^\[\n][^\n]*\n)*?name = "([^"]+)"', re.M)
 CLAIM = (
     "The first version on crates.io claims the name, which needs an owner's token: check out "
-    "the tag v{version}, then run `cargo publish --locked` from native/ after `cargo login`. "
-    "Later releases publish from this workflow once crates.io trusts it (crate settings, "
-    "Trusted Publishing: repository ilanbm/kpopper, workflow publish.yml, environment crates-io)."
+    "the tag v{version}, then from native/ run `cargo login` and `cargo publish --locked` with "
+    "the toolchain native/rust-toolchain.toml pins. The verified crate's sha256 is {sha256}; "
+    "rerun this job afterwards and it requires crates.io to serve exactly those bytes. Later "
+    "releases publish from this workflow once crates.io trusts it (crate settings, Trusted "
+    "Publishing: repository ilanbm/kpopper, workflow publish.yml, environment crates-io)."
 )
 
 
@@ -54,18 +58,26 @@ def fetch(path):
         raise SystemExit(f"crates.io could not be reached for {path}: {error}")
 
 
-def decide(version):
-    """-> (action, reason). 'publish': the registry holds the crate but not this version;
-    'published': it already serves this version; 'claim': the crate is not there yet."""
-    if fetch(f"/crates/{CRATE}") is None:
-        return "claim", f"{CRATE} is not on crates.io yet. " + CLAIM.format(version=version)
-    if fetch(f"/crates/{CRATE}/{version}") is not None:
-        return "published", f"crates.io already serves {CRATE} {version}; nothing to publish"
-    return "publish", f"publishing {CRATE} {version} to crates.io"
-
-
 def digest(path):
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+
+
+def decide(version, crate_file):
+    """-> (action, reason) for this version and the bytes verified for it. 'publish': the
+    registry holds the crate but not this version; 'published': it serves this version, as
+    exactly these bytes; 'claim': the crate is not there yet. A version served with other bytes
+    stops here: it can never be replaced, so the run must not read as a success."""
+    expected = digest(crate_file)
+    if fetch(f"/crates/{CRATE}") is None:
+        return "claim", f"{CRATE} is not on crates.io yet. " + CLAIM.format(version=version, sha256=expected)
+    found = fetch(f"/crates/{CRATE}/{version}")
+    if found is not None:
+        checksum = found.get("version", {}).get("checksum")
+        if checksum != expected:
+            raise SystemExit(f"crates.io serves {CRATE} {version} with checksum {checksum}, "
+                             f"not the verified {expected}")
+        return "published", f"crates.io already serves {CRATE} {version} as verified (sha256 {expected})"
+    return "publish", f"publishing {CRATE} {version} to crates.io (sha256 {expected})"
 
 
 def served(version, crate_file, attempts=30, pause=10):
@@ -95,6 +107,8 @@ def output(**values):
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--plan", action="store_true", help="decide what crates.io takes from this commit")
+    parser.add_argument("--crate", type=pathlib.Path, metavar="FILE",
+                        help="the verified .crate file the plan holds the registry to")
     parser.add_argument("--served", type=pathlib.Path, metavar="FILE",
                         help="require crates.io to serve exactly this .crate file")
     parser.add_argument("--version", help="the version the release planner published")
@@ -112,7 +126,9 @@ def main(argv):
         print(f"crates.io serves {CRATE} {version}, sha256 {served(version, options.served)}")
         return 0
     if options.plan:
-        action, reason = decide(version)
+        if options.crate is None:
+            parser.error("--plan needs the verified crate: --crate FILE")
+        action, reason = decide(version, options.crate)
         print(reason)
         if action == "claim":
             print("::warning title=crates.io::" + reason)
