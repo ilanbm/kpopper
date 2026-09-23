@@ -1000,6 +1000,13 @@ sources:
          as a control. The crate packaged from 20f9b64 did not build: its build script could not read
          ../scripts/session/lean/Main.lean from inside the package."
     read: "2026-09-23"
+  s.2026_09_23_dear_agent_copy:
+    name: "Use Dear agent as the signature for copyable agent requests"
+    read: "2026-09-23"
+    of: "Maintainer request, paraphrased: start the installation request with Dear agent, and make
+         that the recognizable opening of every natural-language text readers copy to an agent. Place
+         a bold Copy and paste the following text to your agent instruction immediately before the
+         copyable text."
   s.2026_09_23_missing_runtime_at_start:
     name: "A missing native runtime is said at session start, by the opener alone"
     asked: "Paraphrased maintainer request: a freshly installed plugin has no native runtime, and
@@ -4542,6 +4549,22 @@ judgments:
       m.door.opposed_verdicts_named_reversed: 2
       m.door.grounds_changes_named: 2
       m.door.future_dated_readings_refused: 3
+  d.copyable_agent_requests:
+    name: "Give copyable agent requests a consistent greeting and instruction"
+    rests_on: [s.2026_09_23_dear_agent_copy]
+    verdict: "User-facing natural-language requests intended for pasting into an agent chat begin
+              with Dear agent, and use a fenced text block preceded by the bold instruction Copy and
+              paste the following text to your agent:. Apply this convention in the README and
+              guides; preserve executable command syntax, configuration templates, source quotations
+              and actual output."
+    because: "The maintainer chose the greeting as a brand signature. A consistent introduction
+              makes the text to copy recognizable and separates an agent request from surrounding
+              explanation. Adding prose to a slash command or shell command would change how it runs,
+              while altering quoted or observed text would misrepresent its source."
+    reopened_by: "Readers copy the label as part of the request, mistake a natural-language request
+                  for an executable command, or the greeting interferes with a documented
+                  interaction."
+    seen: {s.2026_09_23_dear_agent_copy: "read 2026-09-23"}
   d.correct_is_for_unlanded_work:
     name: "Correct only what nobody could have read"
     rests_on: [s.2026_09_23_answer_and_correct, d.fold_passes_the_one_door]

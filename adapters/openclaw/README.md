@@ -110,11 +110,14 @@ From the machine where the commands will run:
 "$KPOPPER_VENV/bin/kpop" --workspace /absolute/path/to/project check
 ```
 
-Then ask the agent:
+**Copy and paste the following text to your agent:**
 
-> Use kpopper in this project. Open its record, pull the evidence relevant to my
-> question, and show what needs review. Preserve useful findings and their sources
-> while we work. Use the configured project and command paths.
+```text
+Dear agent,
+Use kpopper in this project. Open its record, pull the evidence relevant to my
+question, and show what needs review. Preserve useful findings and their sources
+while we work. Use the configured project and command paths.
+```
 
 For acceptance, plant a unique confirmation code in a local source and save a
 numeric fact with a dependent judgment through captured CLI calls. In an independent
