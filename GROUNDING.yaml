@@ -962,6 +962,22 @@ sources:
          as a control. The crate packaged from 20f9b64 did not build: its build script could not read
          ../scripts/session/lean/Main.lean from inside the package."
     read: "2026-09-23"
+  s.2026_09_23_missing_runtime_at_start:
+    name: "A missing native runtime is said at session start, by the opener alone"
+    asked: "Paraphrased maintainer request: a freshly installed plugin has no native runtime, and
+            when it is missing the hooks write the diagnostic and the install command to standard
+            error only, so the session opens with no word about kpopper and the agent never learns
+            what is missing or how to install it. Have the session opener alone print them on
+            standard output, so the agent can offer to run the command and ask for a new session;
+            keep every other hook silent and hooks never downloading or installing a runtime; check
+            how Codex treats SessionStart output before assuming it matches Claude Code; add a
+            regression test."
+    of: "Reproduced on 59e4322 with the 0.9.0 plugin installed into an isolated Claude
+         configuration: scripts/session_open.sh --host claude, given a SessionStart payload in an
+         empty project, exited 0 with nothing on standard output and wrote 'native runtime is not
+         installed for darwin-arm64 in this package' and the install_native.sh command to standard
+         error only."
+    read: "2026-09-23"
   s.2026_09_23_one_line_review:
     name: "A review of a judgment written on one line writes inside its braces"
     asked: "Paraphrased maintainer request: the Python writer's review of a judgment written on one
@@ -3059,6 +3075,17 @@ known:
     name: "What the registries hold"
     from: "registry lookup"
     of: "2026-09-03"
+  lit.session_start_output:
+    v: "On exit 0, Claude Code and Codex both add a SessionStart command hook's plain-text standard
+        output to the model's context, and neither shows the model its standard error. Output that
+        opens like JSON is parsed as JSON instead."
+    name: "What Claude Code and Codex do with a SessionStart command hook's output"
+    from: "the Claude Code hooks reference and the Codex hooks guide; for Codex also
+           codex-rs/hooks/src/events/session_start.rs at rust-v0.153.3"
+    at: "Claude Code: Exit code 0 and SessionStart decision control; Codex: SessionStart, and
+         parse_completed in that source, where exit 0 turns stdout not opening with { or [ into model
+         context and stderr is never read"
+    of: "2026-09-23; Claude Code 2.1.269, Codex CLI 0.153.3"
   lit.tms:
     v: "a conclusion keeps the justifications and assumptions it was drawn from, support is
         recomputed when an assumption changes, and losing the support for a conclusion does not
@@ -5298,6 +5325,39 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.opener_reports_a_missing_runtime:
+    name: "The session opener says when the native runtime is missing"
+    verdict: "When the plugin's native runtime is missing, the session opener prints the resolver's
+              diagnostic, the exact install command and what follows on standard output: kpopper did
+              not open the session, hooks never download or install the runtime, and the agent may
+              offer to run the command and then ask for a new session. It still exits 0. Every other
+              hook prints nothing and keeps the diagnostic on standard error."
+    because: "A plugin installs without its native runtime, and standard error reaches neither
+              model, so the first session opened with no word about kpopper and the agent could not
+              say what was missing or how to fix it. The opener runs once per session and its
+              standard output is already the session's context, the channel the Python compatibility
+              launcher uses for its own repair command; any other hook would repeat the text on every
+              prompt or tool call. Installing stays an explicit act, because the command downloads a
+              release: the opener names it and the person decides."
+    rests_on: [lit.session_start_output, p.native_distribution_contract, d.plugin_runtime_is_explicit]
+    reopened_by: "An agent given the opener's message says nothing of the missing runtime or runs
+                  the install command without asking; a host that runs these hooks stops adding plain
+                  SessionStart output to the model's context or starts showing the model standard
+                  error; or a plugin installation starts carrying its native runtime."
+    from: s.2026_09_23_missing_runtime_at_start
+    seen:
+      lit.session_start_output: "On exit 0, Claude Code and Codex both add a SessionStart command
+                                 hook's plain-text standard output to the model's context, and
+                                 neither shows the model its standard error. Output that opens like
+                                 JSON is parsed as JSON instead."
+      p.native_distribution_contract: "The native CLI and plugin start at 0.9.0 with GitHub platform
+                                       archives and explicit installers. Public names are kpopper and
+                                       kpop. Existing GitHub tags/releases and legacy PyPI/npm
+                                       versions remain available. Cargo is a source-build route;
+                                       crates.io publication is separate."
+      d.plugin_runtime_is_explicit: "Prepare hook dependencies through an explicit
+                                     private-virtualenv setup; Claude Code and Codex hooks select it
+                                     while executing code from their active plugin."
   d.overlay_infers_once_per_document:
     rests_on: [m.overlay_open_seconds, s.2026_09_18_overlay_profile]
     verdict: "the live overlay infers roles once per document it compares, never once per entry"
