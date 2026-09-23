@@ -65,15 +65,19 @@ pub(crate) fn collections(document: &V) -> Result<BTreeMap<String, Map>> {
         })
         .collect())
 }
-fn source_only_collections(collections: &BTreeMap<String, Map>) -> bool {
+/// Whether a record with no judgment yet reads as it stands. Its sections are read by what
+/// their entries are, as they are once a judgment exists: the method's own sections read
+/// whatever they hold, and a section under a name of the record's own reads when every
+/// entry in it is a value - a bare scalar, or `v`, `quoted` or `rule` - or a source.
+fn plain_collections(collections: &BTreeMap<String, Map>) -> bool {
     collections.iter().all(|(name, members)| {
         ["known", "sources", "open", "questions"].contains(&name.as_str())
             || members.values().all(|body| {
-                map(body).is_ok_and(|body| {
-                    !["v", "quoted", "rule"]
+                map(body).ok().is_none_or(|body| {
+                    ["v", "quoted", "rule"]
                         .iter()
                         .any(|key| body.contains_key(key))
-                        && ["asked", "file", "url", "read"]
+                        || ["asked", "file", "url", "read"]
                             .iter()
                             .any(|key| body.get(key).is_some_and(truth))
                 })
@@ -539,7 +543,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                             && m.get("rule").is_some_and(|v| map(v).is_ok()))
                 });
             require(
-                (header_only || !collections.is_empty() && source_only_collections(&collections))
+                (header_only || !collections.is_empty() && plain_collections(&collections))
                     && unresolved.is_empty()
                     && !shaped,
                 "invalid_snapshot",

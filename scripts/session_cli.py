@@ -12,15 +12,16 @@ else:
     sys.path.insert(0, str(package_dir.parent))
     main = importlib.import_module(package_dir.name + ".session.entry").main
 
-if __name__ == "__main__":
+def run(*, context=False):
     import os
     import importlib
     import pathlib
     import sys
-    operation = sys.argv[1] if len(sys.argv) > 1 else ""
+    operation = "context" if context else (sys.argv[1] if len(sys.argv) > 1 else "")
     if operation not in {"setup", "status", "enable", "disable", "serve", "-h", "--help", ""} and not os.environ.get("KPOPPER_SESSION_BOOTSTRAPPED"):
         package_dir = pathlib.Path(__file__).resolve().parent
-        args = importlib.import_module(package_dir.name + ".session.entry").parser().parse_args()
+        entry = importlib.import_module(package_dir.name + ".session.entry")
+        args = (entry.context_parser() if context else entry.parser()).parse_args()
         directory = args.input.expanduser().resolve().parent if args.input else None
         config = {} if args.no_settings else importlib.import_module(package_dir.name + ".session.settings").current(directory)
         target = config.get("python") if config.get("enabled") else None
@@ -30,4 +31,8 @@ if __name__ == "__main__":
                 import subprocess
                 raise SystemExit(subprocess.call([target] + sys.argv))
             os.execv(target, [target] + sys.argv)
-    raise SystemExit(main())
+    return main(context=context)
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())

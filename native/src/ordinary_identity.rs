@@ -995,7 +995,7 @@ pub(super) fn run(
         route.verify()?;
         inventory.verify()?;
         require(
-            crate::legacy_authoring::route(entry, route.config())?
+            crate::legacy_authoring::local_route(entry, route)?
                 == crate::legacy_authoring::AuthorityRoute::Legacy,
             "project_route_changed",
         )
@@ -2678,8 +2678,19 @@ pub(crate) fn distinct_text(
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn ordinary_record() -> (tempfile::TempDir, BTreeMap<PathBuf, Vec<u8>>) {
+    /// `advanced` makes the directory a Git project, which is Advanced by default.
+    fn ordinary_record(advanced: bool) -> (tempfile::TempDir, BTreeMap<PathBuf, Vec<u8>>) {
         let temp = tempfile::tempdir().unwrap();
+        if advanced {
+            assert!(
+                std::process::Command::new("git")
+                    .args(["init", "-q"])
+                    .current_dir(temp.path())
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
         let files = [
             (
                 "GROUNDING.yaml",
@@ -2715,13 +2726,16 @@ mod tests {
     }
     #[test]
     fn ordinary_identity_guards_all_captured_participants_before_publication() {
-        for changed in [
-            "parts.yaml",
-            ".kpopper/view.yaml",
-            ".kpopper/hypotheses/alpha.yaml",
-            ".kpopper/hypotheses/appeared.yaml",
-        ] {
-            let (temp, before) = ordinary_record();
+        for (advanced, changed) in [false, true].into_iter().flat_map(|advanced| {
+            [
+                "parts.yaml",
+                ".kpopper/view.yaml",
+                ".kpopper/hypotheses/alpha.yaml",
+                ".kpopper/hypotheses/appeared.yaml",
+            ]
+            .map(|changed| (advanced, changed))
+        }) {
+            let (temp, before) = ordinary_record(advanced);
             let path = temp.path().join(changed);
             let mut reached = false;
             let result =
@@ -2732,10 +2746,13 @@ mod tests {
                     }
                     Ok(())
                 });
-            assert!(result.is_err(), "accepted concurrent change to {changed}");
+            assert!(
+                result.is_err(),
+                "accepted concurrent change to {changed} (advanced: {advanced})"
+            );
             assert!(
                 reached,
-                "failed before reaching guarded publication: {result:?}"
+                "failed before reaching guarded publication (advanced: {advanced}): {result:?}"
             );
             for (file, expected) in &before {
                 if file != &path {
@@ -2757,8 +2774,8 @@ mod tests {
     }
     #[test]
     fn ordinary_identity_recovery_retains_exact_multi_file_images() {
-        for rollback in [false, true] {
-            let (temp, before) = ordinary_record();
+        for (advanced, rollback) in [(false, false), (false, true), (true, false), (true, true)] {
+            let (temp, before) = ordinary_record(advanced);
             let entry = temp.path().canonicalize().unwrap().join("GROUNDING.yaml");
             let result =
                 super::super::run_with_runtime(request(), temp.path(), None, &mut |stage| {
@@ -2778,30 +2795,34 @@ mod tests {
             for (path, original) in &before {
                 assert_eq!(
                     &std::fs::read(path).unwrap(),
-                    if rollback { original } else { &after[path] }
+                    if rollback { original } else { &after[path] },
+                    "{} (advanced: {advanced}, rollback: {rollback})",
+                    path.display()
                 );
             }
         }
     }
     #[test]
     fn ordinary_identity_recovery_refuses_changed_untouched_inputs() {
-        let (temp, _) = ordinary_record();
-        let entry = temp.path().canonicalize().unwrap().join("GROUNDING.yaml");
-        // This distinct edit leaves the brief untouched, but its report read it.
-        let mut intent = request();
-        intent.action = crate::history_identity::Action::Distinct {
-            because: "different subjects".into(),
-        };
-        let result = super::super::run_with_runtime(intent, temp.path(), None, &mut |stage| {
-            require(stage != "published", "interrupted")
-        });
-        assert_eq!(result.unwrap_err().0, "interrupted");
-        std::fs::write(temp.path().join(".kpopper/view.yaml"), "sections: []\n").unwrap();
-        assert!(
-            crate::legacy_authoring::recover(std::slice::from_ref(&entry), temp.path(), false)
-                .is_err()
-        );
-        assert!(temp.path().join(layout(&entry).unwrap().journal).is_file());
+        for advanced in [false, true] {
+            let (temp, _) = ordinary_record(advanced);
+            let entry = temp.path().canonicalize().unwrap().join("GROUNDING.yaml");
+            // This distinct edit leaves the brief untouched, but its report read it.
+            let mut intent = request();
+            intent.action = crate::history_identity::Action::Distinct {
+                because: "different subjects".into(),
+            };
+            let result = super::super::run_with_runtime(intent, temp.path(), None, &mut |stage| {
+                require(stage != "published", "interrupted")
+            });
+            assert_eq!(result.unwrap_err().0, "interrupted", "advanced: {advanced}");
+            std::fs::write(temp.path().join(".kpopper/view.yaml"), "sections: []\n").unwrap();
+            assert!(
+                crate::legacy_authoring::recover(std::slice::from_ref(&entry), temp.path(), false)
+                    .is_err()
+            );
+            assert!(temp.path().join(layout(&entry).unwrap().journal).is_file());
+        }
     }
     #[test]
     fn captured_text_edits_match_python() {

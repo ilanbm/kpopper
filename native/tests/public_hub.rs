@@ -13,9 +13,10 @@ fn cli(root: &Path, args: &[&str]) -> std::process::Output {
         resources.join("reasoning").join(format!("{target}.zip")),
     )
     .unwrap();
-    if fs::read_to_string(root.join("GROUNDING.yaml"))
-        .is_ok_and(|record| !record.contains("profile: core/v1"))
-    {
+    if ["GROUNDING.yaml", "PROVENANCE.yaml"].iter().any(|entry| {
+        fs::read_to_string(root.join(entry))
+            .is_ok_and(|record| !record.contains("profile: core/v1"))
+    }) {
         let ordinary = resources.join("ordinary").join(&target);
         fs::create_dir_all(&ordinary).unwrap();
         let program = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
@@ -227,6 +228,195 @@ fn ordinary_hub_draws_arrangement_history_from_reader_semantics() {
     let html = fs::read_to_string(root.join("page.html")).unwrap();
     assert!(html.contains("decided <span class=\"fx\" data-id=\"v.layout\">2026-09-03</span>"));
     assert!(html.contains("data-request=\"s.request\">What should this page show?</span>"));
+}
+const STRING_QUESTION: &str = "sources:\n  s.a: {name: A, read: \"2026-09-01\"}\nknown:\n  x.one: {v: 1, from: s.a}\nopen:\n  q.second: \"is a second boiler cheaper?\"\n";
+
+#[test]
+fn ordinary_hub_draws_a_string_open_question_as_its_value() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), STRING_QUESTION).unwrap();
+    let verified = ok(root, &["--frozen", "experimental", "hub", "--verify"]);
+    assert_eq!(
+        String::from_utf8(verified.stdout).unwrap(),
+        "3 elements, 3 entries, 0 judgments, 1 tab, 0 problems\n"
+    );
+    ok(
+        root,
+        &["--frozen", "experimental", "hub", "--out", "page.html"],
+    );
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(html.contains("data-id=\"q.second\">is a second boiler cheaper?</span>"));
+    assert!(html.contains("\"q.second\":{\"used\":[],\"v\":\"is a second boiler cheaper?\"}"));
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        STRING_QUESTION
+    );
+}
+
+#[test]
+fn ordinary_hub_without_a_brief_opens_on_the_record_tab() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let record = include_str!("../../examples/launch-party/GROUNDING.yaml");
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let verified = ok(root, &["--frozen", "experimental", "hub", "--verify"]);
+    assert_eq!(
+        String::from_utf8(verified.stdout).unwrap(),
+        "3 elements, 2 entries, 1 judgments, 1 tab, 0 problems\n"
+    );
+    ok(
+        root,
+        &["--frozen", "experimental", "hub", "--out", "page.html"],
+    );
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(!html.contains("data-tab=\"now\""));
+    assert!(!html.contains("panel-now"));
+    assert!(html.contains(
+        "<div class=\"tabs\" role=\"tablist\"><button type=\"button\" data-tab=\"record\" aria-selected=\"true\">"
+    ));
+    assert!(html.contains("<section id=\"panel-record\">"));
+    assert!(html.contains("<section id=\"panel-tree\" hidden>"));
+}
+
+#[test]
+fn ordinary_hub_without_a_brief_says_what_needs_a_person_on_the_record_cards() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "sources:\n  s.2026_09_20_ask: {asked: 'What should the page show?', read: '2026-09-20'}\nknown:\n  p.one: {v: 1, from: s.2026_09_20_ask}\njudgments:\n  v.layout:\n    verdict: Keep the page as it is\n    rests_on: [s.2026_09_20_ask, graph.entries]\n    seen: {s.2026_09_20_ask: 'read 2026-09-20', graph.entries: 2}\n    wrong_if: graph.entries > 0\n    born: '2026-09-20'\n  d.wait:\n    verdict: Hold for the survey\n    rests_on: [p.one]\n    seen: {p.one: 2}\n    wrong_if: p.one > 5\n    unverified: nobody has read the survey\n",
+    )
+    .unwrap();
+    // Without a brief no arrangement is held against the page: the fired one is the
+    // record's to report, and its card says so.
+    let verified = ok(root, &["--frozen", "experimental", "hub", "--verify"]);
+    assert_eq!(
+        String::from_utf8(verified.stdout).unwrap(),
+        "5 elements, 3 entries, 2 judgments, 1 tab, 0 problems\n"
+    );
+    ok(
+        root,
+        &["--frozen", "experimental", "hub", "--out", "page.html"],
+    );
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(!html.contains("decided <span class=\"fx\" data-id=\"v.layout\">"));
+    assert!(html.contains("data-id=\"v.layout\">Keep the page as it is</div><div class=\"state\" data-warning=\"true\">its own condition for being wrong now holds</div>"));
+    assert!(html.contains(
+        "<div class=\"state\" data-warning=\"true\">unverified: nobody has read the survey</div>"
+    ));
+    assert_eq!(html.matches("class=\"state\"").count(), 2);
+}
+
+#[test]
+fn ordinary_hub_verifies_the_page_fixture_and_its_string_open_question() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/page");
+    for file in fs::read_dir(&fixture).unwrap() {
+        let file = file.unwrap();
+        fs::copy(file.path(), root.join(file.file_name())).unwrap();
+    }
+    let record = fs::read_to_string(root.join("PROVENANCE.yaml")).unwrap();
+    assert!(record.contains(
+        "  q.second_boiler: \"is a second boiler cheaper than glazing the north wall?\"\n"
+    ));
+    let verified = ok(root, &["--frozen", "experimental", "hub", "--verify"]);
+    let stdout = String::from_utf8(verified.stdout).unwrap();
+    assert!(!stdout.contains("FAIL"), "{stdout}");
+    assert!(
+        stdout.ends_with("17 elements, 14 entries, 3 judgments, 3 tabs, 0 problems\n"),
+        "{stdout}"
+    );
+    ok(
+        root,
+        &["--frozen", "experimental", "hub", "--out", "page.html"],
+    );
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(html.contains(
+        "data-id=\"q.second_boiler\">is a second boiler cheaper than glazing the north wall?</span>"
+    ));
+    assert_eq!(
+        fs::read_to_string(root.join("PROVENANCE.yaml")).unwrap(),
+        record
+    );
+}
+
+#[test]
+fn ordinary_hub_fails_a_section_only_when_its_selectors_pick_nothing_together() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "meta: {name: Sections}\nknown:\n  p.load: {v: 61}\n",
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    let verify = |view: &str| {
+        fs::write(root.join(".kpopper/view.yaml"), view).unwrap();
+        let verified = cli(root, &["--frozen", "experimental", "hub", "--verify"]);
+        let lines = String::from_utf8(verified.stdout)
+            .unwrap()
+            .lines()
+            .filter(|line| !line.starts_with("NOTE "))
+            .map(|line| format!("{line}\n"))
+            .collect::<String>();
+        (verified.status.code(), lines)
+    };
+    assert_eq!(
+        verify("tabs:\n- title: Inputs\n  sections:\n  - {title: Mixed, pick: [p., scope.], as: table}\n  - {title: Gone, pick: [scope., name.], as: table}\n"),
+        (
+            Some(1),
+            "FAIL section 'Gone' (tab 'Inputs') picks nothing - it is about something the record no longer holds\n1 elements, 1 entries, 0 judgments, 2 tabs, 1 problems\n".into()
+        )
+    );
+    assert_eq!(
+        verify("sections:\n- {title: Gone, pick: [scope.], as: table}\n- {title: Blank}\n"),
+        (
+            Some(1),
+            "FAIL section 'Gone' picks nothing - it is about something the record no longer holds\nFAIL section 'Blank' picks nothing - it is about something the record no longer holds\n1 elements, 1 entries, 0 judgments, 2 tabs, 2 problems\n".into()
+        )
+    );
+    assert_eq!(
+        verify("sections:\n- {title: Mixed, pick: [p., scope.], as: table}\n"),
+        (
+            Some(0),
+            "1 elements, 1 entries, 0 judgments, 2 tabs, 0 problems\n".into()
+        )
+    );
+}
+
+#[test]
+fn arrangement_write_reads_the_page_of_a_record_with_a_string_open_question() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "sources:\n  s.2026_09_20_ask: {asked: 'What should the page show?', read: '2026-09-20'}\nknown:\n  x.one: {v: 1, from: s.2026_09_20_ask}\nopen:\n  q.second: \"is a second boiler cheaper?\"\n",
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/view.yaml"),
+        "tabs:\n- title: Answer\n  serves: [s.2026_09_20_ask]\n  sections:\n  - {title: Values, pick: x, as: table}\n",
+    )
+    .unwrap();
+    ok(
+        root,
+        &[
+            "add",
+            "v.layout",
+            "verdict=Keep the answer tab",
+            "rests_on=[s.2026_09_20_ask, page.unserved]",
+            "wrong_if=page.unserved > 0",
+            "from=s.2026_09_20_ask",
+            "--as-of",
+            "2026-09-20",
+        ],
+    );
+    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    assert!(record.contains("  v.layout:\n"), "{record}");
+    assert!(record.contains("  q.second: \"is a second boiler cheaper?\"\n"));
 }
 fn ok(root: &Path, args: &[&str]) -> std::process::Output {
     let result = cli(root, args);

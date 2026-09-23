@@ -2039,6 +2039,9 @@ impl Projection<'_> {
         if let Some(waiting) = self.hypothesis_line()? {
             head.push(waiting);
         }
+        if !truth(&self.base.reader.fields["snapshot"]) {
+            head.push("no snapshot field: drift cannot be detected in this record".into());
+        }
 
         let mut items = vec![];
         for (id, body) in &self.base.judgments {
@@ -2336,6 +2339,9 @@ impl Projection<'_> {
                     }
                 }
             }
+        }
+        if !truth(&self.base.reader.fields["snapshot"]) {
+            note.push("no snapshot field anywhere: dependencies are declared but never captured, so drift can never be detected".into());
         }
 
         for (id, body) in &self.base.judgments {
@@ -2756,6 +2762,27 @@ mod tests {
         assert_eq!(data.arrangements[0].request.as_deref(), Some("s.request"));
         assert_eq!(data.arrangements[0].born.as_deref(), Some("2026-09-03"));
         assert!(data.flags["v.layout"].is_empty());
+    }
+    #[test]
+    fn a_record_with_no_snapshot_field_says_drift_cannot_be_detected() {
+        let document = crate::history_yaml::decode_document(b"known:\n  api.limit: {v: 10}\njudgments:\n  d.w: {verdict: known, rests_on: [api.limit], wrong_if: \"api.limit > 100\"}\n").unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(cache.path())
+            .with_ordinary_program(crate::ordinary_reader::tests::program());
+        let projection =
+            Projection::new(&document, &Map::new(), &Map::new(), vec![], Some(&runtime)).unwrap();
+        // `same` reports the last line of this check after it writes.
+        assert_eq!(
+            projection.check(None).unwrap(),
+            (
+                "NOTE no snapshot field anywhere: dependencies are declared but never captured, so drift can never be detected\n\n1 judgments, 2 entries, 0 problems, 1 declared\n".into(),
+                0
+            )
+        );
+        assert_eq!(
+            projection.opening(25, None, &[]).unwrap(),
+            "2 entries, 1 judgments\nno snapshot field: drift cannot be detected in this record\n\nnothing needs a person right now.\n\nstanding:\n  = d.w: known\n\nnext: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n"
+        );
     }
     #[test]
     fn ordinary_pull_and_affects_match_final_python() {

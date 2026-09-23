@@ -382,6 +382,33 @@ class Locations(WorkspaceFixture, unittest.TestCase):
         (self.work / ".git" / "kpopper-record").write_text(str(record))
         self.assertEqual(W.locate(linked)["record"], str(record))
 
+    def test_another_repositorys_git_dir_does_not_choose_the_record(self):
+        # Git exports GIT_DIR to hooks, `rebase --exec` and aliases run in a linked worktree.
+        self.git("init", "-q")
+        other = self.root / "other"
+        other.mkdir()
+        self.git("init", "-q", cwd=other)
+        self.git("-c", "user.email=fixture@example.invalid", "-c", "user.name=Fixture",
+                 "commit", "--allow-empty", "-m", "fixture", "-q", cwd=other)
+        self.git("worktree", "add", "--detach", str(self.root / "other-linked"), cwd=other)
+        external = self.root / "external"
+        external.mkdir()
+        registered = self.write_record(external)
+        (other / ".git" / "kpopper-record").write_text(str(registered))
+        before = registered.read_bytes()
+        hook = {"GIT_DIR": str(other / ".git" / "worktrees" / "other-linked")}
+        with patch.dict(os.environ, hook):
+            location = W.locate(self.work)
+        self.assertEqual((location["status"], location["record"]),
+                         ("missing", str(self.work / "GROUNDING.yaml")))
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/cli.py"), "--workspace", str(self.work),
+                                 "add", "fact.here", "v=2", "from=measurement"],
+                                cwd=self.root / "other-linked", capture_output=True, text=True,
+                                env={**self.env, **hook})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("fact.here", (self.work / "GROUNDING.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(registered.read_bytes(), before)
+
 
 if __name__ == "__main__":
     unittest.main()

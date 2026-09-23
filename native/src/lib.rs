@@ -117,6 +117,7 @@ pub mod public_update;
 pub mod public_workspace;
 pub mod publication_provider;
 mod python_identifiers;
+mod python_text;
 pub mod reasoning_assessment;
 pub mod reasoning_authoring;
 mod reasoning_authoring_guards;
