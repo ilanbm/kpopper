@@ -96,12 +96,24 @@ and installed replacement-library tests still execute. A cold cache therefore
 retains the original GMP `make check` work; warm-run savings must be measured
 separately from cold-run timings.
 
-The native command's compiled Rust dependencies are cached per target and build profile,
-so the test build of a check run and the release-only build of a publish run each restore
-their own. The key's prefix hashes the toolchain file and the native workflow, whose
+The native lane runs two jobs side by side, each with a leg per target. `tests` builds and
+runs the native test suite. `release` builds the release program, then accepts, packages
+and uploads it in the same job, so a publish run ships only bytes that the job which built
+them accepted. A pull request that changes no platform input builds and accepts the release
+on `linux-x86_64` alone, while its tests keep every target but Intel macOS; main, a publish
+run and a pull request that changes a platform input build and accept it on all five
+targets. A final `verdict` job fails when either job failed, was cancelled, or was skipped
+where the validation requires it: a publish run skips the tests and requires the release,
+and every other validation requires both. Without it, a job skipped inside the native
+workflow would leave `ci-required` green.
+
+The native command's compiled Rust dependencies are cached per target and build profile.
+The `tests` job restores and saves the test build's entry, and the `release` job the
+release build's, so each job of a check run or a publish run restores only what its own
+build uses. The key's prefix hashes the toolchain file and the native workflow, whose
 changes make every artifact stale, and a restore never crosses it; its suffix hashes the
 Cargo manifests, so a lockfile change starts from the nearest entry and rebuilds only what
-changed. Only a successful run on main saves an entry, after removing the package's own
+changed. Only a job that succeeds on main saves its entry, after removing the package's own
 artifacts, which every checkout rebuilds. Pull requests read main's entries.
 
 To generate candidates before updating committed bundles, dispatch
