@@ -305,7 +305,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     host: options.host.clone(),
                     ..Default::default()
                 };
-                match kpop_native::public_readers::run_auto("open", &options, &root, mode, false) {
+                match kpop_native::public_readers::run_auto(
+                    "open",
+                    &options,
+                    &root,
+                    mode,
+                    kpop_native::public_readers::Reply::View,
+                ) {
                     Ok(opening) => {
                         if !opening.text.is_empty() {
                             output.push(opening.text.trim_end().into());
@@ -557,6 +563,58 @@ fn run(args: Args) -> Result<Value> {
         }
     }
 }
+/// Prints what a command wrote and exits with its status. With --json the same output is
+/// wrapped as the Python reference wraps it, on stdout: the command, its exit status, and
+/// what it wrote to stdout and to stderr.
+fn emit(command: &str, as_json: bool, stdout: &str, stderr: &str, code: i32) -> ! {
+    if as_json {
+        println!(
+            "{}",
+            json!({"command":command,"exit_code":code,"output":stdout,"error":stderr})
+        );
+    } else {
+        print!("{stdout}");
+        eprint!("{stderr}");
+    }
+    std::process::exit(code)
+}
+/// The command a `--json` invocation names when its arguments are refused, if that command
+/// answers in the wrapper: the refusal is wrapped too, as the Python reference wraps it.
+fn wrapped_refusal(argv: &[std::ffi::OsString], error: &clap::Error) -> Option<&'static str> {
+    const WRAPPED: [&str; 12] = [
+        "check",
+        "pull",
+        "affects",
+        "add",
+        "set",
+        "review",
+        "remeasure",
+        "same",
+        "distinct",
+        "export",
+        "where",
+        "consolidate",
+    ];
+    if !error.use_stderr() {
+        return None;
+    }
+    let mut arguments = argv.iter().skip(1).map(|argument| argument.to_str());
+    let (mut json, mut command) = (false, None);
+    while let Some(argument) = arguments.next() {
+        match argument? {
+            "--" => break,
+            "--json" => json = true,
+            "--workspace" => {
+                arguments.next();
+            }
+            argument if command.is_none() && !argument.starts_with('-') => {
+                command = Some(WRAPPED.into_iter().find(|name| *name == argument)?);
+            }
+            _ => {}
+        }
+    }
+    command.filter(|_| json)
+}
 fn main() {
     let argv =
         kpop_native::public_expressions::preprocess_argv(&std::env::args_os().collect::<Vec<_>>());
@@ -576,6 +634,10 @@ fn main() {
                 print!("{}", output.stdout);
                 eprint!("{}", output.stderr);
                 std::process::exit(output.code);
+            }
+            if let Some(command) = wrapped_refusal(&argv, &error) {
+                let refusal = error.render().to_string();
+                emit(command, true, "", &refusal, error.exit_code());
             }
             error.exit();
         }
@@ -1074,20 +1136,13 @@ fn main() {
             .unwrap_or_else(std::env::current_dir)
         {
             Ok(cwd) => cwd,
-            Err(error) => {
-                eprintln!("{error}");
-                std::process::exit(1);
-            }
+            Err(error) => emit(kind, args.json, "", &format!("{error}\n"), 1),
         };
         if !cwd.join(".kpopper/native-feasibility.json").is_file() {
             match kpop_native::public_authoring::run(kind, options, &cwd) {
-                Ok(output) => print!("{output}"),
-                Err(error) => {
-                    eprintln!("{error}");
-                    std::process::exit(1);
-                }
+                Ok(output) => emit(kind, args.json, &output, "", 0),
+                Err(error) => emit(kind, args.json, "", &format!("{error}\n"), 1),
             }
-            return;
         }
     }
     if let Command::Recover { record, rollback } = &args.command {
@@ -1202,38 +1257,42 @@ fn main() {
                 } else {
                     kpop_native::source_capture::ReadMode::Live
                 };
-            kpop_native::public_readers::run_auto(command, options, &cwd, mode, args.json)
+            let reply = if args.json {
+                kpop_native::public_readers::Reply::Json
+            } else {
+                kpop_native::public_readers::Reply::Text
+            };
+            kpop_native::public_readers::run_auto(command, options, &cwd, mode, reply)
         })();
-        match result {
-            Ok(output) => {
-                print!("{}", output.text);
-                if output.code != 0 {
-                    std::process::exit(output.code);
-                }
-            }
+        let (output, error, code) = match result {
+            Ok(output) => (output.text, String::new(), output.code),
             Err(error) => {
-                let unreadable = kpop_native::public_readers::unreadable_record(&error);
-                if error
-                    .0
-                    .contains("is not an entry or a prefix in this record.")
-                    || unreadable && !args.json
-                {
-                    eprintln!("{error}");
-                    std::process::exit(1);
-                }
-                if command == "pull" && options.from_ref.is_some() {
-                    eprintln!("{error}");
-                    std::process::exit(1);
-                }
-                if args.json {
-                    eprintln!("{}", json!({"error":error.to_string()}));
+                let (text, code) = kpop_native::public_readers::failure(command, options, &error);
+                if command == "open" && args.json {
+                    // Before the reader could answer, open's object carries only the error.
+                    let object = json!({"error":text.trim()});
+                    (
+                        serde_json::to_string_pretty(&object).unwrap() + "\n",
+                        String::new(),
+                        code,
+                    )
                 } else {
-                    eprintln!("kpop {command}: {error}");
+                    (String::new(), text, code)
                 }
-                std::process::exit(if unreadable { 1 } else { 2 });
             }
+        };
+        if command == "open" {
+            // open answers --json with its own object, and in text a reply that reports
+            // a failure goes to stderr, as the Python reference prints both.
+            if args.json || code == 0 {
+                print!("{output}");
+            } else {
+                eprint!("{output}");
+            }
+            eprint!("{error}");
+            std::process::exit(code);
         }
-        return;
+        emit(command, args.json, &output, &error, code);
     }
     if let Command::Assess(options) = &args.command {
         let result = (|| {
@@ -1292,11 +1351,7 @@ fn main() {
             let text = value["text"].as_str().unwrap_or("");
             let stderr = value["stderr"].as_str().unwrap_or("");
             let code = value["code"].as_i64().unwrap_or(0) as i32;
-            print!("{}", text);
-            eprint!("{}", stderr);
-            if code != 0 {
-                std::process::exit(code);
-            }
+            emit("remeasure", as_json, text, stderr, code);
         }
         Ok(value) if is_watch => {
             if let Some(watch) = watch_args {
@@ -1337,7 +1392,14 @@ fn main() {
             } else if is_watch {
                 eprintln!("{}", json!({"error":error.to_string()}));
             } else {
-                eprintln!("{}", json!({"status":"refused","error":error.to_string()}));
+                let refusal = format!(
+                    "{}\n",
+                    json!({"status":"refused","error":error.to_string()})
+                );
+                if is_remeasure {
+                    emit("remeasure", as_json, "", &refusal, 2);
+                }
+                eprint!("{refusal}");
             }
             std::process::exit(2);
         }

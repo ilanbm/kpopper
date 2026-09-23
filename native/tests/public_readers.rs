@@ -604,8 +604,9 @@ fn a_record_without_a_readable_dependency_field_is_refused_with_the_reason() {
 
     let output = cli(root, &["--json", "check"], &root.join("private"));
     assert_eq!(output.status.code(), Some(1));
-    let error: J = serde_json::from_slice(&output.stderr).unwrap();
-    assert_eq!(error["error"], BROKEN_REFERENCE_REFUSAL.trim_end());
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], BROKEN_REFERENCE_REFUSAL);
     let output = cli(
         root,
         &["--json", "export", "local.one"],
@@ -789,8 +790,9 @@ fn a_record_whose_field_roles_tie_is_refused_with_the_fields_that_tie() {
 
     let output = cli(root, &["--json", "check"], &root.join("private"));
     assert_eq!(output.status.code(), Some(1));
-    let error: J = serde_json::from_slice(&output.stderr).unwrap();
-    assert_eq!(error["error"], refusal.trim_end());
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], refusal);
     let output = cli(root, &["--json", "export", "d.a"], &root.join("private"));
     assert_eq!(output.status.code(), Some(1));
     let result: J = serde_json::from_slice(&output.stdout).unwrap();

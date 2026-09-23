@@ -99,7 +99,10 @@ findings match.
 
 Ordinary `open`, `check` and `pull --history` use the captured record and retained
 replacement file. They preserve namespace ordering, review flags, pointer and
-hypothesis orientation, private-draft counts, historical decisions and final source revalidation. Existing feasibility-
+hypothesis orientation, private-draft counts, historical decisions and final source revalidation.
+`open --json` returns the view with the workspace, record and `record_sha256` of the
+bytes it read; the other read and write commands wrap their text, error and exit code
+in `--json`. Existing feasibility-
 store workspaces retain their explicitly marked experimental opener. Complete
 command compatibility and final distribution acceptance remain in progress.
 
