@@ -1,6 +1,6 @@
 [package]
 name = "kpopper"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 rust-version = "1.98"
 description = "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Installs the kpop and kpopper commands."
