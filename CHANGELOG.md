@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.0 — 2026-09-23
+
+- Run the worked examples on the command line (#225) — major
+- Validate native copies before restoring the record reader cache — patch
+- Keep the page fixture record beside the tests that embed it (#222) — patch
+- Keep Rust test and release build caches apart — patch
+- Preserve snapshots named reviewed during review — patch
+- Check the release tree with the native reader (#221) — patch
+- Run the Gemini, Copilot and Windsurf adapters on the native runtime (#216) — minor
+- Check this repository's record with the native reader in CI (#215) — patch
+- Compare the native hooks with the Python of v0.10.0, not the checkout's (#214) — patch
+- Open Cursor sessions on the native runtime and install it in the host guides — patch
+- Preserve CRLF in ordinary authoring and consolidation — patch
+- Use Dear agent for copyable requests — patch
+
+Decisions recorded: d.copyable_agent_requests, d.python_frozen_at_v0_10_0, d.snapshot_named_reviewed_is_kept
+
 ## 0.10.0 — 2026-09-23
 
 - Clarify README visuals, navigation and onboarding (#210) — patch
