@@ -37,9 +37,9 @@ fn files(root: &Path) -> BTreeMap<String, String> {
     fn walk(root: &Path, path: &Path, out: &mut BTreeMap<String, String>) {
         for entry in fs::read_dir(path).unwrap() {
             let path = entry.unwrap().path();
-            // These three trees belong to this test harness, not the shared record.
+            // These trees belong to this test harness or to Git, not the shared record.
             if path.parent() == Some(root)
-                && ["resources", "cache", "state"]
+                && ["resources", "cache", "state", ".git"]
                     .iter()
                     .any(|name| path.file_name().is_some_and(|part| part == *name))
             {
@@ -67,14 +67,52 @@ fn files(root: &Path) -> BTreeMap<String, String> {
     walk(root, root, &mut out);
     out
 }
-#[test]
-fn ordinary_identity_matches_complete_python_commands_and_images() {
+fn kpop(root: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+    command
+        .current_dir(root)
+        .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
+        .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
+        .env("XDG_STATE_HOME", root.join("state"))
+        .env("TZ", "UTC")
+        .env_remove("KPOPPER_AGENT_SESSION")
+        .env_remove("CODEX_THREAD_ID");
+    command
+}
+/// A Git project without a configuration is an Advanced one.
+fn advanced_project(root: &Path) {
+    let init = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["init", "-q"])
+        .output()
+        .unwrap();
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+}
+fn project_mode(root: &Path) -> String {
+    let output = kpop(root).args(["config", "--json"]).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let config: Value = serde_json::from_slice(&output.stdout).unwrap();
+    config["project"]["mode"].as_str().unwrap().to_owned()
+}
+fn assert_identity_cases_match_python(advanced: bool) {
     let cases: Value =
         serde_json::from_slice(include_bytes!("fixtures/ordinary-identity-cli.json")).unwrap();
     for case in cases.as_array().unwrap() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path();
         resources(root);
+        if advanced {
+            advanced_project(root);
+        }
         for (path, value) in case["before"].as_object().unwrap() {
             let path = root.join(path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -86,17 +124,7 @@ fn ordinary_identity_matches_complete_python_commands_and_images() {
             .iter()
             .map(|v| v.as_str().unwrap())
             .collect::<Vec<_>>();
-        let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
-            .current_dir(root)
-            .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
-            .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
-            .env("XDG_STATE_HOME", root.join("state"))
-            .env("TZ", "UTC")
-            .env_remove("KPOPPER_AGENT_SESSION")
-            .env_remove("CODEX_THREAD_ID")
-            .args(args)
-            .output()
-            .unwrap();
+        let result = kpop(root).args(args).output().unwrap();
         let normalized =
             |bytes: &[u8]| String::from_utf8_lossy(bytes).replace(root.to_str().unwrap(), "$ROOT");
         assert_eq!(
@@ -125,7 +153,20 @@ fn ordinary_identity_matches_complete_python_commands_and_images() {
             "{}: images",
             case["name"]
         );
+        if advanced {
+            assert_eq!(project_mode(root), "advanced", "{}", case["name"]);
+        }
     }
+}
+#[test]
+fn ordinary_identity_matches_complete_python_commands_and_images() {
+    assert_identity_cases_match_python(false);
+}
+/// Git projects default to Advanced mode, and Python writes their own ordinary
+/// record with the same `same` and `distinct` bytes as a Simple project's.
+#[test]
+fn ordinary_identity_in_an_advanced_project_matches_the_same_python_images() {
+    assert_identity_cases_match_python(true);
 }
 
 #[test]

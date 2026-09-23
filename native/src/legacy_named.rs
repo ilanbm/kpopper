@@ -46,7 +46,7 @@ fn carry(
         .map_err(|_| error("invalid_history_yaml"))?;
         let lines = text.split('\n').map(str::to_owned).collect::<Vec<_>>();
         if let Some((collection, member)) = locate(&lines, id) {
-            let mut block = lines[member.start..member.end].to_vec();
+            let mut block = lines[member.start..block_end(&lines, &member)].to_vec();
             while block.last().is_some_and(|line| line.trim().is_empty()) {
                 block.pop();
             }
@@ -107,7 +107,11 @@ fn insert_block(
         .find(|m| m.name.as_str() > id)
         .map(|m| (*m, true))
         .unwrap_or((*neighbors.last().unwrap(), false));
-    let at = if before { anchor.start } else { anchor.end };
+    let at = if before {
+        anchor.start
+    } else {
+        block_end(lines, anchor)
+    };
     lines.splice(at..at, block);
     Ok(format!(
         "{id} into {collection}, {} {}",
@@ -413,7 +417,11 @@ fn prepare_mode(
                 replace_field_ordered(&mut lines, &member, snapshot, &order)?;
             }
             let (_, member) = locate(&lines, &id).unwrap();
-            if field_span(&lines, &member, "reviewed").is_some() {
+            if inline(&lines[member.start]).starts_with('{') {
+                if body.contains_key("reviewed") {
+                    in_braces(&mut lines, &member, "reviewed", "", None, Some(&stamp))?;
+                }
+            } else if field_span(&lines, &member, "reviewed").is_some() {
                 replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
             }
             output.push(format!(

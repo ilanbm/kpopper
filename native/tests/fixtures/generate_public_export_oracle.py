@@ -60,10 +60,36 @@ custom["dense-cap"] = captured({
 })
 
 
+class LiveOrder:
+    """A context read back from its data holds every map in name order, while
+    `kpop export` captures the record live and reads each judgment's
+    dependencies in the order the judgment declares them."""
+
+    def __init__(self, context):
+        self._context = context
+
+    def __getattr__(self, name):
+        return getattr(self._context, name)
+
+    @property
+    def assessment(self):
+        report = self._context.assessment
+        for node in report["nodes"].values():
+            body = node["body"] if isinstance(node["body"], dict) else {}
+            declared = body.get(node["fields"]["deps"])
+            readings = node["state"]["basis"]["dependencies"]
+            if not isinstance(declared, list):
+                continue
+            order = [dep for dep in dict.fromkeys(declared) if isinstance(dep, str) and dep in readings]
+            order += [dep for dep in readings if dep not in order]
+            node["state"]["basis"]["dependencies"] = {dep: readings[dep] for dep in order}
+        return report
+
+
 def context(name):
     if name in custom:
         return custom[name]
-    return CapturedAssessment.from_data(supplied[name])
+    return LiveOrder(CapturedAssessment.from_data(supplied[name]))
 
 
 original_core_modules = export._core_modules

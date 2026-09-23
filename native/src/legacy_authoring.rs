@@ -90,6 +90,20 @@ pub(crate) fn route(entry: &Path, config: &V) -> Result<AuthorityRoute> {
     Ok(route)
 }
 
+/// Writes that no contribution routing applies to, such as `same` and `distinct`,
+/// edit an Advanced project's own ordinary record as they edit a Simple one.
+pub(crate) fn local_route(entry: &Path, write: &WriteRoute) -> Result<AuthorityRoute> {
+    let route = authority_route(entry)?;
+    if route == AuthorityRoute::Legacy {
+        require(
+            string_is(field(map(write.config())?, "mode")?, "simple")
+                || write.pending_required()?,
+            "legacy_authoring_requires_simple_project",
+        )?;
+    }
+    Ok(route)
+}
+
 #[derive(Clone, Debug)]
 struct Collection {
     name: String,
@@ -210,6 +224,15 @@ fn field_span(lines: &[String], member: &Member, field: &str) -> Option<Member> 
     members(lines, &collection)
         .into_iter()
         .find(|item| item.name == field)
+}
+
+/// The column an entry's fields start at: the first line of its block that is neither
+/// blank nor a comment. An entry written on one line has none.
+fn field_indent(lines: &[String], member: &Member) -> Option<usize> {
+    lines[member.start + 1..block_end(lines, member)]
+        .iter()
+        .find(|line| !blank(line))
+        .map(|line| indent(line))
 }
 
 #[derive(Clone, Copy)]
@@ -510,7 +533,14 @@ fn insert_entry(
         .ok_or_else(|| error(&format!("no collection {collection_name} in this file")))?;
     let existing = members(lines, &collection);
     if existing.is_empty() {
-        let new = entry_lines_ordered(id, body, 2, 4, false)?;
+        // Entries whose ids the member pattern cannot read still set the column.
+        let ind = lines[collection.start + 1..collection.end]
+            .iter()
+            .find(|line| !blank(line))
+            .map(|line| indent(line))
+            .filter(|&column| column > 0)
+            .unwrap_or(2);
+        let new = entry_lines_ordered(id, body, ind, ind + 2, false)?;
         lines.splice(collection.start + 1..collection.start + 1, new);
         return Ok(format!("{id} into {collection_name}, its first entry"));
     }
@@ -528,9 +558,7 @@ fn insert_entry(
         .find(|member| member.name.as_str() > id)
         .map(|member| (*member, true))
         .unwrap_or((*siblings.last().unwrap(), false));
-    let field_indent = field_span(lines, anchor, "v")
-        .or_else(|| field_span(lines, anchor, "quoted"))
-        .map_or(anchor.indent + 2, |field| field.indent);
+    let field_indent = field_indent(lines, anchor).unwrap_or(anchor.indent + 2);
     let flow = inline(&lines[anchor.start]).starts_with('{');
     let mut new = entry_lines_ordered(id, body, anchor.indent, field_indent, flow)?;
     let position = if before {
@@ -542,7 +570,8 @@ fn insert_entry(
         }
         anchor.start
     } else {
-        let mut position = anchor.end;
+        // A comment under the anchor, such as the reason a set wrote, stays with it.
+        let mut position = block_end(lines, anchor);
         if position < collection.end && separator_blank(&lines[position]) {
             position += 1;
             new.push(String::new());
@@ -560,9 +589,7 @@ fn insert_entry(
 fn replace_entry(lines: &mut Vec<String>, id: &str, body: &Source) -> Result<()> {
     let (_, member) = locate(lines, id).ok_or_else(|| error("entry_not_found"))?;
     let flow = inline(&lines[member.start]).starts_with('{');
-    let field_indent = field_span(lines, &member, "v")
-        .or_else(|| field_span(lines, &member, "quoted"))
-        .map_or(member.indent + 2, |field| field.indent);
+    let field_indent = field_indent(lines, &member).unwrap_or(member.indent + 2);
     let replacement = entry_lines_ordered(id, body, member.indent, field_indent, flow)?;
     lines.splice(member.start..member.end, replacement);
     Ok(())
@@ -608,6 +635,11 @@ fn replace_field_ordered(
     field: &str,
     value: &Source,
 ) -> Result<usize> {
+    if inline(&lines[member.start]).starts_with('{') {
+        // A judgment written on one line takes the field inside its braces.
+        in_braces(lines, member, field, &flow_text(value)?, None, None)?;
+        return Ok(member.end);
+    }
     if let Some(span) = field_span(lines, member, field) {
         let replacement = field_lines_ordered(field, value, span.indent)?;
         let new_end = member.end + replacement.len() - (span.end - span.start);
@@ -615,13 +647,11 @@ fn replace_field_ordered(
         Ok(new_end)
     } else {
         // A missing field closes the block, at the indent of the fields before it.
-        // An entry written on one line has no block to close: the field then lands
-        // under the key, and the write is refused as unreadable, not as a sibling.
+        // An entry written on one line without braces, an alias, has no block to close:
+        // the field then lands under the key, and the write is refused as unreadable,
+        // not as a sibling.
         let end = block_end(lines, member);
-        let field_indent = lines[member.start + 1..end]
-            .iter()
-            .find(|line| !blank(line))
-            .map_or(member.indent + 2, |line| indent(line));
+        let field_indent = field_indent(lines, member).unwrap_or(member.indent + 2);
         let replacement = field_lines_ordered(field, value, field_indent)?;
         let len = replacement.len();
         lines.splice(end..end, replacement);
@@ -784,6 +814,178 @@ fn upsert_scalar_in_flow(block: &str, field: &str, value: &V) -> Result<String> 
         scalar(value, Style::Bare)?,
         &block[at..]
     ))
+}
+
+/// `value` as the record writes it inside braces: every mapping and list as a flow
+/// collection, every scalar on one line.
+fn flow_text(value: &Source) -> Result<String> {
+    Ok(match value {
+        Source::Scalar(value) => scalar(value, Style::Bare)?,
+        Source::List(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(flow_text)
+                .collect::<Result<Vec<_>>>()?
+                .join(", ")
+        ),
+        Source::Map(values) => format!(
+            "{{{}}}",
+            values
+                .iter()
+                .map(|(key, value)| Ok(format!("{}: {}", safe_key(key)?, flow_text(value)?)))
+                .collect::<Result<Vec<_>>>()?
+                .join(", ")
+        ),
+    })
+}
+
+/// `field` written inside the braces of the judgment at `member`: its value replaced
+/// where it stands - a stamp in the style it had - or the pair added after the field
+/// `after`, else after the last one. Nothing else on its lines moves.
+fn in_braces(
+    lines: &mut Vec<String>,
+    member: &Member,
+    field: &str,
+    text: &str,
+    after: Option<&str>,
+    stamp: Option<&str>,
+) -> Result<()> {
+    use libyaml_safer::{Scanner, TokenData as T};
+    let id = &member.name;
+    let unreadable = || {
+        error(&format!(
+            "refused - {id}: its braces could not be read - write it with one field per line, then review it again"
+        ))
+    };
+    let block = lines[member.start..].join("\n");
+    // Read on to the brace that closes the judgment: it may stand on a line of its own,
+    // at the judgment's indent, past the lines the entry spans.
+    let mut input = block.as_bytes();
+    let mut scanner = Scanner::new();
+    scanner.set_input_string(&mut input);
+    let (mut tokens, mut keys, mut depth) = (Vec::new(), Vec::new(), 0_i32);
+    for token in scanner {
+        let token = token.map_err(|_| unreadable())?;
+        let closing = match token.data {
+            T::BlockMappingStart
+            | T::FlowMappingStart
+            | T::BlockSequenceStart
+            | T::FlowSequenceStart => {
+                depth += 1;
+                false
+            }
+            T::BlockEnd | T::FlowMappingEnd | T::FlowSequenceEnd => {
+                depth -= 1;
+                depth == 1
+            }
+            T::Key if depth == 2 => {
+                keys.push(tokens.len());
+                false
+            }
+            _ => false,
+        };
+        tokens.push(token);
+        if closing {
+            break;
+        }
+    }
+    if depth != 1 || !matches!(tokens.last().map(|t| &t.data), Some(T::FlowMappingEnd)) {
+        return Err(unreadable());
+    }
+    let values = keys
+        .iter()
+        .filter_map(|&k| match (&tokens[k + 1].data, &tokens[k + 2].data) {
+            (T::Scalar { value, .. }, T::Value) => Some((value.clone(), k + 3)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let value_at = |name: &str| {
+        values
+            .iter()
+            .rev()
+            .find(|(key, _)| key == name)
+            .map(|(_, at)| *at)
+    };
+    let index = |mark: u64| usize::try_from(mark).map_err(|_| error("source_limit"));
+    // (start, end, whether it is a scalar) of the value whose first token is `at`; None
+    // for an alias, a tag, an anchor or no value, which this writer leaves alone.
+    let span = |at: usize| -> Result<Option<(usize, usize, bool)>> {
+        let token = &tokens[at];
+        match token.data {
+            T::Scalar { .. } => Ok(Some((
+                index(token.start_mark.index)?,
+                index(token.end_mark.index)?,
+                true,
+            ))),
+            T::FlowMappingStart | T::FlowSequenceStart => {
+                let mut level = 0;
+                for next in &tokens[at..] {
+                    match next.data {
+                        T::FlowMappingStart | T::FlowSequenceStart => level += 1,
+                        T::FlowMappingEnd | T::FlowSequenceEnd => {
+                            level -= 1;
+                            if level == 0 {
+                                return Ok(Some((
+                                    index(token.start_mark.index)?,
+                                    index(next.end_mark.index)?,
+                                    false,
+                                )));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
+    };
+    let block = if let Some(at) = value_at(field) {
+        let (start, end, _) = span(at)?
+            .filter(|(_, _, is_scalar)| stamp.is_none() || *is_scalar)
+            .ok_or_else(|| {
+                error(&format!(
+                    "refused - {id}: {field}: inside its braces is not a value this review can rewrite"
+                ))
+            })?;
+        let new = match stamp {
+            Some(stamp) => scalar(&s(stamp), style(&block[start..end]))?,
+            None => text.to_owned(),
+        };
+        format!("{}{new}{}", &block[..start], &block[end..])
+    } else {
+        let after = match after.and_then(value_at) {
+            Some(at) => span(at)?,
+            None => None,
+        };
+        let last = &tokens[tokens.len() - 2];
+        let (at, separator) = match after {
+            Some((_, end, _)) => (end, ", "),
+            None => (
+                index(last.end_mark.index)?,
+                match last.data {
+                    T::FlowMappingStart => "",
+                    T::FlowEntry => " ",
+                    _ => ", ",
+                },
+            ),
+        };
+        let new = match stamp {
+            Some(stamp) => format!("\"{stamp}\""),
+            None => text.to_owned(),
+        };
+        format!(
+            "{}{separator}{}: {new}{}",
+            &block[..at],
+            safe_key(field)?,
+            &block[at..]
+        )
+    };
+    // One line changed, none added.
+    let replacement = block.split('\n').map(str::to_owned).collect::<Vec<_>>();
+    lines.splice(member.start.., replacement);
+    Ok(())
 }
 
 fn set_entry(
@@ -1888,14 +2090,24 @@ fn prepare_with_inventory_mode(
             }
             let (_, member) = locate(&lines, &id).unwrap();
             if stamp_review {
-                if field_span(&lines, &member, "reviewed").is_some() {
+                if inline(&lines[member.start]).starts_with('{') {
+                    in_braces(
+                        &mut lines,
+                        &member,
+                        "reviewed",
+                        "",
+                        Some("replaced"),
+                        Some(&stamp),
+                    )?;
+                } else if field_span(&lines, &member, "reviewed").is_some() {
                     replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
                 } else {
                     let after =
                         field_span(&lines, &member, "replaced").map_or(member.end, |span| span.end);
+                    let column = field_indent(&lines, &member).unwrap_or(member.indent + 2);
                     lines.insert(
                         after,
-                        format!("{}reviewed: \"{stamp}\"", " ".repeat(member.indent + 2)),
+                        format!("{}reviewed: \"{stamp}\"", " ".repeat(column)),
                     );
                 }
             }

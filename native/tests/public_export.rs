@@ -58,32 +58,37 @@ fn write_ordinary(root: &Path, case: &J) -> PathBuf {
     record
 }
 
+/// Run `kpop --frozen export` in `root` with the core runtime as its only
+/// resource.
+fn core_export(root: &Path, args: &[&str]) -> std::process::Output {
+    let target = kpop_native::reasoning_runtime::target_name().unwrap();
+    let resources = root.join("resources/reasoning");
+    if !resources.exists() {
+        fs::create_dir_all(&resources).unwrap();
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../scripts/reasoning/native")
+                .join(format!("{target}.kpopper-runtime")),
+            resources.join(format!("{target}.zip")),
+        )
+        .unwrap();
+    }
+    std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["--workspace", root.to_str().unwrap(), "--frozen", "export"])
+        .args(args)
+        .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
+        .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
+        .output()
+        .unwrap()
+}
+
 #[test]
 fn public_cli_exports_core_findings_and_wraps_the_reference_exit_contract() {
-    use std::{fs, path::Path, process::Command};
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     let record = "meta: {reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nknown:\n  p.a: {v: 7}\njudgments:\n  d.keep: {verdict: Keep, rests_on: [p.a], seen: {p.a: 7}, wrong_if: 'p.a > 8'}\n";
     fs::write(root.join("GROUNDING.yaml"), record).unwrap();
-    let target = kpop_native::reasoning_runtime::target_name().unwrap();
-    fs::create_dir_all(root.join("resources/reasoning")).unwrap();
-    fs::copy(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../scripts/reasoning/native")
-            .join(format!("{target}.kpopper-runtime")),
-        root.join("resources/reasoning")
-            .join(format!("{target}.zip")),
-    )
-    .unwrap();
-    let run = |args: &[&str]| {
-        Command::new(env!("CARGO_BIN_EXE_kpop"))
-            .args(["--workspace", root.to_str().unwrap(), "--frozen", "export"])
-            .args(args)
-            .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
-            .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
-            .output()
-            .unwrap()
-    };
+    let run = |args: &[&str]| core_export(root, args);
     let text = run(&["d.keep"]);
     assert!(
         text.status.success(),
@@ -289,6 +294,86 @@ fn ordinary_projection_and_renderers_match_the_frozen_python_oracle() {
     }
 }
 
+/// The expected outputs below are Python's: `scripts/cli.py --frozen export ...`
+/// run beside the fixture record.
+#[test]
+fn ordinary_export_matches_python_on_undecided_conditions_and_labels() {
+    // v.heating_tab reads page.spill, which only the page counts: its
+    // condition cannot be evaluated here, so it is UNKNOWN. The computed
+    // names list their name, count and origin in that order. c.coupling's
+    // label breaks after the hyphen of "baryon-acceleration", and
+    // d.greeting's Hebrew points are escaped for Mermaid, as Python escapes
+    // what `str.isalnum` rejects, and its U+001C separates words.
+    let temp = tempfile::tempdir().unwrap();
+    let record = temp.path().join("GROUNDING.yaml");
+    fs::write(&record, include_str!("fixtures/export-unknown.yaml")).unwrap();
+    let runtime = install_runtime(temp.path());
+    let capture = source_capture::capture_source_with_runtime(
+        std::slice::from_ref(&record),
+        temp.path(),
+        ReadMode::Frozen,
+        None,
+        Some(&runtime),
+    )
+    .unwrap();
+    let seeds = ["v.heating_tab", "c.coupling", "d.greeting"].map(str::to_owned);
+    let both = Options {
+        format: Format::MarkdownMermaid,
+        ..Options::default()
+    };
+    assert_eq!(
+        public_export::render_ordinary(&capture, Some(&runtime), &seeds, &both).unwrap(),
+        include_str!("fixtures/export-unknown.stdout")
+    );
+    let details = Options {
+        details: true,
+        format: Format::Mermaid,
+        ..Options::default()
+    };
+    assert_eq!(
+        public_export::render_ordinary(&capture, Some(&runtime), &seeds, &details)
+            .unwrap_err()
+            .0,
+        "--details needs a text format: markdown or markdown-mermaid"
+    );
+    // The selection is read before the format is refused, as in Python.
+    assert_eq!(
+        public_export::render_ordinary(&capture, Some(&runtime), &["nope".into()], &details)
+            .unwrap_err()
+            .0,
+        "unknown exact ID(s): nope; use kpop open or pull"
+    );
+}
+
+#[test]
+fn core_export_keeps_the_record_order_of_dependencies_and_fields() {
+    // d.budget rests on [p.rate, p.hours, p.cost] and its fields, like the
+    // known entries', are not in name order. The shared assessment's own
+    // revision names the evaluator, so only the identity line is masked.
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        include_str!("fixtures/export-core-order.yaml"),
+    )
+    .unwrap();
+    let output = core_export(root, &["d.budget"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let identity =
+        regex::Regex::new("Shared assessment [0-9a-f]{64}; findings [0-9a-f]{64}").unwrap();
+    assert_eq!(
+        identity.replace_all(
+            &String::from_utf8(output.stdout).unwrap(),
+            "Shared assessment <snapshot>; findings <findings>"
+        ),
+        include_str!("fixtures/export-core-order.stdout")
+    );
+}
+
 #[test]
 fn ordinary_export_refuses_unsupported_reference_shapes_without_surrogate_leaks() {
     let oracle: J =
@@ -380,5 +465,11 @@ fn validates_bounds_after_seed_deduplication() {
             .unwrap_err()
             .0,
         "--details needs a text format: markdown or markdown-mermaid"
+    );
+    assert_eq!(
+        public_export::render(&captured, &["D.A".into()], &details_mermaid)
+            .unwrap_err()
+            .0,
+        "unknown exact ID(s): D.A; use kpop open or pull"
     );
 }
