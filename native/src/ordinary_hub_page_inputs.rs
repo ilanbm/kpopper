@@ -23,6 +23,24 @@ struct Section {
 fn body<'a>(nodes: &'a Map, id: &str) -> Result<&'a Map> {
     map(&map(&nodes[id])?["body"])
 }
+/// The assessment keeps each body as written. The page reads a body that is not a
+/// mapping - an open question written as a bare string - as the value `{v: body}`,
+/// the way the Python page does.
+fn page_nodes(nodes: &Map) -> Result<Map> {
+    nodes
+        .iter()
+        .map(|(id, node)| {
+            let mut node = map(node)?.clone();
+            if let Some(body) = node.get_mut("body")
+                && !matches!(body, V::Map(_))
+            {
+                let value = std::mem::replace(body, V::Null);
+                *body = V::Map(Map::from([("v".into(), value)]));
+            }
+            Ok((id.clone(), V::Map(node)))
+        })
+        .collect()
+}
 fn textish(v: &V) -> String {
     if matches!(v, V::Text(_)) {
         text(v).unwrap_or("").into()
@@ -115,10 +133,11 @@ fn select(
 }
 
 fn parse_brief(content: Option<&[u8]>) -> Result<(Map, Vec<Tab>)> {
-    let brief = match content {
-        Some(b) => decode_brief(b)?,
-        None => V::Map(Map::new()),
+    // Without a brief there is no session tab, and the page opens on Record.
+    let Some(content) = content else {
+        return Ok((Map::new(), vec![]));
     };
+    let brief = decode_brief(content)?;
     let brief = if truth(&brief) {
         map(&brief)?.clone()
     } else {

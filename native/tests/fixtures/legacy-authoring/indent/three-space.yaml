@@ -1,0 +1,6 @@
+known:
+   api.limit:
+      v: 10
+   s.ask:
+      asked: "what next"
+      read: 2026-01-01

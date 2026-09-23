@@ -1,0 +1,17 @@
+43 entries, 42 judgments
+
+needs a person (12):
+  d.gap00: rests on gone.v00, which is not an entry
+  d.gap01: rests on gone.v01, which is not an entry
+  d.gap02: rests on gone.v02, which is not an entry
+  d.gap03: rests on gone.v03, which is not an entry
+  d.gap04: rests on gone.v04, which is not an entry
+  d.gap05: rests on gone.v05, which is not an entry
+  d.gap06: rests on gone.v06, which is not an entry
+  d.gap07: rests on gone.v07, which is not an entry
+  d.gap08: rests on gone.v08, which is not an entry
+  d.gap09: rests on gone.v09, which is not an entry
+  d.gap10: rests on gone.v10, which is not an entry
+  d.gap11: rests on gone.v11, which is not an entry
+
+next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check

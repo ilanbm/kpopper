@@ -1,0 +1,6 @@
+d.gone:
+- verdict: the old call
+  rests_on: [p.dropped]
+  seen: {p.dropped: 3}
+  ended: replaced when the plan changed
+  day: '2026-09-18'

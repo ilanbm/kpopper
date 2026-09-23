@@ -237,7 +237,7 @@ fn run_routed(
     let entry = &route.paths()[0];
     let _lock =
         F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
-    if crate::legacy_authoring::route(entry, route.config())?
+    if crate::legacy_authoring::local_route(entry, &route)?
         == crate::legacy_authoring::AuthorityRoute::Legacy
     {
         *ordinary = true;

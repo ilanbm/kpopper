@@ -1,0 +1,10 @@
+known:
+    api.limit:
+        v: 10
+judgments:
+    d.w:
+        verdict: y
+        rests_on: [api.limit]
+        wrong_if: "api.limit > 50"
+        replaced: ["its wrong_if holds (api.limit > 5) on 2026-01-01"]
+        seen: {api.limit: 10}
