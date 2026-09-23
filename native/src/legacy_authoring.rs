@@ -1543,6 +1543,31 @@ fn update_review_candidate(
     Ok(candidate)
 }
 
+/// Whether a judgment holds something other than a mapping where its snapshot goes, such
+/// as a day written over it. It is read as never checked, and a review writes the snapshot
+/// whole, even one with nothing in it.
+fn written_over(body: &Map, snapshot: &str) -> bool {
+    body.get(snapshot).is_some_and(|value| map(value).is_err())
+}
+
+/// What a review says of a reversal it leaves open. A record that names its snapshot
+/// `reviewed` gets no review day, and the day is what clears one.
+fn open_reversal(reader: &Reader<'_>, body: &V, seen: &Map) -> Result<Option<String>> {
+    if crate::reasoning_authoring_guards::arrangement(reader, body) {
+        return Ok(None);
+    }
+    let mut written = map(body)?.clone();
+    written.insert("reviewed".into(), V::Map(seen.clone()));
+    Ok(
+        crate::ordinary_reader::reversal_pending(&V::Map(written)).map(|day| {
+            format!(
+                "  reversed on {day} stays open - the snapshot field is named reviewed, so review \
+                 writes no day"
+            )
+        }),
+    )
+}
+
 fn common_root(entry: &Path, members: &[PathBuf]) -> Result<PathBuf> {
     let mut root = entry
         .parent()
@@ -1838,7 +1863,13 @@ fn prepare_with_inventory_mode(
     }
     let collection =
         collection.ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
+    // A record may name its snapshot `reviewed`, the field a review dates a judgment by:
+    // the snapshot is kept and no day is written over it.
+    let snapshot_is_reviewed = reader
+        .snapshot_field()
+        .is_ok_and(|field| field == "reviewed");
     let stamp_review = kind == "review"
+        && !snapshot_is_reviewed
         && map(&entries[&id].1).is_ok_and(|body| {
             body.contains_key("reviewed")
                 || body.contains_key("replaced")
@@ -2127,11 +2158,13 @@ fn prepare_with_inventory_mode(
             let (_, member) = locate(&lines, &id)
                 .ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
             let snapshot = reader.snapshot_field()?;
-            let old_seen = map(map(&entries[&id].1)?
+            let old_seen = map(&entries[&id].1)?
                 .get(snapshot)
-                .unwrap_or(&V::Map(Map::new())))?
-            .clone();
-            let changed = old_seen.len() != seen.len()
+                .and_then(|value| map(value).ok())
+                .cloned()
+                .unwrap_or_default();
+            let changed = written_over(map(&entries[&id].1)?, snapshot)
+                || old_seen.len() != seen.len()
                 || old_seen
                     .iter()
                     .any(|(key, value)| seen.get(key).is_none_or(|now| !same_legacy(value, now)));
@@ -2205,6 +2238,9 @@ fn prepare_with_inventory_mode(
                     )),
                     _ => {}
                 }
+            }
+            if snapshot_is_reviewed {
+                output.extend(open_reversal(&reader, &entries[&id].1, &seen)?);
             }
         }
         _ => return Err(error("unsupported_legacy_authoring_kind")),

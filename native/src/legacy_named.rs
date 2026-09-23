@@ -295,7 +295,8 @@ fn prepare_mode(
             &id,
             snapshot,
             &seen,
-            body.contains_key("reviewed").then_some(stamp.as_str()),
+            // a snapshot named `reviewed` is kept, never dated over
+            (snapshot != "reviewed" && body.contains_key("reviewed")).then_some(stamp.as_str()),
         )?
     } else {
         reader.candidate(&V::Map(candidate_action))?
@@ -407,7 +408,8 @@ fn prepare_mode(
                 .unwrap_or_default();
             let seen = dependency_snapshot(&reader, body)?;
             let order = snapshot_order(&reader, body, &seen, &document.source, &hyp_source)?;
-            let changed = old.len() != seen.len()
+            let changed = written_over(body, snapshot)
+                || old.len() != seen.len()
                 || old
                     .iter()
                     .any(|(k, v)| seen.get(k).is_none_or(|n| !same_legacy(v, n)));
@@ -417,11 +419,13 @@ fn prepare_mode(
                 replace_field_ordered(&mut lines, &member, snapshot, &order)?;
             }
             let (_, member) = locate(&lines, &id).unwrap();
-            if inline(&lines[member.start]).starts_with('{') {
+            // A snapshot named `reviewed` is kept, never dated over.
+            let dated = snapshot != "reviewed";
+            if dated && inline(&lines[member.start]).starts_with('{') {
                 if body.contains_key("reviewed") {
                     in_braces(&mut lines, &member, "reviewed", "", None, Some(&stamp))?;
                 }
-            } else if field_span(&lines, &member, "reviewed").is_some() {
+            } else if dated && field_span(&lines, &member, "reviewed").is_some() {
                 replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
             }
             output.push(format!(
@@ -445,6 +449,9 @@ fn prepare_mode(
                     )),
                     _ => {}
                 }
+            }
+            if snapshot == "reviewed" {
+                output.extend(open_reversal(&reader, &reader.raw()[&id], &seen)?);
             }
         }
         _ => return Err(error("unsupported_named_action")),

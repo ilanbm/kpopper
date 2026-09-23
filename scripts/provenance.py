@@ -4027,6 +4027,21 @@ def reversal_pending(body):
     return None if seen and seen.isoformat() >= day else day
 
 
+def _written_over(body, snapshot_field):
+    """Whether a judgment holds something other than a mapping where its snapshot goes - a day
+    written over it, say. It is read as never checked, and a review writes the snapshot whole,
+    even one with nothing in it."""
+    return not isinstance(body.get(snapshot_field, {}), dict)
+
+
+def _open_reversal(j, raw, seen):
+    """What a review says of a reversal it leaves open. A record that names its snapshot
+    `reviewed` gets no review day, and the day is what clears one -> [the line], or []."""
+    day = None if is_arrangement(j, raw) else reversal_pending(dict(j["body"], reviewed=seen))
+    return [f"  reversed on {day} stays open - the snapshot field is named reviewed, so review "
+            "writes no day"] if day else []
+
+
 def listened_until(kept, dep):
     """The replaced judgments that rested on `dep` where nothing standing does now ->
     [(judgment id, day it stopped listening, what it saw)], latest version per judgment;
@@ -5383,20 +5398,24 @@ def _fork(paths, action, diagnostics=None):
         _, ind, s, e = _locate(lines, nid)
         changed = [d for d in seen if d not in was or not _writer_same(raw, was[d], seen[d])] + \
             [d for d in was if d not in seen]
-        if changed:
+        rewrite = changed or _written_over(j["body"], snapshot_field)
+        if rewrite:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        # a judgment written on one line keeps its reviewed inside its braces, and it is
-        # renewed there
-        if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
+        # a snapshot named `reviewed` is kept, never dated over; a judgment written on one
+        # line keeps its reviewed inside its braces, and it is renewed there
+        if snapshot_field != "reviewed" and (
+                _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e))):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         out.append(f"review {nid} in hypothesis {name}: "
-                   + (f"seen rewritten from what the record holds under it ({stamp})" if changed
+                   + (f"seen rewritten from what the record holds under it ({stamp})" if rewrite
                       else f"what it saw is what the record holds under it ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _writer_same(raw, was[d], seen[d]):
                 out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
+        if snapshot_field == "reviewed":
+            out += _open_reversal(j, raw, seen)
     if world is not None:
         _peer('reasoning.authoring').declare(lines, (sys.modules.get(__name__) or _Reader()))
         staged = parse(text="\n".join(lines)) or {}
@@ -5972,11 +5991,18 @@ def _apply_candidate(paths, action, diagnostics=None):
         _, ind, s, e = _locate(lines, nid)
         changed = [d for d in seen if d not in was or not _writer_same(raw, was[d], seen[d])] + \
             [d for d in was if d not in seen]
-        if changed:
+        rewrite = changed or _written_over(j["body"], snapshot_field)
+        if rewrite:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        # a judgment written on one line keeps its reviewed inside its braces, and it is
-        # renewed there
-        if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
+        kept_open = []
+        if snapshot_field == "reviewed":
+            # a record may name its snapshot `reviewed`, the field a review dates a judgment
+            # by: the snapshot is kept and no day is written over it, so a reversal its trail
+            # records stays open, and the review says so
+            kept_open = _open_reversal(j, raw, seen)
+        elif _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
+            # a judgment written on one line keeps its reviewed inside its braces, and it is
+            # renewed there
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         elif "replaced" in j["body"] and not arrangement:
             # a judgment that carries a trail keeps the day it was last read, so the
@@ -5984,12 +6010,13 @@ def _apply_candidate(paths, action, diagnostics=None):
             # arrangement's day is its born, renewed by the re-decision itself
             _stamp_field(lines, s, e, "reviewed", stamp, "replaced")
         out.append(f"review {nid}: " + (f"seen rewritten from what the record holds ({stamp})"
-                                        if changed else f"what it saw is what the record holds ({stamp})"))
+                                        if rewrite else f"what it saw is what the record holds ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _writer_same(raw, was[d], seen[d]):
                 out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
+        out += kept_open
     if '_record_scope' in action and kind != 'add':
         entry = copy.deepcopy(raw[nid])
         if not isinstance(entry, dict):
@@ -5998,7 +6025,7 @@ def _apply_candidate(paths, action, diagnostics=None):
             entry = _peer('recording').set_body(entry, action)
         elif kind == 'review':
             entry[snapshot_field] = seen
-            if 'reviewed' in entry:
+            if 'reviewed' in entry and snapshot_field != 'reviewed':
                 entry['reviewed'] = stamp
         entry['scope'] = copy.deepcopy(action['_record_scope'])
         _replace_in(lines, nid, entry)
@@ -6550,7 +6577,8 @@ written by this tool on every judgment; a write that carries one is refused.""",
   review "<section title>"
 
 "I read it, and it still holds." A judgment's `seen` is rewritten from what its
-dependencies hold now, and `reviewed:` moves when the judgment carries one; an
+dependencies hold now, and `reviewed:` moves when the judgment carries one - unless the
+record names its snapshot `reviewed`, which is kept and never dated; an
 arrangement's review also rewrites the brief's shape line - the one tab's, or of every tab
 whose sections earn a session source it rests on. A section of the brief is reviewed by its title:
 its text's references are snapshotted into `seen` and `reviewed:` moves. Never automatic:
