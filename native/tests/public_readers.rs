@@ -510,6 +510,94 @@ fn actual_ordinary_cli_opens_and_checks_the_record() {
 }
 
 #[test]
+fn a_record_with_no_snapshot_field_says_drift_cannot_be_detected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let judgment = "judgments:\n  d.w: {verdict: known, rests_on: [api.limit], wrong_if: \"api.limit > 100\"}\n";
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        format!("known:\n  api.limit: {{v: 10}}\n{judgment}"),
+    )
+    .unwrap();
+    for mode in [&[][..], &["--frozen"][..]] {
+        let check = cli(
+            &root,
+            &[mode, &["check"][..]].concat(),
+            &root.join("private"),
+        );
+        assert!(
+            check.status.success(),
+            "{}",
+            String::from_utf8_lossy(&check.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(check.stdout).unwrap(),
+            concat!(
+                "NOTE no snapshot field anywhere: dependencies are declared but never captured, so drift can never be detected\n",
+                "\n",
+                "1 judgments, 2 entries, 0 problems, 1 declared\n",
+            ),
+            "{mode:?}"
+        );
+        let open = cli(
+            &root,
+            &[mode, &["open"][..]].concat(),
+            &root.join("private"),
+        );
+        assert!(
+            open.status.success(),
+            "{}",
+            String::from_utf8_lossy(&open.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(open.stdout).unwrap(),
+            concat!(
+                "2 entries, 1 judgments\n",
+                "no snapshot field: drift cannot be detected in this record\n",
+                "\n",
+                "nothing needs a person right now.\n",
+                "\n",
+                "standing:\n",
+                "  = d.w: known\n",
+                "\n",
+                "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n",
+            ),
+            "{mode:?}"
+        );
+    }
+
+    // A snapshot field the schema names is a field, even before any judgment carries it:
+    // the missing snapshot is then a problem with the judgment, not with the record.
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        format!("schema: {{snapshot: saw}}\nknown:\n  api.limit: {{v: 10}}\n{judgment}"),
+    )
+    .unwrap();
+    let check = cli(&root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(check.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(check.stdout).unwrap(),
+        concat!(
+            "FAIL d.w: no snapshot for api.limit - never checked against it\n",
+            "\n",
+            "1 judgments, 2 entries, 1 problems\n",
+        )
+    );
+    let open = cli(&root, &["--frozen", "open"], &root.join("private"));
+    assert_eq!(
+        String::from_utf8(open.stdout).unwrap(),
+        concat!(
+            "2 entries, 1 judgments\n",
+            "\n",
+            "needs a person (1):\n",
+            "  d.w: never checked against api.limit\n",
+            "\n",
+            "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n",
+        )
+    );
+}
+
+#[test]
 fn actual_ordinary_pull_history_reads_the_retained_versions() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().canonicalize().unwrap();
