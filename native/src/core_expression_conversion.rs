@@ -729,7 +729,7 @@ pub(super) fn compare(
                 (
                     "expression_source_sha256".into(),
                     s(&crate::identity::sha256(include_bytes!(
-                        "../../scripts/expressions.py"
+                        "../shared/expressions.py"
                     ))),
                 ),
             ]);

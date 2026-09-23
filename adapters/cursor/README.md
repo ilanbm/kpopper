@@ -1,8 +1,8 @@
 # kpopper for Cursor
 
 This project adapter supplies a rule and two native Cursor hook wrappers. The
-wrappers call kpopper's shared reader and checker; they translate opening context
-into Cursor's response format. It never requests a stop follow-up.
+opener runs the kpopper checkout's native runtime and returns the opening context
+in Cursor's response format. It never requests a stop follow-up.
 
 **Status:** wrapper smoke tests pass on macOS. Installation, context delivery and
 opening delivery inside Cursor still need a live session test. A passing shell
@@ -13,7 +13,7 @@ test does not establish desktop, CLI or cloud runtime parity.
 | File | Behavior |
 |---|---|
 | `hooks.json` | `sessionStart` → `gate-open.sh`; no stop hook. |
-| `scripts/gate-open.sh` | Opens the record in `additional_context` and saves a temporary baseline keyed by `conversation_id`. |
+| `scripts/gate-open.sh` | Opens the record in `additional_context` and saves a temporary baseline keyed by `conversation_id`. A missing native runtime is reported there, with the command that installs it. |
 | `scripts/gate-stop.sh` | Silent compatibility handler for old installations. |
 | `rules/kpopper.mdc` | Condensed method, requested by relevance or attached when a record file is in context. |
 
@@ -44,9 +44,12 @@ there. Local symlink targets also need to exist in any remote execution environm
 
 ## Install the project adapter
 
-Use a trusted project, a kpopper checkout, and Python 3.9+ with the dependencies
-from the repository's installation instructions. Run from the project root,
-replacing `<plugin>` with the absolute checkout path. If `.cursor/hooks.json`
+Use a trusted project and a kpopper checkout with its native runtime installed
+(`sh "<plugin>/scripts/install_native.sh"`; see
+[Install the native runtime](../../docs/plugin-runtime.md#install-the-native-runtime)).
+The opener needs no Python. `KPOPPER_RUNTIME=python` selects the source-only
+[Python compatibility mode](../../docs/plugin-runtime.md#python-compatibility-mode)
+instead. Run from the project root, replacing `<plugin>` with the absolute checkout path. If `.cursor/hooks.json`
 already exists, merge this adapter's two hook entries into it instead of copying
 over it. Preserve existing rules and scripts with the same names as well.
 
@@ -80,8 +83,10 @@ for the same kpopper hooks: all matching hooks can run.
 
 ## Verification
 
-The existing `tests.test_start.FirstUse.test_cursor_first_use_json_and_first_record_stop_use_the_same_baseline`
-checks opening JSON, the first-record baseline and silent legacy stops. A separate
+`native/tests/cursor_adapter.rs` runs the opener against the native build: first use
+through a symlinked install, an existing record, a missing runtime and an unknown
+runtime choice. `tests.test_start.FirstUse.test_cursor_first_use_json_and_first_record_stop_use_the_same_baseline`
+checks the Python compatibility mode's opening JSON, the first-record baseline and silent legacy stops. A separate
 2026-09-16 smoke test also exercised executable symlinks, a project path with
 spaces and documented payload fields without `cwd`.
 

@@ -102,13 +102,17 @@ LANES = {
     # The native command: compilation, its tests, the release build and installed acceptance.
     "rust": Lane((
         "native/*", ".github/workflows/native-rust.yml",
-        # Compiled in: include_str! and the build script's rerun-if-changed inputs.
+        # The originals of what native/shared/ and native/LICENSE copy: the build script
+        # refuses a copy that differs from them.
         "scripts/session/rules.txt", "scripts/start-guide.md", "scripts/page/*", "scripts/document/*",
         "scripts/assessment.schema.json", "scripts/reasoning/*.schema.json",
-        "scripts/session/lean/*", "scripts/reasoning/lean/*",
+        "scripts/session/lean/*", "scripts/reasoning/lean/*", "scripts/verify_page.js",
+        "scripts/expressions.py", "LICENSE",
         # Read at test time and by the packaging steps.
         "scripts/reasoning/native/*", "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
         "tests/fixtures/page/*", "install.sh", "install.ps1", "VERSION",
+        # The Cursor opener its tests run against this build.
+        "adapters/cursor/scripts/gate-open.sh", "scripts/native_runtime.sh",
         "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
         # Run from the checkout, with everything they import: the host hooks its tests compare,
@@ -134,6 +138,7 @@ RECORD_JOB = (
     "tests/test_skills.py", "tests/test_release.py", "tests/test_ci_selection.py",
     "tests/test_ci_execution.py", "tests/test_ci_sharding.py", "tests/test_ci_audit.py",
     ".github/scripts/release.py", ".github/scripts/publish_release.py",
+    ".github/scripts/publish_crate.py", ".github/scripts/native_shared.py",
 )
 
 # CI's own machinery decides what every lane means, so a change to it runs everything.

@@ -213,3 +213,97 @@ d.gate_reminds:
     doc.ingestion_contract: read 2026-09-07
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-22'
+d.readme_canvas_placement:
+- name: Place the approved canvas illustration before the closing invitation
+  rests_on:
+  - s.2026_09_20_canvas_placement
+  - q.readme_canvas_metaphor
+  verdict: Display assets/canvas-for-reasoning.png immediately before Make it earn its place, outside
+    all collapsed sections. The maintainer has selected the illustration and its placement.
+  because: The earlier question described an unadopted sketch. The subsequent approval resolves its adoption
+    and placement; whether the metaphor improves reader comprehension remains unmeasured. The approved
+    image and editable SVG are now workspace assets referenced by the README.
+  reopened_by: The closing placement obstructs the invitation to try the tool, or readers mistake the
+    canvas metaphor for a different product capability.
+  seen:
+    s.2026_09_20_canvas_placement: read 2026-09-20
+    q.readme_canvas_metaphor: Does an agent painting connections between evidence, assumptions, a decision
+      and review conditions clarify the product, and where should that illustration appear? A separate
+      local SVG/PNG concept was produced; it is not adopted into the README.
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.readme_paths_use_wide_banners:
+- name: Make the three README paths visible as wide illustrated disclosures
+  rests_on:
+  - s.2026_09_20_readme_path_banners
+  verdict: Use wide story strips inside the three closed README summaries, with explicit product names
+    and Explore workflows and examples below each strip. Wrap each image in a named anchor without href
+    so clicking it toggles the section.
+  because: The maintainer found the small collapsed previews easy to miss. The sections contain workflows
+    and explanations as well as examples. The id-only anchor preserves native summary activation after
+    GitHub renders the Markdown; full-image links remain in the expanded sections.
+  reopened_by: A supported renderer turns the banner into a separate image link, or narrow layouts make
+    the titles and opening prompt unreadable.
+  seen:
+    s.2026_09_20_readme_path_banners: read 2026-09-20
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.readme_get_started_is_one_instruction:
+- name: Get started is one instruction the reader sends to their agent
+  verdict: Open Get started with a short paragraph and one instruction, beginning Dear agent, that asks
+    the reader's agent to install kpopper for itself from the section's own steps. The steps for each
+    agent follow at once; the Claude Code and Codex steps install the plugin's native runtime directly.
+    Standalone CLI installation lives in the command reference and Python compatibility setup in the plugin
+    runtime guide.
+  because: The maintainer asked for a short opening that reaches the agents at once and rests on one concise
+    instruction to the agent. The Claude Code and Codex plugin commands and the plugin's install_native.sh
+    run without interaction, and three Codex sessions given the instruction completed them unaided; Cowork
+    and Work install in their own apps, which the instruction covers by asking the agent to say what is
+    left. A plugin installs without its native runtime and the opener reports that only on standard error,
+    so waiting for the opener to report it leaves a session that opens silently.
+  rests_on:
+  - s.2026_09_23_readme_get_started
+  - run.plugin_arrives_without_runtime
+  - run.agent_installs_itself
+  reopened_by: An agent in Claude Code or Codex given the instruction ends without the plugin and its
+    runtime installed, a reader who wants to install by hand cannot find the commands, or a plugin installation
+    starts to carry its native runtime so the separate step is no longer needed.
+  from: s.2026_09_23_readme_get_started
+  seen:
+    s.2026_09_23_readme_get_started: read 2026-09-23
+    run.plugin_arrives_without_runtime: claude plugin install and codex plugin add each left a plugin
+      root with no scripts/runtime. The opener then exited 0 with empty standard output and wrote its
+      install command only to standard error. After scripts/install_native.sh in that root, the opener
+      in an empty project printed first-use guidance and KPOPPER_AGENT_CONTEXT.
+    run.agent_installs_itself: 3 of 3 sessions read the section, ran codex plugin marketplace add, codex
+      plugin add and the plugin's install_native.sh, checked kpop, and ended by telling the reader to
+      start a new task and trust the hooks. None wrote to the workspace or created a record.
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'
+d.readme_popper_introduction:
+- name: Introduce falsifiability through a direct answer to the Popper joke
+  rests_on:
+  - s.2026_09_23_popper_introduction
+  - s.popper_falsifiability_sep
+  - s.kpop_history_loc
+  verdict: 'Title the section Karl Popper: the philosopher behind falsifiability. Answer the father-of-K-pop
+    question immediately, identify him as a philosopher of science, and show how biography, music credits
+    and recorded history can challenge a concrete historical claim. Attribute the criterion of empirical
+    science to Popper and explain that apparent refutations need scrutiny. Connect the principle to a
+    revisable project picture whose recorded conditions the software checks and whose evidence a person
+    or agent interprets. Preserve the existing link anchors and the separate fictional launch example.'
+  because: The maintainer wants the joke to lead directly into the method. The documented K-pop history
+    supplies a concrete comparison, while the philosophical source distinguishes logical falsifiability
+    from accepting a refutation in practice. Calling the musical story an invention avoids treating the
+    illustration as historical evidence. Making the historical claim concrete avoids presenting a vague
+    honorary title as an executable predicate. The project picture remains scoped to recorded claims and
+    explicit checks.
+  reopened_by: Readers infer that the program automatically researches and refutes historical claims,
+    that any apparent contrary observation settles a scientific theory, that Popper alone defined an uncontested
+    scientific method, or that the project record is guaranteed to match all of reality.
+  seen:
+    s.2026_09_23_popper_introduction: read 2026-09-23
+    s.popper_falsifiability_sep: read 2026-09-23
+    s.kpop_history_loc: read 2026-09-23
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-23'

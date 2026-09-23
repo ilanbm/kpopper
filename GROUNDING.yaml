@@ -975,6 +975,38 @@ sources:
          formula text, beside a much larger section of values written out with v. The maintainer
          chose to count bare scalars as values only when no section holds a value written out, and
          never in open, questions or sources."
+  s.2026_09_23_canvas_hero:
+    name: "Approval to make the reasoning canvas the README hero"
+    of: "Maintainer decision, paraphrased: promote the robot-and-canvas illustration to the README
+         opening, add the existing lowercase kpopper wordmark with restrained branding, keep
+         GROUNDING.yaml and the canvas tagline, and move the Popper banner with its curiosity link to
+         the former closing image position. The maintainer approved implementing this proposal in the
+         2026-09-23 canvas-banner conversation."
+    read: "2026-09-23"
+  s.2026_09_23_chat_install_wording:
+    name: "Clarify installation requests and distinguish chat from terminal commands"
+    of: "Maintainer request, paraphrased: replace the ambiguous your kind wording with a direct
+         instruction for the app in use; make it clear under every agent that a chat request is a
+         starting point, so readers do not mistake Claude Code terminal examples for the required
+         route; format supported slash commands as copyable code blocks alongside terminal
+         alternatives."
+    read: "2026-09-23"
+  s.2026_09_23_crates_io:
+    name: "Publish every release to crates.io under the project's name"
+    asked: "Paraphrased maintainer request, after asking how kpopper and kpop are listed on
+            crates.io and how to publish them if they are not: prepare the crate for publication; the
+            goal is that every new version is published to crates.io under the project's own name."
+    of: "On 2026-09-22 crates.io answered 404 for kpopper, kpop and kpop_native, and 200 for serde
+         as a control. The crate packaged from 20f9b64 did not build: its build script could not read
+         ../scripts/session/lean/Main.lean from inside the package."
+    read: "2026-09-23"
+  s.2026_09_23_dear_agent_copy:
+    name: "Use Dear agent as the signature for copyable agent requests"
+    read: "2026-09-23"
+    of: "Maintainer request, paraphrased: start the installation request with Dear agent, and make
+         that the recognizable opening of every natural-language text readers copy to an agent. Place
+         a bold Copy and paste the following text to your agent instruction immediately before the
+         copyable text."
   s.2026_09_23_missing_runtime_at_start:
     name: "A missing native runtime is said at session start, by the opener alone"
     asked: "Paraphrased maintainer request: a freshly installed plugin has no native runtime, and
@@ -1015,6 +1047,14 @@ sources:
     of: "The two contributions giving api.limit 10 and 11 against a record whose d.x falls above 10
          were the worked example"
     read: "2026-09-23"
+  s.2026_09_23_popper_introduction:
+    name: "Request to introduce Popper through the falsifiable K-pop joke"
+    read: "2026-09-23"
+    of: "Maintainer request, paraphrased: add the question whether Popper really is the father of
+         K-pop to the curiosity link; answer no immediately and identify him as a philosopher,
+         without unlikely; introduce falsification through ways to challenge the historical claim;
+         use a direct and accurate title describing his contribution; explain that kpopper uses this
+         discipline for a picture of reality that can be challenged and revised."
   s.2026_09_23_readme_checkable_link:
     name: "Maintainer report on the README link behind deterministically checkable"
     asked: "the \"deterministically checkable.\" link in the readme: 1. leads to a collapsed section
@@ -1025,6 +1065,15 @@ sources:
          reasoning abstractly and then used the dark-matter selection example with a CLI and jq
          pipeline, without saying what is checked, by what, or what the reader or agent is expected
          to do."
+    read: "2026-09-23"
+  s.2026_09_23_readme_fragment_check:
+    name: "GitHub fragment navigation opens hidden README content"
+    url: "https://github.com/ilanbm/kpopper#user-content-two-working-modes"
+    of: "Live read-only browser observation on 2026-09-23: the unprefixed two-working-modes fragment
+         left the coding disclosure closed. Navigation to the rendered user-content-two-working-modes
+         ID opened it. Clicking the native summary closed it, and navigating away then back to the
+         prefixed fragment reopened it. This verifies the existing public page in the tested in-app
+         browser, not the newly edited README or the native GitHub mobile app."
     read: "2026-09-23"
   s.2026_09_23_readme_get_started:
     name: "README Get started built on one instruction to the agent"
@@ -1048,6 +1097,16 @@ sources:
          checked the same once it held a judgment. The README on main at 92703f3 showed known: and
          judgments: in its first excerpt with only their fields explained, and called them the
          documented names only inside the collapsed How it works section."
+  s.2026_09_23_readme_structure:
+    name: "Approval to expose practical benefits and regroup README details"
+    of: "Maintainer approval, paraphrased: make Keep the conversation moving visible with delivery
+         details folded; expose the existing-knowledge message with its own optional detail; repeat
+         the three workflow links after installation and near the closing invitation; place each path
+         banner above a native disclosure title, linking into its content; use a neutral Explore
+         workflows and examples label; consolidate the Popper explanation and launch example into the
+         final closed section immediately above the Popper banner; shorten Lean while preserving its
+         technical scope and limitations."
+    read: "2026-09-23"
   s.2026_09_23_session_hook:
     name: "The native ground and citation hooks work on macOS again"
     asked: "Paraphrased maintainer request: check whether the kpopper session-start hook works as it
@@ -1182,6 +1241,14 @@ sources:
     read: "2026-09-16"
     recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
                    captured report."
+  s.kpop_history_loc:
+    name: "Library of Congress history and timeline of K-pop"
+    url: "https://guides.loc.gov/k-pop/history-timeline"
+    read: "2026-09-23"
+    at: "Timeline introduction and the 1992-1996 entry."
+    of: "Source reading, paraphrased: the timeline places K-pop in the broader history of Korean
+         popular music and describes the emergence of Seo Taiji and Boys as a cultural turning point
+         in the 1992-1996 period. It explicitly says the timeline is not exhaustive."
   s.native_authoring_envelopes:
     name: "Native semantic authoring conformance"
     from: s.2026_09_19_native_snapshot_continuation
@@ -1447,6 +1514,17 @@ sources:
     at: "230 pinned Python writer scenarios at commit 8c7bc2a; scalar identity corpus is
          reasoning-authoring-identities.json beside this file"
     read: "2026-09-19"
+  s.popper_falsifiability_sep:
+    name: "Stanford Encyclopedia of Philosophy on Popper and falsifiability"
+    url: "https://plato.stanford.edu/entries/popper/"
+    read: "2026-09-23"
+    at: "Sections 1, 3 (The Problem of Demarcation) and 4 (Basic Statements, Falsifiability and
+         Convention)."
+    of: "Source reading, paraphrased: Popper was a philosopher of science who proposed
+         falsifiability as the criterion of demarcation for empirical science. Surviving rigorous
+         tests supports provisional retention rather than final verification. Apparent
+         counterexamples require methodological scrutiny because observation and measurement can be
+         mistaken."
   s.python_final_native_reference:
     from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Final Python 1.7.0 native compatibility reference"
@@ -3055,6 +3133,14 @@ known:
     name: "Native source capture exact accepted snapshots"
     v: 38
     from: s.native_source_capture
+  m.native_without_resources:
+    name: "What the native commands do with no verified resources beside them"
+    v: "Reads (check, open, pull, affects) and add on an existing ordinary record succeed; the first
+        add in an empty workspace refuses with: cannot compute core/v1 evidence: runtime_unavailable"
+    from: s.2026_09_23_crates_io
+    at: "The 0.9.0 darwin-arm64 executable copied to a directory with no resources beside it and
+         KPOPPER_NATIVE_RESOURCES unset, on this repository's record, a copy of it, and the platform
+         acceptance flows"
   m.native_writer_conformance_cases:
     name: "Writer conformance scenarios"
     v: 230
@@ -3406,11 +3492,15 @@ known:
     fidelity: paraphrase
   p.readme_popper_link_visibility:
     name: "The curiosity link lands on an immediately visible explanation"
-    v: "The Popper anchor, heading and short identification are outside details. The extended worked
-        example remains folded below them. The original link was verified against this structure at
-        desktop and phone widths."
-    from: s.2026_09_20_readme_path_banners
-    at: "Later three-part feedback, item 2, README edit and browser verification."
+    v: "The complete Popper explanation is the final closed section immediately above the Popper
+        banner. Its curiosity link targets the user-content-prefixed anchor inside the content; a
+        paired raw alias preserves that target in ordinary Markdown previews. The fragment-opening
+        mechanism was verified on an existing hidden section of the public GitHub README in the
+        in-app browser. The edited README and native GitHub mobile-app behavior have not been
+        verified on GitHub."
+    of: "2026-09-23"
+    from: s.2026_09_23_readme_structure
+    at: "Approved consolidated Popper section and its authored internal navigation; browser mechanism evidence is in s.2026_09_23_readme_fragment_check."
     fidelity: paraphrase
   p.reasoning_core_contract:
     fidelity: paraphrase
@@ -3775,6 +3865,16 @@ known:
     of: "2026-09-11"
 
 open:
+  q.crates_io_resources:
+                         name: "What a crates.io install does about the verified resources"
+                         question: "A crate installed from crates.io carries the two commands
+                                    without the verified reasoning resources a release archive places
+                                    beside them, so it can read and write an existing record but
+                                    cannot start a new one until KPOPPER_NATIVE_RESOURCES names a
+                                    matching bundle. Should it stay that way, fetch the matching
+                                    release's resources on request, or send Cargo users to the
+                                    archive?"
+                         from: s.2026_09_23_crates_io
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
                          a dedicated execution session? No per-item dispatch policy is currently
                          implemented."
@@ -4461,6 +4561,22 @@ judgments:
       m.door.opposed_verdicts_named_reversed: 2
       m.door.grounds_changes_named: 2
       m.door.future_dated_readings_refused: 3
+  d.copyable_agent_requests:
+    name: "Give copyable agent requests a consistent greeting and instruction"
+    rests_on: [s.2026_09_23_dear_agent_copy]
+    verdict: "User-facing natural-language requests intended for pasting into an agent chat begin
+              with Dear agent, and use a fenced text block preceded by the bold instruction Copy and
+              paste the following text to your agent:. Apply this convention in the README and
+              guides; preserve executable command syntax, configuration templates, source quotations
+              and actual output."
+    because: "The maintainer chose the greeting as a brand signature. A consistent introduction
+              makes the text to copy recognizable and separates an agent request from surrounding
+              explanation. Adding prose to a slash command or shell command would change how it runs,
+              while altering quoted or observed text would misrepresent its source."
+    reopened_by: "Readers copy the label as part of the request, mistake a natural-language request
+                  for an executable command, or the greeting interferes with a documented
+                  interaction."
+    seen: {s.2026_09_23_dear_agent_copy: "read 2026-09-23"}
   d.correct_is_for_unlanded_work:
     name: "Correct only what nobody could have read"
     rests_on: [s.2026_09_23_answer_and_correct, d.fold_passes_the_one_door]
@@ -4504,6 +4620,54 @@ judgments:
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
       p.coverage_thresholds: 0
+  d.crate_carries_shared_copies:
+    name: "The published crate carries its own copies of the files it shares"
+    verdict: "native/ builds on its own: the files the crate embeds or fingerprints from scripts/
+              are copied into native/shared/, and the licence into native/LICENSE. scripts/ stays the
+              place to edit them; a stale copy stops a native build in the repository and fails the
+              release tests. A crate built from crates.io declares the adapter fingerprint of the
+              same version built from the repository."
+    because: "crates.io receives native/ alone, while the plugin and the Python reader read these
+              files from scripts/ by path, so the originals cannot move. Cargo publishes a rewritten
+              manifest and keeps the original as Cargo.toml.orig; the build hashes that original, so
+              receipts and the runtime declaration name one program whichever channel built it."
+    rests_on: [d.crates_io_every_release]
+    reopened_by: "A crate built from crates.io refuses the verified resources of the release with
+                  the same version, or declares a different adapter than that release's executable."
+    from: s.2026_09_23_crates_io
+    seen:
+      d.crates_io_every_release: "Each release's crate is published to crates.io as kpopper, from
+                                  the commit its GitHub release was made from and only once that
+                                  release is out. An owner publishes the first version, which claims
+                                  the name; the release workflow publishes every later one through
+                                  trusted publishing. Only bytes equal to the package the release
+                                  build verified are uploaded, and a version crates.io already serves
+                                  must be those bytes."
+  d.crates_io_every_release:
+    name: "Every release reaches crates.io as kpopper"
+    verdict: "Each release's crate is published to crates.io as kpopper, from the commit its GitHub
+              release was made from and only once that release is out. An owner publishes the first
+              version, which claims the name; the release workflow publishes every later one through
+              trusted publishing. Only bytes equal to the package the release build verified are
+              uploaded, and a version crates.io already serves must be those bytes."
+    because: "kpopper is already the package name on PyPI and npm, and one crate installs both
+              commands, so cargo install kpopper needs no second name. crates.io never takes a
+              version back, so the upload waits for the release it belongs to, repeats nothing the
+              registry already serves, and the repository holds no registry credential. Cargo
+              packages the commit again when it publishes, so the job that holds the registry
+              identity compares that package with the verified bytes before and after the upload, and
+              runs no repository script."
+    rests_on: [s.2026_09_23_crates_io, p.native_distribution_contract]
+    reopened_by: "crates.io serves a crate named kpopper that this project did not publish, or
+                  refuses a release's crate from the workflow's trusted publisher."
+    from: s.2026_09_23_crates_io
+    seen:
+      s.2026_09_23_crates_io: "read 2026-09-23"
+      p.native_distribution_contract: "The native CLI and plugin start at 0.9.0 with GitHub platform
+                                       archives and explicit installers. Public names are kpopper and
+                                       kpop. Existing GitHub tags/releases and legacy PyPI/npm
+                                       versions remain available. Cargo is a source-build route;
+                                       crates.io publication is separate."
   d.darwin_checked_where_it_lands:
     name: "Where in the life of a change the Darwin check belongs"
     verdict: "Darwin runs on the push to main and at release, not on every pull request commit"
@@ -5771,23 +5935,32 @@ judgments:
                   that moved goes unflagged by open and check."
     seen: {s.2026_09_23_answer_and_correct: "read 2026-09-23"}
   d.readme_canvas_placement:
-    name: "Place the approved canvas illustration before the closing invitation"
-    rests_on: [s.2026_09_20_canvas_placement, q.readme_canvas_metaphor]
-    verdict: "Display assets/canvas-for-reasoning.png immediately before Make it earn its place,
-              outside all collapsed sections. The maintainer has selected the illustration and its
-              placement."
-    because: "The earlier question described an unadopted sketch. The subsequent approval resolves
-              its adoption and placement; whether the metaphor improves reader comprehension remains
-              unmeasured. The approved image and editable SVG are now workspace assets referenced by
-              the README."
-    reopened_by: "The closing placement obstructs the invitation to try the tool, or readers mistake
-                  the canvas metaphor for a different product capability."
+    name: "Open the README with the branded reasoning canvas"
+    rests_on: [s.2026_09_20_canvas_placement, q.readme_canvas_metaphor, s.2026_09_23_canvas_hero]
+    verdict: "Use assets/kpopper-canvas-hero.png as the README opening image, with
+              assets/kpopper-canvas-hero-mobile.png at phone width. Keep the original robot,
+              GROUNDING.yaml diagram and canvas tagline; add the original lowercase kpopper wordmark
+              with its blue k. Move assets/kpopper-hero.png and its Popper curiosity link to the
+              former canvas position, immediately before Make it earn its place, outside collapsed
+              sections."
+    because: "The maintainer explicitly replaced the earlier closing placement with a canvas-first
+              entrance. The canvas depicts evidence and assumptions connected to decisions and review
+              conditions, while the Popper illustration preserves the philosophical joke near the
+              closing invitation. Reuse the existing ink artwork and wordmark with restrained
+              composition changes. Stack the wordmark and tagline on phones to preserve the main
+              message. This is an approved presentation choice; improved reader comprehension or
+              conversion has not been measured."
+    reopened_by: "Readers mistake the canvas for a drawing application or an automatic organizer of
+                  all their sources, cannot read the main brand message at phone width, or the
+                  closing Popper banner obstructs the invitation to try the tool."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_20_canvas_placement: "read 2026-09-20"
       q.readme_canvas_metaphor: "Does an agent painting connections between evidence, assumptions, a
                                  decision and review conditions clarify the product, and where should
                                  that illustration appear? A separate local SVG/PNG concept was
                                  produced; it is not adopted into the README."
+      s.2026_09_23_canvas_hero: "read 2026-09-23"
   d.readme_checks_explained_visibly:
     name: "Explain checks where the opening link lands, with the opening example"
     from: s.2026_09_23_readme_checkable_link
@@ -5815,24 +5988,26 @@ judgments:
                                     desktop and phone layouts."
   d.readme_get_started_is_one_instruction:
     name: "Get started is one instruction the reader sends to their agent"
-    verdict: "Open Get started with a short paragraph and one instruction, beginning Dear agent,
-              that asks the reader's agent to install kpopper for itself from the section's own
-              steps. The steps for each agent follow at once; the Claude Code and Codex steps install
-              the plugin's native runtime directly. Standalone CLI installation lives in the command
-              reference and Python compatibility setup in the plugin runtime guide."
-    because: "The maintainer asked for a short opening that reaches the agents at once and rests on
-              one concise instruction to the agent. The Claude Code and Codex plugin commands and the
-              plugin's install_native.sh run without interaction, and three Codex sessions given the
-              instruction completed them unaided; Cowork and Work install in their own apps, which
-              the instruction covers by asking the agent to say what is left. A plugin installs
-              without its native runtime and the opener reports that only on standard error, so
-              waiting for the opener to report it leaves a session that opens silently."
-    rests_on: [s.2026_09_23_readme_get_started, run.plugin_arrives_without_runtime, run.agent_installs_itself]
-    reopened_by: "An agent in Claude Code or Codex given the instruction ends without the plugin and
-                  its runtime installed, a reader who wants to install by hand cannot find the
-                  commands, or a plugin installation starts to carry its native runtime so the
-                  separate step is no longer needed."
-    from: s.2026_09_23_readme_get_started
+    verdict: "Open Get started with one copyable chat request to install kpopper for the app in use,
+              including the required runtime and guidance through steps needing the user. Refer to
+              this request under every agent. Present supported slash commands and terminal commands
+              in separately labelled code blocks, with manual command routes in optional disclosures.
+              Preserve explicit app and administrator steps for Cowork and Work and their unverified
+              runtime status."
+    because: "The maintainer found your kind unclear and wanted readers to understand that they can
+              start in the agent chat. Naming the current app directly makes the intended
+              installation target explicit. Chat-first instructions and labelled alternatives prevent
+              terminal examples from appearing mandatory. Prior Codex runs support the feasibility of
+              agent-assisted setup, but they did not test this revised request or establish automatic
+              installation in every host. Runtime installation remains a separate requirement after
+              plugin commands; app approvals and administrator actions remain user steps."
+    rests_on: [s.2026_09_23_readme_get_started, run.plugin_arrives_without_runtime, run.agent_installs_itself, s.2026_09_23_chat_install_wording]
+    reopened_by: "Readers still think they must open a terminal, confuse a slash command with a
+                  shell command, finish without the required runtime, cannot find the manual route,
+                  or interpret the chat request as a verified unattended install for every supported
+                  app."
+    from: s.2026_09_23_chat_install_wording
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_23_readme_get_started: "read 2026-09-23"
       run.plugin_arrives_without_runtime: "claude plugin install and codex plugin add each left a
@@ -5846,6 +6021,7 @@ judgments:
                                   add, codex plugin add and the plugin's install_native.sh, checked
                                   kpop, and ended by telling the reader to start a new task and trust
                                   the hooks. None wrote to the workspace or created a record."
+      s.2026_09_23_chat_install_wording: "read 2026-09-23"
   d.readme_illustration_reading_order:
     name: "Show the process before the takeaway"
     from: s.2026_09_18_illustration_titles
@@ -5998,17 +6174,70 @@ judgments:
       s.2026_09_13_remove_duplicate_overview: "read 2026-09-13"
   d.readme_paths_use_wide_banners:
     name: "Make the three README paths visible as wide illustrated disclosures"
-    rests_on: [s.2026_09_20_readme_path_banners]
-    verdict: "Use wide story strips inside the three closed README summaries, with explicit product
-              names and Explore workflows and examples below each strip. Wrap each image in a named
-              anchor without href so clicking it toggles the section."
-    because: "The maintainer found the small collapsed previews easy to miss. The sections contain
-              workflows and explanations as well as examples. The id-only anchor preserves native
-              summary activation after GitHub renders the Markdown; full-image links remain in the
-              expanded sections."
-    reopened_by: "A supported renderer turns the banner into a separate image link, or narrow
-                  layouts make the titles and opening prompt unreadable."
-    seen: {s.2026_09_20_readme_path_banners: "read 2026-09-20"}
+    rests_on: [s.2026_09_20_readme_path_banners, s.2026_09_23_readme_structure, s.2026_09_23_readme_fragment_check]
+    verdict: "Place each wide story strip above its closed README disclosure. Link the banner into
+              the content with a user-content-prefixed fragment and include a matching raw alias for
+              ordinary Markdown previews. Keep the native triangle beside the title; the title opens
+              or closes the section, while the banner opens it. Use Explore workflows and examples
+              without a fixed downward arrow."
+    because: "The maintainer approved placing each preview above the title to clarify the
+              disclosure. Live GitHub navigation to a rendered prefixed ID opened an existing hidden
+              section, while the bare fragment did not. Paired aliases preserve the same link target
+              in ordinary Markdown previews. Banner navigation and native title toggling have
+              distinct roles. The fragment mechanism was tested on the existing public page; the
+              edited README and native mobile-app behavior remain unverified on GitHub."
+    reopened_by: "A supported renderer fails to open a section from its banner, strips a target
+                  alias, or makes the title, disclosure marker or navigation unclear at phone width."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
+    seen:
+      s.2026_09_20_readme_path_banners: "read 2026-09-20"
+      s.2026_09_23_readme_structure: "read 2026-09-23"
+      s.2026_09_23_readme_fragment_check: "read 2026-09-23"
+  d.readme_popper_introduction:
+    name: "Introduce falsifiability through a direct answer to the Popper joke"
+    rests_on: [s.2026_09_23_popper_introduction, s.popper_falsifiability_sep, s.kpop_history_loc]
+    verdict: "Title the section Popper: the philosopher behind falsifiability. Answer the
+              father-of-K-pop question immediately, identify him as a philosopher of science, and
+              show how biography, music credits and recorded history can challenge a concrete
+              historical claim. Attribute the criterion of empirical science to Popper and explain
+              that apparent refutations need scrutiny. Connect the principle to a revisable project
+              picture whose recorded conditions the software checks and whose evidence a person or
+              agent interprets. Preserve the existing link anchors and the separate fictional launch
+              example."
+    because: "The maintainer wants the joke to lead directly into the method. The documented K-pop
+              history supplies a concrete comparison, while the philosophical source distinguishes
+              logical falsifiability from accepting a refutation in practice. Calling the musical
+              story an invention avoids treating the illustration as historical evidence. Making the
+              historical claim concrete avoids presenting a vague honorary title as an executable
+              predicate. The project picture remains scoped to recorded claims and explicit checks."
+    reopened_by: "Readers infer that the program automatically researches and refutes historical
+                  claims, that any apparent contrary observation settles a scientific theory, that
+                  Popper alone defined an uncontested scientific method, or that the project record
+                  is guaranteed to match all of reality."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
+    seen:
+      s.2026_09_23_popper_introduction: "read 2026-09-23"
+      s.popper_falsifiability_sep: "read 2026-09-23"
+      s.kpop_history_loc: "read 2026-09-23"
+  d.readme_practical_sections:
+    name: "Keep practical benefits visible and consolidate deeper explanations"
+    rests_on: [s.2026_09_23_readme_structure]
+    verdict: "Show Keep the conversation moving and the existing-knowledge message before Go deeper,
+              with delivery details and the source-map illustration in their own disclosures. Repeat
+              the three workflow links after installation and near the closing invitation. Put the
+              complete Popper explanation and launch example in the final closed section immediately
+              above the Popper banner, with no nested disclosure. Keep the Lean overview concise and
+              preserve detailed theorem coverage in the checked-session guide."
+    because: "The maintainer approved separating everyday use and adoption questions from
+              philosophical and technical depth. The existing-knowledge message applies to coding,
+              planning and research. Repeated path links give readers who skipped the opening choices
+              another entrance. Combining the Popper material keeps one narrative and one place to
+              open it. The Lean summary preserves the distinction between deterministic computation,
+              specific formal guarantees and source-world truth."
+    reopened_by: "Readers still miss the workflow paths, mistake existing-knowledge compatibility
+                  for a Claude-only capability, cannot reach the Popper explanation from its link, or
+                  interpret the shorter Lean account as proving arbitrary conclusions."
+    seen: {s.2026_09_23_readme_structure: "read 2026-09-23"}
   d.readme_reasoning_overview:
     name: "Introduce the record through a complete check"
     from: s.2026_09_19_reasoning_overview

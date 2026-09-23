@@ -122,7 +122,7 @@ pub fn packet(location: &public_workspace::Location, job: &Value) -> Result<Valu
         .ok_or_else(|| Error("invalid mapping request".into()))?;
     Ok(
         json!({"request":request,"status":job["mapping"],"mode":job["mode"],"owner":job["owner"],"workspace":location.workspace,
-        "record":location.record,"instructions":include_str!("../../scripts/start-guide.md"),
+        "record":location.record,"instructions":include_str!("../shared/start-guide.md"),
         "protocol":{"accept":protocol_argv(location,"accept",request,None,None),"complete":protocol_argv(location,"complete",request,Some("REPORT_PATH"),None),"fail":protocol_argv(location,"fail",request,None,Some("REASON"))}}),
     )
 }
@@ -324,7 +324,7 @@ pub fn run(options: &Options, workspace: &Path) -> Result<Value> {
 pub fn run_agent(options: &AgentOptions, workspace: &Path) -> Result<Value> {
     if matches!(options.command, Some(AgentCommand::Guide)) {
         return Ok(Value::String(
-            include_str!("../../scripts/start-guide.md").into(),
+            include_str!("../shared/start-guide.md").into(),
         ));
     }
     let loc = public_workspace::locate(workspace, crate::source_capture::ReadMode::Live)?;

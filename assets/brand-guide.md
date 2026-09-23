@@ -1,10 +1,11 @@
 # kpopper visual identity
 
-The character is an earnest philosopher in an absurd pop-star role. The visual
-treatment is an editorial ink poster: expressive portrait, clear typography and
-a small number of strong accents.
+The visual treatment is editorial ink illustration: expressive characters, clear
+typography and a small number of strong accents. The README opens with a robot
+working at a reasoning canvas. An earnest philosopher in an absurd pop-star role
+carries the name's joke near the closing invitation.
 
-[Current hero illustration](kpopper-hero.png)
+[Current hero illustration](kpopper-canvas-hero.png) · [Popper banner](kpopper-hero.png)
 
 ## Character and language
 
@@ -14,14 +15,14 @@ a small number of strong accents.
 - Karl Popper performs with a microphone and a finger-heart gesture. His serious
   expression carries the humor, with room for a barely perceptible, closed-mouth
   smile. Keep his composure and a natural gaze rather than an exaggerated side-eye.
-- In the hero, a large ink portrait occupies the left side and looks inward toward
+- In the Popper banner, a large ink portrait occupies the left side and looks inward toward
   the wordmark and quotation on the right. Keep the restrained expression and recognizably
   Popper-like features. The full-width banner balances character and typography.
 - The slogan is **“It really whips the lemma's ass!”** — a Winamp reference with
   *lemma* in place of *llama*.
 - The playful attribution is **“- Karl Popper, the father of K-pop”**, without a
   final period. It is a fictional joke, never a historical quotation.
-- In the hero artwork, set the full slogan on one line and the full attribution
+- In the Popper artwork, set the full slogan on one line and the full attribution
   on another single line, with a leading hyphen and space.
 - A few recognizable logic symbols near *lemma* can help explain the wordplay.
 - The Korean aside, when used with Popper, reads **OMG / 이건 꼭 필요해!**
@@ -42,6 +43,12 @@ a small number of strong accents.
   A passing check covers its declared condition; it does not certify every conclusion.
 - The public voice is direct and specific. Introduce philosophical terminology
   after the concrete use case.
+- Natural-language requests offered for readers to paste into an agent chat begin
+  with **Dear agent,**. Introduce each with the bold sentence
+  **Copy and paste the following text to your agent:** and put the request in a
+  fenced `text` block. Use this greeting consistently in the README and guides.
+  Executable commands, configuration templates, source quotations and actual output
+  retain their original syntax and wording.
 
 ## Visual treatment
 
@@ -55,7 +62,7 @@ a small number of strong accents.
 - Expressive ink lines and print texture. The larger portrait identifies the
   fictional speaker while leaving the wordmark and quotation their own space.
 - Use a wide hero so the practical explanation remains close to the top on a phone.
-- Keep illustration details subordinate to the name, slogan and face. Logic marks
+- Keep illustration details subordinate to the main scene, name and slogan. Logic marks
   stay near the word they explain; they do not become a background pattern.
 - Product diagrams use the same restrained palette, clear reading order and a
   few large labels. Diagrams of behavior must distinguish recorded information,
@@ -176,7 +183,14 @@ conditions for review. Here, self-awareness is a metaphor for making that reason
 inspectable; it is not a claim of consciousness or automatic knowledge of everything
 happening in the project.
 
-Lead with the hero and practical explanation, then introduce the record through
+The hero uses the existing robot-and-canvas ink illustration with the lowercase
+kpopper wordmark, its blue initial k and **The canvas your AI didn't know it needed.**
+Keep `GROUNDING.yaml` on the board, with evidence and assumptions connected to a
+decision and what would change it. Give the wordmark and caption their own clear
+space below the scene; stack them on phones. Preserve the existing art and restrained
+blue accents without adding decorative marks.
+
+Lead with this hero and practical explanation, then introduce the record through
 the download-promise/retention overview. Follow with the shared-cache case, the
 Cowork workshop and the research synthesis, including their record close-ups and
 selected YAML. Link to the full download merge example without repeating its whole
@@ -186,27 +200,49 @@ Immediately after Contents, ask **Where would you like to start?** and offer thr
 native disclosure sections: **Coding agents**, **Claude Cowork / ChatGPT Work**, and
 **Research**. Keep Contents open by default; the three paths start closed. Put
 **Claude Code · Codex · Cursor · and more** below the Coding agents title.
-Each summary includes a wide, shallow strip from its existing illustration, with
-**Click to expand workflows and examples ↓** below it. Keep the opening prompt as
-text outside the banner. Small SVG title labels with alt text keep the large titles
-beside the native disclosure markers. The title, strip and prompt all toggle the section;
-do not wrap the strip in a separate image link. Full illustrations remain linked
-inside the expanded section. Keep the opening record overview, installation, quick reference
-and capability overview visible; group longer explanations under **Go deeper**.
+Place each wide story strip above its disclosure title. The banner links to an anchor
+inside the closed content; the title remains the native toggle, with its triangle beside
+the SVG title label. Keep **Explore workflows and examples** below the title and its
+short description. The banner opens the section; the title opens or closes it. Do not
+use a fixed downward arrow or an instruction that becomes false when the section opens.
+Use GitHub's `user-content-` target IDs in these fragment links, with matching raw aliases
+for ordinary Markdown previews. A bare fragment did not open the hidden target in the
+GitHub browser check. Native mobile-app behavior needs separate verification.
+Full illustrations remain linked inside the expanded section. Repeat the three path
+links after installation and near the closing invitation. Keep the opening record
+overview, installation, quick reference and capability overview visible.
+
+Keep **Keep the conversation moving** and its illustration visible before **Go deeper**,
+with authoring and delivery details in a smaller disclosure. Give **Keep the knowledge
+system already in use** its own visible explanation; its source-map illustration and
+detail stay in a separate disclosure. This message applies to all three audiences.
+The third-brain metaphor remains in the deeper explanation. Keep the Lean overview
+concise and distinguish deterministic computation, specific formal guarantees and the
+optional checked view; the technical guide carries the theorem table.
 Preserve existing example anchors, images, source links and runnable excerpts.
 
-Essential explanations remain text. Image alt text includes the wordplay and
-attribution. Keep the caption within the hero without repeating it beneath the
+Essential explanations remain text. The hero alt text describes the reasoning canvas,
+wordmark and caption; the Popper banner alt text includes the wordplay and attribution.
+Keep the caption within the hero without repeating it beneath the
 image. Philosophy and the third-brain metaphor follow the concrete examples.
 
-A small curiosity link beneath the hero can lead directly to the Popper explanation.
-Keep the short identification and explanation visible at that destination; only the
-extended worked example is folded, so following the link immediately answers who he is.
-Let the visual joke stand; that section can introduce his idea without explaining
-each prop or spelling out every piece of the pun.
+Place the Popper banner immediately before **Make it earn its place**, with the
+small curiosity link beneath it leading into the Popper explanation. Place that explanation
+in the final closed section immediately above the banner. Keep the short identification,
+launch-party example and checking limits together, using internal headings without another
+nested disclosure. The curiosity link targets the content inside it so navigation reveals
+the explanation.
+Use **Popper: the philosopher behind falsifiability** as the section title.
+The curiosity link asks whether he is really the father of K-pop; answer no immediately
+and identify him as a philosopher of science. Use biography, music credits and a sourced
+history of K-pop to illustrate how a concrete historical claim can be challenged.
+Explain falsifiability as Popper's criterion for empirical science, including the need
+to examine apparent counterexamples. Connect it to kpopper's revisable working picture
+of a project, with claims, evidence, assumptions and explicit conditions for review.
+The person or agent interprets evidence; the software checks declared conditions.
 The main text heading states the practical value rather than repeating the wordmark.
 Use the working-context names **Coding agents**, **Claude Cowork / ChatGPT Work**,
-and **Research** once, in the disclosure summaries. Inside each path, start with
+and **Research** consistently in the disclosure summaries and navigation links. Inside each path, start with
 the specific scenario subheading instead of a duplicate numbered Example title. Place the complete
 **Two working modes** explanation and illustration inside the coding example;
 make clear that the project modes also apply to document and research work.

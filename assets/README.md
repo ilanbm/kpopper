@@ -1,8 +1,19 @@
 # Image sources
 
-## Brand hero
+## README hero
 
-`kpopper-hero.png` is the current README hero: a large ink portrait on the left,
+`kpopper-canvas-hero.png` opens the README with the robot at its reasoning canvas,
+the original lowercase kpopper wordmark and "The canvas your AI didn't know it needed."
+The 1774 × 1000 composition reuses the scene and caption from
+`canvas-for-reasoning-v2.png` and the wordmark from `kpopper-hero.png`.
+The original illustration, blue connections and `GROUNDING.yaml` label are preserved.
+`kpopper-canvas-hero-mobile.png` stacks the wordmark and caption below the same scene
+at 1536 × 1152 so the main message remains readable at phone width.
+
+## Popper banner
+
+`kpopper-hero.png` appears before the README's **Make it earn its place** invitation,
+with its curiosity link beneath it. It keeps the large ink portrait on the left,
 a prominent wordmark and one-line quotation on the right, and a separate italic
 attribution beneath the quotation, beginning with a hyphen and space. Popper looks inward toward the wording with a
 restrained, faintly amused expression; a small Korean speech bubble accompanies the portrait.
@@ -104,8 +115,8 @@ and its SVG reflow the same content for phones.
 `canvas-for-reasoning-v2.png` shows an ink-drawn software artist working at a
 drafting surface labelled `GROUNDING.yaml`. Evidence and assumptions feed a decision;
 the decision connects to what would change it. The agent authors the relationships.
-The caption is "The canvas your AI didn't know it needed." The README displays it
-outside collapsed sections, immediately before **Make it earn its place**.
+The caption is "The canvas your AI didn't know it needed." It supplies the artwork
+for the branded README hero described above.
 The earlier PNG and SVG remain as the previous concept, not the source of the new art.
 
 ## Knowledge-source illustration

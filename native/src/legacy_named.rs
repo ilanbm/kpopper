@@ -44,7 +44,7 @@ fn carry(
                 .ok_or_else(|| error("snapshot_changed"))?,
         )
         .map_err(|_| error("invalid_history_yaml"))?;
-        let lines = text.split('\n').map(str::to_owned).collect::<Vec<_>>();
+        let lines = source_lines(text);
         if let Some((collection, member)) = locate(&lines, id) {
             let mut block = lines[member.start..block_end(&lines, &member)].to_vec();
             while block.last().is_some_and(|line| line.trim().is_empty()) {
@@ -331,7 +331,7 @@ fn prepare_mode(
         .map_err(|_| error("invalid_history_yaml"))?
         .unwrap_or_else(|| format!("hypothesis: {{born: \"{stamp}\"}}\n"));
     let hyp_source = crate::history_yaml::decode_ordinary_source_value(initial.as_bytes())?;
-    let mut lines = initial.split('\n').map(str::to_owned).collect::<Vec<_>>();
+    let mut lines = source_lines(&initial);
     let mut output = notice.text.lines().map(str::to_owned).collect::<Vec<_>>();
     output.extend(notes.clone());
     let collection;
@@ -456,7 +456,7 @@ fn prepare_mode(
         }
         _ => return Err(error("unsupported_named_action")),
     }
-    let after = lines.join("\n").into_bytes();
+    let after = lines.join(source_newline(&initial)).into_bytes();
     let (head, after_doc) = parsed_hypothesis(&after)?;
     let expected_head = if fresh {
         object([("born", s(&stamp))])
