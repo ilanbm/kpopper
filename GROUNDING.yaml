@@ -3201,11 +3201,12 @@ known:
         deterministically checkable means. It walks the opening 30-versus-7-day example with the
         check output the native CLI prints, says what the agent writes and what is asked of the
         reader, and separates what the program checks from what stays judgment. The dark-matter case
-        with an unchanged count and a changed basis is folded below it. Landing and layout were
-        checked in a GitHub Markdown API render at 1024 and 375 pixels, not yet on github.com."
+        with an unchanged count and a changed basis is folded below it. The link lands on the heading
+        on github.com at desktop width and at a 375-pixel phone width; GitHub scrolls to it a few
+        seconds after the click."
     from: s.2026_09_23_readme_checkable_link
-    at: "README edit, native check, open and set runs on the example record, and the browser check
-         in this session"
+    at: "README edit, native check, open and set runs on the example record, and browser checks of a
+         Markdown API render and of the branch on github.com"
     fidelity: paraphrase
   p.readme_coding_banner_story:
     name: "The coding strip shows both PR changes and their combined consequence"

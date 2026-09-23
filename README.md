@@ -1021,8 +1021,8 @@ would make it wrong. `seen` keeps the values the decision was made with.
 agent records `files.days: 7`.
 
 **3. kpopper evaluates the condition.** `7 < 30` is true, so the promise no longer holds.
-The write reports the broken decision immediately, the next session opens with it under
-“needs a person”, and `kpop check` fails:
+The agent sees the broken decision as soon as it records the new value, the next session
+opens with it under “needs a person”, and `kpop check` fails:
 
 ```text
 $ kpop check
