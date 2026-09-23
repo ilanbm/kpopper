@@ -111,6 +111,40 @@ class ContextIntegration(unittest.TestCase):
              '--direction','support','--tokens','2000']
         result=subprocess.run(cmd,text=True,encoding='utf-8',capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout,expected)
+
+    def public_context(self, *args):
+        root=Path(__file__).resolve().parents[1]
+        return subprocess.run([sys.executable,str(root/'scripts/cli.py'),'--workspace',str(self.folder),
+            'context',*args,'--normalized','--no-settings','--input',str(self.path),
+            '--project','context','--state',str(self.folder/'state')],
+            text=True,encoding='utf-8',capture_output=True)
+
+    def test_public_context_reads_current_revision_without_opening(self):
+        before=self.path.read_bytes()
+        expected=self.service.contextualizing(['d.old'],self.revision,'support',tokens=2000)
+        result=self.public_context('d.old')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout,expected)
+        self.assertEqual(self.path.read_bytes(),before)
+        structured=self.public_context('d.old','--json')
+        self.assertEqual(structured.returncode,0,structured.stderr)
+        self.assertEqual(structured.stdout,expected)
+
+    def test_public_context_preserves_direction_and_recovery_bounds(self):
+        expected=self.service.contextualizing(['node:m.value'],self.revision,'impact',tokens=1000,depth=1,max_nodes=2)
+        result=self.public_context('node:m.value','--direction','impact','--tokens','1000','--max-nodes','2')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout,expected)
+
+    def test_public_context_rejects_stale_explicit_revision(self):
+        self.data['nodes']['m.value']['body']['v']=3
+        self.path.write_text(json.dumps(self.data))
+        stale=self.public_context('m.value','--revision',self.revision)
+        self.assertEqual(stale.returncode,2)
+        self.assertIn('reopen',stale.stderr)
+        current=self.public_context('m.value')
+        self.assertEqual(current.returncode,0,current.stderr)
+        self.assertNotEqual(json.loads(current.stdout)['revision'],self.revision)
     @unittest.skipUnless(importlib.util.find_spec('mcp'),'install MCP dependency')
     def test_mcp_context_matches_service(self):
         from mcp import Client

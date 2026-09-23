@@ -92,6 +92,16 @@ fn pending(reader: &Reader<'_>, pred: &V) -> bool {
     false
 }
 pub(crate) fn flags(reader: &Reader<'_>, body: &V) -> Result<BTreeSet<&'static str>> {
+    reader_flags(reader, body, true)
+}
+/// The flags one judgment shows. With `defer_counts`, an undecided condition
+/// that reads a computed name nothing has counted yet, directly or through a
+/// rule, is not flagged UNKNOWN, so the counts never count their own result.
+pub(crate) fn reader_flags(
+    reader: &Reader<'_>,
+    body: &V,
+    defer_counts: bool,
+) -> Result<BTreeSet<&'static str>> {
     let b = map(body)?;
     let fields = &reader.fields;
     let dep = text(&fields["deps"])?;
@@ -123,7 +133,7 @@ pub(crate) fn flags(reader: &Reader<'_>, body: &V) -> Result<BTreeSet<&'static s
         flags.insert("no_predicate");
     } else if named && verdict == Some(true) {
         flags.insert("falsified");
-    } else if named && verdict.is_none() && !pending(reader, &pred) {
+    } else if named && verdict.is_none() && !(defer_counts && pending(reader, &pred)) {
         flags.insert("unknown");
     }
     for (d, old) in seen {

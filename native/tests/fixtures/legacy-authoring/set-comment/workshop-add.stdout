@@ -1,0 +1,7 @@
+nearest existing:
+  stock.packages: same from (prep)
+  workshop.guests: same from (prep)
+  one subject: same <id> workshop.rooms folds it in · two: distinct workshop.rooms <id> "why" keeps them apart
+add workshop.rooms into known, after workshop.guests
+
+the record needs a person on 1 judgment (0 moved, 1 falsified) - check says the rest

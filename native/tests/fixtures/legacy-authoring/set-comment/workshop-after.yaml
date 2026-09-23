@@ -1,0 +1,18 @@
+# Arithmetic example used in the reference guide. Run commands here or copy it elsewhere.
+sources:
+  prep: {name: "Example preparation check", read: "2026-09-09"}
+
+known:
+  stock.packages:  {v: 24, from: prep, at: "Completed packs", as_of: "2026-09-09"}
+  workshop.guests: {v: 26, of: "2026-09-22", from: prep, at: "Confirmed guest count", as_of: "2026-09-09"}
+    # set 2026-09-22: late sign-ups
+
+  workshop.rooms: {v: 2, from: prep, at: "Room plan"}
+
+judgments:
+  workshop.stock_ready:
+    rests_on: [stock.packages, workshop.guests]
+    verdict: "Stock covers the 20-person workshop while at least 20 packs are available."
+    because: "The preparation check reports 24 completed packs for 20 guests."
+    wrong_if: "stock.packages < workshop.guests"
+    seen: {stock.packages: 24, workshop.guests: 20}

@@ -317,7 +317,7 @@ fn build_document(
     let PageDocument { capture, document } = input;
     let doc = map(document)?;
     let report = map(assessment)?;
-    let nodes = map(&report["nodes"])?;
+    let nodes = &page_nodes(map(&report["nodes"])?)?;
     let fields = crate::reasoning_fields::snapshot_fields(document)?;
     let dep_field = fields
         .get("deps")
@@ -429,6 +429,7 @@ fn build_document(
         page_path,
         states: &states,
         groups: &group_schemes,
+        language,
     };
     let mut failures = vec![];
     let mut notes = vec![];
@@ -665,18 +666,7 @@ fn build_document(
         for sec in &tab.sections {
             let mut chosen = BTreeSet::new();
             for s in &sec.pick {
-                let got = select(s, &ids, &judgments, &states);
-                if got.is_empty() {
-                    failures.push(format!(
-                        "section '{}': selector {s} picks nothing",
-                        if sec.title.is_empty() {
-                            "?"
-                        } else {
-                            &sec.title
-                        }
-                    ));
-                }
-                chosen.extend(got);
+                chosen.extend(select(s, &ids, &judgments, &states));
             }
             selected_all.extend(chosen.clone());
             let title = if sec.title.is_empty() {
@@ -765,8 +755,24 @@ fn build_document(
                 )),
                 _ => {}
             }
-            if sec.pick.is_empty() && sec.text.is_empty() {
-                failures.push(format!("section '{title}' is empty"));
+            // A section is judged by what its selectors pick together, as the Python page
+            // judges it: one selector may name a prefix the record does not hold yet.
+            if chosen.is_empty() && (!sec.pick.is_empty() || sec.text.is_empty()) {
+                failures.push(format!(
+                    "section {} picks nothing - it is about something the record no longer holds",
+                    if tab.bare {
+                        format!("'{title}'")
+                    } else {
+                        format!(
+                            "'{title}' (tab '{}')",
+                            if tab.title.is_empty() {
+                                "?"
+                            } else {
+                                &tab.title
+                            }
+                        )
+                    }
+                ));
             }
             panel.push_str(&format!(
                 "<div data-component=\"{}\"><h2 dir=\"auto\">{} <span class=\"n\">{}</span></h2>",
@@ -954,6 +960,73 @@ struct RenderContext<'a> {
     page_path: &'a Path,
     states: &'a BTreeMap<String, BTreeSet<String>>,
     groups: &'a Groups,
+    language: &'a str,
+}
+/// What a card says about a judgment that needs a person, in the Python page's words:
+/// its states, the most urgent first, then what is unverified about it.
+fn state_line(flags: &BTreeSet<String>, body: &Map, language: &str) -> Option<String> {
+    const URGENT_FIRST: [&str; 8] = [
+        "broken",
+        "falsified",
+        "unchecked",
+        "unknown",
+        "reversed",
+        "moved",
+        "blocked",
+        "no_predicate",
+    ];
+    let mut parts = URGENT_FIRST
+        .iter()
+        .filter(|flag| flags.contains(**flag))
+        .filter_map(|flag| says(language, flag))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    parts.extend(
+        flags
+            .iter()
+            .filter(|flag| says(language, flag).is_none())
+            .cloned(),
+    );
+    if let Some(unverified) = body.get("unverified").filter(|v| truth(v)) {
+        let word = match language {
+            "he" => "לא אומת",
+            "ar" => "غير متحقق",
+            _ => "unverified",
+        };
+        parts.push(format!("{word}: {}", textish(unverified)));
+    }
+    (!parts.is_empty()).then(|| parts.join("; "))
+}
+fn says(language: &str, flag: &str) -> Option<&'static str> {
+    Some(match (language, flag) {
+        ("he", "broken") => "נשען על משהו שאינו ברשומה הזו",
+        ("he", "falsified") => "התנאי שהוא עצמו הציב לכך שהוא שגוי מתקיים עכשיו",
+        ("he", "moved") => "משהו שהוא נשען עליו כבר לא מה שראה לאחרונה",
+        ("he", "unchecked") => "מעולם לא נבדק מול אחד הדברים שהוא נשען עליהם",
+        ("he", "blocked") => "ממתין למשהו שאיש עוד לא רשם",
+        ("he", "no_predicate") => "שום דבר כאן לא יראה שהוא שגוי",
+        ("he", "unknown") => "לא ניתן להכריע כרגע בתנאי שלו",
+        ("he", "reversed") => "המסקנה שלו הוחלפה תחת המזהה הזה ואיש לא סקר אותה מאז",
+        ("ar", "broken") => "يستند إلى شيء غير موجود في السجل",
+        ("ar", "falsified") => "تحقق شرط خطئه",
+        ("ar", "moved") => "تغير شيء يستند إليه منذ مراجعته",
+        ("ar", "unchecked") => "لم يراجع مقابل بعض ما يستند إليه",
+        ("ar", "blocked") => "ينتظر شيئاً لم يسجل بعد",
+        ("ar", "no_predicate") => "لا يوجد هنا ما يبيّن خطأه",
+        ("ar", "unknown") => "لا يمكن تقييم شرطه حاليًا",
+        ("ar", "reversed") => "استُبدل حكمه تحت هذا المعرّف ولم يراجعه أحد منذ ذلك الحين",
+        (_, "broken") => "rests on something that is not in this record",
+        (_, "falsified") => "its own condition for being wrong now holds",
+        (_, "moved") => "something it rests on no longer matches what it last saw",
+        (_, "unchecked") => "has never been checked against one of the things it rests on",
+        (_, "blocked") => "waiting on something nobody has recorded yet",
+        (_, "no_predicate") => "nothing here would show it to be wrong",
+        (_, "unknown") => "its condition cannot currently be evaluated",
+        (_, "reversed") => {
+            "its verdict was replaced under this id and nobody has reviewed it since"
+        }
+        _ => return None,
+    })
 }
 fn render_set(
     context: &RenderContext<'_>,
@@ -1004,7 +1077,15 @@ fn render_set(
                 o.push_str(&format!("<div class=\"al\"><span class=\"ico {tone}\">{}</span><span class=\"at\"><span class=\"fx\" data-id=\"{}\">{}</span><div class=\"aw\">{}</div></span><span class=\"tag {tone}\">judgment</span>{}</div>",if tone=="stop"{"!"}else if tone=="warn"{"△"}else{"✓"},esc(id,true),esc(&verdict,false),esc(&status,false),group.map(|g|format!("<span class=\"grp\"><i class=\"group-dot\"></i>{}</span>",esc(&g,false))).unwrap_or_default()));
             } else {
                 let rest = deps(b, context.dependency_field).len();
-                o.push_str(&format!("<div class=\"card\" data-judgment=\"{}\" data-review=\"{}\"><div class=\"cardtop\"><span class=\"judgment-label\">judgment</span></div><div class=\"vd fx\" data-id=\"{}\">{}</div>{}</div>",esc(id,true),if context.states[id].contains("moved"){"moved"}else{"current"},esc(id,true),esc(&verdict,false),if rest>0{format!("<div class=\"rest\">rests on {rest} more — hover the line above</div>")}else{String::new()}));
+                let state = state_line(&context.states[id], b, context.language)
+                    .map(|state| {
+                        format!(
+                            "<div class=\"state\" data-warning=\"true\">{}</div>",
+                            esc(&state, true)
+                        )
+                    })
+                    .unwrap_or_default();
+                o.push_str(&format!("<div class=\"card\" data-judgment=\"{}\" data-review=\"{}\"><div class=\"cardtop\"><span class=\"judgment-label\">judgment</span></div><div class=\"vd fx\" data-id=\"{}\">{}</div>{state}{}</div>",esc(id,true),if context.states[id].contains("moved"){"moved"}else{"current"},esc(id,true),esc(&verdict,false),if rest>0{format!("<div class=\"rest\">rests on {rest} more — hover the line above</div>")}else{String::new()}));
             }
         }
         o.push_str("</div>");

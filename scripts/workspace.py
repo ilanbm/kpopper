@@ -13,12 +13,24 @@ import sys
 ENTRY = "GROUNDING.yaml"
 LEGACY = "PROVENANCE.yaml"
 NAMES = (ENTRY, LEGACY)
+# Git exports GIT_DIR to hooks, `rebase --exec` and aliases run in a linked worktree.
+# Inherited, any of these would name another repository - its record, its pending
+# ledger - over the directory a command was given.
+REPOSITORY_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+                        "GIT_ALTERNATE_OBJECT_DIRECTORIES")
+
+
+def git_environment(env=None):
+    """An environment for a Git call whose directory alone names the repository."""
+    return {key: value for key, value in (os.environ if env is None else env).items()
+            if key not in REPOSITORY_VARIABLES}
 
 
 def _git(directory, flag):
     try:
         result = subprocess.run(["git", "rev-parse", flag], cwd=directory, text=True,
-                                encoding="utf-8", capture_output=True, timeout=5)
+                                encoding="utf-8", capture_output=True, timeout=5,
+                                env=git_environment())
         if result.returncode == 0 and result.stdout.strip():
             return (directory / result.stdout.strip()).resolve()
     except (OSError, subprocess.SubprocessError):

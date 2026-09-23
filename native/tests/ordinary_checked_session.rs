@@ -67,12 +67,14 @@ fn command(root: &Path, operation: &str) -> Command {
 
 fn live_command(root: &Path, operation: &str) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+    command.args(["--workspace", root.to_str().unwrap()]);
+    if operation == "current-context" {
+        command.arg("context");
+    } else {
+        command.args(["session", operation]);
+    }
     command
         .args([
-            "--workspace",
-            root.to_str().unwrap(),
-            "session",
-            operation,
             "--no-settings",
             "--input",
             "GROUNDING.yaml",
@@ -103,6 +105,43 @@ fn revision(open: &str) -> String {
         .find_map(|line| line.strip_prefix("project=fixture revision="))
         .unwrap()
         .into()
+}
+
+#[test]
+fn public_context_reads_ordinary_sources_without_a_prior_open() {
+    let temp = fixture();
+    let root = temp.path();
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let text = ok(command(root, "current-context")
+        .args(["d.keep", "--depth", "2", "--tokens", "4000"])
+        .output()
+        .unwrap());
+    let packet: J = serde_json::from_str(&text).unwrap();
+    let rev = packet["revision"].as_str().unwrap();
+    let old = ok(command(root, "context")
+        .args([
+            "--id",
+            "d.keep",
+            "--direction",
+            "support",
+            "--depth",
+            "2",
+            "--tokens",
+            "4000",
+            "--revision",
+            rev,
+        ])
+        .output()
+        .unwrap());
+    assert_eq!(text, old);
+    assert!(
+        packet["reads"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["id"] == "s.note")
+    );
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
 }
 
 #[test]
