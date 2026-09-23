@@ -1413,8 +1413,9 @@ fn prepare_with_inventory_mode(
     let source = projected_document(&document.source);
     let runtime = crate::public_workspace::runtime_for_document(&source)?;
     let groups = legacy_named::normalize_groups(&document.hypotheses)?;
-    let mut reader =
-        Reader::new(&source, runtime.as_ref())?.with_layers(groups.clone(), BTreeSet::new())?;
+    let mut reader = Reader::new(&source, runtime.as_ref())
+        .map_err(|e| crate::ordinary_fields::in_record_order(&document.source, e))?
+        .with_layers(groups.clone(), BTreeSet::new())?;
     reader.for_action(action)?;
     let (normalized, notes) = reader.normalize(action)?;
     let notice = nearest_notice(&reader, &normalized, &document, &inventory)?;

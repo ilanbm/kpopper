@@ -294,7 +294,8 @@ pub(super) fn run(
         loaded_runtime = crate::public_workspace::runtime_for_document(&source)?;
         loaded_runtime.as_ref()
     };
-    let before = Projection::new(&source, hypotheses, &Map::new(), vec![], runtime)?;
+    let before = Projection::new(&source, hypotheses, &Map::new(), vec![], runtime)
+        .map_err(|e| crate::ordinary_fields::in_record_order(&document.source, e))?;
     let mut side = crate::ordinary_write_report::Ancillary::capture(entry, &mut inventory)?;
     let brief_path = entry.parent().unwrap().join(&local.view);
     let has_brief = side.inputs.get(&brief_path).is_some_and(Option::is_some);

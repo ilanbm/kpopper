@@ -742,3 +742,219 @@ fn a_hypothesis_the_base_cannot_read_is_named_with_the_reason_on_one_line() {
         format!("refused - hypothesis vendor {why}\n")
     );
 }
+
+/// Two judgments that say what they rest on under different names: each field lists
+/// only entries, so each gets one vote, and the reader does not choose between them.
+const TIED_ROLES: &str = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n  d.b:\n    verdict: b\n    depends: [local.two]\n";
+fn tied(role: &str, first: &str, second: &str) -> String {
+    format!(
+        "two fields fit '{role}' ({first}, {second}) and this tool does not guess.\nAdd to the record:\n\nschema:\n  {role}: <field name>\n"
+    )
+}
+
+#[test]
+fn a_record_whose_field_roles_tie_is_refused_with_the_fields_that_tie() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, TIED_ROLES).unwrap();
+    let baseline = root.join("baseline.json");
+    let refusal = tied("deps", "rests_on", "depends");
+    for args in [
+        vec!["check"],
+        vec!["--frozen", "check"],
+        vec!["pull", "d.a"],
+        vec!["--frozen", "pull", "d.a"],
+        vec!["affects", "local.one"],
+        vec!["--frozen", "affects", "local.one"],
+        vec!["open"],
+        vec!["assess", "d.a"],
+        vec!["export", "d.a"],
+        vec!["add", "local.three", "3"],
+        vec!["set", "local.one", "5"],
+        vec!["review", "d.a"],
+        vec!["mark", baseline.to_str().unwrap(), entry.to_str().unwrap()],
+    ] {
+        let output = cli(root, &args, &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            refusal,
+            "{args:?}"
+        );
+    }
+    assert_eq!(fs::read_to_string(&entry).unwrap(), TIED_ROLES);
+    assert!(!baseline.exists());
+
+    let output = cli(root, &["--json", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    let error: J = serde_json::from_slice(&output.stderr).unwrap();
+    assert_eq!(error["error"], refusal.trim_end());
+    let output = cli(root, &["--json", "export", "d.a"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], refusal);
+    let output = cli(root, &["experimental", "hub"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!("kpop experimental hub: {refusal}")
+    );
+}
+
+#[test]
+fn tied_fields_are_named_in_the_order_the_record_first_gives_them() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for (record, refusal) in [
+        // The record's own order, collections included - not the order of the names.
+        (
+            "zeta:\n  d.a: {verdict: a, zz_deps: [local.one]}\nalpha:\n  d.b: {verdict: b, aa_deps: [local.two]}\nknown:\n  local.one: {v: 1}\n  local.two: {v: 2}\n",
+            tied("deps", "zz_deps", "aa_deps"),
+        ),
+        // A list naming something that is not an entry casts no vote, so a field is
+        // placed by its first vote.
+        (
+            "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.x: {verdict: x, zz_deps: [nowhere.at_all]}\n  d.a: {verdict: a, aa_deps: [local.one]}\n  d.b: {verdict: b, zz_deps: [local.two]}\n",
+            tied("deps", "aa_deps", "zz_deps"),
+        ),
+        // Only the fields with the most votes tie.
+        (
+            "known:\n  local.one: {v: 1}\njudgments:\n  d.a: {verdict: a, mm: [local.one]}\n  d.b: {verdict: b, zz: [local.one]}\n  d.c: {verdict: c, aa: [local.one]}\n  d.d: {verdict: d, aa: [local.one]}\n  d.e: {verdict: e, zz: [local.one]}\n",
+            tied("deps", "zz", "aa"),
+        ),
+        // The snapshot and the predicate are voted on among the judgments, and a role
+        // the schema names is not voted on at all.
+        (
+            "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.a: {verdict: a, rests_on: [local.one], was: {local.one: 1}}\n  d.b: {verdict: b, rests_on: [local.two], seen: {local.two: 2}}\n",
+            tied("snapshot", "was", "seen"),
+        ),
+        (
+            "schema: {deps: basis, snapshot: seen}\nknown:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.a: {verdict: a, basis: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n  d.b: {verdict: b, basis: [local.two], seen: {local.two: 2}, fails_if: local.two > 5}\n",
+            tied("predicate", "wrong_if", "fails_if"),
+        ),
+    ] {
+        fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+        let output = cli(root, &["check"], &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{record}");
+        assert!(output.stdout.is_empty(), "{record}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            refusal,
+            "{record}"
+        );
+    }
+}
+
+#[test]
+fn a_hypothesis_whose_fields_tie_over_the_base_is_named_with_the_fields() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    let hypothesis = root.join(".kpopper/hypotheses/vendor.yaml");
+    fs::write(
+        &hypothesis,
+        "judgments:\n  d.b:\n    verdict: b\n    depends: [local.two]\n",
+    )
+    .unwrap();
+    let why = "cannot be read over the base: two fields fit 'deps' (rests_on, depends) and this tool does not guess. Add to the record: schema: deps: <field name>";
+
+    let output = cli(root, &["check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("FAIL hypothesis vendor {why}\n\n1 judgments, 3 entries, 1 problems\n")
+    );
+    let output = cli(root, &["pull", "d.a"], &root.join("private"));
+    assert!(output.status.success());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .starts_with(&format!("! hypothesis vendor {why}\nlocal.one: 1\n"))
+    );
+    let output = cli(root, &["open"], &root.join("private"));
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout).unwrap().contains(
+        "\n1 hypothesis waits - vendor (unreadable over the base: two fields fit 'deps' (rests_on, depends) and this tool ...\n"
+    ));
+    let output = cli(
+        root,
+        &["consolidate", "--dry-run", "--as-of", "2026-01-01"],
+        &root.join("private"),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!("refused - hypothesis vendor {why}\n")
+    );
+
+    // A hypothesis's own collections are laid over the base in the order its file
+    // holds them, so a tie between them reads as it would in that file.
+    fs::write(
+        &hypothesis,
+        "zeta:\n  d.z: {verdict: z, zz_deps: [local.one]}\n  d.y: {verdict: y, zz_deps: [local.two]}\nalpha:\n  d.x: {verdict: x, aa_deps: [local.two]}\n  d.w: {verdict: w, aa_deps: [local.one]}\n",
+    )
+    .unwrap();
+    let output = cli(root, &["check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "FAIL hypothesis vendor cannot be read over the base: two fields fit 'deps' (zz_deps, aa_deps) and this tool does not guess. Add to the record: schema: deps: <field name>\n\n1 judgments, 3 entries, 1 problems\n"
+    );
+}
+
+#[test]
+fn export_and_the_write_commands_tell_the_refusal_in_the_record_s_order() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    for (record, refusal) in [
+        // Entries out of name order: the first to vote leads.
+        (
+            "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.zeta:\n    verdict: z\n    rests_on: [local.one]\n  d.alpha:\n    verdict: a\n    depends: [local.two]\n".to_owned(),
+            tied("deps", "rests_on", "depends"),
+        ),
+        // Names that are not entries, held first by the record's first entry.
+        (
+            "zeta:\n  d.first:\n    verdict: first in the file\n    rests_on: [api.limit]\nalpha:\n  d.second:\n    verdict: second\n    rests_on: [api.second]\nknown:\n  local.one: {v: 1}\n  local.two: {v: 2}\n".to_owned(),
+            concat!(
+                "no dependency field found: no field lists names that are all entries in this record, so there is no graph to walk.\n",
+                "These list names that are not entries:\n",
+                "  rests_on: api.limit (in d.first, and 1 more)\n",
+                "\n",
+                "Either those names are wrong, or one of these is a dependency field this reader cannot see by shape - and it does not guess between them. Fix the names, or say which:\n",
+                "\n",
+                "schema:\n",
+                "  deps: <field name>\n",
+            )
+            .to_owned(),
+        ),
+    ] {
+        let entry = root.join("GROUNDING.yaml");
+        fs::write(&entry, &record).unwrap();
+        for args in [
+            vec!["export", "local.one"],
+            vec!["add", "local.three", "3"],
+            vec!["set", "local.one", "5"],
+            vec!["review", "local.one"],
+            vec!["same", "local.one", "local.two"],
+            vec!["distinct", "local.one", "local.two", "because"],
+        ] {
+            let output = cli(root, &args, &root.join("private"));
+            assert_eq!(output.status.code(), Some(1), "{args:?}");
+            assert!(output.stdout.is_empty(), "{args:?}");
+            assert_eq!(
+                String::from_utf8(output.stderr).unwrap(),
+                refusal,
+                "{args:?}"
+            );
+        }
+        assert_eq!(fs::read_to_string(&entry).unwrap(), record);
+    }
+}

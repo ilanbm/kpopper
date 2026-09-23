@@ -45,7 +45,8 @@ pub fn from_capture(
         &capture.ordinary_context(),
         runtime,
         policy,
-    )?;
+    )
+    .map_err(|e| crate::ordinary_fields::in_record_order(capture.source(), e))?;
     capture.verify()?;
     Ok(report)
 }
