@@ -208,6 +208,9 @@ and confirming the underlying evidence remain part of review.
 | `kpop review "section title"` | Refresh the page section's review snapshot. |
 | `kpop same <a> <b>` | Record that two IDs describe one subject; by default, retire `b` into `a`. |
 | `kpop distinct <a> <b> "reason"` | Keep a similar-looking pair distinct with a recorded reason. |
+| `kpop answer <question> <id> [--why "reason"]` | Close an open question with the entry or judgment that answered it. The question stays in `open:` with what answered it, what that said and the day; `pull` shows it, the opener stops counting it, and `open` and `check` flag it again if the answer later moves or disappears. On a history-backed record the answer's exact version is pinned in history. |
+| `kpop answer <question> --dropped "reason"` | Close an open question that no longer matters, keeping the reason. |
+| `kpop correct <id> field=value ... [--unset field] [--why "what was wrong"]` | Fix an entry that no commit holds yet (outside Git, one this session wrote) in place. Everything resting on it must be unlanded too; it is flagged for review, never rewritten. A judgment keeps its kind and gets its snapshot taken again. Anything already landed is refused with the hypothesis route, since correcting work others may have read is a decision for a person. |
 
 Writes report their downstream reach. `review` records that review happened; it does not
 perform the intellectual review for you. Updating `seen` alone cannot make a fired

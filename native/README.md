@@ -257,6 +257,25 @@ hypothesis files and advanced contribution routing are available through
 `history adopt --revision REVISION`; their privacy, source, journal and recovery
 boundaries still apply.
 
+```sh
+kpop answer q.second_boiler d.one_boiler --why "the inspection settles it"
+kpop answer q.annex_floor --dropped "the extension was cancelled"
+kpop correct m.annex_load v=45 --why "page 3 says 45"
+```
+
+`answer` closes an open question in place, in both record kinds. The question keeps its
+text and its own fields and gains one key: `answered`, holding the answering entry in `by`,
+its verdict or value in `said`, the day in `of` and the reason in `because`, or instead
+`dropped` with the day and the reason. On active history, the accept act pins the
+answering entry's head in `read`. `open` and `check` flag the question again when that
+answer later moves, breaks or disappears. `correct` rewrites an entry that no commit holds
+yet; outside Git, only the session that wrote it may do so. On active history it records a
+`correct` act over the old head, so that version is marked corrected rather than replaced.
+Everything resting on the entry must be unlanded too, and it is flagged rather than
+rewritten. Anything already landed is refused and directed to a named hypothesis and the
+fold. Unlike the explicit `history correct` act, the command addresses the entry by id and
+applies these checks.
+
 Named hypotheses on active native history can be previewed, folded or refuted:
 
 ```sh

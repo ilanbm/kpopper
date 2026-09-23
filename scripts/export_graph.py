@@ -333,7 +333,7 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12, profile=No
         states = set(flags.get(nid, ()))
         if nid in disputed:
             states.add('contested')
-        if sections.get(nid) in P.OPEN:
+        if sections.get(nid) in P.OPEN and not P.settled(body):
             states.add('question')
         nodes[nid] = {'body': body, 'missing': missing, 'states': sorted(states),
                       'kind': 'missing' if missing else 'judgment' if nid in judgments

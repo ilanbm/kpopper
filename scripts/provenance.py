@@ -9,14 +9,18 @@
   python3 provenance.py set     <key> <value> [--why "..."] [--as-of DATE]
   python3 provenance.py add     <id> field=value ... [--in COLLECTION]
   python3 provenance.py review  <id | "section title"> [--as-of DATE]
+  python3 provenance.py answer  <question> <id> [--why "..."] | <question> --dropped "why"
+  python3 provenance.py correct <id> field=value ... [--unset FIELD] [--why "..."]
   python3 provenance.py same    <a> <b> [--keep a|b]  one subject under two ids: b retired into a
   python3 provenance.py distinct <a> <b> "<why>"      two subjects that look alike, told apart
   python3 provenance.py mark    <state file> [file]  the hooks' own: where a session began
   python3 provenance.py gate    <state file> [file]  ... and what it left, said once at its end
 
-The five before them change the record, and each answers with the reach: what rests on
+The seven before them change the record, and each answers with the reach: what rests on
 what it wrote, what is MOVED now, which predicate fired. `set --help`, `add --help`,
-`review --help`, `same --help`, `distinct --help`. Sameness is judged, never guessed: `add`
+`review --help`, `answer --help`, `correct --help`, `same --help`, `distinct --help`.
+`answer` closes an open question where it stands; `correct` fixes an entry no commit holds
+yet. Sameness is judged, never guessed: `add`
 names the entries nearest a new one, and `same` or `distinct` records the answer
 (sameness.py).
 
@@ -1986,7 +1990,8 @@ def counts(doc, ids, jud, fields, raw):
     those judgments - check, the opener, the page - decides them against the same numbers.
     `raw` here is the record's own bodies, without the counts."""
     _legacy_computation(doc)
-    open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
+    open_ids = {k for g in OPEN if isinstance(doc.get(g), dict)
+                for k, b in doc[g].items() if not settled(b)}
     held = [k for k in ids if k not in jud and not is_builtin(k)]
     fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)}, defer_counts=True)
 
@@ -2124,6 +2129,10 @@ def _core_check_findings(paths, context):
         if node['support']['status'] == 'reserved':
             states = sorted({item['state'] for item in node['support']['reservations']})
             notes.append(nid + ': support reserved (' + ', '.join(states) + ')')
+    falsified = {nid for nid, node in report['nodes'].items()
+                 if node['state']['falsifier']['status'] == 'holds'}
+    for nid, flag in document_flags(context.snapshot.to_data()['document'], falsified):
+        notes.append(nid + ': ' + answer_flag_text(flag, 40))
     return failures, notes
 
 
@@ -2201,6 +2210,120 @@ def core_affects(paths, changed):
 
 def _fired_failure(name, judgment):
     return f"{name}: wrong_if holds ({predicate_text(judgment['pred'])}) - broken by its own condition"
+
+
+# ── closed questions ─────────────────────────────────────────────────────────
+# `answer` closes an open question where it stands, and writes what closed it under one key -
+# `answered:` (by, said, of, because) or `dropped:` (of, because) - so the question's own fields
+# are never touched. The readers stop counting it; once its answer moves they put it in front
+# of a person again, and nothing reopens by itself.
+def settled(question):
+    """A question that `answer` closed: answered by an entry, or dropped."""
+    return isinstance(question, dict) and ("answered" in question or "dropped" in question)
+
+
+def _typed_same(a, b):
+    """One value, type and all: 14 and 14.0, true and 1, are different readings."""
+    identity = _peer('pending_grounding').identity
+    try:
+        return identity(a) == identity(b)
+    except ValueError:
+        return a == b
+
+
+def answer_said(body):
+    """What an answering entry says - a judgment's verdict, an entry's value, a one-value entry
+    itself - as a list of one, empty when it says nothing a question could keep."""
+    if isinstance(body, dict):
+        return next(([body[k]] for k in ("verdict", "v", "quoted") if k in body), [])
+    return [] if body is None else [body]
+
+
+def answer_flag(question, raw, falsified):
+    """Why a closed question needs a person again, its answer having moved since it was given ->
+    ("gone", by), ("broken", by), ("changed", by, was, now), or None. `falsified(by, body)` says
+    whether what answered it is broken by its own condition."""
+    answered = question.get("answered") if isinstance(question, dict) else None
+    if not isinstance(answered, dict) or not isinstance(answered.get("by"), str):
+        return None
+    by = answered["by"]
+    if by not in raw:
+        return "gone", by
+    body = raw[by]
+    if falsified(by, body):
+        return "broken", by
+    if "said" not in answered:
+        return None
+    now = answer_said(body)
+    now = now[0] if now else None
+    return None if _typed_same(now, answered["said"]) else ("changed", by, answered["said"], now)
+
+
+def answer_flag_text(flag, n):
+    if flag[0] == "gone":
+        return f"its answer {flag[1]} is no longer an entry"
+    if flag[0] == "broken":
+        return f"its answer {flag[1]} is broken by its own condition"
+    was, now = apart(flag[2], flag[3], n)
+    return f"its answer moved - {flag[1]} now says {now}, it said {was}"
+
+
+def _answer_flags(doc, ids, jud, fields, raw):
+    """The closed questions whose answer moved -> [(id, flag)], collection by collection in id
+    order, for the readers that hold the record itself."""
+    found, broken = [], {}
+
+    def falsified(by, body):
+        if by not in broken:
+            j, assessment = jud.get(by), assessment_module()
+            broken[by] = j is not None and "falsified" in assessment.reader_flags(
+                assessment.judgment_state(j, raw, ids, fields, jud), j, raw, ids, fields)
+        return broken[by]
+    for key in OPEN:
+        members = doc.get(key)
+        if not isinstance(members, dict):
+            continue
+        for nid in sorted(members):
+            flag = answer_flag(members[nid], raw, falsified)
+            if flag:
+                found.append((nid, flag))
+    return found
+
+
+def document_flags(document, falsified):
+    """The closed questions of a captured document whose answer moved -> [(id, flag)], for the
+    readers that hold a document rather than the record's reader; `falsified` names what is
+    broken by its own condition."""
+    try:
+        known = _peer('pending_grounding').entries(document)
+    except ValueError:
+        return []
+    raw = {nid: body for nid, (_, body) in known.items()}
+    found = []
+    for nid, (collection, question) in sorted(known.items()):
+        if collection in OPEN:
+            flag = answer_flag(question, raw, lambda by, _: by in falsified)
+            if flag:
+                found.append((nid, flag))
+    return found
+
+
+def settled_line(nid, question):
+    """How `pull` shows a closed question: what was asked, what answered it or that it was
+    dropped, the day and why."""
+    if not isinstance(question, dict):
+        return None
+    asked = next((str(question[k]) for k in ("question", "v", "name") if k in question), nid)
+
+    def closed(c):
+        return (f" on {c['of']}" if "of" in c else "") + (f" - {c['because']}" if "because" in c else "")
+    answered, dropped = question.get("answered"), question.get("dropped")
+    if isinstance(answered, dict):
+        by = str(answered["by"]) if "by" in answered else ""
+        return f"{nid}: {asked} - answered by {by}{closed(answered)}"
+    if isinstance(dropped, dict):
+        return f"{nid}: {asked} - dropped{closed(dropped)}"
+    return None
 
 
 def check_lines(paths):
@@ -2351,6 +2474,9 @@ def check_lines(paths):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import sameness
     note += sameness.also_lines(doc, fields["deps"])
+    # A closed question whose answer moved is said for a person to read, and fails nothing:
+    # it keeps its answer until someone decides again.
+    note += [f"{nid}: {answer_flag_text(flag, 40)}" for nid, flag in _answer_flags(doc, ids, jud, fields, raw)]
     # Hypotheses beside the record: a file the reader cannot read fails; an id two of them hold
     # with different claims needs a person and fails nothing - which of them folds, or neither,
     # is decided at consolidation, where the union is tested.
@@ -2416,6 +2542,8 @@ def opening(paths, budget=25, chars=None, host=None):
     ids, jud, fields = infer(doc)
     raw = with_builtins(doc, ids, jud, fields)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
+    # what is still asked: a question `answer` closed is no longer open
+    asked = {k for g in OPEN if isinstance(doc.get(g), dict) for k, b in doc[g].items() if not settled(b)}
     items = []
     for name, j in sorted(jud.items()):
         if name in open_ids:
@@ -2449,6 +2577,9 @@ def opening(paths, budget=25, chars=None, host=None):
         if day:
             items.append((75, name, f"reversed on {day} - the verdict under this id changed; review "
                                     f"it once read, or pull {name} --history"))
+    # a question answer closed needs a person again once its answer moves
+    for name, flag in _answer_flags(doc, ids, jud, fields, raw):
+        items.append((72, name, answer_flag_text(flag, 28)))
     # an id two hypotheses disagree on is ranked above everything: nothing decides it but a
     # person, and consolidation will refuse to run over it
     for k, hs in contested(doc).items():
@@ -2500,7 +2631,7 @@ def opening(paths, budget=25, chars=None, host=None):
         head.append("prefixes: " + " · ".join(f"{g}={w}" for g, w in legend.items()))
     held = sum(1 for k in ids if not is_builtin(k))
     head.append(f"{held} entries, {len(jud)} judgments"
-               + (f", {len(open_ids)} open questions" if open_ids else "")
+               + (f", {len(asked)} open questions" if asked else "")
                + (f", updated {meta['updated']}" if meta.get("updated") else ""))
     # of those judgments, how many stand on a session's own confidence - only where any do:
     # a record with no prior.* claims has nothing to say here and keeps the room
@@ -2553,6 +2684,8 @@ def opening(paths, budget=25, chars=None, host=None):
         qmap.update(doc.get(g) or {})
     quests = []
     for qid in sorted(qmap):
+        if settled(qmap[qid]):
+            continue
         text = qmap[qid] if isinstance(qmap[qid], str) else str(qmap[qid])
         line = f"  ? {qid}: {text}"
         quests.append(line if len(line) < 100 else line[:100] + " ...")
@@ -2814,6 +2947,10 @@ def pull(paths, seeds, budget=40, doc=None):
 
     def describe(k, b, ids_, raw_):
         """-> (line, shown): an entry's line, and the value it shows."""
+        line = settled_line(k, b) if settled(b) else None
+        if line is not None:
+            # a closed question reads as what was asked and how it was settled
+            return line, ""
         v, rule = resolved(b, ids_)
         if isinstance(rule, dict):
             v = value_of(raw_, ids_, k)
@@ -3458,6 +3595,11 @@ def _known_key(a, doc, ids, jud, fields, raw):
                         out.append('reframe must preserve the current scalar type and value; record any source-supported value change first')
             except (ValueError, TypeError, KeyError) as error:
                 out.append('reframe: ' + str(error))
+    # `answer` and `correct` rewrite one existing entry in place; the command decides whether
+    # that is allowed, and these checks keep what it writes in the record's shape
+    amend = a.get("amend")
+    if amend is not None:
+        out += _rewrite_problems(a, doc, jud, fields, raw, str(amend), reframe)
     if a["kind"] == "set":
         if k not in ids:
             if a.get("hypothesis") or not _held_by(doc, k):     # else the fork rule says where it is
@@ -3487,7 +3629,7 @@ def _known_key(a, doc, ids, jud, fields, raw):
             if a.get("hypothesis"):
                 out.append(f"{k} is already in hypothesis {a['hypothesis']} - set changes its value "
                            f"there, review its snapshot")
-            elif not reframe and _disagreement(a, raw.get(k), raw, ids, jud, fields,
+            elif not reframe and amend is None and _disagreement(a, raw.get(k), raw, ids, jud, fields,
                                getattr(doc, "page", None)) is None:   # else the fork rule speaks
                 out.append(f"{k} is already an entry - set changes its value, review its snapshot")
         elif is_builtin(k):
@@ -3499,6 +3641,68 @@ def _known_key(a, doc, ids, jud, fields, raw):
         if k not in jud and not a.get("section"):
             out.append(f"{k} is not a judgment" + (" - an entry's value is set, not reviewed"
                                                      if k in ids else ""))
+    return out
+
+
+def _rewrite_problems(a, doc, jud, fields, raw, amend, reframe):
+    """What an `answer` or a `correct` may not write over the entry it rewrites: a question is
+    closed once, by an entry of the record; a correction keeps what the entry is, leaves what
+    this tool writes as it is, and leaves to the fold an entry a hypothesis holds or rests on."""
+    out, k = [], a["id"]
+    try:
+        place = _peer('pending_grounding').entries(doc)
+    except ValueError:
+        place = {}
+
+    def question(key):
+        return key in place and place[key][0] in OPEN
+    old = raw.get(k) if isinstance(raw.get(k), dict) else None
+    body = a.get("body") if isinstance(a.get("body"), dict) else {}
+    if a["kind"] != "add" or k not in raw or is_builtin(k) or a.get("hypothesis") or reframe:
+        out.append(f"{k} is not an entry of the record - {amend} rewrites one that exists")
+    elif amend == "answer":
+        by = None if a.get("answer_by") is None else str(a["answer_by"])
+        if not question(k):
+            out.append(f"{k} is not an open question - answer closes an entry of open:")
+        elif settled(old):
+            out.append(f"{k} is already answered - its answer is read with pull {k}")
+        elif by is not None:
+            if by == k or question(by):
+                out.append(f"{by} is a question - an answer is an entry or a judgment of the record")
+            elif by not in raw:
+                out.append(f"{by} is not an entry - record the answer first, then answer {k} {by}")
+            elif not isinstance(body.get("answered"), dict) or "by" not in body["answered"] \
+                    or str(body["answered"]["by"]) != by:
+                out.append("the answered question names what answered it under answered: by")
+        elif not body.get("dropped"):
+            out.append(f"answer {k} needs the entry that answered it, or --dropped with the reason "
+                       f"it no longer matters")
+    elif amend == "correct":
+        if k not in jud and fields["deps"] in body:
+            out.append(f"{k} is not a judgment - a correction keeps what an entry is; resting it on "
+                       f"something is a new decision")
+
+        def changed(key):
+            was = old or {}
+            return (key in was) != (key in body) or key in body and not _typed_same(was[key], body[key])
+        if any(changed(key) for key in ("answered", "dropped")):
+            out.append(f"{k} records how a question was settled - that is written by answer, never "
+                       f"corrected")
+        for key in ("replaced", "reviewed", "born"):
+            if changed(key):
+                out.append(f"{key} is written by this tool - a correction leaves it as it is")
+        deps = fields["deps"]
+        holding = [name for name, h in sorted((getattr(doc, "hypotheses", None) or {}).items())
+                   if not h["error"] and (k in h["ids"] or any(
+                       isinstance(b, dict) and isinstance(b.get(deps), list) and k in b[deps]
+                       for b in h["raw"].values()))]
+        if holding:
+            one = len(holding) == 1
+            out.append(f"hypothes{'is' if one else 'es'} {', '.join(holding)} hold{'s' if one else ''} "
+                       f"{k} or rest{'s' if one else ''} on it - a correction there is a decision for "
+                       f"the fold")
+    else:
+        out.append(f"{amend} is not a rewrite this reader knows")
     return out
 
 
@@ -4118,7 +4322,8 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
         return out
     if a["kind"] != "add":
         return out
-    if k in ids:
+    # a rewrite in place - answer, correct - replaces what it rewrites by its own rules
+    if k in ids and a.get("amend") is None:
         d = _disagreement(a, raw.get(k), raw, ids, jud, fields, getattr(doc, "page", None))
         if d and not (d[0] in JUDGMENT_KINDS and d[3]):   # a judgment that may supersede replaces
             kind, old, new, newer, why, when = d
@@ -4182,8 +4387,8 @@ def _not_from_the_future(a, doc, ids, jud, fields, raw):
 def _trail_is_tool_written(a, doc, ids, jud, fields, raw):
     """`replaced:` is the trail this tool leaves on a judgment that replaced another - on
     every judgment, not only an arrangement - and a session cannot write a history."""
-    if a["kind"] != "add" or not isinstance(a.get("body"), dict):
-        return []
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict) or a.get("amend") is not None:
+        return []                                    # a rewrite keeps the trail it finds
     if _arrangement_shaped(a["body"], fields, raw):
         return []                                    # _arrangement_is_sound says it
     if "replaced" in a["body"]:
@@ -4195,7 +4400,8 @@ def _drops_are_named(a, doc, ids, jud, fields, raw):
     """A replacement that rests on less than the judgment it replaces stops listening to
     something - a decision, not a side effect - so each dependency dropped is named with
     its reason (--drop "<id>: <why>"), and the reason is kept with the replaced version."""
-    if a["kind"] != "add" or not isinstance(a.get("body"), dict) or a.get("hypothesis"):
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict) or a.get("hypothesis") \
+            or a.get("amend") is not None:
         return []
     k = a["id"]
     if k not in jud or not _judgment_shaped(a["body"], fields):
@@ -4275,7 +4481,10 @@ def _structured_is_sound(a, doc, ids, jud, fields, raw):
 def _nearest_existing(a, doc, ids, jud, fields, raw):
     """The entries nearest a new one, said in the reply - a note, never a refusal - and a
     write under an id that was retired into another, refused and pointed at it. Both live in
-    sameness.py, beside the commands that record the answer."""
+    sameness.py, beside the commands that record the answer. A rewrite in place hears neither:
+    the entry it rewrites is already there."""
+    if a.get("amend") is not None:
+        return []
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import sameness
     return sameness.nearest_existing(a, doc, ids, jud, fields, raw)
@@ -5014,6 +5223,7 @@ def apply(paths, action, diagnostics=None):
         with _locked(paths[0], project=project, hypotheses=bool(action.get("hypothesis"))):
             if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
                 raise Refused('refused - project mode or record destination changed; retry the write')
+            _rewrite_ready(paths, action)
             return _peer('history_direct').apply(paths, action, project=project, original_paths=original_paths)
     try:
         receipt = _peer('recording').route(paths, action, sys.modules.get(__name__) or _Reader(),
@@ -5026,6 +5236,7 @@ def apply(paths, action, diagnostics=None):
     with _locked(paths[0], project=project, hypotheses=bool(action.get("hypothesis"))):
         if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
             raise Refused('refused - project mode or record destination changed; retry the write')
+        _rewrite_ready(paths, action)
         return _apply_unlocked(paths, action, diagnostics, project=project)
 
 
@@ -5658,11 +5869,13 @@ def _apply_candidate(paths, action, diagnostics=None):
     # one the file its neighbours are in (_file_for)
     target = files[0] if kind == "add" else _file_for(files, nid)
     out, seen, arrangement, supersede, arranged = list(expression_notes), {}, False, False, False
+    amend = action.get("amend")
     if kind == "add":
         body = action["body"]
         # a judgment under a standing judgment's id got past validation only because it may
-        # supersede it - it is broken by its own sign - so it replaces it in place
-        supersede = nid in jud and isinstance(body, dict)
+        # supersede it - it is broken by its own sign - so it replaces it in place; `answer`
+        # and `correct` rewrite what stands instead, and leave no trail
+        supersede = nid in jud and isinstance(body, dict) and amend is None
         arranged = isinstance(body, dict) and _arrangement_shaped(body, fields, raw)
         if isinstance(body, dict) and fields["deps"] in body:
             seen = _snapshot(list(body[fields["deps"]]), raw, ids, jud, paths, brief,
@@ -5682,7 +5895,14 @@ def _apply_candidate(paths, action, diagnostics=None):
             body.update(extra)
             body[snapshot_field] = seen
             action["body"] = body
-        if supersede:
+        if amend == "correct" and isinstance(body, dict) and isinstance(raw.get(nid), dict):
+            # a correction keeps the entry's own field order, its snapshot where it stood; what
+            # it adds goes last. `answer` gives its own order: the question, then what closed it
+            was = raw[nid]
+            body = dict([(f, body[f]) for f in was if f in body]
+                        + [(f, v) for f, v in body.items() if f not in was])
+            action["body"] = body
+        if supersede or amend is not None:
             target = _file_for(files, nid)
         else:
             collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
@@ -5701,6 +5921,13 @@ def _apply_candidate(paths, action, diagnostics=None):
         out.append(f"set {nid}: {old} -> {scalar(action['value'], fold=False)} (as of {stamp})")
         if action.get("source") is not None:
             out.append(f"source: {action['source']}, at {action['at']}")
+    elif kind == "add" and amend is not None:
+        # the entry's lines replaced where they stand and in their style: an answered question
+        # stays in its collection, a corrected entry is not superseded
+        if not _locate(lines, nid):
+            raise Refused(f"refused - no file of the record holds {nid}")
+        _replace_in(lines, nid, body)
+        out.append(f"{amend} {nid}")
     elif kind == "add" and supersede:
         old = jud[nid]["body"]
         _, why = may_supersede(nid, old, body, raw, ids, jud, fields, action.get("as_of"), facts)
@@ -6325,7 +6552,50 @@ whose sections earn a session source it rests on. A section of the brief is revi
 its text's references are snapshotted into `seen` and `reviewed:` moves. Never automatic:
 a snapshot that refreshed itself could not show a difference. `--hypothesis NAME` reviews
 a judgment the hypothesis holds, against the record as it stands under it.""",
+    "answer": """  answer <question> <id> [--why "..."] [--as-of YYYY-MM-DD]
+  answer <question> --dropped "why it no longer matters" [--as-of YYYY-MM-DD]
+
+An open question closed where it stands. It stays in its collection and its own fields are
+never touched - a question that is one line becomes `question:` - and what closed it is written
+under one key after them: `answered:` with `by` (the entry or judgment that answered it), `said`
+(what that said when it answered: a judgment's verdict, an entry's value), `of` (the day) and
+`because` (the --why, when one is given); or, with --dropped, `dropped:` with `of` and
+`because`, the reason it no longer matters - which --dropped carries, so --why goes only with
+an answer. The opener stops counting and listing it, and `pull` shows how it was settled. Once
+the answer moves - its entry gone, broken by its own condition, what it says no longer what
+the question kept - `open` and `check` put the question in front of a person again: it keeps
+its answer until someone decides, and the flag fails nothing. On a history-backed record the
+question gets a new version, and its acceptance pins the exact version of the entry that
+answered it. Refused: an id that is not an open question, one already answered or dropped, an
+answer that is itself a question or no entry of the record.""",
+    "correct": """  correct <id> field=value ... [--unset FIELD] [--why "what was wrong"]
+  correct <id> <value>
+
+A slip in work nobody has landed yet, fixed where it stands. The fields given replace the
+entry's own, --unset removes one, and a bare value replaces an entry that is one value; the
+entry keeps its collection and its field order, and no replaced trail is left; an entry that is
+one value takes one value, even one with an equals sign in it. In git, the entry and everything
+resting on it - through rests_on, from, a question it answered, a condition, a rule or a
+{{reference}} - must be in no commit yet; outside git, this session (KPOPPER_AGENT_SESSION,
+else CODEX_THREAD_ID) must have written all of it. What rests on it is then flagged, never
+rewritten. A judgment stays a judgment and an entry an entry; `seen` is taken again from what the
+dependencies hold and is never given; what this tool writes - answered, dropped, replaced,
+reviewed, born - is left as it is; an entry a hypothesis holds or rests on is the
+fold's. Anything already landed is refused with the route that remains: the corrected entry
+written as a hypothesis (add <id> ... --hypothesis NAME), for a person to take at the fold. On a
+history-backed record the new version marks the one it replaces as corrected.""",
 }
+
+
+def _day_option(as_of):
+    """--as-of as every write takes it: a date, and none after today."""
+    if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
+        raise Refused("--as-of takes a date, YYYY-MM-DD")
+    if as_of and _as_day(as_of) and _as_day(as_of) > latest_today():
+        raise Refused(f"--as-of {as_of} is after today ({latest_today().isoformat()}) - a day is "
+                      f"the record's clock, and a reading dated ahead would outrank every reading of "
+                      f"today; date it the day it was read")
+    return as_of
 
 
 def write_command(cmd, rest):
@@ -6377,13 +6647,7 @@ def write_command(cmd, rest):
     if not args:
         raise Refused(HELP[cmd].strip("\n"))
     nid, args = args[0], args[1:]
-    as_of = opts.get("as_of")
-    if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
-        raise Refused("--as-of takes a date, YYYY-MM-DD")
-    if as_of and _as_day(as_of) and _as_day(as_of) > latest_today():
-        raise Refused(f"--as-of {as_of} is after today ({latest_today().isoformat()}) - a day is "
-                      f"the record's clock, and a reading dated ahead would outrank every reading of "
-                      f"today; date it the day it was read")
+    as_of = _day_option(opts.get("as_of"))
     if opts.get("why") and "\n" in opts["why"]:
         raise Refused("--why is one line: a second line would be a line of the record")
     if opts.get("hypothesis"):
@@ -6459,6 +6723,371 @@ def write_command_cli(cmd, rest):
     except _peer('history_contract').HistoryError as error:
         print(str(error), file=sys.stderr)
         return 1
+
+
+# ── answer and correct ───────────────────────────────────────────────────────
+# `answer` settles an open question where it stands; `correct` rewrites an entry nobody has
+# landed yet. Both prepare the whole new body here and write it through the one write path,
+# which validates it, locks the record and answers with the reach. A correction goes through
+# without a person only while nothing landed rests on it: in git, what no commit holds yet;
+# outside git, what this session wrote.
+def rewrite_command_cli(cmd, rest):
+    """The two commands as the command line runs them, history refusals said as a write says them."""
+    try:
+        return (answer_command if cmd == "answer" else correct_command)(rest)
+    except _peer('history_contract').HistoryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+
+def _rewrite_options(cmd, rest, valued, repeated=()):
+    """-> (options, arguments): each option in `valued` takes one value, and one in `repeated`
+    may come again, its values kept in order."""
+    opts, args, i = {}, [], 0
+    while i < len(rest):
+        a = rest[i]
+        if a in valued or a in repeated:
+            if i + 1 >= len(rest):
+                raise Refused(f"{a} needs a value")
+            key = a[2:].replace("-", "_")
+            if a in repeated:
+                opts.setdefault(key, []).append(rest[i + 1])
+            else:
+                opts[key] = rest[i + 1]
+            i += 2
+            continue
+        if a.startswith("--"):
+            raise Refused(f"{a} is not an option of {cmd} - {cmd} --help says what it takes")
+        args.append(a)
+        i += 1
+    return opts, args
+
+
+def _one_line(why):
+    if why and "\n" in why:
+        raise Refused("--why is one line: a second line would be a line of the record")
+    return why
+
+
+def _rewrite_paths():
+    """The one record the two commands rewrite, which must exist: they never create one."""
+    paths = _peer('knowledge_views').write_paths(default_paths())
+    if len(paths) != 1:
+        raise Refused("choose one logical record entry")
+    if not os.path.exists(_first_of(paths)):
+        raise Refused("record not found")
+    return paths
+
+
+def _rewrite_document(paths):
+    """The record as the two commands read it, frozen: the base, the hypotheses beside it and the
+    file each entry came from. A history-backed record is read from its view, the one file that
+    holds every entry; the history writer checks the view against the history when it writes."""
+    if _peer('history_direct').active(paths):
+        entry = os.path.abspath(_first_of(paths))
+        doc = Record(parse(entry) or {})
+        if isinstance(doc.get("meta"), dict):
+            doc["meta"] = {k: v for k, v in doc["meta"].items() if k != "history"}
+        doc.origins = {section: dict.fromkeys(members, entry)
+                       for section, members in collections_of(doc).items()}
+        return doc
+    return _peer('reasoning.authoring').load(sys.modules.get(__name__) or _Reader(), paths)
+
+
+def _rewrite_entries(doc):
+    try:
+        return _peer('pending_grounding').entries(doc)
+    except ValueError as error:
+        raise Refused("refused - " + str(error))
+
+
+def _rewrite_roles(doc):
+    """The role names the record's reader infers - dependencies, condition, snapshot - and the
+    conventional ones where it infers none."""
+    try:
+        fields = infer(doc)[2]
+    except SystemExit:
+        fields = {}
+    return (fields.get("deps") or "rests_on", fields.get("predicate") or "wrong_if",
+            fields.get("snapshot") or "seen")
+
+
+def _rewrite_action(amend, nid, body, why=None, as_of=None, was=None, paths=None):
+    """The add a rewrite goes through: its whole new body, and which rewrite it is. What the
+    command read travels beside it (never into the record), so the write can refuse under
+    the lock if the entry changed in between; on active history the view file's digest
+    does the same inside the history writer."""
+    action = {"kind": "add", "id": nid, "as_of": as_of, "why": why, "into": None,
+              "hypothesis": None, "source": None, "at": None, "amend": amend, "body": body,
+              "_was": copy.deepcopy(was)}
+    if paths and _peer('history_direct').active(paths):
+        with open(_first_of(paths), "rb") as f:
+            action["expected_record_sha256"] = hashlib.sha256(f.read()).hexdigest()
+    return action
+
+
+def answer_command(rest):
+    if "--help" in rest or "-h" in rest:
+        print(HELP["answer"].strip("\n"))
+        return 0
+    opts, args = _rewrite_options("answer", rest, ("--why", "--as-of", "--dropped"))
+    if not 1 <= len(args) <= 2:
+        raise Refused(HELP["answer"].strip("\n"))
+    nid, by, dropped = args[0], (args[1] if len(args) == 2 else None), opts.get("dropped")
+    why = opts.get("why")
+    if (by is None) == (dropped is None):
+        raise Refused("answer takes the entry that answered the question, or --dropped with the "
+                      "reason it no longer matters")
+    if dropped is not None and not dropped.strip():
+        raise Refused("--dropped needs the reason the question no longer matters")
+    if dropped is not None and why is not None:
+        raise Refused("--dropped carries the reason; --why goes with an answer")
+    # the reason the write carries: why it answers, or why it was dropped
+    because = _one_line(why if why is not None else dropped)
+    as_of = _day_option(opts.get("as_of"))
+    paths = _rewrite_paths()
+    doc = _rewrite_document(paths)
+    place = _rewrite_entries(doc)
+    if nid not in place:
+        raise Refused(f"refused - {nid} is not an entry of the record")
+    old = place[nid][1]
+    # what was asked is never touched: a line becomes `question:`, a question with fields keeps
+    # them all in their order, and what closes it goes under one key after them
+    if isinstance(old, str):
+        body = {"question": old}
+    elif isinstance(old, dict):
+        body = copy.deepcopy(old)
+    else:
+        raise Refused(f"refused - {nid} is not a question this reader can close")
+    day = as_of or datetime.date.today().isoformat()
+    if by is not None:
+        closing = {"by": by}
+        said_ = answer_said(place[by][1]) if by in place else []
+        if said_:
+            closing["said"] = copy.deepcopy(said_[0])
+        closing["of"] = day
+        if why and why.strip():
+            closing["because"] = why.strip()
+        body["answered"] = closing
+    else:
+        body["dropped"] = {"of": day, "because": dropped.strip()}
+    action = _rewrite_action("answer", nid, body, because, as_of, was=old, paths=paths)
+    if by is not None:
+        action["answer_by"] = by
+    return apply(paths, action)
+
+
+def correct_command(rest):
+    if "--help" in rest or "-h" in rest:
+        print(HELP["correct"].strip("\n"))
+        return 0
+    opts, args = _rewrite_options("correct", rest, ("--why",), ("--unset",))
+    if not args:
+        raise Refused(HELP["correct"].strip("\n"))
+    nid, values, unset = args[0], args[1:], [f.strip() for f in opts.get("unset", [])]
+    why = _one_line(opts.get("why"))
+    paths = _rewrite_paths()
+    doc = _rewrite_document(paths)
+    place = _rewrite_entries(doc)
+    if nid not in place:
+        raise Refused(f"refused - {nid} is not an entry of the record")
+    old = place[nid][1]
+    snapshot = _rewrite_roles(doc)[2]
+    # an entry that is one value takes one value, even text with an equals sign in it
+    if len(values) == 1 and ("=" not in values[0] or not isinstance(old, dict)):
+        if isinstance(old, dict) or unset:
+            raise Refused(f"refused - {nid} holds fields: correct it as field=value")
+        body = typed(values[0])
+    else:
+        if not isinstance(old, dict):
+            raise Refused(f"refused - {nid} is one value: correct {nid} <value>")
+        body = copy.deepcopy(old)
+        for given in values:
+            field, eq, value = given.partition("=")
+            field = field.strip()
+            if not eq or not field:
+                raise Refused("fields are written field=value")
+            if field == snapshot:
+                raise Refused(f"refused - {snapshot} is written by this tool, from what the "
+                              f"dependencies hold - leave it out")
+            # a list or a mapping is read as one; `{{` opens a reference, not a mapping
+            if value[:1] == "[" or (value[:1] == "{" and value[:2] != "{{"):
+                try:
+                    value = yaml.safe_load(value)
+                except yaml.YAMLError as e:
+                    raise Refused(f"{field}: {e}")
+            else:
+                value = typed(value)
+            body[field] = value
+        for field in unset:
+            if field == snapshot:
+                raise Refused(f"refused - {snapshot} is written by this tool, from what the "
+                              f"dependencies hold - leave it out")
+            if field not in body:
+                raise Refused(f"refused - {nid} has no field {field}")
+            del body[field]
+        # the snapshot is the tool's: a corrected judgment has it taken again
+        body.pop(snapshot, None)
+    unchanged = {f: v for f, v in old.items() if f != snapshot} if isinstance(old, dict) else old
+    if _typed_same(body, unchanged):
+        raise Refused(f"{nid} already says that; nothing to correct")
+    return apply(paths, _rewrite_action("correct", nid, body, why, was=old, paths=paths))
+
+
+def _rewrite_ready(paths, action):
+    """Under the record's lock: a rewrite needs the record it rewrites, and a correction goes
+    through only while nothing landed rests on what it corrects."""
+    amend = action.get("amend")
+    was = action.pop("_was", None)
+    if amend is None:
+        return
+    if not os.path.exists(_first_of(paths)):
+        raise Refused("record not found")
+    place = _rewrite_entries(_rewrite_document(paths))
+    if action["id"] not in place or not _typed_same(place[action["id"]][1], was):
+        raise Refused(f"refused - {action['id']} changed since {amend} read it - run {amend} again")
+    if amend == "correct":
+        unlanded_or_refuse(paths, action["id"])
+
+
+def _mentions(body, deps, predicate, target):
+    """Whether a body rests on `target`: lists it among its dependencies, cites it with from:,
+    was answered by it (answered: by), reads it in its condition or its rule, or names it as a
+    {{reference}}."""
+    if not isinstance(body, dict):
+        return False
+    listed = body.get(deps)
+    if isinstance(listed, list) and any(isinstance(x, str) and x == target for x in listed):
+        return True
+    answered = body.get("answered")
+    if isinstance(body.get("from"), str) and body["from"] == target or \
+            isinstance(answered, dict) and isinstance(answered.get("by"), str) and answered["by"] == target:
+        return True
+    for key in (predicate, "rule"):
+        value = body.get(key)
+        if isinstance(value, dict):
+            try:
+                language = _peer('reasoning.language')
+                if target in language.references(language.lower(value)):
+                    return True
+            except (ValueError, TypeError, KeyError, SyntaxError, RecursionError):
+                pass
+        elif isinstance(value, str) and target in ID.findall(value):
+            return True
+    return any(isinstance(v, str) and any(m.group(1) == target for m in REF.finditer(v))
+               for v in body.values())
+
+
+def _resting_on(place, deps, predicate, subject):
+    """Everything that rests on `subject`, directly or through what rests on it."""
+    reach, frontier = set(), [subject]
+    while frontier:
+        target = frontier.pop()
+        for nid, (_, body) in place.items():
+            if nid != subject and nid not in reach and _mentions(body, deps, predicate, target):
+                reach.add(nid)
+                frontier.append(nid)
+    return reach
+
+
+def _git(directory, *args):
+    """What git prints for one command run in `directory`; None when it fails or is not there."""
+    try:
+        done = subprocess.run(["git", "-C", str(directory), *args], capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def _entry_ids(data):
+    """The entry ids a file's bytes hold, read in the record's own shape."""
+    try:
+        document = yaml.safe_load(data.decode("utf-8"))
+        return set(_peer('pending_grounding').entries(document)) if isinstance(document, dict) else set()
+    except (yaml.YAMLError, UnicodeError, ValueError, TypeError, AttributeError):
+        return set()
+
+
+def _committed_ids(paths, record):
+    """Ids of the record already in the committed tree -> a set, or None when no work tree holds
+    the record. A file of the record is one whose working copy holds ids of the record - its own
+    files and the hypotheses beside it; a history-backed record's view, which holds all of its
+    entries."""
+    entry = os.path.realpath(_first_of(paths))
+    top = _git(os.path.dirname(entry), "rev-parse", "--show-toplevel")
+    if top is None:
+        return None
+    top = os.path.realpath(top.decode("utf-8", "replace").strip())
+    try:
+        if os.path.commonpath([top, entry]) != top:
+            return None
+    except ValueError:
+        return None
+    if _peer('history_direct').active(paths):
+        files = [entry]
+    else:
+        home = glob.escape(hypothesis_dir(paths))
+        files = [*_files_of(paths), *sorted(glob.glob(os.path.join(home, "*.yaml"))
+                                            + glob.glob(os.path.join(home, "*.yml")))]
+    found = set()
+    for path in dict.fromkeys(os.path.realpath(f) for f in files):
+        relative = os.path.relpath(path, top)
+        if relative == os.pardir or relative.startswith(os.pardir + os.sep):
+            continue
+        try:
+            with io.open(path, "rb") as f:
+                working = f.read()
+        except OSError:
+            continue
+        if not _entry_ids(working) & record:
+            continue
+        head = _git(top, "show", "HEAD:" + relative.replace(os.sep, "/"))
+        if head is not None:
+            found |= _entry_ids(head)
+    return found
+
+
+def _listed(ids):
+    if len(ids) < 2:
+        return "".join(ids)
+    return ", ".join(ids[:-1]) + " and " + ids[-1]
+
+
+def unlanded_or_refuse(paths, subject):
+    """A correction goes through without a person only while the entry, and everything resting
+    on it, is unlanded: absent from the committed tree, or outside git written by this session.
+    What rests on it is then flagged, never rewritten."""
+    doc = _rewrite_document(paths)
+    place = _rewrite_entries(doc)
+    if subject not in place:
+        raise Refused(f"refused - {subject} is not an entry of the record")
+    deps, predicate, _ = _rewrite_roles(doc)
+    ids = _resting_on(place, deps, predicate, subject) | {subject}
+    route = (f"write the corrected entry as a hypothesis (add {subject} ... --hypothesis NAME) and "
+             f"let a person take it at the fold")
+    found = _committed_ids(paths, set(place))
+    if found is None:
+        activity = _peer('session_activity')
+        sid = activity.session_id()
+        if not sid:
+            raise Refused(f"refused - {subject} is outside git, where only the session that wrote it "
+                          f"can correct it, and this command carries no session identity - {route}")
+        foreign = sorted(ids - activity.owned(sys.modules.get(__name__) or _Reader(), doc, sid))
+        if foreign:
+            raise Refused(f"refused - {_listed(foreign)} {'was' if len(foreign) == 1 else 'were'} not "
+                          f"written by this session - a correction of work someone else may have "
+                          f"read is a decision for a person: {route}")
+        landed = []
+    else:
+        landed = sorted(ids & found)
+    if subject in landed:
+        raise Refused(f"refused - {subject} is already in a commit - a correction of work others may "
+                      f"have read is a decision for a person: {route}")
+    if landed:
+        one = len(landed) == 1
+        raise Refused(f"refused - {_listed(landed)} rest{'s' if one else ''} on {subject} and "
+                      f"{'is' if one else 'are'} already in a commit - a correction of work others "
+                      f"may have read is a decision for a person: {route}")
 
 
 HEAD_LINE = "# Kept with kpopper: read it with `kpop open`, write it with `kpop add`.\n"
@@ -6617,6 +7246,8 @@ if __name__ == "__main__":
         sys.exit(gate(rest[0], files, turns, host, at))
     if cmd in ("set", "add", "review"):
         sys.exit(write_command_cli(cmd, rest))
+    if cmd in ("answer", "correct"):
+        sys.exit(rewrite_command_cli(cmd, rest))
     if cmd in ("same", "distinct"):
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import sameness

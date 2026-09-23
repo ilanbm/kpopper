@@ -244,7 +244,11 @@ pub(crate) fn builtins(reader: &Reader<'_>) -> Result<Map> {
         .iter()
         .filter_map(|k| doc.get(k))
         .filter_map(|v| map(v).ok())
-        .flat_map(|m| m.keys())
+        .flat_map(|m| {
+            m.iter()
+                .filter(|(_, question)| !crate::public_amend::settled_value(question))
+                .map(|(id, _)| id)
+        })
         .collect::<BTreeSet<_>>();
     count("graph.open", open.len());
     count(

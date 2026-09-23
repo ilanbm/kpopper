@@ -116,7 +116,13 @@ def open_context(argv):
                      + str(len(report['history_subjects'])) + ' history subjects']
             attention_lines = [('  ' + item['id'] + ': ' + ', '.join(item['reasons']))
                                for item in attention]
-            if not attention:
+            # a question answer closed needs a person again once its answer moves
+            falsified = {identifier for identifier, node in report['nodes'].items()
+                         if node['state']['falsifier']['status'] == 'holds'}
+            answered = P.document_flags(document, falsified)
+            attention_lines += ['  ' + identifier + ': ' + P.answer_flag_text(flag, 28)
+                                for identifier, flag in answered]
+            if not attention and not answered:
                 lines.append('  no attention selected by ' + report['attention_policy'])
             footer = ['Use `kpop assess ID --profile core/v1 --history` for exact findings.']
             if data.get('mapping'):

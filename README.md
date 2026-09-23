@@ -794,6 +794,8 @@ guides describe their arguments and review steps.
 | `kpop update --file report.json` | Apply one prepared source report |
 | `kpop review <id>` | Record a completed review |
 | `kpop same <a> <b>` · `kpop distinct <a> <b> "reason"` | Resolve whether two IDs name the same subject |
+| `kpop answer <question> <id>` · `kpop answer <question> --dropped "reason"` | Close an open question with what answered it, or with why it no longer matters |
+| `kpop correct <id> field=value ...` | Fix an entry that no commit holds yet |
 | `kpop consolidate --dry-run` · `kpop consolidate --from <ref> --dry-run` | Test hypotheses or another branch before folding |
 | `kpop consolidate` · `kpop consolidate --refute <name> "reason"` | Fold eligible hypotheses or retain a refutation |
 | `kpop history status` | Inspect committed history acceptance |

@@ -559,6 +559,7 @@ fn project_ordinary_assessed(
         if sections
             .get(internal)
             .is_some_and(|s| matches!(s.as_str(), "open" | "questions"))
+            && !crate::public_amend::settled(body)
         {
             flags.insert("question".into());
         }

@@ -95,7 +95,8 @@ repeat the dry run after changing the record; a passing dry run covers the decla
 **One rule, two containers.** What stands is contested only by something recorded: a rival claim, in
 a hypothesis; or a doubt with no rival value yet, an open question that names the id. The page says
 *a hypothesis contests this arrangement*, or *a question* does, `check` notes the same, and both
-stand until a person consolidates or answers. Deleting the file is neither.
+stand until a person consolidates, or answers the question with `answer`. Deleting the file is neither,
+and `correct` is no way around the fold: it refuses anything already landed.
 
 **How a merge goes.** git merges the files: additions in id order rarely meet, and hypothesis files
 meet only when two branches claim the same thing under one id, since the name carries both - two
