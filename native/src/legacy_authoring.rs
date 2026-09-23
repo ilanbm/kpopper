@@ -34,6 +34,28 @@ static BARE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-
 static DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$").unwrap());
 
+// Layout readers and field emitters work on line contents. Keep a CRLF record's
+// separator outside those contents, including the empty last item that represents
+// a final newline. Mixed endings retain the existing LF-split behavior.
+pub(crate) fn source_newline(source: &str) -> &'static str {
+    if source.contains("\r\n")
+        && source
+            .match_indices('\n')
+            .all(|(at, _)| at > 0 && source.as_bytes()[at - 1] == b'\r')
+    {
+        "\r\n"
+    } else {
+        "\n"
+    }
+}
+
+pub(crate) fn source_lines(source: &str) -> Vec<String> {
+    source
+        .split(source_newline(source))
+        .map(str::to_owned)
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AuthorityRoute {
     History,
@@ -1452,7 +1474,7 @@ fn choose_add_owner(
             .ok_or_else(|| error("snapshot_changed"))?;
         let raw = std::str::from_utf8(bytes)
             .map_err(|_| error("nontext_record_authoring_unsupported"))?;
-        let lines = raw.split('\n').map(str::to_owned).collect::<Vec<_>>();
+        let lines = source_lines(raw);
         if locate(&lines, id).is_some() {
             return Ok(path.clone());
         }
@@ -1897,10 +1919,7 @@ fn prepare_with_inventory_mode(
         .ok_or_else(|| error("snapshot_changed"))?;
     let text_source =
         std::str::from_utf8(&before).map_err(|_| error("nontext_record_authoring_unsupported"))?;
-    let mut lines = text_source
-        .split('\n')
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
+    let mut lines = source_lines(text_source);
     if supersede {
         let old = supersede_old
             .as_ref()
@@ -2191,7 +2210,7 @@ fn prepare_with_inventory_mode(
         _ => return Err(error("unsupported_legacy_authoring_kind")),
     }
     bump_updated(&mut lines, &stamp)?;
-    let after = lines.join("\n").into_bytes();
+    let after = lines.join(source_newline(text_source)).into_bytes();
     let parsed_before = crate::history_yaml::decode_ordinary_source_value(&before)?;
     let parsed = crate::history_yaml::decode_ordinary_source_value(&after)?;
     require(

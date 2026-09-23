@@ -1,5 +1,5 @@
 use super::*;
-use crate::legacy_authoring::legacy_replaced as kept;
+use crate::legacy_authoring::{legacy_replaced as kept, source_lines, source_newline};
 use crate::public_identity::ordinary_identity as I;
 use crate::{
     history_transaction::{self as T, FileImage, PreparedMutation},
@@ -290,7 +290,7 @@ fn source_body<'a>(source: &'a O, id: &str) -> Option<&'a O> {
     }
 }
 fn block(h: &Hypothesis, id: &str, c: &Union<'_>) -> Result<(String, Vec<String>)> {
-    let lines = h.text.split('\n').map(str::to_owned).collect::<Vec<_>>();
+    let lines = source_lines(&h.text);
     if let Some((col, _, s, e)) = locate(&lines, id) {
         let mut block = lines[s..e].to_vec();
         while block.last().is_some_and(|l| l.trim().is_empty()) {
@@ -418,6 +418,19 @@ fn parsed(files: &[PathBuf], texts: &BTreeMap<PathBuf, Vec<String>>) -> Result<O
     }
     Ok(out)
 }
+fn encoded_sources(
+    texts: &BTreeMap<PathBuf, Vec<String>>,
+    originals: &BTreeMap<PathBuf, Vec<u8>>,
+) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
+    texts
+        .iter()
+        .map(|(path, lines)| {
+            let source = std::str::from_utf8(&originals[path])
+                .map_err(|_| error("invalid_utf8"))?;
+            Ok((path.clone(), lines.join(source_newline(source)).into_bytes()))
+        })
+        .collect()
+}
 fn count_flagged(doc: &V, hyps: &Map, runtime: Option<&Runtime>) -> Result<String> {
     let mut reader = projection(doc, hyps, runtime)?.base.reader;
     reader.ids.insert("graph.flagged".into());
@@ -469,11 +482,7 @@ pub(super) fn fold(
                 .ok_or_else(|| error("snapshot_changed"))?;
             Ok((
                 p.clone(),
-                std::str::from_utf8(raw)
-                    .map_err(|_| error("invalid_utf8"))?
-                    .split('\n')
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>(),
+                source_lines(std::str::from_utf8(raw).map_err(|_| error("invalid_utf8"))?),
             ))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -657,9 +666,10 @@ pub(super) fn fold(
             version,
         )?);
     }
+    let encoded = encoded_sources(&texts, capture.files())?;
     let changed = files
         .iter()
-        .filter(|p| texts[*p].join("\n").as_bytes() != capture.files()[*p])
+        .filter(|p| encoded[*p] != capture.files()[*p])
         .cloned()
         .collect::<Vec<_>>();
     let mut images = changed
@@ -673,7 +683,7 @@ pub(super) fn fold(
             }
             .into(),
             before: Some(capture.files()[p].clone()),
-            after: Some(texts[p].join("\n").into_bytes()),
+            after: Some(encoded[p].clone()),
         })
         .collect::<Vec<_>>();
     if let Some(bytes) = side_after {
@@ -1035,11 +1045,10 @@ pub(super) fn refute(
         .map(|p| {
             Ok((
                 p.clone(),
-                std::str::from_utf8(&capture.files()[p])
-                    .map_err(|_| error("invalid_utf8"))?
-                    .split('\n')
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>(),
+                source_lines(
+                    std::str::from_utf8(&capture.files()[p])
+                        .map_err(|_| error("invalid_utf8"))?,
+                ),
             ))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -1061,10 +1070,11 @@ pub(super) fn refute(
             .is_some_and(|v| same_claim(&claim(v), &s("refuted"))),
         "the write broke the record and was undone",
     )?;
+    let encoded = encoded_sources(&texts, capture.files())?;
     let changed = capture
         .members()
         .iter()
-        .filter(|p| texts[*p].join("\n").as_bytes() != capture.files()[*p])
+        .filter(|p| encoded[*p] != capture.files()[*p])
         .cloned()
         .collect::<Vec<_>>();
     let entry = &route.paths()[0];
@@ -1079,7 +1089,7 @@ pub(super) fn refute(
             }
             .into(),
             before: Some(capture.files()[p].clone()),
-            after: Some(texts[p].join("\n").into_bytes()),
+            after: Some(encoded[p].clone()),
         })
         .collect::<Vec<_>>();
     images.push(FileImage {
