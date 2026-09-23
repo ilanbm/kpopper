@@ -3418,6 +3418,34 @@ def _judgment_shaped(body, fields):
 
 def _known_key(a, doc, ids, jud, fields, raw):
     out, k = [], a["id"]
+    reframe = a.get('reframe') is True
+    if 'reframe' in a and type(a['reframe']) is not bool:
+        out.append('reframe must be a boolean operation option')
+    if reframe:
+        world = getattr(raw, 'world', None)
+        old, body = raw.get(k), a.get('body')
+        stored = old.get('v', old.get('quoted')) if isinstance(old, dict) else None
+        if (a['kind'] != 'add' or world is None
+                or k not in ids or k in jud or is_builtin(k) or a.get('hypothesis')
+                or isinstance(old, dict) and 'rule' in old or type(stored) not in (bool, str, int, float)):
+            out.append('reframe requires an existing stored scalar in an active core/v1 history; it cannot replace judgments, rules or hypotheses')
+        if (not isinstance(body, dict) or not isinstance(body.get('rule'), dict)
+                or set(body) - {'rule', 'name'}):
+            out.append('reframe needs only a structured rule and optional name; historical citations and snapshots are preserved by the writer')
+        if not isinstance(a.get('why'), str) or not a['why'].strip():
+            out.append('reframe requires --why explaining why the rule represents the same subject')
+        if not out:
+            try:
+                language = _peer('reasoning.language')
+                if not language.references(language.lower(body['rule'])):
+                    out.append('reframe needs a rule over recorded inputs, not a constant')
+                else:
+                    prior, replacement = world.result(k), world.candidate(a).result(k)
+                    if (prior['status'] != 'ok' or replacement['status'] != 'ok'
+                            or prior['value'] != replacement['value']):
+                        out.append('reframe must preserve the current scalar type and value; record any source-supported value change first')
+            except (ValueError, TypeError, KeyError) as error:
+                out.append('reframe: ' + str(error))
     if a["kind"] == "set":
         if k not in ids:
             if a.get("hypothesis") or not _held_by(doc, k):     # else the fork rule says where it is
@@ -3447,7 +3475,7 @@ def _known_key(a, doc, ids, jud, fields, raw):
             if a.get("hypothesis"):
                 out.append(f"{k} is already in hypothesis {a['hypothesis']} - set changes its value "
                            f"there, review its snapshot")
-            elif _disagreement(a, raw.get(k), raw, ids, jud, fields,
+            elif not reframe and _disagreement(a, raw.get(k), raw, ids, jud, fields,
                                getattr(doc, "page", None)) is None:   # else the fork rule speaks
                 out.append(f"{k} is already an entry - set changes its value, review its snapshot")
         elif is_builtin(k):
@@ -4517,26 +4545,42 @@ def _add_in(lines, nid, body, collection):
     return f"{nid} into {collection}, {'before' if before else 'after'} {anchor}"
 
 
+def _on_one_line(lines, s, e):
+    """Whether the entry at `s` is written on the line of its key - a flow mapping, or an
+    alias - with no field lines of its own for another field to join."""
+    return _members_of(lines, s, e)[0] is None or _inline(lines[s]).startswith("{")
+
+
+def _field_indent(lines, s, e, field):
+    """-> the indent of the judgment's field lines, for `field` written as one of them.
+    Under a judgment written on one line, that line would be read as another entry of
+    its collection, or break the file: the review is refused before anything is written."""
+    if _on_one_line(lines, s, e):
+        nid = MEMBER.match(lines[s]).group(2)
+        raise Refused(f"refused - {nid} is written on one line, and review writes {field}: as a line "
+                      f"of its own - write {nid} with one field per line, then review it again")
+    return _members_of(lines, s, e)[0]
+
+
 def _seen_lines(lines, s, e, snapshot_field, seen):
     """The judgment's snapshot rewritten in place, in the style it had."""
-    span = _field_span(lines, s, e, snapshot_field)
-    find = span[0] if span else (_members_of(lines, s, e)[0] or 4)
+    find = _field_indent(lines, s, e, snapshot_field)
     return _replace_field(lines, s, e, snapshot_field, _field_lines(snapshot_field, seen, find))
 
 
 def _stamp_field(lines, s, e, field, stamp, after):
     """A date field rewritten if present, in its own style, keeping every comment on or
     under it; added after `after` if not."""
+    find = _field_indent(lines, s, e, field)
     span = _field_span(lines, s, e, field)
     if span:
-        find, i, j = span
+        _, i, j = span
         m = re.match(r"^(\s+" + re.escape(field) + r":\s*)(\S+)(\s*(?:#.*)?)$", lines[i])
         head = (m.group(1) + scalar(stamp, _style(m.group(2)), fold=False) + m.group(3)) if m \
             else " " * find + f"{field}: " + scalar(stamp, "bare", fold=False)
         kept = [l for l in lines[i + 1:j] if l.strip().startswith("#")]
         lines[i:j] = [head] + kept
         return e + 1 + len(kept) - (j - i)
-    find = _members_of(lines, s, e)[0] or 4
     return _replace_field(lines, s, e, field, [" " * find + f'{field}: "{stamp}"'], after=after)
 
 
@@ -4884,6 +4928,8 @@ def apply(paths, action, diagnostics=None):
 def _apply_unlocked(paths, action, diagnostics=None, *, project=None):
     """The mutation body for a caller already holding the record-directory lock."""
     _direct_ready(paths)
+    if action.get('reframe') or action.get('expected_record_sha256') is not None:
+        raise Refused('reframe and expected-record-sha256 require active core/v1 history; migrate explicitly before reframing')
     # Recheck privacy inside the write lock: a source can change while a writer waits.
     private = _peer('recording').private_route(paths, action, sys.modules.get(__name__) or _Reader(), project=project)
     if private is not None:
@@ -5020,7 +5066,9 @@ def _fork(paths, action, diagnostics=None):
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        if _field_span(lines, s, e, "reviewed"):
+        # a reviewed kept inside a judgment written on one line refuses the review, rather
+        # than stay as it was
+        if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         out.append(f"review {nid} in hypothesis {name}: "
                    + (f"seen rewritten from what the record holds under it ({stamp})" if changed
@@ -5591,7 +5639,9 @@ def _apply_candidate(paths, action, diagnostics=None):
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        if _field_span(lines, s, e, "reviewed"):
+        # a reviewed kept inside a judgment written on one line refuses the review, rather
+        # than stay as it was
+        if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         elif "replaced" in j["body"] and not arrangement:
             # a judgment that carries a trail keeps the day it was last read, so the
@@ -6121,6 +6171,12 @@ first write, and the base is not touched: the entry is carried over whole and se
     "add": """  add <id> field=value ... [--in COLLECTION] [--as-of YYYY-MM-DD] [--hypothesis NAME] [--profile core/v1] [file]
   add <id> '{field: value, ...}'
   add <id> "an open question"
+  add <id> 'rule={expr: "..."}' --reframe --why "same subject, derived from recorded inputs"
+
+On active core/v1 history, --reframe replaces a stored scalar by a structured rule
+with the same current type and value. It preserves the id and old revisions, never
+refreshes dependent judgments, and requires an explicit reason. Record any factual
+value change with its source first. This is not a forced overwrite or migration.
 
 A new entry or judgment, inserted in id order beside the entries it shares a prefix with -
 never at the tail - in the style of the entry it lands beside; meta.updated moves. A list
@@ -6192,6 +6248,16 @@ def write_command(cmd, rest):
             opts[a[2:].replace("-", "_")] = rest[i + 1]
             i += 2
             continue
+        if a == "--reframe":
+            opts['reframe'] = True
+            i += 1
+            continue
+        if a == '--expected-record-sha256':
+            if i + 1 >= len(rest) or not re.fullmatch(r'[0-9a-fA-F]{64}', rest[i + 1]):
+                raise Refused('--expected-record-sha256 needs a SHA-256 digest')
+            opts['expected_record_sha256'] = rest[i + 1].lower()
+            i += 2
+            continue
         if a == "--drop":
             if i + 1 >= len(rest) or ":" not in rest[i + 1]:
                 raise Refused('--drop takes "<id>: <why>" - the dependency the new judgment no '
@@ -6223,6 +6289,12 @@ def write_command(cmd, rest):
             raise Refused('--hypothesis takes a name: a hypothesis name must be one visible filename without path separators or control characters') from None
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
               "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
+    if opts.get('reframe'):
+        if cmd != 'add':
+            raise Refused('--reframe goes with add and a derived rule')
+        action['reframe'] = True
+    if opts.get('expected_record_sha256') is not None:
+        action['expected_record_sha256'] = opts['expected_record_sha256']
     if drops:
         if cmd != "add":
             raise Refused("--drop goes with add, on a judgment that replaces a standing one")
@@ -6337,6 +6409,8 @@ def _apply_first_add(action):
     policy = project.config()
     if location['status'] == 'found' and _peer('history_direct').active([path]):
         return apply([path], action), []
+    if action.get('reframe') or action.get('expected_record_sha256') is not None:
+        raise Refused('reframe and expected-record-sha256 require active core/v1 history')
     try:
         receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader(),
                                           project=project, expected_policy=policy)

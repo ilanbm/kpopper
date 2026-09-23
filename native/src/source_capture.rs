@@ -30,6 +30,16 @@ impl ReadMode {
         }
     }
 }
+/// How a captured record will be read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reading {
+    /// On its own: the capture forms the canonical snapshot, which settles the record's
+    /// field roles and refuses a record whose roles cannot be read.
+    Own,
+    /// Laid over another record, as a hypothesis is: its roles are read only over that
+    /// record, so no snapshot of its own is formed, and none refuses it.
+    Layer,
+}
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
@@ -587,7 +597,34 @@ pub fn capture_ordinary_source_with_runtime(
     as_of: Option<V>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<OrdinaryCapture> {
-    capture_ordinary_with(paths, cwd, mode, as_of, &mut |_, _| Ok(()), runtime)
+    capture_ordinary_with(
+        paths,
+        cwd,
+        mode,
+        as_of,
+        &mut |_, _| Ok(()),
+        runtime,
+        Reading::Own,
+    )
+}
+/// A record read to be laid over another, as another branch's committed record is: its
+/// document and hypotheses, with no snapshot of its own, so its field roles are left to
+/// the reader that lays it over the other record.
+pub(crate) fn capture_ordinary_layer(
+    paths: &[PathBuf],
+    cwd: &Path,
+    mode: ReadMode,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<OrdinaryCapture> {
+    capture_ordinary_with(
+        paths,
+        cwd,
+        mode,
+        None,
+        &mut |_, _| Ok(()),
+        runtime,
+        Reading::Layer,
+    )
 }
 pub fn capture_source(
     paths: &[PathBuf],
@@ -616,7 +653,7 @@ fn capture_with(
     after_load: &mut dyn FnMut(usize, &Document) -> Result<()>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<CapturedSource> {
-    capture_ordinary_with(paths, cwd, mode, as_of, after_load, runtime)?.try_finite()
+    capture_ordinary_with(paths, cwd, mode, as_of, after_load, runtime, Reading::Own)?.try_finite()
 }
 fn capture_ordinary_with(
     paths: &[PathBuf],
@@ -625,6 +662,7 @@ fn capture_ordinary_with(
     as_of: Option<V>,
     after_load: &mut dyn FnMut(usize, &Document) -> Result<()>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
+    reading: Reading,
 ) -> Result<OrdinaryCapture> {
     require(!paths.is_empty(), "invalid_snapshot")?;
     S::normalize_as_of(as_of.as_ref().unwrap_or(&V::Null))?;
@@ -678,7 +716,9 @@ fn capture_ordinary_with(
     }
     let (document, inventory) = final_load.unwrap();
     let ordinary_document = document.source.projected();
-    let (snapshot, snapshot_error) =
+    let (snapshot, snapshot_error) = if reading == Reading::Layer {
+        (None, Some("layer_without_snapshot".into()))
+    } else {
         match snapshot(&document, &inventory, &initial, &paths, mode, as_of) {
             Ok(snapshot) => (Some(snapshot), None),
             Err(error)
@@ -688,8 +728,15 @@ fn capture_ordinary_with(
             {
                 (None, Some(error.0))
             }
+            Err(error) if error.0 == "invalid_snapshot" => {
+                return Err(crate::ordinary_fields::explain_tie(
+                    &ordinary_document,
+                    error,
+                ));
+            }
             Err(error) => return Err(error),
-        };
+        }
+    };
     let captured = CapturedSource {
         snapshot,
         snapshot_error,
@@ -967,6 +1014,7 @@ mod nonfinite_target_tests {
                     Ok(())
                 },
                 None,
+                Reading::Own,
             ) {
                 Ok(_) => panic!("accepted changed nonfinite capture"),
                 Err(error) => error,
