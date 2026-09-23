@@ -1055,6 +1055,16 @@ sources:
          without unlikely; introduce falsification through ways to challenge the historical claim;
          use a direct and accurate title describing his contribution; explain that kpopper uses this
          discipline for a picture of reality that can be challenged and revised."
+  s.2026_09_23_python_exit:
+    name: "Replace the Python implementation with the native one"
+    asked: "Paraphrased maintainer request: the goal is to replace Python with Rust completely -
+            move every host adapter to the native command, stop updating the Python implementation,
+            pin the Python the native tests compare with, and take Python out of the main branch
+            while keeping the last version available."
+    of: "On 2026-09-23 the Rust tests ran the checkout's own Python hooks as their reference, the
+         record job checked this record with the Python reader, and the Gemini, Copilot, Cursor and
+         Windsurf adapters still called python3."
+    read: "2026-09-23"
   s.2026_09_23_readme_checkable_link:
     name: "Maintainer report on the README link behind deterministically checkable"
     asked: "the \"deterministically checkable.\" link in the readme: 1. leads to a collapsed section
@@ -5908,6 +5918,21 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.python_frozen_at_v0_10_0:
+    name: "The native implementation is the specification; the Python one is frozen"
+    verdict: "The Python implementation stays as it was at v0.10.0 (dd099226). The native tests
+              compare with that commit, never with the Python in the checkout, and the Python leaves
+              the main branch once nothing in the repository runs it."
+    because: "Since 0.9.0 the native runtime is the default, and every fix was being made twice to
+              keep the two alike. A frozen reference keeps the comparisons, and the git history keeps
+              the last Python available."
+    rests_on: [s.2026_09_23_python_exit, s.native_default_release]
+    reopened_by: "A behavior only the frozen Python has turns out to be needed and the native
+                  implementation cannot take it, or a comparison with v0.10.0 blocks a native fix
+                  that this record decided."
+    from: s.2026_09_23_python_exit
+    as_of: "2026-09-23"
+    seen: {s.2026_09_23_python_exit: "read 2026-09-23", s.native_default_release: "read 2026-09-22"}
   d.question_closes_in_place:
     name: "An open question ends with answer, in place"
     rests_on: [s.2026_09_23_answer_and_correct]

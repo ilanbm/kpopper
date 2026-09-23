@@ -57,6 +57,27 @@ cargo test --locked --no-fail-fast
 The platform acceptance workflow builds these resources before testing. Tests that
 require an explicitly selected Python oracle or managed deployment remain opt-in.
 
+The host hook tests compare the native hooks with a fixed reference: the Python
+implementation at the v0.10.0 release tag (commit
+`dd099226bba989f4f22c2979cd7f96e99a36d733`, Python package 1.8.1), never the Python in
+the checkout under test. `KPOP_HOST_ORACLE_ROOT` is the absolute path of a tree of that
+commit, and `KPOP_HOST_ORACLE_PYTHON` an interpreter with PyYAML (`python3` by default,
+`python` on Windows). Without the root, the tests check the native hooks alone and print
+that the comparison was skipped; when `CI` is set they fail instead. The platform
+acceptance workflow fetches the commit and prepares that interpreter on every target. To
+run the comparisons locally, extract the tag with `git archive` (or check it out with
+`git worktree add --detach /tmp/kpopper-v0.10.0 v0.10.0`):
+
+```sh
+mkdir -p /tmp/kpopper-v0.10.0
+git archive v0.10.0 | tar -x -C /tmp/kpopper-v0.10.0
+python3 -m venv /tmp/kpopper-v0.10.0-python
+/tmp/kpopper-v0.10.0-python/bin/python -m pip install PyYAML==6.0.3 tzdata==2025.2
+KPOP_HOST_ORACLE_ROOT=/tmp/kpopper-v0.10.0 \
+KPOP_HOST_ORACLE_PYTHON=/tmp/kpopper-v0.10.0-python/bin/python \
+cargo test --locked --test host_hooks
+```
+
 Core commands and the compiled Hub/Annotated applications do not require Python,
 Node, Cargo or Rust on the runtime PATH. Optional browser checks use Node,
 playwright-core and Chrome. The applications themselves remain experimental and

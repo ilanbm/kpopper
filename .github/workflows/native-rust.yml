@@ -86,14 +86,6 @@ jobs:
           lint: "false"
           use-mathlib-cache: "false"
           use-github-cache: "false"
-      - name: Install and bind the Python hook reference for parity tests
-        if: inputs.validation != 'distribution'
-        shell: python
-        run: |
-          import os, subprocess, sys
-          subprocess.run([sys.executable, '-m', 'pip', 'install', 'PyYAML==6.0.3', 'tzdata==2025.2'], check=True)
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
-              output.write('KPOP_HOST_ORACLE_PYTHON=' + sys.executable + '\n')
       - name: Bind the selected Lean toolchain and record Rust
         shell: bash
         run: |
@@ -143,6 +135,27 @@ jobs:
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), resources/'ordinary'/target)
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
+      - name: Bind the pinned Python reference for the host hook comparisons
+        # The hook tests compare the native hooks with the Python implementation of v0.10.0,
+        # never with the Python in this checkout.
+        if: inputs.validation != 'distribution'
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          reference = temporary/'native-host-oracle'
+          commit = 'dd099226bba989f4f22c2979cd7f96e99a36d733'
+          subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', commit], check=True)
+          subprocess.run(['git', 'worktree', 'add', '--detach', str(reference), commit], check=True)
+          environment = temporary/'native-host-oracle-python'
+          subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True)
+          windows = os.name == 'nt'
+          python = environment/('Scripts' if windows else 'bin')/('python.exe' if windows else 'python')
+          subprocess.run([str(python), '-m', 'pip', 'install', 'PyYAML==6.0.3', 'tzdata==2025.2'], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_HOST_ORACLE_ROOT=' + str(reference) + '\n')
+              output.write('KPOP_HOST_ORACLE_PYTHON=' + str(python) + '\n')
+          (temporary/'native-evidence'/'python-host-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
       - name: Generate Windows history group vectors with the pinned Python reference
         if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' && inputs.validation != 'hooks'
         shell: python

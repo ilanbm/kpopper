@@ -115,10 +115,9 @@ LANES = {
         "adapters/cursor/scripts/gate-open.sh", "scripts/native_runtime.sh",
         "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
-        # Run from the checkout, with everything they import: the host hooks its tests compare,
-        # and the setup that builds the Lean program its tests load.
-        python_entry_points=("scripts/followups_hook.py", "scripts/watch_hook.py", "scripts/ground_hook.py",
-                             "scripts/edit_hook.py", "scripts/session/core.py"),
+        # Run from the checkout, with everything it imports: the setup that builds the Lean program
+        # its tests load. The Python hooks its tests compare run from the pinned v0.10.0 reference.
+        python_entry_points=("scripts/session/core.py",),
         rust_sources=("native",)),
     # The research exercise through the installed package and CLI.
     "examples": Lane(PYTHON_PACKAGE + RESEARCH_EXAMPLE_INPUTS, enforced=False),

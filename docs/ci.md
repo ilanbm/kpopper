@@ -14,7 +14,7 @@ directories.
 | `session` | Checked session with the reviewed Lean kernel | The package, its session tests and the Lean kernel |
 | `installed` | Wheel, sdist and plugin installs on each native target | The package, everything the plugin carries, the committed runtimes |
 | `runtime` | Rebuilding the reasoning runtime on each target | Lean sources, build recipe, bundled runtimes and notices |
-| `rust` | Native command on each platform | `native/`, the assets it compiles in, the runtime resources and Python hooks its tests use |
+| `rust` | Native command on each platform | `native/`, the assets it compiles in, the runtime resources and the setup that builds its Lean test program |
 | `examples` | The research exercise | The package and the exercise's reviewed inputs |
 
 The declarations are checked, not trusted. On Linux, `.github/scripts/ci_audit.py` watches
