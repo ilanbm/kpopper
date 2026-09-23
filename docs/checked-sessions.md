@@ -175,6 +175,29 @@ The core separates current values from review snapshots, unknown from false, exe
 
 The Python router, native adapter and text renderer are tested but not formally proved end to end. The compiler and locally managed cache are part of the trusted runtime. Source-world truth, human re-openers and arbitrary logical languages remain outside the checks. Platform CI builds the pinned source on Linux, macOS and Windows; local validation alone does not establish that every host integration behaves identically.
 
+## Formal guarantees
+
+The [Lean source](../scripts/session/lean/Main.lean) proves specific properties of
+the checked-session core:
+
+| Theorem | Property |
+|---|---|
+| `changed_does_not_falsify` | A changed premise alone does not count as falsification when the falsifier is false. |
+| `unknown_is_not_a_negative_result` | An unknown falsifier cannot satisfy an assertion that it is false. |
+| `scan_accounts_for_every_row` | Every scan row contributes to either the success or error count. |
+| `accepted_view_preserves_conflict_signal` | A view accepted by the core's acceptance predicate preserves declared conflict signals. |
+| `accepted_view_accounts_for_every_link` | An accepted view accounts for every link index. |
+
+The [proof audit](../scripts/session/lean/ProofAudit.lean) names these theorems and
+prints their axiom dependencies. Other runtime checks cover exact recovery references,
+topic bindings and event values. The [session CI workflow](../.github/workflows/session.yml)
+builds the pinned source, audits the named proofs and runs integration tests on Linux,
+macOS and Windows. The [arithmetic evaluator's proof scope](reasoning-core.md#runtime-licensing-and-assurance)
+is documented separately.
+
+These guarantees concern defined data structures and checks. They do not establish
+source accuracy, logical entailment of an agent's verdict or permission to act.
+
 ## Finding a record from a question
 
 Use [checked-session search](retrieval.md) for exact IDs, whole-record lexical search, and optional pinned local E5 ranking. Results are candidate references at the current revision; read them for evidence. The complete opening and Lean assertion checks retain their existing boundaries.
