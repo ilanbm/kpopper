@@ -297,6 +297,44 @@ fn a_branch_fold_carries_only_what_the_branch_holds_differently() {
 }
 
 #[test]
+fn a_branch_that_still_holds_an_id_twice_is_refused_before_anything_folds() {
+    // Both of the branch's bodies for local.five differ from this record, so neither is
+    // left out, and no one body is the branch's.
+    let twice = "known:\n  local.five: {v: 5, of: 2026-09-12}\njudgments:\n  local.five: {verdict: five, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n";
+    let (_temp, root) = branched(&[(
+        "held_twice",
+        BRANCHED.replace("known:\n", "known:\n  local.five: {v: 5, of: 2026-09-12}\n")
+            + "  local.five: {verdict: five, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n",
+    )]);
+    // The same in a hypothesis file the branch carries, beside an unchanged record.
+    git(&root, &["checkout", "-q", "-b", "idea_twice", "main"]);
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(root.join(".kpopper/hypotheses/idea.yaml"), twice).unwrap();
+    commit(&root, "idea_twice");
+    git(&root, &["checkout", "-q", "main"]);
+    let before = image(&root);
+    for reference in ["held_twice", "idea_twice"] {
+        for dry_run in [true, false] {
+            let output = public_consolidation::dispatch(
+                &Options {
+                    from_refs: vec![reference.into()],
+                    dry_run,
+                    as_of: Some("2026-09-20".into()),
+                    ..Default::default()
+                },
+                &root,
+            );
+            assert_eq!(
+                (output.code, output.stdout.as_str(), output.stderr.as_str()),
+                (1, "", "duplicate_entry\n"),
+                "{reference}, dry run: {dry_run}"
+            );
+        }
+    }
+    assert_eq!(image(&root), before);
+}
+
+#[test]
 fn a_branch_fold_reads_permissions_from_the_branch_s_whole_record() {
     // The branch marks an entry private without changing its claim, so the entry is not
     // laid again; the judgment it adds rests on that entry.

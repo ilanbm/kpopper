@@ -149,6 +149,8 @@ fn read_hypotheses(
             ),
             _ => (h.document.clone(), None),
         };
+        // An id the branch still holds in two collections has no one body to fold.
+        crate::reasoning_snapshot::entries(&doc)?;
         let raw = entries(&doc)?;
         pool.insert(
             h.name.clone(),
