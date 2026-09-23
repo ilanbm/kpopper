@@ -60,8 +60,8 @@ Their hook commands start a small standard-library-only launcher with `python3`.
 The launcher selects a private dependency environment if one exists, otherwise it
 checks that bootstrap Python. Opening a record probes only `yaml`
 before running the hook. Failures name the actual interpreter and the repair command;
-they do not block the host session or claim the record was opened. Run that quoted
-`setup` command in a terminal, then start a new session.
+they do not block the host session or claim the record was opened. Run that repair
+command in a terminal, then start a new session.
 
 Normal setup also installs `tzdata` for followup scheduling on systems without an IANA
 timezone database. It is not an HTML dependency and its absence does not block record
