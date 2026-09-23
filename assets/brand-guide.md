@@ -43,6 +43,12 @@ carries the name's joke near the closing invitation.
   A passing check covers its declared condition; it does not certify every conclusion.
 - The public voice is direct and specific. Introduce philosophical terminology
   after the concrete use case.
+- Natural-language requests offered for readers to paste into an agent chat begin
+  with **Dear agent,**. Introduce each with the bold sentence
+  **Copy and paste the following text to your agent:** and put the request in a
+  fenced `text` block. Use this greeting consistently in the README and guides.
+  Executable commands, configuration templates, source quotations and actual output
+  retain their original syntax and wording.
 
 ## Visual treatment
 

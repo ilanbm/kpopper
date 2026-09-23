@@ -1000,6 +1000,13 @@ sources:
          as a control. The crate packaged from 20f9b64 did not build: its build script could not read
          ../scripts/session/lean/Main.lean from inside the package."
     read: "2026-09-23"
+  s.2026_09_23_dear_agent_copy:
+    name: "Use Dear agent as the signature for copyable agent requests"
+    read: "2026-09-23"
+    of: "Maintainer request, paraphrased: start the installation request with Dear agent, and make
+         that the recognizable opening of every natural-language text readers copy to an agent. Place
+         a bold Copy and paste the following text to your agent instruction immediately before the
+         copyable text."
   s.2026_09_23_missing_runtime_at_start:
     name: "A missing native runtime is said at session start, by the opener alone"
     asked: "Paraphrased maintainer request: a freshly installed plugin has no native runtime, and
@@ -1048,6 +1055,16 @@ sources:
          without unlikely; introduce falsification through ways to challenge the historical claim;
          use a direct and accurate title describing his contribution; explain that kpopper uses this
          discipline for a picture of reality that can be challenged and revised."
+  s.2026_09_23_python_exit:
+    name: "Replace the Python implementation with the native one"
+    asked: "Paraphrased maintainer request: the goal is to replace Python with Rust completely -
+            move every host adapter to the native command, stop updating the Python implementation,
+            pin the Python the native tests compare with, and take Python out of the main branch
+            while keeping the last version available."
+    of: "On 2026-09-23 the Rust tests ran the checkout's own Python hooks as their reference, the
+         record job checked this record with the Python reader, and the Gemini, Copilot, Cursor and
+         Windsurf adapters still called python3."
+    read: "2026-09-23"
   s.2026_09_23_readme_checkable_link:
     name: "Maintainer report on the README link behind deterministically checkable"
     asked: "the \"deterministically checkable.\" link in the readme: 1. leads to a collapsed section
@@ -4542,6 +4559,22 @@ judgments:
       m.door.opposed_verdicts_named_reversed: 2
       m.door.grounds_changes_named: 2
       m.door.future_dated_readings_refused: 3
+  d.copyable_agent_requests:
+    name: "Give copyable agent requests a consistent greeting and instruction"
+    rests_on: [s.2026_09_23_dear_agent_copy]
+    verdict: "User-facing natural-language requests intended for pasting into an agent chat begin
+              with Dear agent, and use a fenced text block preceded by the bold instruction Copy and
+              paste the following text to your agent:. Apply this convention in the README and
+              guides; preserve executable command syntax, configuration templates, source quotations
+              and actual output."
+    because: "The maintainer chose the greeting as a brand signature. A consistent introduction
+              makes the text to copy recognizable and separates an agent request from surrounding
+              explanation. Adding prose to a slash command or shell command would change how it runs,
+              while altering quoted or observed text would misrepresent its source."
+    reopened_by: "Readers copy the label as part of the request, mistake a natural-language request
+                  for an executable command, or the greeting interferes with a documented
+                  interaction."
+    seen: {s.2026_09_23_dear_agent_copy: "read 2026-09-23"}
   d.correct_is_for_unlanded_work:
     name: "Correct only what nobody could have read"
     rests_on: [s.2026_09_23_answer_and_correct, d.fold_passes_the_one_door]
@@ -5885,6 +5918,21 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.python_frozen_at_v0_10_0:
+    name: "The native implementation is the specification; the Python one is frozen"
+    verdict: "The Python implementation stays as it was at v0.10.0 (dd099226). The native tests
+              compare with that commit, never with the Python in the checkout, and the Python leaves
+              the main branch once nothing in the repository runs it."
+    because: "Since 0.9.0 the native runtime is the default, and every fix was being made twice to
+              keep the two alike. A frozen reference keeps the comparisons, and the git history keeps
+              the last Python available."
+    rests_on: [s.2026_09_23_python_exit, s.native_default_release]
+    reopened_by: "A behavior only the frozen Python has turns out to be needed and the native
+                  implementation cannot take it, or a comparison with v0.10.0 blocks a native fix
+                  that this record decided."
+    from: s.2026_09_23_python_exit
+    as_of: "2026-09-23"
+    seen: {s.2026_09_23_python_exit: "read 2026-09-23", s.native_default_release: "read 2026-09-22"}
   d.question_closes_in_place:
     name: "An open question ends with answer, in place"
     rests_on: [s.2026_09_23_answer_and_correct]

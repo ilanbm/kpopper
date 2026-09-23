@@ -706,11 +706,14 @@ assumptions remain explicit, and neither the count nor replay proves the synthes
 
 ## Get started
 
-**Start in your agent's chat.** Paste this request into any of the agents listed below.
-The agent can carry out the steps its tools allow and guide you through any clicks,
-approvals or administrator steps that need your input.
+You can use this request with any of the agents listed below. The agent can carry out
+the steps its tools allow and guide you through any clicks, approvals or administrator
+steps that need your input.
+
+**Copy and paste the following text to your agent:**
 
 ```text
+Dear agent,
 Please install kpopper. Open the guide below and follow the installation
 instructions for your environment:
 https://github.com/ilanbm/kpopper#get-started
@@ -1573,8 +1576,7 @@ To share a small part of the record in a task, document or pull request, use
 readings and marks values omitted from the selection. From a source checkout:
 
 ```sh
-python3 scripts/cli.py export launch.announcement \
-  --record examples/launch-party/GROUNDING.yaml
+kpop export launch.announcement --record examples/launch-party/GROUNDING.yaml
 ```
 
 Add `--format markdown-mermaid` to keep the text and append a diagram for destinations

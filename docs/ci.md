@@ -14,7 +14,7 @@ directories.
 | `session` | Checked session with the reviewed Lean kernel | The package, its session tests and the Lean kernel |
 | `installed` | Wheel, sdist and plugin installs on each native target | The package, everything the plugin carries, the committed runtimes |
 | `runtime` | Rebuilding the reasoning runtime on each target | Lean sources, build recipe, bundled runtimes and notices |
-| `rust` | Native command on each platform | `native/`, the assets it compiles in, the runtime resources and Python hooks its tests use |
+| `rust` | Native command on each platform | `native/`, the assets it compiles in, the runtime resources and the setup that builds its Lean test program |
 | `examples` | The research exercise | The package and the exercise's reviewed inputs |
 
 The declarations are checked, not trusted. On Linux, `.github/scripts/ci_audit.py` watches
@@ -91,7 +91,11 @@ unexecuted tests fail the gate.
 
 Before provisioning expensive jobs, `changes` validates the committed native
 bundles, their source identity and the corresponding-source archive. All expensive
-lanes also require the inexpensive record and contract job to succeed. `check.yml` runs
+lanes also require the inexpensive record and contract job to succeed. That job reads
+this repository's record with the native `kpop` built from the same tree. A push to main
+caches its build by the hash of `native/`; a pull request restores that build and saves
+none, so only a pull request that changes the native sources builds one, and that pull
+request checks the record with the reader it changes. `check.yml` runs
 `reasoning-target.yml` once per selected target, with the matrix of `reasoning-runtime.yml`;
 selection lives in `check.yml` because both reasoning workflows are recorded in the
 corresponding-source archive. Each target's build and installed tests depend only on that

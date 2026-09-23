@@ -1,10 +1,11 @@
 # kpopper for OpenCode
 
-The verification below predates the application rename. The current bundle has eight
-canonical skills plus the `page` and `document` compatibility aliases; the application
-skills are now `hub` and `annotated-doc`.
+The verification below predates the application rename and the native runtime: it
+ran the Python CLI, and the native install steps here have not had a live host run.
+The current bundle has eight canonical skills plus the `page` and `document`
+compatibility aliases; the application skills are now `hub` and `annotated-doc`.
 
-Use OpenCode's native skills loader with the shared Python CLI. This adapter provides
+Use OpenCode's native skills loader with the `kpop` command. This adapter provides
 instructions, not an OpenCode JavaScript plugin: it does not install automatic session
 hooks, a blocking stop gate, or background delivery.
 
@@ -19,13 +20,14 @@ Keep a full kpopper checkout at a stable absolute path. The skills link to sibli
 skills, references, and `../../docs/`; copying just their `SKILL.md` files loses those
 resources. A temporary worktree or an expiring plugin cache is not a stable install.
 
-Create a Python environment for that checkout (Python 3.9 or newer):
+Install that checkout's native runtime and put its `bin/` on `PATH`. The installer
+downloads the release matching the checkout's `VERSION` and checks its SHA-256; see
+[Install the native runtime](../../docs/plugin-runtime.md#install-the-native-runtime).
 
 ```sh
 KPOPPER_CHECKOUT=/absolute/path/to/kpopper
-python3 -m venv "$KPOPPER_CHECKOUT/.venv"
-"$KPOPPER_CHECKOUT/.venv/bin/python" -m pip install -e "$KPOPPER_CHECKOUT"
-export PATH="$KPOPPER_CHECKOUT/.venv/bin:$PATH"
+sh "$KPOPPER_CHECKOUT/scripts/install_native.sh"
+export PATH="$KPOPPER_CHECKOUT/bin:$PATH"
 ```
 
 In the project where you want to use kpopper, merge these fields into `opencode.json`
@@ -52,7 +54,7 @@ instructions without replacing the project's `AGENTS.md`.
 
 Launch `opencode` from the target project using the shell where the CLI is on `PATH`.
 Other launchers may not inherit that environment; in that case configure their runtime
-path explicitly before relying on `kpopper`. Keep the existing `GROUNDING.yaml` or
+path explicitly before relying on `kpop`. Keep the existing `GROUNDING.yaml` or
 registered record location; this adapter does not need another record.
 
 OpenCode also discovers `.agents/skills` and `.claude/skills`, including global ones.
@@ -83,13 +85,13 @@ read the entries relevant to my question.” Verify the actual tool calls and ou
 Later, ask it to record an authorized finding and run `kpop check`. Start a new
 session and verify that it reads that finding before answering from memory.
 
-The Python commands are the same as in other hosts:
+The commands are the same as in other hosts:
 
 ```sh
 kpop pull <entry-or-prefix>
 kpop affects <entry>
 kpop check
-# Optional experimental application; install kpopper[html] first.
+# Optional experimental application.
 kpop experimental hub
 ```
 

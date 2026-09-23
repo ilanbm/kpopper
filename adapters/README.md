@@ -1,8 +1,8 @@
 # kpopper adapters
 
-The record format and Python CLI are shared across hosts. Integration determines
+The record format and the `kpop` command are shared across hosts. Integration determines
 how an agent discovers skills, receives the opening, checks its work and delivers
-background results. Some shared scripts already understand Claude and Codex;
+background results. The shared hook scripts already understand Claude and Codex;
 other hosts need an adapter or explicit commands.
 
 ## Design principle
@@ -38,12 +38,12 @@ checks](../docs/compatibility.md) state which boundaries have actually been test
 | **Copilot cloud agent** | Setup workflow installs the native runtime and logs the opening | PR check with the native runtime; merge enforcement depends on branch protection | Setup/CI examples require a kpopper checkout in the job. Cloud lifecycle hooks are not connected by this adapter. |
 | **OpenClaw** | Explicit command or agent instruction | Explicit `check`; declared bundle hooks are not runnable hook packs | Canonical skills load as a Codex bundle. |
 | **OpenCode** | Agent instruction | Explicit `check`; no enforced gate | Native `skills.paths` loads the bundled skills; `instructions` loads the shared method. |
-| **Claude Cowork** | Same package import; runtime behavior needs verification | No verified parity with Claude Code | Claude plugin package; validate Python, file access and persistence in Cowork. |
+| **Claude Cowork** | Same package import; runtime behavior needs verification | No verified parity with Claude Code | Claude plugin package; validate the native runtime, file access and persistence in Cowork. |
 | **Windsurf / Cascade** | Agent instruction in the shipped rule | Explicit command; an optional hook runs `check` after record writes and discards its output | Condensed rule and an unverified host hook route; not reassessed in this compatibility pass. |
 
-`kpop experimental hub` is an optional experimental application. Install the
-`kpopper[html]` runtime to produce a local HTML page. Opening
-or delivering that file depends on the host's browser and filesystem capabilities.
+`kpop experimental hub` is an optional experimental application; the native runtime
+includes it, and it produces a local HTML page. Opening or delivering that file
+depends on the host's browser and filesystem capabilities.
 Likewise, loading `map` or `watch` does not supply a worker, source connector or
 scheduler. Background delivery needs its own verification.
 
