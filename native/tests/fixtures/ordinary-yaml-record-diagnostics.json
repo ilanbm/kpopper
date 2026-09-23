@@ -1,0 +1,300 @@
+{
+  "oracle": "str() of the YAMLError yaml.safe_load raises, PyYAML 6.0.3",
+  "cases": [
+    {
+      "name": "flow-colon",
+      "source": "known:\n  a.b: {v: 1\n  c.d: [unclosed\n",
+      "expected": "while parsing a flow mapping\n  in \"<unicode string>\", line 2, column 8:\n      a.b: {v: 1\n           ^\nexpected ',' or '}', but got ':'\n  in \"<unicode string>\", line 3, column 6:\n      c.d: [unclosed\n         ^"
+    },
+    {
+      "name": "flow-eof",
+      "source": "known: {a: 1",
+      "expected": "while parsing a flow mapping\n  in \"<unicode string>\", line 1, column 8:\n    known: {a: 1\n           ^\nexpected ',' or '}', but got '<stream end>'\n  in \"<unicode string>\", line 1, column 13:\n    known: {a: 1\n                ^"
+    },
+    {
+      "name": "flow-seq-colon",
+      "source": "known: [a, b: c: d]\n",
+      "expected": "while parsing a flow sequence\n  in \"<unicode string>\", line 1, column 8:\n    known: [a, b: c: d]\n           ^\nexpected ',' or ']', but got ':'\n  in \"<unicode string>\", line 1, column 16:\n    known: [a, b: c: d]\n                   ^"
+    },
+    {
+      "name": "flow-dash",
+      "source": "known: {a: - 1}\n",
+      "expected": "while parsing a flow node\nexpected the node content, but found '-'\n  in \"<unicode string>\", line 1, column 12:\n    known: {a: - 1}\n               ^"
+    },
+    {
+      "name": "tab-indent",
+      "source": "known:\n\tp.a: 1\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 2, column 1:\n    \tp.a: 1\n    ^"
+    },
+    {
+      "name": "tab-trailing",
+      "source": "known:\n  p.a: 1\t# c\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 2, column 9:\n      p.a: 1\t# c\n            ^"
+    },
+    {
+      "name": "tab-after-colon",
+      "source": "known:\n  p.a:\t1\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 2, column 7:\n      p.a:\t1\n          ^"
+    },
+    {
+      "name": "tab-in-plain",
+      "source": "known:\n  p.a: one\ttwo\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 2, column 11:\n      p.a: one\ttwo\n              ^"
+    },
+    {
+      "name": "tab-in-flow",
+      "source": "known: {a: 1,\tb: 2}\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 1, column 14:\n    known: {a: 1,\tb: 2}\n                 ^"
+    },
+    {
+      "name": "tab-in-comment",
+      "source": "known:  # a\tcomment\n  p.a: 1\n  p.b: [\n",
+      "expected": "while parsing a flow node\nexpected the node content, but found '<stream end>'\n  in \"<unicode string>\", line 4, column 1:\n    \n    ^"
+    },
+    {
+      "name": "tab-in-quoted",
+      "source": "known:\n  p.a: \"a\tb\"\n  p.b: {v: 1\n  p.c: 2\n",
+      "expected": "while parsing a flow mapping\n  in \"<unicode string>\", line 3, column 8:\n      p.b: {v: 1\n           ^\nexpected ',' or '}', but got ':'\n  in \"<unicode string>\", line 4, column 6:\n      p.c: 2\n         ^"
+    },
+    {
+      "name": "tab-block-header",
+      "source": "known:\n  p.a: |\t\n    text\n",
+      "expected": "while scanning a block scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: |\t\n           ^\nexpected chomping or indentation indicators, but found '\\t'\n  in \"<unicode string>\", line 2, column 9:\n      p.a: |\t\n            ^"
+    },
+    {
+      "name": "tab-block-header-comment",
+      "source": "known:\n  p.a: | \t# c\n    text\n",
+      "expected": "while scanning a block scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: | \t# c\n           ^\nexpected a comment or a line break, but found '\\t'\n  in \"<unicode string>\", line 2, column 10:\n      p.a: | \t# c\n             ^"
+    },
+    {
+      "name": "tab-block-content",
+      "source": "known:\n  p.a: |\n    a\tb\n  p.b: [\n",
+      "expected": "while parsing a flow node\nexpected the node content, but found '<stream end>'\n  in \"<unicode string>\", line 5, column 1:\n    \n    ^"
+    },
+    {
+      "name": "tab-after-error",
+      "source": "known: {a: 1\n  b: [x\n\tc: 2\n",
+      "expected": "while parsing a flow mapping\n  in \"<unicode string>\", line 1, column 8:\n    known: {a: 1\n           ^\nexpected ',' or '}', but got ':'\n  in \"<unicode string>\", line 2, column 4:\n      b: [x\n       ^"
+    },
+    {
+      "name": "dup-anchor",
+      "source": "a: &x 1\nb: &x 2\n",
+      "expected": "found duplicate anchor 'x'; first occurrence\n  in \"<unicode string>\", line 1, column 4:\n    a: &x 1\n       ^\nsecond occurrence\n  in \"<unicode string>\", line 2, column 4:\n    b: &x 2\n       ^"
+    },
+    {
+      "name": "dup-anchor-map",
+      "source": "a: &x {k: 1}\nb: &x [2]\n",
+      "expected": "found duplicate anchor 'x'; first occurrence\n  in \"<unicode string>\", line 1, column 4:\n    a: &x {k: 1}\n       ^\nsecond occurrence\n  in \"<unicode string>\", line 2, column 4:\n    b: &x [2]\n       ^"
+    },
+    {
+      "name": "undef-alias",
+      "source": "a: *y\n",
+      "expected": "found undefined alias 'y'\n  in \"<unicode string>\", line 1, column 4:\n    a: *y\n       ^"
+    },
+    {
+      "name": "two-docs",
+      "source": "a: 1\n---\nb: 2\n",
+      "expected": "expected a single document in the stream\n  in \"<unicode string>\", line 1, column 1:\n    a: 1\n    ^\nbut found another document\n  in \"<unicode string>\", line 2, column 1:\n    ---\n    ^"
+    },
+    {
+      "name": "two-docs-explicit",
+      "source": "---\na: 1\n...\n---\nb: 2\n",
+      "expected": "expected a single document in the stream\n  in \"<unicode string>\", line 2, column 1:\n    a: 1\n    ^\nbut found another document\n  in \"<unicode string>\", line 4, column 1:\n    ---\n    ^"
+    },
+    {
+      "name": "bad-indent",
+      "source": "known:\n  p.a: {v: 1}\n p.b: {v: 2}\n",
+      "expected": "while parsing a block mapping\n  in \"<unicode string>\", line 1, column 1:\n    known:\n    ^\nexpected <block end>, but found '<block mapping start>'\n  in \"<unicode string>\", line 3, column 2:\n     p.b: {v: 2}\n     ^"
+    },
+    {
+      "name": "unterminated-quote",
+      "source": "known:\n  p.a: \"abc\n",
+      "expected": "while scanning a quoted scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: \"abc\n           ^\nfound unexpected end of stream\n  in \"<unicode string>\", line 3, column 1:\n    \n    ^"
+    },
+    {
+      "name": "missing-colon",
+      "source": "known:\n  p.a:\n    v: 1\n    broken\n",
+      "expected": "while scanning a simple key\n  in \"<unicode string>\", line 4, column 5:\n        broken\n        ^\ncould not find expected ':'\n  in \"<unicode string>\", line 5, column 1:\n    \n    ^"
+    },
+    {
+      "name": "bad-char",
+      "source": "known:\n  p.a: 1\n  @p.b: 2\n",
+      "expected": "while scanning for the next token\nfound character '@' that cannot start any token\n  in \"<unicode string>\", line 3, column 3:\n      @p.b: 2\n      ^"
+    },
+    {
+      "name": "backtick",
+      "source": "known:\n  `p.b: 2\n",
+      "expected": "while scanning for the next token\nfound character '`' that cannot start any token\n  in \"<unicode string>\", line 2, column 3:\n      `p.b: 2\n      ^"
+    },
+    {
+      "name": "seq-in-map",
+      "source": "known:\n  a: 1\n  - b\n",
+      "expected": "while parsing a block mapping\n  in \"<unicode string>\", line 2, column 3:\n      a: 1\n      ^\nexpected <block end>, but found '-'\n  in \"<unicode string>\", line 3, column 3:\n      - b\n      ^"
+    },
+    {
+      "name": "unicode",
+      "source": "known:\n  café: {v: 1}\n  broken: [א, ב\n",
+      "expected": "while parsing a flow sequence\n  in \"<unicode string>\", line 3, column 11:\n      broken: [א, ב\n              ^\nexpected ',' or ']', but got '<stream end>'\n  in \"<unicode string>\", line 4, column 1:\n    \n    ^"
+    },
+    {
+      "name": "crlf",
+      "source": "known:\r\n  a.b: {v: 1\r\n  c.d: [x\r\n",
+      "expected": "while parsing a flow mapping\n  in \"<unicode string>\", line 2, column 8:\n      a.b: {v: 1\n           ^\nexpected ',' or '}', but got ':'\n  in \"<unicode string>\", line 3, column 6:\n      c.d: [x\n         ^"
+    },
+    {
+      "name": "mapping-in-value",
+      "source": "a: b: c\n",
+      "expected": "mapping values are not allowed here\n  in \"<unicode string>\", line 1, column 5:\n    a: b: c\n        ^"
+    },
+    {
+      "name": "more-indented-key",
+      "source": "known:\n  a: 1\n   b: 2\n",
+      "expected": "mapping values are not allowed here\n  in \"<unicode string>\", line 3, column 5:\n       b: 2\n        ^"
+    },
+    {
+      "name": "seq-then-key",
+      "source": "known:\n  - a\n  b: 1\n",
+      "expected": "while parsing a block collection\n  in \"<unicode string>\", line 2, column 3:\n      - a\n      ^\nexpected <block end>, but found '?'\n  in \"<unicode string>\", line 3, column 3:\n      b: 1\n      ^"
+    },
+    {
+      "name": "extra-bracket",
+      "source": "key: [a, b]]\n",
+      "expected": "while parsing a block mapping\n  in \"<unicode string>\", line 1, column 1:\n    key: [a, b]]\n    ^\nexpected <block end>, but found ']'\n  in \"<unicode string>\", line 1, column 12:\n    key: [a, b]]\n               ^"
+    },
+    {
+      "name": "stray-brace",
+      "source": "a: 1\n}\n",
+      "expected": "while parsing a block mapping\n  in \"<unicode string>\", line 1, column 1:\n    a: 1\n    ^\nexpected <block end>, but found '}'\n  in \"<unicode string>\", line 2, column 1:\n    }\n    ^"
+    },
+    {
+      "name": "extra-brace-in-flow",
+      "source": "known:\n  p.a: {v: 1}}\n",
+      "expected": "while parsing a block mapping\n  in \"<unicode string>\", line 2, column 3:\n      p.a: {v: 1}}\n      ^\nexpected <block end>, but found '}'\n  in \"<unicode string>\", line 2, column 14:\n      p.a: {v: 1}}\n                 ^"
+    },
+    {
+      "name": "flow-seq-then-key",
+      "source": "known:\n  p.a: [1, 2\n  p.b: 3\n",
+      "expected": "while parsing a flow sequence\n  in \"<unicode string>\", line 2, column 8:\n      p.a: [1, 2\n           ^\nexpected ',' or ']', but got ':'\n  in \"<unicode string>\", line 3, column 6:\n      p.b: 3\n         ^"
+    },
+    {
+      "name": "single-quote",
+      "source": "known:\n  p.a: 'unterminated\n",
+      "expected": "while scanning a quoted scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: 'unterminated\n           ^\nfound unexpected end of stream\n  in \"<unicode string>\", line 3, column 1:\n    \n    ^"
+    },
+    {
+      "name": "empty-alias",
+      "source": "known:\n  p.a: *\n",
+      "expected": "while scanning an alias\n  in \"<unicode string>\", line 2, column 8:\n      p.a: *\n           ^\nexpected alphabetic or numeric character, but found '\\n'\n  in \"<unicode string>\", line 2, column 9:\n      p.a: *\n            ^"
+    },
+    {
+      "name": "empty-anchor",
+      "source": "known:\n  p.a: &\n",
+      "expected": "while scanning an anchor\n  in \"<unicode string>\", line 2, column 8:\n      p.a: &\n           ^\nexpected alphabetic or numeric character, but found '\\n'\n  in \"<unicode string>\", line 2, column 9:\n      p.a: &\n            ^"
+    },
+    {
+      "name": "root-seq-then-map",
+      "source": "- a\nb: 1\n",
+      "expected": "while parsing a block collection\n  in \"<unicode string>\", line 1, column 1:\n    - a\n    ^\nexpected <block end>, but found '?'\n  in \"<unicode string>\", line 2, column 1:\n    b: 1\n    ^"
+    },
+    {
+      "name": "dash-no-space",
+      "source": "a:\n  - b\n  -c\n",
+      "expected": "while scanning a simple key\n  in \"<unicode string>\", line 3, column 3:\n      -c\n      ^\ncould not find expected ':'\n  in \"<unicode string>\", line 4, column 1:\n    \n    ^"
+    },
+    {
+      "name": "unknown-tag",
+      "source": "known:\n  p.a: !tag x\n",
+      "expected": "could not determine a constructor for the tag '!tag'\n  in \"<unicode string>\", line 2, column 8:\n      p.a: !tag x\n           ^"
+    },
+    {
+      "name": "tab-in-key",
+      "source": "known:\n  p\t.a: 1\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 2, column 4:\n      p\t.a: 1\n       ^"
+    },
+    {
+      "name": "three-docs",
+      "source": "a: 1\n---\nb: 2\n---\nc: 3\n",
+      "expected": "expected a single document in the stream\n  in \"<unicode string>\", line 1, column 1:\n    a: 1\n    ^\nbut found another document\n  in \"<unicode string>\", line 2, column 1:\n    ---\n    ^"
+    },
+    {
+      "name": "doc-end-then-content",
+      "source": "a: 1\n...\nb: 2\n",
+      "expected": "expected '<document start>', but found '<block mapping start>'\n  in \"<unicode string>\", line 3, column 1:\n    b: 2\n    ^"
+    },
+    {
+      "name": "unknown-escape",
+      "source": "known:\n  p.a: \"x\\qy\"\n",
+      "expected": "while scanning a double-quoted scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: \"x\\qy\"\n           ^\nfound unknown escape character 'q'\n  in \"<unicode string>\", line 2, column 11:\n      p.a: \"x\\qy\"\n              ^"
+    },
+    {
+      "name": "short-unicode-escape",
+      "source": "known:\n  p.a: \"\\u12\"\n",
+      "expected": "while scanning a double-quoted scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: \"\\u12\"\n           ^\nexpected escape sequence of 4 hexadecimal numbers, but found '\"'\n  in \"<unicode string>\", line 2, column 11:\n      p.a: \"\\u12\"\n              ^"
+    },
+    {
+      "name": "seq-then-scalar",
+      "source": "- a\nb\n",
+      "expected": "while scanning a simple key\n  in \"<unicode string>\", line 2, column 1:\n    b\n    ^\ncould not find expected ':'\n  in \"<unicode string>\", line 3, column 1:\n    \n    ^"
+    },
+    {
+      "name": "doc-end-then-seq",
+      "source": "a: 1\n...\n- b\n",
+      "expected": "expected '<document start>', but found '<block sequence start>'\n  in \"<unicode string>\", line 3, column 1:\n    - b\n    ^"
+    },
+    {
+      "name": "doc-end-then-seq-of-maps",
+      "source": "a: 1\n...\n- b: 1\n",
+      "expected": "expected '<document start>', but found '<block sequence start>'\n  in \"<unicode string>\", line 3, column 1:\n    - b: 1\n    ^"
+    },
+    {
+      "name": "short-byte-escape",
+      "source": "known:\n  p.a: \"\\x1\"\n",
+      "expected": "while scanning a double-quoted scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: \"\\x1\"\n           ^\nexpected escape sequence of 2 hexadecimal numbers, but found '\"'\n  in \"<unicode string>\", line 2, column 11:\n      p.a: \"\\x1\"\n              ^"
+    },
+    {
+      "name": "short-long-escape",
+      "source": "known:\n  p.a: \"\\U1234\"\n",
+      "expected": "while scanning a double-quoted scalar\n  in \"<unicode string>\", line 2, column 8:\n      p.a: \"\\U1234\"\n           ^\nexpected escape sequence of 8 hexadecimal numbers, but found '\"'\n  in \"<unicode string>\", line 2, column 11:\n      p.a: \"\\U1234\"\n              ^"
+    },
+    {
+      "name": "bom-flow",
+      "source": "﻿known:\n  a.b: {v: 1\n  c.d: [unclosed\n",
+      "expected": "while parsing a flow mapping\n  in \"<unicode string>\", line 2, column 8:\n      a.b: {v: 1\n           ^\nexpected ',' or '}', but got ':'\n  in \"<unicode string>\", line 3, column 6:\n      c.d: [unclosed\n         ^"
+    },
+    {
+      "name": "bom-first-line",
+      "source": "﻿known: {a: 1",
+      "expected": "while parsing a flow mapping\n  in \"<unicode string>\", line 1, column 8:\n    ﻿known: {a: 1\n            ^\nexpected ',' or '}', but got '<stream end>'\n  in \"<unicode string>\", line 1, column 13:\n    ﻿known: {a: 1\n                 ^"
+    },
+    {
+      "name": "bom-tab",
+      "source": "﻿known:\n\tp.a: 1\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 2, column 1:\n    \tp.a: 1\n    ^"
+    },
+    {
+      "name": "bom-first-line-tab",
+      "source": "﻿a:\t1\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 1, column 3:\n    ﻿a:\t1\n       ^"
+    },
+    {
+      "name": "directive-name-tab",
+      "source": "%YAML\t1.1\n---\na: 1\n",
+      "expected": "while scanning a directive\n  in \"<unicode string>\", line 1, column 1:\n    %YAML\t1.1\n    ^\nexpected alphabetic or numeric character, but found '\\t'\n  in \"<unicode string>\", line 1, column 6:\n    %YAML\t1.1\n         ^"
+    },
+    {
+      "name": "tag-directive-name-tab",
+      "source": "%TAG\t! tag:x,2000:\n---\na: 1\n",
+      "expected": "while scanning a directive\n  in \"<unicode string>\", line 1, column 1:\n    %TAG\t! tag:x,2000:\n    ^\nexpected alphabetic or numeric character, but found '\\t'\n  in \"<unicode string>\", line 1, column 5:\n    %TAG\t! tag:x,2000:\n        ^"
+    },
+    {
+      "name": "directive-trailing-tab",
+      "source": "%YAML 1.1\t# c\n---\na: 1\n",
+      "expected": "while scanning a directive\n  in \"<unicode string>\", line 1, column 1:\n    %YAML 1.1\t# c\n    ^\nexpected a digit or ' ', but found '\\t'\n  in \"<unicode string>\", line 1, column 10:\n    %YAML 1.1\t# c\n             ^"
+    },
+    {
+      "name": "flow-tab-then-bad-char",
+      "source": "known: {a: 1,\t@b}\n",
+      "expected": "while scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"<unicode string>\", line 1, column 14:\n    known: {a: 1,\t@b}\n                 ^"
+    }
+  ]
+}

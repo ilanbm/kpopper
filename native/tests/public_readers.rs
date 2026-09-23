@@ -520,6 +520,249 @@ fn actual_open_reports_an_empty_workspace_and_explicit_missing_record() {
 }
 
 #[test]
+fn open_refuses_a_named_record_that_is_not_there_on_stderr() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let output = cli(&root, &["open", "missing.yaml"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "The requested record is unavailable: {}\n",
+            root.join("missing.yaml").display()
+        )
+    );
+}
+
+fn no_record_here(name: &str) -> String {
+    format!(
+        "{name}: no record here. Run this from the directory the record sits in, or name the record file as an argument.\n"
+    )
+}
+
+#[test]
+fn a_record_that_is_not_there_is_refused_as_the_python_reader_refuses_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let private = root.join("private");
+    fs::write(root.join("other.yaml"), "known:\n  x.y: {v: 1}\n").unwrap();
+    for (args, named) in [
+        (vec!["check"], "GROUNDING.yaml"),
+        (vec!["--frozen", "check"], "GROUNDING.yaml"),
+        (vec!["pull", "x.y"], "GROUNDING.yaml"),
+        (vec!["--frozen", "pull", "x.y"], "GROUNDING.yaml"),
+        (vec!["affects", "x.y"], "GROUNDING.yaml"),
+        (vec!["--frozen", "affects", "x.y"], "GROUNDING.yaml"),
+        (vec!["assess", "x.y"], "GROUNDING.yaml"),
+        (vec!["export", "x.y"], "GROUNDING.yaml"),
+        (vec!["set", "x.y", "2"], "GROUNDING.yaml"),
+        (vec!["review", "d.x"], "GROUNDING.yaml"),
+        (vec!["consolidate", "--dry-run"], "GROUNDING.yaml"),
+        (vec!["check", "missing.yaml"], "missing.yaml"),
+        (vec!["check", "./missing.yaml"], "./missing.yaml"),
+        (vec!["check", "MISSING.YAML"], "MISSING.YAML"),
+        (vec!["check", "other.yaml", "missing.yaml"], "missing.yaml"),
+        (vec!["pull", "x.y", "missing.yaml"], "missing.yaml"),
+        (vec!["affects", "x.y", "missing.yaml"], "missing.yaml"),
+        (
+            vec!["assess", "x.y", "--record", "missing.yaml"],
+            "missing.yaml",
+        ),
+        (
+            vec!["export", "x.y", "--record", "missing.yaml"],
+            "missing.yaml",
+        ),
+        (vec!["add", "x.z", "v=1", "missing.yaml"], "missing.yaml"),
+        (
+            vec!["consolidate", "--dry-run", "missing.yaml"],
+            "missing.yaml",
+        ),
+    ] {
+        let output = cli(root, &args, &private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            no_record_here(named),
+            "{args:?}"
+        );
+    }
+    assert!(!root.join("GROUNDING.yaml").exists());
+    assert!(!root.join("missing.yaml").exists());
+
+    let output = cli(root, &["--json", "check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], no_record_here("GROUNDING.yaml"));
+    // The Hub keeps its own framing and exit status around the same reason.
+    let output = cli(root, &["experimental", "hub"], &private);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "kpop experimental hub: {}",
+            no_record_here("GROUNDING.yaml")
+        )
+    );
+}
+
+#[test]
+fn a_configured_simple_record_that_is_not_there_is_named_in_full() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let private = root.join("private");
+    let git = Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["init", "-q", "-b", "main"])
+        .output()
+        .unwrap();
+    assert!(git.status.success());
+    fs::create_dir_all(root.join(".git/kpopper/project")).unwrap();
+    fs::create_dir_all(root.join("notes")).unwrap();
+    fs::write(
+        root.join(".git/kpopper/project/project.json"),
+        r#"{"version": 1, "mode": "simple", "record": "notes/knowledge.yaml", "publication": null, "generation": 0}"#,
+    )
+    .unwrap();
+    // A live read takes the project's one record for the entry names at its root, and for
+    // the record named as it is.
+    let configured = root.join("notes/knowledge.yaml");
+    for args in [
+        vec!["check"],
+        vec!["check", "GROUNDING.yaml"],
+        vec!["check", "notes/knowledge.yaml"],
+        vec!["pull", "x.y"],
+        vec!["assess", "x.y"],
+        vec!["set", "x.y", "2"],
+    ] {
+        let output = cli(&root, &args, &private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            no_record_here(configured.to_str().unwrap()),
+            "{args:?}"
+        );
+    }
+    // A frozen read takes the files as the command gave them, and so does a read from
+    // below the project's root.
+    let output = cli(&root, &["--frozen", "check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        no_record_here("GROUNDING.yaml")
+    );
+    let output = cli(&root.join("notes"), &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        no_record_here("GROUNDING.yaml")
+    );
+    assert!(!configured.exists());
+    // The record keeps the root's entry name: it is still named in full.
+    fs::write(
+        root.join(".git/kpopper/project/project.json"),
+        r#"{"version": 1, "mode": "simple", "record": "GROUNDING.yaml", "publication": null, "generation": 0}"#,
+    )
+    .unwrap();
+    let output = cli(&root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        no_record_here(root.join("GROUNDING.yaml").to_str().unwrap())
+    );
+}
+
+const BROKEN_YAML: &str = "known:\n  a.b: {v: 1\n  c.d: [unclosed\n";
+fn broken_yaml_refusal(name: &str) -> String {
+    format!(
+        "{name}: the record is not valid YAML.\nwhile parsing a flow mapping\n  in \"{name}\", line 2, column 8:\n      a.b: {{v: 1\n           ^\nexpected ',' or '}}', but got ':'\n  in \"{name}\", line 3, column 6:\n      c.d: [unclosed\n         ^\n"
+    )
+}
+
+#[test]
+fn a_record_that_does_not_parse_is_refused_with_the_line_and_column() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let private = root.join("private");
+    let entry = root.join("GROUNDING.yaml");
+    fs::write(&entry, BROKEN_YAML).unwrap();
+    let baseline = root.join("baseline.json");
+    let (baseline, record) = (baseline.to_str().unwrap(), entry.to_str().unwrap());
+    for args in [
+        vec!["check"],
+        vec!["--frozen", "check"],
+        vec!["pull", "a.b"],
+        vec!["--frozen", "pull", "a.b"],
+        vec!["affects", "a.b"],
+        vec!["open"],
+        vec!["--frozen", "open"],
+        vec!["assess", "a.b"],
+        vec!["export", "a.b"],
+        vec!["add", "x.y", "v=1"],
+        vec!["set", "a.b", "2"],
+        vec!["consolidate", "--dry-run"],
+        vec!["mark", baseline, record],
+    ] {
+        let output = cli(root, &args, &private);
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            broken_yaml_refusal("GROUNDING.yaml"),
+            "{args:?}"
+        );
+    }
+    assert_eq!(fs::read_to_string(&entry).unwrap(), BROKEN_YAML);
+
+    let output = cli(root, &["--json", "check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], broken_yaml_refusal("GROUNDING.yaml"));
+    let output = cli(root, &["experimental", "hub"], &private);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "kpop experimental hub: {}",
+            broken_yaml_refusal("GROUNDING.yaml")
+        )
+    );
+
+    // A file the record points to is named as the command line would name it, and a
+    // record found above the current directory by its full path.
+    fs::write(&entry, "also: notes/more.yaml\nknown:\n  x.y: {v: 1}\n").unwrap();
+    fs::create_dir_all(root.join("notes")).unwrap();
+    fs::write(root.join("notes/more.yaml"), BROKEN_YAML).unwrap();
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        broken_yaml_refusal("notes/more.yaml")
+    );
+    fs::write(&entry, BROKEN_YAML).unwrap();
+    let output = cli(&root.join("notes"), &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    let full = root.canonicalize().unwrap().join("GROUNDING.yaml");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        broken_yaml_refusal(full.to_str().unwrap())
+    );
+
+    // A tab where PyYAML takes none is refused where it stands.
+    fs::write(&entry, "known:\n\tp.a: 1\n").unwrap();
+    let output = cli(root, &["check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "GROUNDING.yaml: the record is not valid YAML.\nwhile scanning for the next token\nfound character '\\t' that cannot start any token\n  in \"GROUNDING.yaml\", line 2, column 1:\n    \tp.a: 1\n    ^\n"
+    );
+}
+
+#[test]
 fn actual_seed_case_and_legacy_negative_budget_remain_distinct_from_filenames() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().canonicalize().unwrap();
