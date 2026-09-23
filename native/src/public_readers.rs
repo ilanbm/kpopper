@@ -336,17 +336,192 @@ fn orientation(source: &crate::ordinary_source::Source) -> Vec<String> {
 pub fn unreadable_record(failure: &crate::Error) -> bool {
     crate::ordinary_fields::explains_unreadable(failure)
 }
+/// What a read command prints on stderr when it fails, and its exit status. With
+/// --json the same text travels: wrapped for check, pull and affects, as open's `error`.
+pub fn failure(command: &str, options: &Options, error: &crate::Error) -> (String, i32) {
+    if unreadable_record(error)
+        || error
+            .0
+            .contains("is not an entry or a prefix in this record.")
+        || command == "pull" && options.from_ref.is_some()
+    {
+        return (format!("{error}\n"), 1);
+    }
+    (format!("kpop {command}: {error}\n"), 2)
+}
+/// What a read returns. Only `open` builds its reply differently: the command's text
+/// follows the view with the followups and mapping lines, JSON is its own object, and
+/// the session opener takes the view alone because it adds its own followups line.
+/// The other readers return their text, which the command line wraps for --json.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reply {
+    Text,
+    Json,
+    View,
+}
 pub fn run_auto(
     command: &str,
     options: &Options,
     cwd: &Path,
     mode: ReadMode,
-    as_json: bool,
+    reply: Reply,
 ) -> Result<C::Output> {
-    let cwd = cwd.canonicalize()?;
-    let (paths, _) = files(options, &cwd, command)?;
-    let runtime = W::runtime_for_paths(&paths, &cwd, options.profile.as_deref())?;
-    run(command, options, &cwd, mode, as_json, runtime.as_ref())
+    let mut taken = None;
+    let mut read = || {
+        let cwd = cwd.canonicalize()?;
+        let runtime =
+            |paths: &[PathBuf]| W::runtime_for_paths(paths, &cwd, options.profile.as_deref());
+        run(command, options, &cwd, mode, reply, &runtime, &mut taken)
+    };
+    match read() {
+        Err(error) if command == "open" && reply == Reply::Json => {
+            unopened(options, cwd, mode, &error, taken.as_deref())
+        }
+        result => result,
+    }
+}
+/// The files a read takes, and the subjects that name no file. `open` in a workspace
+/// whose record is missing or no readable file takes the location it found and reports it.
+fn read_paths(
+    command: &str,
+    options: &Options,
+    cwd: &Path,
+    location: &W::Location,
+) -> Result<(Vec<PathBuf>, Vec<String>)> {
+    if command == "open"
+        && options.subjects.is_empty()
+        && matches!(location.status.as_str(), "missing" | "unavailable")
+    {
+        return Ok((vec![location.record.clone()], vec![]));
+    }
+    files(options, cwd, command)
+}
+/// The fields `open` reports before it reads a record: the workspace, the record it
+/// found or the one it was given, and the workspace's mapping task.
+fn opening_fields(
+    location: &W::Location,
+    options: &Options,
+    paths: &[PathBuf],
+    seeds: &[String],
+    inventory: &mut Inventory,
+) -> Result<J> {
+    crate::require(
+        seeds.is_empty(),
+        "Record filenames must have a .yaml or .yml extension.",
+    )?;
+    let mut data =
+        json!({"workspace":location.workspace,"record":location.record,"status":location.status});
+    if !options.subjects.is_empty() {
+        data["record"] = json!(paths[0]);
+        data["status"] = json!(if paths[0].is_file() {
+            "found"
+        } else {
+            "unavailable"
+        });
+    }
+    match mapping(location, inventory) {
+        Ok(Some(v)) => data["mapping"] = v,
+        Err(e) => data["warning"] = json!(e.0),
+        _ => {}
+    }
+    Ok(data)
+}
+/// `open` on an ordinary record, around the view the reader produced.
+fn opened(
+    mut data: J,
+    view: String,
+    digest: Option<String>,
+    workspace: &Path,
+    reply: Reply,
+) -> Result<C::Output> {
+    if reply == Reply::View {
+        return Ok(C::Output {
+            text: view,
+            code: 0,
+        });
+    }
+    let mut text = view.clone();
+    match crate::session_admin::followup_summary(workspace) {
+        Ok(Some(summary)) => {
+            text.push_str(&format!("\n{summary}"));
+            data["followups"] = json!(summary);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            text.push_str(&format!("\nFollowups unavailable: {error}"));
+            data["followups_error"] = json!(error.0);
+        }
+    }
+    if let Some(state) = data["mapping"]["mapping"].as_str() {
+        text.push_str(&format!("\nMapping: {state}"));
+    }
+    if reply == Reply::Text {
+        return Ok(C::Output {
+            text: text.trim_end().to_owned() + "\n",
+            code: 0,
+        });
+    }
+    if let Some(digest) = digest {
+        data["record_sha256"] = json!(digest);
+    }
+    data["view"] = json!(view);
+    // The view is read from the record itself, never from a checked session.
+    data["checked"] = json!(false);
+    Ok(C::Output {
+        text: serde_json::to_string_pretty(&data)? + "\n",
+        code: 0,
+    })
+}
+/// Whether the core/v1 reader takes the record: its capabilities declare that profile.
+fn core_record(paths: &[PathBuf]) -> Result<bool> {
+    let mut inventory = Inventory::default();
+    let document = crate::ordinary_document::load(paths, &mut inventory, true)?;
+    let capabilities =
+        crate::ordinary_fields::capabilities(&document.source.projected(), None)?.try_typed()?;
+    Ok(!document.members.is_empty() && string_is(&map(&capabilities)?["profile"], "core/v1"))
+}
+/// `open --json` after a failure: the fields known before the read and, once an ordinary
+/// record was located, an empty view, with the text-mode failure as `error`. The digest
+/// taken before the read is named only while the entry still holds those bytes: a record
+/// that changed during the failed read was read by no one. The core/v1 reader refuses the
+/// opener's options before it reads anything, so that refusal carries the error alone.
+fn unopened(
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    error: &crate::Error,
+    taken: Option<&str>,
+) -> Result<C::Output> {
+    let (message, code) = failure("open", options, error);
+    let located = || -> Result<J> {
+        let cwd = cwd.canonicalize()?;
+        let location = W::locate(&cwd, mode)?;
+        let (paths, seeds) = read_paths("open", options, &cwd, &location)?;
+        let mut inventory = Inventory::default();
+        let mut data = opening_fields(&location, options, &paths, &seeds, &mut inventory)?;
+        if data["status"] == "missing" || data["status"] == "unavailable" {
+            return Ok(data);
+        }
+        if options.profile.is_some() || core_record(&paths).unwrap_or(false) {
+            let refused =
+                options.chars.is_some() || options.budget.is_some() || options.host.is_some();
+            return Ok(if refused { json!({}) } else { data });
+        }
+        if let (Some(taken), [entry]) = (taken, paths.as_slice())
+            && crate::identity::sha256(&inventory.read(entry)?) == taken
+        {
+            data["record_sha256"] = json!(taken);
+        }
+        data["view"] = json!("");
+        data["checked"] = json!(false);
+        Ok(data)
+    };
+    let mut data = located().unwrap_or_else(|_| json!({}));
+    data["error"] = json!(message.trim());
+    Ok(C::Output {
+        text: serde_json::to_string_pretty(&data)? + "\n",
+        code,
+    })
 }
 
 pub fn run(
@@ -354,33 +529,19 @@ pub fn run(
     options: &Options,
     cwd: &Path,
     mode: ReadMode,
-    as_json: bool,
-    runtime: Option<&Runtime>,
+    reply: Reply,
+    load_runtime: &dyn Fn(&[PathBuf]) -> Result<Option<Runtime>>,
+    taken: &mut Option<String>,
 ) -> Result<C::Output> {
+    let as_json = reply == Reply::Json;
     let cwd = cwd.canonicalize()?;
     let location = W::locate(&cwd, mode)?;
-    let (paths, seeds) = files(options, &cwd, command)?;
+    let (paths, seeds) = read_paths(command, options, &cwd, &location)?;
     let mut inventory = Inventory::default();
     let mut data =
         json!({"workspace":location.workspace,"record":location.record,"status":location.status});
     if command == "open" {
-        crate::require(
-            seeds.is_empty(),
-            "Record filenames must have a .yaml or .yml extension.",
-        )?;
-        if !options.subjects.is_empty() {
-            data["record"] = json!(paths[0]);
-            data["status"] = json!(if paths[0].is_file() {
-                "found"
-            } else {
-                "unavailable"
-            });
-        }
-        match mapping(&location, &mut inventory) {
-            Ok(Some(v)) => data["mapping"] = v,
-            Err(e) => data["warning"] = json!(e.0),
-            _ => {}
-        }
+        data = opening_fields(&location, options, &paths, &seeds, &mut inventory)?;
         if data["status"] == "unavailable" || data["status"] == "missing" {
             let unavailable = data["status"] == "unavailable";
             let mut message = if unavailable {
@@ -413,7 +574,16 @@ pub fn run(
                 code: i32::from(unavailable),
             });
         }
+        // `open --json` names the entry bytes it reads. They are taken before the read and
+        // verified with everything else after it, so a write that carries the digest back
+        // is refused once the record has changed since.
+        if as_json && let [entry] = paths.as_slice() {
+            *taken = Some(crate::identity::sha256(&inventory.read(entry)?));
+        }
     }
+    // Resources are selected from the record, once there is one to read.
+    let loaded = load_runtime(&paths)?;
+    let runtime = loaded.as_ref();
     let capture =
         source_capture::capture_ordinary_source_with_runtime(&paths, &cwd, mode, None, runtime)?;
     if let Some(reference) = options.from_ref.as_deref() {
@@ -528,6 +698,9 @@ pub fn run(
             W::locate(&cwd, mode)? == location,
             "workspace changed while reading it; retry",
         )?;
+        if command == "open" {
+            return opened(data, output, taken.clone(), &location.workspace, reply);
+        }
         return Ok(C::Output {
             text: output,
             code: 0,
