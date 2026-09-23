@@ -3,13 +3,14 @@ import base64
 import copy
 import datetime
 import multiprocessing
+import os
 import queue
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts import pending_grounding as G, project_modes as M
+from scripts import pending_grounding as G, project_modes as M, workspace as W
 
 
 def capture_process(root, index, same=False):
@@ -346,6 +347,32 @@ class StoreTests(Repository):
         M.git(self.root, 'config', 'gpg.program', '/nonexistent/signing-program')
         receipt = self.capture()
         self.assertNotIn(b'gpgsig', M.git(self.root, 'cat-file', '-p', receipt['commit']).stdout)
+
+    def test_inherited_repository_variables_cannot_move_a_capture(self):
+        # Hooks, `rebase --exec` and aliases in a linked worktree inherit its GIT_DIR.
+        other = self.base / 'other'
+        other.mkdir()
+        M.git(other, 'init', '-b', 'trunk')
+        seeded = G.Store(other).capture(fixture_bundle(), event_id='seed', contribution_id='limit',
+                                        shareability='project')
+        values = {'GIT_DIR': other / '.git', 'GIT_WORK_TREE': other, 'GIT_COMMON_DIR': other / '.git',
+                  'GIT_OBJECT_DIRECTORY': other / '.git/objects',
+                  'GIT_ALTERNATE_OBJECT_DIRECTORIES': other / '.git/objects'}
+        self.assertEqual(set(values), set(W.REPOSITORY_VARIABLES))
+        for key, value in values.items():
+            with self.subTest(key):
+                root = self.base / key.lower()
+                root.mkdir()
+                M.git(root, 'init', '-b', 'trunk')
+                with patch.dict(os.environ, {key: str(value)}):
+                    project = M.Project(root)
+                    receipt = G.Store(project).capture(fixture_bundle(), event_id='hook',
+                                                       contribution_id='limit', shareability='project')
+                self.assertEqual((project.root, project.common), (root, root / '.git'))
+                self.assertEqual(G.Store(root).head(), receipt['ledger_commit'])
+                self.assertEqual(M.git(root, 'rev-list', '--objects', '--missing=error',
+                                       receipt['ledger_commit'], check=False).returncode, 0)
+                self.assertEqual(G.Store(other).head(), seeded['ledger_commit'])
 
     def test_tree_builder_refuses_both_orders_of_path_collision(self):
         oid = self.store._write_blob(b'x')

@@ -1,11 +1,11 @@
 ---
 name: ground
-description: "Read the project's knowledge record before answering from memory or from the files. Use before answering about the project's state, a number, a date, a decision, a source, a deadline or what was agreed - even a casual 'what's the situation with X' or 'is that quote still current' - because the recorded answer, with its source, beats a fresh search of the tree; before changing a value the record may hold; and whenever the session opener or a grounding line names entries. Runs pull, affects and check, reads what hypotheses and other branches propose, and searches when a question maps to no name. A missing id is not absence. Not for showing the record's page (the hub skill). Requests come in any language."
+description: "Read the project's knowledge record before answering from memory or from the files. Use before answering about the project's state, a number, a date, a decision, a source, a deadline or what was agreed - even a casual 'what's the situation with X' or 'is that quote still current'; before changing a recorded value; and whenever the opener or a grounding line names entries. After finding relevant IDs, prefer kpop context to read them with their declared dependencies and checks. Uses pull for concise readings or when the checked reader is unavailable, affects for changed inputs, and search when no ID is known. A missing id is not absence. Not for showing the record's page (the hub skill). Requests come in any language."
 ---
 
 # Ground
 
-The record answers two questions a session cannot answer reliably in its head: what is known here now, with its sources, and what a change reaches. Ask it before restating a value, a date or a decision from memory, and before changing one. Run `kpop` (or its `kpopper` alias) from the native runtime. Prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`; do not guess a path or silently use PATH, pip or Python. Explicit Python compatibility mode uses the active plugin's `scripts/cli.py` only when `KPOPPER_RUNTIME=python` is set. [The method's reference](../kpopper/references/method.md#finding-the-reader) describes the installed copy.
+The record answers what is known here, with its sources, and what a change reaches. Ask it before restating or changing a recorded value. Run `kpop` (or its `kpopper` alias) from the native runtime, using the exact `KPOPPER_AGENT_CONTEXT.command` when supplied; examples abbreviate it as `kpop`. Do not guess a path or silently use PATH, pip or Python. Explicit Python compatibility mode uses the active plugin's `scripts/cli.py` only with `KPOPPER_RUNTIME=python`. [The method's reference](../kpopper/references/method.md#finding-the-reader) locates the installed copy.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:ground` or "ground from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
@@ -48,18 +48,18 @@ Folding a repair into the turn that records it hides both from the person watchi
 cannot tell bookkeeping from a change to their project, and the repair's minutes read as
 the method's cost.
 
-`open` also prints **what the record holds** — the namespace, not the values: `mtg (11) ·
-pay (4) · c50 (9) · …`. Use a known namespace directly; otherwise discover candidates
-with the checked-session search below or local source search.
-A record kept under letters says what they stand for in its head (`meta.prefixes`), and the
-opener prints that legend beside the namespace - `prefixes: d=decision · m=measurement` - as
-the page's namespace bar shows the words.
+`open` names what the record holds, not its values: `mtg (11) · pay (4) · …`.
+Use a known namespace directly; otherwise use checked search or local source search.
+Letter prefixes are explained by `meta.prefixes`; the opener and page print that legend.
 
-**A second command runs when the work starts, not before:** `provenance.py affects <seed>` for
-what a change reaches, or `provenance.py pull <seed>` to ground yourself on the subject itself —
-where the seed is the prefix or entry the question maps to. Their first message is the seed,
-which is why this cannot be folded into the first command — it does not exist yet when the
-session opens. If they only said hello, it never runs at all.
+**Once the request is known, find relevant IDs and prefer `kpop context <id>`.** It reads
+those records with their declared dependencies and checks; it is graph context, not chat
+history. For example, `kpop context task.release --depth 1 --tokens 2000`. No prior open is
+required; pass `--revision REV` when reusing a checked view. Expand omitted bodies as needed.
+Use `pull <id|prefix>` for a concise reading, or when the checked reader is unavailable;
+name that limitation rather than installing or enabling a runtime just to answer.
+For consequences, use `context <changed-id> --direction impact` or `affects <changed-id>`.
+Choose the changed input or decision, not automatically the terminal task. A greeting needs no read.
 
 **If a question does not map to a name, the lookup is incomplete.** Names and topic labels
 do not establish that the subject is absent. When checked sessions are configured, use
@@ -95,7 +95,8 @@ See [project modes](../../docs/project-modes.md).
 ```bash
 kpop open                             # what to read instead of the whole record
 kpop check                            # does the record still hold together
-kpop affects <entry> [entry ...]      # what a change reaches
+kpop context <id> [id ...]            # exact records, dependencies and checks
+kpop affects <changed-id> [...]       # what a changed input or decision reaches
 kpop pull <entry|prefix> [...]        # values with sources, and what rests on them
 kpop pull <seed> --from <ref>         # what another branch's record proposes, beside
 kpop watch shared                     # shared external observations, from any branch

@@ -38,7 +38,27 @@ Search results contain references, not evidence excerpts. Existing reads preserv
 
 ## Read a declared neighborhood
 
-Use explicit context reads when a relevant record's premises or dependents would help the task:
+After identifying relevant records, use `kpop context` to read their declared neighborhood:
+
+```sh
+kpop context d.choice
+kpop context d.choice --depth 2 --tokens 2000
+kpop context m.reading --direction impact --max-nodes 16
+```
+
+This captures the current record and defaults to support depth 1 and 2,000 reference
+tokens. It needs no AI conversation, known task object, or preceding `session open`.
+Supply 1–8 exact IDs or `node:ID` handles; discover them with the map or search first.
+`--revision REV_FROM_OPEN` preserves an explicit checked view and rejects stale inputs.
+`--input`, `--project`, `--state`, `--profile`, `--assessment-profile`, `--encoding` and
+`--no-settings` retain the existing reader's routing. It does not enable a runtime,
+change a record's interpretation, apply proposals, or certify source truth.
+The private cache must be writable. In a restricted agent sandbox, use
+`--state /path/to/allowed/private-directory` or an allowed `XDG_STATE_HOME`;
+the record itself remains unchanged.
+
+The same checked-reader prerequisites apply. If unavailable, use `pull`/`affects` and
+state that limitation. The existing transport spelling remains supported:
 
 ```sh
 kpop session context --revision REV_FROM_OPEN --id d.choice --direction support --depth 2 --tokens 2000
