@@ -353,7 +353,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     if entry.exists() {
         drop(_lock);
         drop(route);
-        let result = crate::direct_history::write(&original, &cwd, &action)?;
+        let (result, notice) = crate::direct_history::write(&original, &cwd, &action)?;
         if string_is(&map(&result)?["state"], "private draft") {
             return Ok(format!(
                 "{}\n",
@@ -361,7 +361,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             ));
         }
         return Ok(format!(
-            "history committed: {} ({kind} {})\n",
+            "{notice}history committed: {} ({kind} {})\n",
             text(&map(&result)?["operation"])?,
             options.subject
         ));

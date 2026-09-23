@@ -192,6 +192,8 @@ pub fn start_mark(cwd: &Path, payload: &Value, mode: ReadMode) -> Result<()> {
 
 /// Stop always reassesses; the private delivery ledger decides which messages are
 /// fresh. An unavailable assessment is reported to the caller, not treated as proof.
+/// A workspace without a record has nothing to assess: its empty mark only waits
+/// for the session's first write.
 fn diagnostics(payload: &Value, host: Option<&str>, mode: ReadMode) -> Result<Output> {
     require(payload.is_object(), "invalid_hook_payload")?;
     let Some(sid) = payload["session_id"].as_str().filter(|s| valid_session(s)) else {
@@ -214,6 +216,12 @@ fn diagnostics(payload: &Value, host: Option<&str>, mode: ReadMode) -> Result<Ou
         });
     }
     let location = W::locate(&cwd, mode)?;
+    if location.status == "missing" {
+        return Ok(Output {
+            text: String::new(),
+            code: 0,
+        });
+    }
     let ground =
         private_json(&tmp.join(format!("kpopper-ground-{sid}.json"))).unwrap_or(Value::Null);
     run(

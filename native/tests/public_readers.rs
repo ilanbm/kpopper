@@ -910,6 +910,92 @@ fn a_hypothesis_whose_fields_tie_over_the_base_is_named_with_the_fields() {
     );
 }
 
+fn git(root: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+fn commit_record(root: &Path, record: &str, message: &str) {
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    git(root, &["add", "GROUNDING.yaml"]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            message,
+        ],
+    );
+}
+
+#[test]
+fn a_branch_record_whose_fields_tie_is_read_over_this_one_as_a_hypothesis_is() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    git(root, &["init", "-q", "-b", "main"]);
+    let base = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";
+    // The other branch adds a judgment that says what it rests on under another name, so
+    // on its own its record cannot say which field is its dependency field.
+    commit_record(
+        root,
+        &format!("{base}  d.b:\n    verdict: b\n    depends: [local.two]\n"),
+        "branch",
+    );
+    git(root, &["branch", "other"]);
+    commit_record(root, base, "base");
+
+    // Laid over this record the two fields still tie: the branch is named with the
+    // reason, and this record's own pull follows.
+    let output = cli(
+        root,
+        &["pull", "--from", "other", "d.a"],
+        &root.join("private"),
+    );
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "! hypothesis other cannot be read over the base: two fields fit 'deps' (rests_on, depends) and this tool does not guess. Add to the record: schema: deps: <field name>\nlocal.one: 1\n+ d.a: a\n    holds\n    wrong_if: local.one > 5\n\naffects <entry> shows what a change reaches\n"
+    );
+
+    // Once this record rests a second judgment on its own field, the tie is the
+    // branch's alone: over this record its roles read, and what it adds is shown.
+    let current = format!(
+        "{base}  d.c:\n    verdict: c\n    rests_on: [local.two]\n    seen: {{local.two: 2}}\n    wrong_if: local.two > 5\n"
+    );
+    commit_record(root, &current, "second judgment");
+    let output = cli(
+        root,
+        &["pull", "--from", "other", "d"],
+        &root.join("private"),
+    );
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "d.b:  - held by other\nlocal.one: 1\nlocal.two: 2\n+ d.a: a\n    holds\n    wrong_if: local.one > 5\n+ d.c: c\n    holds\n    wrong_if: local.two > 5\n\naffects <entry> shows what a change reaches\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        current
+    );
+}
+
 #[test]
 fn export_and_the_write_commands_tell_the_refusal_in_the_record_s_order() {
     let temp = tempfile::tempdir().unwrap();

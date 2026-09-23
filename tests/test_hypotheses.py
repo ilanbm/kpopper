@@ -517,6 +517,29 @@ class TheWritePathForks(unittest.TestCase):
             self.assertIn("seen: {heat.boiler_kw: 36, heat.loss_kw: 35}", h)
             self.assertEqual(rec.read_text(encoding="utf-8"), before)
 
+    def test_review_in_a_hypothesis_refuses_a_judgment_written_on_one_line(self):
+        # a line written under it would be read as another judgment of the hypothesis
+        # (four spaces) or break its file (two)
+        judgment = 'verdict: known, requires: [api.limit], fails_if: "api.limit > 100"'
+        for pad in ("  ", "    "):
+            for body, field in ((judgment, "seen"),
+                                (judgment + ', seen: {api.limit: 10}, reviewed: "2025-12-01"', "reviewed")):
+                with tempfile.TemporaryDirectory() as d:
+                    rec = pathlib.Path(d) / "GROUNDING.yaml"
+                    base = f"known:\n{pad}api.limit: {{v: 10}}\n"
+                    rec.write_text(base, encoding="utf-8")
+                    h = pathlib.Path(d) / ".kpopper" / "hypotheses" / "limit.yaml"
+                    h.parent.mkdir(parents=True)
+                    text = f'hypothesis: {{born: "2025-12-01"}}\n\njudgments:\n{pad}d.w: {{{body}}}\n'
+                    h.write_text(text, encoding="utf-8")
+                    code, out, err = run(SCRIPTS / "provenance.py", "review", "d.w", "--as-of", "2026-01-01",
+                                         "--hypothesis", "limit", rec)
+                    self.assertEqual(code, 1, (pad, body, out + err))
+                    self.assertIn(f"refused - d.w is written on one line, and review writes {field}: as a "
+                                  "line of its own", out + err)
+                    self.assertEqual(h.read_text(encoding="utf-8"), text)
+                    self.assertEqual(rec.read_text(encoding="utf-8"), base)
+
     def test_a_superseding_verdict_replaces_the_standing_judgment(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
