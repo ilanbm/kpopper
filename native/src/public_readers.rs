@@ -245,6 +245,11 @@ fn orientation(source: &crate::ordinary_source::Source) -> Vec<String> {
         vec![format!("  {}", places.join(" | "))]
     }
 }
+/// Whether a failure is the reader's account of a record whose field roles it cannot
+/// read. Commands print it as it stands, with exit status 1, as the Python reader does.
+pub fn unreadable_record(failure: &crate::Error) -> bool {
+    crate::ordinary_fields::explains_unreadable(failure)
+}
 pub fn run_auto(
     command: &str,
     options: &Options,

@@ -161,11 +161,31 @@ pub(super) fn prepare(
     route: &WriteRoute,
     source_body: Option<&Source>,
 ) -> Result<Preparation> {
+    prepare_mode(action, route, source_body, false)
+}
+
+/// An Advanced project's local ordinary record keeps its named proposals
+/// beside it, as a Simple one does; only the Simple-mode routing gate differs.
+pub(super) fn prepare_advanced_local(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+) -> Result<Preparation> {
+    prepare_mode(action, route, source_body, true)
+}
+
+fn prepare_mode(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+    advanced_local: bool,
+) -> Result<Preparation> {
     let input = map(action)?;
     let group = text(field(input, "hypothesis")?)?.to_owned();
     hypothesis_name(&s(&group))?;
     require(
-        string_is(&map(route.config())?["mode"], "simple"),
+        string_is(&map(route.config())?["mode"], "simple")
+            || advanced_local && route.pending_required()?,
         "legacy_authoring_requires_simple_project",
     )?;
     let entry = route
@@ -259,6 +279,9 @@ pub(super) fn prepare(
     }
     let mut candidate_action = action.clone();
     candidate_action.insert("as_of".into(), s(&stamp));
+    // A declared scope routed this write into the proposal; a named set writes
+    // only the value, its day, reason and citation.
+    candidate_action.remove("_record_scope");
     let candidate = if kind == "review" {
         let body = map(&reader.raw()[&id])?;
         let seen = dependency_snapshot(&reader, body)?;
@@ -337,6 +360,17 @@ pub(super) fn prepare(
         "add" => {
             let mut body = field(&action, "body")?.clone();
             let mut ordered = preserve_order(&body, source_body);
+            if let Some(scope) = map(&body).ok().and_then(|m| m.get("scope"))
+                && let Source::Map(fields) = &mut ordered
+                && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
+            {
+                // Only a routed scope is missing from the authored body, and
+                // routing declares it as a mapping; an authored scope is kept.
+                *value = match source_body.and_then(|body| body.get("scope")) {
+                    Some(written) => written.clone(),
+                    None => ordered_scope(scope)?,
+                };
+            }
             if let Ok(m) = map(&body)
                 && m.contains_key(deps)
             {

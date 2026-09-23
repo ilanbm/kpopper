@@ -310,7 +310,8 @@ pub struct GateData {
 }
 
 /// Python-compatible ordinary graph semantics for checked-reader sessions.
-/// Source bytes and handles are attached by the captured-session adapter.
+/// Source bytes, handles and contribution statuses are attached by the
+/// captured-session adapter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OrdinarySessionData {
     pub nodes: BTreeMap<String, serde_json::Value>,
@@ -319,7 +320,6 @@ pub struct OrdinarySessionData {
     pub sections: BTreeMap<String, String>,
     pub scope: String,
     pub native_hypotheses: serde_json::Value,
-    pub contributions: serde_json::Value,
     pub knowledge_conflicts: serde_json::Value,
 }
 
@@ -611,13 +611,12 @@ impl<'a> Projection<'a> {
                     layers.insert(name.clone(), world);
                 }
                 Err(e) => {
+                    let why = crate::ordinary_semantics::layer_failure(&e);
                     unread_failures.push(format!(
-                        "{label} {name} cannot be read over the base: {}",
-                        e.0
+                        "{label} {name} cannot be read over the base: {why}"
                     ));
                     unread.push(format!(
-                        "! hypothesis {name} cannot be read over the base: {}",
-                        e.0
+                        "! hypothesis {name} cannot be read over the base: {why}"
                     ));
                     continue;
                 }
@@ -671,7 +670,9 @@ impl<'a> Projection<'a> {
             .collect()
     }
 
-    pub fn session_data(&self) -> Result<OrdinarySessionData> {
+    /// `pending` names the entries a pending contribution added to the document
+    /// this projection reads; an entry the record itself holds is never pending.
+    pub fn session_data(&self, pending: &BTreeSet<String>) -> Result<OrdinarySessionData> {
         let collections = F::collections(&self.base.reader.document)?;
         let sections = collections
             .iter()
@@ -682,15 +683,6 @@ impl<'a> Projection<'a> {
             .iter()
             .filter(|(section, _)| ["open", "questions"].contains(&section.as_str()))
             .flat_map(|(_, members)| members.keys().cloned())
-            .collect::<BTreeSet<_>>();
-        let pending = self
-            .hypotheses
-            .values()
-            .filter_map(|hypothesis| map(hypothesis).ok())
-            .filter(|hypothesis| string_is(get(hypothesis, "kind"), "contribution"))
-            .filter_map(|hypothesis| hypothesis.get("ids").and_then(|ids| list(ids).ok()))
-            .flatten()
-            .filter_map(|id| text(id).ok().map(str::to_owned))
             .collect::<BTreeSet<_>>();
         let mut nodes = BTreeMap::new();
         let mut topics = BTreeMap::new();
@@ -823,17 +815,6 @@ impl<'a> Projection<'a> {
             .filter(|scope| !scope.is_empty())
             .unwrap_or_else(|| "Epistemic project record.".into());
         let native_hypotheses = R::json_value(&V::Map(self.hypotheses.clone()), 0)?;
-        let contributions = serde_json::Value::Array(
-            self.hypotheses
-                .values()
-                .filter_map(|hypothesis| {
-                    let hypothesis = map(hypothesis).ok()?;
-                    string_is(get(hypothesis, "kind"), "contribution")
-                        .then(|| hypothesis.get("head").cloned().unwrap_or(V::Null))
-                })
-                .map(|value| R::json_value(&value, 0))
-                .collect::<Result<_>>()?,
-        );
         let knowledge_conflicts = serde_json::json!(self.base.reader.knowledge_conflicts);
         Ok(OrdinarySessionData {
             nodes,
@@ -842,7 +823,6 @@ impl<'a> Projection<'a> {
             sections,
             scope,
             native_hypotheses,
-            contributions,
             knowledge_conflicts,
         })
     }

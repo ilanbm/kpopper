@@ -2,7 +2,8 @@
 
 use crate::{
     Error, Result,
-    history_contract::map,
+    history_contract::{field, map, string_is, text},
+    history_view::map_mut,
     identity::sha256,
     ordinary_reader,
     public_ordinary_readers::{OrdinarySessionData, Projection},
@@ -332,19 +333,20 @@ impl OrdinarySession {
         navigation: Option<&V>,
     ) -> Result<Self> {
         let context = capture.ordinary_context();
+        let (document, contributed) = with_contributions(capture)?;
         let projection = Projection::new(
-            capture.ordinary_document(),
+            document.as_ref().unwrap_or(capture.ordinary_document()),
             map(capture.hypotheses())?,
             map(&map(&context)?["conflicts"])?,
             capture.reader_lines()?,
             Some(runtime),
         )?;
-        let data = projection.session_data()?;
+        let data = projection.session_data(&contributed.keys().cloned().collect())?;
         let mut directory_keys = source_directory_keys(capture.source(), &data.sections);
         let program = runtime
             .ordinary_program()
             .ok_or_else(|| Error("ordinary expression program is not configured".into()))?;
-        let mut graph = graph(capture, data, project, program.provenance()?)?;
+        let mut graph = graph(capture, data, &contributed, project, program.provenance()?)?;
         apply_profile(&mut graph, navigation)?;
         let navigation = navigation_index(&graph)?;
         graph["navigation_routes"] = json!(navigation.groups);
@@ -1378,9 +1380,68 @@ impl OrdinarySession {
     }
 }
 
+/// The source handle of a pending contribution, which the entries it adds name
+/// as their `record_source`.
+fn contribution_handle(name: &str) -> String {
+    format!(
+        "contribution.{}",
+        name.strip_prefix("pending-").unwrap_or(name)
+    )
+}
+
+/// The record as the session reads it, with each pending contribution's new
+/// entries added. Contributions apply in ledger order: the first to add an id
+/// supplies its body, and an id the record already holds keeps the record's
+/// body. Returns the document when anything was added, and the source handle
+/// of each added id.
+fn with_contributions(capture: &CapturedSource) -> Result<(Option<V>, BTreeMap<String, String>)> {
+    let hypotheses = map(capture.hypotheses())?;
+    let mut document = capture.ordinary_document().clone();
+    let held = map(&document)?
+        .iter()
+        .filter(|(section, _)| !["meta", "schema", "record", "also"].contains(&section.as_str()))
+        .filter_map(|(_, members)| map(members).ok())
+        .flat_map(|members| members.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    let mut added = BTreeMap::new();
+    for contribution in capture.contributions() {
+        let revision = text(field(map(contribution)?, "revision")?)?;
+        let name = format!("pending-{revision}");
+        // A retired contribution keeps its status but is no longer layered.
+        let Some(hypothesis) = hypotheses.get(&name).map(map).transpose()? else {
+            continue;
+        };
+        if !hypothesis
+            .get("kind")
+            .is_some_and(|kind| string_is(kind, "contribution"))
+        {
+            continue;
+        }
+        for (collection, members) in
+            crate::reasoning_fields::collections(field(hypothesis, "doc")?)?
+        {
+            for (id, body) in members {
+                if held.contains(&id) || added.contains_key(&id) {
+                    continue;
+                }
+                let section = map_mut(&mut document)?
+                    .entry(collection.clone())
+                    .or_insert(V::Null);
+                if !matches!(section, V::Map(_)) {
+                    *section = V::Map(Default::default());
+                }
+                map_mut(section)?.insert(id.clone(), body);
+                added.insert(id, contribution_handle(&name));
+            }
+        }
+    }
+    Ok(((!added.is_empty()).then_some(document), added))
+}
+
 fn graph(
     capture: &CapturedSource,
     data: OrdinarySessionData,
+    contributed: &BTreeMap<String, String>,
     project: &str,
     provenance: J,
 ) -> Result<J> {
@@ -1406,9 +1467,40 @@ fn graph(
             handles.insert(path.clone(), handle);
         }
     }
+    // Every layered contribution is a source, whether or not it added an entry.
+    for (name, hypothesis) in map(capture.hypotheses())? {
+        let hypothesis = map(hypothesis)?;
+        if !hypothesis
+            .get("kind")
+            .is_some_and(|kind| string_is(kind, "contribution"))
+        {
+            continue;
+        }
+        let dumped = crate::public_ordinary_readers::python_safe_dump_unicode(
+            &crate::history_yaml::OrdinaryValue::from_typed(field(hypothesis, "doc")?),
+        )?;
+        let digest = sha256(&dumped);
+        let dumped = String::from_utf8(dumped)
+            .map_err(|_| Error("contribution source is not UTF-8".into()))?;
+        sources.insert(
+            contribution_handle(name),
+            json!({"text":dumped,"sha256":digest,"location":text(field(hypothesis, "path")?)?}),
+        );
+    }
     let native_hypotheses = session_hypotheses(capture, data.native_hypotheses)?;
+    // Every observed contribution status, not only those still layered as
+    // hypotheses: a retired contribution stays visible with its state.
+    let contributions = capture
+        .contributions()
+        .iter()
+        .map(|contribution| ordinary_reader::json_value(contribution, 0))
+        .collect::<Result<Vec<_>>>()?;
     let mut nodes = Map::from_iter(data.nodes);
     for (id, node) in &mut nodes {
+        if let Some(handle) = contributed.get(id) {
+            node["record_source"] = json!(handle);
+            continue;
+        }
         let section = data.sections.get(id);
         let origin = section
             .and_then(|section| capture.origins().get(section))
@@ -1421,7 +1513,7 @@ fn graph(
         }
     }
     Ok(
-        json!({"nodes":nodes,"edges":data.edges,"topics":data.topics,"scope":data.scope,"sources":sources,"native_hypotheses":native_hypotheses,"contributions":data.contributions,"knowledge_conflicts":data.knowledge_conflicts,"read_mode":map(&capture.ordinary_context())?["read_mode"].to_json()?,"origin":provenance,"project_context":project}),
+        json!({"nodes":nodes,"edges":data.edges,"topics":data.topics,"scope":data.scope,"sources":sources,"native_hypotheses":native_hypotheses,"contributions":contributions,"knowledge_conflicts":data.knowledge_conflicts,"read_mode":map(&capture.ordinary_context())?["read_mode"].to_json()?,"origin":provenance,"project_context":project}),
     )
 }
 

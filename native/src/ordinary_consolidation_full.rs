@@ -54,7 +54,6 @@ fn captured_projection<'a>(
         capture.reader_lines()?,
         runtime,
     )
-    .map_err(|e| ordinary_error(capture.ordinary_document(), e))
 }
 fn read_hypotheses(
     capture: &CapturedSource,
@@ -79,14 +78,7 @@ fn read_hypotheses(
         Reader::new(&merged, runtime).map_err(|e| {
             error(&format!(
                 "refused - hypothesis {name} cannot be read over the base: {}",
-                ordinary_error(&merged, e)
-                    .0
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .chars()
-                    .take(160)
-                    .collect::<String>()
+                crate::ordinary_semantics::layer_failure(&e)
             ))
         })?;
         let path = PathBuf::from(text(get(h, "path"))?);
@@ -150,8 +142,7 @@ pub(super) fn preview(
         conflicts,
         vec![],
         request.runtime,
-    )
-    .map_err(|e| ordinary_error(request.document, e))?;
+    )?;
     let mut pool = BTreeMap::new();
     for (name, h) in request.hypotheses {
         if get(h, "kind") == &s("contribution") {
@@ -173,14 +164,7 @@ pub(super) fn preview(
         Reader::new(&merged, request.runtime).map_err(|e| {
             error(&format!(
                 "refused - hypothesis {name} cannot be read over the base: {}",
-                ordinary_error(&merged, e)
-                    .0
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .chars()
-                    .take(160)
-                    .collect::<String>()
+                crate::ordinary_semantics::layer_failure(&e)
             ))
         })?;
         let raw = entries(doc)?;

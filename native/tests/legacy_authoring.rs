@@ -103,6 +103,36 @@ fn add_set_and_review_match_python_18_source_images_and_output() {
 }
 
 #[test]
+fn an_added_scope_text_is_written_as_given() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    write(&root.join("GROUNDING.yaml"), &fixture("simple-before.yaml"));
+    let output = success(run(
+        &root,
+        &[
+            "add",
+            "p.gamma",
+            "v=3",
+            "scope=local experiment",
+            "--as-of",
+            "2026-09-19",
+            "GROUNDING.yaml",
+        ],
+    ));
+    assert_eq!(output.as_bytes(), fixture("add.stdout"));
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        String::from_utf8(fixture("add-after.yaml"))
+            .unwrap()
+            .replace(
+                "    note: \"new value\"\n",
+                "    scope: \"local experiment\"\n"
+            )
+    );
+    assert_no_history(&root);
+}
+
+#[test]
 fn set_replaces_source_citation_in_the_same_guarded_write() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
