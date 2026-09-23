@@ -1061,6 +1061,18 @@ sources:
          characters on this record against the 2,000-character slot, so KPOPPER_AGENT_CONTEXT never
          reached the agent; a record born by add that could not be opened under a host; a consolidate
          hint that counted pending contributions - are fixed by PR #184."
+  s.2026_09_23_snapshot_named_reviewed:
+    name: "A snapshot named reviewed survives review in both writers"
+    asked: "Paraphrased maintainer request - a record may declare schema {snapshot: reviewed}, and
+            review also treats a field called reviewed as the judgment's review day. Reproduce
+            outside any git repository, decide between keeping the snapshot and writing no day or
+            refusing such a schema at write time, ask the maintainer to choose, make the Python and
+            native writers agree, and add a test in each runtime."
+    of: "Reproduced on 92703f3 outside any repository. The Python review rewrote the snapshot, then
+         wrote the day over it and exited 0, and check then failed with the judgment never checked.
+         The native review refused with invalid_date_field, and where the judgment had no
+         dependencies it wrote the day over an empty snapshot. The maintainer chose to keep the
+         snapshot and write no day."
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -6660,6 +6672,34 @@ judgments:
       m.skill_bytes_before: 64011
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
+  d.snapshot_named_reviewed_is_kept:
+    name: "A snapshot named reviewed is kept, and review writes no day into it"
+    verdict: "When a record names its snapshot field reviewed, review rewrites that snapshot and
+              writes no review day, in the base and in named hypotheses, in both writers. A reversal
+              the judgment's trail records then stays open, and the review says so in one line."
+    because: "The snapshot is what a review leaves behind. A day written over it left the judgment
+              never checked and turned check red, while the day only acknowledges a reversal, which
+              the review can name instead. Refusing the review would leave every judgment in such a
+              record unreviewable until someone renamed the field by hand, in the schema and in every
+              judgment. A snapshot that is not a mapping, such as a day an earlier review wrote over
+              it, is read as never checked by both readers, and both writers now replace it with the
+              snapshot."
+    rests_on: [d.replacement_leaves_a_trail, d.review_names_what_it_reads]
+    reopened_by: "A record that names its snapshot reviewed carries a judgment a person has read
+                  since it was decided again, and its reversal notice keeps asking with no way to
+                  answer it."
+    from: s.2026_09_23_snapshot_named_reviewed
+    seen:
+      d.replacement_leaves_a_trail: "every replacement of a judgment - by add once the standing
+                                     one's condition fired, or by the fold - keeps one line on the
+                                     judgment saying what ended the decision it replaced and the day,
+                                     and the replaced body whole beside the record; a dependency
+                                     dropped is named with its reason, and a write that returns to a
+                                     kept version is told so"
+      d.review_names_what_it_reads: "review takes a judgment's id or a section's title; an
+                                     arrangement's review also rewrites the shape of the one tab, or
+                                     of the tab serving a session source it rests on; nothing
+                                     refreshes a snapshot by itself"
   d.spill_on_every_tab:
     rests_on: [s.2026_09_03_coverage, d.author_free_build_guarantees]
     verdict: "what fell through the arrangement - flagged judgments nothing picked, and what a
