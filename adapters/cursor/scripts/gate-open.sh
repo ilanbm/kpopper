@@ -31,11 +31,33 @@ else
   SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd -P)
   ROOT=$(CDPATH= cd -- "$SELF_DIR/../../.." && pwd -P) 2>/dev/null || ROOT=""
 fi
-PROVENANCE_PY="$ROOT/scripts/provenance.py"
-if [ ! -f "$PROVENANCE_PY" ]; then
-  echo "gate-open.sh: can't find scripts/provenance.py under '$ROOT' - set KPOPPER_ROOT to the kpopper checkout" >&2
+RUNTIME="$ROOT/scripts/native_runtime.sh"
+if [ ! -f "$RUNTIME" ]; then
+  echo "gate-open.sh: can't find scripts/native_runtime.sh under '$ROOT' - set KPOPPER_ROOT to the kpopper checkout" >&2
   exit 0
 fi
 
-printf '%s' "$IN" | python3 "$ROOT/scripts/session_start.py" --cursor
+case "${KPOPPER_RUNTIME:-rust}" in
+  python) printf '%s' "$IN" | python3 "$ROOT/scripts/session_start.py" --cursor; exit 0 ;;
+  rust) ;;
+  *) printf 'gate-open.sh: KPOPPER_RUNTIME must be rust or python\n' >&2; exit 0 ;;
+esac
+
+# Cursor gives the agent additional_context and never shows it standard error, so a
+# missing runtime is reported there, with the command that installs it.
+json_text() {
+  sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | awk 'NR > 1 { printf "\\n" } { printf "%s", $0 }'
+}
+if ! REPORT=$(sh "$RUNTIME" --path 2>&1 >/dev/null); then
+  TEXT=$(printf '%s\n%s' "$REPORT" \
+    'kpopper did not open this session, and its hooks never download or install the runtime.')
+  case "$REPORT" in
+    *'Install this active copy: '*)
+      TEXT=$(printf '%s\n%s %s' "$TEXT" "Offer to run the command above (it downloads this version's runtime from" \
+        'the kpopper GitHub release and checks its SHA-256), then ask the user to start a new session.') ;;
+  esac
+  printf '{"additional_context": "%s"}\n' "$(printf '%s' "$TEXT" | json_text)"
+  exit 0
+fi
+printf '%s' "$IN" | sh "$RUNTIME" --exec session-start --cursor
 exit 0

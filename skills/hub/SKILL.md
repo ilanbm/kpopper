@@ -9,7 +9,7 @@ This application is experimental and optional. Request it explicitly or honor a 
 
 The page is a visual way to read the record: hover anything for where it came from, click to walk to a dependency. Build it with the native `kpop` command and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH, pip or Python; use the active plugin's Python dispatcher only when `KPOPPER_RUNTIME=python` is explicit. [The method's reference](../kpopper/references/method.md#finding-the-reader) describes the installed copy.
 
-`render_page.py` turns any record into one self-contained HTML file, in two tabs: **Record**,
+`kpop experimental hub` turns any record into one self-contained HTML file, in two tabs: **Record**,
 which nobody writes, and **Now**, the arrangement this session chose. What makes it worth
 opening is the provenance layer - hover anything for where it came from, click to walk to a
 dependency, and see the graph around it outlined in place.
@@ -21,7 +21,7 @@ kpop experimental hub --verify               # deterministic, no browser
 kpop experimental hub --checks .kpopper/build/page.html   # the browser checks, on a page already written
 ```
 
-The same three, by the scripts themselves - `R` is the reader's path, found as [the method's reference](../kpopper/references/method.md#finding-the-reader) says:
+In Python compatibility mode (`KPOPPER_RUNTIME=python`) only, the same three by the scripts themselves - `R` is the reader's path, found as [the method's reference](../kpopper/references/method.md#finding-the-reader) says:
 
 ```bash
 python3 "$(dirname "$R")/render_page.py" > page.html        # the page

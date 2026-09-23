@@ -111,6 +111,8 @@ LANES = {
         # Read at test time and by the packaging steps.
         "scripts/reasoning/native/*", "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
         "tests/fixtures/page/*", "install.sh", "install.ps1", "VERSION",
+        # The Cursor opener its tests run against this build.
+        "adapters/cursor/scripts/gate-open.sh", "scripts/native_runtime.sh",
         "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
         # Run from the checkout, with everything they import: the host hooks its tests compare,
