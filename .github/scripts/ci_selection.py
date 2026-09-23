@@ -114,6 +114,9 @@ LANES = {
         # The Cursor opener its tests run against this build.
         "adapters/cursor/scripts/gate-open.sh", "scripts/native_runtime.sh",
         "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
+        # The host adapter scripts and manifests its tests run.
+        "adapters/gemini/scripts/session-start.sh", "adapters/gemini/hooks/hooks.json",
+        "adapters/copilot/cli/hook.sh", "adapters/windsurf/hooks.json",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
         # Run from the checkout, with everything it imports: the setup that builds the Lean program
         # its tests load. The Python hooks its tests compare run from the pinned v0.10.0 reference.
