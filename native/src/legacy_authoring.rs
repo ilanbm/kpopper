@@ -1678,10 +1678,10 @@ fn prepare_with_inventory_mode(
                     }
                 }
                 if let Some(scope) = authored.get("scope") {
-                    let scope = source_body
-                        .and_then(|body| body.get("scope"))
-                        .cloned()
-                        .unwrap_or(ordered_scope(scope)?);
+                    let scope = match source_body.and_then(|body| body.get("scope")) {
+                        Some(written) => written.clone(),
+                        None => ordered_scope(scope)?,
+                    };
                     if let Some((_, value)) = fields.iter_mut().find(|(field, _)| field == "scope") {
                         *value = scope;
                     } else {
@@ -2428,21 +2428,24 @@ pub(crate) fn write(
 }
 
 /// Advanced projects may intentionally keep an ordinary local record for
-/// unannotated, feature-scoped, and unclear-scoped work. This path retains the
-/// legacy authority guard while bypassing only the Simple-mode routing gate.
+/// unannotated, feature-scoped, and unclear-scoped work, with named hypotheses
+/// beside it. This path retains the legacy authority guard while bypassing only
+/// the Simple-mode routing gate.
 pub(crate) fn write_advanced_local(
     action: &V,
     route: &WriteRoute,
     source_body: Option<&Source>,
 ) -> Result<String> {
     require(route.pending_required()?, "legacy_authoring_requires_advanced_project")?;
-    require(
-        map(action)?
-            .get("hypothesis")
-            .is_none_or(|value| *value == V::Null),
-        "legacy_named_hypothesis_authoring_requires_history",
-    )?;
-    match prepare_pending_candidate(action, route, source_body)? {
+    let prepared = if map(action)?
+        .get("hypothesis")
+        .is_some_and(|v| *v != V::Null)
+    {
+        legacy_named::prepare_advanced_local(action, route, source_body)?
+    } else {
+        prepare_pending_candidate(action, route, source_body)?
+    };
+    match prepared {
         Preparation::Draft { output, .. } => Ok(output),
         Preparation::Mutation(prepared) => publish_with_committed(prepared, route, None, true),
     }
@@ -2905,6 +2908,79 @@ mod tests {
                 } else {
                     "known:\n  p.a: {v: 2, of: \"2026-09-19\"}\n"
                 }
+            );
+            assert!(!entry.parent().unwrap().join(prepared.journal).exists());
+        }
+    }
+
+    #[test]
+    fn advanced_named_writes_keep_the_simple_gate_and_recover_both_ways() {
+        for before in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            assert!(
+                std::process::Command::new("git")
+                    .args(["init", "-q"])
+                    .current_dir(temp.path())
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            let entry = temp.path().join("GROUNDING.yaml");
+            fs::write(&entry, "known:\n  p.a: {v: 1}\n").unwrap();
+            let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+            assert!(route.pending_required().unwrap());
+            let action = object([
+                ("kind", s("set")),
+                ("id", s("p.a")),
+                ("value", n("2")),
+                ("as_of", s("2026-09-19")),
+                ("why", V::Null),
+                ("into", V::Null),
+                ("hypothesis", s("alpha")),
+                ("source", V::Null),
+                ("at", V::Null),
+            ]);
+            assert_eq!(
+                legacy_named::prepare(&action, &route, None)
+                    .err()
+                    .unwrap()
+                    .0,
+                "legacy_authoring_requires_simple_project"
+            );
+            let Preparation::Mutation(prepared) =
+                legacy_named::prepare_advanced_local(&action, &route, None).unwrap()
+            else {
+                panic!("expected mutation")
+            };
+            let image = prepared.mutation.files()[0].clone();
+            let inventory = legacy_named::prepare_directories(&prepared).unwrap();
+            let mut verify = |_: &V| verify_prepared_mode(&prepared, &route, &inventory, true);
+            let mut stop = |_: &V| Err(error("injected_after_publication"));
+            assert_eq!(
+                F::publish_legacy(
+                    &prepared.root,
+                    &prepared.journal,
+                    &prepared.mutation,
+                    &mut verify,
+                    Some(&mut stop),
+                )
+                .unwrap_err()
+                .0,
+                "injected_after_publication"
+            );
+            drop(route);
+            let result = recover(std::slice::from_ref(&entry), temp.path(), before).unwrap();
+            assert!(string_is(
+                &map(&result).unwrap()["state"],
+                if before { "restored" } else { "recovered" }
+            ));
+            assert_eq!(
+                F::read(&prepared.root.join(&image.path)).unwrap(),
+                if before { image.before } else { image.after }
+            );
+            assert_eq!(
+                fs::read_to_string(&entry).unwrap(),
+                "known:\n  p.a: {v: 1}\n"
             );
             assert!(!entry.parent().unwrap().join(prepared.journal).exists());
         }
