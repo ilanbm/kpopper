@@ -29,6 +29,9 @@ import release  # noqa: E402 - the version files are read the one way
 
 ROOT = release.ROOT
 CRATE = "kpopper"
+# Who may own the crate. The published bytes can be rebuilt by anyone from the public tag, so a
+# name someone else claimed can serve them too; it is still not this project's crate.
+OWNERS = {"ilanbm"}
 API = os.environ.get("KPOPPER_CRATES_API", "https://crates.io/api/v1")
 # crates.io asks every client to say who it is.
 AGENT = "kpopper release workflow (https://github.com/ilanbm/kpopper)"
@@ -38,8 +41,9 @@ CLAIM = (
     "run stops here until it exists. Check out the tag v{version}; from native/, with the "
     "toolchain native/rust-toolchain.toml pins, run `cargo package --locked --no-verify` and "
     "require `shasum -a 256 target/package/kpopper-{version}.crate` to print {sha256}; then run "
-    "`cargo login` and `cargo publish --locked --no-verify`. Rerun this job: it passes once "
-    "crates.io serves exactly those bytes. Later releases publish from this workflow once "
+    "`cargo login` and `cargo publish --locked --no-verify`. Do it soon: until then anyone can "
+    "publish these bytes under their own name. Rerun this job: it passes once crates.io serves "
+    "exactly those bytes, owned by {owners}. Later releases publish from this workflow once "
     "crates.io trusts it (crate settings, Trusted Publishing: repository ilanbm/kpopper, "
     "workflow publish.yml, environment crates-io)."
 )
@@ -64,35 +68,44 @@ def digest(path):
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
+def served_as(found, expected, version):
+    """Require a registry version record to hold the verified bytes, not yanked."""
+    record = (found or {}).get("version", {})
+    if record.get("checksum") != expected:
+        raise SystemExit(f"crates.io serves {CRATE} {version} with checksum {record.get('checksum')}, "
+                         f"not the verified {expected}")
+    if record.get("yanked") is not False:
+        raise SystemExit(f"crates.io has yanked {CRATE} {version}")
+
+
 def decide(version, crate_file):
     """-> (action, reason) for this version and the bytes verified for it. 'publish': the
     registry holds the crate but not this version; 'published': it serves this version, as
-    exactly these bytes; 'claim': the crate is not there yet. A version served with other bytes
-    stops here: it can never be replaced, so the run must not read as a success."""
+    exactly these bytes and not yanked; 'claim': the crate is not there yet. A crate owned by
+    anyone but OWNERS, or a version served otherwise, stops here: neither can be undone, so the
+    run must not read as a success."""
     expected = digest(crate_file)
     if fetch(f"/crates/{CRATE}") is None:
-        return "claim", f"{CRATE} is not on crates.io yet. " + CLAIM.format(version=version, sha256=expected)
+        return "claim", f"{CRATE} is not on crates.io yet. " + CLAIM.format(
+            version=version, sha256=expected, owners=", ".join(sorted(OWNERS)))
+    owners = {user.get("login") for user in (fetch(f"/crates/{CRATE}/owners") or {}).get("users", [])}
+    if owners != OWNERS:
+        raise SystemExit(f"crates.io lists {sorted(owners)} as the owners of {CRATE}, not {sorted(OWNERS)}")
     found = fetch(f"/crates/{CRATE}/{version}")
     if found is not None:
-        checksum = found.get("version", {}).get("checksum")
-        if checksum != expected:
-            raise SystemExit(f"crates.io serves {CRATE} {version} with checksum {checksum}, "
-                             f"not the verified {expected}")
+        served_as(found, expected, version)
         return "published", f"crates.io already serves {CRATE} {version} as verified (sha256 {expected})"
     return "publish", f"publishing {CRATE} {version} to crates.io (sha256 {expected})"
 
 
 def served(version, crate_file, attempts=30, pause=10):
-    """Wait until the registry serves the version, then require its checksum to be the one
-    of the bytes this workflow verified."""
+    """Wait until the registry serves the version, then require it to be the bytes this workflow
+    verified, not yanked."""
     expected = digest(crate_file)
     for attempt in range(attempts):
         found = fetch(f"/crates/{CRATE}/{version}")
         if found is not None:
-            checksum = found.get("version", {}).get("checksum")
-            if checksum != expected:
-                raise SystemExit(f"crates.io serves {CRATE} {version} with checksum {checksum}, "
-                                 f"not the verified {expected}")
+            served_as(found, expected, version)
             return expected
         if attempt + 1 < attempts:
             time.sleep(pause)

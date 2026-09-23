@@ -410,11 +410,13 @@ class TheCrate(unittest.TestCase):
             crate = pathlib.Path(directory) / "kpopper-1.2.3.crate"
             crate.write_bytes(b"crate")
             verified = hashlib.sha256(b"crate").hexdigest()
+            owned = {"users": [{"login": "ilanbm", "kind": "user"}]}
             answers = {
                 "claim": {"/crates/kpopper": None},
-                "published": {"/crates/kpopper": {},
-                              "/crates/kpopper/1.2.3": {"version": {"checksum": verified}}},
-                "publish": {"/crates/kpopper": {}, "/crates/kpopper/1.2.3": None},
+                "published": {"/crates/kpopper": {}, "/crates/kpopper/owners": owned,
+                              "/crates/kpopper/1.2.3": {"version": {"checksum": verified, "yanked": False}}},
+                "publish": {"/crates/kpopper": {}, "/crates/kpopper/owners": owned,
+                            "/crates/kpopper/1.2.3": None},
             }
             for action, registry in answers.items():
                 with self.subTest(action=action), patch.object(C, "fetch", side_effect=registry.__getitem__):
@@ -423,10 +425,31 @@ class TheCrate(unittest.TestCase):
                     self.assertIn(verified, reason)
                     if action == "claim":
                         self.assertIn("v1.2.3", reason)
-            other = {"/crates/kpopper": {}, "/crates/kpopper/1.2.3": {"version": {"checksum": "0" * 64}}}
-            with patch.object(C, "fetch", side_effect=other.__getitem__):
-                with self.assertRaisesRegex(SystemExit, "not the verified"):
-                    C.decide("1.2.3", crate)
+            refusals = {
+                "not the verified": {"/crates/kpopper/1.2.3": {"version": {"checksum": "0" * 64, "yanked": False}}},
+                "yanked": {"/crates/kpopper/1.2.3": {"version": {"checksum": verified, "yanked": True}}},
+                "as the owners": {"/crates/kpopper/owners": {"users": [{"login": "someone-else", "kind": "user"}]}},
+            }
+            for message, change in refusals.items():
+                registry = {"/crates/kpopper": {}, "/crates/kpopper/owners": owned,
+                            "/crates/kpopper/1.2.3": {"version": {"checksum": verified, "yanked": False}}}
+                registry.update(change)
+                with self.subTest(refused=message), patch.object(C, "fetch", side_effect=registry.__getitem__):
+                    with self.assertRaisesRegex(SystemExit, message):
+                        C.decide("1.2.3", crate)
+
+    def test_only_the_projects_owners_may_hold_the_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            crate = pathlib.Path(directory) / "kpopper-1.2.3.crate"
+            crate.write_bytes(b"crate")
+            for users in ([{"login": "someone-else", "kind": "user"}],
+                          [{"login": "ilanbm", "kind": "user"}, {"login": "github:other:team", "kind": "team"}],
+                          []):
+                registry = {"/crates/kpopper": {}, "/crates/kpopper/owners": {"users": users},
+                            "/crates/kpopper/1.2.3": None}
+                with self.subTest(users=users), patch.object(C, "fetch", side_effect=registry.__getitem__):
+                    with self.assertRaisesRegex(SystemExit, "as the owners"):
+                        C.decide("1.2.3", crate)
 
     def test_registry_answers_other_than_found_or_missing_stop_the_run(self):
         import urllib.error
@@ -446,10 +469,13 @@ class TheCrate(unittest.TestCase):
             crate = pathlib.Path(directory) / "kpopper-1.2.3.crate"
             crate.write_bytes(b"crate")
             verified = hashlib.sha256(b"crate").hexdigest()
-            with patch.object(C, "fetch", return_value={"version": {"checksum": verified}}):
+            with patch.object(C, "fetch", return_value={"version": {"checksum": verified, "yanked": False}}):
                 self.assertEqual(C.served("1.2.3", crate, attempts=1, pause=0), verified)
-            with patch.object(C, "fetch", return_value={"version": {"checksum": "0" * 64}}):
+            with patch.object(C, "fetch", return_value={"version": {"checksum": "0" * 64, "yanked": False}}):
                 with self.assertRaisesRegex(SystemExit, "not the verified"):
+                    C.served("1.2.3", crate, attempts=1, pause=0)
+            with patch.object(C, "fetch", return_value={"version": {"checksum": verified, "yanked": True}}):
+                with self.assertRaisesRegex(SystemExit, "yanked"):
                     C.served("1.2.3", crate, attempts=1, pause=0)
             with patch.object(C, "fetch", return_value=None):
                 with self.assertRaisesRegex(SystemExit, "does not serve"):

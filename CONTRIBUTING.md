@@ -288,16 +288,19 @@ a failed release is made by rerunning its own run rather than by pushing again.
 The release build also builds the crate from its packaged files alone, requires it to be the
 program the release ships (the same adapter and schemas, the same verified resources accepted,
 the platform acceptance flows), and keeps that `.crate`. Once the GitHub release is out, the
-same run publishes it to crates.io as `kpopper`. A version crates.io already serves must be
-exactly those bytes. One it lacks is uploaded by a job that holds a token crates.io issues to
+same run publishes it to crates.io as `kpopper`. crates.io must list exactly the project's
+owners (`ilanbm`), and a version it already serves must be exactly those bytes, not yanked. One
+it lacks is uploaded by a job that holds a token crates.io issues to
 the run (trusted publishing) and runs no repository script; its Cargo runs outside the checkout
 on the pinned toolchain. That job requires Cargo's package of the commit to equal the verified
 bytes before and after the upload, and leaves alone a version already served as those bytes,
 so a rerun never publishes twice. A last job, without that token, checks that the registry
 serves them. crates.io never takes a version back; it can only yank one.
 
-The first version on crates.io claims the name, so an owner publishes it once by hand; until
-then the release run stops at its `crate` job, which names the verified crate's checksum. Check
+The first version on crates.io claims the name, so an owner publishes it once by hand, and
+soon: until then anyone can publish the same bytes under their own account, and the owner check
+would stop every release. Until it exists, the release run stops at its `crate` job, which
+names the verified crate's checksum. Check
 out that release's tag. From `native/`, with the toolchain `native/rust-toolchain.toml` pins,
 run `cargo package --locked --no-verify` and check that `shasum -a 256` of
 `target/package/kpopper-<version>.crate` prints that checksum; then run `cargo login` with a
