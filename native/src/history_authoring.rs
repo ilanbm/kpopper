@@ -586,8 +586,26 @@ pub(crate) fn prepare_inner(
             let mut saw = saw;
             saw.push(text(&claim_id)?.into());
             saw.sort();
-            let body = obj([
-                ("act", s("accept")),
+            // A correction marks the version it replaces as corrected rather than replaced;
+            // an answer pins the exact version of the entry that answered the question.
+            let amend = a
+                .get("amend")
+                .filter(|v| **v != V::Null)
+                .map(text)
+                .transpose()?;
+            require(
+                amend.is_none() || old.is_some(),
+                "unresolved_history_subject",
+            )?;
+            let mut body = obj([
+                (
+                    "act",
+                    s(if amend == Some("correct") {
+                        "correct"
+                    } else {
+                        "accept"
+                    }),
+                ),
                 ("of", claim_id),
                 ("over", over),
                 (
@@ -595,9 +613,15 @@ pub(crate) fn prepare_inner(
                     a.get("why")
                         .filter(|v| truth(v))
                         .map(|v| s(&Authoring::py(v)))
-                        .unwrap_or_else(|| s(&format!("explicit {kind}"))),
+                        .unwrap_or_else(|| s(&format!("explicit {}", amend.unwrap_or(kind.as_str())))),
                 ),
             ]);
+            if amend == Some("answer")
+                && let Some(by) = a.get("answer_by").filter(|v| **v != V::Null)
+            {
+                let (read, _) = self::pins(capture, std::slice::from_ref(by), false)?;
+                map_mut(&mut body)?.insert("read".into(), read);
+            }
             new.push(make_object(
                 subject,
                 "act",

@@ -1460,7 +1460,17 @@ fn prepare_with_inventory_mode(
         .with_layers(groups.clone(), BTreeSet::new())?;
     reader.for_action(action)?;
     let (normalized, notes) = reader.normalize(action)?;
-    let notice = nearest_notice(&reader, &normalized, &document, &inventory)?;
+    // `answer` and `correct` rewrite an entry in place: no sameness candidates, no supersede.
+    let amend = a
+        .get("amend")
+        .filter(|value| **value != V::Null)
+        .map(|value| text(value).map(str::to_owned))
+        .transpose()?;
+    let notice = if amend.is_some() {
+        Default::default()
+    } else {
+        nearest_notice(&reader, &normalized, &document, &inventory)?
+    };
     let mut action = map(&normalized)?.clone();
     let stamp = action_stamp(&action);
     let initial_entries = crate::reasoning_snapshot::entries(&source)?;
@@ -1525,7 +1535,9 @@ fn prepare_with_inventory_mode(
     let mut supersede_old = None::<V>;
     let mut born = false;
     if kind == "add" {
-        collection = Some(collection_for(&reader, &action)?);
+        if amend.is_none() {
+            collection = Some(collection_for(&reader, &action)?);
+        }
         if let Ok(body) = map(field(&action, "body")?) {
             let deps = text(&reader.fields()["deps"])?;
             if body.contains_key(deps) {
@@ -1541,7 +1553,8 @@ fn prepare_with_inventory_mode(
         if born {
             map_mut(action.get_mut("body").unwrap())?.insert("born".into(), s(&stamp));
         }
-        if let Some((_, old)) = entries.get(&id)
+        if amend.is_none()
+            && let Some((_, old)) = entries.get(&id)
             && let Ok(old_map) = map(old)
             && let Ok(deps) = text(&reader.fields()["deps"])
             && old_map.contains_key(deps)
@@ -1708,7 +1721,18 @@ fn prepare_with_inventory_mode(
     output.extend(notes);
     match kind.as_str() {
         "add" => {
-            let mut body = preserve_order(field(&action, "body")?, source_body);
+            // A rewrite in place keeps the entry's own field order unless the command gave one.
+            let template = if amend.is_some() && source_body.is_none() {
+                document
+                    .source
+                    .get(&collection)
+                    .and_then(|members| members.get(&id))
+                    .and_then(ordinary_template)
+            } else {
+                None
+            };
+            let mut body =
+                preserve_order(field(&action, "body")?, source_body.or(template.as_ref()));
             if let Source::Map(fields) = &mut body {
                 let authored = map(field(&action, "body")?)?;
                 for key in ["born", "replaced"] {
@@ -1737,11 +1761,14 @@ fn prepare_with_inventory_mode(
                         fields.push((snapshot.into(), seen_order.clone()));
                     }
                 }
-                if !supersede {
+                if !supersede && amend.is_none() {
                     order_added_fields(fields, source_body, snapshot, born);
                 }
             }
-            if supersede {
+            if let Some(amend) = &amend {
+                replace_entry(&mut lines, &id, &body)?;
+                output.push(format!("{amend} {id}"));
+            } else if supersede {
                 let old = supersede_old.as_ref().unwrap();
                 if let Source::Map(fields) = &mut body {
                     let snapshot = reader.snapshot_field()?;

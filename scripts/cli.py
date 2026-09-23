@@ -18,7 +18,11 @@ straight through to provenance.py; page renders the record and can open what it 
                   add --notify-task TASK_ID to return a native Codex delivery job
   kpop ingest  pending                important findings still needing attention
   kpop review  <id | "section title">  it still holds: seen rewritten from what the record holds
-                  add --hypothesis NAME to any of the three: the write lands in
+  kpop answer  <question> <id> [--why "..."] | <question> --dropped "why"   an open question
+                  closed where it stands, with what answered it and the day
+  kpop correct <id> field=value ... [--unset FIELD]   an entry no commit holds yet (outside
+                  git, one this session wrote) fixed in place; what rests on it is flagged
+                  add --hypothesis NAME to set, add or review: the write lands in
                   .kpopper/hypotheses/NAME.yaml beside the record and the base is not touched -
                   where a write contradicts the base, the refusal names this command
   kpop consolidate [--dry-run] [<hypothesis> ...]   the record with its hypotheses laid over
@@ -49,7 +53,8 @@ except ImportError:
     from applications import APPLICATIONS, ALIASES, show_catalog
 
 HERE = pathlib.Path(__file__).resolve().parent
-READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "same", "distinct")
+READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "answer", "correct",
+        "same", "distinct")
 COMMANDS = {
     "expressions": ('convert TEXT [--predicate] | migrate [--record FILE] [--apply]', "Convert explicit formulas to structured data; preview checked record migration."),
     "search": ('"QUERY" [--record FILE] [--limit N] [--chars N]', "Find local source evidence; read a hit with --read REF --revision REV."),
@@ -64,6 +69,10 @@ COMMANDS = {
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
     "update": ("--file JSON|- [--record FILE] [--state-dir PATH]", "Record one or many changes from a source report now; return applied or retained status."),
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
+    "answer": ("QUESTION ID [--why TEXT] [--as-of DATE] | QUESTION --dropped TEXT",
+               "Close an open question with what answered it, or drop it with the reason."),
+    "correct": ("ID FIELD=VALUE ... [--unset FIELD] [--why TEXT]",
+                "Fix an entry not yet in any commit (outside git: one this session wrote)."),
     "recover": ("[--record FILE] [--rollback]", "Complete an interrupted direct write or restore its exact before images."),
     "history": ("status|reconcile|rebuild|accept|refute|correct|adopt|migrate|capabilities [OPTIONS]", "Inspect, explicitly resolve or adopt history, rebuild a view, or prepare a verified copy."),
     "export": ("ID [ID ...] [--format FORMAT]", "Export a focused readable excerpt with optional Mermaid."),
@@ -195,7 +204,7 @@ def main():
     if not application and cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch", "export", "assess"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpop " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
-        if cmd in {"set", "add", "review", "same", "distinct"}:
+        if cmd in {"set", "add", "review", "answer", "correct", "same", "distinct"}:
             print()
             sys.stdout.flush()
             subprocess.run([sys.executable, str(HERE / "provenance.py"), cmd, "--help"])

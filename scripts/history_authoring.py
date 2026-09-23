@@ -338,11 +338,17 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
         new.append(claim)
         document.setdefault(collection, {})[subject] = copy.deepcopy(body)
         if old is not None or _strict:
+            # A correction marks the version it replaces as corrected rather than replaced; an
+            # answer pins the exact version of the entry that answered the question.
+            amend = action.get('amend')
+            C._require(amend is None or old is not None, 'unresolved_history_subject', subject)
+            act = {'act': 'correct' if amend == 'correct' else 'accept', 'of': claim['id'],
+                   'over': sorted(captured.state['subjects'][subject]['heads']) if old is not None else [],
+                   'because': str(action.get('why') or 'explicit ' + (amend or kind))}
+            if amend == 'answer' and action.get('answer_by') is not None:
+                act['read'] = _pins(captured, [action['answer_by']])
             new.append(C.make_object(subject=subject, kind='act', by=by, on=recorded_at,
-                operation=operation, saw=sorted([*saw, claim['id']]),
-                body={'act': 'accept', 'of': claim['id'],
-                      'over': sorted(captured.state['subjects'][subject]['heads']) if old is not None else [],
-                      'because': str(action.get('why') or 'explicit ' + kind)}))
+                operation=operation, saw=sorted([*saw, claim['id']]), body=act))
     document = _destination(document)
     cap = capabilities(document, profile=cap['profile'])
     # Updates belong to a new immutable template, not to an old claim body.

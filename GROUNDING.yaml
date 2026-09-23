@@ -953,6 +953,14 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_answer_and_correct:
+    name: "Close questions and correct unlanded writes from the command line"
+    asked: "Paraphrased maintainer request: build answer and correct. The maintainer chose that an
+            answered question stays in open: marked with what answered it; that when its answer later
+            moves, open and check flag it for a person; and that correct rewrites only work no commit
+            holds yet (outside git, written by this session), with what rests on it unlanded too and
+            flagged."
+    read: "2026-09-23"
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -4214,6 +4222,29 @@ judgments:
       m.door.opposed_verdicts_named_reversed: 2
       m.door.grounds_changes_named: 2
       m.door.future_dated_readings_refused: 3
+  d.correct_is_for_unlanded_work:
+    name: "Correct only what nobody could have read"
+    rests_on: [s.2026_09_23_answer_and_correct, d.fold_passes_the_one_door]
+    verdict: "correct rewrites an entry in place only while no commit holds it - outside git, while
+              this session wrote it - and while everything resting on it is unlanded by the same
+              test; what rests on it is flagged, never rewritten, and landed work goes to a
+              hypothesis a person takes at the fold."
+    because: "A writer's own slip was refused as a second writer or a re-decision, so sessions
+              edited the file by hand, which a history-backed record refuses outright. A correction
+              nobody could have read replaces nothing anyone relied on; anything already in a commit
+              may have been read, and replacing it stays the person's act
+              {{d.fold_passes_the_one_door}} describes."
+    reopened_by: "A correction reaches work someone else had already read, or sessions still edit
+                  the record by hand to fix what they just wrote."
+    seen:
+      s.2026_09_23_answer_and_correct: "read 2026-09-23"
+      d.fold_passes_the_one_door: "a folded reading passes the one door a written one does, asked
+                                   with the base's own readings: a reading newer than the base's
+                                   enters and a same-day or older one is contested; a verdict, or
+                                   other grounds, laid over a standing judgment folds only when the
+                                   base's own condition has broken it on what the base holds, or when
+                                   a person names the id at the fold; a reversal nobody named is red,
+                                   and the trail says which of the two admitted it"
   d.coverage_printed_never_acted:
     rests_on: [s.2026_09_03_coverage, d.intent_is_a_source, d.metrics_derived_builtin, p.coverage_thresholds]
     verdict: "coverage is counted at every build and check and printed as facts - each intent no tab
@@ -5418,6 +5449,20 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.question_closes_in_place:
+    name: "An open question ends with answer, in place"
+    rests_on: [s.2026_09_23_answer_and_correct]
+    verdict: "An open question ends through answer: it stays in open: with what answered it, what
+              that said and the day, or with the reason it no longer matters; the opener stops
+              counting it, and open and check flag it again when its answer moves, breaks or
+              disappears."
+    because: "A question closed by deleting its line leaves no trace: the six this record closed
+              that way left none, and on a history-backed record a hand deletion locks check, open
+              and every later add. Keeping the question with its answer lets pull show both, and lets
+              the reader notice when the answer moves, the way seen does for a judgment."
+    reopened_by: "Sessions keep deleting answered questions by hand once answer exists, or an answer
+                  that moved goes unflagged by open and check."
+    seen: {s.2026_09_23_answer_and_correct: "read 2026-09-23"}
   d.readme_canvas_placement:
     name: "Place the approved canvas illustration before the closing invitation"
     rests_on: [s.2026_09_20_canvas_placement, q.readme_canvas_metaphor]

@@ -85,6 +85,12 @@ using one is never a failure:
 ```yaml
 open:         # a live question. Not a fact, not yet a judgment. No verdict is owed.
   which_base: "does the bank measure the ratio against price or against its own valuation?"
+  rate_lock:  # closed by `answer rate_lock mtg.lock_policy`; the tool writes answered:
+    question: "does the lock survive a change of lender?"
+    answered:
+      by: mtg.lock_policy
+      said: "the lock is the lender's, not the borrower's"
+      of: "2026-09-18"
 
 judgments:
   blocked_thing:

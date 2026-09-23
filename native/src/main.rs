@@ -61,9 +61,16 @@ enum Command {
     Page(kpop_native::public_hub::Options),
     /// Compatibility alias for experimental annotated-doc.
     Document(kpop_native::public_annotated_document::Options),
+    /// Add a sourced entry or a judgment; the first add creates the record.
     Add(WriteArgs),
+    /// Change one reading's value and see what it reaches.
     Set(WriteArgs),
+    /// Record that a judgment still holds against what the record holds now.
     Review(WriteArgs),
+    /// Close an open question with what answered it, or drop it with the reason.
+    Answer(kpop_native::public_amend::AnswerOptions),
+    /// Fix an entry not yet in any commit (outside git: one this session wrote).
+    Correct(kpop_native::public_amend::CorrectOptions),
     /// Apply one source report atomically and return its durable receipt.
     Update(kpop_native::public_update::Options),
     /// Capture, process and inspect durable asynchronous source reports.
@@ -526,7 +533,9 @@ fn run(args: Args) -> Result<Value> {
             unreachable!()
         }
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
-        Command::Update(_)
+        Command::Answer(_)
+        | Command::Correct(_)
+        | Command::Update(_)
         | Command::Ingest(_)
         | Command::IngestionHook(_)
         | Command::Assess(_)
@@ -674,6 +683,38 @@ fn main() {
         print!("{}", output.stdout);
         eprint!("{}", output.stderr);
         std::process::exit(output.code);
+    }
+    if matches!(args.command, Command::Answer(_) | Command::Correct(_)) {
+        let result = args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)
+            .map_err(kpop_native::Error::from)
+            .and_then(|cwd| match &args.command {
+                Command::Answer(options) => kpop_native::public_amend::answer(options, &cwd),
+                Command::Correct(options) => kpop_native::public_amend::correct(options, &cwd),
+                _ => unreachable!(),
+            });
+        let (stdout, stderr, code) = match result {
+            Ok(output) => (output, String::new(), 0),
+            Err(error) => (String::new(), format!("{error}\n"), 1),
+        };
+        if args.json {
+            let command = if matches!(args.command, Command::Answer(_)) {
+                "answer"
+            } else {
+                "correct"
+            };
+            println!(
+                "{}",
+                json!({"command":command,"exit_code":code,"output":stdout,"error":stderr})
+            );
+        } else {
+            print!("{stdout}");
+            eprint!("{stderr}");
+        }
+        std::process::exit(code);
     }
     if matches!(args.command, Command::Same(_) | Command::Distinct(_)) {
         let output = match args

@@ -995,6 +995,12 @@ impl World<'_> {
     }
     fn describe(&self, id: &str) -> Result<(String, String)> {
         let value = self.reader.raw.get(id).cloned().unwrap_or(V::Null);
+        if crate::public_amend::settled_value(&value)
+            && let Ok(typed) = value.try_typed()
+            && let Some(line) = crate::public_amend::settled_line(id, &typed)
+        {
+            return Ok((line, String::new()));
+        }
         let body = if matches!(value, V::Map(_)) {
             value
         } else {
@@ -1431,7 +1437,12 @@ impl Projection<'_> {
             .into_iter()
             .filter_map(|key| doc.get(key))
             .filter_map(|value| map(value).ok())
-            .flat_map(|values| values.keys())
+            .flat_map(|values| {
+                values
+                    .iter()
+                    .filter(|(_, question)| !crate::public_amend::settled_value(question))
+                    .map(|(id, _)| id)
+            })
             .collect::<BTreeSet<_>>()
             .len();
         let mut summary = format!("{held} entries, {judgments} judgments");
@@ -1509,6 +1520,35 @@ impl Projection<'_> {
                 items.push((40, id.clone(), "nothing evaluable would falsify it".into()));
             }
         }
+        // A question answer closed needs a person again once its answer moves.
+        for key in ["open", "questions"] {
+            if let Some(values) = doc.get(key).and_then(|value| map(value).ok()) {
+                let reader = &self.base.reader;
+                let raw = reader
+                    .raw
+                    .iter()
+                    .filter_map(|(id, body)| body.try_typed().ok().map(|b| (id.clone(), b)))
+                    .collect::<BTreeMap<_, _>>();
+                for (id, question) in values {
+                    let mut falsified = |by: &str, _: &crate::value::TypedValue| {
+                        reader.raw.get(by).is_some_and(|body| {
+                            crate::ordinary_domain_counts::flags(reader, body)
+                                .is_ok_and(|f| f.contains("falsified"))
+                        })
+                    };
+                    if let Ok(question) = question.try_typed()
+                        && let Some(flag) =
+                            crate::public_amend::answer_flag(&question, &raw, &mut falsified)
+                    {
+                        items.push((
+                            72,
+                            id.clone(),
+                            flag.text(&|a, b| apart(&V::from_typed(a), &V::from_typed(b), 28)),
+                        ));
+                    }
+                }
+            }
+        }
         for (id, variants) in &self.disputed {
             items.push((
                 110,
@@ -1565,6 +1605,9 @@ impl Projection<'_> {
         for key in ["open", "questions"] {
             if let Some(values) = doc.get(key).and_then(|value| map(value).ok()) {
                 for (id, value) in values {
+                    if crate::public_amend::settled_value(value) {
+                        continue;
+                    }
                     let line = format!("  ? {id}: {}", py(value));
                     questions.push(if line.chars().count() < 100 {
                         line
@@ -1878,6 +1921,34 @@ impl Projection<'_> {
         for (id, asked, hint) in self.page_unserved(brief)? {
             note.push(format!("{id} is served by no tab - asked: {asked}"));
             note.push(hint);
+        }
+        let answered = map(&self.base.reader.document)?;
+        for key in ["open", "questions"] {
+            if let Some(values) = answered.get(key).and_then(|value| map(value).ok()) {
+                let reader = &self.base.reader;
+                let raw = reader
+                    .raw
+                    .iter()
+                    .filter_map(|(id, body)| body.try_typed().ok().map(|b| (id.clone(), b)))
+                    .collect::<BTreeMap<_, _>>();
+                for (id, question) in values {
+                    let mut falsified = |by: &str, _: &crate::value::TypedValue| {
+                        reader.raw.get(by).is_some_and(|body| {
+                            crate::ordinary_domain_counts::flags(reader, body)
+                                .is_ok_and(|f| f.contains("falsified"))
+                        })
+                    };
+                    if let Ok(question) = question.try_typed()
+                        && let Some(flag) =
+                            crate::public_amend::answer_flag(&question, &raw, &mut falsified)
+                    {
+                        note.push(format!(
+                            "{id}: {}",
+                            flag.text(&|a, b| apart(&V::from_typed(a), &V::from_typed(b), 40))
+                        ));
+                    }
+                }
+            }
         }
         fail.extend(self.unread_failures.clone());
         let mut lines = vec![];
