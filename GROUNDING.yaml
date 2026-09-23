@@ -962,6 +962,17 @@ sources:
          as a control. The crate packaged from 20f9b64 did not build: its build script could not read
          ../scripts/session/lean/Main.lean from inside the package."
     read: "2026-09-23"
+  s.2026_09_23_pending_dry_run:
+    name: "Test the pending findings in the consolidation dry run"
+    asked: "Paraphrased maintainer request: in live mode the consolidation dry run also lays the
+            active pending contributions over the record and reports what would break if they were
+            accepted - contested ids, falsifiers that hold on a pending value, holes - while the
+            frozen run CI makes stays unchanged and nothing is adopted. Shown a worked example first,
+            the maintainer chose a separate pending part after the hypotheses' report, and a red run
+            when a finding would break something once it was clear the red holds up no other work."
+    of: "The two contributions giving api.limit 10 and 11 against a record whose d.x falls above 10
+         were the worked example"
+    read: "2026-09-23"
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -1508,6 +1519,13 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.pending_dry_run:
+    name: "Pending findings in the consolidation dry run"
+    file: "tests/test_consolidate_pending.py"
+    read: "2026-09-23"
+    at: "Each active finding over the record alone and together; red on a finding the base cannot
+         read as it says, a contested id, a falsifier, a hole, a refused reading or a reversal;
+         nothing adopted; a frozen run has no pending part"
   doc.plugin_runtime:
     name: "Explicit Python setup and runtime selection for plugin hooks"
     file: "docs/plugin-runtime.md"
@@ -2336,6 +2354,12 @@ known:
     at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
     of: "2026-09-04"
     measure: hypothesis_thresholds
+  p.live_dry_run_gates:
+    v: 0
+    name: "Automatic runs of the consolidation dry run that read the pending ledger"
+    from: ".github/workflows, .githooks/pre-push and hooks/hooks.json"
+    at: "lines that run consolidate --dry-run without --frozen"
+    measure: live_dry_run_gates
   p.native_batch_budget_refusal:
     name: "Native evaluator refuses an over-budget batch"
     v: "Input and output budget overruns refuse the complete evaluation batch, including a bound
@@ -5300,6 +5324,23 @@ judgments:
       p.record_parsers: 1
       m.prompt_hook_10x_parsing: 1.3
       m.prompt_hook_10x_kept: 0.15
+  d.pending_findings_in_the_dry_run:
+    rests_on: [s.2026_09_23_pending_dry_run, doc.pending_dry_run, p.live_dry_run_gates]
+    verdict: "a live dry run over every hypothesis also tests each active pending finding against
+              the record under its own heading, and is red when accepting one would break something;
+              it adopts nothing, and no fold, commit, merge or frozen run waits on it"
+    because: "A shared finding whose value would flip a recorded falsifier was otherwise reported
+              only inside a knowledge PR, which exists only with publication. Reads already show
+              pending items beside the record without adopting them, and a test that stayed green on
+              them would hold findings to a lower standard than hypotheses. The red clears where it
+              is seen - a wrong finding is rejected with its reason, a right one is read again or
+              accepted - and it holds up nothing else only while no automatic run reads the pending
+              ledger: {{p.live_dry_run_gates}} do."
+    wrong_if: "p.live_dry_run_gates > 0"
+    seen:
+      s.2026_09_23_pending_dry_run: "read 2026-09-23"
+      doc.pending_dry_run: "read 2026-09-23"
+      p.live_dry_run_gates: 0
   d.plugin_descriptions_lead_with_reasoning:
     from: s.2026_09_19_pr_and_plugin_descriptions
     rests_on: [s.2026_09_19_pr_and_plugin_descriptions, d.readme_opens_with_what_it_does, d.html_applications_are_optional]

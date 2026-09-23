@@ -40,14 +40,18 @@ PYTHON_RUNNER = (".github/scripts/ci_execution.py", ".github/requirements-test.t
 RELEASE_ASSETS = (".github/scripts/native_assets.py",)
 # Read by the Python suite beyond the package and its tests, as the audit observed them: hook and
 # plugin surfaces, installers, this repository's own record (the contract, priors and remeasure
-# tests check it), the ignore files the workspace scan honours, and the reasoning workflows the
-# distribution test compares.
+# tests check it), the ignore files the workspace scan honours, the reasoning workflows the
+# distribution test compares, and the workflows and pre-push hook the record's count of automatic
+# dry runs reads when the remeasure test runs its recipes.
 PYTHON_TESTED = PYTHON_PACKAGE + PYTHON_RUNNER + RELEASE_ASSETS + (
     "tests/*", "adapters/*", "hooks/*", "bin/*", ".claude-plugin/*", ".codex-plugin/*",
     "package.json", "LICENSE", "install.sh", "install.ps1", "native/Cargo.toml", "native/Cargo.lock",
     "GROUNDING.yaml", ".kpopper/hypotheses/*", ".kpopper/measure.yaml",
     ".gitignore", "*/.gitignore", ".gitattributes", "examples/scoped-query/*",
     ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
+    ".github/workflows/check.yml", ".github/workflows/native-rust.yml",
+    ".github/workflows/publish.yml", ".github/workflows/release.yml",
+    ".github/workflows/session.yml", ".githooks/pre-push",
 )
 # Compiling the reasoning runtime and auditing what it links.
 RUNTIME_SOURCES = (
