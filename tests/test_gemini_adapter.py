@@ -25,10 +25,12 @@ class GeminiHooks(unittest.TestCase):
         self.adapter = self.plugin / "adapters" / "gemini"
         shutil.copytree(ROOT / "adapters" / "gemini", self.adapter)
         (self.plugin / "scripts").symlink_to(ROOT / "scripts", target_is_directory=True)
+        # The native route is covered by native/tests/host_adapters.rs; these tests check
+        # the Python compatibility hook that the same manifest reaches.
         self.env = {**os.environ, "XDG_STATE_HOME": str(self.root / "state"),
                     "XDG_CONFIG_HOME": str(self.root / "config"),
                     "KPOPPER_SESSION_DISABLE": "1", "TMPDIR": str(self.root),
-                    "KPOPPER_READ_MODE": "frozen"}
+                    "KPOPPER_READ_MODE": "frozen", "KPOPPER_RUNTIME": "python"}
 
     def record(self, broken=False):
         body = '''meta:

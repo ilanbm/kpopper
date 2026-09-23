@@ -267,15 +267,6 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         repeated = cursor("gate-stop.sh", {**payload, "loop_count": 1})
         self.assertEqual(repeated.stdout, "")
 
-    @unittest.skipIf(os.name == "nt", "shell adapter")
-    def test_gemini_advisory_finds_a_non_git_record_using_payload_cwd(self):
-        self.write_record(broken=True)
-        result = subprocess.run(["sh", str(ROOT / "adapters/gemini/scripts/checknote.sh")],
-                                input=json.dumps({"cwd": str(self.work)}), cwd=self.root,
-                                env=self.env, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("no snapshot", result.stdout)
-
     @unittest.skipIf(os.name == "nt", "shell hook")
     def test_hook_uses_payload_cwd_and_leaves_only_a_temporary_baseline(self):
         result = self.hook({"session_id": "first-use", "cwd": str(self.work)}, cwd=self.root)

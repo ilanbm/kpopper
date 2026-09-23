@@ -112,6 +112,9 @@ LANES = {
         "scripts/reasoning/native/*", "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
         "tests/fixtures/page/*", "install.sh", "install.ps1", "VERSION",
         "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
+        # The host adapter scripts and manifests its tests run.
+        "scripts/native_runtime.sh", "adapters/gemini/scripts/session-start.sh", "adapters/gemini/hooks/hooks.json",
+        "adapters/copilot/cli/hook.sh", "adapters/windsurf/hooks.json",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
         # Run from the checkout, with everything they import: the host hooks its tests compare,
         # and the setup that builds the Lean program its tests load.

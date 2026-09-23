@@ -30,8 +30,39 @@ pub struct Options {
 pub struct StartOptions {
     #[arg(long, value_parser = ["claude", "codex"])]
     pub host: Option<String>,
-    #[arg(long)]
+    /// Reply in Cursor's sessionStart format.
+    #[arg(long, conflicts_with_all = ["gemini", "copilot"])]
     pub cursor: bool,
+    /// Reply in Gemini CLI's SessionStart format.
+    #[arg(long, conflicts_with = "copilot")]
+    pub gemini: bool,
+    /// Read Copilot CLI's sessionStart payload and reply in its format.
+    #[arg(long)]
+    pub copilot: bool,
+}
+const GEMINI_UNOPENED: &str = "kpopper could not open the record; check it before relying on it.";
+/// The opening in the reply format a host flag names; `None` for no output. `opened` is
+/// `None` when the opening failed, after its diagnostic went to standard error. A host
+/// flag always replies with exactly one JSON object.
+pub fn start_reply(options: &StartOptions, opened: Option<&str>) -> Option<String> {
+    let reply = if options.cursor {
+        json!({"additional_context": opened.unwrap_or_default()})
+    } else if options.gemini {
+        // Gemini CLI shows plain output to the user; only this field reaches the model.
+        match opened.unwrap_or(GEMINI_UNOPENED) {
+            "" => json!({}),
+            text => json!({"hookSpecificOutput": {
+                "hookEventName": "SessionStart", "additionalContext": text}}),
+        }
+    } else if options.copilot {
+        match opened.unwrap_or_default() {
+            "" => json!({}),
+            text => json!({"additionalContext": text}),
+        }
+    } else {
+        return opened.filter(|text| !text.is_empty()).map(str::to_owned);
+    };
+    Some(reply.to_string())
 }
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct HookOptions {

@@ -32,14 +32,14 @@ checks](../docs/compatibility.md) state which boundaries have actually been test
 | **Codex CLI / Desktop** | Native plugin hooks, including grounding and ingestion integration | Advisory diagnostics on the next user prompt | Native plugin skills; a separate plain-project configuration is also available. Validate the actual client. |
 | **Cursor local** | Native `sessionStart` wrapper emits `additional_context` | Explicit `check`; legacy stop wrapper is silent | Project rule; this route does not install the bundled skills or the other plugin hooks. |
 | **Cursor hosted cloud** | Explicit command; this hook pair has no startup baseline there | Explicit command | Configure instructions and reachable runtime in the remote environment. |
-| **Gemini CLI** | Extension wrapper supplies JSON startup context | Explicit `check`; no shutdown notification | Condensed method in `GEMINI.md`; no separate skill catalog in this extension. |
-| **Copilot CLI** | Native `sessionStart` bridge | Explicit `check`; legacy `agentStop` is silent | Canonical skills linked in `.agents/skills` plus shared instructions; no async/background hooks. |
+| **Gemini CLI** | Extension wrapper runs the checkout's native runtime and supplies JSON startup context | Explicit `check`; no shutdown notification | Condensed method in `GEMINI.md`; no separate skill catalog in this extension. |
+| **Copilot CLI** | `sessionStart` bridge runs the checkout's native runtime | Explicit `check`; legacy `agentStop` is silent | Canonical skills linked in `.agents/skills` plus shared instructions; no async/background hooks. |
 | **Copilot VS Code** | Instructions; hook sketch remains unverified | Explicit command until verified in VS Code | `.github/copilot-instructions.md` or existing `AGENTS.md`. |
-| **Copilot cloud agent** | Setup workflow logs the opening | PR check; merge enforcement depends on branch protection | Setup/CI examples require the runtime in the job. Cloud lifecycle hooks are not connected by this adapter. |
+| **Copilot cloud agent** | Setup workflow installs the native runtime and logs the opening | PR check with the native runtime; merge enforcement depends on branch protection | Setup/CI examples require a kpopper checkout in the job. Cloud lifecycle hooks are not connected by this adapter. |
 | **OpenClaw** | Explicit command or agent instruction | Explicit `check`; declared bundle hooks are not runnable hook packs | Canonical skills load as a Codex bundle. |
 | **OpenCode** | Agent instruction | Explicit `check`; no enforced gate | Native `skills.paths` loads the bundled skills; `instructions` loads the shared method. |
 | **Claude Cowork** | Same package import; runtime behavior needs verification | No verified parity with Claude Code | Claude plugin package; validate Python, file access and persistence in Cowork. |
-| **Windsurf / Cascade** | Agent instruction in the shipped rule | Explicit command; optional write notification | Condensed rule and an unverified host hook route; not reassessed in this compatibility pass. |
+| **Windsurf / Cascade** | Agent instruction in the shipped rule | Explicit command; an optional hook runs `check` after record writes and discards its output | Condensed rule and an unverified host hook route; not reassessed in this compatibility pass. |
 
 `kpop experimental hub` is an optional experimental application. Install the
 `kpopper[html]` runtime to produce a local HTML page. Opening

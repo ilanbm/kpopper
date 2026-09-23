@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${extensionPath}/scripts/hook.py\" SessionStart"
+            "command": "sh \"${extensionPath}/scripts/session-start.sh\""
           }
         ]
       }

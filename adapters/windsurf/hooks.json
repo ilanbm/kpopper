@@ -2,7 +2,7 @@
   "hooks": {
     "post_write_code": [
       {
-        "command": "python3 -c \"import json,sys,os,subprocess; d=json.load(sys.stdin); fp=(d.get('tool_info') or {}).get('file_path') or d.get('file_path') or ''; os.path.basename(fp) in ('GROUNDING.yaml','PROVENANCE.yaml') and subprocess.run(['python3','../../scripts/provenance.py','check'])\"",
+        "command": "sh -c 'if grep -qE \"(GROUNDING|PROVENANCE)[.]yaml\"; then cat >/dev/null; \"/absolute/path/to/kpopper/bin/kpop\" check >/dev/null 2>&1; fi; exit 0'",
         "show_output": false
       }
     ]
