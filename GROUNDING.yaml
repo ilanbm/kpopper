@@ -953,6 +953,19 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_one_line_review:
+    name: "A review of a judgment written on one line writes inside its braces"
+    asked: "Paraphrased maintainer request: the Python writer's review of a judgment written on one
+            line wrote the snapshot as a new sibling entry of the collection in a record indented by
+            four spaces, and reported success. Make it refuse at least, and decide whether both
+            writers should write the snapshot inside the braces instead, asking before changing both.
+            Offered writing inside the braces, rewriting the judgment one field per line, or
+            refusing, the maintainer chose writing inside the braces."
+    of: "Reproduced on 59e4322: in a four-space record the review exited 0 and wrote seen:
+         {api.limit: 10} beside the judgment, which check then counted as an entry; in a two-space
+         record the write broke the file and was undone. The native writer refused both. With the
+         change, the two writers left the same bytes on 84 reviews of one-line judgments - 21 shapes,
+         in two- and four-space records, in the base and in a named hypothesis."
   s.2026_09_23_pending_dry_run:
     name: "Test the pending findings in the consolidation dry run"
     asked: "Paraphrased maintainer request: in live mode the consolidation dry run also lays the
@@ -6258,6 +6271,31 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.review_writes_inside_the_braces:
+    name: "A review writes inside the braces of a judgment written on one line"
+    verdict: "A review of a judgment written on one line writes its snapshot, and the reviewed date
+              it renews or adds, inside the judgment's braces: a value there is replaced where it
+              stands, a new pair follows the last field - the date follows replaced - and nothing
+              else on the line moves. Both writers leave the same bytes. A judgment written on one
+              line without braces, such as an alias, is refused, as is a field inside the braces
+              written as an alias, with an anchor or a tag, or with no value."
+    because: "The writers keep a record in the style it has, and set, same and distinct already
+              write into a judgment written on one line. Refusing sent the person to rewrite the
+              judgment by hand before every review - the hand edit the write path exists to replace -
+              and rewriting it one field per line would drop the author's form and any comment after
+              the braces."
+    rests_on: [d.write_path_returns_reach]
+    reopened_by: "Someone rewrites by hand, one field per line, a judgment that a review grew inside
+                  its braces, or asks for the review to do it, because the line has grown too long to
+                  read."
+    from: s.2026_09_23_one_line_review
+    seen:
+      d.write_path_returns_reach: "the record changes from the command line through set, add and
+                                   review; each edits the file in place, writes seen itself, and
+                                   answers with the reach - what rests on the write, what is MOVED
+                                   now, which predicate fired; set can replace from and at together
+                                   with a value using --source and --at, without reviewing dependent
+                                   judgments"
   d.same_asks_the_one_door:
     rests_on: [s.2026_09_04_sameness, d.contradiction_by_id_and_day, d.sameness_is_judged, p.supersede_doors]
     verdict: "same is a migration through the record's own write path: the retired id is rewritten
