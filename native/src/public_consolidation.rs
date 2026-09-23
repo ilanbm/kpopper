@@ -3,6 +3,7 @@
 mod branch;
 #[path = "ordinary_consolidation_full.rs"]
 mod full;
+pub(crate) use full::branch_differences;
 #[path = "consolidation_preview_facts.rs"]
 mod preview_facts;
 pub use preview_facts::{
@@ -319,7 +320,15 @@ pub fn dispatch(options: &Options, cwd: &Path) -> CommandOutput {
         Ok(output) => output,
         Err(error) => CommandOutput {
             stdout: String::new(),
-            stderr: format!("{error}\n"),
+            stderr: format!(
+                "{}\n",
+                crate::public_readers::explain_missing(
+                    error,
+                    options.record.iter().filter_map(|p| p.to_str()),
+                    cwd,
+                    true
+                )
+            ),
             code: 1,
         },
     }

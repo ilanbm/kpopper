@@ -373,6 +373,15 @@ pub fn project_for(paths: &[PathBuf], cwd: &Path) -> Result<Project> {
     }
 }
 pub fn write_paths(paths: &[PathBuf], cwd: &Path) -> Result<Vec<PathBuf>> {
+    let mut result = paths.to_vec();
+    if let Some(record) = simple_record(paths, cwd)? {
+        result[0] = record;
+    }
+    Ok(result)
+}
+/// The one record a configured Simple project reads in place of the first of `paths`,
+/// when that path is an entry name at the project's root or the record itself.
+pub(crate) fn simple_record(paths: &[PathBuf], cwd: &Path) -> Result<Option<PathBuf>> {
     let project = project_for(paths, cwd)?;
     let first = resolved(&paths[0])?;
     if project.config_path.exists() {
@@ -386,12 +395,10 @@ pub fn write_paths(paths: &[PathBuf], cwd: &Path) -> Result<Vec<PathBuf>> {
             ]
             .contains(&first)
         {
-            let mut result = paths.to_vec();
-            result[0] = record;
-            return Ok(result);
+            return Ok(Some(record));
         }
     }
-    Ok(paths.to_vec())
+    Ok(None)
 }
 
 /// A captured write route holds the project policy lock until its caller has

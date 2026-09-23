@@ -1,0 +1,12 @@
+schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}
+sources:
+  s.doc: {name: doc, read: "2026-09-01"}
+known:
+  site.observed: {v: scripted requests are served a bot-manager challenge page by the edge, from: s.doc}
+  other.count: {v: 1, from: s.doc}
+judgments:
+  j.site:
+    verdict: the site blocks scripts
+    rests_on: [site.observed, other.count]
+    wrong_if: other.count > 5
+    seen: {site.observed: challenge page returned to scripted requests made by the crawler, other.count: 1}

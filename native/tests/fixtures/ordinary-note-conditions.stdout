@@ -1,0 +1,5 @@
+NOTE d.open: nothing decides wrong_if (p.pending > 1) - a side holds no value to compare, or a truth value is held against a value that is not one
+FAIL d.holds: wrong_if holds (p.b > 10) - broken by its own condition
+FAIL d.sum_over: wrong_if holds (p.total > 5) - broken by its own condition
+
+5 judgments, 9 entries, 2 problems, 1 declared

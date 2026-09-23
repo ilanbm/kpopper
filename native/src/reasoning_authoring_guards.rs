@@ -266,12 +266,25 @@ pub(crate) fn collection_for_document(
             .map(|(c, _)| c.clone())
             .unwrap_or_else(|| "sources".into()));
     }
-    Ok(most(&|_, b| {
+    // A value lands where values are.
+    let written = most(&|_, b| {
         !jud(b) && map(b).is_ok_and(|m| ["v", "rule", "quoted"].iter().any(|k| m.contains_key(*k)))
     })
-    .filter(|(_, n)| *n > 0)
-    .map(|(c, _)| c.clone())
-    .unwrap_or_else(|| "known".into()))
+    .filter(|(_, n)| *n > 0);
+    // A record that writes its values bare keeps them together, but a bare scalar is a value
+    // only when no section holds one written out: elsewhere it is as often a path or a
+    // formula, and in the questions and the sources it never is.
+    let bare = || {
+        cols.iter()
+            .filter(|(c, _)| !["open", "questions", "sources"].contains(&c.as_str()))
+            .map(|(c, m)| (c, m.values().filter(|b| !matches!(b, V::Map(_))).count()))
+            .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(a.0)))
+            .filter(|(_, n)| *n > 0)
+    };
+    Ok(written
+        .or_else(bare)
+        .map(|(c, _)| c.clone())
+        .unwrap_or_else(|| "known".into()))
 }
 fn scalar_type(
     world: &impl Admission,

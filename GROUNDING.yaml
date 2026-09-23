@@ -961,6 +961,20 @@ sources:
             holds yet (outside git, written by this session), with what rests on it unlanded too and
             flagged."
     read: "2026-09-23"
+  s.2026_09_23_bare_value_placement:
+    name: "Where a new value goes when a record writes its values bare"
+    asked: "Paraphrased maintainer request: placement ignores sections whose values are bare scalars
+            - in a record holding facts: {acme.seats: 120} and a judgment, add beta.price v=3 opens a
+            new known: section instead of joining facts:. Decide whether bare scalars outside open
+            and questions should count as values for placement; if they should, change both runtimes
+            in parity with a test in each suite, and ask the maintainer first when the choice is not
+            obvious. Record the outcome and open a pull request."
+    of: "Reproduced on bf200d6 in both runtimes. Bare scalars are ambiguous in the product itself:
+         add beta.price 3 files a bare value whose prefix has no home into open: as a question. Among
+         the maintainer's live records, bare scalars outside open: appear only as file paths and
+         formula text, beside a much larger section of values written out with v. The maintainer
+         chose to count bare scalars as values only when no section holds a value written out, and
+         never in open, questions or sources."
   s.2026_09_23_missing_runtime_at_start:
     name: "A missing native runtime is said at session start, by the opener alone"
     asked: "Paraphrased maintainer request: a freshly installed plugin has no native runtime, and
@@ -1000,6 +1014,17 @@ sources:
             when a finding would break something once it was clear the red holds up no other work."
     of: "The two contributions giving api.limit 10 and 11 against a record whose d.x falls above 10
          were the worked example"
+    read: "2026-09-23"
+  s.2026_09_23_readme_checkable_link:
+    name: "Maintainer report on the README link behind deterministically checkable"
+    asked: "the \"deterministically checkable.\" link in the readme: 1. leads to a collapsed section
+            2. that section is really not readable, I'm not sure anyone will understand what we want
+            from them in the explenations there"
+    of: "The tagline linked to the how-it-works anchor, which sat before a closed details block, so
+         the reader landed on a collapsed summary line. Its first subsection defined deterministic
+         reasoning abstractly and then used the dark-matter selection example with a CLI and jq
+         pipeline, without saying what is checked, by what, or what the reader or agent is expected
+         to do."
     read: "2026-09-23"
   s.2026_09_23_readme_get_started:
     name: "README Get started built on one instruction to the agent"
@@ -3333,6 +3358,19 @@ known:
     from: s.2026_09_20_dependency_illustration
     at: "The shortened English paragraph, approved with מושלם."
     fidelity: quoted
+  p.readme_checkable_link_visibility:
+    name: "The deterministically checkable link lands on a visible explanation"
+    v: "The tagline link opens a visible section after the capabilities table, What
+        deterministically checkable means. It walks the opening 30-versus-7-day example with the
+        check output the native CLI prints, says what the agent writes and what is asked of the
+        reader, and separates what the program checks from what stays judgment. The dark-matter case
+        with an unchanged count and a changed basis is folded below it. The link lands on the heading
+        on github.com at desktop width and at a 375-pixel phone width; GitHub scrolls to it a few
+        seconds after the click."
+    from: s.2026_09_23_readme_checkable_link
+    at: "README edit, native check, open and set runs on the example record, and browser checks of a
+         Markdown API render and of the branch on github.com"
+    fidelity: paraphrase
   p.readme_coding_banner_story:
     name: "The coding strip shows both PR changes and their combined consequence"
     v: "PR A adds private projects and PR B caches by query. Large labels identify the two changes,
@@ -4049,6 +4087,36 @@ judgments:
       d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
                           person; only a predicate that holds fails the build"
       goal.portable: "usable by any session, in any project, with no author present"
+  d.bare_values_place_last:
+    name: "A bare scalar decides where a new value goes only when nothing else does"
+    verdict: "A new value whose prefix no section holds yet goes to the section holding the most
+              values written out (v, quoted or rule). Only when no section holds one does the section
+              holding the most bare scalars take it - never open, questions or sources - and a record
+              holding neither opens known:. Both runtimes place it the same way and break a tie by
+              the first section name."
+    because: "A bare scalar is a value to the reader but not always to the person: add <id> <value>
+              files one as a question when its prefix has no home, and in live records bare text
+              outside the questions is file paths and formulas. Counting bare scalars always would
+              pull new values into such sections; never counting them left a record that writes its
+              values bare with a second, known: section beside them. A misplaced value costs a hand
+              edit, which locks a history-backed record, while an extra known: section is cosmetic,
+              so bare scalars decide only when nothing else can."
+    rests_on: [d.shape_is_read_not_declared, d.add_places_by_prefix]
+    reopened_by: "A record that keeps bare text other than values, with no value written out beside
+                  it, has a new value filed into that text; or a record that writes its values bare
+                  in two sections of its own gets one in the section its person did not mean."
+    from: s.2026_09_23_bare_value_placement
+    seen:
+      d.shape_is_read_not_declared: "what the record's physical form is - its files and shards, the
+                                     field each role is read from, its sidecars, the stores derived
+                                     from it and what reads it - is computed by a read command
+                                     whenever asked and never kept as a declaration; the only
+                                     declared parts are the choices no shape can infer, each a
+                                     judgment with a sign, and the bindings of one machine, which
+                                     stay in that machine's state"
+      d.add_places_by_prefix: "add inserts a new entry beside the entries it shares the longest
+                               dotted prefix with, in id order among them, and at a collection's tail
+                               only when id order puts it there"
   d.brand_on_the_directory:
     verdict: "the brand goes on the directory, the verbs, the check's name and the head line of a
               born record; the concept goes on the entry file's name"
@@ -5672,6 +5740,31 @@ judgments:
                                  decision and review conditions clarify the product, and where should
                                  that illustration appear? A separate local SVG/PNG concept was
                                  produced; it is not adopted into the README."
+  d.readme_checks_explained_visibly:
+    name: "Explain checks where the opening link lands, with the opening example"
+    from: s.2026_09_23_readme_checkable_link
+    rests_on: [s.2026_09_23_readme_checkable_link, d.readme_reasoning_overview]
+    verdict: "Explain deterministic checks in a visible section that the opening link reaches, using
+              the opening's 30-versus-7-day record: what the agent records, the value that changes,
+              and what the check prints. Say what is asked of the reader, separate what the program
+              checks from what stays judgment, and fold the research case of an unchanged count with
+              a changed basis below it."
+    because: "The maintainer reported that the link landed on a collapsed summary and that the
+              explanation behind it did not say what is asked of the reader. The opening illustration
+              is an example the reader has just seen, so its three steps need no new domain, and
+              printed output shows what the check actually says. The research case teaches a subtler
+              point - a changed basis under an unchanged result - and stays one click away without
+              standing between the reader and the basic answer. Reader comprehension has not been
+              measured."
+    reopened_by: "A reader who follows the link cannot say without coaching what the check compares,
+                  who writes the condition, or what a passing check means; or the opening
+                  illustration stops using the 30-versus-7-day record the section walks through."
+    seen:
+      s.2026_09_23_readme_checkable_link: "read 2026-09-23"
+      d.readme_reasoning_overview: "Use a file-centered Meet GROUNDING.yaml overview: conversations
+                                    point to recorded reasoning and changed inputs; wrong_if leads to
+                                    a returned check result. Preserve the same meaning in dedicated
+                                    desktop and phone layouts."
   d.readme_get_started_is_one_instruction:
     name: "Get started is one instruction the reader sends to their agent"
     verdict: "Open Get started with a short paragraph and one instruction, beginning Dear agent,

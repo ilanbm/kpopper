@@ -364,11 +364,16 @@ fn ordinary_pull(
                 e
             }
         })?;
-    let branch_doc = branch.document;
     let mut hypotheses = match current.hypotheses() {
         OV::Map(m) => m.clone(),
         _ => OMap::new(),
     };
+    // The branch is laid over this record as what it holds differently, never as a copy
+    // of what this record already holds.
+    let base =
+        crate::ordinary_views::World::base(current.ordinary_document(), &hypotheses, runtime)?;
+    let branch_doc = crate::public_consolidation::branch_differences(&branch.document, &base)?;
+    drop(base);
     let head = OV::Map(OMap::from([
         (
             "claim".into(),

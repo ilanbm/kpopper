@@ -325,6 +325,7 @@ fn ordinary(
             ])),
             source: source_document,
             text: raw.into(),
+            differences_only: true,
         });
         let layout = crate::history_transaction::Layout::for_entry(&relative)?;
         for item in list(&data["hypotheses"])? {
@@ -358,6 +359,7 @@ fn ordinary(
                 source_record: source_record.clone(),
                 source: crate::history_yaml::OrdinaryValue::from_typed(&item["doc"]),
                 text: raw.into(),
+                differences_only: false,
             });
         }
     }

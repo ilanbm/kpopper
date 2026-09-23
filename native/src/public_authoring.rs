@@ -406,7 +406,10 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             options.subject
         ));
     }
-    require(kind == "add" && implicit, "record not found")?;
+    if kind != "add" || !implicit {
+        let named = files.iter().filter_map(|p| p.to_str());
+        return Err(crate::public_readers::no_record_here(named, &cwd, true));
+    }
     let body = map(&action)?["body"].clone();
     if Privacy::private_marker(&action) {
         let document = obj([(
