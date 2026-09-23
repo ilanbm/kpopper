@@ -961,6 +961,35 @@ sources:
             holds yet (outside git, written by this session), with what rests on it unlanded too and
             flagged."
     read: "2026-09-23"
+  s.2026_09_23_missing_runtime_at_start:
+    name: "A missing native runtime is said at session start, by the opener alone"
+    asked: "Paraphrased maintainer request: a freshly installed plugin has no native runtime, and
+            when it is missing the hooks write the diagnostic and the install command to standard
+            error only, so the session opens with no word about kpopper and the agent never learns
+            what is missing or how to install it. Have the session opener alone print them on
+            standard output, so the agent can offer to run the command and ask for a new session;
+            keep every other hook silent and hooks never downloading or installing a runtime; check
+            how Codex treats SessionStart output before assuming it matches Claude Code; add a
+            regression test."
+    of: "Reproduced on 59e4322 with the 0.9.0 plugin installed into an isolated Claude
+         configuration: scripts/session_open.sh --host claude, given a SessionStart payload in an
+         empty project, exited 0 with nothing on standard output and wrote 'native runtime is not
+         installed for darwin-arm64 in this package' and the install_native.sh command to standard
+         error only."
+    read: "2026-09-23"
+  s.2026_09_23_one_line_review:
+    name: "A review of a judgment written on one line writes inside its braces"
+    asked: "Paraphrased maintainer request: the Python writer's review of a judgment written on one
+            line wrote the snapshot as a new sibling entry of the collection in a record indented by
+            four spaces, and reported success. Make it refuse at least, and decide whether both
+            writers should write the snapshot inside the braces instead, asking before changing both.
+            Offered writing inside the braces, rewriting the judgment one field per line, or
+            refusing, the maintainer chose writing inside the braces."
+    of: "Reproduced on 59e4322: in a four-space record the review exited 0 and wrote seen:
+         {api.limit: 10} beside the judgment, which check then counted as an entry; in a two-space
+         record the write broke the file and was undone. The native writer refused both. With the
+         change, the two writers left the same bytes on 84 reviews of one-line judgments - 21 shapes,
+         in two- and four-space records, in the base and in a named hypothesis."
   s.2026_09_23_pending_dry_run:
     name: "Test the pending findings in the consolidation dry run"
     asked: "Paraphrased maintainer request: in live mode the consolidation dry run also lays the
@@ -980,6 +1009,20 @@ sources:
     of: "Request of 2026-09-23 about the section at 59e4322, which opened with standalone bundle
          installation and Python compatibility mode before the steps for each agent."
     read: "2026-09-23"
+  s.2026_09_23_readme_section_names:
+    name: "The README says what known and judgments hold where a reader first meets them"
+    asked: "Paraphrased maintainer questions: are judgments and known part of GROUNDING.yaml, or
+            something that evolved in some repositories? Then, told they are the method's default
+            section names and that the reader goes by shape: should both appear in the README more
+            prominently? The maintainer approved the smaller change offered, one sentence under the
+            first record excerpt and a new-record column in the roles table."
+    of: "Checked on 2026-09-23. skills/kpopper/references/shape.md has named sources, known and
+         judgments since the first commit. With the 0.9.0 native runtime, the first kpop add calls in
+         an empty directory filed a source, a reading, a rule, a judgment and a question under
+         sources, known, known, judgments and open, and a record naming facts and claims instead
+         checked the same once it held a judgment. The README on main at 92703f3 showed known: and
+         judgments: in its first excerpt with only their fields explained, and called them the
+         documented names only inside the collapsed How it works section."
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -3023,6 +3066,17 @@ known:
     name: "What the registries hold"
     from: "registry lookup"
     of: "2026-09-03"
+  lit.session_start_output:
+    v: "On exit 0, Claude Code and Codex both add a SessionStart command hook's plain-text standard
+        output to the model's context, and neither shows the model its standard error. Output that
+        opens like JSON is parsed as JSON instead."
+    name: "What Claude Code and Codex do with a SessionStart command hook's output"
+    from: "the Claude Code hooks reference and the Codex hooks guide; for Codex also
+           codex-rs/hooks/src/events/session_start.rs at rust-v0.153.3"
+    at: "Claude Code: Exit code 0 and SessionStart decision control; Codex: SessionStart, and
+         parse_completed in that source, where exit 0 turns stdout not opening with { or [ into model
+         context and stderr is never read"
+    of: "2026-09-23; Claude Code 2.1.269, Codex CLI 0.153.3"
   lit.tms:
     v: "a conclusion keeps the justifications and assumptions it was drawn from, support is
         recomputed when an assumption changes, and losing the support for a conclusion does not
@@ -5227,6 +5281,39 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.opener_reports_a_missing_runtime:
+    name: "The session opener says when the native runtime is missing"
+    verdict: "When the plugin's native runtime is missing, the session opener prints the resolver's
+              diagnostic, the exact install command and what follows on standard output: kpopper did
+              not open the session, hooks never download or install the runtime, and the agent may
+              offer to run the command and then ask for a new session. It still exits 0. Every other
+              hook prints nothing and keeps the diagnostic on standard error."
+    because: "A plugin installs without its native runtime, and standard error reaches neither
+              model, so the first session opened with no word about kpopper and the agent could not
+              say what was missing or how to fix it. The opener runs once per session and its
+              standard output is already the session's context, the channel the Python compatibility
+              launcher uses for its own repair command; any other hook would repeat the text on every
+              prompt or tool call. Installing stays an explicit act, because the command downloads a
+              release: the opener names it and the person decides."
+    rests_on: [lit.session_start_output, p.native_distribution_contract, d.plugin_runtime_is_explicit]
+    reopened_by: "An agent given the opener's message says nothing of the missing runtime or runs
+                  the install command without asking; a host that runs these hooks stops adding plain
+                  SessionStart output to the model's context or starts showing the model standard
+                  error; or a plugin installation starts carrying its native runtime."
+    from: s.2026_09_23_missing_runtime_at_start
+    seen:
+      lit.session_start_output: "On exit 0, Claude Code and Codex both add a SessionStart command
+                                 hook's plain-text standard output to the model's context, and
+                                 neither shows the model its standard error. Output that opens like
+                                 JSON is parsed as JSON instead."
+      p.native_distribution_contract: "The native CLI and plugin start at 0.9.0 with GitHub platform
+                                       archives and explicit installers. Public names are kpopper and
+                                       kpop. Existing GitHub tags/releases and legacy PyPI/npm
+                                       versions remain available. Cargo is a source-build route;
+                                       crates.io publication is separate."
+      d.plugin_runtime_is_explicit: "Prepare hook dependencies through an explicit
+                                     private-virtualenv setup; Claude Code and Codex hooks select it
+                                     while executing code from their active plugin."
   d.overlay_infers_once_per_document:
     rests_on: [m.overlay_open_seconds, s.2026_09_18_overlay_profile]
     verdict: "the live overlay infers roles once per document it compares, never once per entry"
@@ -5710,6 +5797,36 @@ judgments:
                                      spell the name kpopper, and link to Popper's idea without
                                      explaining every part of the visual joke."
       s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
+  d.readme_names_the_default_sections:
+    name: "The README names the default sections where a reader first meets them"
+    verdict: "Say what known and judgments hold directly under the first record excerpt, and give
+              each role's place in a new record as a column of the roles table. Present them as
+              defaults in those two places rather than as a prominent block of file sections."
+    because: "The first excerpt showed known: and judgments: with only their fields explained, and
+              the one sentence calling them the documented names sat in the collapsed How it works
+              section. A reader meeting the names needs them explained where they appear. A prominent
+              block of file sections would present defaults as requirements, which
+              d.readme_layered_explanation rules out, and would push the examples down, against
+              d.readme_opens_with_what_it_does."
+    rests_on: [d.readme_layered_explanation, d.readme_opens_with_what_it_does]
+    reopened_by: "A new reader given the README without coaching still cannot say what known and
+                  judgments hold after the first excerpt, or reads the new-record column as a list of
+                  mandatory sections."
+    from: s.2026_09_23_readme_section_names
+    seen:
+      d.readme_layered_explanation: "Lead with recorded dependencies between decisions, evidence and
+                                     assumptions, and the conditions for review. Use descriptive
+                                     story headings and visible record excerpts, with complete
+                                     records, state tables and diagrams in the example guides.
+                                     Distinguish shared reasoning roles from mandatory sections,
+                                     spell the name kpopper, and link to Popper's idea without
+                                     explaining every part of the visual joke."
+      d.readme_opens_with_what_it_does: "Keep the hero, practical benefit, direct installation link
+                                         and opening reasoning illustration, followed by the concrete
+                                         code and non-code examples with visible recorded premises
+                                         and phone layouts. Omit the introductory caption and link to
+                                         the illustration-production guide. Introduce the third-brain
+                                         metaphor later."
   d.readme_opens_with_what_it_does:
     rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_reasoning_overview, s.2026_09_13_remove_duplicate_overview]
     verdict: "Keep the hero, practical benefit, direct installation link and opening reasoning
@@ -6259,6 +6376,31 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.review_writes_inside_the_braces:
+    name: "A review writes inside the braces of a judgment written on one line"
+    verdict: "A review of a judgment written on one line writes its snapshot, and the reviewed date
+              it renews or adds, inside the judgment's braces: a value there is replaced where it
+              stands, a new pair follows the last field - the date follows replaced - and nothing
+              else on the line moves. Both writers leave the same bytes. A judgment written on one
+              line without braces, such as an alias, is refused, as is a field inside the braces
+              written as an alias, with an anchor or a tag, or with no value."
+    because: "The writers keep a record in the style it has, and set, same and distinct already
+              write into a judgment written on one line. Refusing sent the person to rewrite the
+              judgment by hand before every review - the hand edit the write path exists to replace -
+              and rewriting it one field per line would drop the author's form and any comment after
+              the braces."
+    rests_on: [d.write_path_returns_reach]
+    reopened_by: "Someone rewrites by hand, one field per line, a judgment that a review grew inside
+                  its braces, or asks for the review to do it, because the line has grown too long to
+                  read."
+    from: s.2026_09_23_one_line_review
+    seen:
+      d.write_path_returns_reach: "the record changes from the command line through set, add and
+                                   review; each edits the file in place, writes seen itself, and
+                                   answers with the reach - what rests on the write, what is MOVED
+                                   now, which predicate fired; set can replace from and at together
+                                   with a value using --source and --at, without reviewing dependent
+                                   judgments"
   d.same_asks_the_one_door:
     rests_on: [s.2026_09_04_sameness, d.contradiction_by_id_and_day, d.sameness_is_judged, p.supersede_doors]
     verdict: "same is a migration through the record's own write path: the retired id is rewritten

@@ -173,9 +173,10 @@ judgments:
       path.
 ```
 
-`rests_on` names the premise. `seen` keeps its value at the last review. When the
-measured value becomes `false`, `wrong_if` fires and identifies the cache decision.
-Source locators and the complete record are in the
+`known` holds values taken from a source or derived from other entries; `judgments`
+holds the decisions that rest on them. `rests_on` names the premise. `seen` keeps its
+value at the last review. When the measured value becomes `false`, `wrong_if` fires
+and identifies the cache decision. Source locators and the complete record are in the
 [example](examples/merge-assumptions/cache/pr-b/GROUNDING.yaml).
 
 <details>
@@ -1062,14 +1063,14 @@ record through that history, and ordinary reads automatically use `core/v1`. An
 existing legacy YAML record is not migrated by reading it. See the
 [history contract](docs/history-contract.md) for adoption and editing rules.
 
-| Piece | What it preserves |
-|---|---|
-| Source | The document, conversation, observation or other origin of a claim, with dates and locators. |
-| Reading | A value or quotation taken from that source. |
-| Derivation | A structured rule relating inputs to a result. Its references supply graph dependencies and the local Lean core computes its value. Legacy text rules remain readable and unevaluated until explicitly converted. |
-| Judgment | A conclusion, its reasoning, declared dependencies and condition for reconsideration. |
-| Review snapshot | What those dependencies held when the judgment was last reviewed: `seen`. |
-| Open question | Something unresolved, retained without inventing an answer. |
+| Piece | What it preserves | In a new record |
+|---|---|---|
+| Source | The document, conversation, observation or other origin of a claim, with dates and locators. | `sources` |
+| Reading | A value or quotation taken from that source. | `known` |
+| Derivation | A structured rule relating inputs to a result. Its references supply graph dependencies and the local Lean core computes its value. Legacy text rules remain readable and unevaluated until explicitly converted. | `known`, as a `rule` |
+| Judgment | A conclusion, its reasoning, declared dependencies and condition for reconsideration. | `judgments` |
+| Review snapshot | What those dependencies held when the judgment was last reviewed: `seen`. | `seen`, inside each judgment |
+| Open question | Something unresolved, retained without inventing an answer. | `open` |
 
 The method is opinionated about grounding conclusions, declaring dependencies and
 preserving a basis for review. A judgment needs the values it was reviewed against

@@ -82,8 +82,10 @@ tabs:
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
-    serves: [s.2026_09_23_answer_and_correct, s.2026_09_23_readme_get_started,
-             s.2026_09_23_pending_dry_run, s.2026_09_23_unsaved_baseline,
+    serves: [s.2026_09_23_answer_and_correct, s.2026_09_23_one_line_review,
+             s.2026_09_23_readme_section_names, s.2026_09_23_readme_get_started,
+             s.2026_09_23_pending_dry_run, s.2026_09_23_missing_runtime_at_start,
+             s.2026_09_23_unsaved_baseline,
              s.2026_09_22_responsive_readme, s.2026_09_22_readme_redraw,
              s.2026_09_20_canvas_placement, s.2026_09_20_dependency_illustration,
              s.2026_09_20_readme_path_banners, s.2026_09_19_claude_install_request,
