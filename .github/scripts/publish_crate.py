@@ -6,9 +6,9 @@ moved to. The build job has already built the crate from its packaged files and 
 is the program the release ships; its .crate is the verified bytes. crates.io never takes a
 version back, so a version the registry already serves must be exactly those bytes, and a
 version it lacks is published next. The first publication claims the name and needs an owner's
-own token; until the crate exists this says so and publishes nothing. Later versions are
-published with a short-lived token the workflow's identity is exchanged for, so the repository
-holds no registry credential.
+own token; until the crate exists this stops the run, naming the bytes that publication must
+be, and publishes nothing. Later versions are published with a short-lived token the workflow's
+identity is exchanged for, so the repository holds no registry credential.
 
     python3 .github/scripts/publish_crate.py --plan --crate FILE.crate    # what crates.io takes
     python3 .github/scripts/publish_crate.py --served FILE.crate          # it serves these bytes
@@ -34,12 +34,14 @@ API = os.environ.get("KPOPPER_CRATES_API", "https://crates.io/api/v1")
 AGENT = "kpopper release workflow (https://github.com/ilanbm/kpopper)"
 PACKAGE_NAME = re.compile(r'^\[package\]\n(?:[^\[\n][^\n]*\n)*?name = "([^"]+)"', re.M)
 CLAIM = (
-    "The first version on crates.io claims the name, which needs an owner's token: check out "
-    "the tag v{version}, then from native/ run `cargo login` and `cargo publish --locked` with "
-    "the toolchain native/rust-toolchain.toml pins. The verified crate's sha256 is {sha256}; "
-    "rerun this job afterwards and it requires crates.io to serve exactly those bytes. Later "
-    "releases publish from this workflow once crates.io trusts it (crate settings, Trusted "
-    "Publishing: repository ilanbm/kpopper, workflow publish.yml, environment crates-io)."
+    "The first version on crates.io claims the name, which needs an owner's token, so this "
+    "run stops here until it exists. Check out the tag v{version}; from native/, with the "
+    "toolchain native/rust-toolchain.toml pins, run `cargo package --locked --no-verify` and "
+    "require `shasum -a 256 target/package/kpopper-{version}.crate` to print {sha256}; then run "
+    "`cargo login` and `cargo publish --locked --no-verify`. Rerun this job: it passes once "
+    "crates.io serves exactly those bytes. Later releases publish from this workflow once "
+    "crates.io trusts it (crate settings, Trusted Publishing: repository ilanbm/kpopper, "
+    "workflow publish.yml, environment crates-io)."
 )
 
 
@@ -130,9 +132,10 @@ def main(argv):
             parser.error("--plan needs the verified crate: --crate FILE")
         action, reason = decide(version, options.crate)
         print(reason)
-        if action == "claim":
-            print("::warning title=crates.io::" + reason)
         output(action=action, version=version)
+        if action == "claim":
+            print("::error title=crates.io::" + reason)
+            return 1
         return 0
     parser.error("choose --plan or --served")
 

@@ -99,10 +99,13 @@ jobs:
           python .github/scripts/publish_crate.py --plan --version "$VERSION"
           --crate "$RUNNER_TEMP/verified-crate/kpopper-$VERSION.crate"
 
-  # The one job that can publish, so it runs as little as publishing needs: no repository script
-  # and no build. It exchanges this workflow's identity for a registry token that expires within
-  # the hour. Cargo packages the commit itself, so the package is compared with the verified
-  # bytes before the upload and again after it.
+  # The one job that can publish, so it runs as little as publishing needs: no repository
+  # script, no build, and nothing that lets the repository decide how Cargo runs - Cargo runs
+  # outside the checkout, on the pinned toolchain, with a Cargo home of its own. It exchanges
+  # this workflow's identity for a registry token that expires within the hour. Cargo packages
+  # the commit itself, so the package is compared with the verified bytes before the upload and
+  # again after it. A version crates.io already serves as those bytes is left alone, so a rerun
+  # after an upload whose reply was lost ends green instead of publishing twice.
   crate-publish:
     needs: [plan, crate]
     if: needs.crate.outputs.action == 'publish'
@@ -113,6 +116,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      VERSION: ${{ needs.plan.outputs.version }}
       CRATE: kpopper-${{ needs.plan.outputs.version }}.crate
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -122,25 +126,69 @@ jobs:
         with:
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
-      - name: Package the commit, and require the verified bytes
-        working-directory: native
+      - id: toolchain
+        name: Take no Cargo configuration or toolchain choice from the repository
         run: |
-          cargo package --locked --no-verify
-          cmp "$RUNNER_TEMP/verified-crate/$CRATE" "target/package/$CRATE"
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)\.cargo/'; then
+            echo "::error::repository-local Cargo configuration would run beside the registry token"
+            exit 1
+          fi
+          channel=$(sed -n 's/^channel = "\([0-9]*\.[0-9]*\.[0-9]*\)"$/\1/p' native/rust-toolchain.toml)
+          test -n "$channel"
+          rustup toolchain install "$channel" --profile minimal
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - name: Package the commit, and require the verified bytes
+        working-directory: ${{ runner.temp }}
+        env:
+          CHANNEL: ${{ steps.toolchain.outputs.channel }}
+          CARGO_HOME: ${{ runner.temp }}/cargo-home
+        run: |
+          cargo "+$CHANNEL" package --manifest-path "$GITHUB_WORKSPACE/native/Cargo.toml" --locked --no-verify
+          cmp "$RUNNER_TEMP/verified-crate/$CRATE" "$GITHUB_WORKSPACE/native/target/package/$CRATE"
+      - id: registry
+        name: Leave alone a version crates.io already serves as these bytes
+        run: |
+          set -euo pipefail
+          expected=$(sha256sum "$RUNNER_TEMP/verified-crate/$CRATE" | cut -d' ' -f1)
+          answer=$(curl -sS -o "$RUNNER_TEMP/registry.json" -w '%{http_code}' \
+            -A 'kpopper release workflow (https://github.com/ilanbm/kpopper)' \
+            "https://crates.io/api/v1/crates/kpopper/$VERSION")
+          case "$answer" in
+            404)
+              echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            200)
+              served=$(jq -r '.version.checksum' "$RUNNER_TEMP/registry.json")
+              if [ "$served" != "$expected" ]; then
+                echo "::error::crates.io serves kpopper $VERSION with checksum $served, not the verified $expected"
+                exit 1
+              fi
+              echo "crates.io already serves kpopper $VERSION as these bytes; nothing to publish"
+              echo "publish=false" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::crates.io answered $answer for kpopper $VERSION"
+              exit 1 ;;
+          esac
       - id: auth
+        if: steps.registry.outputs.publish == 'true'
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
       - name: Publish to crates.io
-        working-directory: native
+        if: steps.registry.outputs.publish == 'true'
+        working-directory: ${{ runner.temp }}
         env:
+          CHANNEL: ${{ steps.toolchain.outputs.channel }}
+          CARGO_HOME: ${{ runner.temp }}/cargo-home
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
-          cargo publish --locked --no-verify
-          cmp "$RUNNER_TEMP/verified-crate/$CRATE" "target/package/$CRATE"
+          cargo "+$CHANNEL" publish --manifest-path "$GITHUB_WORKSPACE/native/Cargo.toml" --locked --no-verify
+          cmp "$RUNNER_TEMP/verified-crate/$CRATE" "$GITHUB_WORKSPACE/native/target/package/$CRATE"
 
   # The registry is read back from a job without its identity: crates.io must serve exactly the
-  # verified bytes. Rerunning this job alone repeats the check without publishing again.
+  # verified bytes. It runs after a failed upload too, since the upload may have gone through,
+  # and rerunning it alone repeats the check without publishing again.
   crate-served:
-    needs: [plan, crate-publish]
+    needs: [plan, crate, crate-publish]
+    if: ${{ !cancelled() && needs.crate.outputs.action == 'publish' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

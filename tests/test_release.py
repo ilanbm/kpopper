@@ -455,6 +455,18 @@ class TheCrate(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "does not serve"):
                     C.served("1.2.3", crate, attempts=2, pause=0)
 
+    def test_an_unclaimed_crate_stops_the_release_run_naming_the_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            crate = pathlib.Path(directory) / f"kpopper-{current_version()}.crate"
+            crate.write_bytes(b"crate")
+            printed = io.StringIO()
+            with patch.object(C, "fetch", return_value=None), redirect_stdout(printed), \
+                 patch.dict("os.environ", {"GITHUB_OUTPUT": str(pathlib.Path(directory) / "out")}):
+                self.assertEqual(C.main(["--plan", "--crate", str(crate)]), 1)
+            self.assertIn("::error", printed.getvalue())
+            self.assertIn(hashlib.sha256(b"crate").hexdigest(), printed.getvalue())
+            self.assertIn("action=claim", (pathlib.Path(directory) / "out").read_text())
+
     def test_plan_refuses_a_version_the_release_planner_did_not_publish(self):
         with patch.object(C, "fetch") as fetch:
             with self.assertRaisesRegex(SystemExit, "planner published 0.0.1"):
@@ -484,17 +496,32 @@ class TheCrate(unittest.TestCase):
         self.assertFalse(any("python" in run or ".github/scripts" in run for run in runs))
         self.assertFalse(any(use.startswith("actions/setup-python") for use in uses))
         self.assertFalse(any(word in run for run in runs for word in ("cargo build", "cargo test", "cargo install")))
-        upload = next((i for i, run in enumerate(runs) if "cargo publish" in run), None)
-        compare = next((i for i, run in enumerate(runs) if "cmp " in run and "cargo publish" not in run), None)
+        upload = next((i for i, run in enumerate(runs) if "cargo" in run and " publish " in run), None)
+        compare = next((i for i, run in enumerate(runs) if "cmp " in run and " publish " not in run), None)
+        asked = next((i for i, step in enumerate(publish["steps"]) if step.get("id") == "registry"), None)
         auth = next((i for i, use in enumerate(uses) if use.startswith("rust-lang/crates-io-auth-action@")), None)
-        self.assertNotIn(None, (upload, compare, auth), "compare the verified bytes, authenticate, publish")
-        self.assertLess(compare, auth)
+        self.assertNotIn(None, (upload, compare, asked, auth), "compare, ask the registry, authenticate, publish")
+        self.assertLess(compare, asked)
+        self.assertLess(asked, auth)
         self.assertLess(auth, upload)
         self.assertRegex(uses[auth], r"@[0-9a-f]{40}$")
-        self.assertIn("cargo publish --locked --no-verify", runs[upload])
-        self.assertIn("cmp ", runs[upload].split("cargo publish", 1)[1])
+        self.assertIn("--locked --no-verify", runs[upload])
+        self.assertIn("cmp ", runs[upload].split(" publish ", 1)[1])
+        # A version already served as the verified bytes is left alone, so a rerun cannot publish twice.
+        self.assertIn("crates.io/api/v1/crates/kpopper/", runs[asked])
+        for step in (auth, upload):
+            self.assertEqual(publish["steps"][step].get("if"), "steps.registry.outputs.publish == 'true'")
+        # Cargo takes no configuration or toolchain choice from the checkout.
+        self.assertTrue(any("git ls-files" in run and ".cargo/" in run for run in runs))
+        for step in publish["steps"]:
+            self.assertNotEqual(step.get("working-directory"), "native")
+            if "cargo " in step.get("run", "") and "rustup" not in step["run"]:
+                self.assertIn('"+$CHANNEL"', step["run"])
+                self.assertIn("--manifest-path", step["run"])
+                self.assertIn("CARGO_HOME", step.get("env", {}))
         # The registry is read back without the identity, against the verified bytes.
-        self.assertIn("crate-publish", served["needs"])
+        self.assertTrue({"crate", "crate-publish"} <= set(served["needs"]))
+        self.assertIn("!cancelled()", served["if"])
         self.assertFalse((served.get("permissions") or {}).get("id-token"))
         check = " ".join(step.get("run", "") for step in served["steps"])
         self.assertIn("--served", check)
