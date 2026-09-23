@@ -1,0 +1,4 @@
+known:
+    api.window:
+      v: 5
+    api-limit: {v: 10}
