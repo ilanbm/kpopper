@@ -259,7 +259,7 @@ fn prepare_mode(
     )?;
     let original_entries = crate::reasoning_snapshot::entries(&original_hyp)?;
     let deps = text(&reader.fields()["deps"])?;
-    let snapshot = text(&reader.fields()["snapshot"])?;
+    let snapshot = reader.snapshot_field()?;
     if kind == "review" {
         require(
             original_entries.contains_key(&id),
@@ -378,7 +378,11 @@ fn prepare_mode(
                 let order = snapshot_order(&reader, m, &seen, &document.source, &hyp_source)?;
                 map_mut(&mut body)?.insert(snapshot.into(), V::Map(seen));
                 if let Source::Map(m) = &mut ordered {
-                    m.push((snapshot.into(), order));
+                    if let Some((_, value)) = m.iter_mut().find(|(key, _)| key == snapshot) {
+                        *value = order;
+                    } else {
+                        m.push((snapshot.into(), order));
+                    }
                 }
             }
             action.insert("body".into(), body);
