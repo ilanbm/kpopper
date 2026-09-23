@@ -981,6 +981,20 @@ sources:
     of: "Request of 2026-09-23 about the section at 59e4322, which opened with standalone bundle
          installation and Python compatibility mode before the steps for each agent."
     read: "2026-09-23"
+  s.2026_09_23_readme_section_names:
+    name: "The README says what known and judgments hold where a reader first meets them"
+    asked: "Paraphrased maintainer questions: are judgments and known part of GROUNDING.yaml, or
+            something that evolved in some repositories? Then, told they are the method's default
+            section names and that the reader goes by shape: should both appear in the README more
+            prominently? The maintainer approved the smaller change offered, one sentence under the
+            first record excerpt and a new-record column in the roles table."
+    of: "Checked on 2026-09-23. skills/kpopper/references/shape.md has named sources, known and
+         judgments since the first commit. With the 0.9.0 native runtime, the first kpop add calls in
+         an empty directory filed a source, a reading, a rule, a judgment and a question under
+         sources, known, known, judgments and open, and a record naming facts and claims instead
+         checked the same once it held a judgment. The README on main at 92703f3 showed known: and
+         judgments: in its first excerpt with only their fields explained, and called them the
+         documented names only inside the collapsed How it works section."
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -5740,6 +5754,36 @@ judgments:
                                      spell the name kpopper, and link to Popper's idea without
                                      explaining every part of the visual joke."
       s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
+  d.readme_names_the_default_sections:
+    name: "The README names the default sections where a reader first meets them"
+    verdict: "Say what known and judgments hold directly under the first record excerpt, and give
+              each role's place in a new record as a column of the roles table. Present them as
+              defaults in those two places rather than as a prominent block of file sections."
+    because: "The first excerpt showed known: and judgments: with only their fields explained, and
+              the one sentence calling them the documented names sat in the collapsed How it works
+              section. A reader meeting the names needs them explained where they appear. A prominent
+              block of file sections would present defaults as requirements, which
+              d.readme_layered_explanation rules out, and would push the examples down, against
+              d.readme_opens_with_what_it_does."
+    rests_on: [d.readme_layered_explanation, d.readme_opens_with_what_it_does]
+    reopened_by: "A new reader given the README without coaching still cannot say what known and
+                  judgments hold after the first excerpt, or reads the new-record column as a list of
+                  mandatory sections."
+    from: s.2026_09_23_readme_section_names
+    seen:
+      d.readme_layered_explanation: "Lead with recorded dependencies between decisions, evidence and
+                                     assumptions, and the conditions for review. Use descriptive
+                                     story headings and visible record excerpts, with complete
+                                     records, state tables and diagrams in the example guides.
+                                     Distinguish shared reasoning roles from mandatory sections,
+                                     spell the name kpopper, and link to Popper's idea without
+                                     explaining every part of the visual joke."
+      d.readme_opens_with_what_it_does: "Keep the hero, practical benefit, direct installation link
+                                         and opening reasoning illustration, followed by the concrete
+                                         code and non-code examples with visible recorded premises
+                                         and phone layouts. Omit the introductory caption and link to
+                                         the illustration-production guide. Introduce the third-brain
+                                         metaphor later."
   d.readme_opens_with_what_it_does:
     rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_reasoning_overview, s.2026_09_13_remove_duplicate_overview]
     verdict: "Keep the hero, practical benefit, direct installation link and opening reasoning
