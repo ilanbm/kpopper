@@ -1198,10 +1198,19 @@ fn added_fields_follow_the_authored_ones_in_the_python_writers_order() {
 fn same_and_distinct_rewrite_a_record_without_snapshots() {
     let two = "known:\n  api.limit: {v: 10}\n  api.cap: {v: 10}\njudgments:\n  d.w:\n    verdict: known\n    requires: [api.limit, api.cap]\n    fails_if: \"api.cap > 100\"\n";
     let (_temp, root) = simple_workspace(two);
-    let output = success(run_unbundled(&root, &["same", "api.limit", "api.cap"]));
-    assert!(
-        output.starts_with("same api.limit api.cap: api.cap retired into api.limit\n  rewritten - requires: d.w · fails_if: d.w\n"),
-        "{output}"
+    // The check line counts the note that the record has no snapshot field.
+    assert_eq!(
+        success(run_unbundled(&root, &["same", "api.limit", "api.cap"])),
+        concat!(
+            "same api.limit api.cap: api.cap retired into api.limit\n",
+            "  rewritten - requires: d.w · fails_if: d.w\n",
+            "  1 mention in GROUNDING.yaml\n",
+            "  check: 1 judgments, 2 entries, 0 problems, 1 declared\n",
+            "rests on it:\n",
+            "  HOLDS     d.w: wrong_if does not hold (api.limit > 100)\n",
+            "\n",
+            "the record needs a person on 0 judgments - check says the rest\n",
+        )
     );
     assert_eq!(
         record(&root),
