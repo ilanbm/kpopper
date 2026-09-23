@@ -1,7 +1,7 @@
 //! Public core session service. Follow-up reads reuse retained findings.
 use crate::{
     Result,
-    checked_session::{ContextDirection, ContextOptions},
+    checked_session::{CheckedSession, ContextDirection, ContextOptions},
     checked_session_store::{CheckedSessionStore, ProposalRequest},
     history_contract::*,
     project_modes, public_workspace as W,
@@ -91,6 +91,76 @@ pub struct Options {
     pub basis: Vec<String>,
     #[arg(long, default_value = "")]
     pub revisit: String,
+}
+
+/// Read graph context without first opening a transport session.
+#[derive(Clone, Debug, clap::Args)]
+pub struct ContextCommand {
+    /// Known record IDs or node:ID handles.
+    #[arg(value_name = "ID", required = true, num_args = 1..=8)]
+    pub ids: Vec<String>,
+    #[arg(long)]
+    pub input: Option<PathBuf>,
+    #[arg(long)]
+    pub no_settings: bool,
+    #[arg(long)]
+    pub project: Option<String>,
+    /// Writable private cache for checked reads and proposals.
+    #[arg(long)]
+    pub state: Option<PathBuf>,
+    #[arg(long)]
+    pub profile: Option<PathBuf>,
+    #[arg(long, value_parser = ["checked-reader/v1", "core/v1"])]
+    pub assessment_profile: Option<String>,
+    #[arg(long, value_enum, default_value = "o200k_base")]
+    pub encoding: Encoding,
+    #[arg(long, default_value_t = 2000)]
+    pub tokens: usize,
+    /// Require this exact record revision; stale revisions refuse.
+    #[arg(long)]
+    pub revision: Option<String>,
+    /// Support follows premises and sources; impact follows dependents.
+    #[arg(long, value_enum, default_value = "support")]
+    pub direction: ContextDirection,
+    #[arg(long, default_value_t = 1)]
+    pub depth: usize,
+    #[arg(long, default_value_t = 16)]
+    pub max_nodes: usize,
+}
+
+impl ContextCommand {
+    fn session_options(&self) -> Options {
+        Options {
+            operation: Operation::Context,
+            input: self.input.clone(),
+            no_settings: self.no_settings,
+            global_scope: false,
+            rebuild: false,
+            project: self.project.clone(),
+            state: self.state.clone(),
+            profile: self.profile.clone(),
+            assessment_profile: self.assessment_profile.clone(),
+            encoding: self.encoding,
+            tokens: Some(self.tokens),
+            reference: None,
+            revision: self.revision.clone(),
+            offset: None,
+            ids: self.ids.clone(),
+            direction: Some(self.direction),
+            depth: self.depth,
+            max_nodes: self.max_nodes,
+            query: String::new(),
+            limit: 8,
+            branch: None,
+            search_mode: SearchMode::Hybrid,
+            cursor: None,
+            embedding_dir: None,
+            kind: None,
+            text: None,
+            basis: vec![],
+            revisit: String::new(),
+        }
+    }
 }
 
 fn home() -> Result<PathBuf> {
@@ -368,6 +438,17 @@ impl Service {
             self.inputs.verify()?;
             return Ok(opening.text);
         }
+        let (capture, session) = self.capture_core_session()?;
+        let result = session
+            .with_proposals(self.store.proposals()?)?
+            .opening(tokens, |s| self.store.encoding().count(s))?
+            .text;
+        capture.verify()?;
+        self.inputs.verify()?;
+        Ok(result)
+    }
+
+    fn capture_core_session(&self) -> Result<(source_capture::CapturedSource, CheckedSession)> {
         let runtime = W::core_runtime()?;
         let capture = source_capture::capture_source_with_runtime(
             std::slice::from_ref(&self.input),
@@ -391,16 +472,8 @@ impl Service {
             None,
         )?;
         let revision = self.store.save(&context, capture.snapshot()?)?;
-        let session = self
-            .store
-            .load(&revision, capture.snapshot()?)?
-            .with_proposals(self.store.proposals()?)?;
-        let result = session
-            .opening(tokens, |s| self.store.encoding().count(s))?
-            .text;
-        capture.verify()?;
-        self.inputs.verify()?;
-        Ok(result)
+        let session = self.store.load(&revision, capture.snapshot()?)?;
+        Ok((capture, session))
     }
 
     pub fn reading(
@@ -570,6 +643,40 @@ impl Service {
         capture.verify()?;
         self.inputs.verify()?;
         Ok(result)
+    }
+
+    pub fn current_context(&self, ids: &[String], options: &ContextOptions) -> Result<String> {
+        let result = if self.ordinary()? {
+            let (capture, _, session) = self.ordinary_session()?;
+            let text = session.contextualize(ids, session.revision(), options, |s| {
+                self.store.encoding().count(s)
+            })?;
+            capture.verify()?;
+            text
+        } else {
+            let (capture, session) = self.capture_core_session()?;
+            let text = session.contextualize(ids, session.revision(), options, |s| {
+                self.store.encoding().count(s)
+            })?;
+            capture.verify()?;
+            text
+        };
+        self.inputs.verify()?;
+        Ok(result)
+    }
+}
+
+pub fn run_context(options: &ContextCommand, cwd: &Path, mode: ReadMode) -> Result<String> {
+    let service = Service::new(&options.session_options(), cwd, mode)?;
+    let context = ContextOptions {
+        direction: options.direction,
+        tokens: options.tokens,
+        depth: options.depth,
+        max_nodes: options.max_nodes,
+    };
+    match options.revision.as_deref() {
+        Some(revision) => service.contextualizing(&options.ids, revision, &context),
+        None => service.current_context(&options.ids, &context),
     }
 }
 

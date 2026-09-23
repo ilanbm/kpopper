@@ -35,7 +35,9 @@ executable from `KPOPPER_AGENT_CONTEXT.command`. If it is unavailable, resolve t
 active plugin's runtime with `sh <plugin>/scripts/native_runtime.sh --path`; do not
 silently use PATH, pip or Python. The source-only Python dispatcher is available
 only when `KPOPPER_RUNTIME=python` is explicit.
-Ground a subject with `pull`, trace what a change reaches with `affects`, gate on `check`.
+After finding relevant IDs, prefer `context <id>` for declared dependencies and checks.
+Use `pull` for concise reads or if the checked reader is unavailable. Trace changes with
+`affects <changed-id>` or `context <changed-id> --direction impact`; gate on `check`.
 
 Use the project's mode: Simple shares one graph with named hypotheses across sessions;
 Advanced adds branch contexts and `pending_grounding` for shareable findings independent

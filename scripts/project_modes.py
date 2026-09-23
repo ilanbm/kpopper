@@ -13,9 +13,10 @@ import subprocess
 import time
 
 try:
-    from . import ingestion as I
+    from . import ingestion as I, workspace as W
 except ImportError:
     import ingestion as I
+    import workspace as W
 
 MODES = ('simple', 'advanced')
 PENDING_REF = 'refs/kpopper/pending_grounding'
@@ -24,7 +25,7 @@ PENDING_REF = 'refs/kpopper/pending_grounding'
 def git(cwd, *args, data=None, check=True, env=None):
     proc = subprocess.run(['git', '-C', str(cwd), *args], input=data,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          timeout=30, env=env)
+                          timeout=30, env=W.git_environment(env))
     if check and proc.returncode:
         raise ValueError(proc.stderr.decode('utf-8', 'replace').strip() or 'Git operation failed')
     return proc

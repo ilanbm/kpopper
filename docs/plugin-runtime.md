@@ -1,14 +1,36 @@
 # Plugin runtime and Python compatibility mode
 
-The native bundle matching the plugin version is the default runtime. Install it
-explicitly into the active plugin checkout or marketplace cache with the exact command its opener prints,
-typically `sh /absolute/path/to/kpopper/scripts/install_native.sh` on Unix or the
-printed `pwsh -NoProfile -File .../install.ps1 -PluginRoot ...` command on Windows.
+## Install the native runtime
+
+The native bundle matching the plugin version is the default runtime. Plugin installation
+does not include it: install it explicitly into the active plugin checkout or marketplace
+cache. On Unix:
+
+```sh
+sh "/absolute/path/to/plugin/scripts/install_native.sh"
+```
+
+On Windows, pass the plugin's own version, the first line of its `VERSION` file:
+
+```powershell
+pwsh -NoProfile -File "C:/path/to/plugin/install.ps1" -Version VERSION -PluginRoot "C:/path/to/plugin"
+```
+
+Claude Code lists the plugin directory as `installPath` in `claude plugin list --json`;
+`codex plugin add` prints it as the installed plugin root.
 That installer places the exact target under `scripts/runtime/<target>` and can use
 an offline archive plus SHA-256. Hooks never download or compile a runtime. The
 opener's `KPOPPER_AGENT_CONTEXT.command` points to the canonical native executable.
 A globally installed CLI does not satisfy plugin hooks; each active cache needs its
 own `scripts/runtime/TARGET` payload.
+
+When the runtime is missing, the session opener prints the diagnostic and the exact
+install command for that plugin copy on standard output, which Claude Code and Codex add
+to the agent's context at session start. The agent can then offer to run it and ask for a
+new session, which opens with kpopper. The opener still exits 0. Every other hook stays
+silent and leaves the same diagnostic on standard error, which neither host shows the model.
+
+## Python compatibility mode
 
 The Python runtime described below is source-only compatibility mode for legacy
 workflows. Select it explicitly with `KPOPPER_RUNTIME=python`; missing native
@@ -16,13 +38,34 @@ runtime must not silently fall back to Python or to a different `kpop` on `PATH`
 The Python followup and watch hooks require POSIX file locking; use the native
 runtime for those deliveries on Windows.
 
+On macOS or Linux, install **Python 3.9+ with `venv` support**, then run this once on the
+machine where the hooks execute, under the same OS account as the host:
+
+```sh
+git clone https://github.com/ilanbm/kpopper.git "$HOME/kpopper"
+python3 "$HOME/kpopper/scripts/plugin_runtime.py" setup
+python3 "$HOME/kpopper/scripts/plugin_runtime.py" doctor
+```
+
+If you already have a checkout, use its absolute path instead. `setup` installs the
+[core dependencies](../pyproject.toml) from PyPI into a private virtualenv. It works with
+externally managed Python installations: system packages are not modified. On Linux
+distributions that package `venv` separately, install that Python's `venv` support first.
+
+When `KPOPPER_RUNTIME=python` is set, the Claude Code and Codex hooks select this runtime,
+including after a plugin cache update. No activation or PATH change is needed. The hooks
+run code from their own installed plugin; the checkout only prepares dependencies. Hooks
+never create environments or install packages. A standalone `pipx` or `uv tool`
+installation supplies its own CLI environment and does not by itself repair hooks.
+
 In explicit Python compatibility mode, Claude Code and Codex copy plugin files; that
 does not install Python dependencies.
 Their hook commands start a small standard-library-only launcher with `python3`.
 The launcher selects a private dependency environment if one exists, otherwise it
 checks that bootstrap Python. Opening a record probes only `yaml`
 before running the hook. Failures name the actual interpreter and the repair command;
-they do not block the host session or claim the record was opened.
+they do not block the host session or claim the record was opened. Run that repair
+command in a terminal, then start a new session.
 
 Normal setup also installs `tzdata` for followup scheduling on systems without an IANA
 timezone database. It is not an HTML dependency and its absence does not block record

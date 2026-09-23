@@ -1272,27 +1272,38 @@ def infer(doc):
 
     fields = {"deps": pick("deps")}
     if not fields["deps"]:
-        # The checked-session transport already accepts this narrow starting shape.
-        # Let the reader/writer do so too: a first source and finding need not invent
-        # a judgment. Unknown collections or judgment-shaped fields still require
-        # role inference; this must never hide a misspelled dependency declaration.
+        # A record before its first judgment has no graph yet, and that is not a lost one:
+        # a first source and finding need not invent a judgment. Its sections are read by
+        # what their entries are, as they are once a judgment exists, so `facts:` holding
+        # values reads as `known:` does. A misspelled dependency declaration must still
+        # never pass: a judgment's own fields, or a list naming what is not an entry,
+        # refuse the record in any section, and a section under a name of the record's
+        # own reads only when every entry in it is a value or a source.
         source_collections = {k: v for k, v in collections.items() if k != "meta"}
         judgment_fields = {"rests_on", "wrong_if", "seen", "verdict", "reopened_by", "blocked_on"}
         # A record born with only its head - meta, and nothing yet - is the moment before
         # the first entry, not a record that lost its graph.
         header_only = bool(doc) and set(doc) <= {"meta", "schema"}
+        # The method's own sections read whatever their entries hold, as they always have.
         conventional = {'known', 'sources', 'open', 'questions'}
-        custom_sources = all(collection in conventional or all(
-            isinstance(body, dict) and not any(key in body for key in ('v', 'quoted', 'rule'))
-            and any(body.get(key) for key in ('asked', 'file', 'url', 'read'))
-            for body in members.values())
-            for collection, members in source_collections.items())
-        if (header_only or source_collections and custom_sources) \
+
+        def value_or_source(body):
+            """A value - a bare scalar, or `v`, `quoted` or `rule` - or a source."""
+            if not isinstance(body, dict):
+                return True
+            return any(key in body for key in ('v', 'quoted', 'rule')) \
+                or any(body.get(key) for key in ('asked', 'file', 'url', 'read'))
+
+        plain_sections = all(collection in conventional or all(map(value_or_source, members.values()))
+                             for collection, members in source_collections.items())
+        if (header_only or source_collections and plain_sections) \
                 and not unresolved and not any(
                     judgment_shaped(body, judgment_fields) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
+            # A role the schema already names is the one the first judgment is written with.
             return {nid for group in source_collections.values() for nid in group} | (ids & set(COMPUTED)), {}, \
-                {"deps": "rests_on", "snapshot": "seen", "predicate": "wrong_if"}
+                {role: sch.get(role) or default for role, default in
+                 (("deps", "rests_on"), ("snapshot", "seen"), ("predicate", "wrong_if"))}
         raise SystemExit(_no_deps(unresolved))
     # The snapshot and the predicate are judgment fields, so they are voted on among the
     # bodies that carry the dependency field: a derived entry's rule has a predicate's
@@ -2560,8 +2571,8 @@ def opening(paths, budget=25, chars=None, host=None):
         rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
                 "(what a change reaches)")
     # hypotheses beside the record are a move of their own on a host that has the skill; a
-    # pending contribution is not one - consolidate leaves it to its own explicit step
-    n = sum(h.get('kind') != 'contribution' for h in doc.hypotheses.values())
+    # pending contribution is not one - consolidation never folds it
+    n = sum(1 for h in doc.hypotheses.values() if h.get("kind") != "contribution")
     if moves and n:
         footer += f" · {moves['consolidate']} ({n} hypothes{'is waits' if n == 1 else 'es wait'})"
 
@@ -4563,8 +4574,87 @@ def _field_indent(lines, s, e, field):
     return _members_of(lines, s, e)[0]
 
 
+def _flow_text(v):
+    """`v` as the record writes it inside braces: every mapping and list as a flow
+    collection, every scalar on one line."""
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"{scalar(k, fold=False)}: {_flow_text(x)}" for k, x in v.items()) + "}"
+    if isinstance(v, list):
+        return "[" + ", ".join(_flow_text(x) for x in v) + "]"
+    return scalar(v, fold=False)
+
+
+def _in_braces(lines, s, e, field, text, after=None, stamp=None):
+    """`field` written inside the braces of the judgment at `s`: its value replaced where
+    it stands - a stamp in the style it had - or the pair added after the field `after`,
+    else after the last one. Nothing else on its lines moves. -> the end of the entry."""
+    nid = MEMBER.match(lines[s]).group(2)
+    block = "\n".join(lines[s:])
+    # read on to the brace that closes the judgment: it may stand on a line of its own, at
+    # the judgment's indent, past the lines the entry spans
+    tokens, depth, keys = [], 0, []
+    try:
+        for t in yaml.scan(block):
+            tokens.append(t)
+            if isinstance(t, (yaml.BlockMappingStartToken, yaml.FlowMappingStartToken,
+                              yaml.BlockSequenceStartToken, yaml.FlowSequenceStartToken)):
+                depth += 1
+            elif isinstance(t, (yaml.BlockEndToken, yaml.FlowMappingEndToken, yaml.FlowSequenceEndToken)):
+                depth -= 1
+                if depth == 1:
+                    break
+            elif isinstance(t, yaml.KeyToken) and depth == 2:
+                keys.append(len(tokens) - 1)
+    except yaml.YAMLError:
+        tokens = []
+    if depth != 1 or not tokens or not isinstance(tokens[-1], yaml.FlowMappingEndToken):
+        raise Refused(f"refused - {nid}: its braces could not be read - write it with one field per "
+                      f"line, then review it again")
+    values = {tokens[k + 1].value: k + 3 for k in keys
+              if isinstance(tokens[k + 1], yaml.ScalarToken) and isinstance(tokens[k + 2], yaml.ValueToken)}
+
+    def span(at):
+        """-> (start, end, whether it is a scalar) of the value whose first token is `at`;
+        None for an alias, a tag, an anchor or no value, which this writer leaves alone."""
+        t = tokens[at]
+        if isinstance(t, yaml.ScalarToken):
+            return t.start_mark.index, t.end_mark.index, True
+        if isinstance(t, (yaml.FlowMappingStartToken, yaml.FlowSequenceStartToken)):
+            level = 0
+            for u in tokens[at:]:
+                if isinstance(u, (yaml.FlowMappingStartToken, yaml.FlowSequenceStartToken)):
+                    level += 1
+                elif isinstance(u, (yaml.FlowMappingEndToken, yaml.FlowSequenceEndToken)):
+                    level -= 1
+                    if not level:
+                        return t.start_mark.index, u.end_mark.index, False
+        return None
+
+    if field in values:
+        got = span(values[field])
+        if got is None or (stamp is not None and not got[2]):
+            raise Refused(f"refused - {nid}: {field}: inside its braces is not a value this review "
+                          f"can rewrite")
+        start, end, _ = got
+        new = scalar(stamp, _style(block[start:end]), fold=False) if stamp is not None else text
+        block = block[:start] + new + block[end:]
+    else:
+        got = span(values[after]) if after in values else None
+        last = tokens[-2]
+        at = got[1] if got else last.end_mark.index
+        sep = ", " if got else "" if isinstance(last, yaml.FlowMappingStartToken) \
+            else " " if isinstance(last, yaml.FlowEntryToken) else ", "
+        new = f'"{stamp}"' if stamp is not None else text
+        block = block[:at] + sep + f"{scalar(field, fold=False)}: {new}" + block[at:]
+    lines[s:] = block.split("\n")    # one line changed, none added
+    return e
+
+
 def _seen_lines(lines, s, e, snapshot_field, seen):
-    """The judgment's snapshot rewritten in place, in the style it had."""
+    """The judgment's snapshot rewritten in place, in the style it had - inside the braces
+    of a judgment written on one line."""
+    if _inline(lines[s]).startswith("{"):
+        return _in_braces(lines, s, e, snapshot_field, _flow_text(seen))
     find = _field_indent(lines, s, e, snapshot_field)
     return _replace_field(lines, s, e, snapshot_field, _field_lines(snapshot_field, seen, find))
 
@@ -4572,6 +4662,8 @@ def _seen_lines(lines, s, e, snapshot_field, seen):
 def _stamp_field(lines, s, e, field, stamp, after):
     """A date field rewritten if present, in its own style, keeping every comment on or
     under it; added after `after` if not."""
+    if _inline(lines[s]).startswith("{"):
+        return _in_braces(lines, s, e, field, None, after, stamp)
     find = _field_indent(lines, s, e, field)
     span = _field_span(lines, s, e, field)
     if span:
@@ -5067,8 +5159,8 @@ def _fork(paths, action, diagnostics=None):
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        # a reviewed kept inside a judgment written on one line refuses the review, rather
-        # than stay as it was
+        # a judgment written on one line keeps its reviewed inside its braces, and it is
+        # renewed there
         if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         out.append(f"review {nid} in hypothesis {name}: "
@@ -5640,8 +5732,8 @@ def _apply_candidate(paths, action, diagnostics=None):
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        # a reviewed kept inside a judgment written on one line refuses the review, rather
-        # than stay as it was
+        # a judgment written on one line keeps its reviewed inside its braces, and it is
+        # renewed there
         if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         elif "replaced" in j["body"] and not arrangement:

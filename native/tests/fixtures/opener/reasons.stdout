@@ -1,0 +1,31 @@
+A record that exercises every line of the opener.
+holds: p (4) · prior (2) · q (2) · and 1 standalone
+prefixes: d=decision made by a person · prior=a session's own confidence, held as a n… · p=parameter
+21 entries, 12 judgments, 2 open questions, updated 2026-09-20
+2 judgments rest on prior.* claims, 1 of them on a prior at 0.8 or above
+1 reading moved that only a replaced judgment listened to: p.dropped (d.gone until 2026-09-18) - pull d.gone --history
+left under the earlier name, not read: PROVENANCE.view.yaml - move into .kpopper/
+
+needs a person (11):
+  d.broken: rests on missing.one, which is not an entry
+  d.broken: rests on missing.two, which is not an entry
+  d.misfiled: reopened_by reads as a comparison - a predicate belongs in wrong_if
+  d.undeclared: predicate reads p.limit, which it does not declare - a change to it never reaches this
+  d.falsified: wrong_if holds (p.load != 'a long quoted value that runs well past sixty cha) - broken by its own condition
+      because: the load was measured on 61 and this sentence runs long enough to be cut at one hundr ...
+  d.unchecked: never checked against p.limit
+  d.reversed: reversed on 2026-09-16 - the verdict under this id changed; review it once read, or pull d.reversed --history
+  d.moved: p.old differs from what it last saw: 4 -> 5
+  d.blocked: waiting on vendor.sheet - the vendor has not sent the sheet yet, and nobody can say when it will
+  d.broken: nothing evaluable would falsify it
+  d.prose: nothing evaluable would falsify it
+
+  ? q.a: {'name': 'the second question', 'question': 'does the limit hold through the winter peak, a ...
+  ? q.b: which vendor sends the sheet?
+
+standing:  (9 above need a person)
+  = d.priors_high (on the word of s.note): sure of it
+  = d.priors_low: not so sure
+  = d.reviewed: reviewed since it was replaced
+
+next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check

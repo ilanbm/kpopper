@@ -1,5 +1,6 @@
 """Native launchers bind commands to the active package, without Python fallback."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -41,7 +42,7 @@ class NativeShellLaunchers(unittest.TestCase):
             shutil.copy2(ROOT / "scripts" / name, self.plugin / "scripts" / name)
         for name in ("kpop", "kpopper"):
             shutil.copy2(ROOT / "bin" / name, self.plugin / "bin" / name)
-        tools = self.root / "path tools"
+        tools = self.tools = self.root / "path tools"
         tools.mkdir()
         self.write_executable(tools / "uname", '#!/bin/sh\ncase "$1" in -s) echo Darwin;; -m) echo arm64;; esac\n')
         self.python_called = self.root / "python-called"
@@ -103,15 +104,66 @@ class NativeShellLaunchers(unittest.TestCase):
 
     def test_missing_runtime_is_nonblocking_for_hooks_and_fails_cli(self):
         self.binary.unlink()
-        for script, args in (("session_open.sh", ()), ("session_gate.sh", ("--context", "UserPromptSubmit"))):
+        for script, args in (("session_gate.sh", ("--context", "UserPromptSubmit")),
+                             ("hook.sh", ("ground_hook.py", "claude", "start"))):
             result = self.invoke("scripts/" + script, args)
-            self.assertEqual(result.returncode, 0)
+            self.assertEqual((result.returncode, result.stdout), (0, ""))
             self.assertIn("not installed", result.stderr)
-            self.assertNotIn("KPOPPER_AGENT_CONTEXT", result.stdout)
         self.assertEqual(self.invoke("bin/kpop").returncode, 1)
         stopped = self.invoke("scripts/session_gate.sh")
         self.assertEqual((stopped.returncode, stopped.stdout, stopped.stderr), (0, '', ''))
         self.assertFalse(self.python_called.exists())
+
+    def test_only_the_opener_tells_the_session_that_the_runtime_is_missing(self):
+        # Claude Code and Codex give the model a SessionStart hook's standard output, never
+        # its standard error. The installer is present, so running it would reach curl.
+        self.binary.unlink()
+        shutil.copy2(ROOT / "scripts/install_native.sh", self.plugin / "scripts/install_native.sh")
+        shutil.copy2(ROOT / "install.sh", self.plugin / "install.sh")
+        (self.plugin / "VERSION").write_text("0.9.0\n")
+        downloaded = self.root / "downloaded"
+        self.write_executable(self.tools / "curl", '#!/bin/sh\n: > "$DOWNLOADED"\nexit 99\n')
+        env = dict(self.env, CLAUDE_PLUGIN_ROOT=str(self.plugin), PLUGIN_ROOT=str(self.plugin),
+                   DOWNLOADED=str(downloaded))
+        install = 'Install this active copy: sh "%s"\n' % (self.plugin / "scripts/install_native.sh")
+        openers = 0
+        for config in ("hooks/hooks.json", "adapters/codex/plugin-hooks.json", "adapters/codex/hooks.json"):
+            for event, groups in json.loads((ROOT / config).read_text())["hooks"].items():
+                for hook in (hook for group in groups for hook in group["hooks"]):
+                    command = hook["command"].replace("../../scripts", str(self.plugin / "scripts"))
+                    payload = {"session_id": "missing-runtime", "transcript_path": str(self.root / "t.jsonl"),
+                               "cwd": str(self.root), "hook_event_name": event, "source": "startup"}
+                    with self.subTest(config=config, command=command):
+                        result = subprocess.run(command, shell=True, input=json.dumps(payload), text=True,
+                                                capture_output=True, timeout=10, env=env, cwd=self.root)
+                        self.assertEqual(result.returncode, 0)
+                        if "session_open.sh" not in command:
+                            self.assertEqual(result.stdout, "")
+                            self.assertIn("not installed", result.stderr)
+                            continue
+                        openers += 1
+                        self.assertEqual(result.stderr, "")
+                        self.assertTrue(result.stdout.startswith(
+                            "kpopper: native runtime is not installed for darwin-arm64 in this package.\n"
+                            + install), result.stdout)
+                        self.assertIn("kpopper did not open this session", result.stdout)
+                        self.assertIn("Offer to run the command above", result.stdout)
+                        self.assertIn("start a new session", result.stdout)
+        self.assertEqual(openers, 3)
+        self.assertFalse(self.binary.exists())
+        self.assertFalse(downloaded.exists())
+        self.assertFalse(self.python_called.exists())
+
+    def test_an_unsupported_platform_reaches_the_session_without_an_install_offer(self):
+        self.write_executable(self.tools / "uname", '#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo riscv64;; esac\n')
+        result = self.invoke("scripts/session_open.sh", ("--host", "claude"))
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertTrue(result.stdout.startswith("kpopper: unsupported native platform: Linux riscv64\n"
+                                                 "kpopper did not open this session"), result.stdout)
+        self.assertNotIn("Offer to run", result.stdout)
+        grounded = self.invoke("scripts/hook.sh", ("ground_hook.py", "claude", "start"))
+        self.assertEqual((grounded.returncode, grounded.stdout), (0, ""))
+        self.assertIn("unsupported native platform", grounded.stderr)
 
 
 if __name__ == "__main__":

@@ -44,25 +44,6 @@ class Views(Repository):
             self.assertIn('PENDING', out.stdout)
             self.assertIn('captured locally', out.stdout)
 
-    def test_a_pending_contribution_is_not_offered_to_consolidate(self):
-        # consolidate leaves a contribution to its own explicit step, so the host's moves send
-        # a session there only for a hypothesis beside the record
-        self.capture()
-        moves = ('next: /kpopper:ground <entry|prefix> (values with sources, what a change reaches)'
-                 ' · /kpopper:record (what this session found) · check')
-
-        def footer():
-            with contextlib.redirect_stdout(io.StringIO()) as out:
-                P.opening([str(self.record)], host='claude')
-            self.assertIn('PENDING', out.getvalue())
-            return out.getvalue().splitlines()[-1]
-
-        self.assertEqual(footer(), moves)
-        (self.root / '.kpopper' / 'hypotheses').mkdir(parents=True)
-        (self.root / '.kpopper' / 'hypotheses' / 'higher.yaml').write_text(
-            'known:\n  local.extra: {v: 2}\n')
-        self.assertEqual(footer(), moves + ' · /kpopper:consolidate (1 hypothesis waits)')
-
     def test_raw_mutation_lock_excludes_overlay_from_every_writer(self):
         self.capture()
         with P._locked(str(self.record)):
@@ -138,6 +119,23 @@ class Views(Repository):
         self.assertTrue(live['sources'][source]['location'].startswith('git:'))
         self.assertEqual(digest(before), digest(native_record(self.record, reader, read_mode='frozen')))
         self.assertNotEqual(digest(before), digest(live))
+
+    def test_consolidate_move_counts_hypotheses_and_never_a_pending_contribution(self):
+        # consolidation folds hypotheses only, so a contribution alone sends nobody there
+        self.capture()
+        for host, move in (('claude', '/kpopper:consolidate'), ('codex', '$consolidate')):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                P.opening([str(self.record)], host=host)
+            self.assertIn('PENDING', out.getvalue())
+            self.assertNotIn(move, out.getvalue())
+        hypothesis = Path(P.hypothesis_path([str(self.record)], 'alternate'))
+        hypothesis.parent.mkdir(parents=True)
+        hypothesis.write_text(P.yaml.safe_dump({'known': {'local.other': {'v': 2, 'from': 'measurement'}}}))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            P.opening([str(self.record)], host='claude')
+        self.assertIn('1 hypothesis waits - alternate', out.getvalue())
+        self.assertTrue(out.getvalue().endswith(' · check · /kpopper:consolidate (1 hypothesis waits)\n'),
+                        out.getvalue())
 
     def test_capture_before_first_checkout_record_is_readable(self):
         self.record.unlink()
@@ -223,6 +221,32 @@ class Routing(Views):
         self.assertEqual(json.loads(out.stdout)['state'], 'private draft')
         self.assertEqual(before, legacy.read_bytes())
         self.assertIsNone(G.Store(self.root).head())
+
+    def test_import_run_from_another_repositorys_hook_captures_into_the_workspace(self):
+        # Git runs hooks and `rebase --exec` in a linked worktree with its GIT_DIR exported.
+        other = self.base / 'other'
+        other.mkdir()
+        M.git(other, 'init', '-b', 'trunk')
+        M.git(other, '-c', 'user.name=Test', '-c', 'user.email=test@example.test', '-c', 'commit.gpgsign=false',
+              'commit', '--allow-empty', '-m', 'Initial')
+        M.git(other, 'worktree', 'add', '--detach', str(self.base / 'other-feature'))
+        admin = other / '.git' / 'worktrees' / 'other-feature'
+        legacy = self.base / 'legacy.yaml'
+        legacy.write_text(P.yaml.safe_dump({'sources': {'s.vendor': {'name': 'Vendor'}},
+                                            'known': {'fact.import': {'v': 10, 'from': 's.vendor',
+                                                      'scope': {'kind': 'external', 'environment': 'vendor'}}}}))
+        command = [sys.executable, str(Path(P.__file__).with_name('cli.py')),
+                   '--workspace', str(self.root), 'knowledge', 'import', str(legacy),
+                   '--shareability', 'project', '--scope', 'external', '--environment', 'vendor']
+        out = subprocess.run(command, cwd=self.base / 'other-feature', text=True, capture_output=True,
+                             env=dict(os.environ, GIT_DIR=str(admin), GIT_INDEX_FILE=str(admin / 'index'),
+                                      KPOPPER_PRIVATE_HOME=str(self.base / 'private')))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        receipt = json.loads(out.stdout)
+        self.assertEqual(receipt['state'], 'captured')
+        self.assertEqual(G.Store(self.root).head(), receipt['ledger_commit'])
+        self.assertIsNone(G.Store(other).head())
+        self.assertFalse((other / '.git' / 'kpopper').exists())
 
     def test_invalid_private_marker_is_retained_privately(self):
         action = self.action(shareability='project', scope='project', environment='project')
