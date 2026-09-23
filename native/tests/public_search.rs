@@ -93,18 +93,11 @@ fn encode(value: &J) -> String {
 fn native_runtime() -> &'static kpop_native::reasoning_runtime::Runtime {
     static R: std::sync::OnceLock<kpop_native::reasoning_runtime::Runtime> =
         std::sync::OnceLock::new();
+    // Normalize with the runtime search itself selects from KPOPPER_NATIVE_RESOURCES.
     R.get_or_init(|| {
-        let root = std::path::PathBuf::from(std::env::var_os("KPOPPER_NATIVE_RESOURCES").unwrap());
-        let cache = std::path::PathBuf::from(std::env::var_os("KPOPPER_NATIVE_CACHE").unwrap());
-        kpop_native::reasoning_runtime::Runtime::open(
-            &root.join("reasoning").join(format!(
-                "{}.zip",
-                kpop_native::reasoning_runtime::target_name().unwrap()
-            )),
-            &cache,
-            Default::default(),
-        )
-        .unwrap()
+        kpop_native::public_workspace::core_runtime()
+            .unwrap()
+            .expect("set KPOPPER_NATIVE_RESOURCES")
     })
 }
 fn normalize_runtime(case: &mut J, root: &Path) {
