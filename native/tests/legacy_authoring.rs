@@ -132,6 +132,97 @@ fn an_added_scope_text_is_written_as_given() {
     assert_no_history(&root);
 }
 
+/// A set with a reason leaves `# set DAY: why` under its entry. An entry added
+/// after that one goes below the comment, so the reason stays with its entry.
+#[test]
+fn an_entry_added_after_a_set_leaves_the_reason_with_its_entry() {
+    let cases: &[(&str, &[&str], &[&str])] = &[
+        (
+            "workshop",
+            &[
+                "set",
+                "workshop.guests",
+                "26",
+                "--why",
+                "late sign-ups",
+                "--as-of",
+                "2026-09-22",
+                "GROUNDING.yaml",
+            ],
+            &[
+                "add",
+                "workshop.rooms",
+                "v=2",
+                "from=prep",
+                "at=Room plan",
+                "--as-of",
+                "2026-09-22",
+                "GROUNDING.yaml",
+            ],
+        ),
+        (
+            "block",
+            &[
+                "set",
+                "p.beta",
+                "5",
+                "--why",
+                "recount",
+                "--as-of",
+                "2026-09-19",
+                "GROUNDING.yaml",
+            ],
+            &[
+                "add",
+                "p.gamma",
+                "v=3",
+                "--as-of",
+                "2026-09-19",
+                "GROUNDING.yaml",
+            ],
+        ),
+    ];
+    for advanced in [false, true] {
+        for (name, set, add) in cases {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            if advanced {
+                // A Git project without a configuration is an Advanced one.
+                let init = Command::new("git")
+                    .arg("-C")
+                    .arg(&root)
+                    .args(["init", "-q"])
+                    .output()
+                    .unwrap();
+                assert!(init.status.success(), "{init:?}");
+            }
+            write(
+                &root.join("GROUNDING.yaml"),
+                &fixture(&format!("set-comment/{name}-before.yaml")),
+            );
+            success(run(&root, set));
+            let output = success(run(&root, add));
+            assert_eq!(
+                output.as_bytes(),
+                fixture(&format!("set-comment/{name}-add.stdout")),
+                "{name} (advanced: {advanced})"
+            );
+            assert_eq!(
+                fs::read(root.join("GROUNDING.yaml")).unwrap(),
+                fixture(&format!("set-comment/{name}-after.yaml")),
+                "{name} (advanced: {advanced})"
+            );
+            assert_no_history(&root);
+            let config: Value =
+                serde_json::from_str(&success(run(&root, &["config", "--json"]))).unwrap();
+            assert_eq!(
+                config["project"]["mode"],
+                if advanced { "advanced" } else { "simple" }
+            );
+        }
+    }
+}
+
 #[test]
 fn set_replaces_source_citation_in_the_same_guarded_write() {
     let temp = tempfile::tempdir().unwrap();

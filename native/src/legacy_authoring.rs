@@ -90,6 +90,20 @@ pub(crate) fn route(entry: &Path, config: &V) -> Result<AuthorityRoute> {
     Ok(route)
 }
 
+/// Writes that no contribution routing applies to, such as `same` and `distinct`,
+/// edit an Advanced project's own ordinary record as they edit a Simple one.
+pub(crate) fn local_route(entry: &Path, write: &WriteRoute) -> Result<AuthorityRoute> {
+    let route = authority_route(entry)?;
+    if route == AuthorityRoute::Legacy {
+        require(
+            string_is(field(map(write.config())?, "mode")?, "simple")
+                || write.pending_required()?,
+            "legacy_authoring_requires_simple_project",
+        )?;
+    }
+    Ok(route)
+}
+
 #[derive(Clone, Debug)]
 struct Collection {
     name: String,
@@ -556,7 +570,8 @@ fn insert_entry(
         }
         anchor.start
     } else {
-        let mut position = anchor.end;
+        // A comment under the anchor, such as the reason a set wrote, stays with it.
+        let mut position = block_end(lines, anchor);
         if position < collection.end && separator_blank(&lines[position]) {
             position += 1;
             new.push(String::new());
