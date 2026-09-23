@@ -63,7 +63,8 @@ class CoreWorkspaceOpen(unittest.TestCase):
             path.write_text(DOCUMENT, encoding='utf-8')
             nodes = {('d.' + str(index)): {
                 'attention': [{'reasons': [{'code': 'needs_review_' + ('x' * 80)}]}],
-                'support': {'status': 'clear', 'reservations': []}}
+                'support': {'status': 'clear', 'reservations': []},
+                'state': {'falsifier': {'status': 'does_not_hold'}}}
                 for index in range(100)}
             context = type('Context', (), {
                 'assessment': {'nodes': nodes, 'history_subjects': {},
@@ -75,18 +76,22 @@ class CoreWorkspaceOpen(unittest.TestCase):
                 'CaptureError': ValueError,
                 'CapturedAssessment': type('Capture', (), {
                     'capture': staticmethod(lambda files: context)})})
+            # only the capture is replaced; every other sibling the opener asks for is real
+            peer = P._peer
+            def peers(name):
+                return module if name == 'reasoning.context' else peer(name)
             location = {'workspace': directory, 'record': str(path), 'status': 'found',
                         'key': 'core-workspace'}
             with mock.patch.object(W.W, 'locate', return_value=location), \
                     mock.patch.object(P, 'core_reader_selected', return_value=True), \
-                    mock.patch.object(P, '_peer', return_value=module), \
+                    mock.patch.object(P, '_peer', side_effect=peers), \
                     contextlib.redirect_stdout(output := io.StringIO()):
                 self.assertEqual(W.open_context([str(path)]), 0)
             self.assertLessEqual(len(output.getvalue().rstrip()), W.CORE_OPEN_CHARS)
             self.assertIn('more attention items omitted', output.getvalue())
             with mock.patch.object(W.W, 'locate', return_value=location), \
                     mock.patch.object(P, 'core_reader_selected', return_value=True), \
-                    mock.patch.object(P, '_peer', return_value=module), \
+                    mock.patch.object(P, '_peer', side_effect=peers), \
                     contextlib.redirect_stdout(output := io.StringIO()):
                 self.assertEqual(W.open_context(['--json', str(path)]), 0)
             payload = json.loads(output.getvalue())
