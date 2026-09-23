@@ -584,6 +584,115 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     assert!(success(run(&root, &["review", "d.work"])).contains("(review d.work)"));
 }
 
+fn history_record_with_one_source() -> (tempfile::TempDir, std::path::PathBuf) {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    fs::create_dir(root.join("notes")).unwrap();
+    fs::write(root.join("notes/c.txt"), "Hours: 10\nRate: 50\n").unwrap();
+    fs::write(root.join("notes/d.txt"), "Days: 3\n").unwrap();
+    let first = success(run(
+        &root,
+        &[
+            "add",
+            "src.c",
+            "file=notes/c.txt",
+            "name=C",
+            "read=2026-09-20",
+        ],
+    ));
+    assert!(first.starts_with("history committed: "), "{first}");
+    (temp, root)
+}
+
+#[test]
+fn history_add_names_the_nearest_existing_entries_once_before_the_commit() {
+    let (_temp, root) = history_record_with_one_source();
+    let day = ["--as-of", "2026-09-20"];
+    success(run(
+        &root,
+        &[&["add", "p.hours", "v=10", "from=src.c"][..], &day].concat(),
+    ));
+    let output = success(run(
+        &root,
+        &[&["add", "p.rate", "v=50", "from=src.c"][..], &day].concat(),
+    ));
+    let (notice, committed) = output.split_once("history committed: ").unwrap();
+    assert_eq!(
+        notice,
+        "nearest existing:\n  p.hours: same from (src.c)\n  one subject: same <id> p.rate folds it in · two: distinct p.rate <id> \"why\" keeps them apart\n"
+    );
+    assert!(committed.ends_with(" (add p.rate)\n"), "{output}");
+    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    assert!(
+        record.contains("  p.rate:\n    from: src.c\n    v: 50\n"),
+        "{record}"
+    );
+
+    // Judgments read the record's dependency field: shared premises make a pair.
+    let fine = [
+        "add",
+        "d.cost",
+        "verdict=Cost is fine",
+        "rests_on=[p.hours, p.rate]",
+        "wrong_if={expr: \"p.rate > 100\"}",
+    ];
+    let first = success(run(&root, &[&fine[..], &day].concat()));
+    assert!(first.starts_with("history committed: "), "{first}");
+    let high = [
+        "add",
+        "d.cost2",
+        "verdict=Cost is high",
+        "rests_on=[p.hours, p.rate]",
+        "wrong_if={expr: \"p.rate > 200\"}",
+    ];
+    let output = success(run(&root, &[&high[..], &day].concat()));
+    let (notice, committed) = output.split_once("history committed: ").unwrap();
+    assert_eq!(
+        notice,
+        "nearest existing:\n  d.cost: rests on p.hours, p.rate too - verdicts differ, a pair to judge\n  one subject: same <id> d.cost2 folds it in · two: distinct d.cost2 <id> \"why\" keeps them apart\n"
+    );
+    assert!(committed.ends_with(" (add d.cost2)\n"), "{output}");
+
+    // A core rule is stored as an expression and named by its text.
+    let rule = ["rule={expr: \"p.hours * p.rate\"}"];
+    let first = success(run(&root, &[&["add", "p.total"][..], &rule, &day].concat()));
+    assert!(first.starts_with("history committed: "), "{first}");
+    let output = success(run(
+        &root,
+        &[&["add", "p.total2"][..], &rule, &day].concat(),
+    ));
+    assert!(
+        output.starts_with("nearest existing:\n  p.total: same rule (p.hours * p.rate)\n"),
+        "{output}"
+    );
+}
+
+#[test]
+fn history_writes_with_nothing_near_say_only_the_commit() {
+    let (_temp, root) = history_record_with_one_source();
+    let day = ["--as-of", "2026-09-20"];
+    for (subject, fields) in [
+        ("p.hours", ["v=10", "from=src.c"]),
+        ("src.d", ["file=notes/d.txt", "name=D"]),
+        ("p.days", ["v=3", "from=src.d"]),
+    ] {
+        let output = success(run(&root, &[&["add", subject][..], &fields, &day].concat()));
+        assert!(output.starts_with("history committed: "), "{output}");
+        assert!(output.ends_with(&format!(" (add {subject})\n")), "{output}");
+    }
+    success(run(
+        &root,
+        &[&["add", "p.rate", "v=50", "from=src.c"][..], &day].concat(),
+    ));
+    // Only an add hears the note: a newer reading of an entry with a near
+    // neighbour is set without one.
+    let output = success(run(
+        &root,
+        &["set", "p.hours", "11", "--as-of", "2026-09-21"],
+    ));
+    assert!(output.starts_with("history committed: "), "{output}");
+}
+
 #[test]
 fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
     let temp = tempfile::tempdir().unwrap();

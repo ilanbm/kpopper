@@ -2,7 +2,7 @@
 use crate::{
     Error, Result,
     history_authoring_audit::ReplayAudit,
-    history_contract::{Map, map, string_is},
+    history_contract::{Map, map, string_is, text},
     ordinary_reader::Reader,
     reasoning_authoring::World,
     reasoning_fields as F,
@@ -105,6 +105,29 @@ impl<'a> AuthoringReader<'a> {
             Self::Core(w) => w.validate(a),
             Self::Ordinary(w) => w.validate(a),
         }
+    }
+    /// The note naming the entries nearest an add. A history write reads its base
+    /// alone, so no hypothesis layer beside it is consulted.
+    pub fn nearest_existing(&self, a: &V) -> Result<String> {
+        use crate::public_identity::ordinary_sameness as S;
+        let notice = match self {
+            Self::Core(w) => {
+                let ids = w.raw().keys().cloned().collect();
+                S::nearest_existing(
+                    &S::Inputs {
+                        document: w.document(),
+                        hypotheses: &Map::new(),
+                        deps: text(&w.fields()["deps"])?,
+                        ids: &ids,
+                        raw: w.raw(),
+                    },
+                    a,
+                    &S::Sources::default(),
+                )?
+            }
+            Self::Ordinary(w) => S::nearest_existing_from_sources(w, a, &S::Sources::default())?,
+        };
+        Ok(notice.text)
     }
     pub fn candidate_document(&self, a: &V) -> Result<V> {
         match self {

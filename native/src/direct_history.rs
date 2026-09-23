@@ -323,15 +323,27 @@ fn act_with_probe(
     ]))
 }
 
-pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
+/// The write's result, and the note naming the entries nearest an add, which is
+/// said before it.
+pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<(V, String)> {
     write_with_probe(original, cwd, action, &mut |_| Ok(()))
+}
+/// Read against the base the write was prepared from. The note is advisory: it
+/// never changes the write, and whatever keeps it from being read leaves none.
+fn nearest_existing(document: &V, action: &V, runtime: Option<&Runtime>) -> String {
+    let note = || -> Result<String> {
+        let mut world = crate::history_authoring_reader::AuthoringReader::new(document, runtime)?;
+        let (action, _) = world.normalize(action)?;
+        world.nearest_existing(&action)
+    };
+    note().unwrap_or_default()
 }
 fn write_with_probe(
     original: &[PathBuf],
     cwd: &Path,
     action: &V,
     probe: &mut dyn FnMut(&str) -> Result<()>,
-) -> Result<V> {
+) -> Result<(V, String)> {
     let a = map(action)?;
     let kind = text(field(a, "kind")?)?;
     require(
@@ -369,7 +381,7 @@ fn write_with_probe(
         map_mut(meta)?.remove("history");
     }
     if let Some(draft) = Privacy::selected_draft(route.project(), action, &document)? {
-        return Ok(draft);
+        return Ok((draft, String::new()));
     }
     let id = text(field(a, "id")?)?;
     let existing = crate::reasoning_snapshot::entries(&document)?;
@@ -403,7 +415,7 @@ fn write_with_probe(
         map_mut(map_mut(&mut candidate)?.get_mut(collection).unwrap())?.insert(id.into(), body);
     }
     if let Some(draft) = Privacy::candidate_draft(route.project(), action, &candidate)? {
-        return Ok(draft);
+        return Ok((draft, String::new()));
     }
     let runtime = public_workspace::runtime_for_document(&document)?;
     let mutation = if let Some(name) = hypothesis {
@@ -428,12 +440,15 @@ fn write_with_probe(
             .collect::<Result<_>>()?,
     );
     if Privacy::private_marker(&authored) {
-        return Privacy::draft(
-            route.project(),
-            action,
-            &obj([("history", authored)]),
-            "private historical proposal",
-        );
+        return Ok((
+            Privacy::draft(
+                route.project(),
+                action,
+                &obj([("history", authored)]),
+                "private historical proposal",
+            )?,
+            String::new(),
+        ));
     }
     publish(&store, &mutation, &route, original, runtime.as_ref(), probe)?;
     crate::session_activity::published(
@@ -441,10 +456,18 @@ fn write_with_probe(
         mutation.files(),
         Some(&std::collections::BTreeSet::from([id.to_owned()])),
     );
-    Ok(obj([
-        ("state", s("committed")),
-        ("operation", map(&mutation.to_data())?["operation"].clone()),
-    ]))
+    let notice = if kind == "add" && hypothesis.is_none() {
+        nearest_existing(&document, action, runtime.as_ref())
+    } else {
+        String::new()
+    };
+    Ok((
+        obj([
+            ("state", s("committed")),
+            ("operation", map(&mutation.to_data())?["operation"].clone()),
+        ]),
+        notice,
+    ))
 }
 
 pub fn proposals(
