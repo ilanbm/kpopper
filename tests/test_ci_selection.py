@@ -96,13 +96,14 @@ class Selection(unittest.TestCase):
                 self.assertIn("rust", lanes([path]))
 
     def test_rust_lane_reads_what_its_sources_embed_and_the_scripts_its_tests_run(self):
-        # include_str!/include_bytes! targets and the Lean setup it runs, with its imports.
-        for path in ("scripts/verify_page.js", "examples/offer-review/after/GROUNDING.yaml", "scripts/expressions.py",
-                     "scripts/session/core.py", "scripts/session/model.py"):
+        # include_str!/include_bytes! targets.
+        for path in ("scripts/verify_page.js", "examples/offer-review/after/GROUNDING.yaml", "scripts/expressions.py"):
             with self.subTest(path=path):
                 self.assertIn("rust", lanes([path]))
-        # host_hooks.rs runs the Python hooks of the pinned v0.10.0 reference, not the checkout's.
-        for path in ("scripts/render_page.py", "scripts/ground_hook.py", "scripts/edit_hook.py", "scripts/followups.py"):
+        # host_hooks.rs runs the Python hooks of the pinned v0.10.0 reference, not the checkout's,
+        # and the ordinary Lean program is compiled from the source beside the crate.
+        for path in ("scripts/render_page.py", "scripts/ground_hook.py", "scripts/edit_hook.py",
+                     "scripts/followups.py", "scripts/session/core.py", "scripts/session/model.py"):
             with self.subTest(path=path):
                 self.assertNotIn("rust", lanes([path]))
         self.assertTrue(CI.rust_embeds(("native",)) >= {"native/shared/verify_page.js", "native/shared/session/rules.txt"})

@@ -112,9 +112,8 @@ LANES = {
         "adapters/gemini/scripts/session-start.sh", "adapters/gemini/hooks/hooks.json",
         "adapters/copilot/cli/hook.sh", "adapters/windsurf/hooks.json",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
-        # Run from the checkout, with everything it imports: the setup that builds the Lean program
-        # its tests load. The Python hooks its tests compare run from the pinned v0.10.0 reference.
-        python_entry_points=("scripts/session/core.py",),
+        # The ordinary Lean program its tests load is compiled from the source beside the crate.
+        # The Python hooks its tests compare run from the pinned v0.10.0 reference.
         rust_sources=("native",)),
 }
 LANE_NAMES = tuple(LANES)

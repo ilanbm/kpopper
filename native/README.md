@@ -54,6 +54,21 @@ KPOP_CONSOLIDATION_RESOURCES=/absolute/bundle/resources \
 cargo test --locked --no-fail-fast
 ```
 
+Without a bundle, compile the ordinary Lean program from this repository. `ci/build_ordinary_program.sh`
+needs a Lean 4.33.1 toolchain and nothing else; it prints the cache directory holding the
+program and its `build.json`, which is what `KPOP_TEST_ORDINARY_PROGRAM` expects:
+
+```sh
+KPOP_TEST_ORDINARY_PROGRAM=$(sh ci/build_ordinary_program.sh) cargo test --locked --no-fail-fast
+```
+
+Pass the toolchain prefix as an argument, or in `KPOPPER_LEAN_ROOT`, when `lean` is not on
+PATH; `--rebuild` replaces an existing cached program. The cache lives under
+`~/.cache/kpopper/lean/<target>/<source hash>`, which `KPOPPER_CORE_CACHE` or
+`XDG_CACHE_HOME` can relocate, and which the conformance tests fall back to when
+`KPOP_TEST_ORDINARY_PROGRAM` is unset. Rebuilding is only needed when the Lean source
+changes: each source hash keeps its own directory.
+
 The platform acceptance workflow builds these resources before testing. Tests that
 require an explicitly selected Python oracle or managed deployment remain opt-in.
 
