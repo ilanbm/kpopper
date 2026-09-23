@@ -1839,7 +1839,7 @@ fn prepare_with_inventory_mode(
         reader.candidate(&V::Map(candidate_action))?
     };
     if let Some(draft) =
-        Privacy::candidate_draft(route.project(), &V::Map(action.clone()), &candidate)?
+        Privacy::candidate_for_route(route, &V::Map(action.clone()), &candidate)?
     {
         return Ok(Preparation::Draft {
             output: format!("{}\n", crate::public_core_readers::json_value(&draft)?),
@@ -2447,6 +2447,7 @@ fn publish_with_committed(
     committed: Option<F::Verify<'_>>,
     advanced_local: bool,
 ) -> Result<String> {
+    require(!route.is_preview(), "a preview route cannot publish")?;
     if prepared.journal.is_empty() {
         return Ok(prepared.output);
     }
@@ -2693,6 +2694,33 @@ fn recover_inner(
         ("operation", field(map(&data)?, "operation")?.clone()),
         ("mutation_digest", field(map(&data)?, "digest")?.clone()),
     ]))
+}
+
+pub(crate) fn preview(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+) -> Result<String> {
+    require(route.is_preview(), "preview requires an observed route")?;
+    let named = map(action)?.get("hypothesis").is_some_and(|v| *v != V::Null);
+    let advanced = route.pending_required()?;
+    let prepared = match (named, advanced) {
+        (true, true) => legacy_named::prepare_advanced_local(action, route, source_body)?,
+        (true, false) => legacy_named::prepare(action, route, source_body)?,
+        (false, true) => prepare_pending_candidate(action, route, source_body)?,
+        (false, false) => prepare(action, route, source_body)?,
+    };
+    match prepared {
+        Preparation::Draft { output, inventory } => {
+            inventory.verify()?;
+            route.verify()?;
+            Ok(format!("dry run (ordinary): nothing recorded\n{output}"))
+        }
+        Preparation::Mutation(prepared) => {
+            verify_prepared_mode(&prepared, route, &prepared.inventory, advanced)?;
+            crate::authoring_preview::render(&prepared.mutation, action, "ordinary", &prepared.diagnostics)
+        }
+    }
 }
 
 pub(crate) fn write(

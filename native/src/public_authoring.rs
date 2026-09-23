@@ -23,6 +23,9 @@ mod contribution_routing;
 #[derive(Clone, Default, clap::Args)]
 pub struct Options {
     pub subject: String,
+    /// Validate a local candidate with the writer, without recording it.
+    #[arg(long)]
+    pub dry_run: bool,
     #[arg(allow_negative_numbers = true)]
     pub values: Vec<String>,
     #[arg(long, allow_hyphen_values = true)]
@@ -321,6 +324,14 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>, Option<Sour
     Ok((a, paths, source_body))
 }
 pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
+    let result = run_inner(kind, options, cwd);
+    if options.dry_run {
+        result.map_err(crate::authoring_preview::explain)
+    } else {
+        result
+    }
+}
+fn run_inner(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     let cwd = cwd.canonicalize()?;
     let (action, files, source_body) = action(kind, options)?;
     let implicit = files.is_empty();
@@ -329,7 +340,8 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     } else {
         files.iter().map(|p| cwd.join(p)).collect()
     };
-    let route = WriteRoute::capture(&original, &cwd)?;
+    let capture_route = || if options.dry_run { WriteRoute::observe(&original, &cwd) } else { WriteRoute::capture(&original, &cwd) };
+    let route = capture_route()?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     if options.reframe || options.expected_record_sha256.is_some() {
         let entry = &route.paths()[0];
@@ -359,11 +371,12 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             }
             contribution_routing::Outcome::Local(action) => action,
         };
-    let route = WriteRoute::capture(&original, &cwd)?;
+    let route = capture_route()?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];
-    let _lock =
-        F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
+    let _lock = if options.dry_run { None } else {
+        Some(F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?)
+    };
     if let Some(amend) = &options.amend {
         require(entry.exists(), "record not found")?;
         crate::public_amend::unchanged_or_refuse(
@@ -383,6 +396,10 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     {
         require(!options.reframe && options.expected_record_sha256.is_none(),
             "reframe and expected-record-sha256 require active core/v1 history; migrate explicitly before reframing")?;
+        if options.dry_run {
+            return crate::legacy_authoring::preview(&action, &route, source_body.as_ref())
+                .map_err(|e| crate::authoring_preview::in_profile("ordinary", e));
+        }
         return if route.pending_required()? {
             crate::legacy_authoring::write_advanced_local(&action, &route, source_body.as_ref())
         } else {
@@ -392,6 +409,10 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     if entry.exists() {
         drop(_lock);
         drop(route);
+        if options.dry_run {
+            return crate::direct_history::preview(&original, &cwd, &action)
+                .map_err(|e| crate::authoring_preview::in_profile("core/v1", e));
+        }
         let (result, notice) = crate::direct_history::write(&original, &cwd, &action)?;
         if string_is(&map(&result)?["state"], "private draft") {
             return Ok(format!(
@@ -412,6 +433,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     }
     let body = map(&action)?["body"].clone();
     if Privacy::private_marker(&action) {
+        require(!options.dry_run, "private source requires a private draft; preview not validated; nothing recorded")?;
         let document = obj([(
             "known",
             V::Map(Map::from([(options.subject.clone(), body)])),
@@ -441,7 +463,12 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             by: V::Null,
         },
         runtime.as_ref(),
-    )?;
+    ).map_err(|e| if options.dry_run { crate::authoring_preview::in_profile("core/v1", e) } else { e })?;
+    if options.dry_run {
+        B::verify_prepared(entry, &mutation, route.config(), runtime.as_ref())?;
+        route.verify()?;
+        return crate::authoring_preview::render(&mutation, &action, "core/v1", &[]);
+    }
     B::publish(
         entry,
         &mutation,

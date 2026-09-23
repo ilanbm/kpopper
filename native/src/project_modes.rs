@@ -317,7 +317,7 @@ impl Project {
         let raw = bounded(&self.config_path)?;
         let config = self.decode_config(raw.as_deref())?;
         Ok(PolicyGuard {
-            file,
+            file: Some(file),
             project: self.clone(),
             raw,
             config,
@@ -325,7 +325,7 @@ impl Project {
     }
 }
 pub struct PolicyGuard {
-    file: File,
+    file: Option<File>,
     project: Project,
     raw: Option<Vec<u8>>,
     config: V,
@@ -354,7 +354,9 @@ impl PolicyGuard {
 }
 impl Drop for PolicyGuard {
     fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.file);
+        if let Some(file) = &self.file {
+            let _ = FileExt::unlock(file);
+        }
     }
 }
 /// The explicitly configured caller may own an external shared record.
@@ -410,6 +412,24 @@ pub struct WriteRoute {
     cwd: PathBuf,
 }
 impl WriteRoute {
+    /// A preview observes policy without creating a lock file or project state.
+    /// It must verify the observation again and must never publish through it.
+    pub(crate) fn observe(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
+        let project = project_for(paths, cwd)?;
+        let raw = bounded(&project.config_path)?;
+        let config = project.decode_config(raw.as_deref())?;
+        let route = Self {
+            policy: PolicyGuard { file: None, project, raw, config },
+            original: paths.to_vec(),
+            selected: write_paths(paths, cwd)?,
+            cwd: resolved(cwd)?,
+        };
+        route.verify()?;
+        Ok(route)
+    }
+    pub(crate) fn is_preview(&self) -> bool {
+        self.policy.file.is_none()
+    }
     pub fn capture(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
         let project = project_for(paths, cwd)?;
         let policy = project.lock()?;

@@ -58,6 +58,12 @@ display text and dependency links are derived from it.
 
 ## Expression grammar, version 1
 
+This section describes ordinary records. Records declaring `core/v1` also support
+Boolean composition, conditional expressions and containers; use the
+[core grammar](../../docs/reasoning-core.md#composable-conditions) for those records.
+New records created by `add` use `core/v1`. `add --dry-run` reports the selected profile
+and checks the candidate without recording it.
+
 Readable formulas support `+`, `-`, `*`, `/`, unary minus, parentheses, exact decimal and
 exponent constants, quoted text, booleans, and references. Falsifiers have one comparison:
 `==`, `!=`, `<`, `<=`, `>`, or `>=`, with arithmetic permitted on either side. Each `expr`
@@ -209,3 +215,30 @@ Keep the result status, row counts and scope basis together. A missing reading
 remains unknown; a qualitative judgment can carry a prose `reopened_by` without
 inventing an executable falsifier. Later evidence or a new scope member calls for
 fresh assessment, while a retained Snapshot replays its original inputs.
+
+## Preview a candidate
+
+**Keep a decision's first write short.** Supply the conclusion, its actual premises, and a
+meaningful failure condition in one `add`. The writer fills the review snapshot. For example,
+after reading an existing `search.results_public` entry:
+
+```bash
+kpop add d.query_cache 'verdict=Cache by query while all results are public' \
+  'rests_on=[search.results_public]' \
+  'wrong_if={expr: "search.results_public == false"}'
+```
+
+When unsure whether a candidate is accepted, append `--dry-run` to the same `add`, `set`,
+or `review`. It uses the writer's preparation and reports the applicable profile without
+recording the candidate. Read the candidate and diagnostics, then remove `--dry-run` to
+write it; the writer checks again against current evidence. Do not create scratch entries
+to probe syntax. Previewing is optional, not an extra step for every write. Explicit
+contribution-routing flags are not supported by this local preview.
+
+New records use `core/v1`. On that profile, `{expr: "..."}` supports `and`, `or`, `not`
+and conditional expressions as described in [core expressions](../../docs/reasoning-core.md#composable-conditions).
+Ordinary records retain their narrower [expression grammar](EXPRESSIONS.md#expression-grammar-version-1).
+If a candidate is refused, use its profile and diagnostic to make a bounded correction.
+Never weaken a condition, invent a threshold, or mark a syntax error as missing evidence
+just to get a write accepted. A real unobservable condition needs an explicit `blocked_on`
+reason; saved but uncheckable knowledge is not a checked conclusion.

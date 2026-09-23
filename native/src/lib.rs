@@ -6,6 +6,7 @@ mod test_runtime_provenance;
 pub mod annotated_document;
 mod annotated_document_html;
 pub mod authoring_source;
+mod authoring_preview;
 pub mod checked_session;
 pub mod checked_session_store;
 pub mod core_html;

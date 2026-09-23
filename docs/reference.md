@@ -205,6 +205,7 @@ and confirming the underlying evidence remain part of review.
 | `kpop set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Record a scalar reading with its explanation and date. |
 | `kpop add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. Where no record resolves for the workspace, the first `add` creates `GROUNDING.yaml` at its root with that entry. |
 | `kpop review <id>` | Refresh a judgment's snapshot after reviewing it against the current record. |
+| `kpop add/set/review ... --dry-run` | Prepare a local candidate with the actual writer without recording it. Reports the profile, candidate and diagnostics. Nonzero exit means the preview was refused. |
 | `kpop review "section title"` | Refresh the page section's review snapshot. |
 | `kpop same <a> <b>` | Record that two IDs describe one subject; by default, retire `b` into `a`. |
 | `kpop distinct <a> <b> "reason"` | Keep a similar-looking pair distinct with a recorded reason. |
@@ -215,6 +216,16 @@ and confirming the underlying evidence remain part of review.
 Writes report their downstream reach. `review` records that review happened; it does not
 perform the intellectual review for you. Updating `seen` alone cannot make a fired
 predicate false.
+
+Use `--dry-run` when checking an uncertain candidate, then remove it to write the same
+request. Preparation fills snapshots and checks the same admission rules as a write;
+the preview omits generated snapshots from its displayed candidate. A prepared candidate
+does not establish source accuracy, guarantee the sufficiency of its premises or reserve
+the record: the subsequent write checks current evidence again. Previews create no record,
+history, pending contribution, private draft or recording receipt. Loading the local
+computation runtime can still populate its cache. Explicit contribution-routing flags
+(such as `--shareability` and `--scope`) are not supported by this local preview, and a
+candidate that needs private retention is refused without creating a draft.
 
 `add` names nearby existing entries to help identify possible duplicates. Similarity does
 not decide identity: `same` and `distinct` record that decision explicitly.

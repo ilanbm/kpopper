@@ -272,6 +272,11 @@ sources:
     name: "Recorded assessment API and policy contract"
     file: "docs/assessment.md"
     read: "2026-09-14"
+  doc.authoring_preview:
+    name: "Local authoring previews and their admission limits"
+    file: "docs/reference.md"
+    at: "Write and review: --dry-run"
+    read: "2026-09-23"
   doc.checked_retrieval:
     name: "Checked-session search continuation and explicit context contract"
     file: "docs/retrieval.md"
@@ -5784,6 +5789,26 @@ judgments:
       m.grounding_line_prefix_guesses: 182
       m.letter_prefix_ids: 214
       m.letter_prefix_refs_outside: 281
+  d.preview_uses_writer_admission:
+    name: "A candidate is previewed through its actual writer"
+    verdict: "Local add, set and review previews run the writer preparation without recording the
+              candidate. A later write checks current evidence again. Private retention and explicit
+              contribution routing remain outside this preview."
+    rests_on: [doc.authoring_preview, d.write_path_returns_reach]
+    because: "Trying a candidate must not create scratch claims or a second validation language. A
+              prepared candidate establishes write admission only; its sources and the sufficiency of
+              its conclusion still require judgment."
+    reopened_by: "A preview changes record, history, pending or private state; displays the accepted
+                  base in place of its proposal; accepts an unchanged candidate the ordinary write
+                  refuses; or makes users treat preparation as proof that a conclusion is true."
+    seen:
+      doc.authoring_preview: "read 2026-09-23"
+      d.write_path_returns_reach: "the record changes from the command line through set, add and
+                                   review; each edits the file in place, writes seen itself, and
+                                   answers with the reach - what rests on the write, what is MOVED
+                                   now, which predicate fired; set can replace from and at together
+                                   with a value using --source and --at, without reviewing dependent
+                                   judgments"
   d.prior_carries_its_own_falsifier:
     rests_on: [prior.confidence_needs_calibration, m.claims.local_assumed_held, d.hypothesis_is_a_judgment]
     verdict: "the prior kind carries its own falsifier: if judgments resting on priors at 0.8 or

@@ -253,6 +253,7 @@ pub(crate) fn route(
     if !explicit {
         return Ok(Outcome::Local(action));
     }
+    require(!options.dry_run, "--dry-run previews local record writes; explicit contribution routing is not supported; nothing recorded")?;
     let scope = scope(options);
     let scope_kind = text(field(map(&scope)?, "kind")?)?;
     require(
