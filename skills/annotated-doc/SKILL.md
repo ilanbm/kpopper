@@ -6,7 +6,7 @@ description: "Annotated Documents: optional experimental application for standal
 # Annotated Documents
 
 Use this experimental application only on an explicit request or standing preference.
-A generic HTML request does not activate it. Native bundles include the compiled HTML runtime. In explicit Python compatibility mode, install `kpopper[html]` or run the active plugin's `plugin_runtime.py setup --applications html` before the standalone workflow. Create the user's content and design,
+A generic HTML request does not activate it. The packaged command includes the compiled HTML runtime. Create the user's content and design,
 and create the source/check mapping while writing it; the user does not prepare that
 mapping or ask for a separate evidence step. Deliver the single HTML produced by
 `kpop experimental annotated-doc build`, with its inline evidence and review controls. Read the short
@@ -16,12 +16,10 @@ a workspace map, or unrelated record setup. Requests for the record's own page u
 
 ## Author the requested HTML document with its evidence
 
-Read [the packaged author guide](../../scripts/document-guide.md), also available as
-`kpop experimental annotated-doc guide`. It is the same contract in the installed Python package
+Read [the packaged author guide](../../native/src/annotated_document_guide.md), also available as
+`kpop experimental annotated-doc guide`. It is the same contract in the installed package
 and plugin; do not implement a second renderer or manually graft a layer onto the result.
-The native package carries the document runtime. In Python compatibility mode, use
-the active plugin's `scripts/cli.py` with Python and the optional `html` extra. Do
-not silently switch to PATH, pip or Python when the native runtime is missing.
+The package carries the document runtime. Do not silently switch to PATH when it is missing.
 
 The user asks for their document as usual. The author supplies the requested content,
 design, stable claim anchors and the manifest, using the evidence actually read while

@@ -13,11 +13,10 @@ does not relax evidence, isolation or record-integrity checks.
 
 ## Installation and use
 
-Native 0.9.0 bundles include the compiled HTML application runtime. Install the
+Release bundles include the compiled HTML application runtime. Install the
 bundle normally, then request either application explicitly:
 
 ```sh
-python -m pip install 'kpopper[html]'
 kpop experimental --help
 kpop experimental hub --open
 kpop experimental hub --verify
@@ -25,20 +24,9 @@ kpop experimental annotated-doc guide
 kpop experimental annotated-doc build --html draft.html --manifest evidence.json --out report.html
 ```
 
-For an explicit Python compatibility checkout, install `'.[html]'`. The extra then
-installs the legacy runtime dependencies. Applications are not separate packages or
-independently versioned releases.
-
-For a Claude Code or Codex plugin in Python compatibility mode, use the active
-plugin's runtime setup:
-
-```sh
-python3 /absolute/path/to/kpopper/scripts/plugin_runtime.py setup --applications html
-```
-
-Ordinary setup installs the core dependencies and timezone data for followups; hooks
-check only PyYAML before opening the record. Installing an application
-does not activate it on every task. Request the record page or kpopper's evidence-bearing
+Applications are not separate packages or independently versioned releases, and a
+plugin carries them in the runtime it installs. Installing an application does not
+activate it on every task. Request the record page or kpopper's evidence-bearing
 HTML document explicitly, or give the agent a standing preference to use it. A generic
 HTML request and completion of a map do not automatically select these applications.
 

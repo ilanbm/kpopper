@@ -2419,11 +2419,12 @@ known:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
            falsifier"
-    from: "scripts/render_page.py"
-    at: "coverage and coverage_lines: counts and shares, printed; the only comparison is a
-         falsifier's own"
-    of: "2026-09-03"
-    measure: coverage_thresholds
+    from: s.2026_09_23_single_reader
+    at: "scripts/render_page.py: coverage and coverage_lines: counts and shares, printed; the only
+         comparison is a falsifier's own - read 2026-09-03, the last reading taken of the reader this
+         tree no longer holds - read 2026-09-23, the last reading taken of the reader this tree no
+         longer holds"
+    of: "2026-09-23"
   p.dependency_illustration_caption:
     name: "Descriptive caption for the dependency-check illustration"
     v: "When a recorded assumption changes, deterministic checks show the agent which decisions need
@@ -2442,10 +2443,11 @@ known:
   p.entry_names:
     v: 2
     name: "Names the locator recognizes for the record's entry file"
-    from: "scripts/workspace.py"
-    at: NAMES
-    of: "2026-09-12"
-    measure: entry_names
+    from: s.2026_09_23_single_reader
+    at: "scripts/workspace.py: NAMES - read 2026-09-12, the last reading taken of the reader this
+         tree no longer holds - read 2026-09-23, the last reading taken of the reader this tree no
+         longer holds"
+    of: "2026-09-23"
   p.fields_a_build_writes:
     v: 0
     name: "Fields of the record a read command - check, open, page - writes"
@@ -2604,10 +2606,12 @@ known:
     v: 0
     name: "Thresholds the hypothesis count line carries in code - an age or a reach past which it
            draws a line"
-    from: "scripts/provenance.py"
-    at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
-    of: "2026-09-04"
-    measure: hypothesis_thresholds
+    from: s.2026_09_23_single_reader
+    at: "scripts/provenance.py: hypothesis_line - age and reach printed as facts; the only
+         comparison is a falsifier's own - read 2026-09-04, the last reading taken of the reader this
+         tree no longer holds - read 2026-09-23, the last reading taken of the reader this tree no
+         longer holds"
+    of: "2026-09-23"
   p.live_dry_run_gates:
     v: 0
     name: "Automatic runs of the consolidation dry run that read the pending ledger"
@@ -3252,10 +3256,11 @@ known:
   p.checks_in_the_wheel:
     v: 1
     name: "Browser checks the python package ships"
-    from: "pyproject.toml"
-    at: "tool.setuptools.package-data"
-    measure: checks_in_the_wheel
-    of: "2026-09-03"
+    from: s.2026_09_23_single_reader
+    at: "pyproject.toml: tool.setuptools.package-data - read 2026-09-03, the last reading taken of
+         the reader this tree no longer holds - read 2026-09-23, the last reading taken of the reader
+         this tree no longer holds"
+    of: "2026-09-23"
   m.openclaw_bundle_hooks:
     v: 0
     name: "Runnable kpopper hooks registered by the existing bundle in OpenClaw 2026.9.4"
@@ -3438,12 +3443,16 @@ known:
     unit: lines
     name: "Browser code held as Python strings - what the renderer carried inline"
     from: run.constants_measured
-    at: "CSS 0 + JS 0 - they are scripts/page/page.css and page.js now; 154 + 277 before the move"
-    measure: page_string_lines
+    at: "CSS 0 + JS 0 - they are scripts/page/page.css and page.js now; 154 + 277 before the move -
+         the last reading taken of the reader this tree no longer holds - read 2026-09-23, the last
+         reading taken of the reader this tree no longer holds"
+    of: "2026-09-23"
   p.hook_slot:
     v: 2000
     name: "The opener's character budget"
-    from: "scripts/session_start.py: LEGACY_CHARS"
+    from: "native/src/ordinary_views.rs"
+    at: "OPENING_CHARS - the one budget the opener fills and the preview shares"
+    of: "2026-09-23"
     measure: hook_slot
   p.gate_bounces:
     v: 0
@@ -3455,11 +3464,13 @@ known:
     v: 1
     name: "Places that decide whether a predicate is one comparison this reader can decide - the
            shape a falsifier must have to be evaluated at all"
-    from: "scripts/provenance.py"
-    at: "why_undecided, asked by evaluate before it decides anything, by check and the opener before
-         they report a judgment, and by an arrangement's sign when it is written - every surface
-         reads that one answer"
-    measure: predicate_shapes
+    from: s.2026_09_23_single_reader
+    at: "scripts/provenance.py: why_undecided, asked by evaluate before it decides anything, by
+         check and the opener before they report a judgment, and by an arrangement's sign when it is
+         written - every surface reads that one answer - the last reading taken of the reader this
+         tree no longer holds - the last reading taken of the reader this tree no longer holds - read
+         2026-09-23, the last reading taken of the reader this tree no longer holds"
+    of: "2026-09-23"
   p.prepared_legacy_recovery:
     name: "Prepared legacy write and recovery boundary"
     fidelity: paraphrase
@@ -3477,11 +3488,20 @@ known:
     v: 1
     name: "Lines the count of what rests on priors draws in code - a confidence past which it counts
            separately"
-    from: "scripts/provenance.py"
-    at: "HIGH_CONFIDENCE, read by priors_line - the matrix's own line, printed inside the line the
-         count prints"
-    of: "2026-09-04"
-    measure: prior_count_thresholds
+    from: s.2026_09_23_single_reader
+    at: "scripts/provenance.py: HIGH_CONFIDENCE, read by priors_line - the matrix's own line,
+         printed inside the line the count prints - read 2026-09-04, the last reading taken of the
+         reader this tree no longer holds - read 2026-09-23, the last reading taken of the reader
+         this tree no longer holds"
+    of: "2026-09-23"
+  p.product_python_modules:
+    v: 0
+    name: "Modules of the product under scripts/ still written in Python"
+    from: s.2026_09_23_python_exit
+    at: "every .py under scripts/ but the build, packaging and licence tools, which carry no product
+         code; a module that comes back is a second implementation starting again"
+    of: "2026-09-23"
+    measure: product_python_modules
   p.readme_agent_work_copy:
     name: "Approved README paragraph about deterministic execution cost and latency"
     v: "Agent reasoning costs time and tokens. kpopper runs calculations and dependency checks
@@ -3539,16 +3559,20 @@ known:
     v: 1
     name: "Places a measurement recipe is executed - files under scripts/ that name the allowlist
            file, which whatever runs a recipe has to read"
-    from: "scripts/remeasure.py"
-    at: "run_recipe, called by measure and by nothing else - the reader, the page, the hooks and
+    from: "native/src/public_remeasure.rs"
+    at: "run_recipe, called by remeasure and by nothing else - the reader, the page, the hooks and
          consolidate read the name an entry carries and run nothing"
+    of: "2026-09-23"
     measure: recipe_runners
   p.record_parsers:
     v: 1
     name: "Functions of the reader that open a file and parse it as YAML"
-    from: "scripts/provenance.py"
-    at: "parse - load, load_hypotheses, _files_of and the readers of the brief all come through it"
-    measure: record_parsers
+    from: s.2026_09_23_single_reader
+    at: "scripts/provenance.py: parse - load, load_hypotheses, _files_of and the readers of the
+         brief all come through it - the last reading taken of the reader this tree no longer holds -
+         the last reading taken of the reader this tree no longer holds - read 2026-09-23, the last
+         reading taken of the reader this tree no longer holds"
+    of: "2026-09-23"
   p.reference_resolvers:
     v: 1
     name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
@@ -3896,6 +3920,18 @@ open:
                                     release's resources on request, or send Cargo users to the
                                     archive?"
                          from: s.2026_09_23_crates_io
+  q.entries_whose_file_is_gone:
+                         name: "Which entries still name a file the tree no longer holds"
+                         question: "Fourteen sources and about a dozen readings name a file of the
+                                    removed implementation as where they were read, and one decision
+                                    rests on a reason that named it - that the plugin and a second
+                                    reader read the shared originals from scripts/ by path, which
+                                    nothing does now. None of this fails a check, because the reader
+                                    does not ask whether a file it names still exists. Which of these
+                                    subjects survive in the native sources and should be read there,
+                                    and which were about the implementation itself and should be
+                                    closed the way the measured readings were?"
+                         from: s.2026_09_23_python_exit
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
                          a dedicated execution session? No per-item dispatch policy is currently
                          implemented."
@@ -3930,6 +3966,18 @@ open:
   q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
                              that say something - to be read as a foreign agent would, after
                              fifteen real arrangements?"
+  q.reader_places_counted_once:
+                                  name: "Which places the record counts once the native reader still
+                                         holds once"
+                                  question: "Several readings counted a place that must exist once -
+                                             one parse of a record file, one shape test for a
+                                             predicate, one door a replacing write passes, one line
+                                             drawn on confidence. They were taken from the reader
+                                             this tree no longer holds, and the native sources hold
+                                             some of those places in two files. Which of the counts
+                                             still stand, and what takes them from the native sources
+                                             so a second one shows again?"
+                                  from: s.2026_09_23_python_exit
   q.readme_canvas_metaphor:
                                   name: "Whether to place the canvas concept in the README"
                                   v: "Does an agent painting connections between evidence,
@@ -3945,6 +3993,19 @@ open:
                                   applies beyond code without coaching? Ask what the source
                                   illustration communicates as well. The approved design has not yet
                                   established reader comprehension or repeat use."
+  q.runtime_rebuild_unchecked:
+                         name: "What checks a reasoning runtime rebuilt from its sources"
+                         question: "A fresh build of the reasoning runtime was validated by the
+                                    removed suite, in a workflow whose exact bytes are embedded in
+                                    the committed corresponding-source archive and so cannot be
+                                    edited without regenerating it - and a regenerated archive would
+                                    describe a recipe the committed runtimes were not built with.
+                                    That validation is no longer wired to the checks, so a change to
+                                    the Lean sources or the toolchain has none until it is ported.
+                                    The committed runtimes are still checked for integrity on every
+                                    native run. What takes the rebuild validation, and when is the
+                                    archive regenerated so the two agree?"
+                         from: s.2026_09_23_python_exit
   q.same_day_rereading: "where does a re-reading go when the session changed the file a premise was
                          read from, on the day it was read? set refuses it into the base as two
                          writers, and the hypothesis beside it is a contested reading the dry run
@@ -4632,7 +4693,13 @@ judgments:
               code would be a threshold nobody chose and everybody wants to move;
               {{p.coverage_thresholds}} of them exist, and the count is what would show one creeping
               in."
-    wrong_if: "p.coverage_thresholds > 0"
+    reopened_by: "a coverage number the build acts on - a section dropped, a hint withheld or a page
+                  refused because a count crossed a line drawn in code; a coverage number the build
+                  acts on - a section dropped, a hint withheld or a page refused because a count
+                  crossed a line drawn in code; a coverage number the build acts on - a section
+                  dropped, a hint withheld or a page refused because a count crossed a line drawn in
+                  code"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_03_coverage: "read 2026-09-03"
       d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
@@ -4785,6 +4852,7 @@ judgments:
                                           the base"
       p.union_tests: 1
   d.entry_file_is_grounding:
+    rests_on: [s.2026_09_12_layout, goal.portable, d.prefix_is_a_word, d.reasoning_in_record, p.entry_names]
     verdict: "the record's entry file is GROUNDING.yaml: the first add creates it at the workspace
               root, the locator finds it first and a record kept under the earlier name after it,
               wherever that record already is, and no command creates the earlier name again"
@@ -4798,11 +4866,13 @@ judgments:
               and one field, {{d.reasoning_in_record}}, not the state the file holds. The earlier
               name stays read so that no record has to move, and {{p.entry_names}} counts the names
               the locator knows - a third would be a second convention."
-    wrong_if: "p.entry_names > 2"
     reopened_by: "a session with no author present that found the file and did not read it before
                   answering from memory, or an adopter who asked what the file is, or a live record
-                  the locator stopped finding under its earlier name"
-    rests_on: [s.2026_09_12_layout, goal.portable, d.prefix_is_a_word, d.reasoning_in_record, p.entry_names]
+                  the locator stopped finding under its earlier name; a third name the locator
+                  answers to, or a command that creates the earlier name again; a third name the
+                  locator answers to, or a command that creates the earlier name again; a third name
+                  the locator answers to, or a command that creates the earlier name again"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_12_layout: "read 2026-09-12"
       goal.portable: "usable by any session, in any project, with no author present"
@@ -5209,7 +5279,13 @@ judgments:
               each has waited and how much rests on it without drawing a line -
               {{p.hypothesis_thresholds}} thresholds live in the code, and the count is what would
               show one creeping in."
-    wrong_if: "p.hypothesis_thresholds > 0"
+    reopened_by: "an age or a reach past which the hypothesis line stops reporting and starts
+                  deciding - a hypothesis hidden, sorted away or folded because of a number; an age
+                  or a reach past which the hypothesis line stops reporting and starts deciding - a
+                  hypothesis hidden, sorted away or folded because of a number; an age or a reach
+                  past which the hypothesis line stops reporting and starts deciding - a hypothesis
+                  hidden, sorted away or folded because of a number"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_03_hypotheses: "read 2026-09-03"
       d.consolidation_is_a_test: "consolidating hypotheses into the base tests whether the writers
@@ -5559,6 +5635,32 @@ judgments:
                                and distinguishes a returned task from accepted work and a completed
                                result; a plain terminal without a bound session must fail
                                explicitly."
+  d.one_implementation_ships:
+    rests_on: [s.2026_09_23_python_exit, d.python_frozen_at_v0_10_0, p.product_python_modules]
+    verdict: "the tree ships one reader, the native command line; what the record says about how a
+              record is read is read from it, and no second implementation of the same behaviour
+              lives beside it"
+    because: "Two implementations of one behaviour agree only by accident and cost twice: every rule
+              about how a record is read had to be written, tested and kept true in both, and the
+              readings this record took of the reader's own shape - one parse of a file, one door a
+              replacing write passes, one budget the opener fills - were taken from only one of them,
+              so a rule could hold in the reading and not in the reader people ran. With one
+              implementation a reading of it is a reading of the product.
+              {{p.product_python_modules}} is what is left of the other one, counted from the tree on
+              every pull request rather than asserted here, so this decision cannot quiet its own
+              sign: a module of the product coming back is work the native reader was expected to do
+              and did not."
+    wrong_if: "p.product_python_modules > 0"
+    reopened_by: "work that has to be done twice again - a behaviour people need that the native
+                  reader cannot do and that is answered by running something else beside it, in any
+                  language, whether or not it lives in this tree"
+    seen:
+      s.2026_09_23_python_exit: "read 2026-09-23"
+      d.python_frozen_at_v0_10_0: "The Python implementation stays as it was at v0.10.0 (dd099226).
+                                   The native tests compare with that commit, never with the Python
+                                   in the checkout, and the Python leaves the main branch once
+                                   nothing in the repository runs it."
+      p.product_python_modules: 0
   d.one_reference_resolver:
     rests_on: [d.reasoning_in_record, p.reference_resolvers]
     verdict: "a reference resolves the same way on every surface - the value where the entry holds
@@ -5746,7 +5848,14 @@ judgments:
               directory cannot become code. One function of the reader opens a file of a record and
               parses it; a second would read a record without ever seeing what was kept for it, and
               {{p.record_parsers}} is the count that would show one."
-    wrong_if: "p.record_parsers > 1"
+    reopened_by: "a second place that opens a file of the record and hands it to the parser without
+                  asking what was kept for that file, seen as a parse that runs on a file nothing
+                  wrote to; a second place that opens a file of the record and hands it to the parser
+                  without asking what was kept for that file, seen as a parse that runs on a file
+                  nothing wrote to; a second place that opens a file of the record and hands it to
+                  the parser without asking what was kept for that file, seen as a parse that runs on
+                  a file nothing wrote to"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_11_read_once: "read 2026-09-11"
       p.record_parsers: 1
@@ -5823,7 +5932,13 @@ judgments:
               there while the path with no test compared it happily; a rule any narrower than
               'carries no second comparison' refuses values the reader compares perfectly well, and
               silencing a falsifier that works is this same failure from the other side."
-    wrong_if: "p.predicate_shapes > 1"
+    reopened_by: "two answers to what shape a predicate must have - a predicate one surface declines
+                  and another evaluates, or the same refusal worded differently in two places; two
+                  answers to what shape a predicate must have - a predicate one surface declines and
+                  another evaluates, or the same refusal worded differently in two places; two
+                  answers to what shape a predicate must have - a predicate one surface declines and
+                  another evaluates, or the same refusal worded differently in two places"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_04_falsifier_shape: "read 2026-09-04"
       p.predicate_shapes: 1
@@ -5929,7 +6044,14 @@ judgments:
               share past which the line turns red. Neither number gets a computed name, because
               {{d.computed_names_when_named}} and none is rested on yet - the judgment that will rest
               on one is the demotion rule itself, once refuted findings make reversals countable."
-    wrong_if: "p.prior_count_thresholds > 1"
+    reopened_by: "a second line drawn on the confidence a judgment rests on - a threshold read
+                  anywhere but inside the line that prints the count, or a mechanism that acts on
+                  either number; a second line drawn on the confidence a judgment rests on - a
+                  threshold read anywhere but inside the line that prints the count, or a mechanism
+                  that acts on either number; a second line drawn on the confidence a judgment rests
+                  on - a threshold read anywhere but inside the line that prints the count, or a
+                  mechanism that acts on either number"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_04_priors_count: "read 2026-09-04"
       d.computed_names_when_named: "a computed name becomes an entry only when something in the
@@ -6927,7 +7049,11 @@ judgments:
               {{p.coverage_thresholds}} - and a drift of one entry in fifty would have fired every
               tab until someone wanted 0.1. The arrangement's own wrong_if is the line its author
               drew; the counts are printed beside it and never acted on."
-    wrong_if: "p.coverage_thresholds > 0"
+    reopened_by: "a tab whose shape move is fired or muted by a count rather than by its
+                  arrangement's own sign; a tab whose shape move is fired or muted by a count rather
+                  than by its arrangement's own sign; a tab whose shape move is fired or muted by a
+                  count rather than by its arrangement's own sign"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen:
       s.2026_09_03_arrangements: "read 2026-09-03"
       d.arrangement_replaced_by_trigger: "an arrangement is replaced only when its falsifier fires,
@@ -7419,11 +7545,15 @@ judgments:
               copy that came with the reader, wherever it was installed"
     because: "The checks are the only thing that answers whether the page actually behaves, and a
               wheel that leaves them out withholds that answer from everyone who installed the
-              ordinary way. Being Node is a reason to want node on the path, not a reason to live
-              in another registry - and an installed copy sits somewhere nobody would think to
-              look, so the dispatcher finds it instead of the person. The file ships in both
-              packages and is edited in neither."
-    wrong_if: "p.checks_in_the_wheel < 1"
+              ordinary way. Being Node is a reason to want node on the path, not a reason to live in
+              another registry - and an installed copy sits somewhere nobody would think to look, so
+              the dispatcher finds it instead of the person. The file ships in both packages and is
+              edited in neither."
+    reopened_by: "an installed reader whose page check cannot run because the browser check did not
+                  come with it; an installed reader whose page check cannot run because the browser
+                  check did not come with it; an installed reader whose page check cannot run because
+                  the browser check did not come with it"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
     seen: {p.checks_in_the_wheel: 1, p.script_copies: 1}
   d.tree_springs_back:
     rests_on: [d.page_reads_only, p.tree_positions_kept]

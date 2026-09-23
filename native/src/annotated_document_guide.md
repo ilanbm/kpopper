@@ -41,9 +41,8 @@ kpop experimental annotated-doc inspect report.html
 
 `--root` defaults to the manifest's directory. Source paths must stay inside it and
 must not traverse symlinks. Output is a separate copy; `--overwrite` can replace a prior
-output, never an input/source. If the CLI is unavailable, run the plugin's
-`scripts/cli.py` with Python and the same arguments. Install the package's declared
-Python dependencies in the task environment when needed; do not modify global settings.
+output, never an input/source. If `kpop` is not on PATH, run the command the active
+plugin installed under its own `scripts/runtime` directory; do not modify global settings.
 
 ## Manifest v1
 

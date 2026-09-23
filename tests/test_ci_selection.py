@@ -33,49 +33,42 @@ class Claims(unittest.TestCase):
                      and not any(CI.lane_reads(lane, path) for lane in CI.LANES.values())]
         self.assertEqual(unclaimed, [], "declare these in .github/scripts/ci_selection.py")
 
-    def test_record_job_modules_are_the_ones_the_shards_leave_out(self):
-        spec = importlib.util.spec_from_file_location("ci_execution", ROOT / ".github/scripts/ci_execution.py")
-        runner = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(runner)
-        modules = {path for path in CI.RECORD_JOB if path.startswith("tests/")}
-        self.assertEqual(modules, {"tests/" + name for name in runner.RECORD_JOB_MODULES})
+    def test_the_record_job_runs_every_contract_module_no_lane_reads(self):
+        modules = {path for path in CI.RECORD_JOB
+                   if path.startswith("tests/test_") and path.endswith(".py")}
+        self.assertTrue(modules)
         workflow = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())
         contracts = "\n".join(step.get("run", "") for step in workflow["jobs"]["record"]["steps"])
         for module in modules:
+            self.assertTrue((ROOT / module).is_file(), module)
             self.assertIn(module[:-3].replace("/", "."), contracts)
 
 
 class Selection(unittest.TestCase):
-    def test_rust_change_runs_only_the_rust_lane_without_intel_macos(self):
-        # PR #161: four files under native/.
+    def test_rust_change_runs_the_rust_lane_without_intel_macos(self):
         changes = ["native/src/ordinary_checked_session.rs", "native/src/public_ordinary_readers.rs",
                    "native/src/source_capture.rs", "native/tests/ordinary_checked_session.rs"]
         self.assertEqual(lanes(changes), {"rust"})
         self.assertEqual(CI.platforms(changes), "pull-request")
 
-    def test_documentation_edits_run_no_lane(self):
-        # PR #153 edited these; the record job still checks them.
+    def test_documentation_record_and_plugin_manifest_edits_run_no_lane(self):
+        # The record job still checks all of these on every pull request.
         changes = ["README.md", "assets/README.md", "assets/brand-guide.md", ".kpopper/view.yaml",
-                   "docs/ci.md", "CHANGELOG.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "skills/ground/SKILL.md",
-                   "examples/dark-matter/README.md", "examples/offer-review/GROUNDING.yaml",
-                   ".github/pull_request_template.md", ".github/ISSUE_TEMPLATE/bug_report.yml", "native/README.md"]
+                   "CHANGELOG.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "skills/ground/SKILL.md",
+                   "GROUNDING.yaml", ".kpopper/measure.yaml", "package.json", "hooks/hooks.json",
+                   "bin/kpop", ".claude-plugin/plugin.json", "native/README.md",
+                   ".github/pull_request_template.md", ".github/ISSUE_TEMPLATE/bug_report.yml"]
         for path in changes:
             with self.subTest(path=path):
                 self.assertEqual(lanes([path]), set())
 
-    def test_the_project_record_runs_the_tests_that_read_it(self):
-        # The contract, priors and remeasure tests check this repository's own record.
-        self.assertEqual(lanes(["GROUNDING.yaml"]), {"python", "session"})
-        self.assertEqual(lanes([".kpopper/measure.yaml"]), {"python", "session"})
-
     def test_release_scripts_and_their_tests_run_only_the_record_job(self):
-        # PR #155.
         self.assertEqual(lanes([".github/scripts/publish_release.py", "tests/test_release.py"]), set())
 
     def test_adding_a_file_runs_the_lanes_that_list_its_directory(self):
-        added = ("A", "assets/navigation/new-title.svg")
-        expected = {name for name, lane in CI.LANES.items() if CI.lane_lists(lane, "assets/navigation")}
-        self.assertEqual(lanes([added], base_dirs={"", "assets", "assets/navigation"}), expected)
+        added = ("A", "native/src/new_reader.rs")
+        expected = {name for name, lane in CI.LANES.items() if CI.lane_lists(lane, "native/src")}
+        self.assertEqual(lanes([added], base_dirs={"", "native", "native/src"}), expected)
         self.assertEqual(lanes([("M", "assets/navigation/README.md")]), set())
 
     def test_listings_reach_the_first_directory_that_existed(self):
@@ -86,44 +79,37 @@ class Selection(unittest.TestCase):
         self.assertEqual(CI.listings("M", "docs/x.md", base_dirs={""}, head_dirs={""}), [])
         self.assertEqual(CI.listings("A", "top.md", base_dirs={""}), [""])
 
-    def test_shared_python_reaches_every_python_consumer(self):
-        selected = lanes(["scripts/provenance.py"])
-        self.assertTrue({"python", "documents", "session", "installed"} <= selected, selected)
-        self.assertNotIn("runtime", selected)
-
-    def test_compiled_in_assets_reach_the_rust_lane(self):
-        for path in ("scripts/page/page.css", "scripts/document/layer.js", "scripts/session/rules.txt",
-                     "scripts/start-guide.md", "scripts/session/lean/Main.lean"):
+    def test_the_plugin_plumbing_and_host_wrappers_reach_the_rust_lane(self):
+        # Installed acceptance stages a plugin from these and drives its hooks.
+        for path in ("scripts/hook.sh", "scripts/session_gate.sh", "scripts/native_runtime.sh",
+                     "adapters/codex/plugin-hooks.json", "adapters/cursor/scripts/gate-open.sh",
+                     "adapters/copilot/cli/hook.sh", "adapters/windsurf/hooks.json"):
             with self.subTest(path=path):
                 self.assertIn("rust", lanes([path]))
 
-    def test_rust_lane_reads_what_its_sources_embed_and_the_scripts_its_tests_run(self):
-        # include_str!/include_bytes! targets.
-        for path in ("scripts/verify_page.js", "examples/offer-review/after/GROUNDING.yaml", "scripts/expressions.py"):
-            with self.subTest(path=path):
-                self.assertIn("rust", lanes([path]))
-        # host_hooks.rs runs the Python hooks of the pinned v0.10.0 reference, not the checkout's,
-        # and the ordinary Lean program is compiled from the source beside the crate.
-        for path in ("scripts/render_page.py", "scripts/ground_hook.py", "scripts/edit_hook.py",
-                     "scripts/followups.py", "scripts/session/core.py", "scripts/session/model.py"):
-            with self.subTest(path=path):
-                self.assertNotIn("rust", lanes([path]))
-        self.assertTrue(CI.rust_embeds(("native",)) >= {"native/shared/verify_page.js", "native/shared/session/rules.txt"})
-
-    def test_installed_lane_follows_the_imports_of_the_reasoning_tests_it_runs(self):
-        # Including an import inside code the acceptance test hands to the installed interpreter.
-        for path in ("tests/test_pending_grounding.py", "tests/test_history_authoring.py",
-                     "tests/test_history_snapshot_capture.py", "tests/test_reasoning_contract.py"):
-            with self.subTest(path=path):
-                self.assertIn("installed", lanes([path]))
-
-    def test_runtime_sources_rebuild_and_validate_installation(self):
-        for path in ("scripts/reasoning/lean/Kernel.lean", "scripts/reasoning/build_runtime.py",
+    def test_compiled_in_assets_and_packaging_inputs_reach_the_rust_lane(self):
+        for path in ("native/shared/page/page.css", "native/shared/session/rules.txt",
+                     "native/shared/start-guide.md", "native/shared/expressions.py",
+                     "scripts/session/lean/Main.lean", "scripts/reasoning/lean/Kernel.lean",
                      "scripts/reasoning/native/linux-x86_64.kpopper-runtime",
-                     "scripts/reasoning/third_party/COPYING.LESSERv3", "tests/test_reasoning_distribution.py"):
+                     "scripts/reasoning/third_party/COPYING.LESSERv3",
+                     "scripts/reasoning/build_runtime.py", "scripts/package_native.py",
+                     "install.sh", "install.ps1", "VERSION", "LICENSE"):
             with self.subTest(path=path):
-                self.assertTrue({"runtime", "installed"} <= lanes([path]))
-        self.assertTrue(CI.select(["README.md"], full=True)["installed"])
+                self.assertIn("rust", lanes([path]))
+
+    def test_rust_lane_reads_what_its_sources_embed(self):
+        for path in ("native/shared/verify_page.js", "examples/offer-review/after/GROUNDING.yaml"):
+            with self.subTest(path=path):
+                self.assertIn("rust", lanes([path]))
+        self.assertTrue(CI.rust_embeds(("native",))
+                        >= {"native/shared/verify_page.js", "native/shared/session/rules.txt"})
+
+    def test_the_bundle_check_reads_the_workflows_recorded_inside_the_archive(self):
+        for path in (".github/workflows/reasoning-runtime.yml",
+                     ".github/workflows/reasoning-target.yml"):
+            with self.subTest(path=path):
+                self.assertIn("rust", lanes([path]))
 
     def test_ci_machinery_runs_every_lane_on_every_platform(self):
         for path in CI.CI_MACHINERY:
@@ -137,20 +123,18 @@ class Selection(unittest.TestCase):
                 self.assertEqual(lanes([("A", path)]), ALL)
 
     def test_platform_inputs_take_every_target_and_code_changes_leave_intel_macos_to_main(self):
-        for path in ("native/Cargo.lock", "native/build.rs", "install.ps1", ".github/workflows/native-rust.yml",
-                     "scripts/reasoning/native/darwin-x86_64.kpopper-runtime", "pyproject.toml"):
+        for path in ("native/Cargo.lock", "native/build.rs", "install.ps1",
+                     ".github/workflows/native-rust.yml",
+                     "scripts/reasoning/native/darwin-x86_64.kpopper-runtime"):
             with self.subTest(path=path):
                 self.assertEqual(CI.platforms([path]), "all")
-        for path in ("native/src/main.rs", "scripts/cli.py", "tests/test_session.py"):
+        for path in ("native/src/main.rs", "native/tests/cli.rs", "README.md"):
             with self.subTest(path=path):
                 self.assertEqual(CI.platforms([path]), "pull-request")
-        self.assertNotIn(CI.INTEL_MACOS, {row["target"] for row in CI.runtime_targets("pull-request")})
-        self.assertEqual(CI.runtime_targets("all"), [dict(row) for row in CI.RUNTIME_TARGETS])
 
-    def test_main_runs_every_lane_on_every_platform_and_rebuilds_only_changed_runtime(self):
-        self.assertEqual(lanes(["README.md"], push=True), ALL - {"runtime"})
+    def test_main_runs_every_lane_on_every_platform(self):
+        self.assertEqual(lanes(["README.md"], push=True), ALL)
         self.assertEqual(CI.platforms(["README.md"], push=True), "all")
-        self.assertEqual(lanes(["scripts/reasoning/lean/Kernel.lean"], push=True), ALL)
 
     def test_empty_diff_manual_run_and_missing_history_run_everything(self):
         self.assertEqual(lanes([]), ALL)
@@ -175,15 +159,15 @@ class GitRange(unittest.TestCase):
                 git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", message)
 
             git("init")
-            (root / "scripts/document").mkdir(parents=True)
-            (root / "scripts/document/layer.js").write_text("old")
+            (root / "native/src").mkdir(parents=True)
+            (root / "native/src/reader.rs").write_text("old")
             (root / "docs").mkdir()
             (root / "docs/old.md").write_text("documentation")
             (root / "README.md").write_text("readme")
             commit("base")
             base = git("rev-parse", "HEAD")
-            (root / "scripts/document/layer.js").unlink()
-            commit("delete runtime asset")
+            (root / "native/src/reader.rs").unlink()
+            commit("delete a source file")
             (root / "docs/old.md").rename(root / "docs/new.md")
             (root / "README.md").write_text("changed")
             (root / "fresh/nested").mkdir(parents=True)
@@ -191,12 +175,12 @@ class GitRange(unittest.TestCase):
             commit("rename, edit and add")
             changes, base_dirs, head_dirs = CI.changed_files(base, "HEAD", cwd=root)
             self.assertEqual(sorted(changes), [("A", "docs/new.md"), ("A", "fresh/nested/file.txt"),
-                                               ("D", "docs/old.md"), ("D", "scripts/document/layer.js"),
+                                               ("D", "docs/old.md"), ("D", "native/src/reader.rs"),
                                                ("M", "README.md")])
-            self.assertEqual(base_dirs, {"", "docs", "scripts", "scripts/document"})
+            self.assertEqual(base_dirs, {"", "docs", "native", "native/src"})
             self.assertEqual(head_dirs, {"", "docs", "fresh", "fresh/nested"})
-            self.assertEqual(CI.listings("D", "scripts/document/layer.js", base_dirs, head_dirs),
-                             ["scripts/document", "scripts", ""])
+            self.assertEqual(CI.listings("D", "native/src/reader.rs", base_dirs, head_dirs),
+                             ["native/src", "native", ""])
             self.assertEqual(lanes(changes, base_dirs=base_dirs, head_dirs=head_dirs), ALL)
 
 
@@ -206,59 +190,41 @@ class RequiredResults(unittest.TestCase):
         scope = CI.platforms(changes)
         return {"changes": {"result": "success", "outputs": {
                     **{k: str(v).lower() for k, v in selected.items()},
-                    "platforms": scope,
-                    "test_suites": json.dumps(CI.test_suites(selected)),
-                    "test_matrix": json.dumps(CI.test_matrix(selected, pull_request)),
-                    "runtime_targets": json.dumps(CI.runtime_targets(scope))}},
+                    "platforms": scope}},
                 "record": {"result": "success"},
                 **{job: {"result": "success" if any(selected[lane] for lane in lanes) else "skipped"}
                    for job, lanes in CI.JOB_LANES.items()}}
 
     def test_intentional_skips_pass(self):
-        for changes in (["README.md"], ["native/src/main.rs"], ["scripts/cli.py"]):
+        for changes in (["README.md"], ["native/src/main.rs"]):
             with self.subTest(changes=changes):
                 self.assertEqual(CI.required_failures(self.results(changes)), [])
 
     def test_selected_job_cannot_silently_skip_fail_or_cancel(self):
-        for job, changes in (("native-cli", ["native/src/main.rs"]), ("session", ["scripts/cli.py"]),
-                             ("reasoning-runtime", ["scripts/cli.py"]), ("check", ["scripts/documents.py"])):
-            for result in ("skipped", "failure", "cancelled"):
-                with self.subTest(job=job, result=result):
-                    needs = self.results(changes)
-                    needs[job]["result"] = result
-                    self.assertTrue(CI.required_failures(needs))
+        for result in ("skipped", "failure", "cancelled"):
+            with self.subTest(result=result):
+                needs = self.results(["native/src/main.rs"])
+                needs["native-cli"]["result"] = result
+                self.assertTrue(CI.required_failures(needs))
 
     def test_unselected_job_cannot_run_unexpectedly(self):
-        needs = self.results(["native/src/main.rs"])
-        needs["check"]["result"] = "success"
+        needs = self.results(["README.md"])
+        needs["native-cli"]["result"] = "success"
         self.assertTrue(CI.required_failures(needs))
 
     def test_failed_detection_or_missing_output_cannot_pass(self):
         needs = self.results(["README.md"])
         needs["changes"]["result"] = "failure"
         self.assertTrue(CI.required_failures(needs))
-        for output in list(CI.LANE_NAMES) + ["platforms", "runtime_targets", "test_suites", "test_matrix"]:
+        for output in list(CI.LANE_NAMES) + ["platforms"]:
             with self.subTest(output=output):
-                needs = self.results(["scripts/cli.py"])
+                needs = self.results(["native/src/main.rs"])
                 del needs["changes"]["outputs"][output]
                 self.assertTrue(CI.required_failures(needs))
 
     def test_main_cannot_run_the_pull_request_platform_subset(self):
-        needs = self.results(["scripts/cli.py"], pull_request=False)
+        needs = self.results(["native/src/main.rs"], pull_request=False)
         self.assertTrue(CI.required_failures(needs, pull_request=False))
-
-    def test_truncated_plans_and_matrices_cannot_pass(self):
-        needs = self.results(["scripts/cli.py"])
-        matrix = json.loads(needs["changes"]["outputs"]["test_matrix"])
-        matrix["include"].pop()
-        needs["changes"]["outputs"]["test_matrix"] = json.dumps(matrix)
-        self.assertTrue(CI.required_failures(needs))
-        needs = self.results(["scripts/cli.py"])
-        needs["changes"]["outputs"]["runtime_targets"] = json.dumps(CI.runtime_targets("pull-request")[:-1])
-        self.assertTrue(CI.required_failures(needs))
-        needs = self.results(["scripts/cli.py"])
-        needs["changes"]["outputs"]["test_suites"] = '["documents"]'
-        self.assertTrue(CI.required_failures(needs))
 
 
 class WorkflowCoverage(unittest.TestCase):
@@ -269,19 +235,8 @@ class WorkflowCoverage(unittest.TestCase):
         jobs = self.jobs()
         self.assertEqual(set(jobs["ci-required"]["needs"]), set(jobs) - {"ci-required"})
         self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]),
-                         ALL | {"platforms", "test_suites", "test_matrix", "runtime_targets"})
+        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms"})
         self.assertEqual({lane for lanes in CI.JOB_LANES.values() for lane in lanes}, ALL)
-
-    def test_runtime_targets_are_the_producer_matrix_called_directly(self):
-        producer = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
-        self.assertEqual([dict(row) for row in producer["jobs"]["target"]["strategy"]["matrix"]["include"]],
-                         [dict(row) for row in CI.RUNTIME_TARGETS])
-        job = self.jobs()["reasoning-runtime"]
-        self.assertEqual(job["uses"], "./.github/workflows/reasoning-target.yml")
-        self.assertEqual(job["strategy"]["matrix"]["include"], "${{ fromJSON(needs.changes.outputs.runtime_targets) }}")
-        self.assertEqual(job["if"], "needs.changes.outputs.installed == 'true'")
-        self.assertEqual(job["with"]["rebuild"], "${{ needs.changes.outputs.runtime == 'true' }}")
 
     def test_native_pull_request_subset_is_the_full_matrix_without_intel_macos(self):
         workflow = (ROOT / ".github/workflows/native-rust.yml").read_text()
@@ -289,119 +244,15 @@ class WorkflowCoverage(unittest.TestCase):
         full = max(literals, key=len)
         subset = next(rows for rows in literals if len(rows) == len(full) - 1)
         self.assertEqual(subset, [row for row in full if row["target"] != CI.INTEL_MACOS])
-        self.assertEqual({row["target"] for row in full}, {row["target"] for row in CI.RUNTIME_TARGETS})
         job = self.jobs()["native-cli"]
         self.assertEqual(job["if"], "needs.changes.outputs.rust == 'true'")
         self.assertIn("without-darwin-x86_64", job["with"]["target"])
         self.assertIn("needs.changes.outputs.platforms == 'all'", job["with"]["target"])
 
-    def native_matrix(self, job):
-        """A native job's platform rows, by the `target` input that selects them."""
-        rows, target = {}, "all"
-        for text in self.jobs("native-rust.yml")[job]["strategy"]["matrix"]["include"].split("'")[1::2]:
-            if text.startswith("["):
-                rows[target], target = json.loads(text), "all"
-            else:
-                target = text
-        return rows
-
-    def test_native_release_of_the_pull_request_subset_runs_on_linux_x86_64_alone(self):
-        tests, release = self.native_matrix("tests"), self.native_matrix("release")
-        self.assertEqual(set(tests), {"all", "without-darwin-x86_64", "windows-x86_64"})
-        self.assertEqual(set(release), set(tests))
-        self.assertEqual(tests["without-darwin-x86_64"],
-                         [row for row in tests["all"] if row["target"] != CI.INTEL_MACOS])
-        self.assertEqual(release["all"], tests["all"])
-        self.assertEqual(release["windows-x86_64"], tests["windows-x86_64"])
-        self.assertEqual(release["without-darwin-x86_64"],
-                         [row for row in tests["all"] if row["target"] == "linux-x86_64"])
-
-    def test_native_jobs_repeat_one_setup_and_keep_their_own_cache(self):
-        jobs = self.jobs("native-rust.yml")
-
-        def setup(job):
-            steps = [step for step in jobs[job]["steps"] if not step.get("uses", "").startswith("actions/cache/")]
-            last = [step.get("name") for step in steps].index("Prepare resources for native integration tests")
-            return steps[:last + 1]
-
-        self.assertEqual(setup("tests"), setup("release"))
-        self.assertIn("native-source", [step.get("id") for step in setup("tests")])
-        for key in ("runs-on", "env"):
-            self.assertEqual(jobs["tests"][key], jobs["release"][key])
-        for job, profile in (("tests", "native/target/debug"), ("release", "native/target/release")):
-            cached = [tuple(step["with"]["path"].split()) for step in jobs[job]["steps"]
-                      if step.get("uses", "").startswith("actions/cache/")]
-            self.assertEqual(cached, [("~/.cargo/registry/index", "~/.cargo/registry/cache", profile)] * 2, job)
-
-    def test_native_steps_read_only_the_steps_of_their_own_job(self):
-        # A condition naming a step of another job reads nothing, and its step silently skips.
-        for name, job in self.jobs("native-rust.yml").items():
-            earlier = set()
-            for step in job["steps"]:
-                for read in re.findall(r"steps\.([\w-]+)\.", json.dumps(step)):
-                    with self.subTest(job=name, step=step.get("name"), reads=read):
-                        self.assertIn(read, earlier)
-                earlier.add(step.get("id"))
-
-    def test_native_release_is_built_accepted_packaged_and_uploaded_in_one_job(self):
-        # Publication takes the crate and the distributions this job uploads, never another job's build.
-        chain = ["native-release", "native-crate", "verified-crate", "native-bundle", "native-notices",
-                 "native-acceptance", "native-bundle-${{ matrix.target }}", "native-distribution",
-                 "native-distribution-${{ matrix.target }}"]
-        for name, job in self.jobs("native-rust.yml").items():
-            marks = [step.get("id") or (step.get("with") or {}).get("name") for step in job["steps"]]
-            with self.subTest(job=name):
-                self.assertEqual([mark for mark in marks if mark in chain], chain if name == "release" else [])
-
-    def test_native_verdict_requires_each_job_to_end_as_the_validation_requires(self):
-        jobs = self.jobs("native-rust.yml")
-        self.assertEqual(jobs["tests"]["if"], "inputs.validation != 'distribution'")
-        self.assertNotIn("if", jobs["release"])
-        verdict = jobs["verdict"]
-        self.assertEqual((verdict["needs"], verdict["if"]), (["tests", "release"], "always()"))
-        [step] = verdict["steps"]
-        self.assertEqual(step["shell"], "bash")
-        names = {value: name for name, value in step["env"].items()}
-        validation = names["${{ inputs.validation || 'full' }}"]
-        tests, release = names["${{ needs.tests.result }}"], names["${{ needs.release.result }}"]
-        results = ("success", "failure", "cancelled", "skipped")
-        for mode in ("full", "final-fixes", "hooks", "distribution"):
-            required = "skipped" if mode == "distribution" else "success"
-            for tested in results:
-                for released in results:
-                    environment = dict(os.environ, **{validation: mode, tests: tested, release: released})
-                    run = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
-                                         env=environment, capture_output=True, text=True)
-                    with self.subTest(validation=mode, tests=tested, release=released):
-                        self.assertEqual(run.returncode == 0, (tested, released) == (required, "success"),
-                                         run.stdout)
-
-    def test_shards_cover_supported_interpreters_and_docs_avoid_extra_machines(self):
-        rows = CI.test_matrix(CI.select(["scripts/cli.py"]))["include"]
-        self.assertEqual({r["group"] for r in rows if r["python"] == "3.9"}, set(range(1, 9)))
-        self.assertEqual({r["group"] for r in rows if r["python"] == "3.13"}, set(range(1, 5)))
-        docs = CI.test_matrix({lane: lane == "documents" for lane in CI.LANE_NAMES})["include"]
-        self.assertEqual(len(docs), 2)
-        self.assertTrue(all(r["splits"] == 1 for r in docs))
-        main = CI.test_matrix(CI.select(["scripts/cli.py"]), pull_request=False)["include"]
-        self.assertEqual({r["python"] for r in main}, {"3.13"})
-        self.assertEqual(len(main), 4)
-
-    def test_workflow_executes_the_declared_matrix_and_verifies_its_manifests(self):
-        jobs = self.jobs()
-        self.assertEqual(jobs["check"]["strategy"]["matrix"], "${{ fromJSON(needs.changes.outputs.test_matrix) }}")
-        commands = "\n".join(s.get("run", "") for s in jobs["ci-required"]["steps"])
-        self.assertIn("--verify-results", commands)
-        self.assertIn("--matrix", commands)
-
-    def test_record_validates_native_shared_copies_before_cache_restore(self):
-        steps = self.jobs()["record"]["steps"]
-        check = next(i for i, step in enumerate(steps)
-                     if step.get("run") == "python .github/scripts/native_shared.py --check")
-        restore = next(i for i, step in enumerate(steps)
-                       if step.get("uses") == "actions/cache/restore@v4")
-        self.assertLess(check, restore)
-        self.assertNotIn("if", steps[check])
+    def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
+        steps = self.jobs()["changes"]["steps"]
+        gate = next(step for step in steps if "--check-bundles" in step.get("run", ""))
+        self.assertEqual(gate["if"], "steps.select.outputs.rust == 'true'")
 
 
 if __name__ == "__main__":

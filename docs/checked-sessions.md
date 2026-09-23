@@ -190,9 +190,7 @@ the checked-session core:
 
 The [proof audit](../scripts/session/lean/ProofAudit.lean) names these theorems and
 prints their axiom dependencies. Other runtime checks cover exact recovery references,
-topic bindings and event values. The [session CI workflow](../.github/workflows/session.yml)
-builds the pinned source, audits the named proofs and runs integration tests on Linux,
-macOS and Windows. The [arithmetic evaluator's proof scope](reasoning-core.md#runtime-licensing-and-assurance)
+topic bindings and event values. The [arithmetic evaluator's proof scope](reasoning-core.md#runtime-licensing-and-assurance)
 is documented separately.
 
 These guarantees concern defined data structures and checks. They do not establish

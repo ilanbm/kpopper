@@ -492,14 +492,14 @@ esac
 
 #[cfg(unix)]
 #[test]
-fn python_runs_only_when_selected_by_name() {
+fn a_runtime_choice_other_than_rust_is_refused_without_reaching_an_interpreter() {
     use checkout::*;
     let session = Session::with_record();
     let checkout = Checkout::new("kpopper checkout", true);
     let stubs = session.home.path().join("stubs");
     script(
         &stubs.join("python3"),
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOOK_TRACE.args\"\ncat > \"$HOOK_TRACE.stdin\"\nprintf '{\"python\": true}\\n'\n",
+        "#!/bin/sh\n: > \"$HOOK_TRACE.called\"\nprintf '{\"python\": true}\\n'\n",
     );
     let trace = session.home.path().join("trace");
     let path = format!(
@@ -508,68 +508,28 @@ fn python_runs_only_when_selected_by_name() {
         std::env::var("PATH").unwrap_or_default()
     );
     let payload = json!({"cwd":session.work(),"session_id":"compat","sessionId":"compat"});
-    for (hook, args, expected) in [
-        (
-            checkout.gemini(),
-            &[][..],
-            vec![
-                checkout
-                    .root
-                    .join("adapters/gemini/scripts/hook.py")
-                    .display()
-                    .to_string(),
-                "SessionStart".into(),
-            ],
-        ),
-        (
-            checkout.copilot(),
-            &["start"][..],
-            vec![
-                checkout
-                    .root
-                    .join("adapters/copilot/cli/hook.py")
-                    .display()
-                    .to_string(),
-                "start".into(),
-            ],
-        ),
+    for (hook, args) in [
+        (checkout.gemini(), &[][..]),
+        (checkout.copilot(), &["start"][..]),
     ] {
-        let output = run(
-            session
-                .command("sh")
-                .arg(&hook)
-                .args(args)
-                .env("PATH", &path)
-                .env("HOOK_TRACE", &trace)
-                .env("KPOPPER_RUNTIME", "python"),
-            payload.to_string().as_bytes(),
-        );
-        assert_eq!(
-            json_output(&output),
-            json!({"python": true}),
-            "{}",
-            diagnostic(&output)
-        );
-        let called = fs::read_to_string(trace.with_extension("args")).unwrap();
-        assert_eq!(called.lines().collect::<Vec<_>>(), expected);
-        assert_eq!(
-            fs::read(trace.with_extension("stdin")).unwrap(),
-            payload.to_string().into_bytes()
-        );
-        let unknown = run(
-            session
-                .command("sh")
-                .arg(&hook)
-                .args(args)
-                .env("PATH", &path)
-                .env("KPOPPER_RUNTIME", "java"),
-            payload.to_string().as_bytes(),
-        );
-        assert_eq!(json_output(&unknown), json!({}));
-        assert_eq!(
-            String::from_utf8_lossy(&unknown.stderr),
-            "kpopper: KPOPPER_RUNTIME must be rust or python\n"
-        );
+        for choice in ["python", "java"] {
+            let refused = run(
+                session
+                    .command("sh")
+                    .arg(&hook)
+                    .args(args)
+                    .env("PATH", &path)
+                    .env("HOOK_TRACE", &trace)
+                    .env("KPOPPER_RUNTIME", choice),
+                payload.to_string().as_bytes(),
+            );
+            assert_eq!(json_output(&refused), json!({}), "{}", diagnostic(&refused));
+            assert_eq!(
+                String::from_utf8_lossy(&refused.stderr),
+                "kpopper: KPOPPER_RUNTIME must be rust\n"
+            );
+            assert!(!trace.with_extension("called").exists());
+        }
     }
     assert!(!session.baseline("compat").exists());
 }

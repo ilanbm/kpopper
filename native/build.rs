@@ -43,10 +43,12 @@ fn files(dir: &Path, out: &mut Vec<PathBuf>) {
         }
     }
 }
-/// A published crate carries nothing from outside its directory, so what this crate embeds
-/// or fingerprints from the rest of the repository is copied into shared/, and the licence
-/// beside this manifest. In a checkout of the repository a copy that differs from its
-/// original stops the build rather than shipping stale bytes.
+/// A published crate carries nothing from outside its directory, so everything this crate
+/// embeds or fingerprints lives under shared/, with the licence beside this manifest. Two of
+/// those files are also read from outside the crate: the Lean sources, which the reasoning
+/// runtime is built from and the ordinary program is packaged from. In a checkout of the
+/// repository a copy that differs from its original stops the build rather than shipping
+/// bytes that describe something else.
 fn check_copies(sources: &BTreeMap<String, String>) {
     let (Ok(here), Ok(parent)) = (
         Path::new(".").canonicalize(),
@@ -59,16 +61,16 @@ fn check_copies(sources: &BTreeMap<String, String>) {
         return;
     }
     let mut copies = Vec::new();
-    files(Path::new("shared"), &mut copies);
+    files(Path::new("shared/session/lean"), &mut copies);
     let mut pairs = vec![(PathBuf::from("LICENSE"), PathBuf::from("../LICENSE"))];
     for copy in copies {
-        let original = originals.join(copy.strip_prefix("shared").unwrap());
-        pairs.push((copy, original));
+        let outside = originals.join(copy.strip_prefix("shared").unwrap());
+        pairs.push((copy, outside));
     }
     let mut stale = Vec::new();
-    for (copy, original) in pairs {
-        println!("cargo:rerun-if-changed={}", original.display());
-        if fs::read(&copy).ok() != fs::read(&original).ok() {
+    for (copy, outside) in pairs {
+        println!("cargo:rerun-if-changed={}", outside.display());
+        if fs::read(&copy).ok() != fs::read(&outside).ok() {
             stale.push(copy.display().to_string());
         }
     }
@@ -81,8 +83,9 @@ fn check_copies(sources: &BTreeMap<String, String>) {
     }
     assert!(
         stale.is_empty(),
-        "copies that differ from the files they are taken from: {}\n\
-         refresh them with: python3 .github/scripts/native_shared.py",
+        "these differ from the file they are kept in step with: {}\n\
+         the licence comes from the repository root, and the Lean sources under scripts/ are \
+         the same sources the runtime build and the Lean package read",
         stale.join(", ")
     );
 }

@@ -47,9 +47,7 @@ there. Local symlink targets also need to exist in any remote execution environm
 Use a trusted project and a kpopper checkout with its native runtime installed
 (`sh "<plugin>/scripts/install_native.sh"`; see
 [Install the native runtime](../../docs/plugin-runtime.md#install-the-native-runtime)).
-The opener needs no Python. `KPOPPER_RUNTIME=python` selects the source-only
-[Python compatibility mode](../../docs/plugin-runtime.md#python-compatibility-mode)
-instead. Run from the project root, replacing `<plugin>` with the absolute checkout path. If `.cursor/hooks.json`
+The opener needs no interpreter. Run from the project root, replacing `<plugin>` with the absolute checkout path. If `.cursor/hooks.json`
 already exists, merge this adapter's two hook entries into it instead of copying
 over it. Preserve existing rules and scripts with the same names as well.
 
@@ -84,10 +82,8 @@ for the same kpopper hooks: all matching hooks can run.
 ## Verification
 
 `native/tests/cursor_adapter.rs` runs the opener against the native build: first use
-through a symlinked install, an existing record, a missing runtime and an unknown
-runtime choice. `tests.test_start.FirstUse.test_cursor_first_use_json_and_first_record_stop_use_the_same_baseline`
-checks the Python compatibility mode's opening JSON, the first-record baseline and silent legacy stops. A separate
-2026-09-16 smoke test also exercised executable symlinks, a project path with
+through a symlinked install, an existing record, a missing runtime and a runtime
+choice other than the packaged command. A separate 2026-09-16 smoke test also exercised executable symlinks, a project path with
 spaces and documented payload fields without `cwd`.
 
 Before claiming a host is verified, start a fresh conversation in that host,

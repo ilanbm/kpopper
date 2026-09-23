@@ -5,7 +5,7 @@ description: "Map existing materials into a first knowledge record, or investiga
 
 # Map
 
-A map is work in its own right, with a scope and a result the user asked for. Learning while working - the default - needs none of this: the [record skill](../record/SKILL.md) keeps findings as they arise, and the first useful one creates the record. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH, pip or Python. Explicit Python compatibility mode uses the active plugin's `scripts/cli.py` only when `KPOPPER_RUNTIME=python` is set.
+A map is work in its own right, with a scope and a result the user asked for. Learning while working - the default - needs none of this: the [record skill](../record/SKILL.md) keeps findings as they arise, and the first useful one creates the record. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:map` or "map from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
@@ -44,4 +44,4 @@ and use the host's native card or a Markdown block. `kpopper _agent status` list
 is remembered per user, the starting offer per project. Respect `kpop config --guidance off` and do
 not turn an onboarding step into a requirement for finishing the user's task.
 
-A selected mapping or investigation makes discovery the task: follow `kpopper _agent guide` (the packaged [start guide](../../scripts/start-guide.md)), stay inside the agreed subjects, sources and dates, and report its limits. The availability of more material is not a reason to survey it. The result is a report the user can read and a record whose first entries carry their sources; render the optional experimental [hub](../hub/SKILL.md) only if explicitly requested or covered by a standing preference.
+A selected mapping or investigation makes discovery the task: follow `kpopper _agent guide` (the packaged [start guide](../../native/shared/start-guide.md)), stay inside the agreed subjects, sources and dates, and report its limits. The availability of more material is not a reason to survey it. The result is a report the user can read and a record whose first entries carry their sources; render the optional experimental [hub](../hub/SKILL.md) only if explicitly requested or covered by a standing preference.

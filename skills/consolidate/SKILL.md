@@ -5,7 +5,7 @@ description: "Test, fold or refute hypotheses beside the knowledge record, and r
 
 # Consolidate
 
-A hypothesis is a claim the base does not yet hold: a refused reading, a proposal not yet approved, a branch's record, a what-if. Nothing here decides for a person; the dry run tests, the fold and the refutation are the person's acts, recorded so the question never returns. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH, pip or Python. Explicit Python compatibility mode uses the active plugin's `scripts/cli.py` only when `KPOPPER_RUNTIME=python` is set.
+A hypothesis is a claim the base does not yet hold: a refused reading, a proposal not yet approved, a branch's record, a what-if. Nothing here decides for a person; the dry run tests, the fold and the refutation are the person's acts, recorded so the question never returns. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:consolidate` or "consolidate from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
