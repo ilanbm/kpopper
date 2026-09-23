@@ -82,12 +82,39 @@ jobs:
             exit 1
           fi
 
-      - name: Install the package the way a user gets it
-        run: pip install .
       - name: Install the test runner the CI contracts exercise
         run: python -m pip install -r .github/requirements-test.txt
       - name: Check skill/release contracts and CI selection
         run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection tests.test_ci_execution tests.test_ci_sharding tests.test_ci_audit -v
+
+      # The record is read by the native kpop of this tree. A reader main built from the same
+      # native/ sources is reused, so only a change under native/ pays for the build. Only a
+      # push to main saves one: pull requests read main's, and keep the cache budget free.
+      - name: Reuse the native reader built from these sources
+        id: reader
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/kpopper-record-reader
+          key: record-reader-${{ runner.os }}-${{ hashFiles('native/**') }}
+      - name: Build the native reader from this tree
+        if: steps.reader.outputs.cache-hit != 'true'
+        # Inside native/, so that its rust-toolchain.toml selects the compiler.
+        working-directory: native
+        env:
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: |
+          cargo build --locked --bin kpop
+          mkdir -p ~/.cache/kpopper-record-reader
+          cp target/debug/kpop ~/.cache/kpopper-record-reader/kpop
+      - name: Keep main's native reader for the pull requests that follow
+        if: github.event_name == 'push' && steps.reader.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/kpopper-record-reader
+          key: ${{ steps.reader.outputs.cache-primary-key }}
+      - name: Put the native reader on PATH
+        run: echo "$HOME/.cache/kpopper-record-reader" >> "$GITHUB_PATH"
 
       - name: The record holds together
         run: kpop --frozen check
@@ -108,9 +135,6 @@ jobs:
         # a reading the tree contests; an older reading that moved is green, with the
         # command that refreshes it in the log.
         run: kpop --frozen remeasure --run
-
-      - name: Install the optional HTML application runtime
-        run: pip install ".[html]"
 
       - name: The experimental hub renders, and says what it rendered
         run: kpop --frozen experimental hub --verify

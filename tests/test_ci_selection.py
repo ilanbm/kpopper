@@ -96,12 +96,15 @@ class Selection(unittest.TestCase):
                 self.assertIn("rust", lanes([path]))
 
     def test_rust_lane_reads_what_its_sources_embed_and_the_scripts_its_tests_run(self):
-        # include_str!/include_bytes! targets and the hooks host_hooks.rs executes, with their imports.
+        # include_str!/include_bytes! targets and the Lean setup it runs, with its imports.
         for path in ("scripts/verify_page.js", "examples/offer-review/after/GROUNDING.yaml", "scripts/expressions.py",
-                     "scripts/ground_hook.py", "scripts/edit_hook.py", "scripts/followups.py"):
+                     "scripts/session/core.py", "scripts/session/model.py"):
             with self.subTest(path=path):
                 self.assertIn("rust", lanes([path]))
-        self.assertNotIn("rust", lanes(["scripts/render_page.py"]))
+        # host_hooks.rs runs the Python hooks of the pinned v0.10.0 reference, not the checkout's.
+        for path in ("scripts/render_page.py", "scripts/ground_hook.py", "scripts/edit_hook.py", "scripts/followups.py"):
+            with self.subTest(path=path):
+                self.assertNotIn("rust", lanes([path]))
         self.assertTrue(CI.rust_embeds(("native",)) >= {"native/shared/verify_page.js", "native/shared/session/rules.txt"})
 
     def test_installed_lane_follows_the_imports_of_the_reasoning_tests_it_runs(self):

@@ -14,14 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
-      - name: install PyYAML
-        run: pip install pyyaml
-
       - name: check the record
+        # KPOPPER_ROOT: the kpopper checkout, as in copilot-setup-steps.yml. the installer
+        # downloads the runtime for its VERSION from the kpopper GitHub release and checks
+        # its SHA-256.
         env:
           KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
         run: |
@@ -34,7 +30,8 @@ jobs:
             exit 0
           fi
           if [ -z "$KPOPPER_ROOT" ]; then
-            echo "KPOPPER_ROOT is not set (repository variable) - can't locate provenance.py" >&2
+            echo "KPOPPER_ROOT is not set (repository variable) - can't locate kpop" >&2
             exit 1
           fi
-          python3 "$KPOPPER_ROOT/scripts/provenance.py" check "$REC"
+          sh "$KPOPPER_ROOT/scripts/install_native.sh"
+          "$KPOPPER_ROOT/bin/kpop" check "$REC"
