@@ -433,6 +433,11 @@ pub(super) fn pull(
     runtime: Option<&Runtime>,
 ) -> Result<C::Output> {
     require((1..=1000).contains(&budget), "invalid_pull_budget")?;
+    // A record without history is read as an ordinary reader reads it before any branch is
+    // looked for.
+    if current.history_capture().is_none() {
+        current.require_ordinary_reader()?;
+    }
     let (entry, root, relative, oid, day) = context(paths, cwd, reference)?;
     let capabilities = crate::ordinary_fields::capabilities(current.ordinary_document(), None)?;
     if crate::ordinary_value::map(&capabilities)?

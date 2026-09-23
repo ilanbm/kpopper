@@ -416,7 +416,14 @@ fn knowledge_status_passes_the_configured_runtime_to_a_computed_target() {
         String::from_utf8_lossy(&result.stderr)
     );
     let actual: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(actual["target_unavailable"], Value::Null, "{actual}");
+    // The configured runtime lets the core/v1 snapshot compute the target. The status reads
+    // as an ordinary reader, which leaves a target declaring core/v1 unverified and compares
+    // nothing against it.
+    assert_eq!(
+        actual["target_unavailable"], "unsupported_capability: use core/v1 consumer",
+        "{actual}"
+    );
+    assert_eq!(actual["conflicts"], json!({}), "{actual}");
     assert_eq!(actual["contributions"].as_array().unwrap().len(), 1);
 }
 

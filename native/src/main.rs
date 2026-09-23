@@ -834,7 +834,10 @@ fn main() {
         })();
         let (output, error, code) = match result {
             Ok(output) => (output, String::new(), 0),
-            Err(error) if kpop_native::public_readers::unreadable_record(&error) => {
+            Err(error)
+                if kpop_native::public_readers::unreadable_record(&error)
+                    || kpop_native::public_readers::core_consumer_refusal(&error) =>
+            {
                 (String::new(), format!("{error}\n"), 1)
             }
             Err(error) => (
@@ -950,6 +953,10 @@ fn main() {
                     std::process::exit(output.code);
                 }
             }
+            Err(error) if kpop_native::public_readers::core_consumer_refusal(&error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
             Err(error) => {
                 let message = error.to_string();
                 let mut response = json!({"error":message});
@@ -993,7 +1000,9 @@ fn main() {
                 std::process::exit(output.code);
             }
             Err(error) => {
-                if kpop_native::public_readers::unreadable_record(&error) {
+                if kpop_native::public_readers::unreadable_record(&error)
+                    || kpop_native::public_readers::core_consumer_refusal(&error)
+                {
                     eprintln!("{error}");
                 } else {
                     eprintln!("kpop {kind}: {error}");
@@ -1049,6 +1058,9 @@ fn main() {
         })();
         let (output, error, code) = match result {
             Ok(output) => (output.text, String::new(), output.code),
+            Err(error) if kpop_native::public_readers::core_consumer_refusal(&error) => {
+                (String::new(), format!("{error}\n"), 1)
+            }
             Err(error) => (
                 String::new(),
                 format!("kpop experimental hub: {error}\n"),
@@ -1353,7 +1365,10 @@ fn main() {
         })();
         match result {
             Ok(text) => println!("{text}"),
-            Err(error) if kpop_native::public_readers::unreadable_record(&error) => {
+            Err(error)
+                if kpop_native::public_readers::unreadable_record(&error)
+                    || kpop_native::public_readers::core_consumer_refusal(&error) =>
+            {
                 eprintln!("{error}");
                 std::process::exit(1);
             }

@@ -255,16 +255,20 @@ struct Materialized {
     raw_names: BTreeSet<String>,
     active: bool,
 }
-fn materialize(
-    root: &Path,
-    entry: &str,
-    revision: &str,
-    capture: impl FnOnce(
-        &[std::path::PathBuf],
-        &Path,
-        ReadMode,
-    ) -> Result<crate::source_capture::OrdinaryCapture>,
-) -> Result<Materialized> {
+/// A committed tree read as far as its record's authority marker: the tree's files, the
+/// record's entry and layout, and whether the record is kept by its history.
+struct Committed<'a> {
+    reader: Reader<'a>,
+    entry: String,
+    layout: crate::history_transaction::Layout,
+    active: bool,
+}
+/// Whether the record committed at `revision` is kept by its history. An ordinary reader
+/// stops at the authority marker, so this reads nothing beyond it.
+pub(crate) fn kept_by_history(root: &Path, entry: &str, revision: &str) -> Result<bool> {
+    Ok(committed(root, entry, revision)?.active)
+}
+fn committed<'a>(root: &'a Path, entry: &str, revision: &str) -> Result<Committed<'a>> {
     require(
         [40, 64].contains(&revision.len())
             && revision
@@ -327,6 +331,29 @@ fn materialize(
     let active = marker
         .as_ref()
         .is_some_and(|m| string_is(&map(m).unwrap()["authority"], "history"));
+    Ok(Committed {
+        reader,
+        entry,
+        layout,
+        active,
+    })
+}
+fn materialize(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    capture: impl FnOnce(
+        &[std::path::PathBuf],
+        &Path,
+        ReadMode,
+    ) -> Result<crate::source_capture::OrdinaryCapture>,
+) -> Result<Materialized> {
+    let Committed {
+        reader,
+        entry,
+        layout,
+        active,
+    } = committed(root, entry, revision)?;
     let maximum = if active {
         64 * 1024 * 1024
     } else {

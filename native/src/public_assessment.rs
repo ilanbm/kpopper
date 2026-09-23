@@ -56,6 +56,9 @@ pub fn report_value(
         core || !options.history,
         "--history requires --profile core/v1",
     )?;
+    if !core {
+        capture.require_ordinary_reader()?;
+    }
     crate::require(
         core || options.as_of.is_none(),
         "--as-of is available on the explicit core/v1 assessment profile",

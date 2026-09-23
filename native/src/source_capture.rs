@@ -30,6 +30,34 @@ impl ReadMode {
         }
     }
 }
+/// How an ordinary reader refuses what only a core/v1 consumer reads.
+pub const CORE_CONSUMER: &str = "unsupported_capability: use core/v1 consumer";
+/// The ordinary reader's boundary. The record and every layer read with it, a hypothesis
+/// beside it or a pending contribution, keep the ordinary interpretation. A document that
+/// declares a reasoning profile carries its own semantics, so an ordinary reader refuses
+/// it together with the record that carries it, and only a core/v1 consumer reads it.
+pub(crate) fn require_ordinary(
+    record: &crate::ordinary_value::Value,
+    hypotheses: &crate::ordinary_value::Value,
+) -> Result<()> {
+    use crate::ordinary_value::map;
+    let layers = map(hypotheses)?
+        .values()
+        .filter_map(|layer| map(layer).ok())
+        .filter_map(|layer| layer.get("doc").or_else(|| layer.get("document")));
+    for document in std::iter::once(record).chain(layers) {
+        let declared = map(document)
+            .ok()
+            .and_then(|document| document.get("meta"))
+            .and_then(|meta| map(meta).ok())
+            .is_some_and(|meta| meta.contains_key("reasoning"));
+        if declared {
+            crate::ordinary_fields::explained_capabilities(document, None)?;
+            return Err(error(CORE_CONSUMER));
+        }
+    }
+    Ok(())
+}
 /// How a captured record will be read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Reading {
@@ -275,7 +303,7 @@ fn snapshot(
         map_mut(&mut context)?.insert("pending".into(), pending);
         map_mut(&mut context)?.insert(
             "conflicts".into(),
-            portable(&overlay.conflicts, &base, true)?,
+            portable(&overlay.core.conflicts, &base, true)?,
         );
         if !map(&overlay.history_contributions)?.is_empty() {
             map_mut(&mut context)?.insert(
@@ -290,7 +318,7 @@ fn snapshot(
         let target_map = map_mut(&mut target)?;
         target_map.insert(
             "status".into(),
-            s(if overlay.unavailable.is_some() {
+            s(if overlay.core.unavailable.is_some() {
                 "unavailable"
             } else if observed {
                 "observed"
@@ -301,6 +329,7 @@ fn snapshot(
         target_map.insert(
             "reason".into(),
             overlay
+                .core
                 .unavailable
                 .as_ref()
                 .map(|v| s(v))
@@ -423,7 +452,7 @@ impl<T> CapturedSource<T> {
             (
                 "conflicts",
                 overlay
-                    .map(|value| value.conflicts.clone())
+                    .map(|value| value.ordinary.conflicts.clone())
                     .unwrap_or_else(empty),
             ),
             (
@@ -435,7 +464,7 @@ impl<T> CapturedSource<T> {
             (
                 "target_unavailable",
                 overlay
-                    .and_then(|value| value.unavailable.as_ref())
+                    .and_then(|value| value.ordinary.unavailable.as_ref())
                     .map(|value| s(value))
                     .unwrap_or(V::Null),
             ),
@@ -459,6 +488,10 @@ impl<T> CapturedSource<T> {
     pub fn hypotheses(&self) -> &T {
         &self.hypotheses
     }
+    /// The ordinary reader's boundary over this read: see [`require_ordinary`].
+    pub(crate) fn require_ordinary_reader(&self) -> Result<()> {
+        require_ordinary(&self.document.source.projected(), &self.document.hypotheses)
+    }
     /// The ordinary revision binds the original knowledge observation, before
     /// Snapshot portability rewrites paths and adds its own target status fields.
     pub(crate) fn ordinary_context(&self) -> V {
@@ -467,7 +500,9 @@ impl<T> CapturedSource<T> {
             ("read_mode", s(self.mode.name())),
             (
                 "conflicts",
-                overlay.map(|v| v.conflicts.clone()).unwrap_or_else(empty),
+                overlay
+                    .map(|v| v.ordinary.conflicts.clone())
+                    .unwrap_or_else(empty),
             ),
             (
                 "target",
@@ -476,7 +511,7 @@ impl<T> CapturedSource<T> {
             (
                 "target_unavailable",
                 overlay
-                    .and_then(|v| v.unavailable.as_ref())
+                    .and_then(|v| v.ordinary.unavailable.as_ref())
                     .map(|v| s(v))
                     .unwrap_or(V::Null),
             ),
@@ -505,14 +540,14 @@ impl<T> CapturedSource<T> {
                 roots.join(", ")
             ));
         }
-        for (id, variants) in map(&overlay.conflicts)? {
+        for (id, variants) in map(&overlay.ordinary.conflicts)? {
             let names = crate::history_view::list(variants)?
                 .iter()
                 .map(|v| text(&crate::history_view::list(v)?[0]))
                 .collect::<Result<Vec<_>>>()?;
             lines.push(format!("CONFLICT {id}: {}", names.join(", ")));
         }
-        if let Some(reason) = &overlay.unavailable {
+        if let Some(reason) = &overlay.ordinary.unavailable {
             lines.push(format!("TARGET UNVERIFIED: {reason}"));
         }
         Ok(lines)

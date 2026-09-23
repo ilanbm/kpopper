@@ -235,6 +235,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                 .is_some_and(|o| o.ledger.head.is_some()),
         "no record found; open or map this workspace first",
     )?;
+    capture.require_ordinary_reader()?;
     let document = capture.ordinary_document();
     let base_bodies = C::full_source_bodies(capture.source());
     let context = V::from_typed(&capture.knowledge_status_context());

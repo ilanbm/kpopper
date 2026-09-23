@@ -336,10 +336,18 @@ fn orientation(source: &crate::ordinary_source::Source) -> Vec<String> {
 pub fn unreadable_record(failure: &crate::Error) -> bool {
     crate::ordinary_fields::explains_unreadable(failure)
 }
+/// Whether a failure is the ordinary reader's refusal of a record, or of a layer read with
+/// it, that only a core/v1 consumer reads, or whose reasoning declaration it cannot read.
+/// Commands print it as it stands, with exit status 1, as the Python reader does.
+pub fn core_consumer_refusal(failure: &crate::Error) -> bool {
+    failure.0 == crate::source_capture::CORE_CONSUMER
+        || crate::ordinary_fields::refuses_declaration(failure)
+}
 /// What a read command prints on stderr when it fails, and its exit status. With
 /// --json the same text travels: wrapped for check, pull and affects, as open's `error`.
 pub fn failure(command: &str, options: &Options, error: &crate::Error) -> (String, i32) {
     if unreadable_record(error)
+        || core_consumer_refusal(error)
         || error
             .0
             .contains("is not an entry or a prefix in this record.")
@@ -612,6 +620,7 @@ pub fn run(
     )?
     .try_typed()?;
     if !string_is(&map(&capabilities)?["profile"], "core/v1") {
+        capture.require_ordinary_reader()?;
         let context = capture.ordinary_context();
         let ordinary_context = crate::ordinary_value::Value::from_typed(&context);
         let conflicts = crate::ordinary_value::map(

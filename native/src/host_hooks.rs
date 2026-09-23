@@ -320,6 +320,15 @@ fn entries(record: &Path, workspace: &Path) -> Result<BTreeMap<String, Entry>> {
         None,
     )?;
     let doc = capture.source().projected();
+    // An ordinary record is read as an ordinary reader reads it, so a layer beside it that
+    // declares core/v1 leaves the prompt without a grounding line.
+    if capture.history_capture().is_none()
+        && !crate::ordinary_value::map(&crate::ordinary_fields::capabilities(&doc, None)?)?
+            .get("profile")
+            .is_some_and(|profile| crate::ordinary_value::string_is(profile, "core/v1"))
+    {
+        capture.require_ordinary_reader()?;
+    }
     let collections = crate::ordinary_fields::collections(&doc)?;
     let head = crate::ordinary_value::map(&doc)
         .ok()

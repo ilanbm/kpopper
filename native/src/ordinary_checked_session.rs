@@ -332,6 +332,7 @@ impl OrdinarySession {
         project: &str,
         navigation: Option<&V>,
     ) -> Result<Self> {
+        capture.require_ordinary_reader()?;
         let context = capture.ordinary_context();
         let (document, contributed) = with_contributions(capture)?;
         let projection = Projection::new(
