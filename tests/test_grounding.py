@@ -10,7 +10,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
-FIXTURE = ROOT / "tests" / "fixtures" / "page"
+FIXTURE = ROOT / "native" / "tests" / "fixtures" / "page"
 sys.path.insert(0, str(SCRIPTS))
 import ground_hook as G  # noqa: E402
 

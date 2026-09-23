@@ -193,7 +193,7 @@ checks for the same ref. Release and publish workflows keep their own cancellati
 to succeed and accepts skips only for unselected jobs. This is the aggregate status to use
 when configuring branch protection; changing a workflow does not change repository rules.
 
-The full Python suite uses the fixture record in `tests/fixtures/page`, which exercises
+The full Python suite uses the fixture record in `native/tests/fixtures/page`, which exercises
 every field the reader and the page accept; a new field goes there first.
 
 Standalone-document changes also run the offline UI suite with Node 22 or later:

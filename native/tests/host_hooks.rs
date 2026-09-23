@@ -18,11 +18,8 @@ fn sid(label: &str) -> String {
     )
 }
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_owned()
+fn fixtures() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 /// The Python hooks the native ones are compared with come from a tree of the pinned
 /// reference, v0.10.0 (see native/README.md), never from this checkout. Without it the
@@ -56,7 +53,7 @@ fn fixture() -> TempDir {
         "PROVENANCE.measure.yaml",
     ] {
         fs::copy(
-            repo().join("tests/fixtures/page").join(name),
+            fixtures().join("page").join(name),
             dir.path().join(name),
         )
         .unwrap();

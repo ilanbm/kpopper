@@ -451,7 +451,7 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
     }
     fs::write(
         f.root.path().join("GROUNDING.yaml"),
-        include_str!("../../tests/fixtures/core-page/GROUNDING.yaml"),
+        include_str!("fixtures/core-page/GROUNDING.yaml"),
     )
     .unwrap();
     let started = String::from_utf8(success(session_start(&f, "claude")).stdout).unwrap();

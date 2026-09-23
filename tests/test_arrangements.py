@@ -1,6 +1,6 @@
 """Arrangement decisions: what the build maintains for them (born, stood), what their sign may
 be, how a tab's shape move reads by it, how the brief is held against the decisions that
-stand, and how one is re-decided. Runs against the fixture record in tests/fixtures/page with
+stand, and how one is re-decided. Runs against the fixture record in native/tests/fixtures/page with
 no browser and no network:
 
     python3 -m unittest discover -s tests
@@ -16,7 +16,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
-FIXTURE = ROOT / "tests" / "fixtures" / "page"
+FIXTURE = ROOT / "native" / "tests" / "fixtures" / "page"
 RECORD = FIXTURE / "PROVENANCE.yaml"
 BRIEF = FIXTURE / "PROVENANCE.view.yaml"
 
