@@ -1,0 +1,55 @@
+## Knowledge excerpt
+
+Shared assessment <snapshot>; findings <findings>; support depth 1; 4 nodes shown (limit 12), 1 outside selection; 2 boundary links; 0 internal links omitted (cap 96).
+
+### d.budget — judgment
+
+- shared assessment: acceptance=not\_applicable; computation=not\_available; basis=assessed; falsifier=does\_not\_hold; contention=none\_detected; integrity=assessed; coverage=complete; assurance=computed; support=clear
+
+- verdict: The weekly budget holds
+- because: Hours are low
+- wrong\_if: p.cost \> 1000 → false on current recorded values.
+
+| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |
+|---|---|---|---|
+| p.rate | 50 | 50 (calculated) | unchanged |
+| p.hours | 10 | 10 (calculated) | unchanged |
+| p.cost | 500 | 500 (calculated) | unchanged |
+
+### p.cost — computed
+
+- shared assessment: acceptance=not\_applicable; computation=ok=500; basis=not\_applicable; falsifier=not\_applicable; contention=none\_detected; integrity=assessed; coverage=complete; assurance=computed; support=clear
+
+- rule: p.hours \* p.rate
+- name: Weekly cost
+- calculated current: 500
+
+### p.hours — known
+
+- shared assessment: acceptance=not\_applicable; computation=ok=10; basis=not\_applicable; falsifier=not\_applicable; contention=none\_detected; integrity=assessed; coverage=complete; assurance=computed; support=clear
+
+- current: 10
+- from: src.cal
+- name: Weekly hours
+- calculated current: 10
+
+### p.rate — known
+
+- shared assessment: acceptance=not\_applicable; computation=ok=50; basis=not\_applicable; falsifier=not\_applicable; contention=none\_detected; integrity=assessed; coverage=complete; assurance=computed; support=clear
+
+- current: 50
+- from: src.cal
+- name: Hourly rate
+- calculated current: 50
+
+### Recorded links
+
+Left names right; impact traversal keeps this direction.
+
+- d.budget → impact → p.cost (executed read projected from shared findings).
+- d.budget → impact → p.hours (executed read projected from shared findings).
+- d.budget → impact → p.rate (executed read projected from shared findings).
+- p.cost → impact → p.hours (executed read projected from shared findings).
+- p.cost → impact → p.rate (executed read projected from shared findings).
+
+Conditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.

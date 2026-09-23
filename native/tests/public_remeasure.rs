@@ -332,6 +332,364 @@ fn invalid_scalar_for_numeric_record_is_a_hole() {
     assert!(out.text.contains("not clean: a hole"));
 }
 
+/// A git checkout holding `entry` and its allowlist, a recipe that prints `printed`, and an
+/// empty subdirectory `deep/er` to run from.
+#[cfg(unix)]
+fn checkout(
+    entry: &str,
+    record: &str,
+    allowlist: &str,
+    printed: &str,
+) -> (tempfile::TempDir, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&root)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let allowlist_path = if entry == "GROUNDING.yaml" {
+        root.join(".kpopper/measure.yaml")
+    } else {
+        root.join("PROVENANCE.measure.yaml")
+    };
+    fs::create_dir_all(allowlist_path.parent().unwrap()).unwrap();
+    fs::create_dir_all(root.join("deep/er")).unwrap();
+    fs::write(root.join(entry), record).unwrap();
+    fs::write(allowlist_path, allowlist).unwrap();
+    fs::write(
+        root.join("recipe"),
+        format!("#!/bin/sh\nprintf '%s\\n' '{printed}'\n"),
+    )
+    .unwrap();
+    fs::set_permissions(root.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
+    (temp, root)
+}
+
+#[cfg(unix)]
+fn remeasure(cwd: &Path, run: bool, record: Option<&str>) -> public_remeasure::Output {
+    public_remeasure::run(
+        &Options {
+            run,
+            record: record.map(PathBuf::from),
+        },
+        cwd,
+        true,
+    )
+    .unwrap()
+}
+
+#[test]
+#[cfg(unix)]
+fn a_record_under_the_old_name_is_found_from_its_directory_and_below() {
+    let (_temp, root) = checkout(
+        "PROVENANCE.yaml",
+        "known:\n  p.a:\n    v: 1\n    measure: echo\n",
+        "echo: [./recipe]\n",
+        "1",
+    );
+    for cwd in [root.clone(), root.join("deep/er")] {
+        let plan = remeasure(&cwd, false, None);
+        assert_eq!((plan.code, plan.stderr.as_str()), (0, ""), "{plan:?}");
+        assert_eq!(
+            plan.text,
+            format!(
+                "1 recipe named by 1 entry, from PROVENANCE.measure.yaml, run from {root}:\n  p.a <- echo: {root}/./recipe \n\nnothing ran - add --run to measure this tree\n",
+                root = root.display()
+            )
+        );
+        let measured = remeasure(&cwd, true, None);
+        assert_eq!(measured.code, 0, "{measured:?}");
+        assert!(
+            measured.text.ends_with(
+                "  p.a: 1 - as recorded (echo)\n\nthe record holds what this tree measures\n"
+            ),
+            "{measured:?}"
+        );
+    }
+    fs::write(root.join("PROVENANCE.yaml"), "known:\n  p.a:\n    v: 1\n").unwrap();
+    assert_eq!(
+        remeasure(&root.join("deep/er"), true, None).text,
+        "PROVENANCE.measure.yaml holds 1 recipe, and no entry names one - nothing to re-measure\n"
+    );
+    fs::remove_file(root.join("PROVENANCE.measure.yaml")).unwrap();
+    assert_eq!(
+        remeasure(&root.join("deep/er"), true, None).text,
+        "no measures beside the record - nothing to re-measure\n"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn the_command_finds_the_record_from_a_subdirectory() {
+    let (_temp, root) = checkout(
+        "GROUNDING.yaml",
+        "known:\n  p.a:\n    v: 1\n    measure: echo\n",
+        "echo: [./recipe]\n",
+        "1",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["--frozen", "remeasure", "--run"])
+        .current_dir(root.join("deep/er"))
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        (
+            output.status.code(),
+            String::from_utf8(output.stderr).unwrap()
+        ),
+        (Some(0), String::new()),
+        "{stdout}"
+    );
+    assert!(
+        stdout.starts_with(&format!(
+            "1 recipe named by 1 entry, from .kpopper/measure.yaml, run from {}:\n",
+            root.display()
+        )),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\n  p.a: 1 - as recorded (echo)\n"),
+        "{stdout}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn a_missing_or_misnamed_record_is_refused_as_the_reference_refuses_it() {
+    let (_temp, root) = checkout("GROUNDING.yaml", "known: {}\n", "echo: [./recipe]\n", "1");
+    fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+    let hint = ": no record here. Run this from the directory the record sits in, or name the record file as an argument.\n";
+    for (record, said) in [
+        (None, format!("GROUNDING.yaml{hint}")),
+        (Some("nothere.yaml"), format!("nothere.yaml{hint}")),
+        (
+            Some("notes.txt"),
+            "notes.txt: remeasure takes --run and a record file, nothing else\n".into(),
+        ),
+    ] {
+        let output = remeasure(&root.join("deep/er"), false, record);
+        assert_eq!(
+            (output.code, output.text.as_str(), output.stderr),
+            (1, "", said)
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn an_anchored_argument_serves_every_recipe_that_repeats_it() {
+    let (_temp, root) = checkout(
+        "GROUNDING.yaml",
+        "known:\n  p.a:\n    v: 1\n    measure: first\n  p.b:\n    v: 1\n    measure: second\n",
+        "first:\n  - ./recipe\n  - &shared |\n    counted once,\n    read twice\nsecond:\n  - ./recipe\n  - *shared\n",
+        "1",
+    );
+    let plan = remeasure(&root, false, None);
+    assert_eq!((plan.code, plan.stderr.as_str()), (0, ""), "{plan:?}");
+    for (id, recipe) in [("p.a", "first"), ("p.b", "second")] {
+        assert!(
+            plan.text.contains(&format!(
+                "\n  {id} <- {recipe}: {}/./recipe 'counted once, read twice'\n",
+                root.display()
+            )),
+            "{plan:?}"
+        );
+    }
+    let measured = remeasure(&root, true, None);
+    assert!(
+        measured.text.contains(
+            "  p.a: 1 - as recorded (first)\n  p.b: 1 - as recorded (second)\n\nthe record holds what this tree measures\n"
+        ),
+        "{measured:?}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn the_allowlist_still_refuses_what_the_reference_refuses() {
+    let record = "known:\n  p.a:\n    v: 1\n    measure: echo\n";
+    let (_temp, root) = checkout("GROUNDING.yaml", record, "echo: [./recipe]\n", "1");
+    let measure = root.join(".kpopper/measure.yaml");
+    for (allowlist, said) in [
+        (
+            "echo: [./recipe]\necho: [./recipe]\n",
+            "refused - .kpopper/measure.yaml does not read: duplicate_yaml_key: the key 'echo' appears twice\n",
+        ),
+        (
+            "base: &base {echo: [./recipe]}\n<<: *base\necho: [./recipe]\n",
+            "refused - .kpopper/measure.yaml does not read: duplicate_yaml_key: the key 'echo' appears twice\n",
+        ),
+        (
+            "- ./recipe\n",
+            "refused - .kpopper/measure.yaml is not a mapping of recipe names to argument lists\n",
+        ),
+        (
+            "on: [./recipe]\n9lives: [./recipe]\necho: ./recipe\nnone: []\nnumbers: [1, 2]\n",
+            "refused - .kpopper/measure.yaml:\n  True is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else\n  '9lives' is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else\n  echo: a recipe is a non-empty list of non-empty strings - the executable and its arguments - never a line for a shell\n  none: a recipe is a non-empty list of non-empty strings - the executable and its arguments - never a line for a shell\n  numbers: a recipe is a non-empty list of non-empty strings - the executable and its arguments - never a line for a shell\n",
+        ),
+    ] {
+        fs::write(&measure, allowlist).unwrap();
+        let output = remeasure(&root, false, None);
+        assert_eq!(
+            (output.code, output.text.as_str(), output.stderr.as_str()),
+            (1, "", said)
+        );
+    }
+    for allowlist in [
+        "echo: &loop [./recipe, *loop]\n",
+        "echo: &x [a]\nother: &x [b]\n",
+    ] {
+        fs::write(&measure, allowlist).unwrap();
+        let output = remeasure(&root, false, None);
+        assert_eq!(output.code, 1, "{output:?}");
+        assert!(
+            output
+                .stderr
+                .starts_with("refused - .kpopper/measure.yaml does not read: "),
+            "{output:?}"
+        );
+    }
+    // an empty allowlist holds nothing, so the recipe the record names is missing from it
+    fs::write(&measure, "# recipes go here\n").unwrap();
+    assert_eq!(
+        remeasure(&root, false, None).text,
+        "refused - the record names recipe .kpopper/measure.yaml does not hold: echo - a measurement nothing takes is a hole, and a falsifier reading it tests nothing\n"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn the_plan_quotes_each_argument_for_a_shell_and_cuts_a_long_one() {
+    let (_temp, root) = checkout(
+        "GROUNDING.yaml",
+        "known:\n  p.a:\n    v: 1\n    measure: echo\n  p.b:\n    v: 1\n    measure: long\n",
+        "echo: [./recipe, -c, \"print(open('boiler.txt').read())\", a=b, 'x@y:z,w+%']\nlong:\n  - ./recipe\n  - |\n    first line\n      second line\n  - \"0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\"\nspare: [./recipe]\nzeta: [./recipe]\n",
+        "1",
+    );
+    let plan = remeasure(&root, false, None);
+    let exe = format!("{}/./recipe", root.display());
+    assert!(
+        plan.text.contains(&format!(
+            "\n  p.a <- echo: {exe} -c 'print(open('\"'\"'boiler.txt'\"'\"').read())' a=b x@y:z,w+%\n"
+        )),
+        "{plan:?}"
+    );
+    assert!(
+        plan.text.contains(&format!(
+            "\n  p.b <- long: {exe} 'first line second line' 01234567890123456789012345678901234567890123456789012345678901234 ...\n"
+        )),
+        "{plan:?}"
+    );
+    assert!(
+        plan.text
+            .contains("\n  named by no entry, never run: spare, zeta\n"),
+        "{plan:?}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn a_boolean_reading_is_written_as_the_record_writes_it() {
+    let (temp, record) = fixture("true", 0, "", "true", "echo: [./recipe]\n");
+    let measured = public_remeasure::run(
+        &Options {
+            run: true,
+            record: Some(record.clone()),
+        },
+        temp.path(),
+        true,
+    )
+    .unwrap();
+    assert!(
+        measured
+            .text
+            .contains("\n  p.a: true - as recorded (echo)\n"),
+        "{measured:?}"
+    );
+    let (temp, record) = fixture("false", 0, "", "true", "echo: [./recipe]\n");
+    let changed = public_remeasure::run(
+        &Options {
+            run: true,
+            record: Some(record.clone()),
+        },
+        temp.path(),
+        true,
+    )
+    .unwrap();
+    let refresh = regex::Regex::new(&format!(
+        "\n  p\\.a: true recorded \\(undated\\) -> false measured by echo\n    refresh: kpop set p\\.a false --why 'measured by echo' --as-of \\d{{4}}-\\d{{2}}-\\d{{2}} '?{}'?\n",
+        regex::escape(&record.display().to_string())
+    ))
+    .unwrap();
+    assert!(refresh.is_match(&changed.text), "{changed:?}");
+}
+
+#[test]
+#[cfg(unix)]
+fn a_reading_is_typed_and_refreshed_as_python_reads_it() {
+    // a zero-padded count is the number it spells
+    let (temp, record) = fixture("007", 0, "", "7", "echo: [./recipe]\n");
+    let measured = public_remeasure::run(
+        &Options {
+            run: true,
+            record: Some(record),
+        },
+        temp.path(),
+        true,
+    )
+    .unwrap();
+    assert!(
+        measured.text.contains("\n  p.a: 7 - as recorded (echo)\n"),
+        "{measured:?}"
+    );
+    // a word where the record holds true or false is named as Python names text
+    let (temp, record) = fixture("yes", 0, "", "true", "echo: [./recipe]\n");
+    let failed = public_remeasure::run(
+        &Options {
+            run: true,
+            record: Some(record),
+        },
+        temp.path(),
+        true,
+    )
+    .unwrap();
+    assert!(
+        failed
+            .text
+            .contains("FAIL echo (p.a): printed 'yes' where the record holds true or false"),
+        "{failed:?}"
+    );
+    // "null" is text to set, so it is refreshed like any other word; "28.50" is not
+    for (printed, expected) in [
+        (
+            "null",
+            "\n    refresh: kpop set p.a null --why 'measured by echo' --as-of ",
+        ),
+        (
+            "28.50",
+            "\n    edit it by hand in this pull request - p.a: v: '28.50' - set would read '28.50' as 28.5, which is not what was measured\n",
+        ),
+    ] {
+        let (temp, record) = fixture(printed, 0, "", "old", "echo: [./recipe]\n");
+        let changed = public_remeasure::run(
+            &Options {
+                run: true,
+                record: Some(record),
+            },
+            temp.path(),
+            true,
+        )
+        .unwrap();
+        assert!(changed.text.contains(expected), "{changed:?}");
+    }
+}
+
 #[test]
 #[cfg(unix)]
 #[ignore = "requires explicit Python 1.8 oracle runtime and source root"]

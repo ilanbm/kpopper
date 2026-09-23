@@ -218,3 +218,16 @@ entry_names:
     import ast
     t = ast.parse(open('scripts/workspace.py', encoding='utf-8').read())
     print(len(next(n.value.elts for n in ast.walk(t) if isinstance(n, ast.Assign) and any(getattr(x, 'id', '') == 'NAMES' for x in n.targets))))
+
+# p.live_dry_run_gates - lines in the CI workflows, the pre-push guard and the plugin's hooks
+# that run the consolidation dry run without --frozen: each would let a pending finding hold up
+# someone's run, where the live dry run only reports what it would break
+live_dry_run_gates:
+  - python3
+  - -I
+  - -c
+  - |
+    import glob
+    files = glob.glob('.github/workflows/*.yml') + glob.glob('.githooks/*') + glob.glob('hooks/*')
+    print(sum('consolidate' in line and '--dry-run' in line and '--frozen' not in line
+              for name in files for line in open(name, encoding='utf-8')))
