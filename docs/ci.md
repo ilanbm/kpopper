@@ -91,7 +91,11 @@ unexecuted tests fail the gate.
 
 Before provisioning expensive jobs, `changes` validates the committed native
 bundles, their source identity and the corresponding-source archive. All expensive
-lanes also require the inexpensive record and contract job to succeed. `check.yml` runs
+lanes also require the inexpensive record and contract job to succeed. That job reads
+this repository's record with the native `kpop` built from the same tree. A push to main
+caches its build by the hash of `native/`; a pull request restores that build and saves
+none, so only a pull request that changes the native sources builds one, and that pull
+request checks the record with the reader it changes. `check.yml` runs
 `reasoning-target.yml` once per selected target, with the matrix of `reasoning-runtime.yml`;
 selection lives in `check.yml` because both reasoning workflows are recorded in the
 corresponding-source archive. Each target's build and installed tests depend only on that
