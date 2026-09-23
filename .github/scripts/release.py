@@ -115,10 +115,11 @@ def pr_body(version, previous, bump, merged, decisions):
     if decisions:
         lines += ["", "## Decisions the record gained", ""] + [f"- `{d}`" for d in decisions]
     lines += ["", "---", "",
-              "Merging this builds and publishes the native GitHub release. Install its matching "
-              "archive with the release installer; after updating plugin files, install the "
-              "same runtime into the active plugin copy. This pull request is refreshed on every "
-              "push to main until it merges; it never merges by itself.", "",
+              "Merging this builds and publishes the native GitHub release, then publishes the "
+              "same commit's crate to crates.io; crates.io never takes a version back. Install "
+              "the matching archive with the release installer; after updating plugin files, "
+              "install the same runtime into the active plugin copy. This pull request is "
+              "refreshed on every push to main until it merges; it never merges by itself.", "",
               "Bump: none — this is the release"]
     return "\n".join(lines) + "\n"
 

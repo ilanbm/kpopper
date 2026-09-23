@@ -1814,9 +1814,9 @@ pub fn summary(data: &Value) -> Result<Value> {
 }
 pub fn render(data: &Value) -> Result<String> {
     validate_artifact(data)?;
-    let css = include_str!("../../scripts/document/layer.css");
-    let js = include_str!("../../scripts/document/layer.js");
-    let bridge = include_str!("../../scripts/document/frame.js");
+    let css = include_str!("../shared/document/layer.css");
+    let js = include_str!("../shared/document/layer.js");
+    let bridge = include_str!("../shared/document/frame.js");
     if js.to_ascii_lowercase().contains("</script") || css.to_ascii_lowercase().contains("</style")
     {
         return Err(err(

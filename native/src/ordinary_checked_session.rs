@@ -15,7 +15,7 @@ use crate::{
 use serde_json::{Map, Value as J, json};
 use std::collections::{BTreeMap, BTreeSet};
 
-const RULES: &str = include_str!("../../scripts/session/rules.txt");
+const RULES: &str = include_str!("../shared/session/rules.txt");
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Entry {
     Group(String),

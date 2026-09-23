@@ -10,6 +10,23 @@ included at `bin/resources/reasoning/native/gmp-source-and-build.tar.gz`. Python
 Python implementation remains available only through explicit
 `KPOPPER_RUNTIME=python` compatibility mode.
 
+## Install from crates.io
+
+Each release is also published to crates.io as `kpopper`, from the commit its GitHub
+release was built from. Cargo builds the same two commands from source:
+
+```sh
+cargo install kpopper --locked
+```
+
+This needs Rust 1.98 or later and a C compiler; `--locked` keeps the dependency versions
+the release was tested with. The crate carries the commands only, not the verified
+reasoning resources a release archive places beside them. Without those resources the
+commands read and write an existing record, but starting a new record fails with
+`runtime_unavailable` and explicit computations report themselves unavailable. To provide
+them, set `KPOPPER_NATIVE_RESOURCES` to the `bin/resources` directory of the release
+archive for the same version and platform, or install that archive instead.
+
 For source builds, run the commands below from `native/`; the release build can
 also be invoked from the repository root with
 `cargo build --manifest-path native/Cargo.toml --release`.
