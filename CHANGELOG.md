@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.10.0 — 2026-09-23
+
+- Clarify README visuals, navigation and onboarding (#210) — patch
+- Publish the native crate to crates.io with each release (#177) — patch
+- Keep the branch tests' records in the line endings they are written with (#202) — patch
+- Name a malformed record relative to the working directory on Windows (#201) — patch
+- Fix the core opener test's nodes and refresh the measured skill size (#200) — patch
+- Gate core/v1 content in native ordinary reads as the Python reader does (#198) — patch
+- Read a closed question's moved answer only from a captured document (#199) — patch
+- Keep the ground and citation hooks' state without changing $TMPDIR (#196) — patch
+- Add answer and correct commands (#193) — minor
+- Explain deterministic checks where the README links to them (#180) — patch
+- Place new values beside bare values when no section holds written ones (#194) — patch
+- Refuse a missing or malformed record in native commands as the Python reader does (#197) — patch
+- Lay another branch's record over this one as what it holds differently (#191) — patch
+- Print the declared-hole and undecided-condition notes in native check (#189) — patch
+- Tell the session when the plugin's native runtime is missing (#179) — patch
+- Write a review's snapshot inside the braces of a judgment written on one line (#190) — patch
+- Say what known and judgments hold where the README first shows them (#172) — patch
+- Read a record's own section names before its first judgment (#192) — patch
+- Find the record and read aliased recipes in native remeasure (#188) — patch
+- Write same and distinct in Advanced projects and keep set comments with their entries (#187) — patch
+- Answer --json on native ordinary reads and writes as the Python reader does (#186) — patch
+- Match the Python export on unknown conditions, dependency order and label wrapping (#185) — patch
+- Match the Python opener in native open and session start (#184) — patch
+- Write native entries at the field indent of the entries around them (#181) — patch
+- Note a record with no snapshot field in native check and open (#178) — patch
+- Keep Python writes in the named workspace under inherited Git variables (#176) — patch
+- Draw string open questions and brief-less records in the native Hub (#175) — patch
+- Open the search oracle runtime through the product's resource selection (#174) — patch
+- Lead Get started with one instruction to the agent (#170) — patch
+- Add a direct graph context command (#160) — minor
+- Read another branch's record over this one in native consolidate --from (#183) — patch
+- Test pending findings in the consolidation dry run (#167) — minor
+- Name the nearest existing entries when adding to a history-backed record (#182) — patch
+- Keep native prompt context silent in a workspace without a record (#173) — patch
+- Refuse a review that must write inside a judgment written on one line (#171) — patch
+- Read another branch's record over this one in native pull --from (#168) — patch
+- Fix native writes to records whose judgments carry no snapshot yet (#169) — patch
+- Name tied field roles in native reads as the Python reader does (#165) — patch
+- Support guarded stored-to-derived knowledge reframing (#158) — minor
+- Keep the session opening when its baseline cannot be saved (#164) — patch
+- Read pending contribution entries in the native checked session (#161) — patch
+- Fix the checked-session opener on a workspace with a pending contribution (#159) — patch
+- Explain unreadable field roles in native reads as the Python reader does (#163) — patch
+- Accept named hypotheses on ordinary records in Advanced projects (#162) — minor
+- Run only the CI lanes a change reads, and audit what each lane opens (#166) — patch
+- Fix native installation guidance and CLI test setup (#157) — patch
+- Fix draft release verification before publication (#155) — patch
+- Keep all hook diagnostics from interrupting user requests — minor
+- Clarify README navigation and responsive illustrations (#153) — patch
+
+Decisions recorded: d.bare_values_place_last, d.correct_is_for_unlanded_work, d.crate_carries_shared_copies, d.crates_io_every_release, d.hook_state_keeps_its_directory, d.opener_reports_a_missing_runtime, d.pending_findings_in_the_dry_run, d.question_closes_in_place, d.readme_checks_explained_visibly, d.readme_get_started_is_one_instruction, d.readme_names_the_default_sections, d.readme_popper_introduction, d.readme_practical_sections, d.reframe_preserves_subject, d.review_writes_inside_the_braces, d.unsaved_baseline_stays_absent, d.young_sections_read_by_shape
+
 ## 0.9.0 — 2026-09-22
 
 - Start the native Rust release series at 0.9.0 ahead of the 1.0 launch. The earlier
