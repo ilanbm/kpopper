@@ -264,6 +264,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
             .map(|s| json!(format!("cursor-{s}")))
             .unwrap_or(json!(""));
     }
+    // Copilot CLI names the session in camelCase.
+    if options.copilot
+        && payload.get("session_id").is_none_or(Value::is_null)
+        && let Some(id) = payload.get("sessionId").cloned()
+    {
+        payload["session_id"] = id;
+    }
     let cwd = payload["cwd"]
         .as_str()
         .map(PathBuf::from)
@@ -1421,17 +1428,11 @@ fn main() {
         return;
     }
     if let Command::SessionStart(options) = &args.command {
-        let text = match session(options) {
-            Ok(text) => text,
-            Err(error) => {
-                eprintln!("kpop: record was not opened: {error}");
-                String::new()
-            }
-        };
-        if options.cursor {
-            println!("{}", json!({"additional_context":text}));
-        } else if !text.is_empty() {
-            println!("{text}");
+        let opened = session(options)
+            .inspect_err(|error| eprintln!("kpop: record was not opened: {error}"))
+            .ok();
+        if let Some(reply) = kpop_native::public_session::start_reply(options, opened.as_deref()) {
+            println!("{reply}");
         }
         return;
     }

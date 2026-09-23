@@ -210,8 +210,8 @@ def main(argv):
                    encoding="utf-8")
     # the release pull request is opened by a token whose pull requests run no checks,
     # so the record's own checks run here, on the tree the release would ship
-    sh(sys.executable, "scripts/cli.py", "--frozen", "check")
-    sh(sys.executable, "scripts/cli.py", "--frozen", "experimental", "hub", "--verify")
+    sh("kpop", "--frozen", "check")
+    sh("kpop", "--frozen", "experimental", "hub", "--verify")
     sh("git", "add", "CHANGELOG.md", *VERSION_FILES)
     sh("git", "commit", "-q", "-m", f"Release {nxt}")
     sh("git", "push", "-f", "origin", branch)

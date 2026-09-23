@@ -38,12 +38,15 @@ PYTHON_RUNNER = (".github/scripts/ci_execution.py", ".github/requirements-test.t
                  "tests/__init__.py", "tests/ci_pytest.py")
 # Imported by the release-asset tests in the suite.
 RELEASE_ASSETS = (".github/scripts/native_assets.py",)
+# The fixture record the page tests read. It lives beside the native tests that embed it, so the
+# lanes that read it name it explicitly rather than reaching it through the test tree.
+PAGE_FIXTURE = ("native/tests/fixtures/page/*", "native/tests/fixtures/core-page/*")
 # Read by the Python suite beyond the package and its tests, as the audit observed them: hook and
 # plugin surfaces, installers, this repository's own record (the contract, priors and remeasure
 # tests check it), the ignore files the workspace scan honours, the reasoning workflows the
 # distribution test compares, and the workflows and pre-push hook the record's count of automatic
 # dry runs reads when the remeasure test runs its recipes.
-PYTHON_TESTED = PYTHON_PACKAGE + PYTHON_RUNNER + RELEASE_ASSETS + (
+PYTHON_TESTED = PYTHON_PACKAGE + PYTHON_RUNNER + RELEASE_ASSETS + PAGE_FIXTURE + (
     "tests/*", "adapters/*", "hooks/*", "bin/*", ".claude-plugin/*", ".codex-plugin/*",
     "package.json", "LICENSE", "install.sh", "install.ps1", "native/Cargo.toml", "native/Cargo.lock",
     "GROUNDING.yaml", ".kpopper/hypotheses/*", ".kpopper/measure.yaml",
@@ -73,7 +76,7 @@ RESEARCH_EXAMPLE_INPUTS = (
 )
 # The offline DOM suite's own files, which only the documents lane runs.
 DOM_SUITE = ("tests/document-support/*", "tests/document_ui_fixture.py", "tests/test_document_ui.cjs")
-DOCUMENT_INPUTS = DOM_SUITE + (
+DOCUMENT_INPUTS = DOM_SUITE + PAGE_FIXTURE + (
     "scripts/document/*", "scripts/documents.py", "scripts/document_cli.py", "scripts/document_html.py",
     "scripts/document-guide.md", "tests/test_document*.py", "tests/fixtures/*", "package.json",
     ".gitignore", "*/.gitignore", ".gitattributes",
@@ -93,7 +96,7 @@ LANES = {
     # record reads, so this declaration is reviewed rather than audited: the package, what the
     # installed tests run, the plugin's own surfaces and the committed runtimes. The plugin copy
     # carries every file, but none outside these decide whether the installs work.
-    "installed": Lane(PYTHON_PACKAGE + RUNTIME_SOURCES + (
+    "installed": Lane(PYTHON_PACKAGE + RUNTIME_SOURCES + PAGE_FIXTURE + (
         "tests/test_reasoning*.py", "tests/reasoning/*", "tests/fixtures/*", "tests/__init__.py",
         "bin/*", "hooks/*", ".claude-plugin/*", ".codex-plugin/*", "package.json", "LICENSE",
     ), audited=False, python_entry_points=("tests/test_reasoning*.py",)),
@@ -110,10 +113,13 @@ LANES = {
         "scripts/expressions.py", "LICENSE",
         # Read at test time and by the packaging steps.
         "scripts/reasoning/native/*", "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
-        "tests/fixtures/page/*", "install.sh", "install.ps1", "VERSION",
+        "install.sh", "install.ps1", "VERSION",
         # The Cursor opener its tests run against this build.
         "adapters/cursor/scripts/gate-open.sh", "scripts/native_runtime.sh",
         "scripts/package_native.py", "scripts/collect_rust_licenses.py", "scripts/native-licenses/*",
+        # The host adapter scripts and manifests its tests run.
+        "adapters/gemini/scripts/session-start.sh", "adapters/gemini/hooks/hooks.json",
+        "adapters/copilot/cli/hook.sh", "adapters/windsurf/hooks.json",
     ), lists=("native/*", "scripts/reasoning/lean*"), ignores=("native/README.md",), enforced=False,
         # Run from the checkout, with everything it imports: the setup that builds the Lean program
         # its tests load. The Python hooks its tests compare run from the pinned v0.10.0 reference.

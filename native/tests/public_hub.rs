@@ -312,7 +312,7 @@ fn ordinary_hub_without_a_brief_says_what_needs_a_person_on_the_record_cards() {
 fn ordinary_hub_verifies_the_page_fixture_and_its_string_open_question() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
-    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/page");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/page");
     for file in fs::read_dir(&fixture).unwrap() {
         let file = file.unwrap();
         fs::copy(file.path(), root.join(file.file_name())).unwrap();

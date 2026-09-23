@@ -145,6 +145,7 @@ authenticated conversation inside either host. Native Windows shell hooks, remot
 hosts and Cowork's separate VM require their own validation. Their interpreter and
 home directory must not be inferred from a successful local macOS/Linux setup.
 
-Other adapters that directly invoke Python retain their documented interpreter
-selection. The shared shell opener and ingestion wrapper use this launcher, but that
-does not imply that every hook of every adapter uses the private environment.
+Other adapters select the runtime the same way: the native runtime installed in their
+kpopper copy by default, and Python only when `KPOPPER_RUNTIME=python` is set. In that
+mode the shared shell opener and ingestion wrapper use this launcher, but that does not
+imply that every hook of every adapter uses the private environment.

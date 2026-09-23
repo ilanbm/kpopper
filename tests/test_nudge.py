@@ -12,7 +12,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
-FIXTURE = ROOT / "tests" / "fixtures" / "page"
+FIXTURE = ROOT / "native" / "tests" / "fixtures" / "page"
 
 
 def run(*args, cwd, env=None, stdin=None):

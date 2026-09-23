@@ -65,18 +65,18 @@ code:
 
 **Opening.** Read the workspace's first-use context with:
 
-    python3 <plugin>/scripts/cli.py open
+    <plugin>/bin/kpop open
 
 Read that instead of the file whole — it is the record's own head plus only what
 needs a person, ranked and cut to a budget.
 
 **Closing.** Before finishing work that has a record, run:
 
-    python3 <plugin>/scripts/provenance.py check
+    <plugin>/bin/kpop check
 
 If it fails worse than it did when you started, fix the record — or declare the hole
 with `blocked_on` — before you stop. Nothing enforces this: `hooks.json` in this same
-directory runs `check` after every write to `GROUNDING.yaml` (or `PROVENANCE.yaml`) and can show you the
-output, but it cannot stop you from finishing anyway, and its output never reaches you
-automatically — see this adapter's README. This rule, read at the right moment, is the
+directory runs `check` after every write to `GROUNDING.yaml` (or `PROVENANCE.yaml`), but
+it discards the output and cannot stop you from finishing anyway, so its findings never
+reach you — see this adapter's README. This rule, read at the right moment, is the
 actual mechanism.

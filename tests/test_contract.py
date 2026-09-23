@@ -1,5 +1,5 @@
 """The page contract: the fields the reader and the renderer accept, and the names they
-compute. Runs against the fixture record in tests/fixtures/page with no browser and no
+compute. Runs against the fixture record in native/tests/fixtures/page with no browser and no
 network:
 
     python3 -m unittest discover -s tests
@@ -17,7 +17,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
-FIXTURE = ROOT / "tests" / "fixtures" / "page"
+FIXTURE = ROOT / "native" / "tests" / "fixtures" / "page"
 RECORD = FIXTURE / "PROVENANCE.yaml"
 BRIEF = FIXTURE / "PROVENANCE.view.yaml"
 

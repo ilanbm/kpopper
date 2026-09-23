@@ -1524,3 +1524,163 @@ fn custom_field_roles_match_the_python_writer_oracle() {
         assert_eq!(record(&native), record(&oracle), "{args:?} on {source}");
     }
 }
+
+// A record may name its snapshot field `reviewed`, the name a review also dates a
+// judgment by. tests/test_snapshot_named_reviewed.py holds the same records and expects
+// the same bytes and output from the Python writer.
+const NAMED_SCHEMA: &str =
+    "schema: {deps: relies_on, snapshot: reviewed, predicate: invalid_when}\n";
+const NAMED_KNOWN: &str = "known:\n  api.limit: {v: 10}\n";
+const NAMED_JUDGMENT: &str = concat!(
+    "judgments:\n",
+    "  d.w:\n",
+    "    verdict: known\n",
+    "    relies_on: [api.limit]\n",
+    "    invalid_when: \"api.limit > 100\"\n",
+    "    reviewed: {api.limit: 5}\n",
+);
+const NAMED_TRAIL: &str = "    replaced: [\"its condition fired on 2026-01-01\"]\n";
+const NAMED_REWRITTEN: &str =
+    "review d.w: seen rewritten from what the record holds (2026-01-02)\n";
+const NAMED_HOLDS: &str = "  d.w holds: wrong_if does not hold (api.limit > 100)\n";
+
+fn reviewed_now(record: &str) -> String {
+    record.replace("reviewed: {api.limit: 5}", "reviewed: {api.limit: 10}")
+}
+
+fn stays_open(day: &str) -> String {
+    format!(
+        "  reversed on {day} stays open - the snapshot field is named reviewed, so review writes \
+         no day\n"
+    )
+}
+
+#[test]
+fn review_keeps_a_snapshot_named_reviewed_and_writes_no_day() {
+    let plain = format!("{NAMED_SCHEMA}{NAMED_KNOWN}{NAMED_JUDGMENT}");
+    let trail = format!("{plain}{NAMED_TRAIL}");
+    // what a review used to leave: a day where the snapshot was
+    let day_over_it = plain.replace("reviewed: {api.limit: 5}", "reviewed: \"2026-01-01\"");
+    let nothing_to_see = format!(
+        "{NAMED_SCHEMA}judgments:\n  d.w:\n    verdict: known\n    relies_on: []\n    reviewed: {{}}\n"
+    );
+    // a day over the snapshot of a judgment with nothing to see, which cleared its reversal
+    let day_over_nothing = format!(
+        "{NAMED_SCHEMA}judgments:\n  d.w:\n    verdict: known\n    relies_on: []\n    reopened_by: \
+         \"a new vendor contract\"\n    reviewed: \"2026-01-01\"\n    replaced: [\"its condition \
+         fired on 2025-12-20\"]\n"
+    );
+    let one_line = format!(
+        "{NAMED_SCHEMA}{NAMED_KNOWN}judgments:\n  d.w: {{verdict: known, relies_on: [api.limit], \
+         invalid_when: \"api.limit > 100\", reviewed: {{api.limit: 10}}}}\n"
+    );
+    let one_line_moved = |trail: &str| {
+        format!(
+            "{NAMED_SCHEMA}{NAMED_KNOWN}judgments:\n  d.w: {{verdict: known, relies_on: \
+             [api.limit], invalid_when: \"api.limit > 100\", reviewed: {{api.limit: 5}}{trail}}}\n"
+        )
+    };
+    let unchanged = "review d.w: what it saw is what the record holds (2026-01-02)\n";
+    for (source, written, output) in [
+        (
+            plain.clone(),
+            reviewed_now(&plain),
+            format!("{NAMED_REWRITTEN}  api.limit: 5 -> 10\n{NAMED_HOLDS}"),
+        ),
+        (
+            trail.clone(),
+            reviewed_now(&trail),
+            // a day written into the field would be the one that clears it
+            format!(
+                "{NAMED_REWRITTEN}  api.limit: 5 -> 10\n{}{NAMED_HOLDS}",
+                stays_open("2026-01-01")
+            ),
+        ),
+        (
+            day_over_it,
+            reviewed_now(&plain),
+            format!(
+                "{NAMED_REWRITTEN}  api.limit: 10 (never checked against it before)\n{NAMED_HOLDS}"
+            ),
+        ),
+        (
+            day_over_nothing.clone(),
+            day_over_nothing.replace("reviewed: \"2026-01-01\"", "reviewed: {}"),
+            format!(
+                "{NAMED_REWRITTEN}{}  d.w holds: decided; reopened by a new vendor contract\n",
+                stays_open("2025-12-20")
+            ),
+        ),
+        (
+            nothing_to_see.clone(),
+            nothing_to_see,
+            format!("{unchanged}  d.w no_predicate: nothing evaluable would say otherwise\n"),
+        ),
+        (
+            // with no day to write, nothing needs a line of its own under it
+            one_line.clone(),
+            one_line,
+            format!("{unchanged}{NAMED_HOLDS}"),
+        ),
+        (
+            one_line_moved(""),
+            reviewed_now(&one_line_moved("")),
+            format!("{NAMED_REWRITTEN}  api.limit: 5 -> 10\n{NAMED_HOLDS}"),
+        ),
+        (
+            one_line_moved(", replaced: [\"its condition fired on 2026-01-01\"]"),
+            reviewed_now(&one_line_moved(
+                ", replaced: [\"its condition fired on 2026-01-01\"]",
+            )),
+            format!(
+                "{NAMED_REWRITTEN}  api.limit: 5 -> 10\n{}{NAMED_HOLDS}",
+                stays_open("2026-01-01")
+            ),
+        ),
+    ] {
+        let (_temp, root) = simple_workspace(&source);
+        assert_eq!(
+            success(run_unbundled(
+                &root,
+                &["review", "d.w", "--as-of", "2026-01-02"]
+            )),
+            output,
+            "{source}"
+        );
+        assert_eq!(record(&root), written, "{source}");
+    }
+}
+
+#[test]
+fn review_in_a_hypothesis_keeps_a_snapshot_named_reviewed() {
+    let base = format!("{NAMED_SCHEMA}{NAMED_KNOWN}");
+    let proposal = format!("hypothesis: {{born: \"2025-12-01\"}}\n\n{NAMED_JUDGMENT}");
+    let trail = format!("{proposal}{NAMED_TRAIL}");
+    for (source, open) in [(proposal, String::new()), (trail, stays_open("2026-01-01"))] {
+        let (_temp, root) = simple_workspace(&base);
+        let path = root.join(".kpopper/hypotheses/limit.yaml");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &source).unwrap();
+        assert_eq!(
+            success(run_unbundled(
+                &root,
+                &[
+                    "review",
+                    "d.w",
+                    "--as-of",
+                    "2026-01-02",
+                    "--hypothesis",
+                    "limit"
+                ]
+            )),
+            format!(
+                "review d.w in hypothesis limit: seen rewritten from what the record holds under \
+                 it (2026-01-02)\n  api.limit: 5 -> 10\n{open}{NAMED_HOLDS}\nthe base is \
+                 untouched; limit holds 0 entries and 1 judgment\n"
+            ),
+            "{source}"
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), reviewed_now(&source));
+        assert_eq!(record(&root), base);
+    }
+}
