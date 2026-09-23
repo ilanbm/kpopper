@@ -121,6 +121,24 @@ fn numeric_key(key: &TypedValue) -> Option<BigInt> {
     }
 }
 
+/// A name every key that `python_eq` could find equal shares: the whole number a boolean,
+/// integer or integral float stands for, a fraction's exact bits, the text, the date, or a
+/// non-finite float's identity. Keys in different buckets are never equal.
+fn python_bucket(key: &crate::ordinary_value::Scalar) -> String {
+    use crate::ordinary_value::Scalar;
+    match key {
+        Scalar::Finite(value) => match (numeric_key(value), value) {
+            (Some(number), _) => format!("i{number}"),
+            (None, TypedValue::Float(value)) => format!("f{}", value.hex()),
+            (None, TypedValue::Text(value)) => format!("t{value}"),
+            (None, TypedValue::Date(value)) => format!("d{}", value.as_str()),
+            (None, TypedValue::DateTime(value)) => format!("z{}", value.as_str()),
+            (None, _) => "n".into(),
+        },
+        Scalar::NonFinite(value) => format!("x{}{:?}", value.python_str(), value.constructor()),
+    }
+}
+
 impl OrdinaryKey {
     fn new(value: TypedValue) -> Result<Self> {
         require(
@@ -892,25 +910,42 @@ fn construct_full(node: Node, unique: bool) -> Result<crate::ordinary_source::So
         ),
         Node::Map(v) => {
             let mut out: Vec<(Key, S)> = Vec::new();
+            // Keys that Python could call equal share a bucket, so a strict reading compares
+            // each key with its bucket's members only, not with every key read before it.
+            let mut buckets = std::collections::HashMap::<String, Vec<usize>>::new();
             for (k, v) in flatten(v)? {
                 let key = match k {
                     Node::Scalar(v) => Key::new(Scalar::Finite(v), None)?,
                     Node::NonFinite(v, c) => Key::new(Scalar::NonFinite(v), c)?,
                     _ => return Err(Error("invalid_yaml_key".into())),
                 };
-                // The reference compares only keys a Python set can hold by value: dates and
-                // timestamps fall through to the ordinary last-one-kept reading.
-                let dated = matches!(
-                    key.scalar(),
-                    Scalar::Finite(TypedValue::Date(_) | TypedValue::DateTime(_))
-                );
-                if unique && !dated && out.iter().any(|(old, _)| old.python_eq(&key)) {
-                    return Err(Error(format!(
-                        "duplicate_yaml_key: the key {} appears twice",
-                        key.scalar().value().python_repr()
-                    )));
+                if !unique {
+                    crate::ordinary_source::update(&mut out, key, construct_full(v, unique)?);
+                    continue;
                 }
-                crate::ordinary_source::update(&mut out, key, construct_full(v, unique)?);
+                let members = buckets.entry(python_bucket(key.scalar())).or_default();
+                match members.iter().copied().find(|&i| out[i].0.python_eq(&key)) {
+                    // The reference compares only keys a Python set can hold by value: a date
+                    // or a timestamp written twice keeps the last value, as a plain read does.
+                    Some(i)
+                        if matches!(
+                            key.scalar(),
+                            Scalar::Finite(TypedValue::Date(_) | TypedValue::DateTime(_))
+                        ) =>
+                    {
+                        out[i].1 = construct_full(v, unique)?;
+                    }
+                    Some(_) => {
+                        return Err(Error(format!(
+                            "duplicate_yaml_key: the key {} appears twice",
+                            key.scalar().value().python_repr()
+                        )));
+                    }
+                    None => {
+                        members.push(out.len());
+                        out.push((key, construct_full(v, unique)?));
+                    }
+                }
             }
             S::Map(out)
         }
@@ -1231,6 +1266,9 @@ mod ordinary_alias_tests {
             (b"true: [x]\n1: [y]\n", "1"),
             (b"null: [x]\n~: [y]\n", "None"),
             (b".nan: [x]\n.nan: [y]\n", "nan"),
+            (b"&key !!float nan: [x]\n*key: [y]\n", "nan"),
+            (b".inf: [x]\n.inf: [y]\n", "inf"),
+            (b"0.5: [x]\n0.50: [y]\n", "0.5"),
         ] {
             assert_eq!(
                 decode_unique_ordinary_source_value(raw).unwrap_err().0,
@@ -1242,9 +1280,22 @@ mod ordinary_alias_tests {
         for raw in [
             b"2026-01-01: x\n2026-01-01: y\n".as_slice(),
             b"!!float nan: [x]\n!!float nan: [y]\n",
+            b"-.inf: [x]\n.inf: [y]\n",
+            b"1.5: [x]\n3: [y]\n",
         ] {
             assert!(decode_unique_ordinary_source_value(raw).is_ok());
         }
+        // a key written twice far apart is still found
+        let mut raw = (0..5000)
+            .map(|i| format!("r{i}: [x]\n"))
+            .collect::<String>();
+        raw.push_str("r7: [y]\n");
+        assert_eq!(
+            decode_unique_ordinary_source_value(raw.as_bytes())
+                .unwrap_err()
+                .0,
+            "duplicate_yaml_key: the key 'r7' appears twice"
+        );
         assert!(
             decode_unique_ordinary_source_value(b"x: &x [*x]\n")
                 .unwrap_err()
