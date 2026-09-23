@@ -4545,26 +4545,42 @@ def _add_in(lines, nid, body, collection):
     return f"{nid} into {collection}, {'before' if before else 'after'} {anchor}"
 
 
+def _on_one_line(lines, s, e):
+    """Whether the entry at `s` is written on the line of its key - a flow mapping, or an
+    alias - with no field lines of its own for another field to join."""
+    return _members_of(lines, s, e)[0] is None or _inline(lines[s]).startswith("{")
+
+
+def _field_indent(lines, s, e, field):
+    """-> the indent of the judgment's field lines, for `field` written as one of them.
+    Under a judgment written on one line, that line would be read as another entry of
+    its collection, or break the file: the review is refused before anything is written."""
+    if _on_one_line(lines, s, e):
+        nid = MEMBER.match(lines[s]).group(2)
+        raise Refused(f"refused - {nid} is written on one line, and review writes {field}: as a line "
+                      f"of its own - write {nid} with one field per line, then review it again")
+    return _members_of(lines, s, e)[0]
+
+
 def _seen_lines(lines, s, e, snapshot_field, seen):
     """The judgment's snapshot rewritten in place, in the style it had."""
-    span = _field_span(lines, s, e, snapshot_field)
-    find = span[0] if span else (_members_of(lines, s, e)[0] or 4)
+    find = _field_indent(lines, s, e, snapshot_field)
     return _replace_field(lines, s, e, snapshot_field, _field_lines(snapshot_field, seen, find))
 
 
 def _stamp_field(lines, s, e, field, stamp, after):
     """A date field rewritten if present, in its own style, keeping every comment on or
     under it; added after `after` if not."""
+    find = _field_indent(lines, s, e, field)
     span = _field_span(lines, s, e, field)
     if span:
-        find, i, j = span
+        _, i, j = span
         m = re.match(r"^(\s+" + re.escape(field) + r":\s*)(\S+)(\s*(?:#.*)?)$", lines[i])
         head = (m.group(1) + scalar(stamp, _style(m.group(2)), fold=False) + m.group(3)) if m \
             else " " * find + f"{field}: " + scalar(stamp, "bare", fold=False)
         kept = [l for l in lines[i + 1:j] if l.strip().startswith("#")]
         lines[i:j] = [head] + kept
         return e + 1 + len(kept) - (j - i)
-    find = _members_of(lines, s, e)[0] or 4
     return _replace_field(lines, s, e, field, [" " * find + f'{field}: "{stamp}"'], after=after)
 
 
@@ -5050,7 +5066,9 @@ def _fork(paths, action, diagnostics=None):
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        if _field_span(lines, s, e, "reviewed"):
+        # a reviewed kept inside a judgment written on one line refuses the review, rather
+        # than stay as it was
+        if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         out.append(f"review {nid} in hypothesis {name}: "
                    + (f"seen rewritten from what the record holds under it ({stamp})" if changed
@@ -5621,7 +5639,9 @@ def _apply_candidate(paths, action, diagnostics=None):
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
-        if _field_span(lines, s, e, "reviewed"):
+        # a reviewed kept inside a judgment written on one line refuses the review, rather
+        # than stay as it was
+        if _field_span(lines, s, e, "reviewed") or ("reviewed" in j["body"] and _on_one_line(lines, s, e)):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         elif "replaced" in j["body"] and not arrangement:
             # a judgment that carries a trail keeps the day it was last read, so the
