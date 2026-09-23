@@ -2220,6 +2220,9 @@ impl Projection<'_> {
         let mut fail = vec![];
         let mut note = self.knowledge.clone();
         let mut moved = vec![];
+        // Conditions are read through the ordinary reader, converted once and only when a
+        // judgment has one to read.
+        let ordinary = std::cell::OnceCell::new();
 
         // Keep manual edits under the same structured-expression admission rules as
         // tool-authored writes. Computed entries use the same ordinary evaluator
@@ -2310,7 +2313,6 @@ impl Projection<'_> {
         }
 
         for (id, body) in &self.base.judgments {
-            let flags = crate::ordinary_counts::flags(&self.base.reader, body)?;
             let pred = self.base.pred(id);
             let blocked = blocked_text(body);
             let reopened = reopened_text(body);
@@ -2325,26 +2327,22 @@ impl Projection<'_> {
                 .cloned()
                 .collect::<Vec<_>>();
             let dependencies = self.base.deps(id)?;
-            if flags.contains("broken") {
-                for dep in dependencies
-                    .iter()
-                    .filter(|dep| !self.base.reader.ids.contains(*dep))
-                {
-                    fail.push(format!("{id}: rests on {dep}, which is not an entry"));
-                }
-            }
-            if flags.contains("unchecked") {
-                let b = map(body)?;
-                let empty = Map::new();
-                let seen = map(get(
-                    b,
-                    text(&self.base.reader.fields["snapshot"]).unwrap_or(""),
-                ))
-                .unwrap_or(&empty);
-                for dep in dependencies
-                    .iter()
-                    .filter(|dep| self.base.reader.ids.contains(*dep) && !seen.contains_key(*dep))
-                {
+            // A dependency that is not an entry fails, unless the judgment declares the
+            // hole it waits on: then it is noted with the declared reason.
+            let snapshot = text(&self.base.reader.fields["snapshot"]).unwrap_or("");
+            let empty = Map::new();
+            let seen = map(get(map(body)?, snapshot)).unwrap_or(&empty);
+            for dep in &dependencies {
+                if !self.base.reader.ids.contains(dep) {
+                    if blocked.is_empty() {
+                        fail.push(format!("{id}: rests on {dep}, which is not an entry"));
+                    } else {
+                        note.push(format!(
+                            "{id}: rests on {dep}, which is not an entry - declared: {}",
+                            blocked.chars().take(90).collect::<String>()
+                        ));
+                    }
+                } else if !snapshot.is_empty() && !seen.contains_key(dep) {
                     fail.push(format!(
                         "{id}: no snapshot for {dep} - never checked against it"
                     ));
@@ -2408,29 +2406,52 @@ impl Projection<'_> {
                         "{id}: {what} - and nothing says why not, so it can never be re-checked"
                     ));
                 }
-            } else if flags.contains("falsified") {
-                fail.push(format!(
-                    "{id}: wrong_if holds ({}) - broken by its own condition",
-                    predicate_text(&pred)
-                ));
-            } else if !page_refs.is_empty() {
-                note.push(format!(
-                    "{id}: wrong_if reads {}, which is counted when the page is built - `kpop experimental hub --verify` decides it",
-                    page_refs.join(", ")
-                ));
+            } else {
+                // A required evaluator failure is said before the condition, which it
+                // leaves undecided; a comparison with no reading to decide it is noted.
+                let (error, condition) = crate::ordinary_findings::condition(
+                    ordinary.get_or_init(|| self.base.reader.ordinary()),
+                    &crate::ordinary_reader::ordinary(&pred),
+                )?;
+                if !error.is_empty() {
+                    let finding = format!("{id}: condition cannot be computed: {error}");
+                    if blocked.is_empty() {
+                        fail.push(finding);
+                    } else {
+                        note.push(finding);
+                    }
+                } else if condition == Some(true) {
+                    fail.push(format!(
+                        "{id}: wrong_if holds ({}) - broken by its own condition",
+                        predicate_text(&pred)
+                    ));
+                } else if !page_refs.is_empty() {
+                    note.push(format!(
+                        "{id}: wrong_if reads {}, which is counted when the page is built - `kpop experimental hub --verify` decides it",
+                        page_refs.join(", ")
+                    ));
+                } else if condition.is_none() {
+                    note.push(format!(
+                        "{id}: nothing decides wrong_if ({}) - a side holds no value to compare, or a truth value is held against a value that is not one",
+                        short(&pred, 60)
+                    ));
+                }
             }
             for (dep, old, now, state) in self.base.moved(id)? {
                 if state == "moved" {
-                    let (old, now) = apart(&old, &now, 60);
+                    let (old, now) = apart(&old, &now, 40);
                     moved.push(format!("{id}: {dep} differs from its snapshot ({old} -> {now}) - re-review, or refresh seen"));
                 }
             }
-            if let Some(day) = R::reversal_pending(body) {
+            // An arrangement written again is re-decided: its trail records a renewal, not a
+            // reversal for a person to review.
+            if !arrangement && let Some(day) = R::reversal_pending(body) {
                 note.push(format!(
                     "{id}: reversed on {day} - the verdict under this id changed; review it once read, or pull {id} --history"
                 ));
             }
         }
+        // Judgments, not priors, are counted: one resting on two high priors is one.
         let mut prior_judgments = 0usize;
         let mut high_priors = 0usize;
         for id in self.base.judgments.keys() {
@@ -2442,19 +2463,27 @@ impl Projection<'_> {
                 .collect::<Vec<_>>();
             if !priors.is_empty() {
                 prior_judgments += 1;
-                high_priors += priors
-                    .iter()
-                    .filter(|dep| {
-                        py(&self.base.reader.value(dep).unwrap_or(V::Null))
-                            .parse::<f64>()
-                            .is_ok_and(|value| value >= 0.8)
-                    })
-                    .count();
+                // A prior the record does not hold as a number says nothing.
+                if priors.iter().any(|dep| {
+                    self.base
+                        .reader
+                        .value(dep)
+                        .ok()
+                        .and_then(|value| crate::ordinary_views::python_float(&py(&value)))
+                        .is_some_and(|value| value >= crate::ordinary_views::HIGH_CONFIDENCE)
+                }) {
+                    high_priors += 1;
+                }
             }
         }
         if prior_judgments > 0 {
+            let (noun, verb) = if prior_judgments == 1 {
+                ("judgment", "rests")
+            } else {
+                ("judgments", "rest")
+            };
             note.push(format!(
-                "{prior_judgments} judgments rest on prior.* claims, {high_priors} of them on a prior at 0.8 or above"
+                "{prior_judgments} {noun} {verb} on prior.* claims, {high_priors} of them on a prior at 0.8 or above"
             ));
         }
         for (id, asked, hint) in self.page_unserved(brief)? {
@@ -2710,6 +2739,49 @@ mod tests {
         assert_eq!(data.arrangements[0].request.as_deref(), Some("s.request"));
         assert_eq!(data.arrangements[0].born.as_deref(), Some("2026-09-03"));
         assert!(data.flags["v.layout"].is_empty());
+    }
+    #[test]
+    fn check_notes_match_the_python_reference() {
+        for (record, reference) in [
+            (
+                include_str!("../tests/fixtures/ordinary-note-holes.yaml"),
+                include_str!("../tests/fixtures/ordinary-note-holes.stdout"),
+            ),
+            (
+                include_str!("../tests/fixtures/ordinary-note-moved.yaml"),
+                include_str!("../tests/fixtures/ordinary-note-moved.stdout"),
+            ),
+            (
+                include_str!("../tests/fixtures/ordinary-note-arrangement.yaml"),
+                include_str!("../tests/fixtures/ordinary-note-arrangement.stdout"),
+            ),
+            // Nothing computes a structured condition without the ordinary program.
+            (
+                "known:\n  order.price: {v: 20}\njudgments:\n  c.budget:\n    verdict: within budget\n    rests_on: [order.price]\n    seen: {order.price: 20}\n    wrong_if: {op: gt, args: [{ref: order.price}, {num: '10'}]}\n",
+                "FAIL c.budget: condition cannot be computed: ordinary expression program is not configured\n\n1 judgments, 2 entries, 1 problems\n",
+            ),
+        ] {
+            let document = crate::history_yaml::decode_document(record.as_bytes()).unwrap();
+            let projection =
+                Projection::new(&document, &Map::new(), &Map::new(), vec![], None).unwrap();
+            assert_eq!(projection.check(None).unwrap().0, reference);
+        }
+    }
+    #[test]
+    fn conditions_read_through_the_evaluator_match_the_python_reference() {
+        let document = crate::history_yaml::decode_document(include_bytes!(
+            "../tests/fixtures/ordinary-note-conditions.yaml"
+        ))
+        .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(cache.path())
+            .with_ordinary_program(crate::ordinary_reader::tests::program());
+        let projection =
+            Projection::new(&document, &Map::new(), &Map::new(), vec![], Some(&runtime)).unwrap();
+        assert_eq!(
+            projection.check(None).unwrap().0,
+            include_str!("../tests/fixtures/ordinary-note-conditions.stdout")
+        );
     }
     #[test]
     fn a_record_with_no_snapshot_field_says_drift_cannot_be_detected() {
