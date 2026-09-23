@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-22
+  updated: 2026-09-23
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -953,6 +953,19 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_unsaved_baseline:
+    name: "A session-start baseline that cannot be saved no longer costs the opening"
+    asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
+            when saving the session baseline fails, so the agent loses the could-not-open line,
+            KPOPPER_AGENT_CONTEXT and the environment line. Keep them as the Python opener does,
+            decide from the Python reference and this record whether a failed baseline leaves no
+            baseline or an empty one, and add a regression test."
+    of: "Reproduced on 3454c6b with a record whose judgment rests on a name that is not an entry:
+         native session-start printed nothing on stdout and the reader's diagnostic twice; the Python
+         opener printed the three lines and the diagnostic once, and neither left a baseline. With an
+         empty baseline put in its place, both prompt-context hooks reported the assessment
+         unavailable on every prompt, and once the record read again the native one reported the
+         judgment's existing failure as the session's own."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1308,6 +1321,10 @@ sources:
     of: "2026-09-18"
     read: "2026-09-18"
     fidelity: quoted
+  s.representation_evolution_contract:
+    name: "Guarded stored-to-derived representation contract"
+    file: "skills/kpopper/EVOLUTION.md"
+    read: "2026-09-22"
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -3402,7 +3419,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22542
+    v: 22757
+    # Same-day code measurement after adding guarded representation guidance.
     # set 2026-09-22: Measured from the native default skill text by skill_bytes_largest
     # Same-day correction measured after integrating session attribution from main.
     # set 2026-09-19: Measured after merging main plugin-qualified skill guidance with the application names and aliases.
@@ -3411,7 +3429,7 @@ known:
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
-    scope: {kind: code, environment: kpopper skill sources, commit: 9f1415584430ad3536a6eef0dd19b657a1aa034c, working_tree: false}
+    scope: {kind: code, environment: kpopper skill sources, commit: d429f4126e74ebb86e1f4d156a431a6165390a46, working_tree: true}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
@@ -5779,6 +5797,19 @@ judgments:
                                     to keep - as a line on the prompt, and as one stop on the turn
                                     after a line went unanswered; the gate still yields after one
                                     bounce"
+  d.reframe_preserves_subject:
+    name: "Keep representation changes separate from factual changes"
+    rests_on: [s.representation_evolution_contract]
+    verdict: "Permit explicit stored-to-derived reframing only on active core history, preserving
+              current type and value, stable identity, immutable evidence and dependent snapshots."
+    because: "Source-grounded authoring may improve representation without changing the subject.
+              Equal current results are a mechanical guard, not proof of meaning for future inputs. A
+              newer factual value must be recorded with its source before reframing; explicitly
+              historical propositions keep their historical scope."
+    reopened_by: "An independently authored source-backed case where an accepted reframe changes the
+                  meaning for later inputs, or where replay or a dependent snapshot loses the earlier
+                  evidence; assess the case before broadening the operation."
+    seen: {s.representation_evolution_contract: "read 2026-09-22"}
   d.refutations_keep_judgment_ids:
     from: s.2026_09_04_prior_reversal_share
     rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
@@ -6440,6 +6471,27 @@ judgments:
                                     after a line went unanswered; the gate still yields after one
                                     bounce"
       run.design_talk: "read 2026-09-02"
+  d.unsaved_baseline_stays_absent:
+    name: "A session-start baseline that cannot be saved is left absent"
+    verdict: "When the session-start baseline cannot be saved, the opening still reaches the agent
+              and no baseline takes its place; prompt diagnostics stay silent for that session rather
+              than compare against an empty one."
+    because: "An empty baseline claims the record held no failures and no entries when the session
+              began. For a record that could not be read that claim is false: once it reads again,
+              its existing failures would be reported as the session's own, and until then every
+              prompt would carry the unavailable-assessment notice. The Python opener has always
+              ignored a failed baseline, and both prompt-context hooks already stay silent without
+              one."
+    rests_on: [d.gate_and_opener_against_the_mark]
+    reopened_by: "A session that began without a baseline repairs the record, then writes entries
+                  with no recorded intent or introduces a new failure, and nothing reports it before
+                  the work is handed off."
+    from: s.2026_09_23_unsaved_baseline
+    seen:
+      d.gate_and_opener_against_the_mark: "The opener records a session-start baseline. Prompt
+                                           diagnostics compare current failures and session-owned
+                                           writes with it, without creating a record or continuing a
+                                           stopped turn."
   d.watch_async_compatibility:
     rests_on: [s.watch_contract, d.record_is_code, d.no_feed_of_other_branches]
     verdict: "Keep code records with their branches. Opted-in background watch previews only

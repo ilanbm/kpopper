@@ -281,6 +281,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     payload["cwd"] = json!(root);
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
+    let mut opening_failed = false;
     let first_use = location.as_ref().map(|location| {
         kpop_native::onboarding::context_with_host(location, options.host.as_deref())
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
@@ -318,6 +319,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     Err(error) => {
                         output.push(format!("The knowledge record could not be opened. Read it before relying on it: {}", location.record.display()));
                         eprintln!("{error}");
+                        opening_failed = true;
                     }
                 }
             }
@@ -327,6 +329,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     location.record.display()
                 ));
                 eprintln!("{error}");
+                opening_failed = true;
             }
         }
     }
@@ -349,7 +352,15 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     output.push(format!("KPOPPER_AGENT_CONTEXT {}", json!({"command":[command,"--workspace",root],"workspace":root,"environment":environment,"profile":if feasibility{"native-feasibility/v1"}else{"native-public/v1"}})));
     if !feasibility {
         output.push("Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access.".into());
-        kpop_native::public_session::start_mark(&root, &payload, mode)?;
+        // A baseline that cannot be saved leaves the opening intact; prompt
+        // diagnostics then stay silent for this session. A failed opening has
+        // already put its diagnostic on stderr, so none is added for the baseline.
+        match kpop_native::public_session::start_mark(&root, &payload, mode) {
+            Err(error) if !opening_failed => {
+                eprintln!("kpop: session baseline was not saved: {error}")
+            }
+            _ => (),
+        }
     }
     Ok(output.join("\n"))
 }
@@ -481,6 +492,9 @@ fn run(args: Args) -> Result<Value> {
             let (Command::Add(write) | Command::Set(write)) = command else {
                 unreachable!()
             };
+            if write.reframe || write.expected_record_sha256.is_some() {
+                return Err(kpop_native::Error("reframe is unavailable in feasibility stores; expected-record-sha256 requires active history".into()));
+            }
             let value = json_input(
                 write
                     .value

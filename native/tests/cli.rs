@@ -66,6 +66,18 @@ fn snapshot(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
 }
 
 #[test]
+fn feasibility_store_cannot_silently_ignore_reframe() {
+    let (_temp, root) = fixture();
+    ok(write(&root, "add", "p.input", "true", "first"));
+    let before = snapshot(&root);
+    let result = run(&root, &["set", "p.input", "--value", "false", "--operation", "rewrite",
+        "--source", "fixture", "--on", "2026-09-19T00:00:00Z", "--reframe"]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("reframe is unavailable"));
+    assert_eq!(snapshot(&root), before);
+}
+
+#[test]
 fn fresh_process_write_history_and_read_only_reopen_without_runtime() {
     let (_temp, root) = fixture();
     ok(write(&root, "add", "p.input", "1", "first"));
