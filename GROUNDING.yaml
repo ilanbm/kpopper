@@ -953,6 +953,21 @@ sources:
             dependency-checks-v2.png and requests its restoration."
     of: "Restored the original desktop and phone illustrations in README.md. Generated variants are
          retained as private drafts; the editor-centered reasoning and canvas changes remain."
+  s.2026_09_23_session_hook:
+    name: "The native session-start hooks work again: grounding on macOS, the opener's slot, and
+           records born by add"
+    asked: "Paraphrased maintainer request: check whether the kpopper session-start hook works as it
+            should, say whether what fails is a regression from the Python version, then fix both
+            failures found and open a pull request."
+    of: "Read from this machine's Claude Code transcripts and reproduced with the 0.9.0 plugin
+         binary. Since the native runtime became the default on 2026-09-22, every ground and citation
+         hook failed with 'Operation not permitted' (56 failures on 2026-09-22 and 2026-09-23;
+         grounding lines on prompts fell from 5-79 a day to none), and the session opener ran 17,358
+         characters on this record, so the host kept a 2 KB preview and KPOPPER_AGENT_CONTEXT never
+         reached the agent. The Python hooks wrote their state into the same temporary directory, and
+         the Python opener ran 2,643 characters. On the way, a record born by add opened as 'could
+         not be opened' whenever the hook named its host, since the core reader refuses --host; the
+         Python opener leaves the host unused there."
   s.2026_09_23_unsaved_baseline:
     name: "A session-start baseline that cannot be saved no longer costs the opening"
     asked: "Paraphrased maintainer request: the native session-start hook prints nothing on stdout
@@ -3574,6 +3589,10 @@ open:
                   question: "Does the GitHub iPhone app load the Markdown images and their
                              phone-layout links from the updated branch? Native-app rendering remains
                              unverified."
+  q.opener_measured: "what measures the opener a session actually receives, so that d.open_is_a_slot
+                      can fail? m.open_clean is one reading from 2026-09-01 and p.hook_slot reads the
+                      Python constant, so the judgment stood while the native opener ran 17,358
+                      characters against a 2,000-character slot."
   q.prefix_eval: "does a word prefix reach the right entry more often than a letter, and does a
                   legend close the gap? the three-arm eval on the page fixture - the same prompts and
                   trials as the grounding-line harness, under letters, under letters with
@@ -4686,6 +4705,24 @@ judgments:
                                       write to an entry goes into the file that holds it; a record in
                                       one file answers that file to all of it"
       p.hypothesis_homes: 1
+  d.hook_state_keeps_its_directory:
+    name: "Hook state leaves the temporary directory's mode alone"
+    verdict: "The hooks keep a session's state in the host's temporary directory without changing
+              that directory: the state file is private, and only a directory a hook creates is made
+              private."
+    because: "The temporary directory belongs to the system. macOS refuses to change the mode of the
+              per-user $TMPDIR even for its owner, so a hook that tried failed before writing
+              anything, and on macOS the grounding line, the recording reminder and the citation
+              check never ran. The Python hooks never changed it, and a state file created private
+              needs nothing from the directory."
+    rests_on: [d.hooks_carry_pointers]
+    reopened_by: "A session's hook state readable by another local user because the directory
+                  holding it kept the mode the system gave it."
+    from: s.2026_09_23_session_hook
+    seen:
+      d.hooks_carry_pointers: "the hooks are the one layer every session gets without choosing; they
+                               name the entries a prompt touches and the skill for the next move, in
+                               the host's own syntax, and never a value"
   d.hooks_carry_pointers:
     rests_on: [s.2026_09_10_skills_split, d.open_is_a_slot]
     verdict: "the hooks are the one layer every session gets without choosing; they name the entries

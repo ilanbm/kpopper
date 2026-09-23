@@ -2559,9 +2559,10 @@ def opening(paths, budget=25, chars=None, host=None):
                   "(what a change reaches) · check")
         rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
                 "(what a change reaches)")
-    if moves and doc.hypotheses:
-        # hypotheses beside the record are a move of their own on a host that has the skill
-        n = len(doc.hypotheses)
+    # hypotheses beside the record are a move of their own on a host that has the skill; a
+    # pending contribution is not one - consolidate leaves it to its own explicit step
+    n = sum(h.get('kind') != 'contribution' for h in doc.hypotheses.values())
+    if moves and n:
         footer += f" · {moves['consolidate']} ({n} hypothes{'is waits' if n == 1 else 'es wait'})"
 
     for l in head:

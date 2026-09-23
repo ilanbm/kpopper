@@ -299,6 +299,49 @@ fn materialize_refuses_tampered_ledger_objects_without_publishing_a_tree() {
 }
 
 #[test]
+fn a_hosts_moves_offer_consolidate_for_hypotheses_but_not_a_pending_contribution() {
+    let (_, ledgers) = fixtures();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    std::fs::create_dir(&root).unwrap();
+    fixture(&root, ledger_case(&ledgers, "one"));
+    let footer = || {
+        let result = Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .args([
+                "--workspace",
+                root.to_str().unwrap(),
+                "open",
+                "--host",
+                "claude",
+            ])
+            .env("KPOPPER_PRIVATE_HOME", temp.path().join("private"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let text = String::from_utf8(result.stdout).unwrap();
+        assert!(text.contains("\nPENDING "), "{text}");
+        text.lines().last().unwrap().to_owned()
+    };
+    // Consolidate leaves a contribution to its own explicit step, as the Python reader does.
+    let moves = "next: /kpopper:ground <entry|prefix> (values with sources, what a change reaches) · /kpopper:record (what this session found) · check";
+    assert_eq!(footer(), moves);
+    std::fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    std::fs::write(
+        root.join(".kpopper/hypotheses/higher.yaml"),
+        "known:\n  local.one: {v: 2}\n",
+    )
+    .unwrap();
+    assert_eq!(
+        footer(),
+        format!("{moves} · /kpopper:consolidate (1 hypothesis waits)")
+    );
+}
+
+#[test]
 fn registered_cli_surface_matches_python_json_and_exit_codes() {
     let (oracle, ledgers) = fixtures();
     let temp = tempfile::tempdir().unwrap();

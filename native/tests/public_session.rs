@@ -363,6 +363,56 @@ fn a_baseline_that_cannot_be_saved_leaves_the_opening_unchanged() {
 }
 
 #[test]
+fn the_session_opening_fits_the_opener_slot_before_the_agent_context() {
+    let f = Fixture::new();
+    let mut record = String::from("known:\n  p.load: {v: 61}\njudgments:\n");
+    for n in 0..60 {
+        record.push_str(&format!(
+            "  d.standing_{n:02}:\n    verdict: a standing verdict long enough to fill most of an opener line, number {n}\n    rests_on: [p.load]\n    seen: {{p.load: 61}}\n    reopened_by: a later reading\n"
+        ));
+    }
+    fs::write(f.root.path().join("GROUNDING.yaml"), record).unwrap();
+    let opened = success(f.hook_with(&["session-start", "--host", "claude"], json!({})));
+    let stdout = String::from_utf8(opened.stdout).unwrap();
+    // A host keeps only the start of an opening larger than its preview, so the opening is cut
+    // to the slot below its head, and what the agent needs to write still arrives after it.
+    let (opening, context) = stdout.split_once("\nKPOPPER_AGENT_CONTEXT ").unwrap();
+    let cut = opening
+        .find("\n  ... ")
+        .unwrap_or_else(|| panic!("{opening}"));
+    // The same record and host through the Python opener end the same way.
+    assert_eq!(
+        &opening[cut..],
+        "\n  ... 38 more - raise --chars\n\nnext: /kpopper:ground <entry|prefix> (values with sources, what a change reaches) · /kpopper:record (what this session found) · check",
+        "{opening}"
+    );
+    assert!(opening[..=cut].chars().count() <= 2000, "{opening}");
+    let context: Value = serde_json::from_str(context.lines().next().unwrap()).unwrap();
+    assert_eq!(context["environment"]["KPOPPER_AGENT_SESSION"], "flow");
+}
+
+#[test]
+fn a_hosts_session_opens_a_record_born_by_add() {
+    let f = Fixture::new();
+    success(f.run(&["add", "p.x", "v=1"]));
+    let reader = String::from_utf8(success(f.hook("session-start", json!({}))).stdout).unwrap();
+    assert!(reader.contains("\ncore/v1 snapshot "), "{reader}");
+    // The hooks name their host. A core record's opening names no moves, so the opener leaves
+    // the host unused there, as the Python opener does, instead of failing to open the record.
+    for host in ["claude", "codex"] {
+        let opened = success(f.hook_with(&["session-start", "--host", host], json!({})));
+        assert_eq!(String::from_utf8(opened.stdout).unwrap(), reader, "{host}");
+        assert!(opened.stderr.is_empty(), "{host}");
+    }
+    // Asked for by name, the option is still refused on a core record.
+    let asked = f.run(&["open", "--host", "claude"]);
+    assert!(!asked.status.success());
+    assert!(
+        String::from_utf8_lossy(&asked.stderr).contains("core_profile_option_unsupported: --host")
+    );
+}
+
+#[test]
 fn core_only_resources_support_public_reads_history_and_sessions() {
     let f = Fixture::new();
     fs::remove_dir_all(f.resources.join("ordinary")).unwrap();

@@ -1366,23 +1366,35 @@ impl Projection<'_> {
         (held, judgments, prefixes, loose)
     }
 
+    /// The opener: the record's head, what needs a person, the open questions and, when a
+    /// character budget makes room for it, what stands. `chars` is a ceiling on the whole
+    /// output that cuts below the head at line granularity; `host` names the next moves as
+    /// that host invokes a skill.
     pub fn opening_with_orientation(
         &self,
         budget: i64,
+        chars: Option<i64>,
+        host: Option<&str>,
         brief: Option<&V>,
         prefix_order: &[String],
         orientation: &[String],
     ) -> Result<String> {
         crate::require(budget > 0, "--budget must be positive")?;
+        crate::require(chars.is_none_or(|c| c > 0), "--chars must be positive")?;
         let (held, judgments, prefixes, loose) = self.held_counts();
         let doc = map(&self.base.reader.document)?;
         let meta = doc.get("meta").and_then(|value| map(value).ok());
         let mut head = vec![];
-        if let Some(scope) = meta
-            .and_then(|meta| meta.get("scope").or_else(|| meta.get("about")))
-            .filter(|value| truth(value))
-        {
-            head.push(cut(&py(scope), 300));
+        if let Some(scope) = meta.and_then(|meta| {
+            [meta.get("scope"), meta.get("about")]
+                .into_iter()
+                .flatten()
+                .find(|value| truth(value))
+        }) {
+            let scope = py(scope);
+            if !scope.trim().is_empty() {
+                head.push(cut(scope.trim(), 300));
+            }
         }
         head.extend_from_slice(orientation);
         let mut heavy = prefixes
@@ -1445,55 +1457,90 @@ impl Projection<'_> {
             summary.push_str(&format!(", updated {}", py(updated)));
         }
         head.push(summary);
+        if let Some(priors) = self.priors_line()? {
+            head.push(priors);
+        }
         head.extend(self.knowledge.clone());
         if let Some(waiting) = self.hypothesis_line()? {
             head.push(waiting);
         }
 
+        let mut questions = BTreeMap::new();
+        for key in ["open", "questions"] {
+            if let Some(values) = doc.get(key).and_then(|value| map(value).ok()) {
+                questions.extend(values.iter());
+            }
+        }
+        let snapshot = text(&self.base.reader.fields["snapshot"]).unwrap_or("");
         let mut items = vec![];
         for (id, body) in &self.base.judgments {
+            if questions.contains_key(id) {
+                continue;
+            }
+            let b = map(body)?;
             let flags = crate::ordinary_domain_counts::flags(&self.base.reader, body)?;
-            if flags.contains("falsified") {
+            let blocked = blocked_text(body);
+            let empty = Map::new();
+            let seen = map(get(b, snapshot)).unwrap_or(&empty);
+            let deps = self.base.deps(id)?;
+            for dep in &deps {
+                if !self.base.reader.ids.contains(dep) {
+                    items.push(if blocked.is_empty() {
+                        (
+                            100,
+                            id.clone(),
+                            format!("rests on {dep}, which is not an entry"),
+                        )
+                    } else {
+                        (
+                            60,
+                            id.clone(),
+                            format!(
+                                "waiting on {dep} - {}",
+                                blocked.chars().take(70).collect::<String>()
+                            ),
+                        )
+                    });
+                } else if !snapshot.is_empty() && !seen.contains_key(dep) {
+                    items.push((80, id.clone(), format!("never checked against {dep}")));
+                }
+            }
+            let pred = self.base.pred(id);
+            for reference in R::predicate_refs(&pred)
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+            {
+                if self.base.reader.ids.contains(&reference) && !deps.contains(&reference) {
+                    items.push((
+                        100,
+                        id.clone(),
+                        format!(
+                            "predicate reads {reference}, which it does not declare - a change to it never reaches this"
+                        ),
+                    ));
+                }
+            }
+            if MISFILED_REOPENER
+                .captures(&reopened_text(body))
+                .is_some_and(|m| self.base.reader.ids.contains(&m[1]))
+            {
+                items.push((
+                    100,
+                    id.clone(),
+                    "reopened_by reads as a comparison - a predicate belongs in wrong_if".into(),
+                ));
+            }
+            if flags.contains("no_predicate") {
+                items.push((40, id.clone(), "nothing evaluable would falsify it".into()));
+            } else if flags.contains("falsified") {
                 items.push((
                     95,
                     id.clone(),
                     format!(
                         "wrong_if holds ({}) - broken by its own condition",
-                        predicate_text(&self.base.pred(id))
+                        predicate_text(&pred).chars().take(60).collect::<String>()
                     ),
                 ));
-            }
-            if flags.contains("broken") {
-                let missing = self
-                    .base
-                    .deps(id)?
-                    .into_iter()
-                    .filter(|dep| !self.base.reader.ids.contains(dep))
-                    .collect::<Vec<_>>();
-                if !missing.is_empty() {
-                    items.push((
-                        100,
-                        id.clone(),
-                        format!("rests on {}, which is not an entry", missing.join(", ")),
-                    ));
-                }
-            }
-            if flags.contains("unchecked") {
-                let b = map(body)?;
-                let empty = Map::new();
-                let seen = map(get(
-                    b,
-                    text(&self.base.reader.fields["snapshot"]).unwrap_or(""),
-                ))
-                .unwrap_or(&empty);
-                for dep in self
-                    .base
-                    .deps(id)?
-                    .into_iter()
-                    .filter(|dep| self.base.reader.ids.contains(dep) && !seen.contains_key(dep))
-                {
-                    items.push((80, id.clone(), format!("never checked against {dep}")));
-                }
             }
             for (dep, old, now, state) in self.base.moved(id)? {
                 if state == "moved" {
@@ -1505,8 +1552,16 @@ impl Projection<'_> {
                     ));
                 }
             }
-            if flags.contains("no_predicate") {
-                items.push((40, id.clone(), "nothing evaluable would falsify it".into()));
+            if flags.contains("reversed")
+                && let Some(day) = R::reversal_pending(body)
+            {
+                items.push((
+                    75,
+                    id.clone(),
+                    format!(
+                        "reversed on {day} - the verdict under this id changed; review it once read, or pull {id} --history"
+                    ),
+                ));
             }
         }
         for (id, variants) in &self.disputed {
@@ -1561,20 +1616,18 @@ impl Projection<'_> {
                 total - budget as usize
             ));
         }
-        let mut questions = vec![];
-        for key in ["open", "questions"] {
-            if let Some(values) = doc.get(key).and_then(|value| map(value).ok()) {
-                for (id, value) in values {
-                    let line = format!("  ? {id}: {}", py(value));
-                    questions.push(if line.chars().count() < 100 {
-                        line
-                    } else {
-                        line.chars().take(100).collect::<String>() + " ..."
-                    });
+        let questions = questions
+            .into_iter()
+            .map(|(id, value)| {
+                let line = format!("  ? {id}: {}", py(value));
+                if line.chars().count() < 100 {
+                    line
+                } else {
+                    line.chars().take(100).collect::<String>() + " ..."
                 }
-            }
-        }
-        questions.sort();
+            })
+            .collect::<Vec<_>>();
+        // What stands exists only to fill the room a character budget makes for it.
         let mut standing = vec![];
         let live = self
             .base
@@ -1582,7 +1635,7 @@ impl Projection<'_> {
             .keys()
             .filter(|id| !flagged.contains(*id))
             .collect::<Vec<_>>();
-        if !live.is_empty() {
+        if chars.is_some() && !live.is_empty() {
             standing.push(if flagged.is_empty() {
                 "standing:".into()
             } else {
@@ -1614,7 +1667,29 @@ impl Projection<'_> {
             }
         }
         let unserved = self.page_unserved(brief)?;
-        let footer = if let Some((id, _, _)) = unserved.first() {
+        let skill = match host {
+            Some("claude") => Some("/kpopper:"),
+            Some("codex") => Some("$"),
+            _ => None,
+        };
+        let footer = if let Some(skill) = skill {
+            let mut footer = format!(
+                "next: {skill}ground <entry|prefix> (values with sources, what a change reaches) · {skill}record (what this session found) · check"
+            );
+            // A pending contribution is not a hypothesis consolidate folds; it has its own step.
+            let waiting = self
+                .hypotheses
+                .values()
+                .filter(|h| map(h).is_ok_and(|h| !string_is(get(h, "kind"), "contribution")))
+                .count();
+            if waiting > 0 {
+                footer.push_str(&format!(
+                    " · {skill}consolidate ({waiting} hypothes{})",
+                    if waiting == 1 { "is waits" } else { "es wait" }
+                ));
+            }
+            footer
+        } else if let Some((id, _, _)) = unserved.first() {
             format!(
                 "next: check - {id} is served by no tab{} · pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches)",
                 if unserved.len() > 1 {
@@ -1626,15 +1701,74 @@ impl Projection<'_> {
         } else {
             "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check".into()
         };
-        let mut sections = vec![head.join("\n"), needs.join("\n")];
+        let mut body = vec![String::new()];
+        body.extend(needs);
         if !questions.is_empty() {
-            sections.push(questions.join("\n"));
+            body.push(String::new());
+            body.extend(questions);
         }
         if !standing.is_empty() {
-            sections.push(standing.join("\n"));
+            body.push(String::new());
+            body.extend(standing);
         }
-        sections.push(footer);
-        Ok(sections.join("\n\n") + "\n")
+        // The head is never cut, and the footer is never cut or counted.
+        let shown = match chars {
+            None => body.len(),
+            Some(chars) => {
+                let mut used = head
+                    .iter()
+                    .map(|line| line.chars().count() as i64 + 1)
+                    .sum::<i64>();
+                body.iter()
+                    .position(|line| {
+                        used += line.chars().count() as i64 + 1;
+                        used > chars
+                    })
+                    .unwrap_or(body.len())
+            }
+        };
+        let omitted = body.len() - shown;
+        let mut lines = head;
+        lines.extend(body.into_iter().take(shown));
+        if omitted > 0 {
+            lines.push(format!("  ... {omitted} more - raise --chars"));
+        }
+        lines.push(String::new());
+        lines.push(footer);
+        Ok(lines.join("\n") + "\n")
+    }
+
+    /// How much of the record stands on a session's own confidence: the judgments resting on a
+    /// prior.* claim, and how many of them on one held at 0.8 or above. None where nothing does.
+    fn priors_line(&self) -> Result<Option<String>> {
+        let (mut resting, mut high) = (0usize, 0usize);
+        for id in self.base.judgments.keys() {
+            let priors = self
+                .base
+                .deps(id)?
+                .into_iter()
+                .filter(|dep| dep.starts_with("prior."))
+                .collect::<Vec<_>>();
+            if priors.is_empty() {
+                continue;
+            }
+            resting += 1;
+            if priors.iter().any(|dep| {
+                py(&self.base.reader.value(dep).unwrap_or(V::Null))
+                    .trim()
+                    .parse::<f64>()
+                    .is_ok_and(|value| value >= 0.8)
+            }) {
+                high += 1;
+            }
+        }
+        Ok((resting > 0).then(|| {
+            format!(
+                "{resting} judgment{} rest{} on prior.* claims, {high} of them on a prior at 0.8 or above",
+                if resting == 1 { "" } else { "s" },
+                if resting == 1 { "s" } else { "" }
+            )
+        }))
     }
 
     pub fn check(&self, brief: Option<&V>) -> Result<(String, i32)> {

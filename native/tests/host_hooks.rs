@@ -384,6 +384,60 @@ fn native_process_matches_python_citation_selection_and_once_only_state() {
     assert_eq!(fs::read(root.join("PROVENANCE.yaml")).unwrap(), before);
 }
 
+#[cfg(unix)]
+#[test]
+fn hooks_keep_session_state_without_changing_the_directory_that_holds_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = fixture();
+    let root = dir.path().canonicalize().unwrap();
+    // The state lives in the host's temporary directory, which belongs to the system: macOS
+    // refuses to change the mode of the per-user $TMPDIR even for its owner.
+    let shared = tempfile::tempdir().unwrap();
+    fs::set_permissions(shared.path(), fs::Permissions::from_mode(0o755)).unwrap();
+    let id = sid("shared-state");
+    let hooks = [
+        (
+            vec!["_hook", "ground", "claude", "start"],
+            json!({"cwd":root,"session_id":id,"source":"startup"}),
+            "",
+        ),
+        (
+            vec!["_hook", "ground", "claude", "prompt"],
+            json!({"cwd":root,"session_id":id,"hook_event_name":"UserPromptSubmit","prompt":"the heat loss on a -5 night"}),
+            "heat.loss_kw",
+        ),
+        (
+            vec!["_hook", "ground", "claude", "read"],
+            json!({"cwd":root,"session_id":id,"tool_response":{"stdout":"heat.loss_kw"}}),
+            "",
+        ),
+        (
+            vec!["_hook", "edit", "claude"],
+            json!({"cwd":root,"session_id":id,"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"boiler/service-2025.pdf"}}),
+            "doc.boiler_sheet",
+        ),
+    ];
+    for (args, payload, expected) in hooks {
+        let output = native(&args, &payload, &root, shared.path());
+        assert!(
+            output.status.success() && output.stderr.is_empty(),
+            "{args:?}\n{}",
+            diagnostic(&output)
+        );
+        assert!(
+            context(&output).contains(expected),
+            "{args:?}\n{}",
+            diagnostic(&output)
+        );
+    }
+    let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(shared.path()), 0o755);
+    assert_eq!(
+        mode(&shared.path().join(format!("kpopper-ground-{id}.json"))),
+        0o600
+    );
+}
+
 #[test]
 fn malformed_cli_input_is_nonblocking_for_every_hook() {
     let temporary = tempfile::tempdir().unwrap();

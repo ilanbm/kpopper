@@ -85,11 +85,17 @@ fn atomic_json(path: &Path, value: &J) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| Error("invalid private state path".into()))?;
+    // A directory made here is private; one that exists - the shared temporary directory above
+    // all - keeps its mode, which the system may refuse to change (macOS does for $TMPDIR).
+    #[cfg(unix)]
+    let created = !parent.exists();
     fs::create_dir_all(parent)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
+        if created {
+            fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
+        }
     }
     let mut file = tempfile::NamedTempFile::new_in(parent)?;
     #[cfg(unix)]

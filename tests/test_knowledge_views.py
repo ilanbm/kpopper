@@ -44,6 +44,25 @@ class Views(Repository):
             self.assertIn('PENDING', out.stdout)
             self.assertIn('captured locally', out.stdout)
 
+    def test_a_pending_contribution_is_not_offered_to_consolidate(self):
+        # consolidate leaves a contribution to its own explicit step, so the host's moves send
+        # a session there only for a hypothesis beside the record
+        self.capture()
+        moves = ('next: /kpopper:ground <entry|prefix> (values with sources, what a change reaches)'
+                 ' · /kpopper:record (what this session found) · check')
+
+        def footer():
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                P.opening([str(self.record)], host='claude')
+            self.assertIn('PENDING', out.getvalue())
+            return out.getvalue().splitlines()[-1]
+
+        self.assertEqual(footer(), moves)
+        (self.root / '.kpopper' / 'hypotheses').mkdir(parents=True)
+        (self.root / '.kpopper' / 'hypotheses' / 'higher.yaml').write_text(
+            'known:\n  local.extra: {v: 2}\n')
+        self.assertEqual(footer(), moves + ' · /kpopper:consolidate (1 hypothesis waits)')
+
     def test_raw_mutation_lock_excludes_overlay_from_every_writer(self):
         self.capture()
         with P._locked(str(self.record)):

@@ -509,6 +509,83 @@ fn actual_ordinary_cli_opens_and_checks_the_record() {
     );
 }
 
+// Every expected text below is what the Python reader prints for the same record and flags.
+const OPENING: &str = "meta:\n  scope: A small record whose opening needs every part\nknown:\n  p.load: {v: 61, name: load}\n  prior.fast: {v: 0.9, name: a confident prior}\n  prior.slow: {v: 0.3, name: a doubtful prior}\njudgments:\n  d.alpha:\n    verdict: the first standing verdict, long enough that the standing line has to be cut short\n    rests_on: [p.load]\n    seen: {p.load: 61}\n    reopened_by: a later reading\n  d.beta:\n    verdict: rests on the confident prior\n    rests_on: [prior.fast]\n    seen: {prior.fast: 0.9}\n    reopened_by: a later reading\n  d.gamma:\n    verdict: rests on the doubtful prior\n    rests_on: [prior.slow, p.load]\n    seen: {prior.slow: 0.3, p.load: 61}\n    reopened_by: a later reading\n  d.turned:\n    verdict: the verdict written again under its id\n    because: the reading it rested on changed\n    rests_on: [p.load]\n    seen: {p.load: 61}\n    reopened_by: a later reading\n    replaced: [\"the standing judgment broke on its own condition, and this replaces it on 2026-09-20\"]\nopen:\n  q.next: \"what should the next reading be?\"\n";
+const OPENING_HEAD: &str = concat!(
+    "A small record whose opening needs every part\n",
+    "holds: prior (2) · and 2 standalone\n",
+    "8 entries, 4 judgments, 1 open questions\n",
+    "2 judgments rest on prior.* claims, 1 of them on a prior at 0.8 or above\n",
+    "1 hypothesis waits - higher (undated, 3 rest on it)\n",
+    "\n",
+    "needs a person (1):\n",
+);
+const OPENING_NEEDS: &str = concat!(
+    "  d.turned: reversed on 2026-09-20 - the verdict under this id changed; review it once read, or pull d.turned --history\n",
+    "      because: the reading it rested on changed\n",
+    "\n",
+    "  ? q.next: what should the next reading be?\n",
+);
+const OPENING_STANDING: &str = concat!(
+    "\n",
+    "standing:  (1 above needs a person)\n",
+    "  = d.alpha: the first standing verdict, long enough that the standing line has  ...\n",
+    "  = d.beta: rests on the confident prior\n",
+    "  = d.gamma: rests on the doubtful prior\n",
+);
+const READER_MOVES: &str = "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n";
+
+#[test]
+fn ordinary_open_fills_the_opener_slot_and_names_the_hosts_moves() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(root.join("GROUNDING.yaml"), OPENING).unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(
+        root.join(".kpopper/hypotheses/higher.yaml"),
+        "known:\n  p.load: {v: 70}\n",
+    )
+    .unwrap();
+    let open = |args: &[&str]| {
+        let output = cli(
+            &root,
+            &[&["--frozen", "open"][..], args].concat(),
+            &root.join("private"),
+        );
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+    // An opening nobody sized fills the session opener's slot, standing verdicts included.
+    let slot = format!("{OPENING_HEAD}{OPENING_NEEDS}{OPENING_STANDING}\n");
+    assert_eq!(open(&[]), format!("{slot}{READER_MOVES}"));
+    assert_eq!(
+        open(&["--host", "claude"]),
+        format!(
+            "{slot}next: /kpopper:ground <entry|prefix> (values with sources, what a change reaches) · /kpopper:record (what this session found) · check · /kpopper:consolidate (1 hypothesis waits)\n"
+        )
+    );
+    assert_eq!(
+        open(&["--host", "codex"]),
+        format!(
+            "{slot}next: $ground <entry|prefix> (values with sources, what a change reaches) · $record (what this session found) · check · $consolidate (1 hypothesis waits)\n"
+        )
+    );
+    // An explicit item budget is the reader's own opening: no character ceiling, nothing standing.
+    assert_eq!(
+        open(&["--budget", "1"]),
+        format!("{OPENING_HEAD}{OPENING_NEEDS}\n{READER_MOVES}")
+    );
+    // Below the head, a character ceiling cuts whole lines and says how many it left out.
+    assert_eq!(
+        open(&["--chars", "330"]),
+        format!("{OPENING_HEAD}  ... 9 more - raise --chars\n\n{READER_MOVES}")
+    );
+}
+
 #[test]
 fn actual_ordinary_pull_history_reads_the_retained_versions() {
     let tmp = tempfile::tempdir().unwrap();

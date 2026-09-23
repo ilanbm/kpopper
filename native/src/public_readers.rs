@@ -12,6 +12,8 @@ use crate::{
 };
 use serde_json::{Value as J, json};
 use std::path::{Path, PathBuf};
+/// The character slot a session opener fills, as the Python reader's `LEGACY_CHARS`.
+const OPENING_CHARS: i64 = 2000;
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct Options {
     pub subjects: Vec<String>,
@@ -23,6 +25,10 @@ pub struct Options {
     pub chars: Option<i64>,
     #[arg(long,value_parser=["claude","codex"],hide=true)]
     pub host: Option<String>,
+    /// Set by the session opener: its host names the next moves of an ordinary opening, and a
+    /// core record, whose opening names none, is opened without it rather than refused.
+    #[arg(skip)]
+    pub host_is_optional: bool,
     #[arg(long)]
     pub history: bool,
     /// Read a pinned committed branch beside the current record.
@@ -379,12 +385,25 @@ pub fn run(
         )?;
         let prefix_order = prefix_order(capture.source());
         let output = match command {
-            "open" => projection.opening_with_orientation(
-                options.budget.unwrap_or(25),
-                None,
-                &prefix_order,
-                &orientation(capture.source()),
-            )?,
+            "open" => {
+                // An opening nobody sized fills the session opener's slot; naming files or a
+                // budget asks for the reader's own opening instead.
+                let explicit = !options.subjects.is_empty()
+                    || options.chars.is_some()
+                    || options.budget.is_some();
+                projection.opening_with_orientation(
+                    options.budget.unwrap_or(25),
+                    if explicit {
+                        options.chars
+                    } else {
+                        Some(OPENING_CHARS)
+                    },
+                    options.host.as_deref(),
+                    None,
+                    &prefix_order,
+                    &orientation(capture.source()),
+                )?
+            }
             "check" => {
                 let (mut text, code) = projection.check(None)?;
                 if has_brief(&paths, &mut inventory)? {
@@ -437,7 +456,10 @@ pub fn run(
     let unsupported = [
         ("--chars", options.chars.is_some()),
         ("--budget", options.budget.is_some()),
-        ("--host", options.host.is_some()),
+        (
+            "--host",
+            options.host.is_some() && !options.host_is_optional,
+        ),
     ]
     .into_iter()
     .filter(|(_, v)| *v)

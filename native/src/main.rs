@@ -303,6 +303,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
             Ok(None) => {
                 let options = kpop_native::public_readers::Options {
                     host: options.host.clone(),
+                    host_is_optional: true,
                     ..Default::default()
                 };
                 match kpop_native::public_readers::run_auto("open", &options, &root, mode, false) {
