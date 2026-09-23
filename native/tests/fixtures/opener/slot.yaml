@@ -1,0 +1,214 @@
+schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}
+known:
+  p.x: {v: 1}
+judgments:
+  d.gap00:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v00]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap01:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v01]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap02:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v02]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap03:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v03]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap04:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v04]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap05:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v05]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap06:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v06]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap07:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v07]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap08:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v08]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap09:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v09]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap10:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v10]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.gap11:
+    verdict: waits on a name the record does not hold yet
+    rests_on: [p.x, gone.v11]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep00:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep01:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep02:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep03:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep04:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep05:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep06:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep07:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep08:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep09:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep10:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep11:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep12:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep13:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep14:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep15:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep16:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep17:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep18:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep19:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep20:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep21:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep22:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep23:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep24:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep25:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep26:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep27:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep28:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100
+  d.keep29:
+    verdict: stands while the one value it reads stays well below a hundred
+    rests_on: [p.x]
+    seen: {p.x: 1}
+    wrong_if: p.x > 100

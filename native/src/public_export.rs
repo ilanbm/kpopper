@@ -120,7 +120,7 @@ fn run_inner(
         details: options.details,
         format: options.format,
     };
-    let output = if profile == "core/v1" {
+    let packet = if profile == "core/v1" {
         let context = CapturedAssessment::from_snapshot(
             capture.snapshot()?.clone(),
             None,
@@ -129,15 +129,16 @@ fn run_inner(
             crate::reasoning_runtime::OperationalBounds::default(),
             None,
         )?;
-        render(&context, &options.ids, &render_options)?
+        core_render_packet(&capture, &project(&context, &options.ids, &render_options)?)
     } else {
         crate::require(
             profile == "ordinary-reader/v1",
             "unsupported export profile",
         )?;
         let packet = project_ordinary(&capture, runtime.as_ref(), &options.ids, &render_options)?;
-        render_packet(&ordinary_render_packet(&capture, &packet)?, &render_options)?
+        ordinary_render_packet(&capture, &packet)?
     };
+    let output = render_packet(&packet, &render_options)?;
     capture.verify()?;
     Ok(output)
 }
@@ -160,7 +161,21 @@ fn core_readings(finding: &J, selected: &HashSet<String>) -> Result<(Vec<J>, usi
         &finding["state"]["basis"]["dependencies"],
         "invalid captured assessment",
     )?;
-    let order = dependencies.keys().cloned().collect::<Vec<_>>();
+    // The assessment is read in the judgment's own dependency order; its
+    // captured maps are name-ordered, so take that order from the body.
+    let declared = finding["fields"]["deps"]
+        .as_str()
+        .and_then(|field| finding["body"].get(field))
+        .and_then(J::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(J::as_str);
+    let mut order = Vec::<String>::new();
+    for dep in declared.chain(dependencies.keys().map(String::as_str)) {
+        if dependencies.contains_key(dep) && !order.iter().any(|seen| seen == dep) {
+            order.push(dep.to_owned());
+        }
+    }
     let mut rows = Vec::new();
     for dep in order.iter().take(PREMISE_ROWS) {
         let item = object(&dependencies[dep], "invalid captured assessment")?;
@@ -525,7 +540,7 @@ fn project_ordinary_assessed(
                 "not_applicable",
             );
         let mut flags = if judgment {
-            crate::ordinary_counts::flags(&reader, body)?
+            crate::ordinary_counts::reader_flags(&reader, body, false)?
                 .into_iter()
                 .map(str::to_owned)
                 .collect::<BTreeSet<_>>()
@@ -776,6 +791,13 @@ fn ordinary_render_packet(capture: &CapturedSource, packet: &J) -> Result<J> {
     let nodes = rendered["nodes"].as_object_mut().unwrap();
     let mut orders = Map::new();
     for (id, node) in nodes.iter_mut().filter(|(_, node)| node["missing"] != true) {
+        if crate::reasoning_fields::BUILTINS.contains(&id.as_str()) {
+            // A computed name reads as its name, its count when the record
+            // has one, then where the count comes from.
+            let body = node["body"].as_object().cloned().unwrap_or_default();
+            orders.insert(id.clone(), in_order(&body, &["name", "v", "from"]));
+            continue;
+        }
         let Some(OrdinaryValue::Map(fields)) = source_body(capture.source(), id) else {
             continue;
         };
@@ -799,6 +821,40 @@ fn ordinary_render_packet(capture: &CapturedSource, packet: &J) -> Result<J> {
         .unwrap()
         .insert("__ordinary_body_fields".into(), J::Object(orders));
     Ok(rendered)
+}
+
+/// Body fields as `[field, value]` pairs: the named fields first, in that
+/// order, then the rest by name.
+fn in_order(body: &Map<String, J>, first: &[&str]) -> J {
+    let known = first
+        .iter()
+        .filter_map(|field| body.get(*field).map(|value| json!([field, value])));
+    let rest = body
+        .iter()
+        .filter(|(field, _)| !first.contains(&field.as_str()))
+        .map(|(field, value)| json!([field, value]));
+    J::Array(known.chain(rest).collect())
+}
+
+/// Show each core body's fields in the record's own order; the shared
+/// assessment holds them name-ordered.
+fn core_render_packet(capture: &CapturedSource, packet: &J) -> J {
+    let mut rendered = packet.clone();
+    let mut orders = Map::new();
+    for (id, node) in packet["nodes"].as_object().into_iter().flatten() {
+        let (Some(body), Some(crate::history_yaml::OrdinaryValue::Map(fields))) =
+            (node["body"].as_object(), source_body(capture.source(), id))
+        else {
+            continue;
+        };
+        let first = fields
+            .iter()
+            .filter_map(|(key, _)| key.text())
+            .collect::<Vec<_>>();
+        orders.insert(id.clone(), in_order(body, &first));
+    }
+    rendered["__ordinary_body_fields"] = J::Object(orders);
+    rendered
 }
 
 /// Project the core/v1 export packet defined by Python 1.8 `export_graph.py`.
@@ -1038,7 +1094,8 @@ fn plain(value: &J) -> String {
             _ => python_json(value),
         }
     };
-    raw.split_whitespace()
+    raw.split(crate::python_text::space)
+        .filter(|word| !word.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
         .chars()
@@ -1534,45 +1591,13 @@ fn mermaid_text(value: &J) -> String {
     plain(value)
         .chars()
         .map(|c| {
-            if c.is_alphanumeric() || " .,_-:/".contains(c) {
+            if crate::python_text::alnum(c) || " .,_-:/".contains(c) {
                 c.to_string()
             } else {
                 format!("#{};", c as u32)
             }
         })
         .collect()
-}
-fn wrap(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    for word in text.split_whitespace() {
-        let mut rest = word;
-        while rest.chars().count() > width {
-            if !current.is_empty() {
-                lines.push(std::mem::take(&mut current));
-            }
-            let prefix = rest.chars().take(width).collect::<String>();
-            let bytes = prefix.len();
-            lines.push(prefix);
-            rest = &rest[bytes..];
-        }
-        if rest.is_empty() {
-            continue;
-        }
-        let needed =
-            current.chars().count() + usize::from(!current.is_empty()) + rest.chars().count();
-        if needed > width && !current.is_empty() {
-            lines.push(std::mem::take(&mut current));
-        }
-        if !current.is_empty() {
-            current.push(' ')
-        }
-        current.push_str(rest);
-    }
-    if !current.is_empty() {
-        lines.push(current)
-    }
-    lines
 }
 fn truthy(value: Option<&J>) -> bool {
     match value {
@@ -1587,13 +1612,9 @@ fn truthy(value: Option<&J>) -> bool {
 fn named(body: &Map<String, J>) -> Option<String> {
     ["name", "title", "label", "what", "desc"]
         .iter()
-        .find_map(|field| {
-            let value = body.get(*field)?;
-            truthy(Some(value)).then(|| match value {
-                J::String(v) => v.trim().to_owned(),
-                _ => plain(value),
-            })
-        })
+        .find_map(|field| body.get(*field).filter(|value| truthy(Some(value))))
+        .map(plain)
+        .filter(|name| !name.is_empty())
 }
 
 /// Render an already projected packet as the optional Mermaid representation.
@@ -1676,7 +1697,7 @@ pub fn render_mermaid(packet: &J) -> String {
             }
             shortened |= value.chars().count() > LABEL_CHARS;
             let short = value.chars().take(LABEL_CHARS).collect::<String>();
-            parts.extend(wrap(
+            parts.extend(crate::python_text::wrap(
                 &format!(
                     "v: {short}{}",
                     if value.chars().count() > LABEL_CHARS {
@@ -1689,7 +1710,7 @@ pub fn render_mermaid(packet: &J) -> String {
             ));
         }
         clipped_count += usize::from(shortened);
-        parts.extend(wrap(&label, 36));
+        parts.extend(crate::python_text::wrap(&label, 36));
         let rendered = parts
             .iter()
             .map(|p| mermaid_text(&json!(p)))
@@ -1746,16 +1767,15 @@ pub fn render_mermaid(packet: &J) -> String {
     lines.join("\n")
 }
 pub fn render(context: &CapturedAssessment, seeds: &[String], options: &Options) -> Result<String> {
+    render_packet(&project(context, seeds, options)?, options)
+}
+
+fn render_packet(packet: &J, options: &Options) -> Result<String> {
     if options.details && options.format == Format::Mermaid {
         return Err(Error(
             "--details needs a text format: markdown or markdown-mermaid".into(),
         ));
     }
-    let packet = project(context, seeds, options)?;
-    render_packet(&packet, options)
-}
-
-fn render_packet(packet: &J, options: &Options) -> Result<String> {
     Ok(match options.format {
         Format::Markdown => render_markdown(packet, options.details),
         Format::Mermaid => render_mermaid(packet),

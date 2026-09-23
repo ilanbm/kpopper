@@ -1,0 +1,87 @@
+meta:
+  scope: "  A record that exercises every line of the opener.  "
+  prefixes:
+    d: "  decision   made\n by a person "
+    prior: a session's own confidence, held as a number between zero and one
+    p: parameter
+    zz: held by nothing
+    q: 7
+  updated: 2026-09-20
+schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}
+sources:
+  s.note: {name: a note, read: 2026-09-01}
+known:
+  p.load: {v: 61, from: s.note}
+  p.limit: {v: 80, from: s.note}
+  p.old: {v: 5, from: s.note}
+  p.dropped: {v: 4, from: s.note}
+  prior.sure: {v: 0.9, from: s.note}
+  prior.unsure: {v: 0.5, from: s.note}
+judgments:
+  d.blocked:
+    verdict: waits for the vendor sheet
+    rests_on: [p.load, vendor.sheet]
+    seen: {p.load: 61}
+    wrong_if: vendor.sheet > 3
+    blocked_on: the vendor has not sent the sheet yet, and nobody can say when it will arrive in writing
+  d.broken:
+    verdict: rests on two names nothing holds
+    rests_on: [missing.one, missing.two]
+    wrong_if: missing.one > 1
+  d.undeclared:
+    verdict: reads what it never declared
+    rests_on: [p.load]
+    seen: {p.load: 61}
+    wrong_if: p.limit < 70
+  d.misfiled:
+    verdict: filed its falsifier as a re-opener
+    rests_on: [p.load]
+    seen: {p.load: 61}
+    reopened_by: p.load > 100
+  d.falsified:
+    verdict: broken by a long worded condition
+    rests_on: [p.load]
+    seen: {p.load: 61}
+    wrong_if: "p.load != 'a long quoted value that runs well past sixty characters of text'"
+    because: the load was measured on {{p.load}} and this sentence runs long enough to be cut at one hundred characters
+  d.reversed:
+    verdict: the new verdict
+    rests_on: [p.load]
+    seen: {p.load: 61}
+    wrong_if: p.load > 100
+    replaced: ["an earlier verdict, ended by a new reading on 2026-09-16"]
+  d.reviewed:
+    verdict: reviewed since it was replaced
+    rests_on: [p.load]
+    seen: {p.load: 61}
+    wrong_if: p.load > 100
+    replaced: ["an earlier verdict, ended by a new reading on 2026-09-16"]
+    reviewed: 2026-09-17
+  d.moved:
+    verdict: listens to the old value
+    rests_on: [p.old, p.load]
+    seen: {p.old: 4, p.load: 61}
+    wrong_if: p.load > 100
+  d.unchecked:
+    verdict: never looked at the limit
+    rests_on: [p.limit]
+    wrong_if: p.limit > 100
+  d.prose:
+    verdict: nothing falsifies this
+    rests_on: [p.load]
+    seen: {p.load: 61}
+    wrong_if: when the load feels wrong
+  d.priors_high:
+    verdict: sure of it
+    rests_on: [prior.sure, prior.unsure]
+    seen: {prior.sure: 0.9, prior.unsure: 0.5}
+    wrong_if: prior.sure < 0.5
+    request: s.note
+  d.priors_low:
+    verdict: not so sure
+    rests_on: [prior.unsure]
+    seen: {prior.unsure: 0.5}
+    wrong_if: prior.unsure < 0.1
+open:
+  q.b: which vendor sends the sheet?
+  q.a: {name: the second question, question: "does the limit hold through the winter peak, and who checks it every week?"}

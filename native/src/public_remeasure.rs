@@ -4,7 +4,8 @@ use crate::{
     history_contract::{map as hmap, text as htext},
     history_view::list as hlist,
     history_yaml,
-    ordinary_value::{Map, Value as V, map, map_mut, text},
+    ordinary_source::Source,
+    ordinary_value::{Map, Scalar, Value as V, map, map_mut, text},
     public_consolidation::{
         OrdinaryPreviewHypothesis, OrdinaryPreviewRequest, PreviewEvidence, PreviewHypothesis,
     },
@@ -12,7 +13,7 @@ use crate::{
     reasoning_runtime::OperationalBounds,
     require,
     source_capture::{self, ReadMode},
-    value::TypedValue as CV,
+    value::{Integer, TypedValue as CV},
 };
 use std::{
     collections::BTreeMap,
@@ -59,6 +60,14 @@ fn output(lines: Vec<String>, code: i32) -> Output {
         code,
     }
 }
+/// A refusal said on stderr before anything runs.
+fn refusal(message: String) -> Output {
+    Output {
+        text: String::new(),
+        stderr: message + "\n",
+        code: 1,
+    }
+}
 
 fn recipe_file(record: &Path) -> (PathBuf, &'static str) {
     let parent = record.parent().unwrap_or(Path::new("."));
@@ -92,40 +101,68 @@ fn brief_file(record: &Path) -> PathBuf {
         parent.join(format!("{stem}.view.yaml"))
     }
 }
+/// A value as the record writes it: true, false and null in lower case, numbers bare, a date
+/// in ISO form, and text bare only where it reads back as itself - else double-quoted.
 fn scalar(v: &V) -> String {
-    match v {
-        V::Text(value)
-            if BARE_TEXT.is_match(value)
-                && !matches!(
-                    value.as_str(),
-                    "null"
-                        | "Null"
-                        | "NULL"
-                        | "true"
-                        | "True"
-                        | "TRUE"
-                        | "false"
-                        | "False"
-                        | "FALSE"
-                        | "yes"
-                        | "Yes"
-                        | "YES"
-                        | "no"
-                        | "No"
-                        | "NO"
-                        | "on"
-                        | "On"
-                        | "ON"
-                        | "off"
-                        | "Off"
-                        | "OFF"
-                ) =>
-        {
-            value.clone()
-        }
-        V::Text(value) => serde_json::to_string(value).unwrap(),
+    let text = match v {
+        V::Bool(value) => return value.to_string(),
+        V::Null => return "null".into(),
+        V::Integer(_) | V::Float(_) | V::NonFinite(_) => return v.python_str(),
+        V::Date(value) => value.as_str().to_owned(),
+        V::DateTime(value) => value.as_str().to_owned(),
         _ => v.python_str(),
+    };
+    if BARE_TEXT.is_match(&text) && history_yaml::resolve(&text) == "str" {
+        text
+    } else {
+        format!(
+            "\"{}\"",
+            text.replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+        )
     }
+}
+/// A value as it stands in a consolidation report line: its plain text with every run of
+/// whitespace one space, cut to 36 characters.
+fn short(v: &V) -> String {
+    let text = words(&v.python_str()).join(" ");
+    if text.chars().count() <= 36 {
+        text
+    } else {
+        text.chars().take(35).collect::<String>() + "…"
+    }
+}
+/// The words of a text split the way Python's `str.split()` splits it.
+fn words(text: &str) -> Vec<&str> {
+    text.split(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
+        .filter(|word| !word.is_empty())
+        .collect()
+}
+/// A plain number as Python's int or float reads it: Unicode decimal digits and leading
+/// zeros are accepted, and a decimal too large for a float reads as infinity.
+fn number(text: &str) -> Option<V> {
+    if !NUMBER.is_match(text) {
+        return None;
+    }
+    let ascii = history_yaml::numeric_text(text);
+    if ascii.contains('.') {
+        return ascii
+            .parse::<f64>()
+            .ok()
+            .map(|value| Scalar::from_float(value).value());
+    }
+    let integer = ascii.parse::<num_bigint::BigInt>().ok()?;
+    Integer::new(&integer.to_string()).ok().map(V::Integer)
+}
+/// What `set` makes of a value given on its command line: a plain number, true or false, and
+/// otherwise the text itself.
+fn typed(text: &str) -> V {
+    number(text).unwrap_or_else(|| match text {
+        "true" => V::Bool(true),
+        "false" => V::Bool(false),
+        _ => V::Text(text.into()),
+    })
 }
 fn refresh_line(
     id: &str,
@@ -133,35 +170,55 @@ fn refresh_line(
     recipe: &str,
     said: Option<&str>,
     today: &str,
-    record: &Path,
+    record: Option<&str>,
     holder: Option<&str>,
 ) -> String {
-    let text = value.python_str();
+    let text = match value {
+        V::Bool(value) => value.to_string(),
+        _ => value.python_str(),
+    };
     let reason = if text.starts_with('-') || text.contains(['\n', '\r']) {
         Some("a value shaped like an option or spanning lines is not carried by set".into())
-    } else if matches!(value, V::Text(_))
-        && (NUMBER.is_match(&text) || matches!(text.as_str(), "true" | "false" | "null"))
-    {
-        Some(format!(
-            "set would read {} as {}, which is not what was measured",
-            value.python_repr(),
-            text
-        ))
     } else {
-        None
+        // the write path reads its argument the way a command line does, so text that looks
+        // like a number or a boolean would be written as one - a different reading
+        let read = typed(&text);
+        (!crate::ordinary_value::python_equal(&read, value)).then(|| {
+            format!(
+                "set would read {} as {}, which is not what was measured",
+                V::Text(text.clone()).python_repr(),
+                scalar(&read)
+            )
+        })
     };
     if let Some(reason) = reason {
-        let shown = format!("'{}'", text.replace('\'', "''"));
-        return format!("edit it by hand in this pull request - {id}: v: {shown} - {reason}");
+        return format!(
+            "edit it by hand in this pull request - {id}: v: {} - {reason}",
+            V::Text(text).python_repr()
+        );
     }
+    let why = measured_by(recipe, said);
+    let mut parts = vec![
+        "kpop",
+        "set",
+        id,
+        text.as_str(),
+        "--why",
+        why.as_str(),
+        "--as-of",
+        today,
+    ];
+    if let Some(holder) = holder {
+        parts.extend(["--hypothesis", holder]);
+    }
+    parts.extend(record);
     format!(
-        "refresh: kpop set {id} {} --why {} --as-of {today}{} {}",
-        shell_quote(&text),
-        shell_quote(&measured_by(recipe, said)),
-        holder
-            .map(|name| format!(" --hypothesis {}", shell_quote(name)))
-            .unwrap_or_default(),
-        shell_quote(record.to_str().unwrap_or("GROUNDING.yaml"))
+        "refresh: {}",
+        parts
+            .into_iter()
+            .map(shell_quote)
+            .collect::<Vec<_>>()
+            .join(" ")
     )
 }
 fn executable(path: &Path) -> bool {
@@ -455,8 +512,8 @@ fn core_preview(
         let old = body.get("v").or_else(|| body.get("quoted")).unwrap();
         out.push(format!(
             "  {id}: {} -> {}, from {}",
-            scalar(old),
-            scalar(measured),
+            short(old),
+            short(measured),
             tree.name
         ));
         out.push(format!(
@@ -536,31 +593,65 @@ fn history_head_lines(
     }
     Ok((lines, bad))
 }
+/// The recipes the allowlist holds, read whole and refused whole before anything runs. The
+/// file is ordinary YAML - an alias repeats an argument written once - but a key written twice
+/// is refused, and every key must be a recipe name and every value a non-empty list of
+/// non-empty strings: the executable and its arguments, never a line for a shell.
 fn allowlist(path: &Path, display_name: &str) -> Result<BTreeMap<String, Vec<String>>> {
-    if !path.is_file() {
-        return Ok(BTreeMap::new());
-    }
-    let value = history_yaml::decode_document(&std::fs::read(path)?)?;
-    let map = hmap(&value)?;
+    let source = history_yaml::decode_unique_ordinary_source_value(&std::fs::read(path)?).map_err(
+        |error| {
+            Error(format!(
+                "refused - {display_name} does not read: {}",
+                error.0
+            ))
+        },
+    )?;
+    let pairs = match source {
+        Source::Scalar(Scalar::Finite(CV::Null)) => return Ok(BTreeMap::new()),
+        Source::Map(pairs) => pairs,
+        _ => {
+            return Err(Error(format!(
+                "refused - {display_name} is not a mapping of recipe names to argument lists"
+            )));
+        }
+    };
     let mut out = BTreeMap::new();
-    for (name, argv) in map {
-        require(
-            RECIPE_NAME.is_match(name),
-            &format!(
-                "refused - {display_name}:\n  '{name}' is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else"
-            ),
-        )?;
-        let values = hlist(argv)?
-            .iter()
-            .map(|v| htext(v).map(str::to_owned))
-            .collect::<Result<Vec<_>>>()?;
-        require(
-            !values.is_empty() && values.iter().all(|v| !v.is_empty() && !v.contains('\0')),
-            &format!(
-                "refused - {name}: a recipe is a non-empty list of non-empty strings - the executable and its arguments - never a line for a shell"
-            ),
-        )?;
-        out.insert(name.clone(), values);
+    let mut problems = Vec::new();
+    for (key, value) in pairs {
+        let Some(name) = key.text().filter(|name| RECIPE_NAME.is_match(name)) else {
+            problems.push(format!(
+                "{} is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else",
+                key.scalar().value().python_repr()
+            ));
+            continue;
+        };
+        let argv = match &value {
+            Source::List(items) if !items.is_empty() => items
+                .iter()
+                .map(|item| match item {
+                    Source::Scalar(Scalar::Finite(CV::Text(text)))
+                        if !text.is_empty() && !text.contains('\0') =>
+                    {
+                        Some(text.clone())
+                    }
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>(),
+            _ => None,
+        };
+        let Some(argv) = argv else {
+            problems.push(format!(
+                "{name}: a recipe is a non-empty list of non-empty strings - the executable and its arguments - never a line for a shell"
+            ));
+            continue;
+        };
+        out.insert(name.to_owned(), argv);
+    }
+    if !problems.is_empty() {
+        return Err(Error(format!(
+            "refused - {display_name}:\n  {}",
+            problems.join("\n  ")
+        )));
     }
     Ok(out)
 }
@@ -626,9 +717,13 @@ fn utc_day() -> String {
     chrono::Utc::now().date_naive().to_string()
 }
 fn parse_reading(out: &str, recorded: &V) -> Result<V> {
+    // the line breaks and the whitespace Python's splitlines() and strip() know
     let lines = out
-        .lines()
-        .map(str::trim)
+        .split([
+            '\n', '\r', '\u{b}', '\u{c}', '\u{1c}', '\u{1d}', '\u{1e}', '\u{85}', '\u{2028}',
+            '\u{2029}',
+        ])
+        .map(|line| line.trim_matches(|c: char| c.is_whitespace() || c == '\u{1f}'))
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
     require(
@@ -643,42 +738,22 @@ fn parse_reading(out: &str, recorded: &V) -> Result<V> {
         ),
     )?;
     let line = lines[0];
+    let shown = V::Text(line.into()).python_repr();
     match recorded {
         V::Bool(_) => match line {
             "true" => Ok(V::Bool(true)),
             "false" => Ok(V::Bool(false)),
             _ => Err(Error(format!(
-                "printed {line:?} where the record holds true or false"
+                "printed {shown} where the record holds true or false"
             ))),
         },
-        V::Integer(_) => {
-            if !NUMBER.is_match(line) {
-                Err(Error(format!(
-                    "printed '{}' where the record holds a number",
-                    line.replace('\'', "\\'")
-                )))
-            } else if line.contains('.') {
-                line.parse::<f64>()
-                    .map_err(|_| Error("nonfinite_float".into()))
-                    .and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float))
-            } else {
-                crate::value::Integer::new(line).map(V::Integer)
-            }
-        }
-        V::Float(_) | V::NonFinite(_) => {
-            if !NUMBER.is_match(line) {
-                Err(Error(format!(
-                    "printed '{}' where the record holds a number",
-                    line.replace('\'', "\\'")
-                )))
-            } else if line.contains('.') {
-                line.parse::<f64>()
-                    .map_err(|_| Error("nonfinite_float".into()))
-                    .and_then(|n| crate::value::FiniteFloat::new(n).map(V::Float))
-            } else {
-                crate::value::Integer::new(line).map(V::Integer)
-            }
-        }
+        V::Integer(_) | V::Float(_) | V::NonFinite(_) => match number(line) {
+            Some(V::NonFinite(_)) => Err(Error("nonfinite_float".into())),
+            Some(value) => Ok(value),
+            None => Err(Error(format!(
+                "printed {shown} where the record holds a number"
+            ))),
+        },
         _ => Ok(V::Text(line.into())),
     }
 }
@@ -776,19 +851,41 @@ fn measurement_declarations(base: &V, hypotheses: &V) -> Result<(NamedRecipes, V
 }
 
 pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
-    let record = options
-        .record
-        .clone()
-        .unwrap_or_else(|| cwd.join("GROUNDING.yaml"));
-    let record = if record.is_absolute() {
-        record
-    } else {
-        cwd.join(record)
-    }
-    .canonicalize()?;
+    let cwd = cwd.canonicalize()?;
+    let cwd = cwd.as_path();
+    // A record named on the command line keeps its spelling for the lines that print it;
+    // otherwise the record is the one every reader finds from here - up the tree, then the
+    // project's configured or registered location.
+    let (record, spelled) = match &options.record {
+        Some(given) => {
+            let spelled = given.to_string_lossy().into_owned();
+            if !(spelled.ends_with(".yaml") || spelled.ends_with(".yml")) {
+                return Ok(refusal(format!(
+                    "{spelled}: remeasure takes --run and a record file, nothing else"
+                )));
+            }
+            (
+                crate::source_inventory::absolute(&cwd.join(given))?,
+                Some(spelled),
+            )
+        }
+        None => (
+            public_workspace::records(cwd)?
+                .into_iter()
+                .next()
+                .ok_or_else(|| Error("record_required".into()))?,
+            None,
+        ),
+    };
+    // the record a refresh line names: set finds the entry file by that name itself
+    let shown_record = match &spelled {
+        Some(spelled) if spelled == "GROUNDING.yaml" => None,
+        Some(spelled) => Some(spelled.clone()),
+        None => Some(record.display().to_string()),
+    };
     let observed_day = utc_day();
     let runtime = public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None)?;
-    let capture = source_capture::capture_ordinary_source_with_runtime(
+    let capture = match source_capture::capture_ordinary_source_with_runtime(
         std::slice::from_ref(&record),
         cwd,
         if frozen {
@@ -798,7 +895,15 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         },
         None,
         runtime.as_ref(),
-    )?;
+    ) {
+        Err(error) if error.0 == "missing_record" => {
+            return Ok(refusal(format!(
+                "{}: no record here. Run this from the directory the record sits in, or name the record file as an argument.",
+                spelled.as_deref().unwrap_or("GROUNDING.yaml")
+            )));
+        }
+        capture => capture?,
+    };
     let capture = if capture.history_capture().is_some() {
         source_capture::capture_ordinary_source_with_runtime(
             std::slice::from_ref(&record),
@@ -909,24 +1014,23 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     let is_core = map(&capabilities)?
         .get("profile")
         .is_some_and(|value| value == &V::Text("core/v1".into()));
+    // the allowlist is read, and refused whole, before anything the record says is judged
+    let (allowlist_path, allowlist_name) = recipe_file(&record);
+    let allowlist_exists = allowlist_path.is_file();
+    let recipes = if allowlist_exists {
+        match allowlist(&allowlist_path, allowlist_name) {
+            Ok(recipes) => recipes,
+            Err(error) => return Ok(refusal(error.0)),
+        }
+    } else {
+        BTreeMap::new()
+    };
     if !problems.is_empty() {
         let mut lines = vec!["refused - the record names recipes it cannot: ".into()];
         lines.extend(problems.into_iter().map(|problem| format!("  {problem}")));
         return Ok(output(lines, 1));
     }
     let collections = crate::ordinary_fields::collections(&current)?;
-    let (allowlist_path, allowlist_name) = recipe_file(&record);
-    let allowlist_exists = allowlist_path.is_file();
-    let recipes = match allowlist(&allowlist_path, allowlist_name) {
-        Ok(recipes) => recipes,
-        Err(error) => {
-            return Ok(Output {
-                text: String::new(),
-                stderr: format!("{error}\n"),
-                code: 1,
-            });
-        }
-    };
     if named.is_empty() {
         let lines = if recipes.is_empty() {
             vec!["no measures beside the record - nothing to re-measure".into()]
@@ -939,7 +1043,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         };
         return Ok(output(lines, 0));
     }
-    let root = checkout_root(&record);
+    let root = checkout_root(&record.canonicalize().unwrap_or_else(|_| record.clone()));
     let cited = named.keys().cloned().collect::<Vec<_>>();
     if !allowlist_exists {
         return Ok(output(
@@ -983,11 +1087,18 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         let exe = resolve(&argv[0], &root)
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| format!("{} (not found)", argv[0]));
+        // each argument on one line and quoted for a shell, the whole cut at 90 characters:
+        // the plan names what runs, and the allowlist holds it whole
         let args = argv[1..]
             .iter()
-            .map(|v| shell_quote(v))
+            .map(|v| shell_quote(&words(v).join(" ")))
             .collect::<Vec<_>>()
             .join(" ");
+        let args = if args.chars().count() < 90 {
+            args
+        } else {
+            args.chars().take(90).collect::<String>() + " ..."
+        };
         out.push(format!(
             "  {} <- {}: {} {}",
             ids.join(", "),
@@ -996,11 +1107,16 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
             args
         ));
     }
-    for name in recipes
+    let unused = recipes
         .keys()
         .filter(|name| !named.contains_key(name.as_str()))
-    {
-        out.push(format!("  named by no entry, never run: {name}"));
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unused.is_empty() {
+        out.push(format!(
+            "  named by no entry, never run: {}",
+            unused.join(", ")
+        ));
     }
     if !options.run {
         out.extend([
@@ -1317,7 +1433,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
                     recipe,
                     said.as_deref(),
                     &today,
-                    &record,
+                    shown_record.as_deref(),
                     hypothesis_holder(id, doc, capture.hypotheses()).as_deref(),
                 )
             ));
@@ -1481,7 +1597,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
                     recipe,
                     said.as_deref(),
                     &today,
-                    &record,
+                    shown_record.as_deref(),
                     hypothesis_holder(id, doc, capture.hypotheses()).as_deref(),
                 )
             ));
@@ -1518,13 +1634,16 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     });
     Ok(output(out, code))
 }
+/// A word quoted for a POSIX shell exactly as Python's `shlex.quote` quotes it.
 fn shell_quote(value: &str) -> String {
-    if value
+    if value.is_empty() {
+        "''".into()
+    } else if value
         .chars()
-        .all(|c| c.is_ascii_alphanumeric() || "._/-".contains(c))
+        .all(|c| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c))
     {
         value.into()
     } else {
-        format!("'{}'", value.replace('\'', "'\\''"))
+        format!("'{}'", value.replace('\'', "'\"'\"'"))
     }
 }

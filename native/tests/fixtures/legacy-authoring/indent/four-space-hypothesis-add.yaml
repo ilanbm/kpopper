@@ -1,0 +1,14 @@
+hypothesis: {born: "2026-01-01"}
+
+judgments:
+    d.h:
+        verdict: other
+        rests_on: [api.limit]
+        wrong_if: "api.limit > 100"
+        seen: {api.limit: 10}
+
+    d.z:
+        verdict: x
+        rests_on: [api.limit]
+        wrong_if: "api.limit > 50"
+        seen: {api.limit: 10}

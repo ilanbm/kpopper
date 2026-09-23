@@ -682,188 +682,76 @@ assumptions remain explicit, and neither the count nor replay proves the synthes
 
 ## Get started
 
-Install kpopper where your agent works. The 0.9.0 release is the first native
-pre-1.0 series: the old Python package numbering is retained for legacy users and
-is not the source of the native version. The primary install is a prebuilt native
-bundle from the GitHub release; it includes `kpop` and the `kpopper` alias and
-needs no Python, Node or Rust at runtime. The release assets are named
-`kpopper-VERSION-TARGET.tar.gz` (Unix) or `.zip` (Windows).
+kpopper plugs into the agent you already work with, and the agent can follow the steps
+below itself. Send it this, then start a new session when it tells you to:
 
-Download `install.sh` (Unix) or `install.ps1` (Windows) from the
-[Latest GitHub release](https://github.com/ilanbm/kpopper/releases/latest).
-The installer downloads the matching archive for `linux-x86_64`, `linux-aarch64`,
-`darwin-arm64`, `darwin-x86_64` or `windows-x86_64` and verifies its SHA-256.
-On Unix:
-
-```sh
-sh install.sh --prefix "$HOME/.local"
+```text
+Dear agent, please install kpopper for yourself. Follow the steps for your kind
+of agent at https://github.com/ilanbm/kpopper#get-started, run what you can, and
+tell me what is left for me to do.
 ```
-
-On Windows:
-
-```powershell
-pwsh -File install.ps1 -Prefix "$HOME/.local"
-```
-
-These commands select the release marked Latest. To pin a release, add
-`--version VERSION` on Unix or `-Version VERSION` on Windows. Both installers also
-accept an explicit offline archive and checksum.
-The installer exposes the binaries under the selected `PREFIX/bin`.
-
-For a plugin checkout or cache, install the exact native runtime explicitly:
-
-```sh
-sh /absolute/path/to/kpopper/scripts/install_native.sh
-```
-
-On Windows, use the printed PowerShell command, which invokes `install.ps1` with
-`-PluginRoot`.
-
-Hooks never download a runtime. If the runtime is missing, the opener reports a
-diagnostic and the session can use the explicit Python compatibility mode below.
-
-### Python compatibility mode for Claude Code and Codex
-
-On macOS or Linux, install **Python 3.9+ with `venv` support**, then run this once
-on the machine where the hooks execute, under the same OS account as the host:
-
-```sh
-git clone https://github.com/ilanbm/kpopper.git "$HOME/kpopper"
-python3 "$HOME/kpopper/scripts/plugin_runtime.py" setup
-python3 "$HOME/kpopper/scripts/plugin_runtime.py" doctor
-```
-
-If you already have a checkout, use its absolute path instead. `setup` explicitly
-installs the [core dependencies](pyproject.toml) from PyPI into a private
-virtualenv under `~/.local/share/kpopper/runtimes/`. It works with externally managed
-Python installations: system packages are not modified. On Linux distributions that
-package `venv` separately, install that Python's `venv` support first.
-
-When `KPOPPER_RUNTIME=python` is set, the Claude Code and Codex hooks select this
-runtime, including after a plugin cache update. No activation or PATH change is
-needed. The hooks run code from their own installed plugin; this checkout only
-prepares dependencies. Hooks never create environments or install packages. A standalone `pipx` or `uv tool`
-installation supplies its own CLI environment and does not by itself repair hooks.
-
-`doctor` prints both the bootstrap Python and the selected hook Python. After installing
-the plugin below, confirm the opening's `KPOPPER_AGENT_CONTEXT.command` names that same
-hook Python and the active plugin's `scripts/cli.py`. Use that command for plugin work.
-If dependencies are missing or the private environment breaks, the opener prints the
-exact Python it tried and a quoted `setup` command for the active plugin. Run it in a
-terminal and start a new session. See [runtime troubleshooting](docs/plugin-runtime.md).
 
 ### Claude Code
-
-Install the plugin from the marketplace in a terminal with Claude Code installed:
 
 ```sh
 claude plugin marketplace add ilanbm/kpopper
 claude plugin install kpopper@kpopper --scope user
 ```
 
-Or run these inside Claude Code:
-
-```text
-/plugin marketplace add ilanbm/kpopper
-/plugin install kpopper@kpopper
-```
-
-Both install from this repository's marketplace. See
-[Claude's plugin installation guide](https://code.claude.com/docs/en/discover-plugins).
-The native runtime is installed into that plugin cache separately. Start a task and
-run the exact native installer command printed by the active plugin (PowerShell on
-Windows) if its opener reports the runtime missing. Set `KPOPPER_RUNTIME=python` only for the explicit
-source-only compatibility path described above.
+Inside Claude Code, `/plugin marketplace add ilanbm/kpopper` and `/plugin install kpopper@kpopper`
+do the same. Either way, the plugin arrives without its native runtime. Install it with
+`sh "<installPath>/scripts/install_native.sh"`, taking `installPath` from kpopper's entry in
+`claude plugin list --json` ([on Windows](docs/plugin-runtime.md#install-the-native-runtime)),
+then start a new session.
 
 ### Codex
-
-Install the plugin in a terminal on the machine where Codex runs:
 
 ```sh
 codex plugin marketplace add ilanbm/kpopper
 codex plugin add kpopper@kpopper
 ```
 
-Start a new Codex task after installation. If its opener reports the native runtime
-missing, run the exact native installer command printed for the active plugin cache
-(PowerShell on Windows), then start a new task. A native CLI installed globally is not used by
-plugin hooks. Review the plugin's hook definitions when prompted; hook trust is separate
-from installation. See [Codex setup and behavior](adapters/codex/README.md)
-and [OpenAI's plugin guide](https://learn.chatgpt.com/docs/plugins).
+Install the native runtime with `sh "<plugin root>/scripts/install_native.sh"`, using the
+plugin root that `codex plugin add` prints ([on Windows](docs/plugin-runtime.md#install-the-native-runtime)).
+Then start a new task and trust kpopper's hooks when Codex asks, or in `/hooks`. See
+[Codex setup and behavior](adapters/codex/README.md).
 
 ### Claude Cowork
 
-Open **Customize → Plugins → Add marketplace**, enter `ilanbm/kpopper`, then install
-**kpopper** from that marketplace. This uses the same Claude plugin package.
-[Cowork's installation guide](https://claude.com/docs/cowork/guide/plugins) describes the
-repository import and component controls.
+Install it in the app: open **Customize → Plugins → Add marketplace**, enter `ilanbm/kpopper`,
+then install **kpopper**. Cowork runs tasks in its own environment, where kpopper has not yet
+been verified end to end; see the [Cowork notes](adapters/claude-cowork/README.md).
 
 ### ChatGPT Work
 
-**Workspace import is supported by the platform; kpopper's full Work runtime is not yet
-validated.** A workspace administrator can open **Admin → Plugins → Add → Import marketplace**,
-enter `https://github.com/ilanbm/kpopper` as the source and leave **Path** empty. Once the
-plugin is available to the workspace, install it from **Plugins** and start a new Work
-conversation. The repository uses a
-[supported marketplace format](https://learn.chatgpt.com/docs/enterprise/plugin-management).
-
-The scripts, Python dependencies and persistent project record must also be accessible in
-Work's execution environment. Installing a plugin through the web does not deploy local
-hook scripts. See [Work setup and current limits](docs/chatgpt-work.md) before relying on
-automatic opening or background delivery.
+A workspace administrator imports it from **Admin → Plugins → Add → Import marketplace**, with
+`https://github.com/ilanbm/kpopper` as the source and **Path** left empty; members then install
+it from **Plugins**. kpopper's runtime in Work is not yet validated; see
+[Work setup and current limits](docs/chatgpt-work.md).
 
 ### Other agents
 
-Clone the repository to a location where it can remain available:
+Clone the repository where it can stay (`git clone https://github.com/ilanbm/kpopper.git`),
+then follow the adapter for your agent:
+[Cursor](adapters/cursor/README.md#install-the-project-adapter) ·
+[Gemini CLI](adapters/gemini/README.md#install) ·
+[Windsurf](adapters/windsurf/README.md#install) ·
+[GitHub Copilot](adapters/copilot/README.md#install) ·
+[OpenClaw](adapters/openclaw/README.md#install) ·
+[OpenCode](adapters/opencode/README.md#install).
+Add to the agent's existing configuration rather than replacing it. What runs automatically
+differs by agent; see the [capability matrix](adapters/README.md#capability-matrix) and
+[verification status](docs/compatibility.md).
 
-```sh
-git clone https://github.com/ilanbm/kpopper.git
-```
+### After installing
 
-Then follow the adapter for the host:
+In Claude Code and Codex, kpopper opens with each new session. Installing creates no record;
+your agent starts `GROUNDING.yaml` when it records the first finding worth keeping (on native
+Windows, under WSL). To start from what already exists, ask your agent to map the project.
+The native runtime needs no Python, Node, Rust or Lean toolchain.
 
-| Agent | Install path |
-|---|---|
-| [Cursor](adapters/cursor/README.md#install-the-project-adapter) | Install the rule and hook wrappers in the project's `.cursor` directory. |
-| [Gemini CLI](adapters/gemini/README.md#install) | Run `gemini extensions link ./kpopper/adapters/gemini` from the directory where the clone was created. |
-| [Windsurf](adapters/windsurf/README.md#install) | Install the Cascade rule and optional write hook. |
-| [GitHub Copilot](adapters/copilot/README.md#install) | Use the CLI hook bridge, or the separate instructions for VS Code and the cloud agent. |
-| [OpenClaw](adapters/openclaw/README.md#install) | Link the full repository as a bundle and install the Python runtime; skills load, while opening and checking use explicit commands. |
-| [OpenCode](adapters/opencode/README.md#install) | Load the canonical skills through `skills.paths` and the shared method through `instructions`. |
-
-Keep existing host configuration when adding an adapter. Each guide describes its paths
-and limitations; automatic opening and stop behavior differ by host. See the
-[capability matrix](adapters/README.md#capability-matrix) and
-[verification status](docs/compatibility.md) for the comparison.
-
-### Start working
-
-The native CLI and hooks need no Python, Node or Rust at runtime. Source builds use
-Cargo and the documented reasoning resources. The source-only Python implementation
-needs **Python 3.9+** and the [package dependencies](pyproject.toml); use it only
-with `KPOPPER_RUNTIME=python` and follow the [compatibility setup](#python-compatibility-mode-for-claude-code-and-codex).
-
-New records use the packaged native reasoning runtime; you do not need to install the Lean
-development toolchain. The optional [checked-session mode](docs/checked-sessions.md)
-and [HTML applications](#experimental-applications) have their own setup.
-In a new agent session with the project open, start with:
-
-> Use kpopper to keep this project's reasoning across sessions. If a record exists, open it
-> and show what needs review. As we work, preserve the useful findings, sources, decisions
-> and conditions that would make those decisions worth reconsidering.
-
-Installation creates no record. Start with the first finding worth carrying into another
-session. On macOS/Linux or WSL, the first `kpop add` creates a record with `core/v1`
-reasoning and immutable history. Existing legacy records keep their interpretation
-until explicitly adopted. A one-off question may need no record at all.
-
-Keep useful findings within the existing schema and your write permissions. The
-[recording guidance](skills/record/SKILL.md#record-what-the-work-calls-for) includes an
-internal check before implementation or handoff, reusing existing entries and respecting
-explicit read-only instructions.
-
-For a standalone CLI installation and a walkthrough of the launch-party example, see
-[Try it from the command line](docs/reference.md#try-it-from-the-command-line).
+[Use the command line without an agent](docs/reference.md#try-it-from-the-command-line) ·
+[Python compatibility mode and troubleshooting](docs/plugin-runtime.md)
 
 ## Quick reference
 
@@ -885,6 +773,7 @@ resulting `kpop` binary. For plugin work, use the command supplied by the sessio
 | `kpop where` | Locate this project's record |
 | `kpop open` | Open the current context and attention items |
 | `kpop pull <id>` | Retrieve a subject, its sources and reasons |
+| `kpop context <id>` | Read records with their declared dependencies and checks; use `--direction impact` for dependents |
 | `kpop search "terms"` | Find matching claims and local source passages |
 | `kpop affects <id>` | Trace what depends on a premise |
 | `kpop check` | Check recorded conditions and changed premises |
@@ -925,7 +814,7 @@ See the [command reference](docs/reference.md), [history commands](docs/history-
 | Command | Skill | What happens in practice · possible CLI calls |
 | --- | --- | --- |
 | `/kpopper:kpopper` | [kpopper](skills/kpopper/SKILL.md) | Explains the method and chooses the workflow that fits the task. CLI calls follow the selected workflow. |
-| `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Retrieves relevant claims, sources and dependencies before answering, and checks what needs review.<br>May use `kpop pull <id>`, `kpop affects <id>`, `kpop check` or `kpop search "terms"`. |
+| `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Finds relevant IDs, then prefers `kpop context <id>` for records with dependencies and checks.<br>Uses `pull` for concise readings or when the checked reader is unavailable, and `affects` for changed inputs. |
 | `/kpopper:record` | [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. |
 | `/kpopper:map` | [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. |
 | `/kpopper:consolidate` | [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. |

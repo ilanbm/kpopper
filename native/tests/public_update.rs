@@ -163,7 +163,7 @@ fn empty_schema_collections_accept_the_first_batch_update() {
 }
 
 #[test]
-fn no_schema_custom_value_collection_stays_unreadable() {
+fn no_schema_custom_value_collection_accepts_its_first_reading() {
     let temp = tempfile::tempdir().unwrap();
     let entry = temp.path().join("GROUNDING.yaml");
     fs::write(
@@ -171,12 +171,52 @@ fn no_schema_custom_value_collection_stays_unreadable() {
         "evidence:\n  s.old: {file: old.txt, read: 2026-09-01}\nparameters:\n  p.existing: {v: 1}\n",
     )
     .unwrap();
+    let output = run(
+        temp.path(),
+        &temp.path().join("state"),
+        &json!({
+            "event_id":"custom-values", "date":"2026-09-20", "source_quote":"price 12",
+            "source":"s.old", "at":"entire captured report", "record_sha256":hash(&entry),
+            "updates":[{"kind":"add","id":"p.price","body":{"v":12}}],
+        }),
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(receipt["state"], "applied");
+    let saved = fs::read_to_string(&entry).unwrap();
+    let parameters = saved.split("parameters:\n").nth(1).unwrap();
+    assert!(parameters.starts_with("  p.existing: {v: 1}\n"), "{saved}");
+    assert!(
+        parameters
+            .lines()
+            .any(|line| line.starts_with("  p.price: {") && line.contains("v: 12")),
+        "{saved}"
+    );
+    assert!(!saved.contains("known:"));
+    assert!(!saved.contains("judgments:"));
+}
+
+#[test]
+fn no_schema_judgment_in_custom_field_names_stays_unreadable() {
+    let temp = tempfile::tempdir().unwrap();
+    let entry = temp.path().join("GROUNDING.yaml");
+    fs::write(
+        &entry,
+        "evidence:\n  s.old: {file: old.txt, read: 2026-09-01}\nparameters:\n  p.existing: {v: 1}\nclaims:\n  c.budget: {depends: p.existing, conclusion: the price fits, falsified_when: p.existing > 3}\n",
+    )
+    .unwrap();
     let before = fs::read(&entry).unwrap();
     let output = run(
         temp.path(),
         &temp.path().join("state"),
         &json!({
-            "event_id":"ambiguous-custom", "date":"2026-09-20", "source_quote":"price 12",
+            "event_id":"custom-judgment", "date":"2026-09-20", "source_quote":"price 12",
             "source":"s.old", "at":"entire captured report", "record_sha256":hash(&entry),
             "updates":[{"kind":"add","id":"p.price","body":{"v":12}}],
         }),

@@ -964,6 +964,14 @@ sources:
     of: "The two contributions giving api.limit 10 and 11 against a record whose d.x falls above 10
          were the worked example"
     read: "2026-09-23"
+  s.2026_09_23_readme_get_started:
+    name: "README Get started built on one instruction to the agent"
+    asked: "Paraphrased maintainer request: the Get started section is built wrong. Start it with a
+            short paragraph and go straight to Claude Code and the other agents, and base it on one
+            concise instruction to the agent, perhaps beginning Dear agent."
+    of: "Request of 2026-09-23 about the section at 59e4322, which opened with standalone bundle
+         installation and Python compatibility mode before the steps for each agent."
+    read: "2026-09-23"
   s.2026_09_23_readme_section_names:
     name: "The README says what known and judgments hold where a reader first meets them"
     asked: "Paraphrased maintainer questions: are judgments and known part of GROUNDING.yaml, or
@@ -991,6 +999,28 @@ sources:
          empty baseline put in its place, both prompt-context hooks reported the assessment
          unavailable on every prompt, and once the record read again the native one reported the
          judgment's existing failure as the session's own."
+  s.2026_09_23_young_record_sections:
+    name: "A record's own section names hold before its first judgment"
+    asked: "Paraphrased maintainer request: shape.md and the README say section names are a
+            recommendation, yet a record with no judgment yet that keeps its values under facts: is
+            refused - check reports that no dependency field was found, and add cannot write the
+            record's first judgment - while the same record under known: reads. Reproduce it on main
+            and put the choice to the maintainer: read such sections by the shape of their entries in
+            both runtimes, or keep the refusal with a message naming the schema block and document
+            the limit. Then keep the two runtimes in parity, add a regression test, record the
+            outcome and open a pull request."
+    of: "Reproduced on a1e8ac4: the Python reader and a native build both refused a record of
+         sources and facts (exit 1) and read the same record under known: (0 judgments, 3 entries); a
+         schema naming only deps did not help, and one naming all three roles did. Both test suites
+         pinned the refusal on purpose. Tried on fourteen young records in both runtimes, reading a
+         section by its entries - each a value (a bare scalar, or v, quoted or rule) or a source -
+         read the records built that way and still refused every shape of misspelled dependency; the
+         one shape it newly reads that could hide a judgment, an entry holding v with a single-string
+         dependency under a field the reader does not know, is one known: already read. The
+         maintainer chose reading by shape. Review then found that the Python fallback dropped the
+         roles a partial schema declares, so a first judgment it wrote carried seen: where the schema
+         named another snapshot field and checked as never compared; it now keeps them, as native
+         does."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1377,6 +1407,16 @@ sources:
     url: "https://claude.ai/code/artifact/cbd80bb7-da50-4486-a74f-1927e51aaa34"
     name: "איך סוכן מתחיל גרף - the practical appendix"
     read: "2026-09-01"
+  run.agent_installs_itself:
+    name: "Codex sessions given the README's instruction, installing kpopper for themselves"
+    v: "3 of 3 sessions read the section, ran codex plugin marketplace add, codex plugin add and the
+        plugin's install_native.sh, checked kpop, and ended by telling the reader to start a new task
+        and trust the hooks. None wrote to the workspace or created a record."
+    from: s.2026_09_23_readme_get_started
+    at: "codex exec with one model at medium effort, each session in an empty workspace with its own
+         CODEX_HOME, a workspace-write sandbox with network and web search off; the prompt was the
+         README's instruction verbatim, its URL pointing at this change's README before merge"
+    of: "2026-09-23; 137k to 225k input and 2k to 3k output tokens a session"
   run.blocked_on_read:
     name: "Every blocked_on in this record, read for which meaning it carries - a predicate that
            cannot be evaluated, or the sign that would re-open a decision"
@@ -1596,6 +1636,19 @@ sources:
     of: "2026-09-03, on the record after the move: the count written as decided while already stale,
          then re-measured with seen left as it was, then seen refreshed by hand"
     read: "2026-09-03"
+
+  run.plugin_arrives_without_runtime:
+    name: "What a fresh kpopper 0.9.0 plugin installation holds, and what its opener says without
+           the runtime"
+    v: "claude plugin install and codex plugin add each left a plugin root with no scripts/runtime.
+        The opener then exited 0 with empty standard output and wrote its install command only to
+        standard error. After scripts/install_native.sh in that root, the opener in an empty project
+        printed first-use guidance and KPOPPER_AGENT_CONTEXT."
+    from: s.2026_09_23_readme_get_started
+    at: "An isolated CLAUDE_CONFIG_DIR and CODEX_HOME in a scratch directory; installPath taken from
+         claude plugin list --json and the plugin root from the output of codex plugin add;
+         scripts/session_open.sh --host claude run with a SessionStart payload in an empty project"
+    of: "2026-09-23, marketplace ilanbm/kpopper at 59e4322 and release 0.9.0 on darwin-arm64"
 
   run.prefix_survey:
     name: "The prefixes of the records read side by side - this record and its first version, two
@@ -2135,6 +2188,16 @@ known:
     at: "contested, and the opener's standing line; the dry run's report and the page's arrangement
          note say the word of the door's refusal and of a question - the same rival claim"
     of: "2026-09-04"
+  p.context_command:
+    name: "Direct graph-context command"
+    v: "Native kpop context and the explicit Python compatibility dispatcher read exact records with
+        declared dependencies and checks. They default to the current revision, support depth 1 and
+        2000 tokens; explicit revisions retain stale-input refusal. The session context transport
+        spelling remains supported. Private cache access is required and --state can select a
+        writable private directory."
+    from: doc.checked_retrieval
+    at: "docs/retrieval.md, Read a declared neighborhood"
+    of: "2026-09-22"
   p.contributor_session_test_setup:
     name: "Cached kernel and optional dependencies for checked-session tests"
     v: "A matching cached kernel from session setup enables kernel-backed integration tests; Lean on
@@ -5491,6 +5554,39 @@ judgments:
                                  decision and review conditions clarify the product, and where should
                                  that illustration appear? A separate local SVG/PNG concept was
                                  produced; it is not adopted into the README."
+  d.readme_get_started_is_one_instruction:
+    name: "Get started is one instruction the reader sends to their agent"
+    verdict: "Open Get started with a short paragraph and one instruction, beginning Dear agent,
+              that asks the reader's agent to install kpopper for itself from the section's own
+              steps. The steps for each agent follow at once; the Claude Code and Codex steps install
+              the plugin's native runtime directly. Standalone CLI installation lives in the command
+              reference and Python compatibility setup in the plugin runtime guide."
+    because: "The maintainer asked for a short opening that reaches the agents at once and rests on
+              one concise instruction to the agent. The Claude Code and Codex plugin commands and the
+              plugin's install_native.sh run without interaction, and three Codex sessions given the
+              instruction completed them unaided; Cowork and Work install in their own apps, which
+              the instruction covers by asking the agent to say what is left. A plugin installs
+              without its native runtime and the opener reports that only on standard error, so
+              waiting for the opener to report it leaves a session that opens silently."
+    rests_on: [s.2026_09_23_readme_get_started, run.plugin_arrives_without_runtime, run.agent_installs_itself]
+    reopened_by: "An agent in Claude Code or Codex given the instruction ends without the plugin and
+                  its runtime installed, a reader who wants to install by hand cannot find the
+                  commands, or a plugin installation starts to carry its native runtime so the
+                  separate step is no longer needed."
+    from: s.2026_09_23_readme_get_started
+    seen:
+      s.2026_09_23_readme_get_started: "read 2026-09-23"
+      run.plugin_arrives_without_runtime: "claude plugin install and codex plugin add each left a
+                                           plugin root with no scripts/runtime. The opener then
+                                           exited 0 with empty standard output and wrote its install
+                                           command only to standard error. After
+                                           scripts/install_native.sh in that root, the opener in an
+                                           empty project printed first-use guidance and
+                                           KPOPPER_AGENT_CONTEXT."
+      run.agent_installs_itself: "3 of 3 sessions read the section, ran codex plugin marketplace
+                                  add, codex plugin add and the plugin's install_native.sh, checked
+                                  kpop, and ended by telling the reader to start a new task and trust
+                                  the hooks. None wrote to the workspace or created a record."
   d.readme_illustration_reading_order:
     name: "Show the process before the takeaway"
     from: s.2026_09_18_illustration_titles
@@ -7186,6 +7282,35 @@ judgments:
                           person; only a predicate that holds fails the build"
       d.page_reads_only: "the page is a reading surface - no write path, nothing a hand does to it
                           is kept; a trial value that persists nothing is a way of reading the reach"
+  d.young_sections_read_by_shape:
+    name: "A young record's sections are read by what their entries are"
+    verdict: "Before a record's first judgment, a section under a name of the record's own reads as
+              known: does when every entry in it is a value - a bare scalar, or v, quoted or rule -
+              or a source. Judgment fields, a dependency list naming what is not an entry, or an
+              entry that is neither still refuse the record. Both runtimes read it the same way."
+    because: "The method says section and field names are a recommendation, and once a record holds
+              a judgment its section names never mattered; a young record was the one place they did.
+              The name was not what caught a misspelled dependency declaration: the refusals that
+              catch one - a judgment's own fields, a list naming what is not an entry, a
+              judgment-like entry that holds no value - are shapes, and they still apply in every
+              section. A bare scalar counts as a value because add <id> <value> writes one into the
+              section its prefix already holds, and it declares nothing. The one shape newly read
+              that could hide a judgment, an entry holding v whose dependency is a single string
+              under a field the reader does not know and which carries no judgment field, was already
+              read as a value under known: and in every record that holds a judgment."
+    rests_on: [d.shape_is_read_not_declared]
+    reopened_by: "A judgment in a record with no judgment yet is found to have been read as a plain
+                  value - an entry holding v that named what it rests on in one string under a field
+                  the reader does not know - after a decision was taken on it."
+    from: s.2026_09_23_young_record_sections
+    seen:
+      d.shape_is_read_not_declared: "what the record's physical form is - its files and shards, the
+                                     field each role is read from, its sidecars, the stores derived
+                                     from it and what reads it - is computed by a read command
+                                     whenever asked and never kept as a declaration; the only
+                                     declared parts are the choices no shape can infer, each a
+                                     judgment with a sign, and the bindings of one machine, which
+                                     stay in that machine's state"
   v.three_occasions:
     rests_on: [s.2026_09_01_consolidation, s.2026_09_02_priors, s.2026_09_03_coverage,
                s.2026_09_03_hypotheses, s.2026_09_03_language, s.2026_09_03_written_layer,
