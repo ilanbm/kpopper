@@ -1,7 +1,9 @@
 """CI runs the lanes a change reads, from the entire PR, and every tracked file feeds a declared lane."""
 import importlib.util
 import json
+import os
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -292,6 +294,87 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual(job["if"], "needs.changes.outputs.rust == 'true'")
         self.assertIn("without-darwin-x86_64", job["with"]["target"])
         self.assertIn("needs.changes.outputs.platforms == 'all'", job["with"]["target"])
+
+    def native_matrix(self, job):
+        """A native job's platform rows, by the `target` input that selects them."""
+        rows, target = {}, "all"
+        for text in self.jobs("native-rust.yml")[job]["strategy"]["matrix"]["include"].split("'")[1::2]:
+            if text.startswith("["):
+                rows[target], target = json.loads(text), "all"
+            else:
+                target = text
+        return rows
+
+    def test_native_release_of_the_pull_request_subset_runs_on_linux_x86_64_alone(self):
+        tests, release = self.native_matrix("tests"), self.native_matrix("release")
+        self.assertEqual(set(tests), {"all", "without-darwin-x86_64", "windows-x86_64"})
+        self.assertEqual(set(release), set(tests))
+        self.assertEqual(tests["without-darwin-x86_64"],
+                         [row for row in tests["all"] if row["target"] != CI.INTEL_MACOS])
+        self.assertEqual(release["all"], tests["all"])
+        self.assertEqual(release["windows-x86_64"], tests["windows-x86_64"])
+        self.assertEqual(release["without-darwin-x86_64"],
+                         [row for row in tests["all"] if row["target"] == "linux-x86_64"])
+
+    def test_native_jobs_repeat_one_setup_and_keep_their_own_cache(self):
+        jobs = self.jobs("native-rust.yml")
+
+        def setup(job):
+            steps = [step for step in jobs[job]["steps"] if not step.get("uses", "").startswith("actions/cache/")]
+            last = [step.get("name") for step in steps].index("Prepare resources for native integration tests")
+            return steps[:last + 1]
+
+        self.assertEqual(setup("tests"), setup("release"))
+        self.assertIn("native-source", [step.get("id") for step in setup("tests")])
+        for key in ("runs-on", "env"):
+            self.assertEqual(jobs["tests"][key], jobs["release"][key])
+        for job, profile in (("tests", "native/target/debug"), ("release", "native/target/release")):
+            cached = [tuple(step["with"]["path"].split()) for step in jobs[job]["steps"]
+                      if step.get("uses", "").startswith("actions/cache/")]
+            self.assertEqual(cached, [("~/.cargo/registry/index", "~/.cargo/registry/cache", profile)] * 2, job)
+
+    def test_native_steps_read_only_the_steps_of_their_own_job(self):
+        # A condition naming a step of another job reads nothing, and its step silently skips.
+        for name, job in self.jobs("native-rust.yml").items():
+            earlier = set()
+            for step in job["steps"]:
+                for read in re.findall(r"steps\.([\w-]+)\.", json.dumps(step)):
+                    with self.subTest(job=name, step=step.get("name"), reads=read):
+                        self.assertIn(read, earlier)
+                earlier.add(step.get("id"))
+
+    def test_native_release_is_built_accepted_packaged_and_uploaded_in_one_job(self):
+        # Publication takes the crate and the distributions this job uploads, never another job's build.
+        chain = ["native-release", "native-crate", "verified-crate", "native-bundle", "native-notices",
+                 "native-acceptance", "native-bundle-${{ matrix.target }}", "native-distribution",
+                 "native-distribution-${{ matrix.target }}"]
+        for name, job in self.jobs("native-rust.yml").items():
+            marks = [step.get("id") or (step.get("with") or {}).get("name") for step in job["steps"]]
+            with self.subTest(job=name):
+                self.assertEqual([mark for mark in marks if mark in chain], chain if name == "release" else [])
+
+    def test_native_verdict_requires_each_job_to_end_as_the_validation_requires(self):
+        jobs = self.jobs("native-rust.yml")
+        self.assertEqual(jobs["tests"]["if"], "inputs.validation != 'distribution'")
+        self.assertNotIn("if", jobs["release"])
+        verdict = jobs["verdict"]
+        self.assertEqual((verdict["needs"], verdict["if"]), (["tests", "release"], "always()"))
+        [step] = verdict["steps"]
+        self.assertEqual(step["shell"], "bash")
+        names = {value: name for name, value in step["env"].items()}
+        validation = names["${{ inputs.validation || 'full' }}"]
+        tests, release = names["${{ needs.tests.result }}"], names["${{ needs.release.result }}"]
+        results = ("success", "failure", "cancelled", "skipped")
+        for mode in ("full", "final-fixes", "hooks", "distribution"):
+            required = "skipped" if mode == "distribution" else "success"
+            for tested in results:
+                for released in results:
+                    environment = dict(os.environ, **{validation: mode, tests: tested, release: released})
+                    run = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
+                                         env=environment, capture_output=True, text=True)
+                    with self.subTest(validation=mode, tests=tested, release=released):
+                        self.assertEqual(run.returncode == 0, (tested, released) == (required, "success"),
+                                         run.stdout)
 
     def test_shards_cover_supported_interpreters_and_docs_avoid_extra_machines(self):
         rows = CI.test_matrix(CI.select(["scripts/cli.py"]))["include"]
