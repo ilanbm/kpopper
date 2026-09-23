@@ -107,6 +107,18 @@ where the validation requires it: a publish run skips the tests and requires the
 and every other validation requires both. Without it, a job skipped inside the native
 workflow would leave `ci-required` green.
 
+The `tests` job runs every native test in one pool with nextest, which schedules the tests of
+all the test binaries together, where `cargo test` runs the binaries one after another and a
+binary holding one slow test leaves the other cores idle. nextest is pinned to one version in
+the workflow, and each platform's archive is checked against the sha256 written there before
+it is unpacked. The run never retries a test, because a test that passes on a second attempt
+would turn a failing run green; `native/.config/nextest.toml` reports a test still running
+after a minute and stops one after ten, so a hang fails under its own name. The job keeps the
+run's JUnit report, with each test's outcome and duration, in its evidence. A standing step
+compares nextest's listing with cargo's own, so the run covers exactly the tests that
+`cargo test` runs. nextest does not run doc-tests: the crate has none, and a contract test
+fails when one appears until the workflow also runs `cargo test --doc`.
+
 The native command's compiled Rust dependencies are cached per target and build profile.
 The `tests` job restores and saves the test build's entry, and the `release` job the
 release build's, so each job of a check run or a publish run restores only what its own

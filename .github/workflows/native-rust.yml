@@ -190,7 +190,49 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_HISTORY_GROUP_FIXTURE=' + str(fixture) + '\n')
           (temporary/'native-evidence'/'python-group-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
+      # nextest runs every test of every test binary in one pool, where cargo test runs the
+      # binaries one after another. The archive of the pinned release is checked against the
+      # sha256 GitHub recorded for it before anything is extracted.
+      - name: Install cargo-nextest at its pinned version
+        if: inputs.validation != 'distribution'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=0.9.146
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Linux/X64) asset=cargo-nextest-0.9.146-x86_64-unknown-linux-gnu.tar.gz sha256=682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428 ;;
+            Linux/ARM64) asset=cargo-nextest-0.9.146-aarch64-unknown-linux-gnu.tar.gz sha256=b2e33d7c72de7ade0ff7b3a948ac37516b24f8a836b7a8870c1f634a94be9de9 ;;
+            macOS/ARM64 | macOS/X64) asset=cargo-nextest-0.9.146-universal-apple-darwin.tar.gz sha256=39785160b3c2f6ed9a765049cf4fa79f3b39aa02eb7598a5a0e2a1a0b9ffb9a8 ;;
+            Windows/X64) asset=cargo-nextest-0.9.146-x86_64-pc-windows-msvc.tar.gz sha256=809b01f2c94d031ab6cf5f4d4a4f477c8f51b69c96ab3cb2fe4db7ecb222d0d3 ;;
+            *)
+              echo "::error::No cargo-nextest archive is pinned for $RUNNER_OS/$RUNNER_ARCH." >&2
+              exit 1
+              ;;
+          esac
+          directory="$RUNNER_TEMP/cargo-nextest"
+          mkdir -p "$directory/bin"
+          # Inside it, with relative names: GNU tar on Windows takes "D:\..." for a remote host.
+          cd "$directory"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
+            --output "$asset" "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$version/$asset"
+          if [ "$RUNNER_OS" = macOS ]; then
+            actual=$(shasum -a 256 "$asset")
+          else
+            actual=$(sha256sum "$asset")
+          fi
+          actual=${actual%% *}
+          if [ "$actual" != "$sha256" ]; then
+            echo "::error::$asset has sha256 $actual, not the pinned $sha256." >&2
+            exit 1
+          fi
+          tar -xzf "$asset" -C bin
+          bin/cargo-nextest nextest --version
+          if [ "$RUNNER_OS" = Windows ]; then
+            directory=$(cygpath -m "$directory")
+          fi
+          echo "$directory/bin" >> "$GITHUB_PATH"
       - name: Test the native implementation (${{ inputs.validation || 'full' }})
+        id: native-tests
         if: inputs.validation != 'distribution'
         working-directory: native
         shell: bash
@@ -203,15 +245,19 @@ jobs:
           {
             case "$KPOPPER_CI_VALIDATION" in
               full)
-                cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3'
+                cargo nextest run --locked --no-fail-fast --profile ci
                 ;;
               hooks)
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test host_hooks --test cli_alias
+                cargo nextest run --locked --no-fail-fast --profile ci --test host_hooks --test cli_alias
                 ;;
               final-fixes)
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib store::locking_tests
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib ingestion_orchestration::tests
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test cli --test public_update --test public_ingestion --test ingestion_hooks
+                # Name filters match as substrings, as cargo test's do.
+                # Each run rewrites the JUnit report, so the earlier two are kept under their own names.
+                cargo nextest run --locked --no-fail-fast --profile ci --lib store::locking_tests
+                cp target/nextest/ci/junit.xml "$RUNNER_TEMP/native-evidence/junit-store-locking.xml"
+                cargo nextest run --locked --no-fail-fast --profile ci --lib ingestion_orchestration::tests
+                cp target/nextest/ci/junit.xml "$RUNNER_TEMP/native-evidence/junit-ingestion-orchestration.xml"
+                cargo nextest run --locked --no-fail-fast --profile ci --test cli --test public_update --test public_ingestion --test ingestion_hooks
                 ;;
               *)
                 echo "Unsupported validation scope: $KPOPPER_CI_VALIDATION" >&2
@@ -219,6 +265,28 @@ jobs:
                 ;;
             esac
           } 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
+      - name: Keep each test's outcome and duration with the evidence
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          KPOPPER_CI_TEST_OUTCOME: ${{ steps.native-tests.outcome }}
+        run: |
+          report=native/target/nextest/ci/junit.xml
+          if [ -f "$report" ]; then
+            cp "$report" "$RUNNER_TEMP/native-evidence/junit.xml"
+          elif [ "$KPOPPER_CI_TEST_OUTCOME" = success ]; then
+            echo "::error::The tests passed but wrote no JUnit report at $report." >&2
+            exit 1
+          else
+            echo "The test run wrote no JUnit report."
+          fi
+      # The pool holds what nextest lists. This compares that listing with cargo's own, from the
+      # build the full run made, so a test cargo would run cannot drop out of the pool unseen.
+      - name: Nextest selects exactly the tests cargo runs
+        if: env.KPOPPER_CI_VALIDATION == 'full'
+        working-directory: native
+        shell: bash
+        run: python ci/nextest_listing.py --locked
       - name: Compare ingestion and branch commands with the pinned Python reference
         if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' && inputs.validation != 'hooks' }}
         shell: bash

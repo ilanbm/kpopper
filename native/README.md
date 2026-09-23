@@ -45,6 +45,10 @@ Development and test builds optimize SHA-256 hashing because launcher attestatio
 verifies complete executable and runtime artifacts within a bounded deadline.
 Run validation separately from other compilation jobs to avoid resource contention.
 
+`cargo test` stays the command for running the tests locally. CI runs the same tests through
+nextest, in one pool across all the test binaries, with the `ci` profile of
+`.config/nextest.toml`: `cargo nextest run --locked --profile ci` runs them as CI does.
+
 The full integration suite needs the same verified reasoning resources as a runtime
 bundle. For a macOS ARM64 bundle, run (use its matching target directory elsewhere):
 
