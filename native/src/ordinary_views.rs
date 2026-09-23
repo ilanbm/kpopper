@@ -284,6 +284,50 @@ impl<'a> World<'a> {
         Ok((hit, moved, derived))
     }
 }
+/// Hypotheses in the shape every reader takes them: each with its `document` and the ids
+/// its collections hold.
+fn normalized(hypotheses: &Map) -> Result<Map> {
+    hypotheses
+        .iter()
+        .map(|(name, h)| {
+            let mut h = map(h)?.clone();
+            let doc = h
+                .get("document")
+                .or_else(|| h.get("doc"))
+                .cloned()
+                .unwrap_or(V::Null);
+            h.insert("document".into(), doc.clone());
+            if !h.contains_key("ids") {
+                h.insert(
+                    "ids".into(),
+                    V::List(
+                        F::collections(&doc)?
+                            .values()
+                            .flat_map(|m| m.keys().cloned().map(V::Text))
+                            .collect(),
+                    ),
+                );
+            }
+            h.insert("doc".into(), doc);
+            Ok((name.clone(), V::Map(h)))
+        })
+        .collect()
+}
+impl<'a> World<'a> {
+    /// The record as every reader sees it beside its hypotheses, none of them read over it.
+    pub(crate) fn base(
+        document: &V,
+        hypotheses: &Map,
+        runtime: Option<&'a Runtime>,
+    ) -> Result<Self> {
+        Self::new(
+            document,
+            &normalized(hypotheses)?,
+            &BTreeSet::new(),
+            runtime,
+        )
+    }
+}
 pub struct Projection<'a> {
     pub(crate) base: World<'a>,
     pub(crate) layers: BTreeMap<String, World<'a>>,
@@ -304,31 +348,7 @@ impl<'a> Projection<'a> {
         knowledge: Vec<String>,
         runtime: Option<&'a Runtime>,
     ) -> Result<Self> {
-        let hypotheses = hypotheses
-            .iter()
-            .map(|(name, h)| {
-                let mut h = map(h)?.clone();
-                let doc = h
-                    .get("document")
-                    .or_else(|| h.get("doc"))
-                    .cloned()
-                    .unwrap_or(V::Null);
-                h.insert("document".into(), doc.clone());
-                if !h.contains_key("ids") {
-                    h.insert(
-                        "ids".into(),
-                        V::List(
-                            F::collections(&doc)?
-                                .values()
-                                .flat_map(|m| m.keys().cloned().map(V::Text))
-                                .collect(),
-                        ),
-                    );
-                }
-                h.insert("doc".into(), doc);
-                Ok((name.clone(), V::Map(h)))
-            })
-            .collect::<Result<Map>>()?;
+        let hypotheses = normalized(hypotheses)?;
         let conflict_ids = conflicts.keys().cloned().collect();
         let base = World::new(document, &hypotheses, &conflict_ids, runtime)?;
         let mut layers = BTreeMap::new();

@@ -196,6 +196,38 @@ pub(crate) fn records_ordinary(
             .map_err(|_| error("target_replay_failed"))?
     })
 }
+/// Another branch's committed record as `consolidate --from` lays it over this one: its
+/// document, hypotheses and files. As for `pull --from`, no snapshot of its own is formed,
+/// so its field roles are read only over this record.
+pub(crate) fn records_layered(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<V> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let Materialized {
+                    _temp,
+                    captured,
+                    files,
+                    raw_names,
+                    active,
+                } = materialize(root, entry, revision, |paths, scratch, mode| {
+                    capture_ordinary_layer(paths, scratch, mode, runtime)
+                })?;
+                let captured = captured.try_finite()?;
+                Ok(obj([
+                    ("doc", captured.strict_document()?),
+                    ("hypotheses", V::List(target_hypotheses(&captured, active)?)),
+                    ("files", text_files(&files, &raw_names)?),
+                ]))
+            })
+            .join()
+            .map_err(|_| error("target_replay_failed"))?
+    })
+}
 struct Materialized {
     _temp: tempfile::TempDir,
     captured: crate::source_capture::OrdinaryCapture,
@@ -397,29 +429,7 @@ fn records_isolated(
     })?;
     let captured = captured.try_finite()?;
     let document = captured.strict_document()?;
-    let mut hypotheses = vec![];
-    for (name, hyp) in map(captured.hypotheses())? {
-        let hyp = map(hyp)?;
-        require(
-            !hyp.get("error").is_some_and(truth),
-            "unreadable_target_hypothesis",
-        )?;
-        let mut value = obj([
-            ("name", s(name)),
-            (
-                "doc",
-                hyp.get("doc")
-                    .or_else(|| hyp.get("document"))
-                    .ok_or_else(|| error("invalid_target_hypothesis"))?
-                    .clone(),
-            ),
-            ("head", hyp["head"].clone()),
-        ]);
-        if active && let Some(kind) = hyp.get("kind").filter(|v| truth(v)) {
-            map_mut(&mut value)?.insert("kind".into(), kind.clone());
-        }
-        hypotheses.push(value);
-    }
+    let hypotheses = target_hypotheses(&captured, active)?;
     let hashes = V::Map(
         files
             .iter()
@@ -493,22 +503,53 @@ fn records_isolated(
         .to_data()
     };
     map_mut(&mut output)?.insert("snapshot".into(), snapshot);
-    map_mut(&mut output)?.insert(
-        "files".into(),
-        V::Map(
-            files
-                .iter()
-                .filter(|(p, _)| !raw_names.contains(*p))
-                .map(|(p, r)| {
-                    Ok((
-                        p.clone(),
-                        s(std::str::from_utf8(r).map_err(|_| error("invalid_target_text"))?),
-                    ))
-                })
-                .collect::<Result<Map>>()?,
-        ),
-    );
+    map_mut(&mut output)?.insert("files".into(), text_files(&files, &raw_names)?);
     Ok(output)
+}
+/// The hypothesis files a committed record carries, each with its name, document and head.
+fn target_hypotheses(
+    captured: &crate::source_capture::CapturedSource,
+    active: bool,
+) -> Result<Vec<V>> {
+    let mut hypotheses = vec![];
+    for (name, hyp) in map(captured.hypotheses())? {
+        let hyp = map(hyp)?;
+        require(
+            !hyp.get("error").is_some_and(truth),
+            "unreadable_target_hypothesis",
+        )?;
+        let mut value = obj([
+            ("name", s(name)),
+            (
+                "doc",
+                hyp.get("doc")
+                    .or_else(|| hyp.get("document"))
+                    .ok_or_else(|| error("invalid_target_hypothesis"))?
+                    .clone(),
+            ),
+            ("head", hyp["head"].clone()),
+        ]);
+        if active && let Some(kind) = hyp.get("kind").filter(|v| truth(v)) {
+            map_mut(&mut value)?.insert("kind".into(), kind.clone());
+        }
+        hypotheses.push(value);
+    }
+    Ok(hypotheses)
+}
+/// The text of each file a committed record was read from, its raw history files aside.
+fn text_files(files: &Files, raw_names: &BTreeSet<String>) -> Result<V> {
+    Ok(V::Map(
+        files
+            .iter()
+            .filter(|(p, _)| !raw_names.contains(*p))
+            .map(|(p, r)| {
+                Ok((
+                    p.clone(),
+                    s(std::str::from_utf8(r).map_err(|_| error("invalid_target_text"))?),
+                ))
+            })
+            .collect::<Result<Map>>()?,
+    ))
 }
 
 #[cfg(test)]

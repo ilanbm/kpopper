@@ -290,8 +290,12 @@ fn ordinary(
             &route.project().root,
             reference,
         )?;
-        let captured = crate::source_target::records(&root, &relative, &oid, runtime)?;
+        let captured = crate::source_target::records_layered(&root, &relative, &oid, runtime)?;
         let data = map(&captured)?;
+        require(
+            !crate::reasoning_operations::selected(&data["doc"])?,
+            "unsupported_capability: use core/v1 consumer",
+        )?;
         let files = map(&data["files"])?;
         let raw = text(
             files
@@ -323,6 +327,7 @@ fn ordinary(
             ])),
             source: source_document,
             text: raw.into(),
+            differences_only: true,
         });
         let layout = crate::history_transaction::Layout::for_entry(&relative)?;
         for item in list(&data["hypotheses"])? {
@@ -345,6 +350,7 @@ fn ordinary(
                 source_record: source_record.clone(),
                 source: crate::history_yaml::OrdinaryValue::from_typed(&item["doc"]),
                 text: raw.into(),
+                differences_only: false,
             });
         }
     }

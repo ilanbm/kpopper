@@ -138,6 +138,230 @@ fn ordinary_branch_preview_and_fold_keep_source_ref_and_write_only_destination()
     );
 }
 
+const BRANCHED: &str = "known:\n  local.one: {v: 1}\n  local.two: {v: 2, of: 2026-09-10}\n  local.three: {v: two  words}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";
+/// A repository whose `main` holds BRANCHED, with one branch per record given.
+fn branched(branches: &[(&str, String)]) -> (tempfile::TempDir, PathBuf) {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    fs::write(root.join("GROUNDING.yaml"), BRANCHED).unwrap();
+    commit(&root, "base");
+    for (name, record) in branches {
+        git(&root, &["checkout", "-q", "-b", name, "main"]);
+        fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+        commit(&root, name);
+        git(&root, &["checkout", "-q", "main"]);
+    }
+    (temp, root)
+}
+
+#[test]
+fn a_branch_is_tested_as_what_it_holds_differently_from_this_record() {
+    let (_temp, root) = branched(&[
+        (
+            "listed",
+            BRANCHED.replace("{v: 1}", "{v: 1, tags: [local.two]}"),
+        ),
+        (
+            "twice",
+            format!(
+                "{BRANCHED}  local.two: {{verdict: dup, rests_on: [local.one], seen: {{local.one: 1}}}}\n"
+            ),
+        ),
+        ("schema", format!("schema: 5\n{BRANCHED}")),
+        (
+            "rewritten",
+            BRANCHED
+                .replace("{v: 1}", "{v: 1.0}")
+                .replace("two  words", "two words"),
+        ),
+        (
+            "reviewed",
+            BRANCHED.replace(
+                "    seen: {local.one: 1}\n",
+                "    seen: {local.one: 1}\n    reviewed: 2026-09-12\n",
+            ),
+        ),
+        (
+            "grounds",
+            BRANCHED.replace("rests_on: [local.one]", "rests_on: [local.one, local.two]"),
+        ),
+        (
+            "newer",
+            BRANCHED.replace("of: 2026-09-10", "of: 2026-09-12"),
+        ),
+    ]);
+    let before = image(&root);
+    let reversed = "reversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n";
+    let rest = "candidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\n";
+    let nothing = |name: &str| {
+        format!(
+            "arrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\n{reversed}moved / falsified (0): what the union moves or breaks\ncontested (0)\n{rest}clean - and nothing to write: the base already holds everything {name} proposes; consolidate {name} removes the file\n"
+        )
+    };
+    let age = regex::Regex::new(r"\(born [0-9-]+, [^)]*\)").unwrap();
+    for (name, body, code) in [
+        // What this record already holds is not tested again: a list added to an
+        // unchanged claim casts no vote for a field role, the branch's own schema stays
+        // the branch's, a claim written another way is the same claim, and the same
+        // decision with its review refreshed is the branch's own review.
+        ("listed", nothing("listed"), 0),
+        ("schema", nothing("schema"), 0),
+        ("rewritten", nothing("rewritten"), 0),
+        ("reviewed", nothing("reviewed"), 0),
+        // An id the branch holds a second time is tested alone, as a judgment laid
+        // over an entry, never as the branch contesting itself.
+        (
+            "twice",
+            format!(
+                "arrived (0): what the fold would add\nupdates (1): what the base holds that a hypothesis replaces, and what rests on each\n  local.two: 2 -> dup, from twice\n    the base holds an entry under this id and the hypothesis a judgment - a subject does not change kind at the fold: set the entry, or give the judgment a new id - the base keeps what it holds\n{reversed}moved / falsified (1): what the union moves or breaks\n  FAIL local.two: no predicate at all - and nothing says why not, so it can never be re-checked\ncontested (1): the door refuses the reading, so the base keeps what it holds\n  local.two: the base holds an entry under this id and the hypothesis a judgment - a subject does not change kind at the fold: set the entry, or give the judgment a new id\n    the base holds local.two: 2 as of 2026-09-10\n    twice says + local.two: dup\n  read again on a later day - set it in the base or in the hypothesis with --as-of - or refute the hypothesis\n{rest}not clean: a hole, a contested reading - nothing folds until it is read again\n"
+            ),
+            1,
+        ),
+        // What differs still does: a verdict on other grounds, and a later reading.
+        (
+            "grounds",
+            format!(
+                "arrived (0): what the fold would add\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (1): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\n  d.a: the same verdict on other grounds, from grounds\n    the standing judgment holds, and its wrong_if has not fired - take it by name: consolidate grounds --take d.a\n    base: rests_on: [local.one]\n    base: wrong_if: local.one > 5\n    grounds: rests_on: [local.one, local.two]\n    grounds: wrong_if: local.one > 5\nmoved / falsified (1): what the union moves or breaks\n  FAIL d.a: no snapshot for local.two - never checked against it\ncontested (0)\n{rest}not clean: a hole, 1 reversal to take by name - nothing folds until it is read again\n  consolidate grounds --take d.a\n"
+            ),
+            1,
+        ),
+        (
+            "newer",
+            format!(
+                "arrived (0): what the fold would add\nupdates (1): what the base holds that a hypothesis replaces, and what rests on each\n  local.two: 2 -> 2, from newer\n    a reading from 2026-09-12 that is newer than the base's\n{reversed}moved / falsified (0): what the union moves or breaks\ncontested (0)\n{rest}clean: newer may fold - consolidate newer\n"
+            ),
+            0,
+        ),
+    ] {
+        let output = public_consolidation::dispatch(
+            &Options {
+                from_refs: vec![name.into()],
+                dry_run: true,
+                ..Default::default()
+            },
+            &root,
+        );
+        let commit = git(&root, &["rev-parse", name]);
+        assert_eq!(
+            (
+                output.code,
+                output.stderr.as_str(),
+                age.replace(&output.stdout, "(born DAY)").as_ref()
+            ),
+            (
+                code,
+                "",
+                format!(
+                    "the base with {name} laid over it\n  {name} (born DAY): what {name} committed ({}), read as a hypothesis\n\n{body}",
+                    &commit[..7]
+                )
+                .as_str()
+            ),
+            "{name}"
+        );
+    }
+    assert_eq!(image(&root), before);
+}
+
+#[test]
+fn a_branch_fold_carries_only_what_the_branch_holds_differently() {
+    let (_temp, root) = branched(&[(
+        "arrives",
+        BRANCHED.replace(
+            "  local.one: {v: 1}\n",
+            "  local.one: {v: 1, tags: [local.two]}\n  local.four: {v: 4, of: 2026-09-12}\n",
+        ),
+    )]);
+    let output = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec!["arrives".into()],
+            as_of: Some("2026-09-20".into()),
+            ..Default::default()
+        },
+        &root,
+    );
+    assert_eq!(output.code, 0, "{}{}", output.stdout, output.stderr);
+    assert!(
+        output
+            .stdout
+            .contains("folded arrives: 1 entry and 0 judgments - 1 added, 0 replaced\n"),
+        "{}",
+        output.stdout
+    );
+    // The new entry arrives; the list the branch added to an unchanged claim stays there.
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        BRANCHED.replace("known:\n", "known:\n  local.four: {v: 4, of: 2026-09-12}\n")
+    );
+}
+
+#[test]
+fn a_branch_fold_reads_permissions_from_the_branch_s_whole_record() {
+    // The branch marks an entry private without changing its claim, so the entry is not
+    // laid again; the judgment it adds rests on that entry.
+    let (_temp, root) = branched(&[(
+        "private",
+        BRANCHED.replace("{v: 1}", "{v: 1, privacy: private}")
+            + "  d.new: {verdict: new, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 9}\n",
+    )]);
+    let before = image(&root);
+    let private_home = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&root)
+        .args(["consolidate", "--from", "private", "--as-of", "2026-09-20"])
+        .env("KPOPPER_PRIVATE_HOME", private_home.path())
+        .env("KPOPPER_SESSION_DISABLE", "1")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains("private draft retained")
+            && stderr.ends_with("; original hypothesis retained\n"),
+        "{stderr}"
+    );
+    assert_eq!(image(&root), before);
+    let drafts = image(private_home.path())
+        .into_iter()
+        .filter(|(path, _)| path.extension().is_some_and(|v| v == "json"))
+        .map(|(_, body)| String::from_utf8(body).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(drafts.len(), 1);
+    assert!(
+        drafts[0].contains("d.new") && drafts[0].contains("private"),
+        "{}",
+        drafts[0]
+    );
+}
+
+#[test]
+fn a_branch_record_that_declares_the_core_profile_is_not_laid_over_an_ordinary_one() {
+    let (_temp, root) = branched(&[(
+        "core",
+        format!(
+            "meta: {{reasoning: {{version: 1, profile: core/v1, requires: [arithmetic/v1]}}}}\n{BRANCHED}"
+        ),
+    )]);
+    let before = image(&root);
+    for dry_run in [true, false] {
+        let output = public_consolidation::dispatch(
+            &Options {
+                from_refs: vec!["core".into()],
+                dry_run,
+                as_of: Some("2026-09-20".into()),
+                ..Default::default()
+            },
+            &root,
+        );
+        assert_eq!(
+            (output.code, output.stdout.as_str(), output.stderr.as_str()),
+            (1, "", "unsupported_capability: use core/v1 consumer\n")
+        );
+    }
+    assert_eq!(image(&root), before);
+}
+
 #[test]
 fn ordinary_branch_fold_refuses_nonfinite_source_without_changing_bytes() {
     let temp = tempfile::tempdir().unwrap();
