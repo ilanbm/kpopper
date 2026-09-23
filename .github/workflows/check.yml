@@ -87,11 +87,12 @@ jobs:
       - name: Check skill/release contracts and CI selection
         run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection tests.test_ci_execution tests.test_ci_sharding tests.test_ci_audit -v
 
-      # The record is read by the native kpop of this tree. A reader built from the same
-      # native/ sources is reused, so only a change under native/ pays for the build.
+      # The record is read by the native kpop of this tree. A reader main built from the same
+      # native/ sources is reused, so only a change under native/ pays for the build. Only a
+      # push to main saves one: pull requests read main's, and keep the cache budget free.
       - name: Reuse the native reader built from these sources
         id: reader
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/kpopper-record-reader
           key: record-reader-${{ runner.os }}-${{ hashFiles('native/**') }}
@@ -106,6 +107,12 @@ jobs:
           cargo build --locked --bin kpop
           mkdir -p ~/.cache/kpopper-record-reader
           cp target/debug/kpop ~/.cache/kpopper-record-reader/kpop
+      - name: Keep main's native reader for the pull requests that follow
+        if: github.event_name == 'push' && steps.reader.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/kpopper-record-reader
+          key: ${{ steps.reader.outputs.cache-primary-key }}
       - name: Put the native reader on PATH
         run: echo "$HOME/.cache/kpopper-record-reader" >> "$GITHUB_PATH"
 
