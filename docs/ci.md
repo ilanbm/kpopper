@@ -110,6 +110,14 @@ and installed replacement-library tests still execute. A cold cache therefore
 retains the original GMP `make check` work; warm-run savings must be measured
 separately from cold-run timings.
 
+The native command's compiled Rust dependencies are cached per target and build profile,
+so the test build of a check run and the release-only build of a publish run each restore
+their own. The key's prefix hashes the toolchain file and the native workflow, whose
+changes make every artifact stale, and a restore never crosses it; its suffix hashes the
+Cargo manifests, so a lockfile change starts from the nearest entry and rebuilds only what
+changed. Only a successful run on main saves an entry, after removing the package's own
+artifacts, which every checkout rebuilds. Pull requests read main's entries.
+
 To generate candidates before updating committed bundles, dispatch
 `reasoning-runtime` with `candidate-only=true`. This explicit maintainer mode
 builds all target candidates without claiming installed validation of the old

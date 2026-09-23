@@ -102,17 +102,23 @@ jobs:
         run: |
           KPOPPER_CI_ORDINARY=$(python -c 'import os; from scripts.session.core import setup; print(setup(os.environ["KPOPPER_LEAN_ROOT"])["cache"])')
           echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
-      - name: Restore Rust dependency and build cache
-        id: rust-cache
+      # Compiled Rust dependencies are kept per target and build profile, so the release-only
+      # build of a publish run and the test build of a check run each restore their own. The
+      # key's prefix hashes what makes every artifact stale - the toolchain and this workflow's
+      # cargo settings - and a restore never crosses it; the suffix hashes the manifests, so a
+      # lockfile change still starts from the nearest entry and rebuilds only what changed.
+      - name: Restore the test build's Rust dependencies
+        id: test-cache
+        if: inputs.validation != 'distribution'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            native/target
-          key: native-rust-${{ matrix.target }}-${{ hashFiles('native/Cargo.lock') }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/debug
+          key: native-rust-test-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml') }}
           restore-keys: |
-            native-rust-${{ matrix.target }}-
+            native-rust-test-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-
       - name: Initialize the platform evidence archive
         shell: bash
         run: |
@@ -247,6 +253,18 @@ jobs:
           python -m unittest -v
           tests.test_native_distribution.NativeDistribution.test_windows_installer_refuses_modified_managed_public_files
           tests.test_native_distribution.NativeDistribution.test_cargo_metadata_utf8_does_not_depend_on_process_locale
+      - name: Restore the release build's Rust dependencies
+        id: release-cache
+        if: ${{ !cancelled() && steps.native-source.outcome == 'success' && inputs.validation != 'hooks' }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/release
+          key: native-rust-release-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml') }}
+          restore-keys: |
+            native-rust-release-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-
       - name: Build the platform release
         id: native-release
         if: ${{ !cancelled() && steps.native-source.outcome == 'success' && inputs.validation != 'hooks' }}
@@ -389,12 +407,32 @@ jobs:
           name: native-rust-${{ matrix.target }}
           path: ${{ runner.temp }}/native-evidence
           if-no-files-found: error
-      - name: Save reusable Rust dependencies after diagnostic runs
-        if: ${{ !cancelled() && steps.rust-cache.outputs.cache-hit != 'true' }}
+      # Only a green run on main saves, and only what another checkout can reuse: this
+      # package's own artifacts are rebuilt from every checkout. Pull requests read main's entries.
+      - name: Keep only third-party dependencies in the Rust caches
+        if: ${{ success() && github.ref == 'refs/heads/main' && ((steps.test-cache.outcome == 'success' && steps.test-cache.outputs.cache-hit != 'true') || (steps.release-cache.outcome == 'success' && steps.release-cache.outputs.cache-hit != 'true')) }}
+        continue-on-error: true
+        working-directory: native
+        shell: bash
+        run: |
+          cargo clean --locked -p kpopper
+          cargo clean --locked -p kpopper --release
+          du -sh target/debug target/release 2>/dev/null || true
+      - name: Save the test build's Rust dependencies
+        if: ${{ success() && github.ref == 'refs/heads/main' && steps.test-cache.outcome == 'success' && steps.test-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            native/target
-          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/debug
+          key: ${{ steps.test-cache.outputs.cache-primary-key }}
+      - name: Save the release build's Rust dependencies
+        if: ${{ success() && github.ref == 'refs/heads/main' && steps.release-cache.outcome == 'success' && steps.release-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/release
+          key: ${{ steps.release-cache.outputs.cache-primary-key }}
