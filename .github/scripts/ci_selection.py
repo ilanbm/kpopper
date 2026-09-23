@@ -50,7 +50,7 @@ PYTHON_TESTED = PYTHON_PACKAGE + PYTHON_RUNNER + RELEASE_ASSETS + PAGE_FIXTURE +
     "tests/*", "adapters/*", "hooks/*", "bin/*", ".claude-plugin/*", ".codex-plugin/*",
     "package.json", "LICENSE", "install.sh", "install.ps1", "native/Cargo.toml", "native/Cargo.lock",
     "GROUNDING.yaml", ".kpopper/hypotheses/*", ".kpopper/measure.yaml",
-    ".gitignore", "*/.gitignore", ".gitattributes", "examples/scoped-query/*",
+    ".gitignore", "*/.gitignore", ".gitattributes",
     ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
     ".github/workflows/check.yml", ".github/workflows/native-rust.yml",
     ".github/workflows/publish.yml", ".github/workflows/release.yml",
@@ -64,15 +64,6 @@ RUNTIME_SOURCES = (
     "tests/test_reasoning_composition_kernel.py", "tests/test_reasoning_composition_review.py",
     "tests/test_reasoning_composition_acceptance.py", "tests/test_core_composition.py",
     ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
-)
-RESEARCH_EXAMPLE_INPUTS = (
-    ".github/scripts/check_research_example.py",
-    "examples/dark-matter/advanced/exercise.py",
-    "examples/dark-matter/advanced/record.yaml",
-    "examples/dark-matter/advanced/judgment.yaml",
-    "examples/dark-matter/advanced/later-study.yaml",
-    "examples/dark-matter/advanced/captured-output.json",
-    "examples/dark-matter/advanced/assessment-summary.jq",
 )
 # The offline DOM suite's own files, which only the documents lane runs.
 DOM_SUITE = ("tests/document-support/*", "tests/document_ui_fixture.py", "tests/test_document_ui.cjs")
@@ -125,8 +116,6 @@ LANES = {
         # its tests load. The Python hooks its tests compare run from the pinned v0.10.0 reference.
         python_entry_points=("scripts/session/core.py",),
         rust_sources=("native",)),
-    # The research exercise through the installed package and CLI.
-    "examples": Lane(PYTHON_PACKAGE + RESEARCH_EXAMPLE_INPUTS, enforced=False),
 }
 LANE_NAMES = tuple(LANES)
 
@@ -174,8 +163,7 @@ RUNTIME_TARGETS = (
 
 TEST_SUITES = ("core", "documents", "reasoning", "session", "other")
 JOB_LANES = {"check": ("python", "documents"), "document-ui": ("documents",), "session": ("session",),
-             "reasoning-runtime": ("installed", "runtime"), "native-cli": ("rust",),
-             "examples": ("examples",)}
+             "reasoning-runtime": ("installed", "runtime"), "native-cli": ("rust",)}
 
 
 def matches(path, patterns):

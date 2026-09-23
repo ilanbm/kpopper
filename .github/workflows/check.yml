@@ -30,7 +30,6 @@ jobs:
       installed: ${{ steps.select.outputs.installed }}
       runtime: ${{ steps.select.outputs.runtime }}
       rust: ${{ steps.select.outputs.rust }}
-      examples: ${{ steps.select.outputs.examples }}
       platforms: ${{ steps.select.outputs.platforms }}
       test_suites: ${{ steps.select.outputs.test_suites }}
       test_matrix: ${{ steps.select.outputs.test_matrix }}
@@ -59,7 +58,7 @@ jobs:
             python .github/scripts/ci_selection.py --full
           fi
       - name: Reject incomplete committed bundles before starting expensive checks
-        if: steps.select.outputs.installed == 'true' || steps.select.outputs.examples == 'true'
+        if: steps.select.outputs.installed == 'true'
         run: python scripts/reasoning/build_runtime.py --check-bundles
 
   record:
@@ -182,41 +181,11 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
-      - name: The scoped-query example works through the installed writer and CLI
-        if: needs.changes.outputs.python == 'true' && matrix.group == 1
-        run: python examples/scoped-query/exercise.py
       - name: The tests read only what their lane declares
         if: ${{ !cancelled() }}
         run: >-
           python .github/scripts/ci_audit.py finish
           --lane ${{ needs.changes.outputs.python == 'true' && 'python' || 'documents' }}
-
-  examples:
-    name: research example (${{ matrix.python }})
-    timeout-minutes: 15
-    needs: [changes, record]
-    if: needs.changes.outputs.examples == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.9", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Install the package with its committed reasoning runtime
-        run: python -m pip install .
-      - name: Record the files the example opens
-        run: python .github/scripts/ci_audit.py start
-      - name: Check the research exercise, captured output and CLI projection
-        run: python .github/scripts/check_research_example.py
-      - name: The example reads only what its lane declares
-        if: ${{ !cancelled() }}
-        run: python .github/scripts/ci_audit.py finish --lane examples
-      - name: The example leaves the source tree unchanged
-        run: git diff --exit-code
 
   document-ui:
     timeout-minutes: 15
@@ -290,7 +259,7 @@ jobs:
 
   ci-required:
     timeout-minutes: 10
-    needs: [changes, record, check, examples, document-ui, session, reasoning-runtime, native-cli]
+    needs: [changes, record, check, document-ui, session, reasoning-runtime, native-cli]
     if: always()
     runs-on: ubuntu-latest
     steps:

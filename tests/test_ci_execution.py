@@ -133,7 +133,7 @@ class TestPlans(unittest.TestCase):
     def test_invalid_committed_bundles_gate_every_expensive_family(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
         self.assertTrue(any('--check-bundles' in s.get('run', '') for s in jobs['changes']['steps']))
-        for name in ('check', 'examples', 'document-ui', 'session', 'reasoning-runtime'):
+        for name in ('check', 'document-ui', 'session', 'reasoning-runtime'):
             self.assertEqual(set(jobs[name]['needs']), {'changes', 'record'})
         native = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())['jobs']
         self.assertEqual(native['target']['needs'], 'preflight')
@@ -147,15 +147,12 @@ class TestPlans(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", jobs['target']['with']['rebuild'])
         self.assertIn('!inputs.candidate-only', jobs['target']['with']['validate-installed'])
 
-    def test_query_checks_follow_the_fresh_target_and_example_runs_once_per_interpreter(self):
+    def test_query_checks_follow_the_fresh_target(self):
         native = yaml.safe_load((ROOT / '.github/workflows/reasoning-target.yml').read_text())['jobs']
         query = next(s for s in native['build']['steps']
                      if 'tests.test_reasoning_query_runtime' in s.get('run', ''))
         self.assertIn('KPOPPER_QUERY_ARCHIVE', query['run'])
         self.assertIn('${{ inputs.target }}.kpopper-runtime', query['run'])
-        jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
-        example = next(s for s in jobs['check']['steps'] if 'examples/scoped-query/exercise.py' in s.get('run', ''))
-        self.assertIn('matrix.group == 1', example['if'])
 
     @unittest.skipUnless(importlib.util.find_spec('pytest') and importlib.util.find_spec('xdist'),
                          'the parallel runner is installed in the Python CI job')

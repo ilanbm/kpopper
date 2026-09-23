@@ -677,31 +677,6 @@ writer records each judgment's review snapshot. A proposed change of framework
 then reopens several interpretations and the synthesis. No model call or claim of
 live independent research is part of that replay.
 
-### The collection changes; the answer stays five
-
-The [advanced continuation](examples/dark-matter/advanced/README.md) starts with
-the five astronomical papers and an explicit selection rule: include a study
-when it is in this review and classified as astronomy. Adding the existing LZ
-laboratory paper grows the captured collection while leaving that selection equal.
-
-| Reading | Before LZ | After LZ | Replay of the earlier Snapshot |
-|---|---:|---:|---:|
-| Papers in the scope | 5 | 6 | 5 |
-| Selected astronomical papers | 5 | 5 | 5 |
-| Query basis | Earlier basis | Changed basis | Earlier basis recovered |
-| Particle identities | Unknown | Unknown | Unknown |
-
-The `core/v1` record uses `composition/v1` for the inclusion condition and
-`query/v1` for selection. Its basis includes nonmatching members, so an equal
-numeric answer does not hide a changed collection. The retained Snapshot
-recovers the earlier inputs and result even with the source files unavailable.
-
-These are scripted CLI and public API results, checked without model calls.
-The [runnable exercise and captured output](examples/dark-matter/advanced/README.md#run-it)
-also preserve the exact `75/14` density ratio and an unchanged qualitative
-review judgment. Five papers is a coverage count: RAR still reuses SPARC, model
-assumptions remain explicit, and neither the count nor replay proves the synthesis.
-
 </details>
 
 ## Get started
@@ -947,8 +922,6 @@ the earlier evidence available when the work changes.
 | Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
 | Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged native reasoning runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#deterministically-checkable). | Check whether 24 guests fit a venue with 18 seats. |
 | Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). | Find apartments below $2,000 with an elevator and a lease that allows pets. |
-| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
-| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
 | Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). | Record a babysitter's cancellation and surface the evening plans that depended on it. |
 | Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#user-content-example-1-coding-agent). | One branch removes password login; another adds a feature that still requires it. |
 | Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). | A discarded prototype's documented API limit remains available to the next integration task. |
@@ -1100,56 +1073,6 @@ decision is right.**
 [Supported calculations and conditions](skills/kpopper/EXPRESSIONS.md) ·
 [What `check` reports](docs/reference.md#what-check-means) ·
 [The reasoning core's formal scope](docs/reasoning-core.md)
-
-<a id="same-result-different-basis"></a>
-
-<details>
-<summary><strong>A subtler case: the result stays the same, but its basis changed</strong></summary>
-
-A number can stay the same while the evidence behind it changes. kpopper compares both
-with the last review.
-
-In the [research example](examples/dark-matter/advanced/README.md), a literature review
-relies on a count: five of the collected studies are astronomy studies. A recorded rule
-does the counting: a study counts when it is in the review **and** its field is astronomy.
-
-> **User:** “Include the LZ paper. Does our selection of astronomy studies change?”
-
-LZ is a laboratory experiment, so the rule still selects the same five studies, now out
-of six. The count is unchanged; the collection it was computed from is not.
-
-After you [run the example](examples/dark-matter/advanced/README.md#run-it) with
-`--output /tmp/dark-matter-query`, this command reads the count, a second result and the
-review that relies on them. `jq` keeps four fields of the response for display:
-
-```sh
-kpop assess m.astronomy_count m.particle_identities d.review_scope \
-  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
-  jq -f examples/dark-matter/advanced/assessment-summary.jq
-```
-
-```json
-{
-  "studies_scanned": 6,
-  "astronomy_studies_selected": 5,
-  "particle_identity_status": "unknown",
-  "review_basis": "changed"
-}
-```
-
-- `studies_scanned` and `astronomy_studies_selected`: six studies were checked, and five
-  still match.
-- `review_basis: changed`: the review was saved when the count covered five studies, so
-  it needs another look.
-- `particle_identity_status: unknown`: no study records a dark-matter particle identity,
-  so that result stays unknown instead of being guessed.
-
-The agent can answer: **“The selection is unchanged, but the evidence considered has
-changed. The saved review needs another look.”** The example also replays the earlier
-computation from its saved snapshot, with the source files out of reach, and recovers
-the original five-study result.
-
-</details>
 
 ## Go deeper
 
@@ -1383,10 +1306,10 @@ opening illustrations in disposable local Git repositories:
 | Search cache | Add private projects; cache results by query because all results are public. | `search.results_public == false` |
 | Download promise | Retain files for seven days; promise downloads for 30 days. | `exports.retention_days < downloads.promised_days` |
 
-Run them with Git and the package's Python dependencies installed:
+Run them with Git and a native `kpop` on PATH:
 
 ```sh
-python3 examples/merge-assumptions/run.py
+sh examples/merge-assumptions/run.sh
 ```
 
 Each branch's tests and measurement checks pass. Git merges the branches without a text

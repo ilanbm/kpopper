@@ -31,8 +31,7 @@ kpop assess m.minutes --profile core/v1 --record routes.yaml
 
 The result is a typed record whose `result` is the exact number 20. It also
 carries five counts: two input rows, one definite match, and zero unknown
-memberships, unknown values or errors. See the [installed revisit exercise](../examples/scoped-query/README.md)
-for a later assumption change, missing reading, qualitative judgment and replay.
+memberships, unknown values or errors.
 
 ## Operations
 
