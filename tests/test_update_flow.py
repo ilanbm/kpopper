@@ -79,10 +79,33 @@ class UpdateFlow(unittest.TestCase):
         self.assertTrue(saved['sources'])
         self.assertEqual(saved['judgments'], {})
 
-    def test_no_schema_custom_value_collection_stays_unreadable(self):
+    def test_no_schema_custom_value_collection_accepts_its_first_reading(self):
         self.doc = {
             'evidence': self.doc['sources'],
             'parameters': {'order.existing': {'v': 20}},
+        }
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        report = self.report(
+            source='s.original',
+            at='entire captured report',
+            record_sha256=I._sha(self.record.read_bytes()),
+            updates=[{'kind': 'add', 'id': 'order.price', 'body': {'v': 40}}],
+        )
+
+        result = I.update(report, self.record)
+
+        self.assertEqual(result['state'], 'applied', result)
+        saved = yaml.safe_load(self.record.read_text())
+        self.assertEqual(saved['parameters']['order.existing'], {'v': 20})
+        self.assertEqual(saved['parameters']['order.price']['v'], 40)
+        self.assertNotIn('judgments', saved)
+
+    def test_no_schema_judgment_in_custom_field_names_stays_unreadable(self):
+        self.doc = {
+            'evidence': self.doc['sources'],
+            'parameters': {'order.existing': {'v': 20}},
+            'claims': {'c.budget': {'depends': 'order.existing', 'conclusion': 'The unit price fits',
+                                    'falsified_when': 'order.existing > 30'}},
         }
         self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
         before = self.record.read_bytes()

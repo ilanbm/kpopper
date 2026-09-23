@@ -362,6 +362,63 @@ fn a_named_add_keeps_its_scope_text() {
     }
 }
 
+/// An entry carried into a hypothesis brings the comment under it, and the
+/// next one carried after it goes below that comment.
+#[test]
+fn a_carried_entry_keeps_the_comment_under_it() {
+    for advanced in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        copy_resources(root);
+        if advanced {
+            advanced_project(root);
+        }
+        let record = root.join("GROUNDING.yaml");
+        let before = "known:\n  p.a: {v: 1, of: \"2026-09-01\"}\n    # set 2026-09-01: seed reading\n  p.b: {v: 2, of: \"2026-09-01\"}\n";
+        fs::write(&record, before).unwrap();
+        success(
+            kpop(root)
+                .args([
+                    "set",
+                    "p.a",
+                    "5",
+                    "--hypothesis",
+                    "h",
+                    "--as-of",
+                    "2026-09-10",
+                ])
+                .output()
+                .unwrap(),
+        );
+        assert_eq!(
+            success(
+                kpop(root)
+                    .args([
+                        "set",
+                        "p.b",
+                        "7",
+                        "--hypothesis",
+                        "h",
+                        "--as-of",
+                        "2026-09-10"
+                    ])
+                    .output()
+                    .unwrap()
+            ),
+            "carry p.b into known, after p.a of hypothesis h\nset p.b in hypothesis h: 2 -> 7 (as of 2026-09-10)\nnothing rests on it\n\nthe base is untouched; h holds 2 entries and 0 judgments\n"
+        );
+        assert_eq!(fs::read_to_string(&record).unwrap(), before);
+        assert_eq!(
+            fs::read_to_string(root.join(".kpopper/hypotheses/h.yaml")).unwrap(),
+            "hypothesis: {born: \"2026-09-10\"}\n\nknown:\n  p.a: {v: 5, of: \"2026-09-10\"}\n    # set 2026-09-01: seed reading\n  p.b: {v: 7, of: \"2026-09-10\"}\n"
+        );
+        assert_eq!(
+            project_mode(root),
+            if advanced { "advanced" } else { "simple" }
+        );
+    }
+}
+
 #[test]
 fn private_dependencies_stay_out_of_shared_hypotheses() {
     for existing in [false, true] {

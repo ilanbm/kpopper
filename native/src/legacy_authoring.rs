@@ -90,6 +90,20 @@ pub(crate) fn route(entry: &Path, config: &V) -> Result<AuthorityRoute> {
     Ok(route)
 }
 
+/// Writes that no contribution routing applies to, such as `same` and `distinct`,
+/// edit an Advanced project's own ordinary record as they edit a Simple one.
+pub(crate) fn local_route(entry: &Path, write: &WriteRoute) -> Result<AuthorityRoute> {
+    let route = authority_route(entry)?;
+    if route == AuthorityRoute::Legacy {
+        require(
+            string_is(field(map(write.config())?, "mode")?, "simple")
+                || write.pending_required()?,
+            "legacy_authoring_requires_simple_project",
+        )?;
+    }
+    Ok(route)
+}
+
 #[derive(Clone, Debug)]
 struct Collection {
     name: String,
@@ -210,6 +224,15 @@ fn field_span(lines: &[String], member: &Member, field: &str) -> Option<Member> 
     members(lines, &collection)
         .into_iter()
         .find(|item| item.name == field)
+}
+
+/// The column an entry's fields start at: the first line of its block that is neither
+/// blank nor a comment. An entry written on one line has none.
+fn field_indent(lines: &[String], member: &Member) -> Option<usize> {
+    lines[member.start + 1..block_end(lines, member)]
+        .iter()
+        .find(|line| !blank(line))
+        .map(|line| indent(line))
 }
 
 #[derive(Clone, Copy)]
@@ -510,7 +533,14 @@ fn insert_entry(
         .ok_or_else(|| error(&format!("no collection {collection_name} in this file")))?;
     let existing = members(lines, &collection);
     if existing.is_empty() {
-        let new = entry_lines_ordered(id, body, 2, 4, false)?;
+        // Entries whose ids the member pattern cannot read still set the column.
+        let ind = lines[collection.start + 1..collection.end]
+            .iter()
+            .find(|line| !blank(line))
+            .map(|line| indent(line))
+            .filter(|&column| column > 0)
+            .unwrap_or(2);
+        let new = entry_lines_ordered(id, body, ind, ind + 2, false)?;
         lines.splice(collection.start + 1..collection.start + 1, new);
         return Ok(format!("{id} into {collection_name}, its first entry"));
     }
@@ -528,9 +558,7 @@ fn insert_entry(
         .find(|member| member.name.as_str() > id)
         .map(|member| (*member, true))
         .unwrap_or((*siblings.last().unwrap(), false));
-    let field_indent = field_span(lines, anchor, "v")
-        .or_else(|| field_span(lines, anchor, "quoted"))
-        .map_or(anchor.indent + 2, |field| field.indent);
+    let field_indent = field_indent(lines, anchor).unwrap_or(anchor.indent + 2);
     let flow = inline(&lines[anchor.start]).starts_with('{');
     let mut new = entry_lines_ordered(id, body, anchor.indent, field_indent, flow)?;
     let position = if before {
@@ -542,7 +570,8 @@ fn insert_entry(
         }
         anchor.start
     } else {
-        let mut position = anchor.end;
+        // A comment under the anchor, such as the reason a set wrote, stays with it.
+        let mut position = block_end(lines, anchor);
         if position < collection.end && separator_blank(&lines[position]) {
             position += 1;
             new.push(String::new());
@@ -560,9 +589,7 @@ fn insert_entry(
 fn replace_entry(lines: &mut Vec<String>, id: &str, body: &Source) -> Result<()> {
     let (_, member) = locate(lines, id).ok_or_else(|| error("entry_not_found"))?;
     let flow = inline(&lines[member.start]).starts_with('{');
-    let field_indent = field_span(lines, &member, "v")
-        .or_else(|| field_span(lines, &member, "quoted"))
-        .map_or(member.indent + 2, |field| field.indent);
+    let field_indent = field_indent(lines, &member).unwrap_or(member.indent + 2);
     let replacement = entry_lines_ordered(id, body, member.indent, field_indent, flow)?;
     lines.splice(member.start..member.end, replacement);
     Ok(())
@@ -624,10 +651,7 @@ fn replace_field_ordered(
         // the field then lands under the key, and the write is refused as unreadable,
         // not as a sibling.
         let end = block_end(lines, member);
-        let field_indent = lines[member.start + 1..end]
-            .iter()
-            .find(|line| !blank(line))
-            .map_or(member.indent + 2, |line| indent(line));
+        let field_indent = field_indent(lines, member).unwrap_or(member.indent + 2);
         let replacement = field_lines_ordered(field, value, field_indent)?;
         let len = replacement.len();
         lines.splice(end..end, replacement);
@@ -2080,9 +2104,10 @@ fn prepare_with_inventory_mode(
                 } else {
                     let after =
                         field_span(&lines, &member, "replaced").map_or(member.end, |span| span.end);
+                    let column = field_indent(&lines, &member).unwrap_or(member.indent + 2);
                     lines.insert(
                         after,
-                        format!("{}reviewed: \"{stamp}\"", " ".repeat(member.indent + 2)),
+                        format!("{}reviewed: \"{stamp}\"", " ".repeat(column)),
                     );
                 }
             }

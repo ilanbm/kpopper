@@ -1,0 +1,104 @@
+## Knowledge excerpt
+
+Record 10b60ee28c967d8b; support depth 1; 8 nodes shown (limit 12), 0 outside selection; 0 boundary links; 0 internal links omitted (cap 96).
+
+UNKNOWN: condition cannot currently be evaluated.
+
+### v.heating\_tab — judgment · UNKNOWN
+
+- verdict: one tab, for the night the greenhouse is decided on
+- wrong\_if: page.spill \> 0 → not evaluated: missing or unsupported reading/condition.
+
+| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |
+|---|---|---|---|
+| s.heating | read 2026-09-02 | read 2026-09-02 | not compared by reader |
+| graph.flagged | 0 | 0 | unchanged |
+| page.spill | 0 | not evaluated here | not compared |
+
+### c.coupling — judgment
+
+- verdict: Require a galaxy-scale explanation to address the tight baryon-acceleration relation
+- wrong\_if: heat.loss\_kw \< 20 → false on current recorded values.
+
+| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |
+|---|---|---|---|
+| heat.loss\_kw | 31 | 31 kW | unchanged |
+
+### d.greeting — judgment
+
+- verdict: בְּרֵאשִׁית בָּרָא — a long-standing claim
+- wrong\_if: p.greeting \> 5 → false on current recorded values.
+
+| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |
+|---|---|---|---|
+| p.greeting | 1 | 1 | unchanged |
+
+### graph.flagged — computed
+
+- name: judgments that need a person
+- current: 0
+- from: counted from the record each time it is read
+
+### page.spill — computed
+
+- name: flagged judgments no section of the page picked up
+- from: counted when the page is built
+
+### s.heating — sources
+
+- asked: Can we keep the greenhouse above 12°C on the old boiler?
+- name: the heating question
+- read: 2026-09-02
+
+### heat.loss\_kw — known
+
+- current: 31
+- unit: kW
+- name: heat loss on a cold night
+- from: s.heating
+
+### p.greeting — known
+
+- current: 1
+- name: שָׁלוֹם עוֹלָם, a well-known name with a separator
+
+### Recorded links
+
+Left names right; impact traversal keeps this direction.
+
+- c.coupling → rests_on → heat.loss\_kw (declared premise).
+- d.greeting → rests_on → p.greeting (declared premise).
+- heat.loss\_kw → from → s.heating (recorded source).
+- v.heating\_tab → rests_on → graph.flagged (declared premise).
+- v.heating\_tab → rests_on → page.spill (declared premise).
+- v.heating\_tab → rests_on → s.heating (declared premise).
+
+Conditions use the full base record; current readings outside this excerpt are marked. External source contents and page-only checks are not evaluated here. Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. The source YAML remains authoritative.
+
+### Optional Mermaid diagram
+
+Requires a Mermaid renderer; otherwise this is a code block. The text above is the readable representation.
+
+```mermaid
+flowchart TB
+  accTitle: Knowledge excerpt
+  accDescr: Declared links only. MOVED needs review; FALSIFIED means a declared condition is true.
+  %% Record 10b60ee28c967d8b; support depth 1; 8 nodes shown (limit 12), 0 outside selection; 0 boundary links; 0 internal links omitted (cap 96).
+  n0["v.heating_tab<br/>judgment: UNKNOWN<br/>one tab, for the night the<br/>greenhouse is decided on"]
+  n1["c.coupling<br/>judgment<br/>Require a galaxy-scale explanation<br/>to address the tight baryon-<br/>acceleration rela#8230;"]
+  n2["d.greeting<br/>judgment<br/>ב#1456;#1468;ר#1461;אש#1460;#1473;ית ב#1464;#1468;ר#1464;א #8212; a long-standing<br/>claim"]
+  n3["graph.flagged<br/>computed<br/>v: 0<br/>judgments that need a person"]
+  n4["page.spill<br/>computed<br/>flagged judgments no section of the<br/>page picked up"]
+  n5["s.heating<br/>sources<br/>the heating question"]
+  n6["heat.loss_kw<br/>known<br/>v: 31 kW<br/>heat loss on a cold night"]
+  n7["p.greeting<br/>known<br/>v: 1<br/>ש#1464;#1473;לו#1465;ם עו#1465;ל#1464;ם, a well-known name<br/>with a separator"]
+  n1 -->|rests_on| n6
+  n2 -->|rests_on| n7
+  n6 -->|from| n5
+  n0 -->|rests_on| n3
+  n0 -->|rests_on| n4
+  n0 -->|rests_on| n5
+  export_legend["UNKNOWN: condition cannot currently be evaluated"]
+  export_note["Scope #40;not a record#41;<br/>10b60ee28c967d8b<br/>0 nodes outside selection<br/>0 boundary links<br/>0 internal links omitted<br/>1 labels shortened #40;80 chars#41;<br/>0 hypotheses not expanded<br/>0 project contributions not expanded<br/>0 unreadable hypotheses<br/>Details: read the text export"]
+  style export_note stroke-dasharray: 4 4
+```

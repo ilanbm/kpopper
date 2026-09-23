@@ -14,30 +14,51 @@ import sys
 HERE = Path(__file__).resolve().parent
 
 
-def parser():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("operation", choices=["setup", "status", "open", "read", "search", "context", "propose", "serve", "enable", "disable", "hook-open"])
+def input_arguments(p):
     p.add_argument("--input", type=Path, help="native record; defaults to the project's registered record")
     p.add_argument("--normalized", action="store_true", help="input is a normalized JSON snapshot")
     p.add_argument("--no-settings", action="store_true", help="use explicit arguments and record-local defaults without user settings")
     p.add_argument("--project", help="stable project name; defaults to the record directory name")
-    p.add_argument("--state", type=Path, help="pending-proposal state directory")
+    p.add_argument("--state", type=Path, help="writable private cache for checked reads and proposals")
     p.add_argument("--profile", type=Path, help="declared navigation profile JSON")
     p.add_argument("--assessment-profile", choices=["checked-reader/v1", "core/v1"],
                    default=None,
                    help="semantic reader profile; defaults to the selected record's declared profile")
     p.add_argument("--encoding", choices=["o200k_base", "cl100k_base"], default="o200k_base")
     p.add_argument("--tokens", type=int)
+    p.add_argument("--revision", help="require this exact record revision; stale revisions refuse")
+
+
+def context_arguments(p, default_direction=None):
+    p.add_argument("--direction", choices=["support","impact"], default=default_direction,
+                   help="support follows premises and sources; impact follows dependents")
+    p.add_argument("--depth", type=int, default=1, help="context depth,0..4; zero reads only seeds")
+    p.add_argument("--max-nodes", type=int, default=16, help="context candidate cap including seeds,1..64")
+
+
+def context_parser():
+    p = argparse.ArgumentParser(prog="kpop context",
+        description="Read records and their declared dependencies from the knowledge graph.",
+        epilog="Reads the current record by default, with support depth 1 and a 2000-token budget. "
+               "No AI conversation or prior session open is needed. Source truth and action authority are not verified.")
+    p.set_defaults(operation="context", embedding_dir=None)
+    p.add_argument("ids", nargs="+", metavar="ID", help="1..8 known record IDs or node:ID handles")
+    input_arguments(p)
+    context_arguments(p, "support")
+    return p
+
+
+def parser():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("operation", choices=["setup", "status", "open", "read", "search", "context", "propose", "serve", "enable", "disable", "hook-open"])
+    input_arguments(p)
     p.add_argument("--ref")
-    p.add_argument("--revision")
     p.add_argument("--offset", type=int)
     p.add_argument("--query", default="", help="search text; use the original question or a faithful project-aware query")
     p.add_argument("--id", dest="ids", action="append", default=[], help="exact known node ID; repeat for multiple candidates")
     p.add_argument("--limit", type=int, default=8, help="search candidate limit,1..32")
     p.add_argument("--cursor", help="returned search continuation; repeat the same query/IDs/branch/mode")
-    p.add_argument("--direction", choices=["support","impact"], help="explicit context traversal direction")
-    p.add_argument("--depth", type=int, default=1, help="context depth,0..4; zero reads only seeds")
-    p.add_argument("--max-nodes", type=int, default=16, help="context candidate cap including seeds,1..64")
+    context_arguments(p)
     p.add_argument("--branch", help="declared branch hint; only breaks ranking ties")
     p.add_argument("--search-mode", choices=["lexical","semantic","hybrid"], default="hybrid")
     p.add_argument("--embedding-dir", type=Path, help="optional local pinned E5 assets; search/serve only, never downloaded")
@@ -84,12 +105,12 @@ def resolve(args):
     return project, path, state, reader, profile
 
 
-def main(argv=None):
+def main(argv=None, *, context=False):
     # Checked-session output is a UTF-8 protocol even when redirected on Windows.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", newline="\n")
-    args = parser().parse_args(argv)
+    args = (context_parser() if context else parser()).parse_args(argv)
     try:
         if args.operation == "setup":
             from .core import setup
@@ -177,6 +198,10 @@ def main(argv=None):
             result=service.searching(args.query,args.revision,args.tokens if args.tokens is not None else 1000,
                                      args.ids,args.limit,args.branch,args.search_mode,args.cursor)
         elif args.operation == "context":
+            if context and args.revision is None:
+                # The existing reader captures the current revision, then checks
+                # it again in contextualizing, rejecting an intervening change.
+                _, args.revision = service.graph()
             if args.revision is None or args.direction is None:
                 raise ValueError("context requires --revision and --direction support|impact")
             result=service.contextualizing(args.ids,args.revision,args.direction,
@@ -191,5 +216,9 @@ def main(argv=None):
         print(json.dumps({"error": "checked sessions need the optional dependencies; install kpopper[session] with Python 3.10+", "missing": error.name}), file=sys.stderr)
         return 2
     except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
-        print(json.dumps({"error": str(error)}), file=sys.stderr)
+        result = {"error": str(error)}
+        if context and isinstance(error, PermissionError):
+            result["hint"] = ("Ensure the input is readable and --state names a writable private directory. "
+                              "In a sandbox, use an allowed temporary directory for --state.")
+        print(json.dumps(result), file=sys.stderr)
         return 2
