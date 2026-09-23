@@ -8,16 +8,15 @@ out of the Codex path.
 ## Native plugin
 
 Install the plugin first. Plugin installation alone does not install or download the
-native runtime, and a globally installed `kpop` is not used by plugin hooks. Start a
-task and run the exact native installer command printed by the active plugin when its
-opener reports the runtime missing (`install_native.sh` on Unix, `install.ps1` on
-Windows). All commands in `plugin-hooks.json`,
+native runtime, and a globally installed `kpop` is not used by plugin hooks. Run
+`sh "<plugin root>/scripts/install_native.sh"` with the plugin root that `codex plugin add`
+prints ([Windows](../../docs/plugin-runtime.md#install-the-native-runtime)), then start a
+new task. All commands in `plugin-hooks.json`,
 including prompt diagnostics, invoke the exact native package binary under `$PLUGIN_ROOT`.
 For the source-only compatibility path, set `KPOPPER_RUNTIME=python` and follow the
-[private Python setup](../../README.md#python-compatibility-mode-for-claude-code-and-codex).
-If opening reports a missing native runtime, run the exact installer command shown by
-the diagnostic and start a new task. In Python compatibility mode, compare
-`doctor`'s `Hook Python` with `KPOPPER_AGENT_CONTEXT.command[0]`.
+[private Python setup](../../docs/plugin-runtime.md#python-compatibility-mode).
+In Python compatibility mode, compare `doctor`'s `Hook Python` with
+`KPOPPER_AGENT_CONTEXT.command[0]`.
 
 
 The Codex package loads the shared skill and these hooks:
