@@ -49,6 +49,8 @@ struct Hypothesis {
 pub(crate) struct SuppliedHypothesis {
     pub name: String,
     pub document: V,
+    /// `document` in the order its file holds it; a finite value keeps names in name order.
+    pub ordered: crate::ordinary_value::Value,
     pub head: V,
     pub source: O,
     pub text: String,
@@ -178,6 +180,82 @@ fn read_hypotheses(
             .map(|n| pool.remove(n).unwrap())
             .collect())
     }
+}
+
+/// Each hypothesis's document in the order its file holds it, in the order the union lays
+/// them.
+fn in_file_order<'a>(
+    hyps: &[Hypothesis],
+    supplied: &'a [SuppliedHypothesis],
+) -> Vec<std::borrow::Cow<'a, crate::ordinary_value::Value>> {
+    hyps.iter()
+        .map(|h| match supplied.iter().find(|s| s.name == h.name) {
+            Some(s) => std::borrow::Cow::Borrowed(&s.ordered),
+            None => {
+                let mut doc = crate::ordinary_source::Source::from_finite(&h.source).projected();
+                if let crate::ordinary_value::Value::Map(body) = &mut doc {
+                    body.remove("hypothesis");
+                }
+                std::borrow::Cow::Owned(doc)
+            }
+        })
+        .collect()
+}
+/// Why the union's field roles cannot be read, told over the union laid in the order its
+/// records hold it - the base's own, then what each hypothesis adds - as the Python reader
+/// lays and reads it; the finite union keeps ids and fields in name order.
+fn in_union_order(
+    capture: &CapturedSource,
+    layers: &[std::borrow::Cow<'_, crate::ordinary_value::Value>],
+    failure: crate::Error,
+) -> crate::Error {
+    if !crate::ordinary_fields::explains_unreadable(&failure) {
+        return failure;
+    }
+    let mut union = crate::ordinary_source::Source::from_finite(capture.source()).projected();
+    for layer in layers {
+        match laid_in_order(&union, layer) {
+            Ok(laid) => union = laid,
+            Err(_) => return failure,
+        }
+    }
+    crate::ordinary_fields::in_order_of(&union, failure)
+}
+/// `layer` over documents kept in their records' order: the hypothesis's collections are laid
+/// in the order its file gives them, each id taking the place the base kept it in, and a new
+/// one following what the collection already holds.
+fn laid_in_order(
+    base: &crate::ordinary_value::Value,
+    hypothesis: &crate::ordinary_value::Value,
+) -> Result<crate::ordinary_value::Value> {
+    use crate::ordinary_value::{Map as Members, Value as Ordered, map as members, map_mut};
+    let collections = crate::ordinary_fields::collections(hypothesis)?;
+    let mut out = base.clone();
+    for name in members(hypothesis)?.keys() {
+        let Some(laid) = collections.get(name) else {
+            continue;
+        };
+        for (other, held) in map_mut(&mut out)?.iter_mut() {
+            if other != name
+                && let Ordered::Map(held) = held
+            {
+                for id in laid.keys() {
+                    held.remove(id);
+                }
+            }
+        }
+        let target = map_mut(&mut out)?
+            .entry(name.clone())
+            .or_insert_with(|| Ordered::Map(Members::new()));
+        if !matches!(target, Ordered::Map(_)) {
+            *target = Ordered::Map(Members::new());
+        }
+        let target = map_mut(target)?;
+        for (id, body) in laid.iter() {
+            target.insert(id.clone(), body.clone());
+        }
+    }
+    Ok(out)
 }
 
 fn text_values<'a>(v: &'a V, out: &mut Vec<&'a str>) {
@@ -490,7 +568,9 @@ pub(crate) fn run_supplied(
         });
     }
     let drops = map(&super::drops(&options.drops)?)?.clone();
-    let page_capture = edit::page(&capture, &hyps, route, &inventory, runtime)?;
+    let layers = in_file_order(&hyps, supplied);
+    let page_capture = edit::page(&capture, &hyps, route, &inventory, runtime)
+        .map_err(|e| in_union_order(&capture, &layers, e))?;
     let page = page_capture.as_ref().map(|capture| &capture.facts);
     let write = edit::WriteContext {
         capture: &capture,
@@ -512,7 +592,8 @@ pub(crate) fn run_supplied(
         drops: &drops,
         brief: Some(&side.brief.projected()),
         page,
-    })?;
+    })
+    .map_err(|e| in_union_order(&capture, &layers, e))?;
     let mut output = report::lines(&c, chrono::Local::now().date_naive())?.join("\n") + "\n";
     capture.verify()?;
     inventory.verify()?;

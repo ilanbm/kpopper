@@ -1,12 +1,12 @@
 use super::*;
-fn cut(value: &str, width: usize) -> String {
+pub(super) fn cut(value: &str, width: usize) -> String {
     if value.chars().count() < width {
         value.into()
     } else {
         value.chars().take(width).collect::<String>() + " ..."
     }
 }
-fn describe(id: &str, body: &V, world: &World<'_>, suffix: &str) -> Result<String> {
+pub(super) fn describe(id: &str, body: &V, world: &World<'_>, suffix: &str) -> Result<String> {
     let width = 110usize.saturating_sub(suffix.chars().count());
     let dep = text(&world.reader.fields["deps"])?;
     if map(body).is_ok_and(|m| m.contains_key(dep)) {
