@@ -884,6 +884,7 @@ resulting `kpop` binary. For plugin work, use the command supplied by the sessio
 | `kpop where` | Locate this project's record |
 | `kpop open` | Open the current context and attention items |
 | `kpop pull <id>` | Retrieve a subject, its sources and reasons |
+| `kpop context <id>` | Read records with their declared dependencies and checks; use `--direction impact` for dependents |
 | `kpop search "terms"` | Find matching claims and local source passages |
 | `kpop affects <id>` | Trace what depends on a premise |
 | `kpop check` | Check recorded conditions and changed premises |
@@ -924,7 +925,7 @@ See the [command reference](docs/reference.md), [history commands](docs/history-
 | Command | Skill | What happens in practice · possible CLI calls |
 | --- | --- | --- |
 | `/kpopper:kpopper` | [kpopper](skills/kpopper/SKILL.md) | Explains the method and chooses the workflow that fits the task. CLI calls follow the selected workflow. |
-| `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Retrieves relevant claims, sources and dependencies before answering, and checks what needs review.<br>May use `kpop pull <id>`, `kpop affects <id>`, `kpop check` or `kpop search "terms"`. |
+| `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Finds relevant IDs, then prefers `kpop context <id>` for records with dependencies and checks.<br>Uses `pull` for concise readings or when the checked reader is unavailable, and `affects` for changed inputs. |
 | `/kpopper:record` | [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. |
 | `/kpopper:map` | [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. |
 | `/kpopper:consolidate` | [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. |

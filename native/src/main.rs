@@ -52,6 +52,8 @@ enum Command {
     Pull(kpop_native::public_readers::Options),
     /// Trace the consequences of changed entries.
     Affects(kpop_native::public_readers::Options),
+    /// Read records and their declared dependencies from the knowledge graph.
+    Context(kpop_native::public_checked_session::ContextCommand),
     /// Optional applications built from the captured record.
     Experimental {
         #[command(subcommand)]
@@ -272,7 +274,10 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     } else {
         Some(kpop_native::public_workspace::locate(&cwd, mode)?)
     };
-    let root = location.as_ref().map(|l| l.workspace.clone()).unwrap_or(cwd);
+    let root = location
+        .as_ref()
+        .map(|l| l.workspace.clone())
+        .unwrap_or(cwd);
     payload["cwd"] = json!(root);
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
@@ -532,6 +537,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Assess(_)
         | Command::Where
         | Command::Session(_)
+        | Command::Context(_)
         | Command::Consolidate(_)
         | Command::Same(_)
         | Command::Distinct(_)
@@ -840,7 +846,7 @@ fn main() {
         }
         std::process::exit(code);
     }
-    if let Command::Session(options) = &args.command {
+    if matches!(&args.command, Command::Session(_) | Command::Context(_)) {
         let result = (|| {
             let cwd = args
                 .workspace
@@ -853,11 +859,21 @@ fn main() {
                 } else {
                     kpop_native::source_capture::ReadMode::Live
                 };
-            if kpop_native::session_admin::handles(&options.operation) {
-                kpop_native::session_admin::run(options, &cwd)
-            } else {
-                kpop_native::public_checked_session::run(options, &cwd, mode)
-                    .map(|text| kpop_native::session_admin::Output { text, code: 0 })
+            match &args.command {
+                Command::Session(options)
+                    if kpop_native::session_admin::handles(&options.operation) =>
+                {
+                    kpop_native::session_admin::run(options, &cwd)
+                }
+                Command::Session(options) => {
+                    kpop_native::public_checked_session::run(options, &cwd, mode)
+                        .map(|text| kpop_native::session_admin::Output { text, code: 0 })
+                }
+                Command::Context(options) => {
+                    kpop_native::public_checked_session::run_context(options, &cwd, mode)
+                        .map(|text| kpop_native::session_admin::Output { text, code: 0 })
+                }
+                _ => unreachable!(),
             }
         })();
         match result {
@@ -872,7 +888,17 @@ fn main() {
                 }
             }
             Err(error) => {
-                eprintln!("{}", json!({"error":error.to_string()}));
+                let message = error.to_string();
+                let mut response = json!({"error":message});
+                if matches!(&args.command, Command::Context(_))
+                    && (message.contains("Permission denied")
+                        || message.contains("Operation not permitted"))
+                {
+                    response["hint"] = json!(
+                        "Ensure the input is readable and --state names a writable private directory. In a sandbox, use an allowed temporary directory for --state."
+                    );
+                }
+                eprintln!("{response}");
                 std::process::exit(2);
             }
         }
@@ -1029,10 +1055,18 @@ fn main() {
     if let Command::IngestionHook(options) = &args.command {
         let result = (|| -> Result<kpop_native::ingestion_hooks::Output> {
             let payload: Value = serde_json::from_slice(&stdin_bytes()?)?;
-            let cwd = args.workspace.clone()
-                .or_else(|| payload.get("cwd").and_then(Value::as_str)
-                    .filter(|path| !path.is_empty()).map(PathBuf::from))
-                .map(Ok).unwrap_or_else(std::env::current_dir)?;
+            let cwd = args
+                .workspace
+                .clone()
+                .or_else(|| {
+                    payload
+                        .get("cwd")
+                        .and_then(Value::as_str)
+                        .filter(|path| !path.is_empty())
+                        .map(PathBuf::from)
+                })
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
             kpop_native::ingestion_hooks::run(options, payload, &cwd)
         })();
         match result {
@@ -1048,13 +1082,20 @@ fn main() {
         }
     }
     if let Command::Ingest(options) = &args.command {
-        let cwd = args.workspace.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        let cwd = args
+            .workspace
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
         let input = matches!(&options.command, kpop_native::public_ingestion::Command::Capture(capture) if capture.file == "-")
             .then(stdin_bytes)
             .transpose();
         let output = match input {
             Ok(input) => kpop_native::public_ingestion::dispatch(options, &cwd, input.as_deref()),
-            Err(error) => kpop_native::public_ingestion::Output { stdout: format!("{}\n", json!({"error":error.to_string()})), stderr: String::new(), code: 2 },
+            Err(error) => kpop_native::public_ingestion::Output {
+                stdout: format!("{}\n", json!({"error":error.to_string()})),
+                stderr: String::new(),
+                code: 2,
+            },
         };
         print!("{}", output.stdout);
         eprint!("{}", output.stderr);
