@@ -861,10 +861,10 @@ fn main() {
                 .clone()
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
-            Ok::<_, kpop_native::Error>(kpop_native::public_consolidation::dispatch(
-                &arguments.options()?,
-                &cwd,
-            ))
+            let mut options = arguments.options()?;
+            options.frozen =
+                args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen");
+            Ok::<_, kpop_native::Error>(kpop_native::public_consolidation::dispatch(&options, &cwd))
         })();
         let (output, error, code) = match result {
             Ok(output) => (output.stdout, output.stderr, output.code),

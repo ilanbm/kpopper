@@ -218,7 +218,9 @@ kpop consolidate --from BRANCH_OR_REF --dry-run
 
 The dry run reports changed premises, fired falsifiers, structural gaps, contested IDs and
 possible duplicates. A clean structural check is not enough to fold a hypothesis whose
-premises still need review. Refutation retains a negative finding. `--from` reads another
+premises still need review. In an Advanced project, a live dry run with no hypothesis named
+also tests the pending shared findings against the record: it is red when accepting one would
+break something, adopts none of them, and is left out of a `--frozen` run. Refutation retains a negative finding. `--from` reads another
 branch's committed record; it never pushes to that branch.
 
 These checks can run during work; they do not require a pull request or merge. The receiving
