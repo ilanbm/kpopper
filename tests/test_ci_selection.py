@@ -22,6 +22,81 @@ def lanes(changes, **options):
     return {lane for lane, selected in CI.select(changes, **options).items() if selected}
 
 
+def _split_github_expression(expression, operator):
+    parts, start, depth, quoted = [], 0, 0, False
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if char == "'":
+            quoted = not quoted
+        elif not quoted and char == "(":
+            depth += 1
+        elif not quoted and char == ")":
+            depth -= 1
+        elif not quoted and depth == 0 and expression.startswith(operator, index):
+            parts.append(expression[start:index].strip())
+            index += len(operator)
+            start = index
+            continue
+        index += 1
+    if parts:
+        parts.append(expression[start:].strip())
+    return parts
+
+
+def _eval_github_expression(expression, context):
+    expression = expression.strip()
+    while expression.startswith("(") and expression.endswith(")"):
+        depth, quoted, closes_at_end = 0, False, False
+        for index, char in enumerate(expression):
+            if char == "'":
+                quoted = not quoted
+            elif not quoted and char == "(":
+                depth += 1
+            elif not quoted and char == ")":
+                depth -= 1
+                if depth == 0:
+                    closes_at_end = index == len(expression) - 1
+                    break
+        if not closes_at_end:
+            break
+        expression = expression[1:-1].strip()
+
+    def truthy(value):
+        return value is not None and value is not False and value != ""
+
+    ors = _split_github_expression(expression, "||") or [expression]
+    result = None
+    for or_term in ors:
+        ands = _split_github_expression(or_term, "&&") or [or_term]
+        and_result = True
+        for atom in ands:
+            equality = _split_github_expression(atom, "==")
+            if equality:
+                left, right = (_eval_github_expression(x, context) for x in equality)
+                value = left == right
+            elif atom.startswith("'") and atom.endswith("'"):
+                value = atom[1:-1]
+            else:
+                value = context.get(atom)
+            if not truthy(value):
+                and_result = value
+                break
+            and_result = value
+        if truthy(and_result):
+            return and_result
+        result = and_result
+    return result
+
+
+def _render_group(template, context):
+    return re.sub(
+        r"\$\{\{(.*?)\}\}",
+        lambda match: str(_eval_github_expression(match.group(1), context)),
+        template,
+    )
+
+
 def tracked():
     raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
     return [p.decode() for p in raw.split(b"\0") if p]
@@ -312,18 +387,12 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertNotIn("gmp-replacement-${{ inputs.target }}", uploaded)
 
     def test_main_checks_are_not_cancelled_by_a_later_main_commit(self):
-        workflow = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())
-        self.assertEqual(
-            workflow["concurrency"]["group"],
-            "check-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || github.event_name == 'workflow_dispatch' && github.run_id || 'shared' }}",
-        )
-        self.assertEqual(workflow["concurrency"]["cancel-in-progress"],
+        check_workflow = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())
+        check_template = check_workflow["concurrency"]["group"]
+        self.assertEqual(check_workflow["concurrency"]["cancel-in-progress"],
                          "${{ github.event_name == 'pull_request' }}")
         native = yaml.safe_load((ROOT / ".github/workflows/native-rust.yml").read_text())
-        self.assertEqual(
-            native["concurrency"]["group"],
-            "native-rust-${{ github.workflow }}-${{ github.ref }}-${{ inputs.validation || 'full' }}-${{ inputs.target || 'all' }}-${{ github.event_name == 'push' && github.sha || github.event_name == 'workflow_dispatch' && github.run_id || inputs.validation == 'distribution' && github.sha || 'checks' }}",
-        )
+        native_template = native["concurrency"]["group"]
         self.assertEqual(native["concurrency"]["cancel-in-progress"],
                          "${{ github.event_name == 'pull_request' }}")
         check_call = self.jobs()["native-cli"]["with"]
@@ -332,31 +401,42 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertNotIn("validation", check_call)
         self.assertEqual(publish_call["validation"], "distribution")
 
-        def check_group(event, ref, sha, run_id):
-            suffix = sha if event == "push" else run_id if event == "workflow_dispatch" else "shared"
-            return f"check-{ref}-{suffix}"
+        def context(caller, event, ref, sha, run_id, validation="full", target="all"):
+            return {"github.workflow": caller, "github.event_name": event, "github.ref": ref,
+                    "github.sha": sha, "github.run_id": run_id,
+                    "inputs.validation": validation, "inputs.target": target}
 
-        def native_group(caller, ref, event, validation, target, sha, run_id):
-            suffix = (sha if event == "push" else run_id if event == "workflow_dispatch"
-                      else sha if validation == "distribution" else "checks")
-            return f"native-rust-{caller}-{ref}-{validation or 'full'}-{target or 'all'}-{suffix}"
+        def check_group(event, ref, sha, run_id):
+            return _render_group(check_template, context("kpopper check", event, ref, sha, run_id))
+
+        def native_group(caller, event, ref, sha, run_id, validation="full", target="all"):
+            return _render_group(native_template, context(caller, event, ref, sha, run_id, validation, target))
 
         main_check = check_group("push", "refs/heads/main", "commit-a", "run-a")
         newer_main_check = check_group("push", "refs/heads/main", "commit-b", "run-b")
         pr_check = check_group("pull_request", "refs/pull/5/merge", "head-a", "run-pr-a")
         newer_pr_check = check_group("pull_request", "refs/pull/5/merge", "head-b", "run-pr-b")
-        main_native = native_group("kpopper check", "refs/heads/main", "push", None, "all", "commit-a", "run-a")
-        main_publish = native_group("publish", "refs/heads/main", "push", "distribution", "all", "commit-a", "run-pub")
+        other_pr_check = check_group("pull_request", "refs/pull/6/merge", "head-c", "run-pr-c")
+        main_native = native_group("kpopper check", "push", "refs/heads/main", "commit-a", "run-a")
+        main_publish = native_group("publish", "push", "refs/heads/main", "commit-a", "run-pub", "distribution")
+        pr_native = native_group("kpopper check", "pull_request", "refs/pull/5/merge", "head-a", "run-pr-a", target="without-darwin-x86_64")
+        newer_pr_native = native_group("kpopper check", "pull_request", "refs/pull/5/merge", "head-b", "run-pr-b", target="all")
+        same_pr_native = native_group("kpopper check", "pull_request", "refs/pull/5/merge", "head-c", "run-pr-c", target="all")
         manual_check = check_group("workflow_dispatch", "refs/heads/main", "sha", "run-manual")
-        manual_native = native_group("native Rust platform acceptance", "refs/heads/main", "workflow_dispatch", "full", "all", "sha", "run-native")
+        manual_native = native_group("native Rust platform acceptance", "workflow_dispatch", "refs/heads/main", "sha", "run-native")
         self.assertNotEqual(main_check, newer_main_check)
         self.assertEqual(pr_check, newer_pr_check)
+        self.assertNotEqual(pr_check, other_pr_check)
         self.assertNotEqual(main_native, main_publish)
+        self.assertNotEqual(pr_native, pr_check)
+        self.assertNotEqual(pr_native, newer_pr_native)
+        self.assertEqual(newer_pr_native, same_pr_native)
         self.assertNotEqual(manual_check, manual_native)
         self.assertNotEqual(manual_check, main_check)
         self.assertEqual(
-            len({main_check, newer_main_check, pr_check, main_native, main_publish, manual_check, manual_native}),
-            7,
+            len({main_check, newer_main_check, pr_check, other_pr_check, main_native, main_publish,
+                 pr_native, newer_pr_native, manual_check, manual_native}),
+            10,
         )
 
     def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
