@@ -230,6 +230,27 @@ class RequiredResults(unittest.TestCase):
         self.assertTrue(CI.required_failures(needs, pull_request=True))
 
 
+class NativeDocumentUI(unittest.TestCase):
+    def test_document_inputs_select_the_native_lane(self):
+        for path in ('tests/test_document_ui.cjs', 'tests/document_ui_fixture.py',
+                     'tests/document_native_bridge.py', 'tests/document-support/package-lock.json',
+                     'native/src/annotated_document.rs', 'native/shared/document/layer.js',
+                     'native/ci/document_ui.py'):
+            self.assertIn('rust', lanes([path]), path)
+            self.assertTrue(CI.lane_reads(CI.LANES['rust'], path), path)
+
+    def test_required_linux_native_job_runs_the_dom_suite(self):
+        import yaml
+        jobs = yaml.safe_load((ROOT / '.github/workflows/native-rust.yml').read_text())['jobs']
+        steps = jobs['tests']['steps']
+        step = next((s for s in steps if 'python native/ci/document_ui.py' in s.get('run', '')), None)
+        self.assertIsNotNone(step, 'the required native test job must execute DOM interaction tests')
+        self.assertIn("linux-x86_64", step['if'])
+        self.assertNotIn('continue-on-error', step)
+        self.assertTrue(any('npm ci' in s.get('run', '') for s in steps))
+        self.assertIn('tests', jobs['verdict']['needs'])
+
+
 class WorkflowCoverage(unittest.TestCase):
     def jobs(self, name="check.yml"):
         return yaml.safe_load((ROOT / ".github/workflows" / name).read_text())["jobs"]

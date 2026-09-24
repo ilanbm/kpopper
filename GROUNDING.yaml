@@ -1384,6 +1384,16 @@ sources:
             preserve kpopper and kpop names, start the native GitHub release series at 0.9.0 and mark
             it Latest while retaining previous tags and legacy package releases."
     read: "2026-09-22"
+  s.native_document_interactions:
+    name: "Native document interaction coverage"
+    file: "tests/test_document_ui.cjs"
+    read: "2026-09-24"
+    at: "native/ci/document_ui.py and the test-only annotated_document bridge"
+    of: "The offline DOM suite exercises artifacts generated and validated by the checkout-built
+         Rust document library. Its 56 cases cover source navigation, review choices, saved copies,
+         focus, layout, Hebrew and hostile text. Corrupting the generated panel makes the runner
+         fail. The Linux native test job runs the suite with pinned DOM dependencies; this does not
+         establish real-browser CSP or pixel-rendering behavior."
   s.native_edit_rewrite:
     name: "Native view edit and identity rewrite conformance"
     file: "native/src/history_edits.rs"
