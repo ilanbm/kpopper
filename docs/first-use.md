@@ -27,6 +27,12 @@ task may finish without creating a record. During work that will be revisited, t
 starts with an actual useful finding and its source. Conclusions are added when there is
 something to conclude, and their snapshots are filled by the existing writer.
 
+New Git projects currently start in **experimental Advanced mode**. It keeps knowledge
+with each branch, but parallel PRs can conflict on `GROUNDING.yaml` and require repeated
+CI after resolution. Read the [open merge design question](advanced-mode-merging.md) and
+[working modes](project-modes.md) when choosing how to use it. Projects without Git start
+in Simple mode; existing registered shared records keep their configured behavior.
+
 ## Commands
 
 The first-use interface has three operations. When deferred work first arises, the agent

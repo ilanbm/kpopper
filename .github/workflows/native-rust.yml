@@ -278,6 +278,20 @@ jobs:
                 ;;
             esac
           } 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: matrix.target == 'linux-x86_64' && env.KPOPPER_CI_VALIDATION == 'full'
+        with:
+          node-version: "22"
+      - name: Install the pinned offline DOM dependency
+        if: matrix.target == 'linux-x86_64' && env.KPOPPER_CI_VALIDATION == 'full'
+        working-directory: tests/document-support
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify native document interactions and exported copies
+        if: matrix.target == 'linux-x86_64' && env.KPOPPER_CI_VALIDATION == 'full'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/ci/document_ui.py 2>&1 | tee "$RUNNER_TEMP/native-evidence/document-ui.log"
       - name: Keep each test's outcome and duration with the evidence
         if: ${{ !cancelled() }}
         shell: bash

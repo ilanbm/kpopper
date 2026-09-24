@@ -59,7 +59,7 @@ repository once, with its README illustration and exact publication scope; do no
 another publication approval as part of watch setup.
 
 1. Locate the workspace and existing followup configuration with `kpop followups status`.
-   Use the command from the current plugin when needed: `<plugin-root>/bin/kpop`.
+   Use the command from the current plugin when needed: `<plugin-root>/scripts/bin/kpop`.
    The plugin root is two directories above this skill folder. Keep its pinned record and
    canonical task destination. Use an existing destination from user context or its verified
    suggestion; a private fallback is available. If no useful knowledge record exists yet,

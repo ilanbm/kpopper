@@ -112,7 +112,7 @@ def main():
 
     plugin = root / "plugin with spaces"
     plugin.mkdir()
-    for name in ("scripts", "bin", "hooks", "skills", "adapters", ".codex-plugin", ".claude-plugin"):
+    for name in ("scripts", "hooks", "skills", "adapters", ".codex-plugin", ".claude-plugin"):
         shutil.copytree(repository / name, plugin / name,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "runtime"))
     for name in ("VERSION", "install.sh", "install.ps1"):

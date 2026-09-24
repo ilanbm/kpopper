@@ -27,7 +27,11 @@ fn cli(root: &Path, args: &[&str]) -> std::process::Output {
                     .join(&target)
                     .join(env!("KPOP_ORDINARY_SOURCE_SHA256"))
             });
-        let executable = if cfg!(windows) { "epistemic-core.exe" } else { "epistemic-core" };
+        let executable = if cfg!(windows) {
+            "epistemic-core.exe"
+        } else {
+            "epistemic-core"
+        };
         for name in ["build.json", executable] {
             fs::copy(program.join(name), ordinary.join(name)).unwrap();
         }
@@ -52,7 +56,7 @@ fn ordinary_hub_builds_arranged_typed_interactive_page_and_verifies_without_writ
     fs::write(root.join("GROUNDING.yaml"), ORDINARY).unwrap();
     fs::write(root.join("notes # %.html"), "source").unwrap();
     fs::create_dir(root.join(".kpopper")).unwrap();
-    fs::write(root.join(".kpopper/view.yaml"), "title: Current view\nsections:\n- title: Decision\n  pick: judgments\n  as: cards\n- title: Inputs\n  pick: p\n  as: table\n").unwrap();
+    fs::write(root.join(".kpopper/view.yaml"), "title: Current view\nsections:\n- title: Decision\n  pick: judgments\n  as: cards\n- title: Inputs\n  pick: p\n  as: table\n- title: Sources\n  pick: s\n  as: links\n").unwrap();
     let verified = ok(root, &["--frozen", "page", "--verify"]);
     assert!(
         String::from_utf8_lossy(&verified.stdout)
@@ -65,7 +69,7 @@ fn ordinary_hub_builds_arranged_typed_interactive_page_and_verifies_without_writ
     assert!(html.contains("data-tab=\"now\""));
     assert!(html.contains("class=\"card\""));
     assert!(html.contains("data-id=\"d.work\""));
-    assert!(html.contains("data-id=\"p.enabled\">True"));
+    assert!(html.contains("data-id=\"p.enabled\">yes"));
     assert!(html.contains("../notes%20%23%20%25.html"));
     assert!(html.contains("window.__E="));
     assert!(html.contains("window.__J="));
@@ -102,9 +106,10 @@ fn ordinary_hub_uses_reader_flags_for_muted_moves() {
     .unwrap();
     let verified = cli(root, &["--frozen", "page", "--verify"]);
     assert!(verified.status.success());
-    assert_eq!(
-        String::from_utf8(verified.stdout).unwrap(),
-        "4 elements, 3 entries, 1 judgments, 2 tabs, 0 problems\n"
+    let output = String::from_utf8(verified.stdout).unwrap();
+    assert!(
+        output.ends_with("4 elements, 3 entries, 1 judgments, 2 tabs, 0 problems\n"),
+        "{output}"
     );
     ok(root, &["--frozen", "page", "--out", "page.html"]);
     let html = fs::read_to_string(root.join("page.html")).unwrap();
@@ -130,9 +135,10 @@ fn ordinary_hub_selects_and_spills_blocked_judgments() {
     .unwrap();
     let verified = cli(root, &["--frozen", "page", "--verify"]);
     assert!(verified.status.success());
-    assert_eq!(
-        String::from_utf8(verified.stdout).unwrap(),
-        "2 elements, 1 entries, 1 judgments, 2 tabs, 0 problems\n"
+    let output = String::from_utf8(verified.stdout).unwrap();
+    assert!(
+        output.ends_with("2 elements, 1 entries, 1 judgments, 2 tabs, 0 problems\n"),
+        "{output}"
     );
     ok(root, &["--frozen", "page", "--out", "selected.html"]);
     let selected = fs::read_to_string(root.join("selected.html")).unwrap();
@@ -162,15 +168,18 @@ fn ordinary_hub_reports_stale_shape_as_note_without_failure() {
     fs::create_dir(root.join(".kpopper")).unwrap();
     fs::write(
         root.join(".kpopper/view.yaml"),
-        "shape: {entries: 3, judgments: 1, flagged: 0, blocked: 0}\nsections:\n- {title: In, why: w, pick: p, as: table}\n",
+        "shape: {entries: 3, judgments: 0, flagged: 7, blocked: 0}\nsections:\n- {title: In, why: w, pick: p, as: table}\n",
     )
     .unwrap();
     let verified = cli(root, &["--frozen", "page", "--verify"]);
     assert!(verified.status.success());
-    assert_eq!(
-        String::from_utf8(verified.stdout).unwrap(),
-        "NOTE no arrangement decision is recorded, so the brief is held against none\nNOTE the brief recorded a different shape: entries: 3 -> 4\n5 elements, 4 entries, 1 judgments, 2 tabs, 0 problems\n"
+    let output = String::from_utf8(verified.stdout).unwrap();
+    assert!(
+        output.ends_with("5 elements, 4 entries, 1 judgments, 2 tabs, 0 problems\n"),
+        "{output}"
     );
+    assert!(output.contains("NOTE the brief recorded a different shape: entries: 3 -> 4; judgments: 0 -> 1; flagged: 7 -> 0\n"), "{output}");
+    assert!(output.contains("NOTE no arrangement decision is recorded, so the brief is held against none - an arrangement is a judgment resting on the session sources a tab serves, with a sign over a count: add v.<slug> rests_on=[s.<...>, page.unserved] verdict=... wrong_if='page.unserved > 0'\n"), "{output}");
     ok(root, &["--frozen", "page", "--out", "page.html"]);
     assert!(
         fs::read_to_string(root.join("page.html"))
@@ -301,7 +310,7 @@ fn ordinary_hub_without_a_brief_says_what_needs_a_person_on_the_record_cards() {
     );
     let html = fs::read_to_string(root.join("page.html")).unwrap();
     assert!(!html.contains("decided <span class=\"fx\" data-id=\"v.layout\">"));
-    assert!(html.contains("data-id=\"v.layout\">Keep the page as it is</div><div class=\"state\" data-warning=\"true\">its own condition for being wrong now holds</div>"));
+    assert!(html.contains("data-id=\"v.layout\" dir=\"auto\">Keep the page as it is</div><div class=\"state\" data-warning=\"true\">its own condition for being wrong now holds</div>"));
     assert!(html.contains(
         "<div class=\"state\" data-warning=\"true\">unverified: nobody has read the survey</div>"
     ));
@@ -323,10 +332,17 @@ fn ordinary_hub_verifies_the_page_fixture_and_its_string_open_question() {
     ));
     let verified = ok(root, &["--frozen", "experimental", "hub", "--verify"]);
     let stdout = String::from_utf8(verified.stdout).unwrap();
-    assert!(!stdout.contains("FAIL"), "{stdout}");
-    assert!(
-        stdout.ends_with("17 elements, 14 entries, 3 judgments, 3 tabs, 0 problems\n"),
-        "{stdout}"
+    assert_eq!(
+        stdout,
+        r#"NOTE a dump with a heading: What the quote buys
+NOTE 1 entries carry no human name, so the page has to fall back to generic labels: q.second_boiler
+NOTE 6 of 16 live dependencies are named in the prose that cites them; the rest are reachable only by hovering the judgment
+NOTE coverage: 10 covered · spill 0 · 0 intents no tab serves · 0 recent in a row · drift 0.0 since 2026-09-03
+NOTE tab 'The February night' serves s.2026_09_02_heating: picks 3 of 3 they recorded
+NOTE tab 'The glazing quote' serves s.2026_09_03_glazing: picks 3 of 4 they recorded
+NOTE no section picks: doc, q, s
+17 elements, 14 entries, 3 judgments, 3 tabs, 0 problems
+"#
     );
     ok(
         root,
@@ -571,4 +587,153 @@ fn hub_protects_declared_files_in_record_and_also_containers() {
             "original source"
         );
     }
+}
+
+const COUNTED_ARRANGEMENT: &str = "meta: {name: Page counts}\nsources:\n  s.request: {name: Request, asked: Show the current reading, read: 2026-09-03}\nknown:\n  p.answer: {name: Answer, v: 2, from: s.request}\n  page.unserved: {name: Unserved, v: 0}\njudgments:\n  v.layout:\n    verdict: Keep the reading together\n    rests_on: [s.request, page.unserved]\n    seen: {s.request: 'read 2026-09-03', page.unserved: 0}\n    wrong_if: page.unserved > 0\n    born: 2026-09-03\n";
+
+#[test]
+fn ordinary_hub_draws_flags_after_page_counts_for_cards_selectors_spill_and_alerts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), COUNTED_ARRANGEMENT).unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    for (pick, renderer) in [
+        ("falsified", "cards"),
+        ("flagged", "alerts"),
+        ("p", "table"),
+    ] {
+        fs::write(root.join(".kpopper/view.yaml"), format!("title: Current reading\nsections:\n- {{title: Review, why: Current state, pick: {pick}, as: {renderer}}}\n")).unwrap();
+        let verified = cli(root, &["--frozen", "page", "--verify"]);
+        let output = String::from_utf8(verified.stdout).unwrap();
+        assert_eq!(verified.status.code(), Some(1), "{output}");
+        assert!(
+            output.contains(
+                "FAIL v.layout: wrong_if holds (page.unserved > 0) - decided by the page"
+            ),
+            "{output}"
+        );
+        assert!(!output.contains("picks nothing"), "{output}");
+        ok(root, &["--frozen", "page", "--out", "page.html"]);
+        let html = fs::read_to_string(root.join("page.html")).unwrap();
+        let now = html
+            .split("<section id=\"panel-now\"")
+            .nth(1)
+            .unwrap()
+            .split("<section id=\"panel-record\"")
+            .next()
+            .unwrap();
+        assert!(now.contains("data-id=\"v.layout\""), "{now}");
+        assert!(
+            now.contains("its own condition for being wrong now holds"),
+            "{now}"
+        );
+        assert_eq!(now.contains("class=\"spill\""), pick == "p");
+    }
+}
+
+#[test]
+fn ordinary_hub_record_groups_names_references_and_heading_match_python() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), "meta: {name: Record, scope: Current scope, updated: 2026-09-24, prefixes: {p: parameter, s: source}}\nsources:\n  s.reading: {name: Reading}\nknown:\n  p.one: {name: First, v: 100}\n  p.two: {name: Second, v: 200}\njudgments:\n  d.choice:\n    verdict: Keep p.one\n    because: '{{p.two}} supports p.one'\n    rests_on: [p.one, p.two]\n    seen: {p.one: 100, p.two: 200}\n    wrong_if: p.one > 150\n").unwrap();
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    for expected in [
+        "<nav class=\"ns\" dir=\"ltr\"><a href=\"#g-p\" title=\"p.\">parameter (2)</a><a href=\"#g-s\" title=\"s.\">source (1)</a></nav>",
+        "<h2 id=\"g-p\" title=\"p.\">parameter</h2>",
+        "<p class=\"scope\" dir=\"auto\">Current scope</p>",
+        "3 entries and 1 judgments. Last updated 2026-09-24",
+        "Keep <span class=\"fx in\" data-id=\"p.one\">First</span>",
+        "<div class=\"bc\" dir=\"auto\"><span class=\"fx in\" data-id=\"p.two\">200</span> supports <span class=\"fx in\" data-id=\"p.one\">First</span></div>",
+        "Generated from the record - nothing here was typed twice.",
+    ] {
+        assert!(html.contains(expected), "missing {expected}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn hub_output_is_readable_by_other_accounts_when_created_and_replaced() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), ORDINARY).unwrap();
+    let output = root.join("page.html");
+    for _ in 0..2 {
+        ok(root, &["--frozen", "page", "--out", "page.html"]);
+        assert_eq!(
+            fs::metadata(&output).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        fs::set_permissions(&output, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+}
+
+#[test]
+fn ordinary_hub_notes_distinguish_written_and_resolved_reasoning_lengths() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let written = "Long words ".repeat(45);
+    let quote = "א".repeat(450);
+    fs::write(root.join("GROUNDING.yaml"), format!("meta: {{name: Reasoning}}\nknown:\n  p.quote: {{name: Quote, v: '{quote}'}}\n  p.load: {{name: Load, v: 1}}\njudgments:\n  d.cut:\n    verdict: Keep\n    because: '{written}'\n    rests_on: [p.load]\n    seen: {{p.load: 1}}\n    wrong_if: p.load > 3\n  d.resolved:\n    verdict: Keep\n    because: '{{{{p.quote}}}}'\n    rests_on: [p.quote, p.load]\n    seen: {{p.quote: '{quote}', p.load: 1}}\n    wrong_if: p.load > 3\n")).unwrap();
+    let output = String::from_utf8(ok(root, &["--frozen", "page", "--verify"]).stdout).unwrap();
+    assert!(output.contains("NOTE 1 reasoning longer than the 400 characters a card carries; each is drawn to its last whole word and marked. Longest first: d.cut (495)\n"), "{output}");
+    assert!(output.contains("NOTE 1 reasoning within 400 characters as written and past them once their references resolve; what each names is long, so the card is drawn whole. Longest first: d.resolved (450)\n"), "{output}");
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(!html.contains(&format!("<div class=\"bc\" dir=\"auto\">{written}")));
+    assert!(html.contains(&format!("data-id=\"p.quote\">{quote}</span></div>")));
+    assert!(html.contains("words…</div>"));
+}
+
+#[test]
+fn ordinary_hub_keeps_movement_and_container_source_order_on_the_record() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.reading: {name: Reading, v: 20}\n  p.limit: {name: Limit, v: 100}\n  p.details: {name: Details, v: {z: 1, a: [2, 3]}}\njudgments:\n  d.keep:\n    verdict: 'Keep {{p.reading}}'\n    rests_on: [p.reading, p.limit]\n    seen: {p.reading: 10, p.limit: 100}\n    wrong_if: p.limit > 200\n").unwrap();
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    for expected in [
+        "class=\"card moved\" data-judgment=\"d.keep\" data-review=\"moved\"",
+        "class=\"fx in mv\" data-id=\"p.reading\" title=\"was 10 when this was reviewed\">20</span>",
+        "<div class=\"mvd\" dir=\"auto\">Moved since this was reviewed: Reading 10 &rarr; 20</div>",
+        "data-id=\"p.details\">{&#x27;z&#x27;: 1, &#x27;a&#x27;: [2, 3]}</span>",
+    ] {
+        assert!(html.contains(expected), "missing {expected}");
+    }
+}
+
+#[test]
+fn ordinary_hub_reports_undecidable_page_counts_after_counting() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        COUNTED_ARRANGEMENT
+            .replace("page.unserved", "page.drift")
+            .replace("    born: 2026-09-03\n", ""),
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/view.yaml"),
+        "sections:\n- {title: Undecided, why: Unavailable counts, pick: unknown, as: cards}\n",
+    )
+    .unwrap();
+    let verified = String::from_utf8(ok(root, &["--frozen", "page", "--verify"]).stdout).unwrap();
+    assert!(!verified.contains("picks nothing"), "{verified}");
+    assert!(verified.contains("drift -"), "{verified}");
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(html.contains("its condition cannot currently be evaluated"));
+}
+
+#[test]
+fn ordinary_hub_float_references_use_ten_significant_digits() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.precise: {name: Precise, v: 1.23456789123}\njudgments:\n  d.keep:\n    verdict: 'Keep {{p.precise}}'\n    rests_on: [p.precise]\n    seen: {p.precise: 1.23456789123}\n    wrong_if: p.precise > 2\n").unwrap();
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(html.contains("Keep <span class=\"fx in\" data-id=\"p.precise\">1.234567891</span>"));
 }

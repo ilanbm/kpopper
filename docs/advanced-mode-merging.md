@@ -63,8 +63,15 @@ consolidated commit or silently choose a disputed claim. A `pull_request` workfl
 not run while GitHub cannot create its merge result because of a conflict. See
 [CI integration](coding-and-ci.md) and [GitHub workflow events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request).
 
+A bounded local resolver is available in this source tree as `kpop consolidate --resolve`
+(with `--dry-run` for preview). It acts only after a Git merge stops, validates the staged
+candidate, preserves supported history and writes the record without staging or committing.
+Competing claims and unsupported cases remain explicit refusals. This reduces manual
+resolution work; it does not prevent a later target update from causing a conflict or
+avoid CI on a new commit. See [the exact command contract](coding-and-ci.md#resolve-a-stopped-git-merge-locally).
+
 `consolidate --from` is a directional proposal check, not a general three-way Git merge
-implementation. A future merger would need the common base, both complete records and
+implementation. A general merger needs the common base, both complete records and
 their evidence, and the resulting code tree. A file-level driver alone is not a complete
 transaction or a validation of the whole graph.
 

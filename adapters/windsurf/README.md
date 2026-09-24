@@ -42,8 +42,8 @@ Source: `https://docs.devin.ai/desktop/cascade/hooks`, fetched 2026-09-01.
     cp <plugin>/adapters/windsurf/hooks.json .windsurf/hooks.json
 
 Install the checkout's native runtime once with `sh <plugin>/scripts/install_native.sh`,
-then replace `/absolute/path/to/kpopper/bin/kpop` inside `hooks.json`'s `command` with
-the absolute path of this checkout's `bin/kpop`, keeping the quotes around it — see
+then replace `/absolute/path/to/kpopper/scripts/bin/kpop` inside `hooks.json`'s `command` with
+the absolute path of this checkout's `scripts/bin/kpop`, keeping the quotes around it — see
 "not verified," below, for why a relative path can't be shipped portable here the way
 it can for Gemini. The command needs no Python.
 
@@ -53,7 +53,7 @@ it can for Gemini. The command needs no Python.
   field on a hook entry, but the docs don't say what it defaults to, and there's
   nothing here playing the role of Gemini's documented `${extensionPath}` or a
   Codex-style `PLUGIN_ROOT`. The shipped command therefore names a placeholder,
-  `/absolute/path/to/kpopper/bin/kpop`, which the install step above replaces. `check`
+  `/absolute/path/to/kpopper/scripts/bin/kpop`, which the install step above replaces. `check`
   finds the record from the hook's working directory, which the docs do not state
   either.
 - **The exact shape of `tool_info` for a write-triggered event.** One fetch described

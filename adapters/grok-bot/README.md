@@ -44,8 +44,8 @@ After successful installation, open the intended project explicitly:
 
 ```sh
 mkdir -p /workspace/projects/my-project
-/workspace/tools/kpopper/bin/kpop --workspace /workspace/projects/my-project open
-/workspace/tools/kpopper/bin/kpop --workspace /workspace/projects/my-project check
+/workspace/tools/kpopper/scripts/bin/kpop --workspace /workspace/projects/my-project open
+/workspace/tools/kpopper/scripts/bin/kpop --workspace /workspace/projects/my-project check
 ```
 
 Use the absolute command path for later calls too. Each project gets its own
@@ -68,7 +68,7 @@ then the relevant canonical skills in that checkout as the work requires.
 Keep their references pointing to the original files.
 
 At the start of work, run:
-/workspace/tools/kpopper/bin/kpop --workspace /workspace/projects/my-project open
+/workspace/tools/kpopper/scripts/bin/kpop --workspace /workspace/projects/my-project open
 Use this same executable and workspace for subsequent commands.
 Read relevant entries with context or pull before answering from memory.
 Use the record skill and CLI to save authorized findings, then run check.

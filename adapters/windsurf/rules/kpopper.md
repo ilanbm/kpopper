@@ -64,14 +64,14 @@ code:
 
 **Opening.** Read the workspace's first-use context with:
 
-    <plugin>/bin/kpop open
+    <plugin>/scripts/bin/kpop open
 
 Read that instead of the file whole — it is the record's own head plus only what
 needs a person, ranked and cut to a budget.
 
 **Closing.** Before finishing work that has a record, run:
 
-    <plugin>/bin/kpop check
+    <plugin>/scripts/bin/kpop check
 
 If it fails worse than it did when you started, fix the record — or declare the hole
 with `blocked_on` — before you stop. Nothing enforces this: `hooks.json` in this same

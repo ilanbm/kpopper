@@ -2001,3 +2001,7 @@ pub fn write_output(
     }
     Ok(absolute)
 }
+
+#[cfg(test)]
+#[path = "../tests/support/document_ui.rs"]
+mod document_ui;

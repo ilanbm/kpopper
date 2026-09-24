@@ -1,5 +1,11 @@
 # Two working modes
 
+**Advanced mode is experimental.** Parallel branches can make compatible knowledge changes
+that still conflict as text in `GROUNDING.yaml`. A PR that already passed checks can then
+need a conflict-resolution commit and another CI run. The current format and defaults
+remain in place while [the merge design question](advanced-mode-merging.md) is open.
+That document records the alternatives, evidence, tradeoffs and unresolved questions.
+
 The mode belongs to the project. Sessions do not choose different storage rules or create
 a new graph whenever they start.
 

@@ -34,4 +34,4 @@ jobs:
             exit 1
           fi
           sh "$KPOPPER_ROOT/scripts/install_native.sh"
-          "$KPOPPER_ROOT/bin/kpop" check "$REC"
+          "$KPOPPER_ROOT/scripts/bin/kpop" check "$REC"

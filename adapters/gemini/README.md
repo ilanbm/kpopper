@@ -12,7 +12,7 @@ its `scripts/` directory and the native runtime installed there.
 ```sh
 KPOPPER_CHECKOUT=/absolute/path/to/kpopper
 sh "$KPOPPER_CHECKOUT/scripts/install_native.sh"
-export PATH="$KPOPPER_CHECKOUT/bin:$PATH"
+export PATH="$KPOPPER_CHECKOUT/scripts/bin:$PATH"
 gemini extensions link "$KPOPPER_CHECKOUT/adapters/gemini"
 gemini extensions list
 ```
