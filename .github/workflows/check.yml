@@ -10,9 +10,9 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch makes the older run irrelevant.
+# Superseded PRs cancel; a later main push must not cancel a release being validated.
 concurrency:
-  group: check-${{ github.ref }}
+  group: check-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,6 +22,7 @@ jobs:
     outputs:
       rust: ${{ steps.select.outputs.rust }}
       platforms: ${{ steps.select.outputs.platforms }}
+      release: ${{ steps.select.outputs.release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,10 +30,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Install the workflow reader for platform selection
+        run: python -m pip install PyYAML==6.0.3
+      - name: Identify a release commit before selecting its coverage
+        id: release
+        if: github.event_name == 'push'
+        shell: python
+        run: |
+          import json, os, subprocess, sys
+          plan = json.loads(subprocess.check_output(
+              [sys.executable, '.github/scripts/publish_release.py', '--plan'], text=True))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('publish=' + str(plan['publish']).lower() + '\n')
       - name: Select the lanes the change reads
         id: select
         env:
           EVENT: ${{ github.event_name }}
+          RELEASE: ${{ steps.release.outputs.publish }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PUSH_BASE: ${{ github.event.before }}
@@ -41,7 +55,9 @@ jobs:
           if [ "$EVENT" = pull_request ]; then
             python .github/scripts/ci_selection.py --base "$PR_BASE" --head "$PR_HEAD"
           elif [ "$EVENT" = push ]; then
-            python .github/scripts/ci_selection.py --push --base "$PUSH_BASE" --head "$PUSH_HEAD"
+            release=()
+            if [ "$RELEASE" = true ]; then release=(--release); fi
+            python .github/scripts/ci_selection.py --push "${release[@]}" --base "$PUSH_BASE" --head "$PUSH_HEAD"
           else
             python .github/scripts/ci_selection.py --full
           fi
@@ -74,7 +90,7 @@ jobs:
       - name: Check skill/release contracts, CI selection and the native plumbing
         run: >-
           python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
-          tests.test_ci_audit tests.test_native_distribution tests.test_native_release_assets
+          tests.test_ci_release_flow tests.test_ci_audit tests.test_native_distribution tests.test_native_release_assets
           tests.test_native_launcher tests.test_hook_delivery -v
 
       # The record is read by the native kpop of this tree. A reader main built from the same
@@ -135,11 +151,12 @@ jobs:
         run: git diff --exit-code
 
   native-cli:
-    needs: [changes, record]
+    needs: changes
     if: needs.changes.outputs.rust == 'true'
     uses: ./.github/workflows/native-rust.yml
     with:
-      target: ${{ needs.changes.outputs.platforms == 'all' && 'all' || 'without-darwin-x86_64' }}
+      target: ${{ needs.changes.outputs.platforms }}
+      publish: ${{ needs.changes.outputs.release == 'true' }}
       audit: true
 
   ci-required:
