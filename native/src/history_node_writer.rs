@@ -48,6 +48,22 @@ pub(crate) fn operation_member(
         return Ok(false);
     };
     let intent = map(intent)?;
+    if intent
+        .get("kind")
+        .is_some_and(|v| string_is(v, "view-edit-proposals"))
+    {
+        let subjects = list(field(intent, "subjects")?)?;
+        require(
+            !subjects.is_empty() && subjects.len() <= 64,
+            "history_limit",
+        )?;
+        for index in 0..subjects.len() {
+            if crate::history_node_edits::step(transaction, index)? == semantic {
+                return Ok(true);
+            }
+        }
+        return Ok(false);
+    }
     if !intent.get("kind").is_some_and(|v| string_is(v, "batch")) {
         return Ok(false);
     }
@@ -426,6 +442,12 @@ pub(crate) fn action(receipt: &V) -> Result<V> {
                 .collect(),
         ));
     }
+    if intent
+        .get("kind")
+        .is_some_and(|v| string_is(v, "view-edit-proposals"))
+    {
+        return crate::history_node_edits::action(intent);
+    }
     if intent.get("kind").is_some_and(|v| string_is(v, "proposal")) {
         require(
             field(intent, "hypothesis")? == &V::Null,
@@ -473,7 +495,7 @@ fn materialize(
     capture.check_expected(action)?;
     let kind = text(field(map(action)?, "kind")?)?;
     require(
-        kind == "batch" || evidence.is_empty(),
+        ["batch", "view-edit-proposals"].contains(&kind) || evidence.is_empty(),
         "node_evidence_action_unsupported",
     )?;
     let mut effective_options = options.clone();
@@ -493,6 +515,10 @@ fn materialize(
         (plan.objects, projected.document().clone(), receipt)
     } else if kind == "hypothesis" {
         crate::history_node_hypothesis::prepare(capture, action, options, runtime, audit, archive)?
+    } else if kind == "view-edit-proposals" {
+        crate::history_node_edits::prepare(
+            capture, action, options, runtime, audit, archive, evidence,
+        )?
     } else if kind == "proposal" {
         let a = schema(action, &["kind", "id", "body", "into", "because"], &[])?;
         let proposal = A::Proposal {
@@ -669,6 +695,50 @@ pub fn prepare(
     prepare_evidence(root, action, options, runtime, BTreeMap::new())
 }
 
+/// Record all edited bodies as proposals, using a caller-retained exact accepted view.
+pub fn prepare_edits(
+    root: &Path,
+    canonical: &[u8],
+    because: &str,
+    subjects: Option<&[String]>,
+    options: &A::Options,
+    runtime: Option<&Runtime>,
+) -> Result<P::Prepared> {
+    let _lock = FS::DirectoryGuard::acquire(root, false)?;
+    let capture = crate::history_node_edits::capture(root, canonical)?;
+    let raw = crate::history_node_edits::edited(root)?;
+    let selected = crate::history_node_edits::selection(&capture, &raw, subjects)?;
+    let action = A::obj([
+        ("kind", s("view-edit-proposals")),
+        ("because", s(because)),
+        ("subjects", A::strings(selected)),
+    ]);
+    let evidence = BTreeMap::from([(
+        format!("evidence/view-edits/{}.yaml", options.operation),
+        raw,
+    )]);
+    let result = materialize(
+        &capture,
+        &action,
+        options,
+        runtime,
+        None,
+        &archive(root)?,
+        &evidence,
+    )?;
+    let prepared = P::prepare_edited(
+        root,
+        &options.operation,
+        result.after,
+        result.frames,
+        &result.context,
+        evidence,
+        canonical,
+    )?;
+    verify(root, &prepared, runtime)?;
+    Ok(prepared)
+}
+
 pub fn prepare_batch(
     root: &Path,
     actions: &[V],
@@ -737,6 +807,26 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
     let c = context(&c)?;
     let options = decode_options(prepared.operation(), &c["options"])?;
     let intent = intent(&recorded)?;
+    let is_edit = intent
+        .get("kind")
+        .is_some_and(|v| string_is(v, "view-edit-proposals"));
+    require(
+        is_edit == prepared.canonical_before()?.is_some(),
+        "node_edit_baseline_required",
+    )?;
+    if is_edit {
+        let raw = prepared
+            .before_view()?
+            .ok_or_else(|| error("node_edit_evidence_mismatch"))?;
+        let evidence = prepared.evidence()?;
+        require(
+            evidence.get(&format!(
+                "evidence/view-edits/{}.yaml",
+                prepared.operation()
+            )) == Some(&raw),
+            "node_edit_evidence_mismatch",
+        )?;
+    }
     if intent
         .get("kind")
         .is_some_and(|v| ["same", "distinct"].iter().any(|k| string_is(v, k)))

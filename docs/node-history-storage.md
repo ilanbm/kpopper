@@ -117,7 +117,25 @@ Identity operations support named hypotheses and refuse physical hypotheses and 
 Their source guards are rechecked around publication phases and during recovery.
 Named edit, fold and refute operations retain node-local hypothesis evidence. Branch operations,
 pending overlays and activation remain unsupported. Low-level proposal and batch APIs are available;
-edited-file proposal publication remains on its existing path and refuses node records.
+edited-file proposals use an explicit canonical baseline on marked Simple records:
+
+```sh
+kpop history reconcile --record-proposals --baseline saved-GROUNDING.yaml --because "explain the edits"
+```
+
+Save the exact accepted generated view before editing. New nodes keep their only body in the
+current document until first change, so a hash cannot recover a body overwritten by an external
+editor. The supplied baseline must match the committed manifest byte for byte. Missing, stale,
+or altered baselines refuse; the command never infers accepted values from edited text.
+
+All changed bodies become proposals against that canonical world, including authored snapshots;
+existing accepted values are preserved. Template, collection, deletion and incomplete-subject
+changes require a separate disposition and refuse here. Exact edited bytes (including comments
+and line endings) are retained under `evidence/view-edits/<operation>.yaml`. The journal separates
+raw observed bytes for concurrency/rollback from the canonical baseline for semantic replay.
+Recovery uses its retained baseline even if the external saved file is unavailable. Public
+recovery rechecks route, source and privacy guards; the entire raw file is checked for private
+content because the entire file becomes evidence. No activation or legacy migration is implied.
 
 Source reports use the node writer on marked Simple records. Exact quote bytes are immutable
 files under `evidence/reports/`; manifests bind only their relative paths and hashes. The bounded

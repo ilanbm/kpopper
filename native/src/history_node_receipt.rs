@@ -146,6 +146,10 @@ fn authoring(value: &V, hypothesis: bool) -> Result<()> {
             "steps",
             "validation_world",
             "final_dependency_pins",
+            "subjects",
+            "original_view_sha256",
+            "edited_view_sha256",
+            "proposal_steps",
         ][..]
     };
     let a = schema(value, &[], allowed)?;
@@ -211,6 +215,36 @@ fn authoring(value: &V, hypothesis: bool) -> Result<()> {
             crate::history_node_publication::evidence_path(path)?;
             require(
                 crate::history_paths::object_id(text(hash)?),
+                "node_receipt_evidence_hash",
+            )?;
+        }
+    }
+    for key in ["original_view_sha256", "edited_view_sha256"] {
+        if let Some(hash) = a.get(key) {
+            require(
+                crate::history_paths::object_id(text(hash)?),
+                "node_receipt_evidence_hash",
+            )?;
+        }
+    }
+    if let Some(subjects) = a.get("subjects") {
+        let subjects = list(subjects)?;
+        require(
+            !subjects.is_empty() && subjects.len() <= 64,
+            "history_limit",
+        )?;
+        for subject in subjects {
+            crate::history_paths::subject(text(subject)?)?;
+        }
+    }
+    if let Some(steps) = a.get("proposal_steps") {
+        let steps = list(steps)?;
+        require(!steps.is_empty() && steps.len() <= 64, "history_limit")?;
+        for step in steps {
+            let step = schema(step, &["operation", "receipt_digest"], &[])?;
+            token(&step["operation"])?;
+            require(
+                crate::history_paths::object_id(text(&step["receipt_digest"])?),
                 "node_receipt_evidence_hash",
             )?;
         }

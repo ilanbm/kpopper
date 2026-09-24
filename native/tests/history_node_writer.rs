@@ -1370,3 +1370,221 @@ fn public_cli_update_retains_source_quote_and_reader_evidence() {
         2
     );
 }
+
+#[test]
+fn edited_view_proposals_keep_exact_raw_bytes_and_canonical_before() {
+    let root = setup();
+    write(root.path(), "add-a", &add());
+    let canonical = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+    let mut doc = Y::decode_document(&canonical).unwrap().to_json().unwrap();
+    doc["known"]["p.a"]["v"] = json!(2);
+    let mut edited = Y::encode_document(&value(doc)).unwrap();
+    edited.extend(b"# raw human evidence\r\n");
+    fs::write(root.path().join("GROUNDING.yaml"), &edited).unwrap();
+    assert!(Capture::read(root.path()).is_err());
+    let mut op = options("edited-a");
+    op.strict = true;
+    let p = W::prepare_edits(root.path(), &canonical, "human edit", None, &op, None).unwrap();
+    assert_eq!(p.before_view().unwrap().unwrap(), edited);
+    assert_eq!(
+        p.evidence().unwrap()["evidence/view-edits/edited-a.yaml"],
+        edited
+    );
+    W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+    W::publish(root.path(), &p, None, |_| panic!("retry wrote")).unwrap();
+    let capture = Capture::read(root.path()).unwrap();
+    let state = map(&map(capture.state())["subjects"]);
+    let head = match &map(&state["p.a"])["head"] {
+        V::Text(id) => id,
+        _ => panic!(),
+    };
+    assert_eq!(
+        map(&capture.object("p.a", head).unwrap())["body"],
+        value(json!({"v":1}))
+    );
+    assert_eq!(
+        fs::read(root.path().join("evidence/view-edits/edited-a.yaml")).unwrap(),
+        edited
+    );
+    // A complete export remains independently readable without the submitted baseline file.
+    let bundle = P::export(root.path()).unwrap();
+    let dest = bundle.reconstruct().unwrap();
+    Capture::read(dest.path()).unwrap();
+}
+
+#[test]
+fn edited_view_refuses_wrong_baseline_partial_selection_and_changed_template() {
+    let root = setup();
+    write(root.path(), "add-a", &add());
+    let canonical = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+    let mut doc = Y::decode_document(&canonical).unwrap().to_json().unwrap();
+    doc["known"]["p.a"]["v"] = json!(2);
+    let edited = Y::encode_document(&value(doc.clone())).unwrap();
+    fs::write(root.path().join("GROUNDING.yaml"), &edited).unwrap();
+    let mut op = options("edited-a");
+    op.strict = true;
+    assert!(W::prepare_edits(root.path(), &edited, "human edit", None, &op, None).is_err());
+    assert!(W::prepare_edits(root.path(), &canonical, "human edit", Some(&[]), &op, None).is_err());
+    doc["meta"]["purpose"] = json!("changed");
+    fs::write(
+        root.path().join("GROUNDING.yaml"),
+        Y::encode_document(&value(doc)).unwrap(),
+    )
+    .unwrap();
+    assert!(W::prepare_edits(root.path(), &canonical, "human edit", None, &op, None).is_err());
+    assert!(
+        !root
+            .path()
+            .join(".kpopper/history-publication.json")
+            .exists()
+    );
+}
+
+#[test]
+fn edited_view_crashes_preserve_human_bytes_and_retry_without_duplicate_proposals() {
+    for phase in [
+        P::Phase::Journal,
+        P::Phase::Append(0),
+        P::Phase::Evidence(0),
+        P::Phase::Commit,
+        P::Phase::View,
+    ] {
+        let root = setup();
+        write(root.path(), "add-a", &add());
+        let canonical = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+        let mut doc = Y::decode_document(&canonical).unwrap().to_json().unwrap();
+        doc["known"]["p.a"]["v"] = json!(2);
+        doc["known"]["p.b"] = json!({"v":3});
+        let mut edited = Y::encode_document(&value(doc)).unwrap();
+        edited.extend(b"# retain exactly\r\n");
+        fs::write(root.path().join("GROUNDING.yaml"), &edited).unwrap();
+        let mut op = options("edited-a");
+        op.strict = true;
+        let prepared =
+            W::prepare_edits(root.path(), &canonical, "human edit", None, &op, None).unwrap();
+        assert!(
+            W::publish(root.path(), &prepared, None, |at| if at == phase {
+                Err(kpop_native::Error("crash".into()))
+            } else {
+                Ok(())
+            })
+            .is_err()
+        );
+        let committed = matches!(phase, P::Phase::Commit | P::Phase::View);
+        assert_eq!(
+            W::recover(root.path(), None).unwrap(),
+            if committed {
+                "committed"
+            } else {
+                "rolled_back"
+            }
+        );
+        assert_eq!(
+            fs::read(root.path().join("GROUNDING.yaml")).unwrap(),
+            if committed {
+                prepared.after_view().unwrap()
+            } else {
+                edited.clone()
+            }
+        );
+        W::publish(root.path(), &prepared, None, |_| Ok(())).unwrap();
+        assert_eq!(Capture::read(root.path()).unwrap().object_count(), 5);
+        assert_eq!(
+            fs::read(root.path().join("evidence/view-edits/edited-a.yaml")).unwrap(),
+            edited
+        );
+    }
+}
+
+#[test]
+fn edited_view_refuses_concurrent_edit_and_unrelated_corruption() {
+    let root = setup();
+    write(root.path(), "add-a", &add());
+    write(
+        root.path(),
+        "add-b",
+        &value(json!({"kind":"add","id":"p.b","body":{"v":7}})),
+    );
+    write(
+        root.path(),
+        "change-b",
+        &value(json!({"kind":"set","id":"p.b","value":8})),
+    );
+    let canonical = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+    let mut doc = Y::decode_document(&canonical).unwrap().to_json().unwrap();
+    doc["known"]["p.a"]["v"] = json!(2);
+    let edited = Y::encode_document(&value(doc)).unwrap();
+    fs::write(root.path().join("GROUNDING.yaml"), &edited).unwrap();
+    let mut op = options("edited-a");
+    op.strict = true;
+    let prepared =
+        W::prepare_edits(root.path(), &canonical, "human edit", None, &op, None).unwrap();
+    let mut concurrent = edited.clone();
+    concurrent.extend(b"# later edit\n");
+    fs::write(root.path().join("GROUNDING.yaml"), &concurrent).unwrap();
+    assert!(W::publish(root.path(), &prepared, None, |_| Ok(())).is_err());
+    assert_eq!(
+        fs::read(root.path().join("GROUNDING.yaml")).unwrap(),
+        concurrent
+    );
+    fs::write(root.path().join("GROUNDING.yaml"), &edited).unwrap();
+    fs::write(
+        root.path()
+            .join(".kpopper/history")
+            .join(C::subject_path("p.b").unwrap()),
+        b"corrupt\n",
+    )
+    .unwrap();
+    assert!(W::prepare_edits(root.path(), &canonical, "human edit", None, &op, None).is_err());
+    assert!(W::publish(root.path(), &prepared, None, |_| Ok(())).is_err());
+}
+
+#[test]
+fn public_cli_reconcile_requires_exact_baseline_and_records_proposals() {
+    let root = setup();
+    write(root.path(), "add-a", &add());
+    let canonical = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+    fs::write(root.path().join("saved.yaml"), &canonical).unwrap();
+    let mut doc = Y::decode_document(&canonical).unwrap().to_json().unwrap();
+    doc["known"]["p.a"]["v"] = json!(2);
+    let edited = Y::encode_document(&value(doc)).unwrap();
+    fs::write(root.path().join("GROUNDING.yaml"), &edited).unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(root.path())
+            .args(args)
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .output()
+            .unwrap()
+    };
+    let fail = run(&[
+        "history",
+        "reconcile",
+        "--record-proposals",
+        "--because",
+        "human edit",
+    ]);
+    assert!(!fail.status.success());
+    assert!(String::from_utf8_lossy(&fail.stdout).contains("node_edit_baseline_required"));
+    assert_eq!(
+        fs::read(root.path().join("GROUNDING.yaml")).unwrap(),
+        edited
+    );
+    let out = run(&[
+        "history",
+        "reconcile",
+        "--record-proposals",
+        "--because",
+        "human edit",
+        "--baseline",
+        "saved.yaml",
+    ]);
+    assert!(
+        out.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stdout).contains("proposed"));
+    assert_eq!(Capture::read(root.path()).unwrap().object_count(), 3);
+}

@@ -48,6 +48,9 @@ pub struct Options {
     pub preview: bool,
     #[arg(long)]
     pub record_proposals: bool,
+    /// Exact saved accepted GROUNDING.yaml for node-history edited-file proposals.
+    #[arg(long)]
+    pub baseline: Option<PathBuf>,
     #[arg(long)]
     pub proposal_subject: Vec<String>,
 }
@@ -66,6 +69,7 @@ impl Options {
             || self.revision.is_some()
             || !self.choose.is_empty()
             || self.preview
+            || self.baseline.is_some()
             || self.record_proposals
             || !self.proposal_subject.is_empty()
     }
@@ -153,6 +157,10 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
         options.to.is_none() || operation == "migrate",
         "--to belongs to history migrate",
     )?;
+    require(
+        options.baseline.is_none() || operation == "reconcile" && options.record_proposals,
+        "--baseline belongs to history reconcile --record-proposals",
+    )?;
     let cwd = cwd.canonicalize()?;
     let original = match &options.record {
         Some(path) => vec![cwd.join(path)],
@@ -163,7 +171,8 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let entry = &paths[0];
     require(
         !crate::history_node_publication::selected(entry)?
-            || ["status", "accept", "refute", "correct", "propose", "retire"].contains(&operation),
+            || ["status", "accept", "refute", "correct", "propose", "retire"].contains(&operation)
+            || operation == "reconcile" && options.record_proposals,
         "node_history_operation_unsupported",
     )?;
     let result = match operation {
@@ -204,13 +213,33 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
                 .ok_or_else(|| error("recording proposals requires --because"))?;
             let subjects = (!options.proposal_subject.is_empty())
                 .then_some(options.proposal_subject.as_slice());
-            json_value(&crate::direct_history::proposals(
-                &original,
-                &cwd,
-                subjects,
-                because,
-                options.by.as_deref(),
-            )?)?
+            if crate::history_node_publication::selected(entry)? {
+                let baseline = options
+                    .baseline
+                    .as_deref()
+                    .ok_or_else(|| error("node_edit_baseline_required"))?;
+                json_value(&crate::public_node_edits::run(
+                    &original,
+                    &cwd,
+                    baseline,
+                    subjects,
+                    because,
+                    options.by.as_deref(),
+                    &mut |_| Ok(()),
+                )?)?
+            } else {
+                require(
+                    options.baseline.is_none(),
+                    "--baseline requires node-history authority",
+                )?;
+                json_value(&crate::direct_history::proposals(
+                    &original,
+                    &cwd,
+                    subjects,
+                    because,
+                    options.by.as_deref(),
+                )?)?
+            }
         }
         "status" => status(entry)?,
         "reconcile" => json_value(&Store::new(entry)?.prepare_reconciliation(None, true, &[])?)?,

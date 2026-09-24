@@ -315,6 +315,16 @@ pub(crate) fn recover(
             .as_ref()
             .and_then(|v| map(v).ok())
             .and_then(|v| v.get("kind"))
+            .is_some_and(|kind| string_is(kind, "public-node-edits/v1"))
+        {
+            crate::public_node_edits::verify_recovery(route, original, p, runtime_override)?;
+            operation = p.operation().into();
+            return Ok(());
+        }
+        if p.guard()?
+            .as_ref()
+            .and_then(|v| map(v).ok())
+            .and_then(|v| v.get("kind"))
             .is_some_and(|kind| string_is(kind, "public-node-report/v1"))
         {
             crate::public_update::node::verify_recovery(route, original, p, runtime_override)?;

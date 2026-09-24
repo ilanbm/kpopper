@@ -127,6 +127,8 @@ struct Journal {
     format: String,
     manifest: Manifest,
     before_view: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    canonical_before: Option<String>,
     after_view: String,
     appends: Vec<Append>,
     retained: Vec<Touch>,
@@ -173,6 +175,13 @@ impl Journal {
             evidence == self.manifest.evidence,
             "node_publication_evidence",
         )?;
+        if self.canonical_before.is_some() {
+            let path = format!("evidence/view-edits/{}.yaml", self.manifest.operation);
+            require(
+                before.is_some() && evidence.get(&path) == self.manifest.before_view.as_ref(),
+                "node_edit_evidence_mismatch",
+            )?;
+        }
         let mut subjects = BTreeSet::new();
         let mut touches = Vec::new();
         for append in &self.appends {
@@ -193,7 +202,10 @@ impl Journal {
                 });
             }
         }
-        let before_origins = before
+        let canonical = unbytes(&self.canonical_before)?;
+        let before_origins = canonical
+            .as_ref()
+            .or(before.as_ref())
             .as_ref()
             .map(|raw| current_origins(raw))
             .transpose()?
@@ -237,6 +249,9 @@ impl Prepared {
         journal.validate()?;
         require(journal.encode()? == raw, "node_publication_journal")?;
         Ok(Self { journal })
+    }
+    pub(crate) fn canonical_before(&self) -> Result<Option<Vec<u8>>> {
+        unbytes(&self.journal.canonical_before)
     }
     pub fn digest(&self) -> &str {
         &self.journal.manifest.digest
@@ -503,6 +518,10 @@ pub(crate) fn evidence_path(path: &str) -> Result<()> {
     let name = path
         .strip_prefix("evidence/reports/")
         .and_then(|p| p.strip_suffix(".txt"))
+        .or_else(|| {
+            path.strip_prefix("evidence/view-edits/")
+                .and_then(|p| p.strip_suffix(".yaml"))
+        })
         .ok_or_else(|| bad("node_publication_evidence_path"))?;
     token(name)?;
     require(!name.contains('/'), "node_publication_evidence_path")
@@ -510,7 +529,12 @@ pub(crate) fn evidence_path(path: &str) -> Result<()> {
 fn evidence_directories(root: &Path, journal: &Journal) -> Result<()> {
     if !journal.evidence.is_empty() {
         // Sync each newly linked parent before publishing a durable manifest.
-        for relative in ["evidence", "evidence/reports"] {
+        let mut directories = BTreeSet::from(["evidence"]);
+        for file in &journal.evidence {
+            evidence_path(&file.path)?;
+            directories.insert(file.path.rsplit_once('/').unwrap().0);
+        }
+        for relative in directories {
             let path = F::target(root, relative)?;
             fs::create_dir_all(&path)?;
             F::sync(path.parent().unwrap())?;
@@ -659,6 +683,39 @@ pub fn prepare_with_evidence(
     context: Option<&crate::value::TypedValue>,
     evidence: BTreeMap<String, Vec<u8>>,
 ) -> Result<Prepared> {
+    prepare_inner(root, operation, after_view, frames, context, evidence, None)
+}
+
+/// An edited view has two distinct before images: observed bytes for concurrency/rollback,
+/// and a manifest-verified canonical view for semantic admission and replay.
+pub(crate) fn prepare_edited(
+    root: &Path,
+    operation: &str,
+    after_view: Vec<u8>,
+    frames: BTreeMap<String, Vec<u8>>,
+    context: &crate::value::TypedValue,
+    evidence: BTreeMap<String, Vec<u8>>,
+    canonical: &[u8],
+) -> Result<Prepared> {
+    prepare_inner(
+        root,
+        operation,
+        after_view,
+        frames,
+        Some(context),
+        evidence,
+        Some(canonical),
+    )
+}
+fn prepare_inner(
+    root: &Path,
+    operation: &str,
+    after_view: Vec<u8>,
+    frames: BTreeMap<String, Vec<u8>>,
+    context: Option<&crate::value::TypedValue>,
+    evidence: BTreeMap<String, Vec<u8>>,
+    canonical: Option<&[u8]>,
+) -> Result<Prepared> {
     let _lock = F::DirectoryGuard::acquire(root, false)?;
     guard(root)?;
     token(operation)?;
@@ -670,8 +727,12 @@ pub fn prepare_with_evidence(
     let all = inventory(root)?;
     require(!all.contains_key(operation), "operation_already_prepared")?;
     // Complete closure verification is retained; this is never a scoped fast-read promise.
-    verify_history(root, &all)?;
+    verify_history_with(root, &all, &BTreeMap::new(), canonical)?;
     let before = read(root, VIEW)?;
+    if canonical.is_some() {
+        require(!all.is_empty(), "history_bootstrap_required")?;
+        require(before.is_some(), "node_semantic_missing_view")?;
+    }
     let mut appends = Vec::new();
     let mut touched = Vec::new();
     let mut retained = Vec::new();
@@ -749,6 +810,7 @@ pub fn prepare_with_evidence(
         format: FORMAT.into(),
         manifest,
         before_view: bytes(&before),
+        canonical_before: canonical.map(|raw| STANDARD.encode(raw)),
         after_view: STANDARD.encode(after_view),
         appends,
         retained,
@@ -933,7 +995,12 @@ fn revalidate(root: &Path, journal: &Journal) -> Result<()> {
         frontier(&all) == journal.manifest.parents,
         "node_publication_stale_frontier",
     )?;
-    verify_history(root, &all)?;
+    verify_history_with(
+        root,
+        &all,
+        &BTreeMap::new(),
+        unbytes(&journal.canonical_before)?.as_deref(),
+    )?;
     let known = known_touches(&all)?;
     for touch in &journal.retained {
         require(
@@ -1107,6 +1174,7 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         }
     }
     validate_complete_streams(root, &journal)?;
+    let canonical_before = unbytes(&journal.canonical_before)?;
     let observed_inventory = inventory(root)?;
     verify_history_with(
         root,
@@ -1115,7 +1183,7 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         if committed.is_some() {
             after.as_deref()
         } else {
-            before.as_deref()
+            canonical_before.as_deref().or(before.as_deref())
         },
     )?;
     verify(&Prepared {
@@ -1153,7 +1221,7 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         if committed.is_some() {
             after.as_deref()
         } else {
-            before.as_deref()
+            canonical_before.as_deref().or(before.as_deref())
         },
     )?;
     if committed.is_some() {
@@ -1310,7 +1378,7 @@ impl Prepared {
             evidence_state(root, file)?;
             after_overlay.insert(file.path.clone(), unbytes(&Some(file.raw.clone()))?);
         }
-        let before = self.before_view()?;
+        let before = self.canonical_before()?.or(self.before_view()?);
         let after = self.after_view()?;
         let before_versions = verify_history_with(
             root,
@@ -1331,11 +1399,25 @@ pub fn capture(root: &Path) -> Result<Option<Vec<u8>>> {
     Ok(capture_snapshot(root)?.current)
 }
 pub fn capture_snapshot(root: &Path) -> Result<Snapshot> {
+    capture_snapshot_inner(root, None)
+}
+/// The supplied canonical image must match the committed manifest exactly. It is never
+/// inferred from edited bodies or installed on disk by capture.
+pub(crate) fn capture_edited_snapshot(root: &Path, canonical: &[u8]) -> Result<Snapshot> {
+    capture_snapshot_inner(root, Some(canonical))
+}
+fn capture_snapshot_inner(root: &Path, canonical: Option<&[u8]>) -> Result<Snapshot> {
     let _lock = F::DirectoryGuard::acquire(root, false)?;
     guard(root)?;
     let all = inventory(root)?;
-    let versions = verify_history_with(root, &all, &BTreeMap::new(), None)?;
-    let current = read(root, VIEW)?;
+    if canonical.is_some() {
+        require(!all.is_empty(), "history_bootstrap_required")?;
+    }
+    let versions = verify_history_with(root, &all, &BTreeMap::new(), canonical)?;
+    let current = match canonical {
+        Some(raw) => Some(raw.to_vec()),
+        None => read(root, VIEW)?,
+    };
     if !all.is_empty() {
         let tips = frontier(&all);
         require(tips.len() == 1, "node_publication_merge_required")?;
