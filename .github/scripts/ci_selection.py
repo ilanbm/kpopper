@@ -63,7 +63,7 @@ UNREAD = (
     "*.md", "assets/*", "docs/*", "skills/*", "examples/*", "GROUNDING.yaml", ".kpopper/*",
     ".github/ISSUE_TEMPLATE/*", ".github/pull_request_template.md", ".githooks/*",
     ".github/workflows/release.yml", ".github/workflows/publish.yml",
-    "adapters/*", "hooks/*", "bin/*",
+    "adapters/*", "hooks/*", "scripts/bin/*",
     ".claude-plugin/*", ".codex-plugin/*", "package.json",
     ".gitignore", "*/.gitignore", ".gitattributes",
 )

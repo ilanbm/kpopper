@@ -440,8 +440,9 @@ Claude and Codex use regular async context for ingestion/watch findings; there i
 checks, as described in the [capability matrix](../adapters/README.md#capability-matrix).
 
 From a source checkout, build the command with `cargo build --bin kpop` inside `native/`.
-When using an installed plugin without a `kpop` command on `PATH`, run `bin/kpop` from that
-plugin's directory. Installation paths are versioned; locate the active installation rather
+When using an installed plugin without a `kpop` command on `PATH`, run `scripts/bin/kpop`
+from that plugin's directory. In Claude Code the session opener adds that directory to the
+end of `PATH`. Installation paths are versioned; locate the active installation rather
 than retaining a path to an older copy.
 
 The method's lasting constraints are traceable grounding, preserving derivation rules,

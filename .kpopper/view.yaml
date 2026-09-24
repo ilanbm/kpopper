@@ -125,7 +125,8 @@ tabs:
              s.2026_09_19_readme_example_depth,
              s.ci_execution_evidence, s.2026_09_18_lane_b_load_once,
              s.2026_09_18_overlay_profile, s.2026_09_18_lane_a_hoist,
-             s.2026_09_23_young_record_sections]
+             s.2026_09_23_young_record_sections,
+             s.2026_09_24_plugin_commands_out_of_bin]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them

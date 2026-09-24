@@ -542,7 +542,7 @@ fn windsurf_hook_checks_only_after_a_record_write_and_stays_quiet() {
     let checkout = session.home.path().join("kpopper checkout");
     let trace = session.home.path().join("checks");
     script(
-        &checkout.join("bin/kpop"),
+        &checkout.join("scripts/bin/kpop"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$HOOK_TRACE\"\necho unchecked\necho problems >&2\nexit 1\n",
     );
     let manifest: Value =

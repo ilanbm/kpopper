@@ -1188,6 +1188,16 @@ sources:
          roles a partial schema declares, so a first judgment it wrote carried seen: where the schema
          named another snapshot field and checked as never compared; it now keeps them, as native
          does."
+  s.2026_09_24_plugin_commands_out_of_bin:
+    name: "The session that found why Cowork and Claude Code would not add the kpopper marketplace,
+           and moved the plugin's commands out of bin/ so Cowork's sync accepts the package"
+    asked: "למה ככה? [two screenshots of Add marketplace for ilanbm/kpopper - Cowork: \"Marketplace
+            sync failed. Check the repository URL and try again.\"; Code: \"Failed to add
+            marketplace.\"] / כן תתקן / לגבי cowork והשאלה ״להעביר?\" - כן בטח, תעביר"
+    of: "2026-09-24; Claude Desktop's main.log for the Code refusal (2026-09-23 20:21:29), the
+         repository at a82f221a, and a headless Claude Code 2.1.280 session with this branch's
+         plugin"
+    read: "2026-09-24"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -3201,6 +3211,30 @@ known:
     from: "Jensen and Snodgrass 1999, Temporal data management"
     at: "valid time and transaction time"
     of: "2026-09-16"
+  lit.claude_env_file:
+    name: "What Claude Code does with the lines a plugin's SessionStart hook writes to
+           CLAUDE_ENV_FILE"
+    v: "Claude Code gives a plugin's SessionStart command hook CLAUDE_ENV_FILE and runs the lines
+        written there before each later Bash tool command of the session: a line appending a
+        directory to PATH put that directory last on the session's PATH."
+    from: s.2026_09_24_plugin_commands_out_of_bin
+    at: "headless session 2a8ebf77-33b6-48ef-a589-f2e529ca2b4b run with --plugin-dir on this branch:
+         type -a kpopper listed <plugin>/scripts/bin/kpopper after every other kpopper"
+    of: "2026-09-24; Claude Code 2.1.280, macOS"
+  lit.claude_hosted_plugin_bin:
+    name: "What claude.ai-hosted plugin sync does with a plugin whose root holds bin/"
+    v: "claude.ai refuses to sync a plugin with a top-level bin/ directory (error_code
+        marketplace_sync_bin_directory_not_allowed): claude.ai-hosted plugins may not ship bin/
+        executables, because Claude Code adds them to PATH while the admin approval surface does not
+        show them, and executable entry points belong in hooks, commands or mcpServers. Claude
+        Desktop's Add marketplace dialog says only: Marketplace sync failed. Check the repository URL
+        and try again."
+    fidelity: paraphrase
+    from: "two public issue reports quoting the error Claude Desktop logs in claude.ai-web.log"
+    at: "https://github.com/AgriciDaniel/claude-seo/issues/298 (2026-09-10, the sync error with its
+         error_code) and https://github.com/CrowdStrike/fusion-skills/issues/17 (2026-07-31, the same
+         rule from a plugin upload)"
+    of: "read 2026-09-24"
   lit.crdt_mv_register:
     v: "a single timestamp cannot tell concurrent writes apart - a write must carry what it was
         based on; a multi-value register keeps every concurrent write visible and a later write that
@@ -5892,6 +5926,36 @@ judgments:
       s.2026_09_23_pending_dry_run: "read 2026-09-23"
       doc.pending_dry_run: "read 2026-09-23"
       p.live_dry_run_gates: 0
+  d.plugin_commands_live_in_scripts_bin:
+    name: "Where the plugin's kpop and kpopper live, and how they reach PATH"
+    verdict: "The package's kpop and kpopper live in scripts/bin/ and its root holds no bin/. In
+              Claude Code the session opener appends scripts/bin to PATH through CLAUDE_ENV_FILE;
+              every other host and adapter runs <package>/scripts/bin/kpop by its path."
+    because: "claude.ai refuses to sync a plugin whose root holds bin/, so Cowork could not add the
+              marketplace at all while the commands lived there. Claude Code put a plugin's bin/ last
+              on PATH, and the opener putting scripts/bin in the same place keeps a kpop already on
+              PATH in front, as before. The move changes the path the checkout adapters document, so
+              a hook or workflow that copied the old path needs it updated once."
+    rests_on: [lit.claude_hosted_plugin_bin, lit.claude_env_file]
+    reopened_by: "Cowork's marketplace sync still refuses the package once main holds no bin/,
+                  claude.ai accepts a plugin whose root holds bin/ again, or Claude Code stops
+                  running the CLAUDE_ENV_FILE lines of a plugin's SessionStart hook before shell
+                  commands."
+    from: s.2026_09_24_plugin_commands_out_of_bin
+    seen:
+      lit.claude_hosted_plugin_bin: "claude.ai refuses to sync a plugin with a top-level bin/
+                                     directory (error_code
+                                     marketplace_sync_bin_directory_not_allowed): claude.ai-hosted
+                                     plugins may not ship bin/ executables, because Claude Code adds
+                                     them to PATH while the admin approval surface does not show
+                                     them, and executable entry points belong in hooks, commands or
+                                     mcpServers. Claude Desktop's Add marketplace dialog says only:
+                                     Marketplace sync failed. Check the repository URL and try
+                                     again."
+      lit.claude_env_file: "Claude Code gives a plugin's SessionStart command hook CLAUDE_ENV_FILE
+                            and runs the lines written there before each later Bash tool command of
+                            the session: a line appending a directory to PATH put that directory last
+                            on the session's PATH."
   d.plugin_descriptions_lead_with_reasoning:
     from: s.2026_09_19_pr_and_plugin_descriptions
     rests_on: [s.2026_09_19_pr_and_plugin_descriptions, d.readme_opens_with_what_it_does, d.html_applications_are_optional]
