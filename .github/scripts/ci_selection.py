@@ -39,6 +39,8 @@ LANES = {
     # The native command: compilation, its tests, the release build and installed acceptance.
     "rust": Lane((
         "native/*", ".github/workflows/native-rust.yml",
+        "tests/test_document_ui.cjs", "tests/document_ui_fixture.py",
+        "tests/document_native_bridge.py", "tests/document-support/*",
         # The plugin's shell plumbing, the host wrappers and the packaging tools its tests run:
         # installed acceptance stages a plugin from these and drives its hooks.
         "scripts/*.sh", "adapters/codex/plugin-hooks.json",
