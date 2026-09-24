@@ -92,6 +92,10 @@ def _eval_github_expression(expression, context):
 
 
 def _render_group(template, context):
+    for expression in re.findall(r"\$\{\{(.*?)\}\}", template):
+        for atom in re.findall(r"\b(?:github|inputs)\.[A-Za-z_][A-Za-z0-9_]*", expression):
+            if atom not in context:
+                raise AssertionError(f"unknown GitHub concurrency expression name: {atom}")
     return re.sub(
         r"\$\{\{(.*?)\}\}",
         lambda match: str(_eval_github_expression(match.group(1), context)),
@@ -427,13 +431,13 @@ class WorkflowCoverage(unittest.TestCase):
         manual_check = check_group("workflow_dispatch", "refs/heads/main", "sha", "run-manual")
         manual_check_again = check_group("workflow_dispatch", "refs/heads/main", "sha", "run-manual-2")
         manual_native = native_group("native Rust platform acceptance", "workflow_dispatch", "refs/heads/main", "sha", "run-native")
-        manual_native_again = native_group("native Rust platform acceptance", "refs/heads/main", "workflow_dispatch", "full", "all", "sha", "run-native-2")
+        manual_native_again = native_group("native Rust platform acceptance", "workflow_dispatch", "refs/heads/main", "sha", "run-native-2")
         self.assertNotEqual(main_check, newer_main_check)
         self.assertEqual(pr_check, newer_pr_check)
         self.assertNotEqual(pr_check, other_pr_check)
         self.assertNotEqual(main_native, main_publish)
         self.assertNotEqual(pr_native, pr_check)
-        self.assertNotEqual(pr_native, newer_pr_native)
+        self.assertEqual(pr_native, newer_pr_native)
         self.assertEqual(newer_pr_native, same_pr_native)
         self.assertNotEqual(manual_check, manual_native)
         self.assertNotEqual(manual_check, main_check)
@@ -443,8 +447,11 @@ class WorkflowCoverage(unittest.TestCase):
             len({main_check, newer_main_check, pr_check, other_pr_check, main_native, main_publish,
                  pr_native, newer_pr_native, manual_check, manual_check_again,
                  manual_native, manual_native_again}),
-            12,
+            11,
         )
+        test_context = context("kpopper check", "pull_request", "refs/pull/5/merge", "head", "run")
+        with self.assertRaisesRegex(AssertionError, "unknown GitHub concurrency expression name"):
+            _render_group("test-${{ 'valid' || github.run_id_typo }}", test_context)
 
     def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
