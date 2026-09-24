@@ -506,7 +506,7 @@ class TheCrate(unittest.TestCase):
         self.assertEqual(identity, ["crate-publish"])
         crate, publish, served = jobs["crate"], jobs["crate-publish"], jobs["crate-served"]
         # The crate goes after its GitHub release, from bytes the build job verified.
-        self.assertTrue({"build", "publish"} <= set(crate["needs"]))
+        self.assertTrue({"plan", "publish"} <= set(crate["needs"]))
         plan = " ".join(step.get("run", "") for step in crate["steps"])
         self.assertIn("publish_crate.py --plan", plan)
         self.assertIn("--crate", plan)

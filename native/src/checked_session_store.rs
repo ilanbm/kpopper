@@ -155,7 +155,9 @@ impl CheckedSessionStore {
         let name = context_name(revision)?;
         self.validate_root()?;
         let session_identity = self.session_identity()?;
-        let payload = self.read_json(&name)?;
+        let payload = self
+            .read_json_optional(&name)?
+            .ok_or_else(|| Error("unknown core session revision; reopen".into()))?;
         let map = payload
             .as_object()
             .ok_or_else(|| Error("invalid retained core context".into()))?;

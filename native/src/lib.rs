@@ -155,6 +155,7 @@ pub mod source_clock;
 mod source_document;
 mod source_inventory;
 mod source_overlay;
+mod source_references;
 mod source_target;
 pub mod source_text;
 pub mod store;

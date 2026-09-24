@@ -26,23 +26,36 @@ claims, a change to the CI selection or audit itself, an empty diff or unavailab
 selects every lane. The record job's own test modules and release scripts select no lane,
 because the record job runs them on every pull request anyway.
 
-Every push to main runs every lane on every platform, so a dependency that escaped the audit
-is still caught after merge. A pull request leaves out Intel macOS (`darwin-x86_64`), the
-slowest leg of the platform matrix. A pull request that changes what decides platform
-behaviour - Cargo manifests, the build script, installers, packaging scripts, the committed
-runtimes or the platform workflows - takes every target. The final `ci-required` job requires
-successful completion of every selected lane and rejects missing output, an unexpected
-platform scope and unexpected skips.
+Ordinary pull requests default to `linux-x86_64` for both tests and installed acceptance.
+Windows inputs add Windows; macOS inputs add both macOS architectures. Shared platform
+inputs (toolchains, dependencies, installers and packaging), unknown files,
+and unavailable history select all five targets. Changed Rust files are read at both ends
+of the diff: existing platform-conditional code keeps its platform coverage even if the
+conditional itself was not edited. Unix or architecture-specific code takes every target.
+A manifest whose only change is the package version keeps the Linux default; a simultaneous
+dependency or configuration change still selects all platforms. The release PR needs no
+special title or label to qualify for this rule.
 
-Before provisioning expensive jobs, `changes` validates the committed native
-bundles, their source identity and the corresponding-source archive. All expensive
-lanes also require the inexpensive record and contract job to succeed. That job runs the
-skill, release, selection and native-plumbing contracts, then reads this repository's record
-with the `kpop` built from the same tree. A push to main caches its build by the hash of
-`native/`; a pull request restores that build and saves none, so only a pull request that
-changes the native sources builds one, and that pull request checks the record with the
-reader it changes. On main all five targets are covered; installed acceptance uses the
-committed bundles, cold runtime caches and no compiler on PATH.
+Changes to CI selection, auditing and the Linux control workflow exercise the selected lanes
+on Linux. A native workflow change also stays on Linux when only routing, scheduling or
+artifact upload changes: the selector compares the platform jobs' execution inputs and
+complete set of runner mappings at both revisions. Changed build commands, step conditions,
+shells, environment, actions or runner mappings still select every target. An unreadable or
+unrecognized native workflow also keeps the full matrix. Workflow syntax and routing
+contracts are tested separately from executing the product on every platform.
+
+Ordinary pushes to main run the record and contract checks alone. A commit that changes
+`VERSION` runs every lane and platform, using the same release planner as publication.
+The final `ci-required` job rejects failed or unexpectedly skipped checks, missing output,
+and a release selection that omits any lane or platform. Manual full checks remain available.
+
+Before provisioning expensive jobs, `changes` validates the committed native bundles,
+their source identity and the corresponding-source archive. Native checks then run beside
+the record job, without waiting for it; both must succeed. The record job runs the skill,
+release, selection and native-plumbing contracts, then reads this repository's record with
+the `kpop` built from the same tree. A push to main caches its build by the hash of `native/`;
+a pull request restores that build and saves none. Installed acceptance uses the committed
+bundles, cold runtime caches and no compiler on PATH.
 
 Native builds cache pinned download archives and successfully tested GMP prefixes.
 Cache keys include the target, source and recipe hashes, compiler/build tools,
@@ -54,16 +67,20 @@ and installed replacement-library tests still execute. A cold cache therefore
 retains the original GMP `make check` work; warm-run savings must be measured
 separately from cold-run timings.
 
-The native lane runs two jobs side by side, each with a leg per target. `tests` builds and
-runs the native test suite. `release` builds the release program, then accepts, packages
-and uploads it in the same job, so a publish run ships only bytes that the job which built
-them accepted. A pull request that changes no platform input builds and accepts the release
-on `linux-x86_64` alone, while its tests keep every target but Intel macOS; main, a publish
-run and a pull request that changes a platform input build and accept it on all five
-targets. A final `verdict` job fails when either job failed, was cancelled, or was skipped
-where the validation requires it: a publish run skips the tests and requires the release,
-and every other validation requires both. Without it, a job skipped inside the native
-workflow would leave `ci-required` green.
+The native lane runs two jobs side by side, each with a leg per selected target. `tests`
+builds and runs the native suite. `release` builds, accepts, packages and uploads the
+program. Its final `verdict` requires both matrices to succeed, rejecting failure,
+cancellation and unexpected skips. The standalone manual `distribution` mode remains
+available for packaging diagnostics; it does not authorize publication.
+
+Publication starts only after a successful `kpopper check` run triggered by a push to main
+in this repository. It checks out that run's exact commit and downloads its distribution
+artifacts and verified crate by run ID. It does not rebuild them. The native asset verifier
+requires all five targets and checks their version, source commit, contents and hashes.
+Thus a failed test, record check or installation prevents publication. Later main pushes do
+not cancel a release being checked. If publication fails, rerun that publish run; if checks
+fail, rerun the original check run. Both retain the original source commit. Artifacts are
+kept for seven days; an expired artifact requires rerunning its check run before publication.
 
 The `tests` job runs every native test in one pool with nextest, which schedules the tests of
 all the test binaries together, where `cargo test` runs the binaries one after another and a
@@ -79,7 +96,7 @@ fails when one appears until the workflow also runs `cargo test --doc`.
 
 The native command's compiled Rust dependencies are cached per target and build profile.
 The `tests` job restores and saves the test build's entry, and the `release` job the
-release build's, so each job of a check run or a publish run restores only what its own
+release build's, so each job of a check run restores only what its own
 build uses. The key's prefix hashes the toolchain file and the native workflow, whose
 changes make every artifact stale, and a restore never crosses it; its suffix hashes the
 Cargo manifests, so a lockfile change starts from the nearest entry and rebuilds only what
