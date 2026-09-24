@@ -265,8 +265,12 @@ def select(changes, full=False, push=False, base_dirs=None, head_dirs=None):
         for status, path in changes:
             chosen |= lanes_for(status, path, base_dirs, head_dirs)
     if push:
-        # Main checks every consumer.
-        chosen |= set(LANE_NAMES)
+        # Main checks every lane. The expensive cross-platform runtime rebuild runs
+        # only when one of its declared inputs changed.
+        chosen |= set(LANE_NAMES) - {"runtime"}
+        if any(lane_reads(LANES["runtime"], path) or lane_lists(LANES["runtime"], path)
+               for _, path in changes):
+            chosen.add("runtime")
     return {lane: lane in chosen for lane in LANE_NAMES}
 
 

@@ -139,9 +139,13 @@ class Selection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(CI.platforms([path]), "pull-request")
 
-    def test_main_runs_every_lane_on_every_platform(self):
-        self.assertEqual(lanes(["README.md"], push=True), ALL)
+    def test_main_runs_every_lane_except_runtime_when_its_inputs_are_unchanged(self):
+        self.assertEqual(lanes(["README.md"], push=True), ALL - {"runtime"})
         self.assertEqual(CI.platforms(["README.md"], push=True), "all")
+
+    def test_main_rebuilds_runtime_when_its_inputs_change(self):
+        self.assertEqual(lanes(["scripts/reasoning/lean/Main.lean"], push=True), ALL)
+        self.assertEqual(CI.platforms(["scripts/reasoning/lean/Main.lean"], push=True), "all")
 
     def test_empty_diff_manual_run_and_missing_history_run_everything(self):
         self.assertEqual(lanes([]), ALL)
@@ -284,6 +288,14 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("darwin-x86_64", matrix)
         dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
         self.assertEqual(dispatch["target-scope"]["default"], "all")
+
+    def test_reasoning_dependency_cache_is_saved_only_by_main_pushes(self):
+        workflow = self.jobs("reasoning-target.yml")
+        build = workflow["build"]
+        save = next(step for step in build["steps"]
+                    if step.get("name") == "Save successfully built dependencies before running integration checks")
+        self.assertEqual(save["if"],
+                         "steps.dependencies.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'")
 
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
         steps = self.jobs()["changes"]["steps"]

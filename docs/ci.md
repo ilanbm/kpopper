@@ -29,8 +29,9 @@ claims, a change to the CI selection or audit itself, an empty diff or unavailab
 selects every lane. The record job's own test modules and release scripts select no lane,
 because the record job runs them on every pull request anyway.
 
-Every push to main runs every lane on every platform, so a dependency that escaped the audit
-is still caught after merge. A pull request leaves out Intel macOS (`darwin-x86_64`), the
+Every push to main runs every lane on every platform, except the expensive `runtime` rebuild
+when none of its inputs changed. The committed runtime integrity and correspondence checks
+still run in the `rust` lane on every push. A pull request leaves out Intel macOS (`darwin-x86_64`), the
 slowest leg of the platform matrix. A pull request that changes what decides platform
 behaviour - Cargo manifests, the build script, installers, packaging scripts, the committed
 runtimes or the platform workflows - takes every target. The final `ci-required` job requires
@@ -96,9 +97,9 @@ artifacts, which every checkout rebuilds. Pull requests read main's entries.
 To generate candidates before updating committed bundles, dispatch
 `reasoning-runtime` with `candidate-only=true`. This explicit maintainer mode
 builds and validates the candidate on each selected target while skipping the
-committed-bundle preflight and the second validation after artifact download.
-Full validation keeps the integrity gate and checks the matching downloaded
-candidate again. The candidate tests run the native scalar, composition and query
+committed-bundle preflight and artifact round-trip check. Full validation keeps the
+integrity gate and checks that the downloaded archive matches its build sidecar.
+The candidate tests run the native scalar, composition and query
 corpus, then replace the extracted GMP with a separately built probe library and
 check both its load marker and a large-integer arithmetic result. Changes to either
 runtime workflow or the builder must regenerate

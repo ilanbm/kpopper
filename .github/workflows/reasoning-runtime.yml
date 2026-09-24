@@ -51,5 +51,4 @@ jobs:
     with:
       runner: ${{ matrix.runner }}
       target: ${{ matrix.target }}
-      rebuild: true
       validate-candidate: ${{ github.event_name != 'workflow_dispatch' || !inputs.candidate-only }}
