@@ -453,6 +453,12 @@ fn core_cli_add_set_review_preserves_history_in_open_check_and_pull() {
         vec!["check"],
         vec!["pull", "d.b"],
         vec!["history", "status"],
+        vec!["add", "p.c", "v=2", "--in", "readings"],
+        vec!["same", "p.a", "p.c", "--keep", "p.a"],
+        vec!["add", "p.d", "v=2", "--in", "readings"],
+        vec!["distinct", "p.a", "p.d", "different measurements"],
+        vec!["open"],
+        vec!["check"],
     ] {
         let out = run(&args);
         assert!(
@@ -462,5 +468,463 @@ fn core_cli_add_set_review_preserves_history_in_open_check_and_pull() {
             String::from_utf8_lossy(&out.stderr)
         );
     }
-    assert_eq!(Capture::read(root.path()).unwrap().object_count(), 7);
+    assert_eq!(Capture::read(root.path()).unwrap().object_count(), 16);
+}
+
+#[test]
+fn explicit_retirement_retains_lazy_creation_and_replays_after_each_crash() {
+    for phase in [
+        P::Phase::Journal,
+        P::Phase::Append(0),
+        P::Phase::Commit,
+        P::Phase::View,
+    ] {
+        let root = setup();
+        let mut opts = options("strict-add");
+        opts.strict = true;
+        let p = W::prepare(root.path(), &add(), &opts, None).unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        let before = Capture::read(root.path()).unwrap();
+        let id = map(&map(&map(before.state())["subjects"])["p.a"])["head"].clone();
+        let original = before
+            .object("p.a", if let V::Text(id) = &id { id } else { panic!() })
+            .unwrap();
+        let creation =
+            W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap();
+        let stream = root
+            .path()
+            .join(".kpopper/history")
+            .join(C::subject_path("p.a").unwrap());
+        assert!(!stream.exists());
+        opts.operation = "retire-a".into();
+        let action = value(
+            json!({"kind":"retire","id":"p.a","of":id.to_json().unwrap(),"over":[],"because":"no longer applies"}),
+        );
+        let p = W::prepare(root.path(), &action, &opts, None).unwrap();
+        assert!(
+            W::publish(root.path(), &p, None, |at| if at == phase {
+                Err(kpop_native::Error("crash".into()))
+            } else {
+                Ok(())
+            })
+            .is_err()
+        );
+        W::recover(root.path(), None).unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        W::publish(root.path(), &p, None, |_| panic!("retry wrote bytes")).unwrap();
+        assert!(stream.exists());
+        let after = Capture::read(root.path()).unwrap();
+        assert!(!map(&map(after.document())["known"]).contains_key("p.a"));
+        assert_eq!(after.object_count(), 3);
+        assert_eq!(
+            after
+                .object("p.a", if let V::Text(id) = &id { id } else { panic!() })
+                .unwrap(),
+            original
+        );
+        assert_eq!(
+            W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap(),
+            creation
+        );
+        let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+        drop(root);
+        assert_eq!(Capture::read(copy.path()).unwrap().state(), after.state());
+    }
+}
+
+#[test]
+fn proposals_keep_current_and_exact_hypothetical_receipts_until_explicit_acceptance() {
+    for existing in [false, true] {
+        let root = setup();
+        let mut opts = options("proposal-a");
+        opts.strict = true;
+        if existing {
+            write(root.path(), "add-a", &add());
+        }
+        let request = value(
+            json!({"kind":"proposal","id":"p.a","body":{"v":8},"into":"known","because":"possible correction"}),
+        );
+        let p = W::prepare(root.path(), &request, &opts, None).unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        let capture = Capture::read(root.path()).unwrap();
+        let doc = map(&map(capture.document())["known"]);
+        assert_eq!(doc.contains_key("p.a"), existing);
+        if existing {
+            assert_eq!(map(&doc["p.a"])["v"], value(json!(1)));
+        }
+        let snapshot = P::capture_snapshot(root.path()).unwrap();
+        let receipt = W::receipt(&snapshot, "proposal-a").unwrap();
+        let proposal = map(&map(&receipt)["after"])["proposal"].clone();
+        assert_eq!(
+            map(&map(&map(&proposal)["document"])["known"])["p.a"],
+            value(json!({"v":8}))
+        );
+        let after = map(&map(&map(&receipt)["after"])["authoring"]);
+        let id = after["proposal"].to_json().unwrap();
+        let over = if existing {
+            vec![
+                map(&map(&map(capture.state())["subjects"])["p.a"])["head"]
+                    .to_json()
+                    .unwrap(),
+            ]
+        } else {
+            vec![]
+        };
+        opts.operation = "accept-proposal".into();
+        let action = value(
+            json!({"kind":"correct","id":"p.a","of":id,"over":over,"because":"validated correction"}),
+        );
+        let p = W::prepare(root.path(), &action, &opts, None).unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        let after = Capture::read(root.path()).unwrap();
+        assert_eq!(
+            map(&map(&map(after.document())["known"])["p.a"])["v"],
+            value(json!(8))
+        );
+        let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+        drop(root);
+        assert_eq!(
+            W::receipt(&P::capture_snapshot(copy.path()).unwrap(), "proposal-a").unwrap(),
+            receipt
+        );
+        assert_eq!(Capture::read(copy.path()).unwrap().state(), after.state());
+    }
+}
+
+#[test]
+fn public_cli_explicit_acts_preserve_their_result_and_legacy_pin_identity() {
+    let root = setup();
+    write(root.path(), "add-a", &add());
+    let c = Capture::read(root.path()).unwrap();
+    let V::Text(id) = &map(&map(&map(c.state())["subjects"])["p.a"])["head"] else {
+        panic!()
+    };
+    for kind in ["propose", "accept", "refute", "accept", "retire"] {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(root.path())
+            .args([
+                "history",
+                kind,
+                "--subject",
+                "p.a",
+                "--of",
+                id,
+                "--because",
+                "explicit evidence",
+            ])
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{kind}: {} {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            Capture::read(root.path())
+                .unwrap()
+                .object("p.a", id)
+                .is_ok()
+        );
+    }
+    assert!(
+        !map(&map(Capture::read(root.path()).unwrap().document())["known"]).contains_key("p.a")
+    );
+}
+
+#[test]
+fn batch_is_atomic_retains_intermediate_versions_and_final_dependency_pins() {
+    let root = setup();
+    let action = value(json!({"kind":"batch","actions":[
+        {"kind":"add","id":"p.a","body":{"v":1}},
+        {"kind":"set","id":"p.a","value":2},
+        {"kind":"add","id":"d.b","body":{"claim":"basis","rests_on":["p.a"]}},
+        {"kind":"add","id":"p.c","body":{"v":3}}
+    ]}));
+    let p = W::prepare(root.path(), &action, &options("batch-a"), None).unwrap();
+    W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+    W::publish(root.path(), &p, None, |_| panic!("retry wrote")).unwrap();
+    let c = Capture::read(root.path()).unwrap();
+    assert_eq!(c.object_count(), 8);
+    assert_eq!(
+        map(&map(&map(c.document())["known"])["p.a"])["v"],
+        value(json!(2))
+    );
+    let states = map(&map(c.state())["subjects"]);
+    let V::Text(judgment) = &map(&states["d.b"])["head"] else {
+        panic!()
+    };
+    let judgment = c.object("d.b", judgment).unwrap();
+    assert_eq!(
+        map(&map(&judgment)["pins"])["p.a"],
+        map(&states["p.a"])["head"]
+    );
+    let streams = root.path().join(".kpopper/history");
+    assert!(streams.join(C::subject_path("p.a").unwrap()).exists());
+    assert!(!streams.join(C::subject_path("p.c").unwrap()).exists());
+    let receipt = W::receipt(&P::capture_snapshot(root.path()).unwrap(), "batch-a").unwrap();
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    drop(root);
+    assert_eq!(
+        W::receipt(&P::capture_snapshot(copy.path()).unwrap(), "batch-a").unwrap(),
+        receipt
+    );
+    assert_eq!(Capture::read(copy.path()).unwrap().state(), c.state());
+}
+
+#[test]
+fn batch_recovery_commits_all_subjects_or_restores_the_original_view() {
+    for phase in [
+        P::Phase::Journal,
+        P::Phase::Append(0),
+        P::Phase::Commit,
+        P::Phase::View,
+    ] {
+        let root = setup();
+        write(root.path(), "add-a", &add());
+        let before = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+        let action = value(json!({"kind":"batch","actions":[
+            {"kind":"set","id":"p.a","value":4},
+            {"kind":"add","id":"p.b","body":{"v":9}}
+        ]}));
+        let p = W::prepare(root.path(), &action, &options("batch-change"), None).unwrap();
+        assert!(
+            W::publish(root.path(), &p, None, |at| if at == phase {
+                Err(kpop_native::Error("crash".into()))
+            } else {
+                Ok(())
+            })
+            .is_err()
+        );
+        assert!(Capture::read(root.path()).is_err());
+        let committed = matches!(phase, P::Phase::Commit | P::Phase::View);
+        assert_eq!(
+            W::recover(root.path(), None).unwrap(),
+            if committed {
+                "committed"
+            } else {
+                "rolled_back"
+            }
+        );
+        assert_eq!(
+            fs::read(root.path().join("GROUNDING.yaml")).unwrap(),
+            if committed {
+                p.after_view().unwrap()
+            } else {
+                before
+            }
+        );
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        assert_eq!(Capture::read(root.path()).unwrap().object_count(), 5);
+    }
+}
+
+#[test]
+fn core_batch_forward_pins_and_hypothetical_proposal_survive_source_free_roundtrip() {
+    use kpop_native::reasoning_runtime::{OperationalBounds, Runtime};
+    let root = setup();
+    let doc = value(
+        json!({"meta":{"purpose":"Fixture","reasoning":{"version":2,"profile":"core/v1","requires":["arithmetic/v1"]}},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"readings":{},"judgments":{}}),
+    );
+    fs::write(
+        root.path().join("GROUNDING.yaml"),
+        Y::encode_document(&doc).unwrap(),
+    )
+    .unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scripts/reasoning/native")
+        .join(format!(
+            "{}.kpopper-runtime",
+            kpop_native::reasoning_runtime::target_name().unwrap()
+        ));
+    let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
+    let mut opts = options("core-batch");
+    let action = value(json!({"kind":"batch","actions":[
+        {"kind":"add","id":"d.b","body":{"verdict":"ready","rests_on":["p.a"],"wrong_if":{"expr":"p.a > 3"}},"into":"judgments"},
+        {"kind":"add","id":"p.a","body":{"v":1},"into":"readings"}
+    ]}));
+    let p = W::prepare(root.path(), &action, &opts, Some(&runtime)).unwrap();
+    W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    let capture = Capture::read(root.path()).unwrap();
+    let states = map(&map(capture.state())["subjects"]);
+    let V::Text(head) = &map(&states["d.b"])["head"] else {
+        panic!()
+    };
+    let judgment = capture.object("d.b", head).unwrap();
+    assert_eq!(
+        map(&map(&judgment)["pins"])["p.a"],
+        map(&states["p.a"])["head"]
+    );
+    assert!(map(&map(&judgment)["body"]).contains_key("seen"));
+    opts.operation = "core-proposal".into();
+    opts.strict = true;
+    let action = value(
+        json!({"kind":"proposal","id":"d.b","body":{"verdict":"revised","rests_on":["p.a"],"wrong_if":{"expr":"p.a > 5"}},"into":"judgments","because":"check alternate threshold"}),
+    );
+    let p = W::prepare(root.path(), &action, &opts, Some(&runtime)).unwrap();
+    W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    let receipts = ["core-batch", "core-proposal"]
+        .map(|op| W::receipt(&P::capture_snapshot(root.path()).unwrap(), op).unwrap());
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    drop(root);
+    for (op, expected) in ["core-batch", "core-proposal"].into_iter().zip(receipts) {
+        assert_eq!(
+            W::receipt(&P::capture_snapshot(copy.path()).unwrap(), op).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn same_and_distinct_retain_original_claims_and_rewrite_only_current_pins() {
+    use kpop_native::reasoning_runtime::{OperationalBounds, Runtime};
+    let root = setup();
+    let doc = value(
+        json!({"meta":{"purpose":"Fixture","reasoning":{"version":2,"profile":"core/v1","requires":["arithmetic/v1"]}},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"readings":{},"judgments":{}}),
+    );
+    fs::write(
+        root.path().join("GROUNDING.yaml"),
+        Y::encode_document(&doc).unwrap(),
+    )
+    .unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scripts/reasoning/native")
+        .join(format!(
+            "{}.kpopper-runtime",
+            kpop_native::reasoning_runtime::target_name().unwrap()
+        ));
+    let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
+    let mut opts = options("identity-seed");
+    opts.strict = true;
+    let action = value(json!({"kind":"batch","actions":[
+        {"kind":"add","id":"p.a","body":{"v":1},"into":"readings"},
+        {"kind":"add","id":"p.b","body":{"v":1},"into":"readings"},
+        {"kind":"add","id":"p.c","body":{"v":1},"into":"readings"},
+        {"kind":"add","id":"d.j","body":{"verdict":"ready","rests_on":["p.b"],"wrong_if":{"expr":"p.b > 3"}},"into":"judgments"}
+    ]}));
+    let p = W::prepare(root.path(), &action, &opts, Some(&runtime)).unwrap();
+    W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    let c = Capture::read(root.path()).unwrap();
+    let V::Text(old_id) = &map(&map(&map(c.state())["subjects"])["p.b"])["head"] else {
+        panic!()
+    };
+    let original = c.object("p.b", old_id).unwrap();
+    let frozen = P::export(root.path()).unwrap().encode().unwrap();
+    let mut future = opts.clone();
+    future.operation = "future-identity".into();
+    future.recording_day = "9999-12-31".into();
+    let action =
+        value(json!({"kind":"same","a":"p.a","b":"p.b","keep":"p.a","as_of":"9999-12-31"}));
+    assert_eq!(
+        W::prepare(root.path(), &action, &future, Some(&runtime))
+            .unwrap_err()
+            .0,
+        "invalid_identity_as_of"
+    );
+    assert_eq!(P::export(root.path()).unwrap().encode().unwrap(), frozen);
+    opts.operation = "same-ab".into();
+    let action = value(json!({"kind":"same","a":"p.a","b":"p.b","keep":"p.a"}));
+    let p = W::prepare(root.path(), &action, &opts, Some(&runtime)).unwrap();
+    let brief = root.path().join(".kpopper/view.yaml");
+    assert!(
+        W::publish(root.path(), &p, Some(&runtime), |phase| {
+            if phase == P::Phase::Journal {
+                fs::write(&brief, "title: concurrent brief\n").unwrap();
+            }
+            Ok(())
+        })
+        .unwrap_err()
+        .0
+        .contains("node_identity_brief_unsupported")
+    );
+    assert!(
+        W::recover(root.path(), Some(&runtime))
+            .unwrap_err()
+            .0
+            .contains("node_identity_brief_unsupported")
+    );
+    fs::remove_file(&brief).unwrap();
+    assert_eq!(
+        W::recover(root.path(), Some(&runtime)).unwrap(),
+        "rolled_back"
+    );
+    assert!(
+        W::publish(root.path(), &p, Some(&runtime), |phase| {
+            if phase == P::Phase::Commit {
+                Err(kpop_native::Error("crash".into()))
+            } else {
+                Ok(())
+            }
+        })
+        .is_err()
+    );
+    assert_eq!(
+        W::recover(root.path(), Some(&runtime)).unwrap(),
+        "committed"
+    );
+    W::publish(root.path(), &p, Some(&runtime), |_| panic!("retry wrote")).unwrap();
+    let after = Capture::read(root.path()).unwrap();
+    assert!(!map(&map(after.document())["readings"]).contains_key("p.b"));
+    assert_eq!(after.object("p.b", old_id).unwrap(), original);
+    let V::Text(judgment_id) = &map(&map(&map(after.state())["subjects"])["d.j"])["head"] else {
+        panic!()
+    };
+    let judgment = after.object("d.j", judgment_id).unwrap();
+    assert!(map(&map(&judgment)["pins"]).contains_key("p.a"));
+    assert!(!map(&map(&judgment)["pins"]).contains_key("p.b"));
+    opts.operation = "distinct-ac".into();
+    let action =
+        value(json!({"kind":"distinct","a":"p.a","b":"p.c","because":"different measurements"}));
+    let p = W::prepare(root.path(), &action, &opts, Some(&runtime)).unwrap();
+    W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    let after = Capture::read(copy.path()).unwrap();
+    assert_eq!(after.object("p.b", old_id).unwrap(), original);
+    opts.operation = "forbidden-same".into();
+    let action = value(json!({"kind":"same","a":"p.a","b":"p.c","keep":"p.a"}));
+    assert!(
+        W::prepare(copy.path(), &action, &opts, Some(&runtime))
+            .unwrap_err()
+            .0
+            .contains("identities_declared_distinct")
+    );
+}
+
+#[test]
+fn public_identity_private_second_root_keeps_full_intent_in_private_draft() {
+    let root = setup();
+    write(root.path(), "add-a", &add());
+    write(
+        root.path(),
+        "private-b",
+        &value(json!({"kind":"add","id":"p.b","body":{"v":1,"private":true}})),
+    );
+    let before = P::export(root.path()).unwrap().encode().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root.path())
+        .args(["same", "p.a", "p.b", "--keep", "p.a"])
+        .env("KPOPPER_PRIVATE_HOME", private.path())
+        .env_remove("KPOPPER_AGENT_SESSION")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let result: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(result["state"], "private draft");
+    assert_eq!(P::export(root.path()).unwrap().encode().unwrap(), before);
+    let draft = V::from_tagged(
+        &serde_json::from_slice(&fs::read(result["path"].as_str().unwrap()).unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(map(&map(&draft)["action"])["a"], value(json!("p.a")));
+    assert_eq!(map(&map(&draft)["action"])["b"], value(json!("p.b")));
+    assert_eq!(map(&map(&draft)["action"])["keep"], value(json!("p.a")));
 }

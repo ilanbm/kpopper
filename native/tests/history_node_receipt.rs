@@ -248,3 +248,70 @@ fn node_deletion_stale_before_images_and_branch_preparation_are_exact() {
     branch.apply(&reverse).unwrap();
     assert_eq!(branch.values(), base.values());
 }
+
+#[test]
+fn proposal_world_is_partitioned_by_node_and_nested_graphs_refuse() {
+    let source = receipt(100);
+    let mut after = map(&source)["after"].clone();
+    let mut proposal = after.clone();
+    map_mut(&mut proposal).remove("authoring");
+    map_mut(&mut after).insert("proposal".into(), proposal.clone());
+    let source = T::semantic_receipt(
+        "core/v1",
+        &map(&source)["capabilities"],
+        &map(&source)["before"],
+        &after,
+    )
+    .unwrap();
+    let packed = Receipt::pack(&source).unwrap();
+    assert_eq!(packed.restore().unwrap(), source);
+    let context = &map(packed.after().context())["proposal"];
+    let literal = &map(context)["literal"];
+    assert!(
+        map(&map(literal)["document"])
+            .get("known")
+            .is_some_and(|v| map(v).is_empty())
+    );
+    assert!(
+        map(&map(literal)["assessment"])["nodes"]
+            .to_json()
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .is_empty()
+    );
+    let mut nodes = Nodes::new();
+    nodes
+        .apply(&nodes.prepare(packed.before()).unwrap())
+        .unwrap();
+    nodes
+        .apply(&nodes.prepare(packed.after()).unwrap())
+        .unwrap();
+    assert_eq!(
+        nodes
+            .side(packed.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        after
+    );
+    let mut forged = packed.after().context().clone();
+    map_mut(
+        map_mut(map_mut(&mut forged).get_mut("proposal").unwrap())
+            .get_mut("literal")
+            .unwrap(),
+    )
+    .insert("document".into(), map(&proposal)["document"].clone());
+    assert!(Side::from_parts(forged, packed.after().nodes().clone()).is_err());
+    let nested_proposal = proposal.clone();
+    map_mut(&mut proposal).insert("proposal".into(), nested_proposal);
+    map_mut(&mut after).insert("proposal".into(), proposal);
+    let nested = T::semantic_receipt(
+        "core/v1",
+        &map(&source)["capabilities"],
+        &map(&source)["before"],
+        &after,
+    )
+    .unwrap();
+    assert!(Receipt::pack(&nested).is_err());
+}

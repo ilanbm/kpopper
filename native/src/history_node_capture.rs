@@ -61,7 +61,11 @@ pub fn original(object: &V, observation: &ObservationNode) -> Result<Original> {
     )
 }
 
-fn unpack(subject: &str, version: &C::Version) -> Result<(V, ObservationNode)> {
+fn unpack(
+    subject: &str,
+    version: &C::Version,
+    snapshot: &P::Snapshot,
+) -> Result<(V, ObservationNode)> {
     let value = version
         .state()
         .ok_or_else(|| error("node_semantic_absent_unsupported"))?;
@@ -82,7 +86,11 @@ fn unpack(subject: &str, version: &C::Version) -> Result<(V, ObservationNode)> {
     require(
         string_is(field(&object, "subject")?, subject)
             && string_is(field(&object, "id")?, &observation.id)
-            && string_is(field(&object, "op")?, version.operation()),
+            && crate::history_node_writer::operation_member(
+                snapshot,
+                version.operation(),
+                text(field(&object, "op")?)?,
+            )?,
         "node_semantic_binding",
     )?;
     if !string_is(field(&object, "kind")?, "act") {
@@ -148,7 +156,7 @@ impl Capture {
                 if !payload.is_semantic {
                     continue;
                 }
-                let (object, observation) = unpack(subject, version)?;
+                let (object, observation) = unpack(subject, version, &snapshot)?;
                 require(
                     semantic_events
                         .insert(observation.id.clone(), version.id().into())
@@ -205,6 +213,52 @@ impl Capture {
     }
     pub fn object_count(&self) -> usize {
         self.history.objects().len()
+    }
+    /// Reduce a prospective object set without materializing legacy receipts or files.
+    /// The returned input is for authoring evidence only; it is not a published capture.
+    pub(crate) fn candidate(&self, new: &[V]) -> Result<Self> {
+        self.candidate_with_template(new, &self.document)
+    }
+    pub(crate) fn candidate_with_template(&self, new: &[V], template: &V) -> Result<Self> {
+        let mut objects = self
+            .history
+            .objects()
+            .iter()
+            .map(|(id, object)| {
+                Ok((
+                    object.clone(),
+                    self.history
+                        .observations()
+                        .get(id)
+                        .ok_or_else(|| error("incomplete_closure"))?
+                        .clone(),
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for object in new {
+            validate_object(object)?;
+            let mut compact = map(object)?.clone();
+            let saw = crate::history_view::list(&compact.remove("saw").unwrap())?
+                .iter()
+                .map(|v| text(v).map(str::to_owned))
+                .collect::<Result<BTreeSet<_>>>()?;
+            let observation = ObservationNode::root(text(&compact["id"])?, &saw)?;
+            objects.push((V::Map(compact), observation));
+        }
+        let history = History::from_objects(objects)?;
+        let state = history.reduce(Some(map(&map(&self.state)?["rules"])?), None)?;
+        let document = crate::history_authoring::destination(&render(
+            template,
+            history.objects(),
+            &state,
+            true,
+        )?)?;
+        Ok(Self {
+            history,
+            state,
+            document,
+            ..self.clone()
+        })
     }
     pub fn storage_event(&self, semantic_id: &str) -> Result<&str> {
         self.semantic_events

@@ -263,6 +263,21 @@ fn act_with_probe(
         F::read(&F::target(&store.root, &journal(&store))?)?.is_none(),
         "recovery_required",
     )?;
+    if crate::history_node_publication::selected(&store.entry)? {
+        let (result, _) = crate::public_node_history::write(&route, original, action, probe)?;
+        if !map(&result)?
+            .get("state")
+            .is_some_and(|v| string_is(v, "committed"))
+        {
+            return Ok(result);
+        }
+        return Ok(obj([
+            ("state", s("committed")),
+            ("act", a["kind"].clone()),
+            ("subject", a["id"].clone()),
+            ("of", a["of"].clone()),
+        ]));
+    }
     let captured = store.capture()?;
     if let Some(target) = captured.objects.get(text(&a["of"])?)
         && Privacy::private_marker(target)

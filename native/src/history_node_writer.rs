@@ -25,6 +25,49 @@ use std::{
     path::Path,
 };
 const FORMAT: &str = "node-authoring-transaction/v1";
+/// Batch children have original semantic operation IDs distinct from their atomic publication.
+/// Membership is derived only from the explicit bounded batch intent, never event ancestry.
+pub(crate) fn operation_member(
+    snapshot: &P::Snapshot,
+    transaction: &str,
+    semantic: &str,
+) -> Result<bool> {
+    if transaction == semantic {
+        return Ok(true);
+    }
+    let Some(tx) = snapshot.transactions.get(transaction) else {
+        return Ok(false);
+    };
+    let Some(value) = &tx.context else {
+        return Ok(false);
+    };
+    let c = context(value)?;
+    let side = map(&c["before"])?;
+    let literal = map(field(side, "literal")?)?;
+    let Some(intent) = literal.get("authoring") else {
+        return Ok(false);
+    };
+    let intent = map(intent)?;
+    if !intent.get("kind").is_some_and(|v| string_is(v, "batch")) {
+        return Ok(false);
+    }
+    let actions = list(field(intent, "actions")?)?;
+    require(!actions.is_empty() && actions.len() <= 64, "invalid_batch")?;
+    for index in 0..actions.len() {
+        let id = format!(
+            "batch-step-{}",
+            A::obj([
+                ("operation", s(transaction)),
+                ("index", A::n(&index.to_string()))
+            ])
+            .digest()?
+        );
+        if id == semantic {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
@@ -175,6 +218,14 @@ fn decode_options(operation: &str, value: &V) -> Result<A::Options> {
         Some(1)
     } else if is_int(&o["receipt_version"], "7") {
         Some(7)
+    } else if is_int(&o["receipt_version"], "5") {
+        Some(5)
+    } else if is_int(&o["receipt_version"], "9") {
+        Some(9)
+    } else if is_int(&o["receipt_version"], "6") {
+        Some(6)
+    } else if is_int(&o["receipt_version"], "8") {
+        Some(8)
     } else {
         return Err(error("invalid_authoring_receipt"));
     };
@@ -348,6 +399,52 @@ struct Materialized {
     frames: BTreeMap<String, Vec<u8>>,
     context: V,
 }
+/// Recover the operation request without changing the original receipt's hash domain.
+pub(crate) fn action(receipt: &V) -> Result<V> {
+    let intent = intent(receipt)?;
+    if intent
+        .get("kind")
+        .is_some_and(|v| ["same", "distinct"].iter().any(|k| string_is(v, k)))
+    {
+        let fields = ["kind", "a", "b", "keep", "because", "as_of"];
+        return Ok(V::Map(
+            intent
+                .iter()
+                .filter(|(k, _)| fields.contains(&k.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        ));
+    }
+    if intent.get("kind").is_some_and(|v| string_is(v, "proposal")) {
+        require(
+            field(intent, "hypothesis")? == &V::Null,
+            "node_history_hypotheses_unsupported",
+        )?;
+        Ok(A::obj([
+            ("kind", s("proposal")),
+            ("id", field(intent, "subject")?.clone()),
+            ("body", field(intent, "body")?.clone()),
+            ("into", field(intent, "collection")?.clone()),
+            ("because", field(intent, "because")?.clone()),
+        ]))
+    } else if intent.get("kind").is_some_and(|v| string_is(v, "batch")) {
+        Ok(A::obj([
+            ("kind", s("batch")),
+            ("actions", field(intent, "actions")?.clone()),
+        ]))
+    } else {
+        Ok(field(intent, "action")?.clone())
+    }
+}
+pub(crate) fn intent(receipt: &V) -> Result<&Map> {
+    let before = map(&map(receipt)?["before"])?;
+    let keys = ["authoring", "identity_authoring"]
+        .into_iter()
+        .filter(|k| before.contains_key(*k))
+        .collect::<Vec<_>>();
+    require(keys.len() == 1, "node_authoring_intent")?;
+    map(&before[keys[0]])
+}
 fn materialize(
     capture: &Capture,
     action: &V,
@@ -356,13 +453,96 @@ fn materialize(
     audit: Option<&ReplayAudit>,
     archive: &V,
 ) -> Result<Materialized> {
-    let encoded_options = encode_options(options)?;
     // Preserve the optimistic snapshot guard on the same exact before bytes used by replay.
     capture.check_expected(action)?;
-    let plan = Core::prepare(capture, action, options, runtime)?;
-    let receipt = Receipt::pack(&Core::receipt(
-        capture, &plan, options, runtime, audit, archive,
-    )?)?;
+    let kind = text(field(map(action)?, "kind")?)?;
+    let mut effective_options = options.clone();
+    if kind == "batch" {
+        effective_options.strict = true;
+    }
+    let options = &effective_options;
+    let encoded_options = encode_options(options)?;
+    let (objects, document, receipt) = if ["accept", "refute", "correct", "propose", "retire"]
+        .contains(&kind)
+    {
+        let plan = crate::history_authoring_act::prepare(capture, action, options)?;
+        let projected = capture.candidate(&plan.objects)?;
+        let receipt = crate::history_authoring_act::receipt(
+            capture, &projected, &plan, options, runtime, audit, archive,
+        )?;
+        (plan.objects, projected.document().clone(), receipt)
+    } else if kind == "proposal" {
+        let a = schema(action, &["kind", "id", "body", "into", "because"], &[])?;
+        let proposal = A::Proposal {
+            subject: text(&a["id"])?.into(),
+            body: a["body"].clone(),
+            collection: text(&a["into"])?.into(),
+            because: text(&a["because"])?.into(),
+            hypothesis: None,
+        };
+        let plan =
+            crate::history_authoring_proposal::prepare(capture, &proposal, options, runtime)?;
+        let projected = capture.candidate(&plan.objects)?;
+        let receipt = crate::history_authoring_proposal::receipt(
+            capture, &proposal, &plan, options, runtime, audit, archive,
+        )?;
+        (plan.objects, projected.document().clone(), receipt)
+    } else if ["same", "distinct"].contains(&kind) {
+        crate::history_node_identity::prepare(capture, action, options, runtime, audit, archive)?
+    } else if kind == "batch" {
+        let a = schema(action, &["kind", "actions"], &[])?;
+        let mut actions = list(&a["actions"])?.to_vec();
+        require(!actions.is_empty() && actions.len() <= 64, "invalid_batch")?;
+        for action in &mut actions {
+            capture.check_expected(action)?;
+            let a = map_mut(action)?;
+            if !a.get("as_of").is_some_and(crate::history_view::truth) {
+                a.insert("as_of".into(), s(&options.recording_day));
+            }
+        }
+        let version = options.receipt_version.unwrap_or(8);
+        require([6, 8].contains(&version), "invalid_authoring_receipt")?;
+        let batch = crate::history_authoring_batch::BatchOptions {
+            authoring: options.clone(),
+            receipt_version: version,
+            context: A::empty(),
+            evidence: BTreeMap::new(),
+        };
+        let plan = crate::history_authoring_batch_core::prepare(
+            capture, &actions, &batch, runtime, audit, archive,
+        )?;
+        let projected = capture.candidate(&plan.objects)?;
+        require(
+            projected.document().digest()? == plan.document.digest()?,
+            "batch_final_projection_mismatch",
+        )?;
+        let mut ordered = plan
+            .objects
+            .into_iter()
+            .map(|object| {
+                let o = map(&object)?;
+                Ok((
+                    (
+                        text(&o["subject"])?.to_owned(),
+                        list(&o["saw"])?.len(),
+                        text(&o["id"])?.to_owned(),
+                    ),
+                    object,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        ordered.sort_by(|a, b| a.0.cmp(&b.0));
+        (
+            ordered.into_iter().map(|(_, o)| o).collect(),
+            plan.document,
+            plan.receipt,
+        )
+    } else {
+        let plan = Core::prepare(capture, action, options, runtime)?;
+        let receipt = Core::receipt(capture, &plan, options, runtime, audit, archive)?;
+        (plan.objects, plan.document, receipt)
+    };
+    let receipt = Receipt::pack(&receipt)?;
     let mut build = Build::new(capture, &options.operation)?;
     let mut nodes = components(
         &capture.snapshot,
@@ -371,7 +551,14 @@ fn materialize(
     )?;
     build.evidence(&mut nodes, receipt.before(), "before")?;
     let mut observations = capture.history.observations().clone();
-    for object in &plan.objects {
+    let mut claims = BTreeMap::<String, usize>::new();
+    for object in &objects {
+        let object = map(object)?;
+        if !string_is(&object["kind"], "act") {
+            *claims.entry(text(&object["subject"])?.into()).or_default() += 1;
+        }
+    }
+    for object in &objects {
         let o = map(object)?;
         let subject = text(&o["subject"])?;
         let id = text(&o["id"])?;
@@ -394,14 +581,23 @@ fn materialize(
             "semantic",
             nodes.values().get(subject),
         )?;
-        if !build.bases.contains_key(subject) && !string_is(&o["kind"], "act") {
+        let visible = map(&document)?
+            .get(text(&map(&value)?["collection"])?)
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get(subject))
+            == Some(&o["body"]);
+        if !build.bases.contains_key(subject)
+            && !string_is(&o["kind"], "act")
+            && visible
+            && claims.get(subject) == Some(&1)
+        {
             build.lazy(subject, &value)?;
         } else {
             build.append(subject, value)?;
         }
     }
     build.evidence(&mut nodes, receipt.after(), "after")?;
-    let mut doc = plan.document;
+    let mut doc = document;
     let meta = map_mut(
         map_mut(&mut doc)?
             .get_mut("meta")
@@ -437,6 +633,12 @@ pub fn prepare(
     runtime: Option<&Runtime>,
 ) -> Result<P::Prepared> {
     let _lock = FS::DirectoryGuard::acquire(root, false)?;
+    if map(action)?
+        .get("kind")
+        .is_some_and(|v| ["same", "distinct"].iter().any(|k| string_is(v, k)))
+    {
+        crate::history_node_identity::sources(root)?;
+    }
     let capture = Capture::read(root)?;
     let result = materialize(&capture, action, options, runtime, None, &archive(root)?)?;
     let prepared = P::prepare_with_context(
@@ -461,7 +663,13 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         .ok_or_else(|| error("node_transaction_missing_context"))?;
     let c = context(&c)?;
     let options = decode_options(prepared.operation(), &c["options"])?;
-    let intent = map(field(map(&map(&recorded)?["before"])?, "authoring")?)?;
+    let intent = intent(&recorded)?;
+    if intent
+        .get("kind")
+        .is_some_and(|v| ["same", "distinct"].iter().any(|k| string_is(v, k)))
+    {
+        crate::history_node_identity::sources(root)?;
+    }
     let current_archive = archive(root)?;
     require(
         current_archive == *field(intent, "archive")?,
@@ -477,7 +685,7 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
     let audit = ReplayAudit::from_receipts(&recorded, &parents)?;
     let replay = materialize(
         &capture,
-        field(intent, "action")?,
+        &action(&recorded)?,
         &options,
         runtime,
         Some(&audit),
@@ -495,9 +703,29 @@ pub fn publish(
     root: &Path,
     prepared: &P::Prepared,
     runtime: Option<&Runtime>,
-    boundary: impl FnMut(P::Phase) -> Result<()>,
+    mut boundary: impl FnMut(P::Phase) -> Result<()>,
 ) -> Result<()> {
-    P::publish(root, prepared, |p| verify(root, p, runtime), boundary)
+    P::publish(
+        root,
+        prepared,
+        |p| verify(root, p, runtime),
+        |phase| {
+            verify_sources(root, prepared)?;
+            boundary(phase)?;
+            verify_sources(root, prepared)
+        },
+    )
+}
+pub(crate) fn verify_sources(root: &Path, prepared: &P::Prepared) -> Result<()> {
+    let c = prepared
+        .context()?
+        .ok_or_else(|| error("node_transaction_missing_context"))?;
+    let c = context(&c)?;
+    let before = map(field(map(&c["before"])?, "literal")?)?;
+    if before.contains_key("identity_authoring") {
+        crate::history_node_identity::sources(root)?;
+    }
+    Ok(())
 }
 pub fn recover(root: &Path, runtime: Option<&Runtime>) -> Result<&'static str> {
     P::recover(root, |p| verify(root, p, runtime))

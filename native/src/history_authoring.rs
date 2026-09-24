@@ -160,19 +160,6 @@ pub(crate) fn head<'a>(capture: &'a Capture, subject: &str) -> Result<&'a V> {
         .get(text(&state["head"])?)
         .ok_or_else(|| error("incomplete_closure"))
 }
-pub(crate) fn pins(capture: &Capture, deps: &[V], missing: bool) -> Result<(V, V)> {
-    let mut pins = Map::new();
-    let mut gaps = Map::new();
-    for dep in deps {
-        let name = text(dep)?;
-        if !map(&map(&capture.state)?["subjects"])?.contains_key(name) && missing {
-            gaps.insert(name.into(), s("unavailable"));
-        } else {
-            pins.insert(name.into(), map(head(capture, name)?)?["id"].clone());
-        }
-    }
-    Ok((V::Map(pins), V::Map(gaps)))
-}
 pub(crate) fn evidence(doc: &V, world: &mut World<'_>, audit: Option<&ReplayAudit>) -> Result<V> {
     let report = if let Some(audit) = audit {
         audit.assessment(world)?
@@ -197,20 +184,7 @@ fn temporal_subjects(doc: &V) -> Result<BTreeSet<String>> {
         })
         .collect())
 }
-pub(crate) fn accepted_versions(capture: &Capture) -> Result<Map> {
-    let mut versions = Map::new();
-    for (subject, state) in map(field(map(&capture.state)?, "subjects")?)? {
-        let state = map(state)?;
-        if state
-            .get("acceptance")
-            .is_some_and(|v| string_is(v, "accepted"))
-            && let Some(head) = state.get("head")
-        {
-            versions.insert(subject.clone(), head.clone());
-        }
-    }
-    Ok(versions)
-}
+
 pub(crate) fn attach_temporal_replay(
     evidence: &mut V,
     doc: &V,
@@ -461,85 +435,13 @@ fn prepare_act_inner(
     runtime: Option<&Runtime>,
     audit: Option<&ReplayAudit>,
 ) -> Result<PreparedMutation> {
-    let a = schema(action, &["kind", "id", "of", "over", "because"], &[])?;
-    let kind = text(&a["kind"])?;
-    let subject = text(&a["id"])?;
-    let target_id = text(&a["of"])?;
-    require(
-        ["accept", "refute", "correct", "propose", "retire"].contains(&kind),
-        "invalid_history_act",
-    )?;
-    require(P::object_id(target_id), "invalid_identifier")?;
-    let over = list(&a["over"])?;
-    let mut versions = BTreeSet::new();
-    for version in over {
-        let v = text(version)?;
-        require(P::object_id(v), "invalid_identifier")?;
-        versions.insert(v.to_owned());
-    }
-    require(
-        versions.len() == over.len() && !versions.contains(target_id),
-        "invalid_act_over",
-    )?;
-    require(
-        !["refute", "propose", "retire"].contains(&kind) || over.is_empty(),
-        if kind == "refute" {
-            "invalid_refute_over"
-        } else {
-            "invalid_act_over"
-        },
-    )?;
-    require(
-        options.strict || !["propose", "retire"].contains(&kind),
-        "strict_history_capability_required",
-    )?;
-    require(
-        !text(&a["because"])?.trim().is_empty(),
-        "act_reason_required",
-    )?;
-    let mut action = action.clone();
-    map_mut(&mut action)?.insert("over".into(), strings(versions.clone()));
     guards(store, capture, options)?;
-    for version in std::iter::once(target_id).chain(versions.iter().map(String::as_str)) {
-        let target = capture
-            .objects
-            .get(version)
-            .ok_or_else(|| error("missing_act_target"))?;
-        let target = map(target)?;
-        require(
-            !string_is(&target["kind"], "act"),
-            "act_target_must_be_claim",
-        )?;
-        require(
-            string_is(&target["subject"], subject),
-            "act_subject_mismatch",
-        )?;
-    }
     let frozen_archive = archive(store)?;
+    let plan = crate::history_authoring_act::prepare(capture, action, options)?;
+    let new = &plan.objects;
     let before_doc = document(capture)?;
-    let target = &capture.objects[target_id];
-    if ["accept", "correct"].contains(&kind) {
-        require_interpretable_claim(target)?;
-    }
-    let profile = text(field(map(field(map(target)?, "authored")?)?, "profile")?)?;
+    let profile = plan.profile.as_str();
     let cap = F::capabilities(&before_doc, Some(profile))?;
-
-    let body = obj([
-        ("act", s(kind)),
-        ("of", s(target_id)),
-        ("over", strings(versions)),
-        ("because", a["because"].clone()),
-    ]);
-    let new = vec![make_object(
-        subject,
-        "act",
-        body,
-        strings(saw(capture, subject)?),
-        None,
-        empty(),
-        empty(),
-        options,
-    )?];
     let placeholder = T::semantic_receipt(profile, &cap, &empty(), &empty())?;
     let initial_template = View::template(&capture.commits)?;
     let requires = options.requires_for(&before_doc)?;
@@ -564,43 +466,15 @@ fn prepare_act_inner(
     )?;
     let projected = candidate(capture, &draft)?;
     let after_doc = document(&projected)?;
-    let cap = F::capabilities(&after_doc, Some(profile))?;
-    let mut before = crate::history_authoring_reader::AuthoringReader::document_evidence(
-        &before_doc,
+    let receipt = crate::history_authoring_act::receipt(
+        capture,
+        &projected,
+        &plan,
+        options,
         runtime,
         audit,
-        &accepted_versions(capture)?,
+        &frozen_archive,
     )?;
-    map_mut(&mut before)?.insert(
-        "authoring".into(),
-        obj([
-            ("version", n("4")),
-            ("kind", s("act")),
-            ("action", action),
-            ("by", options.by.clone()),
-            ("recorded_at", s(&options.recorded_at)),
-            ("archive", frozen_archive.clone()),
-            ("baseline", capture.baseline.clone()),
-        ]),
-    );
-    let mut after = crate::history_authoring_reader::AuthoringReader::document_evidence(
-        &after_doc,
-        runtime,
-        audit,
-        &accepted_versions(&projected)?,
-    )?;
-    map_mut(&mut after)?.insert(
-        "authoring".into(),
-        obj([
-            ("objects", V::List(vec![map(&new[0])?["id"].clone()])),
-            ("subject", s(subject)),
-            (
-                "acceptance",
-                map(&map(&map(&projected.state)?["subjects"])?[subject])?["acceptance"].clone(),
-            ),
-        ]),
-    );
-    let receipt = T::semantic_receipt(profile, &cap, &before, &after)?;
     let mutation = Preparation::prepare_commit(
         capture,
         &options.operation,
@@ -648,184 +522,26 @@ pub(crate) fn prepare_proposal_inner(
     runtime: Option<&Runtime>,
     audit: Option<&ReplayAudit>,
 ) -> Result<PreparedMutation> {
-    P::subject(&proposal.subject)?;
-    P::subject(&proposal.collection)?;
-    require(
-        !["meta", "schema", "record", "also"].contains(&proposal.collection.as_str()),
-        "invalid_proposal_collection",
-    )?;
-    require(!proposal.because.trim().is_empty(), "act_reason_required")?;
-    require(options.strict, "strict_history_capability_required")?;
-    let mut version = options.receipt_version.unwrap_or(9);
-    require([5, 9].contains(&version), "invalid_authoring_receipt")?;
     guards(store, capture, options)?;
     let frozen_archive = archive(store)?;
-    let doc = document(capture)?;
-    let fields = F::snapshot_fields(&doc)?;
-    let subject = proposal.subject.as_str();
+    let plan = crate::history_authoring_proposal::prepare(capture, proposal, options, runtime)?;
+    let new = &plan.objects;
+    let doc = &plan.document;
     let collection = proposal.collection.as_str();
-    let profile = map(&map(&capture.state)?["subjects"])?
-        .get(subject)
-        .map(map)
-        .transpose()?
-        .and_then(|m| m.get("head"))
-        .map(|h| {
-            let o = capture
-                .objects
-                .get(text(h)?)
-                .ok_or_else(|| error("incomplete_closure"))?;
-            text(field(map(field(map(o)?, "authored")?)?, "profile")?)
-        })
-        .transpose()?;
-    let cap = F::capabilities(&doc, profile)?;
-
-    if !string_is(&map(&cap)?["profile"], "core/v1") {
-        version = 5;
-    }
-    let deps_field = text(&fields["deps"])?;
-    let snapshot_field = text(&fields["snapshot"])?;
-    let mut body = proposal.body.clone();
-    let deps = map(&body)
-        .ok()
-        .and_then(|b| b.get(deps_field))
-        .map(list)
-        .transpose()
-        .map_err(|_| error("invalid_proposal_dependencies"))?
-        .unwrap_or(&[])
-        .to_vec();
-    require(
-        deps.iter().all(|v| matches!(v, V::Text(_))),
-        "invalid_proposal_dependencies",
-    )?;
-    let judgment = map(&body).is_ok_and(|m| m.contains_key(deps_field));
-    require(
-        version != 9 || !judgment || !map(&body)?.contains_key(snapshot_field),
-        "authored_snapshot_forbidden",
-    )?;
-    let mut authored = obj([
-        ("collection", s(collection)),
-        (
-            "fields",
-            V::Map(
-                fields
-                    .iter()
-                    .filter(|(_, v)| truth(v))
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect(),
-            ),
-        ),
-        ("profile", map(&cap)?["profile"].clone()),
-    ]);
-    if let Some(hypothesis) = &proposal.hypothesis {
-        map_mut(&mut authored)?.insert("hypothesis".into(), hypothesis.clone());
-    }
-    let mut hypothetical = doc.clone();
-    for name in F::collections(&doc)?.keys() {
-        map_mut(map_mut(&mut hypothetical)?.get_mut(name).unwrap())?.remove(subject);
-    }
-    map_mut(
-        map_mut(&mut hypothetical)?
-            .entry(collection.into())
-            .or_insert_with(empty),
-    )?
-    .insert(subject.into(), body.clone());
-    hypothetical = destination(&hypothetical)?;
-    if version == 9 && judgment {
-        let mut hypothetical_world =
-            crate::history_authoring_reader::AuthoringReader::new(&hypothetical, runtime)?;
-        let mut seen = Map::new();
-        for dep in &deps {
-            let dep = text(dep)?;
-            if hypothetical_world.raw().contains_key(dep) {
-                seen.insert(dep.into(), hypothetical_world.history(dep)?);
-            }
-        }
-        map_mut(&mut body)?.insert(snapshot_field.into(), V::Map(seen));
-        map_mut(map_mut(&mut hypothetical)?.get_mut(collection).unwrap())?
-            .insert(subject.into(), body.clone());
-    }
-    let saw = saw(capture, subject)?;
-    let (pins, _) = pins(capture, &deps, false)?;
-    let claim = make_object(
-        subject,
-        if judgment { "judgment" } else { "reading" },
-        body,
-        strings(saw.clone()),
-        Some(authored),
-        pins,
-        empty(),
-        options,
-    )?;
-    let claim_id = map(&claim)?["id"].clone();
-    let mut saw = saw;
-    saw.push(text(&claim_id)?.into());
-    saw.sort();
-    let act = make_object(
-        subject,
-        "act",
-        obj([
-            ("act", s("propose")),
-            ("of", claim_id.clone()),
-            ("over", V::List(vec![])),
-            ("because", s(&proposal.because)),
-        ]),
-        strings(saw),
-        None,
-        empty(),
-        empty(),
-        options,
-    )?;
-    let new = vec![claim, act];
     let mut selected = capture.objects.clone();
-    for o in &new {
+    for o in new {
         selected.insert(text(&map(o)?["id"])?.into(), o.clone());
     }
     validate_closure(&selected)?;
-    let versions = accepted_versions(capture)?;
-    let mut before = crate::history_authoring_reader::AuthoringReader::document_evidence(
-        &doc, runtime, audit, &versions,
+    let receipt = crate::history_authoring_proposal::receipt(
+        capture,
+        proposal,
+        &plan,
+        options,
+        runtime,
+        audit,
+        &frozen_archive,
     )?;
-    map_mut(&mut before)?.insert(
-        "authoring".into(),
-        obj([
-            ("version", n(&version.to_string())),
-            ("kind", s("proposal")),
-            ("subject", s(subject)),
-            ("body", proposal.body.clone()),
-            ("collection", s(collection)),
-            ("because", s(&proposal.because)),
-            ("hypothesis", proposal.hypothesis.clone().unwrap_or(V::Null)),
-            ("by", options.by.clone()),
-            ("recorded_at", s(&options.recorded_at)),
-            ("archive", frozen_archive.clone()),
-            ("baseline", capture.baseline.clone()),
-        ]),
-    );
-    let mut after = crate::history_authoring_reader::AuthoringReader::document_evidence(
-        &doc, runtime, audit, &versions,
-    )?;
-    map_mut(&mut after)?.insert(
-        "proposal".into(),
-        crate::history_authoring_reader::AuthoringReader::document_evidence(
-            &hypothetical,
-            runtime,
-            audit,
-            &versions,
-        )?,
-    );
-    let ids = new
-        .iter()
-        .map(|o| text(&map(o)?["id"]).map(str::to_owned))
-        .collect::<Result<BTreeSet<_>>>()?;
-    map_mut(&mut after)?.insert(
-        "authoring".into(),
-        obj([
-            ("objects", strings(ids)),
-            ("subject", s(subject)),
-            ("proposal", claim_id),
-        ]),
-    );
-    let receipt = T::semantic_receipt(text(&map(&cap)?["profile"])?, &cap, &before, &after)?;
     let mut template = template(capture, &doc)?;
     map_mut(&mut template)?
         .entry(collection.into())
@@ -836,7 +552,7 @@ pub(crate) fn prepare_proposal_inner(
         &new,
         &template,
         &receipt,
-        options.requires_for(&hypothetical)?.as_ref(),
+        options.requires_for(&plan.hypothetical)?.as_ref(),
     )?;
     candidate(capture, &mutation)?;
     require(archive(store)? == frozen_archive, "concurrent_archive_edit")?;

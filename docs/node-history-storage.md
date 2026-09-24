@@ -87,7 +87,9 @@ The verifier receives the exact prepared operation, views and touched frames, an
 execution is bracketed by revalidation. Exact before/after snapshots can also be restored
 under the lock during retry and recovery, including partially appended streams.
 
-`history_node_writer` connects add/set/review preparation to that publication boundary.
+`history_node_writer` connects add/set/review, explicit disposition acts, proposals, final-world
+batches and native-claim identity preparation to that publication boundary. Shared planners
+also serve legacy authoring while retaining its original mutation/receipt byte contract.
 It stores changed receipt components alongside node events and compact side contexts in
 the transaction. Evidence-only events have an explicit versioned kind and must preserve
 their parent's semantic payload; they never create duplicate claims. Receipt restoration
@@ -108,14 +110,30 @@ locked project routing. A transient journal guard retains the original route and
 it is excluded from permanent transaction manifests. Public recovery rechecks that guard,
 privacy and semantic replay before following the durable commit decision. Forced rollback
 is refused; an uncommitted transaction rolls back and a committed transaction finishes.
-Pending overlays, hypotheses, other operation families and activation remain unsupported.
+Public explicit accept/refute/correct/propose/retire and core same/distinct use the same guarded
+adapter. Historical private targets remain private even when absent from current. Identity
+requires native-authored source order; legacy conversion must retain exact original source bytes.
+Identity operations currently refuse named or physical hypotheses and a separate brief/view file.
+Their source guards are rechecked around publication phases and during recovery.
+Named hypotheses, branch operations, pending overlays and activation remain unsupported.
+Low-level proposal and batch APIs are available; report/update and edited-file proposal
+publication remain on their existing path and refuse node records.
 Unpartitioned evidence and unsupported writes refuse before publication.
 A successful low-level byte publication alone still does not establish semantic admission.
+
+Final-world batches retain deterministic child operation IDs separately from the atomic
+publication ID. Membership is derived from the bounded explicit intent, never inferred from
+storage parents. Intermediate versions are retained; only a single creation whose body is
+visible in the final current document can stay lazy. Proposal-world evidence is decomposed
+into per-node components and compact context. Nested generated worlds and unpartitioned
+physical, temporal or batch-source evidence still refuse.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
 It preserves the exact new-format bytes and audits the entire committed closure. It
 is not a legacy migration archive and does not preserve original legacy YAML lexemes
-unless the caller retains that evidence separately.
+unless the caller retains that evidence separately. This export verifies retained bytes and
+reconstructs receipts; it does not yet replay every historical command against its exact
+original before-view bytes.
 
 The format retains full-closure verification. No scoped fast-read integrity policy
 is enabled. The semantic provider retains the existing object and reduction-work bounds;

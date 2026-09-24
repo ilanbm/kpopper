@@ -162,7 +162,8 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     require(paths.len() == 1, "choose one logical record entry")?;
     let entry = &paths[0];
     require(
-        !crate::history_node_publication::selected(entry)? || operation == "status",
+        !crate::history_node_publication::selected(entry)?
+            || ["status", "accept", "refute", "correct", "propose", "retire"].contains(&operation),
         "node_history_operation_unsupported",
     )?;
     let result = match operation {

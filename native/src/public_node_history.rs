@@ -42,15 +42,14 @@ fn candidate(root: &Path, prepared: &P::Prepared) -> Result<(Capture, Capture, V
     let before = Capture::from_snapshot(before)?;
     let after = Capture::from_snapshot(after)?;
     let receipt = W::receipt(&after.snapshot, prepared.operation())?;
-    let action = field(
-        map(field(map(&map(&receipt)?["before"])?, "authoring")?)?,
-        "action",
-    )?
-    .clone();
-    let ids = list(field(
-        map(field(map(&map(&receipt)?["after"])?, "authoring")?)?,
-        "objects",
-    )?)?;
+    let action = W::action(&receipt)?;
+    let after_receipt = map(&map(&receipt)?["after"])?;
+    let key = if after_receipt.contains_key("identity_authoring") {
+        "identity_authoring"
+    } else {
+        "authoring"
+    };
+    let ids = list(field(map(field(after_receipt, key)?)?, "objects")?)?;
     let objects = V::List(
         ids.iter()
             .map(|id| {
@@ -69,15 +68,70 @@ fn candidate(root: &Path, prepared: &P::Prepared) -> Result<(Capture, Capture, V
     }
     Ok((before, after, action, objects))
 }
+fn private_targets(capture: &Capture, action: &V) -> Result<bool> {
+    let action = map(action)?;
+    if !action.get("kind").is_some_and(|v| {
+        ["accept", "correct", "refute", "propose", "retire"]
+            .iter()
+            .any(|k| string_is(v, k))
+    }) {
+        return Ok(false);
+    }
+    let over = list(field(action, "over")?)?;
+    for id in std::iter::once(field(action, "of")?).chain(over) {
+        if let Some(object) = capture.history.objects().get(text(id)?) {
+            if Privacy::private_marker(object) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
 pub(crate) fn write(
     route: &WriteRoute,
     original: &[PathBuf],
     action: &V,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<(V, String)> {
+    write_with_runtime(route, original, action, probe, None)
+}
+fn privacy_action(action: &V) -> Result<V> {
+    let a = map(action)?;
+    if ["same", "distinct"]
+        .iter()
+        .any(|k| string_is(&a["kind"], k))
+    {
+        let mut selected = a.clone();
+        selected.insert(
+            "ids".into(),
+            V::List(vec![field(a, "a")?.clone(), field(a, "b")?.clone()]),
+        );
+        Ok(V::Map(selected))
+    } else {
+        Ok(action.clone())
+    }
+}
+pub(crate) fn write_with_runtime(
+    route: &WriteRoute,
+    original: &[PathBuf],
+    action: &V,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+    runtime_override: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<(V, String)> {
     scope(route)?;
     let root = route.paths()[0].parent().unwrap();
     let before = Capture::read(root)?;
+    if private_targets(&before, action)? {
+        return Ok((
+            Privacy::draft(
+                route.project(),
+                action,
+                &obj([]),
+                "private historical claim",
+            )?,
+            String::new(),
+        ));
+    }
     require(
         !map(action)?
             .get("hypothesis")
@@ -91,19 +145,26 @@ pub(crate) fn write(
         crate::source_capture::ReadMode::Frozen,
         None,
     )?;
-    if let Some(draft) = Privacy::selected_draft(route.project(), action, before.document())? {
+    let selection = privacy_action(action)?;
+    if let Some(draft) = Privacy::selected_draft(route.project(), &selection, before.document())? {
         return Ok((draft, String::new()));
     }
-    let runtime = crate::public_workspace::runtime_for_document(before.document())?;
+    let loaded;
+    let runtime = if let Some(runtime) = runtime_override {
+        Some(runtime)
+    } else {
+        loaded = crate::public_workspace::runtime_for_document(before.document())?;
+        loaded.as_ref()
+    };
     let prepared = W::prepare(
         root,
         action,
         &crate::direct_history::options("write", V::Null)?,
-        runtime.as_ref(),
+        runtime,
     )?
     .with_guard(&guard(route, original)?)?;
     let (_, after, _, objects) = candidate(root, &prepared)?;
-    if let Some(draft) = Privacy::candidate_draft(route.project(), action, after.document())? {
+    if let Some(draft) = Privacy::candidate_draft(route.project(), &selection, after.document())? {
         return Ok((draft, String::new()));
     }
     if Privacy::private_marker(&objects) {
@@ -123,23 +184,32 @@ pub(crate) fn write(
         |p| {
             verify_guard(route, original, p)?;
             source.verify()?;
-            W::verify(root, p, runtime.as_ref())?;
+            W::verify(root, p, runtime)?;
             candidate(root, p)?;
             source.verify()?;
             route.verify()
         },
         |phase| {
             route.verify()?;
+            W::verify_sources(root, &prepared)?;
             probe(match phase {
                 P::Phase::Journal => "journal",
                 P::Phase::Append(_) => "append",
                 P::Phase::Commit => "committed",
                 P::Phase::View => "view",
             })?;
+            W::verify_sources(root, &prepared)?;
             route.verify()
         },
     )?;
-    let id = text(field(map(action)?, "id")?)?.to_owned();
+    let ids = if let Some(ids) = map(&selection)?.get("ids") {
+        list(ids)?
+            .iter()
+            .map(|v| text(v).map(str::to_owned))
+            .collect::<Result<_>>()?
+    } else {
+        std::collections::BTreeSet::from([text(field(map(action)?, "id")?)?.to_owned()])
+    };
     crate::session_activity::published(
         root,
         &[crate::history_transaction::FileImage {
@@ -148,17 +218,12 @@ pub(crate) fn write(
             before: prepared.before_view()?,
             after: Some(prepared.after_view()?),
         }],
-        Some(&std::collections::BTreeSet::from([id])),
+        Some(&ids),
     );
     let notice = if string_is(&map(action)?["kind"], "add")
         && !map(action)?.get("amend").is_some_and(|v| *v != V::Null)
     {
-        crate::direct_history::nearest_existing(
-            before.document(),
-            &Map::new(),
-            action,
-            runtime.as_ref(),
-        )
+        crate::direct_history::nearest_existing(before.document(), &Map::new(), action, runtime)
     } else {
         String::new()
     };
@@ -186,13 +251,14 @@ pub(crate) fn recover(
     let state = P::recover(root, |p| {
         verify_guard(route, original, p)?;
         let (before, after, action, objects) = candidate(root, p)?;
+        let selection = privacy_action(&action)?;
         require(
-            !Privacy::selection_is_private(&action, before.document(), false)?
-                && !Privacy::selection_is_private(&action, after.document(), true)?,
+            !Privacy::selection_is_private(&selection, before.document(), false)?
+                && !Privacy::selection_is_private(&selection, after.document(), true)?,
             "private_proposal_requires_draft",
         )?;
         require(
-            !Privacy::private_marker(&objects),
+            !Privacy::private_marker(&objects) && !private_targets(&before, &action)?,
             "private_proposal_requires_draft",
         )?;
         let loaded;
@@ -325,5 +391,61 @@ mod tests {
                 .join(".kpopper/.history-node-publication.json")
                 .exists()
         );
+    }
+    #[test]
+    fn recovery_refuses_private_historical_target_absent_from_current() {
+        let root = setup();
+        let original = vec![root.path().join("GROUNDING.yaml")];
+        let opts = crate::direct_history::options("write", V::Null).unwrap();
+        let p = W::prepare(
+            root.path(),
+            &v(json!({"kind":"add","id":"p.a","body":{"v":1,"private":true}})),
+            &opts,
+            None,
+        )
+        .unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        let c = Capture::read(root.path()).unwrap();
+        let id = map(&map(&map(c.state()).unwrap()["subjects"]).unwrap()["p.a"]).unwrap()["head"]
+            .clone();
+        let request = |kind: &str| {
+            v(
+                json!({"kind":kind,"id":"p.a","of":id.to_json().unwrap(),"over":[],"because":"recorded evidence"}),
+            )
+        };
+        let opts = crate::direct_history::options("act", V::Null).unwrap();
+        let p = W::prepare(root.path(), &request("retire"), &opts, None).unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        let c = Capture::read(root.path()).unwrap();
+        assert!(!Privacy::private_marker(c.document()));
+        assert!(private_targets(&c, &request("refute")).unwrap());
+        let route = WriteRoute::capture(&original, root.path()).unwrap();
+        let opts = crate::direct_history::options("act", V::Null).unwrap();
+        let p = W::prepare(root.path(), &request("refute"), &opts, None)
+            .unwrap()
+            .with_guard(&guard(&route, &original).unwrap())
+            .unwrap();
+        assert!(
+            P::publish(
+                root.path(),
+                &p,
+                |p| W::verify(root.path(), p, None),
+                |phase| if phase == P::Phase::Journal {
+                    Err(error("crash"))
+                } else {
+                    Ok(())
+                }
+            )
+            .is_err()
+        );
+        drop(route);
+        let current = std::fs::read(&original[0]).unwrap();
+        assert!(
+            crate::direct_history::recover(&original, root.path(), false)
+                .unwrap_err()
+                .0
+                .contains("private")
+        );
+        assert_eq!(std::fs::read(&original[0]).unwrap(), current);
     }
 }

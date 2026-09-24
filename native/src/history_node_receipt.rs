@@ -70,9 +70,90 @@ fn authoring(value: &V, hypothesis: bool) -> Result<()> {
             "subject",
             "acceptance",
             "bootstrap",
+            "body",
+            "collection",
+            "because",
+            "hypothesis",
+            "proposal",
+            "actions",
+            "context",
+            "evidence",
+            "steps",
+            "validation_world",
+            "final_dependency_pins",
         ][..]
     };
     let a = schema(value, &[], allowed)?;
+    if let Some(actions) = a.get("actions") {
+        require(
+            a.get("kind").is_some_and(|v| string_is(v, "batch")),
+            "node_receipt_action_unsupported",
+        )?;
+        let actions = list(actions)?;
+        require(!actions.is_empty() && actions.len() <= 64, "invalid_batch")?;
+        for action in actions {
+            // Reuse the narrow direct intent schema; no nested batch/report payload.
+            authoring(
+                &V::Map(Map::from([("action".into(), action.clone())])),
+                false,
+            )?;
+        }
+    }
+    for name in ["context", "evidence"] {
+        if let Some(value) = a.get(name) {
+            require(
+                map(value)?.is_empty(),
+                "node_receipt_batch_context_unsupported",
+            )?;
+        }
+    }
+    if let Some(steps) = a.get("steps") {
+        let steps = list(steps)?;
+        require(!steps.is_empty() && steps.len() <= 64, "invalid_batch")?;
+        for (index, step) in steps.iter().enumerate() {
+            let step = schema(
+                step,
+                &[
+                    "index",
+                    "subject",
+                    "action_digest",
+                    "prior_body_digest",
+                    "objects",
+                    "notes",
+                ],
+                &[],
+            )?;
+            require(
+                is_int(&step["index"], &index.to_string()),
+                "node_receipt_batch_step",
+            )?;
+            text(&step["subject"])?;
+            for key in ["action_digest", "prior_body_digest"] {
+                if step[key] != V::Null {
+                    require(
+                        crate::history_paths::object_id(text(&step[key])?),
+                        "node_receipt_batch_step",
+                    )?;
+                }
+            }
+            ids(&step["objects"], true)?;
+            for note in list(&step["notes"])? {
+                text(note)?;
+            }
+        }
+    }
+    if let Some(value) = a.get("validation_world") {
+        require(
+            string_is(value, "final"),
+            "node_receipt_batch_context_unsupported",
+        )?;
+    }
+    if let Some(value) = a.get("final_dependency_pins") {
+        require(
+            *value == V::Bool(true),
+            "node_receipt_batch_context_unsupported",
+        )?;
+    }
     if let Some(physical) = a.get("physical") {
         require(
             !crate::history_view::truth(physical),
@@ -90,7 +171,14 @@ fn authoring(value: &V, hypothesis: bool) -> Result<()> {
         // Only touched semantic references, never object bodies or a record inventory.
         ids(objects, true)?;
     }
-    for name in ["kind", "subject", "acceptance"] {
+    for name in [
+        "kind",
+        "subject",
+        "acceptance",
+        "collection",
+        "because",
+        "proposal",
+    ] {
         if let Some(value) = a.get(name) {
             text(value)?;
         }
@@ -210,20 +298,73 @@ fn assessment(value: &V) -> Result<()> {
     }
     Ok(())
 }
+fn identity_authoring(value: &V) -> Result<()> {
+    let a = schema(
+        value,
+        &[],
+        &[
+            "version",
+            "kind",
+            "a",
+            "b",
+            "by",
+            "operation",
+            "recorded_at",
+            "baseline",
+            "archive",
+            "physical",
+            "view_sha256",
+            "keep",
+            "because",
+            "as_of",
+            "objects",
+        ],
+    )?;
+    for key in ["a", "b", "operation", "recorded_at", "because", "as_of"] {
+        if let Some(v) = a.get(key) {
+            text(v)?;
+        }
+    }
+    if let Some(v) = a.get("keep").filter(|v| **v != V::Null) {
+        text(v)?;
+    }
+    if let Some(v) = a.get("kind") {
+        require(
+            ["same", "distinct"].iter().any(|k| string_is(v, k)),
+            "node_receipt_identity",
+        )?;
+    }
+    if let Some(v) = a.get("version") {
+        require(is_int(v, "1"), "node_receipt_identity")?;
+    }
+    if let Some(v) = a.get("objects") {
+        ids(v, true)?;
+    }
+    if let Some(v) = a.get("view_sha256") {
+        require(*v == V::Null, "node_receipt_physical_evidence_unsupported")?;
+    }
+    if let Some(v) = a.get("physical") {
+        require(
+            map(v)?.is_empty(),
+            "node_receipt_physical_evidence_unsupported",
+        )?;
+    }
+    if let Some(v) = a.get("baseline") {
+        authoring(&V::Map(Map::from([("baseline".into(), v.clone())])), false)?;
+    }
+    Ok(())
+}
 fn piece<'a>(nodes: &'a mut Map, subject: &str) -> Result<&'a mut Map> {
     map_mut(nodes.entry(subject.into()).or_insert_with(empty))
 }
 fn baseline(side: &mut V) -> Result<Option<&mut Map>> {
     let m = map_mut(side)?;
-    require(
-        !(m.contains_key("authoring") && m.contains_key("hypothesis_authoring")),
-        "node_receipt_authoring_unsupported",
-    )?;
-    let key = if m.contains_key("hypothesis_authoring") {
-        "hypothesis_authoring"
-    } else {
-        "authoring"
-    };
+    let keys = ["authoring", "hypothesis_authoring", "identity_authoring"]
+        .into_iter()
+        .filter(|k| m.contains_key(*k))
+        .collect::<Vec<_>>();
+    require(keys.len() <= 1, "node_receipt_authoring_unsupported")?;
+    let key = keys.first().copied().unwrap_or("authoring");
     let Some(authoring) = m.get_mut(key) else {
         return Ok(None);
     };
@@ -233,10 +374,17 @@ fn baseline(side: &mut V) -> Result<Option<&mut Map>> {
     Ok(Some(map_mut(baseline)?))
 }
 fn components(context: &V) -> Result<BTreeSet<&'static str>> {
-    let context = schema(context, &["format", "literal", "selection_from_nodes"], &[])?;
+    let context = schema(
+        context,
+        &["format", "literal", "selection_from_nodes"],
+        &["proposal"],
+    )?;
     let mut literal = context["literal"].clone();
     let side = map(&literal)?;
     let mut result = BTreeSet::new();
+    if context.contains_key("proposal") {
+        result.insert("proposal");
+    }
     if side.contains_key("document") {
         result.insert("document");
     }
@@ -260,7 +408,11 @@ impl Nodes {
     pub fn from_values(values: Map) -> Result<Self> {
         require(values.len() <= MAX_OBJECTS, "node_receipt_limit")?;
         for node in values.values() {
-            let node = schema(node, &[], &["document", "assessment", "heads", "open_acts"])?;
+            let node = schema(
+                node,
+                &[],
+                &["document", "assessment", "heads", "open_acts", "proposal"],
+            )?;
             require(!node.is_empty(), "node_receipt_empty_piece")?;
         }
         Ok(Self { values })
@@ -353,10 +505,15 @@ impl Side {
                 "assessment",
                 "authoring",
                 "hypothesis_authoring",
+                "proposal",
+                "identity_authoring",
             ],
         )?;
         if let Some(value) = map(side)?.get("authoring") {
             authoring(value, false)?;
+        }
+        if let Some(value) = map(side)?.get("identity_authoring") {
+            identity_authoring(value)?;
         }
         if let Some(authoring) = map(side)?.get("hypothesis_authoring") {
             self::authoring(authoring, true)?;
@@ -369,6 +526,18 @@ impl Side {
         }
         let mut literal = side.clone();
         let mut nodes = Map::new();
+        let proposal = map_mut(&mut literal)?
+            .remove("proposal")
+            .map(|value| {
+                // Exactly one hypothetical world; recursive/nested authoring remains unsupported.
+                schema(&value, &[], &["kind", "document", "assessment"])?;
+                let side = Self::pack(&value)?;
+                for (subject, value) in side.nodes {
+                    piece(&mut nodes, &subject)?.insert("proposal".into(), value);
+                }
+                Ok::<V, crate::Error>(side.context)
+            })
+            .transpose()?;
         let mut declarations = BTreeSet::<Vec<String>>::new();
         if let Some(document) = map_mut(&mut literal)?.get_mut("document") {
             let fields = F::snapshot_fields(document)?;
@@ -422,11 +591,21 @@ impl Side {
             }
             report.insert("nodes".into(), empty());
         }
-        let context = V::Map(Map::from([
-            ("format".into(), s("node-receipt-side/v1")),
+        let mut context = V::Map(Map::from([
+            (
+                "format".into(),
+                s(if proposal.is_some() {
+                    "node-receipt-side/v2"
+                } else {
+                    "node-receipt-side/v1"
+                }),
+            ),
             ("literal".into(), literal),
             ("selection_from_nodes".into(), V::Bool(selection)),
         ]));
+        if let Some(proposal) = proposal {
+            map_mut(&mut context)?.insert("proposal".into(), proposal);
+        }
         let parts = Self { context, nodes };
         require(parts.restore()? == *side, "node_receipt_roundtrip")?;
         Ok(parts)
@@ -447,10 +626,17 @@ impl Side {
         let context = schema(
             &self.context,
             &["format", "literal", "selection_from_nodes"],
-            &[],
+            &["proposal"],
         )?;
         require(
-            string_is(&context["format"], "node-receipt-side/v1"),
+            string_is(
+                &context["format"],
+                if context.contains_key("proposal") {
+                    "node-receipt-side/v2"
+                } else {
+                    "node-receipt-side/v1"
+                },
+            ),
             "node_receipt_format",
         )?;
         let V::Bool(selection) = context["selection_from_nodes"] else {
@@ -466,12 +652,16 @@ impl Side {
                 "assessment",
                 "authoring",
                 "hypothesis_authoring",
+                "identity_authoring",
             ],
         )?;
         for (name, hypothesis) in [("authoring", false), ("hypothesis_authoring", true)] {
             if let Some(value) = map(&literal)?.get(name) {
                 authoring(value, hypothesis)?;
             }
+        }
+        if let Some(value) = map(&literal)?.get("identity_authoring") {
+            identity_authoring(value)?;
         }
         if let Some(document) = map(&literal)?.get("document") {
             require(
@@ -495,9 +685,20 @@ impl Side {
         }
         require(self.nodes.len() <= MAX_OBJECTS, "node_receipt_limit")?;
         let mut selected = Vec::new();
+        let mut proposal_nodes = Map::new();
         for (subject, node) in &self.nodes {
-            let node = schema(node, &[], &["document", "assessment", "heads", "open_acts"])?;
+            let node = schema(
+                node,
+                &[],
+                &["document", "assessment", "heads", "open_acts", "proposal"],
+            )?;
             require(!node.is_empty(), "node_receipt_empty_piece")?;
+            if let Some(value) = node.get("proposal") {
+                require(context.contains_key("proposal"), "node_receipt_proposal")?;
+                // Nested payloads are node-local and cannot themselves contain another proposal.
+                schema(value, &[], &["document", "assessment"])?;
+                proposal_nodes.insert(subject.clone(), value.clone());
+            }
             if let Some(document) = node.get("document") {
                 let pair = list(document)?;
                 require(pair.len() == 2, "node_receipt_document")?;
@@ -560,6 +761,16 @@ impl Side {
                 "node_receipt_selection",
             )?;
             report.insert("selection".into(), V::List(selected));
+        }
+        if let Some(proposal) = context.get("proposal") {
+            schema(
+                proposal,
+                &["format", "literal", "selection_from_nodes"],
+                &[],
+            )?;
+            let restored = Self::from_parts(proposal.clone(), proposal_nodes)?.restore()?;
+            schema(&restored, &[], &["kind", "document", "assessment"])?;
+            map_mut(&mut literal)?.insert("proposal".into(), restored);
         }
         Ok(literal)
     }
