@@ -474,7 +474,7 @@ pub(crate) fn read(path: &Path) -> Result<Option<Vec<u8>>> {
     require(bytes.len() <= MAX_TRANSACTION_BYTES, "history_limit")?;
     Ok(Some(bytes))
 }
-fn sync(path: &Path) -> Result<()> {
+pub(crate) fn sync(path: &Path) -> Result<()> {
     #[cfg(windows)]
     {
         // Rust's ordinary File::open omits FILE_FLAG_BACKUP_SEMANTICS and
