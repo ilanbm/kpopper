@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 struct NodeSource<'a> {
     capture: &'a Capture,
+    components: crate::history_node_receipt_components::Components<'a>,
     introduced: BTreeMap<String, BTreeSet<String>>,
 }
 impl Source for NodeSource<'_> {
@@ -30,13 +31,25 @@ impl Source for NodeSource<'_> {
             .collect())
     }
     fn introduced(&self, operation: &str) -> Result<BTreeSet<String>> {
+        if self
+            .capture
+            .snapshot
+            .transactions
+            .get(operation)
+            .and_then(|tx| tx.context.as_ref())
+            .is_some_and(|c| {
+                crate::history_node_legacy::kind(c, crate::history_node_legacy::FORMAT)
+            })
+        {
+            return crate::history_node_legacy::inventory(&self.capture.snapshot, operation);
+        }
         Ok(self.introduced.get(operation).cloned().unwrap_or_default())
     }
     fn objects(&self) -> &Map {
         self.capture.history.objects()
     }
     fn receipt(&self, operation: &str) -> Result<V> {
-        W::receipt(&self.capture.snapshot, operation)
+        W::receipt_index(&self.capture.snapshot, operation, &self.components)
     }
     fn active(&self, operation: &str) -> Result<bool> {
         for id in self.introduced(operation)? {
@@ -71,12 +84,8 @@ impl Source for NodeSource<'_> {
             .collect::<BTreeSet<_>>();
         let mut template = None;
         for operation in operations.difference(&parents) {
-            let receipt = self.receipt(operation)?;
-            let after = map(&map(&receipt)?["after"])?;
-            let document = after
-                .get("document")
-                .ok_or_else(|| error("missing_document_template"))?;
-            let next = A::document_template(document)?;
+            let next =
+                crate::history_node_transaction::after_template(&self.capture.snapshot, operation)?;
             crate::require(
                 template.as_ref().is_none_or(|old| old == &next),
                 "divergent_templates",
@@ -108,6 +117,7 @@ pub(crate) fn capture(capture: &Capture) -> Result<Option<V>> {
     }
     T::capture_source(&NodeSource {
         capture,
+        components: crate::history_node_receipt_components::Components::new(&capture.snapshot)?,
         introduced,
     })
 }
@@ -159,6 +169,8 @@ mod tests {
             operations,
             transactions: BTreeMap::new(),
             source_clocks: Default::default(),
+            legacy: Default::default(),
+            raw_evidence: Default::default(),
         };
         let mut capture = Capture::from_snapshot(snapshot.clone()).unwrap();
         snapshot.source_clocks = graph;
@@ -185,6 +197,8 @@ mod tests {
         capture.snapshot = snapshot;
         let source = NodeSource {
             capture: &capture,
+            components: crate::history_node_receipt_components::Components::new(&capture.snapshot)
+                .unwrap(),
             introduced: BTreeMap::new(),
         };
         let old = source

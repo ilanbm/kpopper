@@ -19,7 +19,11 @@ pub(crate) fn decode(value: &V) -> Result<Payload> {
     let p = schema(value, &["collection", "body", "context"], &[])?;
     let context = map(&p["context"])?;
     if string_is(field(context, "format")?, SEMANTIC) {
-        schema(&p["context"], &["format", "header", "observation"], &[])?;
+        schema(
+            &p["context"],
+            &["format", "header", "observation"],
+            &["source_order"],
+        )?;
         return Ok(Payload {
             semantic: value.clone(),
             is_semantic: true,
@@ -37,7 +41,7 @@ pub(crate) fn decode(value: &V) -> Result<Payload> {
             "phase",
             "receipt",
         ],
-        &[],
+        &["source_order"],
     )?;
     require(
         string_is(&context["format"], FORMAT),

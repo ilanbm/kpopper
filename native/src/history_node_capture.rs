@@ -46,6 +46,21 @@ pub fn payload(object: &V, observation: &ObservationNode) -> Result<V> {
     ])))
 }
 
+/// Preserve original source mapping order alongside unchanged typed semantic identity.
+/// Used when importing retained original objects, never to invent an ordering from a hash.
+pub fn payload_from_source(raw: &[u8], observation: &ObservationNode) -> Result<V> {
+    let source = Y::decode_source_document(raw)?;
+    let mut value = payload(&source.typed(), observation)?;
+    let order = crate::history_node_source_order::encode(
+        &crate::history_node_source_order::without_saw(source)?,
+    );
+    if order != V::Null {
+        map_mut(map_mut(&mut value)?.get_mut("context").unwrap())?
+            .insert("source_order".into(), order);
+    }
+    Ok(value)
+}
+
 /// Retain the first claim alongside its readable body, without creating a stream.
 pub fn original(object: &V, observation: &ObservationNode) -> Result<Original> {
     let o = map(object)?;
@@ -65,13 +80,17 @@ fn unpack(
     subject: &str,
     version: &C::Version,
     snapshot: &P::Snapshot,
-) -> Result<(V, ObservationNode)> {
+) -> Result<(V, ObservationNode, Option<V>)> {
     let value = version
         .state()
         .ok_or_else(|| error("node_semantic_absent_unsupported"))?;
     let decoded = crate::history_node_frame::decode(value)?;
     let p = schema(&decoded.semantic, &["collection", "body", "context"], &[])?;
-    let context = schema(&p["context"], &["format", "header", "observation"], &[])?;
+    let context = schema(
+        &p["context"],
+        &["format", "header", "observation"],
+        &["source_order"],
+    )?;
     require(
         string_is(&context["format"], FORMAT),
         "node_semantic_format",
@@ -104,7 +123,11 @@ fn unpack(
             "node_semantic_collection",
         )?;
     }
-    Ok((V::Map(object), observation))
+    Ok((
+        V::Map(object),
+        observation,
+        context.get("source_order").cloned(),
+    ))
 }
 
 #[derive(Clone, Debug)]
@@ -147,6 +170,7 @@ impl Capture {
             .ok_or_else(|| error("node_semantic_missing_view"))?;
         let mut document = Y::decode_document(raw)?;
         let mut objects = Vec::new();
+        let mut source_orders = BTreeMap::new();
         let mut semantic_events = BTreeMap::new();
         for (subject, versions) in &snapshot.versions {
             for version in versions.values() {
@@ -155,6 +179,48 @@ impl Capture {
                         == Some(version.operation()),
                     "node_semantic_operation",
                 )?;
+                let state = version
+                    .state()
+                    .ok_or_else(|| error("node_semantic_absent_unsupported"))?;
+                if crate::history_node_ledger::is_ledger(state) {
+                    let inherited = if version.parents().is_empty() {
+                        crate::history_node_ledger::validate_transition(None, state).is_ok()
+                    } else {
+                        version.parents().iter().any(|id| {
+                            versions
+                                .get(id)
+                                .and_then(|v| v.state())
+                                .is_some_and(|previous| {
+                                    crate::history_node_ledger::validate_transition(
+                                        Some(previous),
+                                        state,
+                                    )
+                                    .is_ok()
+                                })
+                        })
+                    };
+                    require(inherited, "node_ledger_transition")?;
+                    for (object, observation) in crate::history_node_ledger::unpack(state)? {
+                        let o = map(&object)?;
+                        require(
+                            string_is(&o["subject"], subject)
+                                && crate::history_node_writer::operation_member(
+                                    &snapshot,
+                                    version.operation(),
+                                    text(&o["op"])?,
+                                )?,
+                            "node_semantic_binding",
+                        )?;
+                        require(
+                            semantic_events
+                                .insert(observation.id.clone(), version.id().into())
+                                .is_none(),
+                            "node_semantic_duplicate",
+                        )?;
+                        objects.push((object, observation));
+                    }
+                    continue;
+                }
                 let payload = crate::history_node_frame::decode(
                     version
                         .state()
@@ -164,7 +230,10 @@ impl Capture {
                 if !payload.is_semantic {
                     continue;
                 }
-                let (object, observation) = unpack(subject, version, &snapshot)?;
+                let (object, observation, source_order) = unpack(subject, version, &snapshot)?;
+                if let Some(order) = source_order {
+                    source_orders.insert(observation.id.clone(), order);
+                }
                 require(
                     semantic_events
                         .insert(observation.id.clone(), version.id().into())
@@ -174,7 +243,9 @@ impl Capture {
                 objects.push((object, observation));
             }
         }
-        let history = History::from_objects(objects)?;
+        let history = History::from_ordered(objects, source_orders)?;
+        crate::history_node_legacy::validate(&snapshot, &history, &semantic_events)?;
+        crate::history_node_bootstrap::validate(&snapshot, &history, &semantic_events)?;
         let clocks = snapshot.source_clocks.select(
             snapshot
                 .transactions
@@ -182,7 +253,7 @@ impl Capture {
                 .flat_map(|tx| tx.evidence.keys()),
         );
         let state = clocks.with_ancestry(|ancestry| history.reduce(None, Some(ancestry)))?;
-        crate::history_node_writer::verify_receipts(&snapshot)?;
+        let templates = crate::history_node_writer::verify_receipts(&snapshot)?;
         let meta = map_mut(
             map_mut(&mut document)?
                 .get_mut("meta")
@@ -202,7 +273,7 @@ impl Capture {
         if !union {
             require(rendered == document, "node_semantic_view_mismatch")?;
         }
-        if union {
+        {
             let expected = crate::history_authority::document_template(&document)?;
             let parents = snapshot
                 .transactions
@@ -214,12 +285,12 @@ impl Capture {
                 .iter()
                 .filter(|(op, _)| !parents.contains(op))
             {
-                let receipt = crate::history_node_writer::receipt(&snapshot, op)?;
-                let doc = field(map(&map(&receipt)?["after"])?, "document")?;
-                require(
-                    crate::history_authority::document_template(doc)? == expected,
-                    "divergent_templates",
-                )?;
+                if let Some(template) = templates.get(op) {
+                    require(*template == expected, "node_template_view_mismatch")?;
+                } else if union {
+                    let template = crate::history_node_transaction::after_template(&snapshot, op)?;
+                    require(template == expected, "divergent_templates")?;
+                }
             }
         }
         let document = render(&document, history.objects(), &state, true)?;
@@ -238,7 +309,13 @@ impl Capture {
     }
     /// Original semantic identity lookup; storage-event IDs cannot silently replace pins.
     pub fn object(&self, subject: &str, id: &str) -> Result<V> {
-        let object = self.history.object(id)?;
+        let object = match self.history.object(id) {
+            Ok(object) => object,
+            Err(e) if e.0 == "missing_object" => {
+                return crate::history_node_legacy::archived_object(&self.snapshot, subject, id);
+            }
+            Err(e) => return Err(e),
+        };
         require(
             string_is(field(map(&object)?, "subject")?, subject),
             "reference_mismatch",
@@ -285,7 +362,7 @@ impl Capture {
             let observation = ObservationNode::root(text(&compact["id"])?, &saw)?;
             objects.push((V::Map(compact), observation));
         }
-        let history = History::from_objects(objects)?;
+        let history = History::from_ordered(objects, self.history.source_orders().clone())?;
         let state = self.clocks.with_ancestry(|ancestry| {
             history.reduce(Some(map(&map(&self.state)?["rules"])?), Some(ancestry))
         })?;
@@ -517,6 +594,8 @@ mod tests {
                 .remove("history");
             let node = Capture::from_snapshot(P::Snapshot {
                 source_clocks: Default::default(),
+                legacy: Default::default(),
+                raw_evidence: Default::default(),
                 authority: V::Null,
                 revision: String::new(),
                 current: Some(Y::encode_document(&doc).unwrap()),

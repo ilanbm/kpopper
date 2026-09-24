@@ -235,3 +235,87 @@ fn untracked_current_entries_and_misbound_publication_operation_refuse() {
     .unwrap();
     assert!(Capture::read(root.path()).is_err());
 }
+
+#[test]
+fn retained_source_order_survives_publication_new_writes_and_export() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/history-reduction.json")).unwrap();
+    let case = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c.get("error").is_none() && c["output"] != c["canonical_output"])
+        .unwrap();
+    let root = setup();
+    let mut base = None;
+    for (index, row) in case["raw_objects"].as_array().unwrap().iter().enumerate() {
+        // The reducer-only fixture uses a minimal legacy role map. Supply the
+        // complete renderable role contract, retaining the original body map order.
+        let raw = row[2].as_str().unwrap().replace(
+            "    value: v",
+            "    deps: rests_on\n    snapshot: seen\n    predicate: wrong_if",
+        );
+        let mut object = Y::decode_document(raw.as_bytes()).unwrap();
+        let old_id = text(&map(&object)["id"]).to_owned();
+        map_mut(&mut object).remove("id");
+        let id = typed_object_identity(&object).unwrap();
+        let raw = raw.replace(&format!("id: {old_id}"), &format!("id: {id}"));
+        let raw = raw.as_bytes();
+        let object = Y::decode_document(raw).unwrap();
+        let subject = text(&map(&object)["subject"]);
+        let op = text(&map(&object)["op"]);
+        let event = C::Event::create(
+            subject,
+            op,
+            base.as_ref()
+                .map(|v: &C::Version| vec![v.id().into()])
+                .unwrap_or_default(),
+            base.as_ref(),
+            Some(N::payload_from_source(raw, &observation(&object)).unwrap()),
+        )
+        .unwrap();
+        base = Some(event.reconstruct(base.as_ref()).unwrap());
+        let doc = if index == 0 {
+            V::from_json(&json!({"meta":{"purpose":"Fixture"},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"readings":{subject:map(&object)["body"].to_json().unwrap()}})).unwrap()
+        } else {
+            V::from_json(
+                &json!({"meta":{"purpose":"Fixture"},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"readings":{}}),
+            )
+            .unwrap()
+        };
+        publish(
+            root.path(),
+            op,
+            &doc,
+            BTreeMap::from([(subject.into(), event.encode().unwrap())]),
+        );
+        Capture::read(root.path()).unwrap();
+    }
+    let captured = Capture::read(root.path()).unwrap();
+    assert_eq!(
+        map(&map(&map(captured.state())["subjects"])["p.a"])["acceptance"],
+        V::Text("contested".into())
+    );
+    let options = kpop_native::history_authoring::Options {
+        operation: "new".into(),
+        recorded_at: "2026-09-24T12:00:00Z".into(),
+        recording_day: "2026-09-24".into(),
+        by: V::Text("fixture".into()),
+        strict: false,
+        paths: kpop_native::history_paths::Scheme::Hashed,
+        receipt_version: None,
+    };
+    let action =
+        V::from_json(&json!({"kind":"add","id":"p.other","into":"readings","body":{"v":9}}))
+            .unwrap();
+    let prepared =
+        kpop_native::history_node_writer::prepare(root.path(), &action, &options, None).unwrap();
+    kpop_native::history_node_writer::publish(root.path(), &prepared, None, |_| Ok(())).unwrap();
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    drop(root);
+    let after = Capture::read(copy.path()).unwrap();
+    assert_eq!(
+        map(&map(after.state())["subjects"])["p.a"],
+        map(&map(captured.state())["subjects"])["p.a"]
+    );
+}

@@ -45,6 +45,26 @@ pub(crate) fn candidate(root: &Path, prepared: &P::Prepared) -> Result<(Capture,
     let (before, after) = prepared.snapshots(root)?;
     let before = Capture::from_snapshot(before)?;
     let after = Capture::from_snapshot(after)?;
+    if let Some(context) = prepared
+        .context()?
+        .as_ref()
+        .filter(|c| crate::history_node_transaction::is_context(c))
+    {
+        let action = crate::history_node_transaction::validate(context)?["action"].clone();
+        let objects = V::List(
+            after
+                .history
+                .objects()
+                .iter()
+                .filter(|(id, _)| !before.history.objects().contains_key(*id))
+                .map(|(id, object)| after.object(text(&map(object)?["subject"])?, id))
+                .collect::<Result<Vec<_>>>()?,
+        );
+        for document in [before.document(), after.document()] {
+            crate::history_sources::capture(root, "GROUNDING.yaml", document)?;
+        }
+        return Ok((before, after, action, objects));
+    }
     let receipt = W::receipt(&after.snapshot, prepared.operation())?;
     let action = W::action(&receipt)?;
     let after_receipt = map(&map(&receipt)?["after"])?;
@@ -361,8 +381,20 @@ pub(crate) fn recover(
                 .iter()
                 .map(|v| text(v).map(str::to_owned))
                 .collect::<Result<Vec<_>>>()?;
-            let receipt = W::receipt(&after.snapshot, p.operation())?;
-            let source = field(W::intent(&receipt)?, "by")?;
+            let receipt;
+            let tx_context = p.context()?;
+            let source = if let Some(context) = tx_context
+                .as_ref()
+                .filter(|c| crate::history_node_transaction::is_context(c))
+            {
+                field(
+                    map(&crate::history_node_transaction::validate(context)?["options"])?,
+                    "by",
+                )?
+            } else {
+                receipt = W::receipt(&after.snapshot, p.operation())?;
+                field(W::intent(&receipt)?, "by")?
+            };
             let source = if *source == V::Null {
                 None
             } else {

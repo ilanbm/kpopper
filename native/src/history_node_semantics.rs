@@ -119,10 +119,18 @@ pub struct History {
     objects: BTreeMap<String, V>,
     observations: ObservationChain,
     index: MembershipIndex,
+    source_orders: BTreeMap<String, V>,
+    sources: BTreeMap<String, crate::history_yaml::SourceValue>,
 }
 
 impl History {
     pub fn from_objects(objects: impl IntoIterator<Item = (V, ObservationNode)>) -> Result<Self> {
+        Self::from_ordered(objects, BTreeMap::new())
+    }
+    pub(crate) fn from_ordered(
+        objects: impl IntoIterator<Item = (V, ObservationNode)>,
+        source_orders: BTreeMap<String, V>,
+    ) -> Result<Self> {
         let mut compact = BTreeMap::new();
         let mut nodes = Vec::new();
         for (value, node) in objects {
@@ -179,13 +187,49 @@ impl History {
             Ok(())
         })?;
         require(index.times.len() == compact.len(), "incomplete_closure")?;
+        require(
+            source_orders.keys().all(|id| compact.contains_key(id)),
+            "node_source_order_identity",
+        )?;
+        let sources = compact
+            .iter()
+            .map(|(id, v)| {
+                Ok((
+                    id.clone(),
+                    crate::history_node_source_order::decode(
+                        v,
+                        source_orders.get(id).unwrap_or(&V::Null),
+                    )?,
+                ))
+            })
+            .collect::<Result<_>>()?;
         Ok(Self {
+            source_orders,
+            sources,
             objects: compact,
             observations,
             index,
         })
     }
 
+    pub(crate) fn source_body(&self, id: &str) -> Result<crate::history_yaml::SourceValue> {
+        let source = self
+            .sources
+            .get(id)
+            .ok_or_else(|| Error("missing_object".into()))?;
+        let crate::history_yaml::SourceValue::Map(fields) = source else {
+            return Err(Error("invalid_schema".into()));
+        };
+        fields
+            .iter()
+            .find(|(key, _)| key == "body")
+            .map(|(_, body)| body.clone())
+            .ok_or_else(|| Error("invalid_schema".into()))
+    }
+
+    pub(crate) fn source_orders(&self) -> &BTreeMap<String, V> {
+        &self.source_orders
+    }
     pub fn objects(&self) -> &BTreeMap<String, V> {
         &self.objects
     }
@@ -213,13 +257,13 @@ impl History {
         rules: Option<&BTreeMap<String, V>>,
         ancestry: Option<&crate::source_clock::Ancestry<'_>>,
     ) -> Result<V> {
-        history_reduce::reduce_compact(objects, &self.index, rules, ancestry)
+        history_reduce::reduce_compact(objects, &self.sources, &self.index, rules, ancestry)
     }
     pub fn reduce(
         &self,
         rules: Option<&BTreeMap<String, V>>,
         ancestry: Option<&crate::source_clock::Ancestry<'_>>,
     ) -> Result<V> {
-        history_reduce::reduce_compact(&self.objects, &self.index, rules, ancestry)
+        history_reduce::reduce_compact(&self.objects, &self.sources, &self.index, rules, ancestry)
     }
 }

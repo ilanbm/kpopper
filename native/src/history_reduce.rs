@@ -62,15 +62,12 @@ pub fn reduce(objects: &Map, rules: Option<&Map>, ancestry: Option<&Ancestry<'_>
 }
 pub(crate) fn reduce_compact(
     objects: &Map,
+    sources: &BTreeMap<String, S>,
     saw: &dyn SawProvider,
     rules: Option<&Map>,
     ancestry: Option<&Ancestry<'_>>,
 ) -> Result<V> {
-    let sources = objects
-        .iter()
-        .map(|(k, v)| (k.clone(), S::from_typed(v)))
-        .collect();
-    reduce_sources_with(objects, &sources, rules, ancestry, Some(saw))
+    reduce_sources_with(objects, sources, rules, ancestry, Some(saw))
 }
 pub fn reduce_bytes(
     raw: &ObjectBytes,

@@ -343,13 +343,14 @@ pub fn capture_node(
             .collect();
         r.include(listing)?;
     }
-    // Physical layers are not yet represented by portable node bundles. Never omit them.
-    require(
-        r.listing(&B::joined(entry, ".kpopper/hypotheses")?)?
-            .keys()
-            .all(|p| !p.ends_with(".yaml") && !p.ends_with(".yml")),
-        "node_history_physical_hypotheses_unsupported",
-    )?;
+    // Mapped physical originals remain exact evidence. Unmapped active layers are
+    // rejected by the bundle's semantic authority guard, never omitted.
+    let physical = r
+        .listing(&B::joined(entry, ".kpopper/hypotheses")?)?
+        .into_iter()
+        .filter(|(path, _)| path.ends_with(".yaml") || path.ends_with(".yml"))
+        .collect();
+    r.include(physical)?;
     for path in r.inventory.keys().cloned().collect::<Vec<_>>() {
         r.read(&path)?;
     }

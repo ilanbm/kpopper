@@ -11,6 +11,13 @@ use crate::{
 use std::{collections::BTreeMap, path::Path};
 pub(crate) const FORMAT: &str = "node-source-clocks/v1";
 pub(crate) fn is_clocks(context: &V) -> Result<bool> {
+    if crate::history_node_transaction::is_context(context) {
+        return Ok(
+            map(&crate::history_node_transaction::validate(context)?["action"])?
+                .get("kind")
+                .is_some_and(|v| string_is(v, "source-clocks")),
+        );
+    }
     Ok(map(context)?
         .get("format")
         .is_some_and(|v| string_is(v, FORMAT)))

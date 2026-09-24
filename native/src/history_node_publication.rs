@@ -69,7 +69,7 @@ struct Manifest {
     parents: BTreeMap<String, String>,
     touched: Vec<Touch>,
     before_view: Option<String>,
-    after_view: String,
+    after_view: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     context: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -93,6 +93,17 @@ impl Manifest {
             "node_publication_manifest",
         )?;
         token(&m.operation)?;
+        if m.after_view.is_none() {
+            let context = m
+                .context
+                .as_ref()
+                .ok_or_else(|| bad("node_publication_view"))?;
+            let context = crate::value::TypedValue::from_tagged(context)?;
+            require(
+                crate::history_node_legacy::kind(&context, crate::history_node_legacy::FORMAT),
+                "node_publication_view",
+            )?;
+        }
         for (path, hash) in &m.evidence {
             evidence_path(path)?;
             require(
@@ -105,6 +116,41 @@ impl Manifest {
         }
         Ok(m)
     }
+}
+/// Build a derived legacy transcript or its final materialized copy checkpoint.
+/// Historical legacy transactions have no invented node-format current-view bytes.
+pub(crate) fn migration_manifest(
+    authority_sha: &str,
+    operation: &str,
+    parents: BTreeMap<String, String>,
+    touches: Vec<(String, String, String)>,
+    after_view: Option<String>,
+    context: &crate::value::TypedValue,
+    evidence: BTreeMap<String, String>,
+) -> Result<Vec<u8>> {
+    let mut manifest = Manifest {
+        format: FORMAT.into(),
+        operation: operation.into(),
+        authority_sha256: authority_sha.into(),
+        parents,
+        touched: touches
+            .into_iter()
+            .map(|(subject, event, frame_sha256)| Touch {
+                subject,
+                event,
+                frame_sha256,
+            })
+            .collect(),
+        before_view: None,
+        after_view,
+        context: Some(context.to_tagged()?),
+        evidence,
+        digest: String::new(),
+    };
+    manifest.digest = manifest.identity()?;
+    let raw = manifest.encode()?;
+    Manifest::decode(&raw)?;
+    Ok(raw)
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -176,7 +222,7 @@ impl Journal {
         let after = unbytes(&Some(self.after_view.clone()))?.unwrap();
         require(
             digest(&before) == self.manifest.before_view
-                && sha256(&after) == self.manifest.after_view,
+                && Some(sha256(&after)) == self.manifest.after_view,
             "node_publication_view",
         )?;
         let mut evidence = BTreeMap::new();
@@ -390,7 +436,7 @@ fn verify_view(all: &BTreeMap<String, Manifest>, raw: &[u8]) -> Result<()> {
         "node_publication_view_frontier",
     )?;
     require(
-        all[&operation].after_view == sha256(raw),
+        all[&operation].after_view.as_deref() == Some(sha256(raw).as_str()),
         "node_publication_view_mismatch",
     )
 }
@@ -463,9 +509,18 @@ pub(crate) fn current_origins(raw: &[u8]) -> Result<BTreeMap<(String, String), C
         }
         let versions = C::decode_stream(&stream, subject)?;
         require(
-            versions
-                .values()
-                .all(|v| v.operation() == initial_version.operation()),
+            versions.values().all(|v| {
+                v.operation() == initial_version.operation()
+                    || v.state().is_some_and(|state| {
+                        crate::history_node_frame::decode(state).is_ok_and(|payload| {
+                            !payload.is_semantic
+                                && crate::history_node_frame::validate_evidence(
+                                    v, &versions, &payload,
+                                )
+                                .is_ok()
+                        })
+                    })
+            }),
             "node_publication_current_tail_operation",
         )?;
     }
@@ -513,7 +568,7 @@ pub fn validate_authority(value: &crate::value::TypedValue) -> Result<()> {
     )?;
     crate::history_contract::token(&value["record_id"])?;
     require(
-        crate::history_contract::is_int(&value["generation"], "1"),
+        matches!(&value["generation"],crate::value::TypedValue::Integer(n) if !n.as_str().starts_with('-')),
         "node_publication_authority_required",
     )?;
     Ok(())
@@ -540,8 +595,33 @@ pub(crate) fn selected(entry: &Path) -> Result<bool> {
     Ok(true)
 }
 pub(crate) fn evidence_path(path: &str) -> Result<()> {
+    if let Some(name) = path
+        .strip_prefix(".kpopper/hypotheses/")
+        .and_then(|p| p.strip_suffix(".yaml").or_else(|| p.strip_suffix(".yml")))
+    {
+        crate::history_contract::hypothesis_name(&crate::value::TypedValue::Text(name.into()))?;
+        return crate::history_branch::portable_path(path);
+    }
+    if path.starts_with(".kpopper-history-migration/") {
+        return crate::history_branch::portable_path(path);
+    }
+
     if crate::history_source_ancestry::path_id(path).is_some() {
         return Ok(());
+    }
+    for (prefix, suffix) in [
+        ("evidence/legacy/", ".zip"),
+        ("evidence/migration/", ".json"),
+        ("evidence/bootstrap/", ".zip"),
+        ("evidence/bootstrap/", ".json"),
+    ] {
+        if let Some(name) = path
+            .strip_prefix(prefix)
+            .and_then(|p| p.strip_suffix(suffix))
+        {
+            token(name)?;
+            return require(!name.contains('/'), "node_publication_evidence_path");
+        }
     }
     let name = path
         .strip_prefix("evidence/reports/")
@@ -560,7 +640,15 @@ fn evidence_directories(root: &Path, journal: &Journal) -> Result<()> {
         let mut directories = BTreeSet::from(["evidence"]);
         for file in &journal.evidence {
             evidence_path(&file.path)?;
-            directories.insert(file.path.rsplit_once('/').unwrap().0);
+            let mut parent = file.path.rsplit_once('/').unwrap().0;
+            loop {
+                directories.insert(parent);
+                if let Some((next, _)) = parent.rsplit_once('/') {
+                    parent = next;
+                } else {
+                    break;
+                }
+            }
         }
         for relative in directories {
             let path = F::target(root, relative)?;
@@ -971,7 +1059,7 @@ fn prepare_inner(
         parents: frontier(&all),
         touched,
         before_view: digest(&before),
-        after_view: sha256(&after_view),
+        after_view: Some(sha256(&after_view)),
         evidence: evidence_hashes,
         context: context
             .map(crate::value::TypedValue::to_tagged)
@@ -1024,6 +1112,8 @@ fn verify_history(root: &Path, all: &BTreeMap<String, Manifest>) -> Result<()> {
 struct Verified {
     versions: BTreeMap<String, BTreeMap<String, C::Version>>,
     source_clocks: crate::history_source_ancestry::Graph,
+    raw_evidence: BTreeMap<String, std::sync::Arc<Vec<u8>>>,
+    legacy: BTreeMap<String, std::sync::Arc<crate::history_node_legacy::Legacy>>,
 }
 fn verify_history_with(
     root: &Path,
@@ -1032,6 +1122,9 @@ fn verify_history_with(
     current_view: Option<&[u8]>,
 ) -> Result<Verified> {
     let mut source_clocks = crate::history_source_ancestry::Graph::default();
+    let mut legacy = BTreeMap::new();
+    let mut raw_evidence = BTreeMap::new();
+    let mut legacy_bytes = 0usize;
     let mut evidence = BTreeMap::new();
     for m in all.values() {
         for (path, hash) in &m.evidence {
@@ -1053,6 +1146,13 @@ fn verify_history_with(
         if path.starts_with(crate::history_source_ancestry::PREFIX) {
             source_clocks.insert(path, &raw)?;
         }
+        if path.starts_with(crate::history_node_legacy::PREFIX) {
+            let value = crate::history_node_legacy::load(&raw)?;
+            legacy_bytes = legacy_bytes.saturating_add(value.decoded_bytes);
+            require(legacy_bytes <= MAX_BYTES, "node_legacy_archive_limit")?;
+            legacy.insert(path.clone(), value);
+        }
+        raw_evidence.insert(path.clone(), std::sync::Arc::new(raw));
     }
     let mut verified = BTreeMap::new();
     let mut expected = BTreeMap::<String, BTreeMap<String, String>>::new();
@@ -1166,6 +1266,8 @@ fn verify_history_with(
     Ok(Verified {
         versions: verified,
         source_clocks,
+        raw_evidence,
+        legacy,
     })
 }
 fn revalidate(root: &Path, journal: &Journal) -> Result<()> {
@@ -1223,6 +1325,7 @@ fn append_frames(root: &Path, append: &Append) -> Result<()> {
     fs::create_dir_all(parent)?;
     let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
     file.write_all(&frames[already..])?;
+    crate::history_io_metrics::write(frames.len() - already);
     file.sync_all()?;
     sync_directory(parent)?;
     Ok(())
@@ -1250,7 +1353,7 @@ pub fn publish(
         let all = inventory(root)?;
         verify_history(root, &all)?;
         require(
-            digest(&read(root, VIEW)?) == Some(journal.manifest.after_view.clone()),
+            digest(&read(root, VIEW)?) == journal.manifest.after_view.clone(),
             "node_publication_retry_view",
         )?;
         verify(prepared)?;
@@ -1490,6 +1593,8 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     pub source_clocks: crate::history_source_ancestry::Graph,
+    pub(crate) raw_evidence: BTreeMap<String, std::sync::Arc<Vec<u8>>>,
+    pub(crate) legacy: BTreeMap<String, std::sync::Arc<crate::history_node_legacy::Legacy>>,
     pub authority: crate::value::TypedValue,
     pub revision: String,
     pub current: Option<Vec<u8>>,
@@ -1525,6 +1630,8 @@ fn snapshot(
     ))?);
     Ok(Snapshot {
         source_clocks: verified.source_clocks,
+        legacy: verified.legacy,
+        raw_evidence: verified.raw_evidence,
         authority,
         revision,
         current,
@@ -1632,7 +1739,7 @@ fn capture_snapshot_inner(root: &Path, canonical: Option<&[u8]>) -> Result<Snaps
         require(tips.len() == 1, "node_publication_merge_required")?;
         let tip = &all[tips.first_key_value().unwrap().0];
         require(
-            digest(&current) == Some(tip.after_view.clone()),
+            digest(&current) == tip.after_view.clone(),
             "node_publication_view_mismatch",
         )?;
     }
@@ -1739,6 +1846,10 @@ pub fn export(root: &Path) -> Result<Bundle> {
     capture(root)?;
     let all = inventory(root)?;
     let mut paths = BTreeSet::from([VIEW.to_owned(), ".kpopper/history.yaml".into()]);
+    let physical = crate::history_hypothesis_authoring::physical_files(
+        &crate::history_store::Store::new(&root.join(VIEW))?,
+    )?;
+    paths.extend(physical.keys().cloned());
     for (operation, manifest) in all {
         paths.insert(commit(&operation)?);
         paths.extend(manifest.evidence.keys().cloned());

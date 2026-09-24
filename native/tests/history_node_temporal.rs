@@ -292,34 +292,56 @@ fn temporal_batch_and_nested_proposal_keep_accepted_world_and_distinct_snapshots
         m(&m(&m(after.state())["subjects"])["d.ready"])["head"],
         prior_head
     );
-    let snapshot = P::capture_snapshot(root.path()).unwrap();
-    let receipt = W::receipt(&snapshot, "proposal").unwrap();
-    let evidence = m(&m(&receipt)["after"]);
-    let accepted = m(&evidence["temporal_replay"]);
-    let proposed = m(&m(&evidence["proposal"])["temporal_replay"]);
-    assert_ne!(accepted["snapshot"], proposed["snapshot"]);
-    assert_eq!(m(&accepted["claims"])["d.ready"], prior_head);
-    // Retained proposal receipts name the accepted input versions in their hypothetical
-    // evidence. The proposed identity is explicit in authoring, never a committed observation.
-    assert_eq!(proposed["claims"], accepted["claims"]);
-    assert_ne!(m(&evidence["authoring"])["proposal"], prior_head);
     let projection = Projection::capture(&after).unwrap();
-    assert!(
-        l(&m(&m(projection.projection())["temporal"])["observations"])
-            .iter()
-            .all(|observation| m(observation)["snapshot"] != proposed["snapshot"])
+    let temporal = m(&m(projection.projection())["temporal"]);
+    assert_eq!(temporal["complete"], V::Bool(true));
+    assert!(l(&temporal["findings"]).is_empty());
+    let proposals = l(&m(&m(&m(after.state())["subjects"])["d.ready"])["proposals"]);
+    assert_eq!(proposals.len(), 1);
+    let proposed_id = &proposals[0];
+    assert_ne!(proposed_id, &prior_head);
+    let observations = l(&temporal["observations"]);
+    let proposed_world = observations
+        .iter()
+        .find(|observation| {
+            let observation = m(observation);
+            observation["operation"] == v(json!("proposal"))
+                && observation["phase"] == v(json!("after"))
+        })
+        .unwrap();
+    assert_eq!(
+        m(proposed_world)["evidence_kind"],
+        v(json!("reconstructed_committed_world"))
+    );
+    for observation in observations {
+        for claim in l(&m(observation)["claims"]) {
+            let claim = m(claim);
+            if claim["subject"] == v(json!("d.ready")) {
+                assert_eq!(claim["claim_id"], prior_head);
+                assert_ne!(claim["claim_id"], *proposed_id);
+            }
+        }
+    }
+    let V::Text(snapshot_json) = &m(proposed_world)["snapshot"] else {
+        panic!()
+    };
+    let snapshot = Snapshot::from_json(snapshot_json.as_bytes()).unwrap();
+    let data = snapshot.to_data();
+    let body = &m(&m(&data)["nodes"])["d.ready"];
+    assert_eq!(
+        m(&m(body)["body"])["wrong_if"],
+        v(json!({"expr":"p.input > 5"}))
     );
     let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
     drop(root);
+    let copied = Capture::read(copy.path()).unwrap();
     assert_eq!(
-        W::receipt(&P::capture_snapshot(copy.path()).unwrap(), "proposal").unwrap(),
-        receipt
+        m(&m(&m(copied.state())["subjects"])["d.ready"])["head"],
+        prior_head
     );
     assert_eq!(
-        m(&m(Projection::capture(&Capture::read(copy.path()).unwrap())
-            .unwrap()
-            .projection())["temporal"])["complete"],
-        V::Bool(true)
+        Projection::capture(&copied).unwrap().projection(),
+        projection.projection()
     );
 }
 

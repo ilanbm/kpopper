@@ -1,16 +1,9 @@
 //! Exact, same-authority branch union. The reducer preserves concurrent disputes; union
 //! neither selects a head nor turns publication ancestry into source-clock ancestry.
 use crate::{
-    Result,
-    history_contract::*,
-    history_node_capture::Capture,
-    history_node_codec as C,
-    history_node_current::Original,
-    history_node_frame as Frame, history_node_publication as P,
-    history_node_receipt::{Nodes, Receipt},
-    history_node_writer as W,
-    history_view::map_mut,
-    history_yaml as Y, require,
+    Result, history_contract::*, history_node_capture::Capture, history_node_codec as C,
+    history_node_current::Original, history_node_frame as Frame, history_node_publication as P,
+    history_node_writer as W, history_view::map_mut, history_yaml as Y, require,
     value::TypedValue as V,
 };
 use std::{
@@ -23,11 +16,31 @@ fn s(v: &str) -> V {
     V::Text(v.into())
 }
 pub(crate) fn is_union(context: &V) -> Result<bool> {
+    if crate::history_node_transaction::is_context(context) {
+        let c = crate::history_node_transaction::validate(context)?;
+        return Ok(
+            string_is(&c["format"], crate::history_node_transaction::FORMAT)
+                && map(&c["action"])?
+                    .get("kind")
+                    .is_some_and(|v| string_is(v, "branch-union")),
+        );
+    }
     Ok(map(context)?
         .get("format")
         .is_some_and(|v| string_is(v, FORMAT)))
 }
 pub(crate) fn evidence(context: &V) -> Result<V> {
+    if crate::history_node_transaction::is_context(context) {
+        let c = crate::history_node_transaction::validate(context)?;
+        require(
+            map(&c["action"])?
+                .get("kind")
+                .is_some_and(|v| string_is(v, "branch-union")),
+            "node_transaction_action",
+        )?;
+        map(&c["evidence"])?;
+        return Ok(c["evidence"].clone());
+    }
     let c = W::context(context)?;
     let o = schema(&c["options"], &["evidence"], &["adoption"])?;
     map(&o["evidence"])?;
@@ -55,6 +68,8 @@ fn merge_snapshot(target: &mut P::Snapshot, source: &P::Snapshot) -> Result<()> 
         "node_branch_authority",
     )?;
     target.source_clocks.merge(&source.source_clocks)?;
+    target.legacy.extend(source.legacy.clone());
+    target.raw_evidence.extend(source.raw_evidence.clone());
     for (op, tx) in &source.transactions {
         require(
             target
@@ -121,43 +136,19 @@ fn plan(
         crate::history_authoring::destination(capture.document())?,
     )]));
     let side = V::Map(Map::from([("document".into(), document.clone())]));
-    let receipt = Receipt::pack(&crate::history_transaction::semantic_receipt(
-        profile,
-        &capabilities,
-        &before_side,
-        &side,
-    )?)?;
-    let mut nodes = Nodes::from_values(Map::new())?;
+    let diagnostic_receipt =
+        crate::history_transaction::semantic_receipt(profile, &capabilities, &before_side, &side)?;
     let mut bases = BTreeMap::new();
     for (subject, versions) in &capture.snapshot.versions {
         let held = tips(versions);
         require(!held.is_empty(), "node_semantic_merge_required")?;
-        let base = held[0]; // Encoding choice only; the semantic reducer keeps every claim.
-        let payload = Frame::decode(state(base)?)?;
-        if let Some(value) = payload.receipt {
-            let mut values = nodes.values().clone();
-            values.insert(subject.clone(), value);
-            nodes = Nodes::from_values(values)?;
-        }
         bases.insert(subject.clone(), held);
     }
-    let changes = nodes.prepare(receipt.before())?;
-    nodes.apply(&changes)?;
-    let changed = changes
-        .iter()
-        .map(|c| c.subject.as_str())
-        .collect::<BTreeSet<_>>();
-    let after_changes = nodes.prepare(receipt.after())?;
-    let mut after_nodes = nodes.clone();
-    after_nodes.apply(&after_changes)?;
-    let after_changed = after_changes
-        .iter()
-        .map(|c| c.subject.as_str())
-        .collect::<BTreeSet<_>>();
-    let objects = objects
-        .into_iter()
-        .map(|v| Ok((text(&map(&v)?["subject"])?.to_owned(), v)))
-        .collect::<Result<BTreeMap<_, _>>>()?;
+    let mut objects_by_subject = BTreeMap::<String, Vec<V>>::new();
+    for object in objects {
+        let subject = text(&map(&object)?["subject"])?.to_owned();
+        objects_by_subject.entry(subject).or_default().push(object);
+    }
     let mut joins = BTreeMap::new();
     let mut lazy = BTreeSet::new();
     let mut originals = Map::new();
@@ -176,70 +167,65 @@ fn plan(
     )?;
     for (subject, held) in bases {
         let base = held[0];
-        let payload = Frame::decode(state(base)?)?;
         let mut events = Vec::new();
-        let mut tip = base.clone();
-        if held.len() > 1 || changed.contains(subject.as_str()) {
-            let value = Frame::encode(
-                &payload.semantic,
-                "evidence",
-                "before",
-                nodes.values().get(&subject),
-            )?;
-            let parents = held.iter().map(|v| v.id().into()).collect();
-            let event = if held.len() > 1 {
-                C::Event::create_merge(&subject, operation, parents, base, Some(value))?
-            } else {
-                C::Event::create(&subject, operation, parents, Some(base), Some(value))?
-            };
-            tip = event.reconstruct(Some(base))?;
-            events.push(event);
-        }
-        if let Some(object) = objects.get(&subject) {
-            let o = map(object)?;
-            let saw = crate::history_view::list(&o["saw"])?
+        let subject_objects = objects_by_subject.get(&subject);
+        let mut semantic = Vec::with_capacity(subject_objects.map_or(0, Vec::len));
+        if let Some(subject_objects) = subject_objects {
+            // Observation ancestry is a deterministic compression choice, separate
+            // from the storage event's parent and merge vector.
+            let mut observation_chain = capture.history.observations().clone();
+            let mut observation_base = capture
+                .history
+                .objects()
                 .iter()
-                .map(|v| text(v).map(str::to_owned))
-                .collect::<Result<BTreeSet<_>>>()?;
-            let old = map(&payload.semantic)?;
-            let old_id = text(&map(&map(&old["context"])?["header"])?["id"])?;
-            let observation = crate::history_node_observation::ObservationNode::between(
-                text(&o["id"])?,
-                old_id,
-                &capture.history.observations().replay(old_id)?,
-                &saw,
-            )?;
-            let value = Frame::encode(
-                &crate::history_node_capture::payload(object, &observation)?,
-                "semantic",
-                "semantic",
-                nodes.values().get(&subject),
-            )?;
-            let event = C::Event::create(
-                &subject,
-                operation,
-                vec![tip.id().into()],
-                Some(&tip),
-                Some(value),
-            )?;
-            tip = event.reconstruct(Some(&tip))?;
-            events.push(event);
+                .filter(|(_, object)| {
+                    map(object).is_ok_and(|value| string_is(&value["subject"], &subject))
+                })
+                .map(|(id, _)| id.clone())
+                .next_back();
+            for object in subject_objects {
+                let o = map(object)?;
+                let saw = crate::history_view::list(&o["saw"])?
+                    .iter()
+                    .map(|v| text(v).map(str::to_owned))
+                    .collect::<Result<BTreeSet<_>>>()?;
+                let observation = if let Some(old_id) = &observation_base {
+                    crate::history_node_observation::ObservationNode::between(
+                        text(&o["id"])?,
+                        old_id,
+                        &observation_chain.replay(old_id)?,
+                        &saw,
+                    )?
+                } else {
+                    crate::history_node_observation::ObservationNode::root(text(&o["id"])?, &saw)?
+                };
+                observation_chain.insert(observation.clone())?;
+                observation_base = Some(text(&o["id"])?.to_owned());
+                semantic.push((object.clone(), observation));
+            }
         }
-        if after_changed.contains(subject.as_str()) {
-            let payload = Frame::decode(state(&tip)?)?;
-            let value = Frame::encode(
-                &payload.semantic,
-                "evidence",
-                "after",
-                after_nodes.values().get(&subject),
-            )?;
-            let event = C::Event::create(
-                &subject,
-                operation,
-                vec![tip.id().into()],
-                Some(&tip),
-                Some(value),
-            )?;
+        if held.len() > 1 || !semantic.is_empty() {
+            // A union touches each subject at most once per operation. The selected
+            // storage base only controls the ledger delta; all storage heads remain
+            // in the deterministic merge parent vector, independent of observation bases.
+            let value = crate::history_node_ledger::pack(Some(state(base)?), &semantic)?;
+            let event = if held.len() > 1 {
+                C::Event::create_merge(
+                    &subject,
+                    operation,
+                    held.iter().map(|v| v.id().into()).collect(),
+                    base,
+                    Some(value),
+                )?
+            } else {
+                C::Event::create(
+                    &subject,
+                    operation,
+                    vec![base.id().into()],
+                    Some(base),
+                    Some(value),
+                )?
+            };
             events.push(event);
         }
         if !events.is_empty() {
@@ -304,28 +290,31 @@ fn plan(
             ("tails".into(), V::Map(tails)),
         ])),
     );
-    let mut context = V::Map(Map::from([
-        ("format".into(), s(FORMAT)),
-        (
-            "options".into(),
-            V::Map(Map::from([(
-                "evidence".into(),
-                V::Map(
-                    evidence
-                        .iter()
-                        .map(|(p, raw)| (p.clone(), s(&crate::identity::sha256(raw))))
-                        .collect(),
-                ),
-            )])),
-        ),
-        ("header".into(), receipt.header().clone()),
-        ("before".into(), receipt.before().context().clone()),
-        ("after".into(), receipt.after().context().clone()),
-    ]));
+    let mut action = Map::from([("kind".into(), s("branch-union"))]);
     if let Some(adoption) = adoption {
-        map_mut(map_mut(&mut context)?.get_mut("options").unwrap())?
-            .insert("adoption".into(), adoption.clone());
+        action.insert("adoption".into(), adoption.clone());
     }
+    let mut options = Map::from([(
+        "evidence".into(),
+        V::Map(
+            evidence
+                .iter()
+                .map(|(p, raw)| (p.clone(), s(&crate::identity::sha256(raw))))
+                .collect(),
+        ),
+    )]);
+    if let Some(adoption) = adoption {
+        options.insert("adoption".into(), adoption.clone());
+    }
+    let context = crate::history_node_transaction::create(
+        &capture.snapshot,
+        &V::Map(action),
+        V::Map(options),
+        &V::Map(Map::new()),
+        evidence,
+        &doc,
+        &diagnostic_receipt,
+    )?;
     Ok(Plan {
         after: P::bind_view(&Y::encode_document(&doc)?, operation)?,
         context,
@@ -505,7 +494,11 @@ pub(crate) fn verify(root: &Path, prepared: &P::Prepared) -> Result<()> {
     let context = prepared
         .context()?
         .ok_or_else(|| error("node_transaction_missing_context"))?;
-    let adoption = map(&W::context(&context)?["options"])?.get("adoption");
+    let adoption = if crate::history_node_transaction::is_context(&context) {
+        map(&crate::history_node_transaction::validate(&context)?["action"])?.get("adoption")
+    } else {
+        map(&W::context(&context)?["options"])?.get("adoption")
+    };
     require(
         !prepared.imports()?.is_empty() || adoption.is_some(),
         "node_branch_no_new_history",
@@ -547,6 +540,26 @@ mod tests {
     use serde_json::json;
     fn value(j: serde_json::Value) -> V {
         V::from_json(&j).unwrap()
+    }
+    #[test]
+    fn compact_ledger_root_can_keep_its_exact_lazy_original_binding() {
+        let subject = "p.ledger";
+        let payload = crate::history_node_ledger::pack(None, &[]).unwrap();
+        let p = map(&payload).unwrap();
+        let original = Original::create(
+            subject,
+            text(&p["collection"]).unwrap(),
+            "seed",
+            p["body"].clone(),
+            map(&p["context"]).unwrap().clone(),
+        )
+        .unwrap();
+        let event = C::Event::create(subject, "seed", vec![], None, Some(payload)).unwrap();
+        let document = V::Map(Map::from([(
+            "acts".into(),
+            V::Map(Map::from([(subject.into(), V::Null)])),
+        )]));
+        assert_eq!(original.from_document(&document).unwrap().id(), event.id());
     }
     fn write(root: &Path, op: &str, action: V) {
         let options = Options {

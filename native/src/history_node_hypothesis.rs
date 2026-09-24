@@ -17,8 +17,14 @@ use std::path::Path;
 
 pub(crate) fn sources(root: &Path) -> Result<()> {
     let store = crate::history_store::Store::new(&root.join("GROUNDING.yaml"))?;
+    if HA::physical_files(&store)?.is_empty() {
+        return Ok(());
+    }
+    let raw = crate::history_transaction_fs::read(&root.join("GROUNDING.yaml"))?
+        .ok_or_else(|| error("node_semantic_missing_view"))?;
+    let document = crate::history_yaml::decode_document(&raw)?;
     require(
-        map(&HA::physical_evidence(&store)?)?.is_empty(),
+        HA::active_physical(&store, &document)?.is_empty(),
         "node_hypothesis_physical_unsupported",
     )
 }

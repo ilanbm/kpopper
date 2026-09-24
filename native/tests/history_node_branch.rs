@@ -400,3 +400,41 @@ fn publication_union_does_not_authenticate_source_commit_ancestry() {
         2
     );
 }
+
+#[test]
+fn nonnegative_authority_generations_work_without_merging_distinct_epochs() {
+    for generation in ["0", "7", "4294967297"] {
+        let root = setup();
+        let marker = root.path().join(".kpopper/history.yaml");
+        let raw = fs::read_to_string(&marker)
+            .unwrap()
+            .replace("generation: 1", &format!("generation: {generation}"));
+        fs::write(&marker, &raw).unwrap();
+        write(root.path(), "seed", &add());
+        let sibling = P::export(root.path()).unwrap().reconstruct().unwrap();
+        write(root.path(), "left", &set(2));
+        write(sibling.path(), "right", &set(3));
+        let p = kpop_native::history_node_branch::prepare(
+            root.path(),
+            &[P::export(sibling.path()).unwrap()],
+            "merge",
+        )
+        .unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        let foreign = setup();
+        fs::write(
+            foreign.path().join(".kpopper/history.yaml"),
+            raw.replace(&format!("generation: {generation}"), "generation: 91"),
+        )
+        .unwrap();
+        write(foreign.path(), "foreign", &add());
+        assert!(
+            kpop_native::history_node_branch::prepare(
+                root.path(),
+                &[P::export(foreign.path()).unwrap()],
+                "bad-epoch"
+            )
+            .is_err()
+        );
+    }
+}

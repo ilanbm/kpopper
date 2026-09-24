@@ -18,33 +18,10 @@ use std::{collections::BTreeSet, path::Path};
 
 impl Core::Input for Capture {
     fn source_body(&self, object: &V) -> Result<SourceValue> {
-        // Native objects are authored from TypedValue and have canonical field order.
-        // A future legacy import must supply its original ordered source, not use this path.
-        require(
-            string_is(field(map(object)?, "id_scheme")?, "typed-history/v2"),
-            "node_identity_source_order_unavailable",
-        )?;
-        let event = self.storage_event(text(field(map(object)?, "id")?)?)?;
-        let operation = self
-            .snapshot
-            .operations
-            .get(event)
-            .ok_or_else(|| error("incomplete_closure"))?;
-        let context = self
-            .snapshot
-            .transactions
-            .get(operation)
-            .and_then(|tx| tx.context.as_ref())
-            .ok_or_else(|| error("node_identity_source_order_unavailable"))?;
-        require(
-            string_is(
-                field(map(context)?, "format")?,
-                "node-authoring-transaction/v1",
-            ),
-            "node_identity_source_order_unavailable",
-        )?;
-        Ok(SourceValue::from_typed(field(map(object)?, "body")?))
+        // Capture already verified each exact object and its retained source-order witness.
+        self.history.source_body(text(field(map(object)?, "id")?)?)
     }
+
     fn template(&self) -> Result<V> {
         let mut doc = self.document().clone();
         for collection in F::collections(self.document())?.keys() {
@@ -56,10 +33,13 @@ impl Core::Input for Capture {
 
 pub(crate) fn sources(root: &Path) -> Result<()> {
     let store = crate::history_store::Store::new(&root.join("GROUNDING.yaml"))?;
-    require(
-        map(&HA::physical_evidence(&store)?)?.is_empty(),
-        "node_identity_physical_hypotheses_unsupported",
-    )?;
+    crate::history_node_hypothesis::sources(root).map_err(|e| {
+        if e.0 == "node_hypothesis_physical_unsupported" {
+            error("node_identity_physical_hypotheses_unsupported")
+        } else {
+            e
+        }
+    })?;
     require(
         crate::history_transaction_fs::read(&crate::history_transaction_fs::target(
             root,

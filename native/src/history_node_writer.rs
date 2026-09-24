@@ -41,13 +41,23 @@ pub(crate) fn operation_member(
     let Some(value) = &tx.context else {
         return Ok(false);
     };
-    let c = context(value)?;
-    let side = map(&c["before"])?;
-    let literal = map(field(side, "literal")?)?;
-    let Some(intent) = literal.get("authoring") else {
-        return Ok(false);
+    if crate::history_node_legacy::kind(value, crate::history_node_legacy::FORMAT) {
+        return crate::history_node_legacy::member(snapshot, transaction, semantic);
+    }
+    let intent = if crate::history_node_transaction::is_context(value) {
+        map(field(
+            crate::history_node_transaction::validate(value)?,
+            "action",
+        )?)?
+    } else {
+        let c = context(value)?;
+        let side = map(&c["before"])?;
+        let literal = map(field(side, "literal")?)?;
+        let Some(intent) = literal.get("authoring") else {
+            return Ok(false);
+        };
+        map(intent)?
     };
-    let intent = map(intent)?;
     if intent
         .get("kind")
         .is_some_and(|v| string_is(v, "view-edit-proposals"))
@@ -101,7 +111,11 @@ pub(crate) fn context(value: &V) -> Result<&Map> {
     require(
         string_is(&c["format"], FORMAT)
             || string_is(&c["format"], crate::history_node_branch::FORMAT)
-            || string_is(&c["format"], crate::history_node_clocks::FORMAT),
+            || string_is(&c["format"], crate::history_node_clocks::FORMAT)
+            || string_is(&c["format"], crate::history_node_legacy::FORMAT)
+            || string_is(&c["format"], crate::history_node_legacy::CHECKPOINT)
+            || string_is(&c["format"], crate::history_node_bootstrap::FORMAT)
+            || string_is(&c["format"], crate::history_node_physical::FORMAT),
         "node_transaction_format",
     )?;
     Ok(c)
@@ -127,39 +141,52 @@ fn components(
     allowed: &BTreeSet<String>,
     before: Option<&str>,
 ) -> Result<Nodes> {
-    let mut values = Map::new();
-    for (subject, versions) in &snapshot.versions {
-        let selected = versions
-            .iter()
-            .filter_map(|(id, version)| {
-                if !allowed.contains(version.operation()) {
-                    return None;
-                }
-                Some((|| {
-                    let payload = Frame::decode(node_value(version)?)?;
-                    Ok((
-                        id,
-                        version,
-                        before != Some(version.operation()) || payload.phase == "before",
-                    ))
-                })())
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let selected = selected
-            .into_iter()
-            .filter(|(_, _, keep)| *keep)
-            .map(|(id, v, _)| (id.clone(), v.clone()))
-            .collect::<BTreeMap<_, _>>();
-        if let Some(tip) = Frame::tip(&selected)? {
-            if let Some(value) = Frame::decode(node_value(tip)?)?.receipt {
-                values.insert(subject.clone(), value);
-            }
-        }
-    }
-    Nodes::from_values(values)
+    crate::history_node_receipt_components::Components::new(snapshot)?.at(allowed, before)
 }
 /// Restore the exact original receipt using only its causal node components and compact context.
 pub fn receipt(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
+    if snapshot
+        .transactions
+        .get(operation)
+        .and_then(|t| t.context.as_ref())
+        .is_some_and(crate::history_node_transaction::is_context)
+    {
+        return crate::history_node_transaction::derive_receipt(snapshot, operation);
+    }
+
+    if snapshot
+        .transactions
+        .get(operation)
+        .and_then(|t| t.context.as_ref())
+        .is_some_and(|c| crate::history_node_legacy::kind(c, crate::history_node_legacy::FORMAT))
+    {
+        return crate::history_node_legacy::receipt(snapshot, operation);
+    }
+    let index = crate::history_node_receipt_components::Components::new(snapshot)?;
+    receipt_index(snapshot, operation, &index)
+}
+pub(crate) fn receipt_index(
+    snapshot: &P::Snapshot,
+    operation: &str,
+    index: &crate::history_node_receipt_components::Components<'_>,
+) -> Result<V> {
+    if snapshot
+        .transactions
+        .get(operation)
+        .and_then(|t| t.context.as_ref())
+        .is_some_and(crate::history_node_transaction::is_context)
+    {
+        return crate::history_node_transaction::derive_receipt(snapshot, operation);
+    }
+
+    if snapshot
+        .transactions
+        .get(operation)
+        .and_then(|t| t.context.as_ref())
+        .is_some_and(|c| crate::history_node_legacy::kind(c, crate::history_node_legacy::FORMAT))
+    {
+        return crate::history_node_legacy::receipt(snapshot, operation);
+    }
     let tx = snapshot
         .transactions
         .get(operation)
@@ -170,13 +197,46 @@ pub fn receipt(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
             .ok_or_else(|| error("node_transaction_missing_context"))?,
     )?;
     let allowed = ancestors(snapshot, operation)?;
-    let before = components(snapshot, &allowed, Some(operation))?.side(&c["before"])?;
-    let after = components(snapshot, &allowed, None)?.side(&c["after"])?;
+    let before = index.at(&allowed, Some(operation))?.side(&c["before"])?;
+    let after = index.at(&allowed, None)?.side(&c["after"])?;
     Receipt::from_parts(c["header"].clone(), before, after)?.restore()
 }
 
-pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<()> {
+pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String, V>> {
+    let templates = crate::history_node_transaction::templates(snapshot)?;
+    let index = crate::history_node_receipt_components::Components::new(snapshot)?;
     for (op, tx) in &snapshot.transactions {
+        if let Some(value) = tx
+            .context
+            .as_ref()
+            .filter(|c| crate::history_node_transaction::is_context(c))
+        {
+            let context = crate::history_node_transaction::validate(value)?;
+            let expected = V::Map(tx.evidence.iter().map(|(p, h)| (p.clone(), s(h))).collect());
+            require(
+                context["evidence"] == expected,
+                "node_receipt_evidence_mismatch",
+            )?;
+            require(templates.contains_key(op), "node_template_missing")?;
+            if tx
+                .evidence
+                .keys()
+                .any(|p| p.starts_with(crate::history_source_ancestry::PREFIX))
+            {
+                require(
+                    crate::history_node_clocks::is_clocks(value)?
+                        || crate::history_node_branch::is_union(value)?,
+                    "source_ancestry_admission",
+                )?;
+            }
+            continue;
+        }
+        if tx.context.as_ref().is_some_and(|c| {
+            crate::history_node_legacy::kind(c, crate::history_node_legacy::FORMAT)
+        }) {
+            crate::history_node_legacy::receipt(snapshot, op)?;
+            continue;
+        }
         if tx
             .evidence
             .keys()
@@ -193,9 +253,22 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<()> {
             )?;
         }
         if tx.context.is_some() {
-            let restored = receipt(snapshot, op)?;
-            let expected = if crate::history_node_branch::is_union(tx.context.as_ref().unwrap())?
+            let restored = receipt_index(snapshot, op, &index)?;
+            let expected = if [
+                crate::history_node_bootstrap::FORMAT,
+                crate::history_node_physical::FORMAT,
+            ]
+            .iter()
+            .any(|format| crate::history_node_legacy::kind(tx.context.as_ref().unwrap(), format))
+            {
+                let context = context(tx.context.as_ref().unwrap())?;
+                field(map(&context["options"])?, "evidence")?.clone()
+            } else if crate::history_node_branch::is_union(tx.context.as_ref().unwrap())?
                 || crate::history_node_clocks::is_clocks(tx.context.as_ref().unwrap())?
+                || crate::history_node_legacy::kind(
+                    tx.context.as_ref().unwrap(),
+                    crate::history_node_legacy::CHECKPOINT,
+                )
             {
                 crate::history_node_branch::evidence(tx.context.as_ref().unwrap())?
             } else {
@@ -208,7 +281,7 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<()> {
             require(actual == expected, "node_receipt_evidence_mismatch")?;
         }
     }
-    Ok(())
+    Ok(templates)
 }
 
 fn archive(root: &Path) -> Result<V> {
@@ -245,7 +318,7 @@ fn encode_options(o: &A::Options) -> Result<V> {
         ),
     ])))
 }
-fn decode_options(operation: &str, value: &V) -> Result<A::Options> {
+pub(crate) fn decode_options(operation: &str, value: &V) -> Result<A::Options> {
     let o = schema(
         value,
         &[
@@ -508,7 +581,7 @@ pub(crate) fn intent(receipt: &V) -> Result<&Map> {
     require(keys.len() == 1, "node_authoring_intent")?;
     map(&before[keys[0]])
 }
-fn materialize(
+pub(crate) fn materialize(
     capture: &Capture,
     action: &V,
     options: &A::Options,
@@ -517,11 +590,38 @@ fn materialize(
     archive: &V,
     evidence: &BTreeMap<String, Vec<u8>>,
 ) -> Result<Materialized> {
+    materialize_mode(
+        capture, action, options, runtime, audit, archive, evidence, false,
+    )
+}
+fn materialize_ledger(
+    capture: &Capture,
+    action: &V,
+    options: &A::Options,
+    runtime: Option<&Runtime>,
+    audit: Option<&ReplayAudit>,
+    archive: &V,
+    evidence: &BTreeMap<String, Vec<u8>>,
+) -> Result<Materialized> {
+    materialize_mode(
+        capture, action, options, runtime, audit, archive, evidence, true,
+    )
+}
+fn materialize_mode(
+    capture: &Capture,
+    action: &V,
+    options: &A::Options,
+    runtime: Option<&Runtime>,
+    audit: Option<&ReplayAudit>,
+    archive: &V,
+    evidence: &BTreeMap<String, Vec<u8>>,
+    compact: bool,
+) -> Result<Materialized> {
     // Preserve the optimistic snapshot guard on the same exact before bytes used by replay.
     capture.check_expected(action)?;
     let kind = text(field(map(action)?, "kind")?)?;
     require(
-        ["batch", "view-edit-proposals"].contains(&kind) || evidence.is_empty(),
+        ["batch", "view-edit-proposals", "physical-import"].contains(&kind) || evidence.is_empty(),
         "node_evidence_action_unsupported",
     )?;
     let mut effective_options = options.clone();
@@ -529,7 +629,22 @@ fn materialize(
         effective_options.strict = true;
     }
     let options = &effective_options;
-    let encoded_options = encode_options(options)?;
+    let encoded_options = if kind == "physical-import" {
+        A::obj([
+            ("authoring", encode_options(options)?),
+            (
+                "evidence",
+                V::Map(
+                    evidence
+                        .iter()
+                        .map(|(p, raw)| (p.clone(), s(&crate::identity::sha256(raw))))
+                        .collect(),
+                ),
+            ),
+        ])
+    } else {
+        encode_options(options)?
+    };
     let (objects, document, receipt) = if ["accept", "refute", "correct", "propose", "retire"]
         .contains(&kind)
     {
@@ -539,6 +654,8 @@ fn materialize(
             capture, &projected, &plan, options, runtime, audit, archive,
         )?;
         (plan.objects, projected.document().clone(), receipt)
+    } else if kind == "physical-import" {
+        crate::history_node_physical::plan(capture, options, evidence)?
     } else if kind == "hypothesis" {
         crate::history_node_hypothesis::prepare(capture, action, options, runtime, audit, archive)?
     } else if kind == "view-edit-proposals" {
@@ -628,6 +745,19 @@ fn materialize(
         let receipt = Core::receipt(capture, &plan, options, runtime, audit, archive)?;
         (plan.objects, plan.document, receipt)
     };
+    if compact {
+        return ledger_materialized(
+            capture,
+            &objects,
+            document,
+            action,
+            options,
+            encoded_options,
+            archive,
+            evidence,
+            &receipt,
+        );
+    }
     let receipt = Receipt::pack(&receipt)?;
     let mut build = Build::new(capture, &options.operation)?;
     let mut nodes = components(
@@ -688,9 +818,112 @@ fn materialize(
         receipt,
         document,
         &options.operation,
-        FORMAT,
+        if kind == "physical-import" {
+            crate::history_node_physical::FORMAT
+        } else {
+            FORMAT
+        },
         encoded_options,
     )
+}
+/// One physical node transition contains all semantic objects authored for that subject.
+fn ledger_materialized(
+    capture: &Capture,
+    objects: &[V],
+    document: V,
+    action: &V,
+    options: &A::Options,
+    encoded_options: V,
+    archive: &V,
+    evidence: &BTreeMap<String, Vec<u8>>,
+    receipt: &V,
+) -> Result<Materialized> {
+    let mut build = Build::new(capture, &options.operation)?;
+    let mut observations = capture.history.observations().clone();
+    let mut grouped = BTreeMap::<String, Vec<(V, ObservationNode)>>::new();
+    let mut last = BTreeMap::<String, String>::new();
+    for (subject, base) in &build.bases {
+        let state = node_value(base)?;
+        let id = if crate::history_node_ledger::is_ledger(state) {
+            crate::history_node_ledger::observation_base(state)?
+        } else {
+            let payload = Frame::decode(state)?;
+            Some(text(&map(&map(&map(&payload.semantic)?["context"])?["header"])?["id"])?.into())
+        };
+        if let Some(id) = id {
+            last.insert(subject.clone(), id);
+        }
+    }
+    for object in objects {
+        let o = map(object)?;
+        let subject = text(&o["subject"])?;
+        let id = text(&o["id"])?;
+        let saw = list(&o["saw"])?
+            .iter()
+            .map(|v| text(v).map(str::to_owned))
+            .collect::<Result<BTreeSet<_>>>()?;
+        let observation = if let Some(previous) = last.get(subject) {
+            ObservationNode::between(id, previous, &observations.replay(previous)?, &saw)?
+        } else {
+            ObservationNode::root(id, &saw)?
+        };
+        observations.insert(observation.clone())?;
+        last.insert(subject.into(), id.into());
+        grouped
+            .entry(subject.into())
+            .or_default()
+            .push((object.clone(), observation));
+    }
+    for (subject, objects) in grouped {
+        let previous = build.bases.get(&subject).map(node_value).transpose()?;
+        let value = crate::history_node_ledger::pack(previous, &objects)?;
+        let p = map(&value)?;
+        let visible = map(&document)?
+            .get(text(&p["collection"])?)
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get(&subject))
+            == Some(&p["body"]);
+        if previous.is_none() && visible {
+            build.lazy(&subject, &value)?;
+        } else {
+            build.append(&subject, value)?;
+        }
+    }
+    let context = crate::history_node_transaction::create(
+        &capture.snapshot,
+        action,
+        encoded_options,
+        archive,
+        evidence,
+        &document,
+        receipt,
+    )?;
+    finish_context(build, document, &options.operation, context)
+}
+fn finish_context(
+    build: Build<'_>,
+    mut document: V,
+    operation: &str,
+    context: V,
+) -> Result<Materialized> {
+    let meta = map_mut(
+        map_mut(&mut document)?
+            .get_mut("meta")
+            .ok_or_else(|| error("invalid_document"))?,
+    )?;
+    meta.insert(
+        "node_history".into(),
+        A::obj([
+            ("version", A::n("2")),
+            ("originals", V::Map(build.originals)),
+            ("tails", V::Map(build.tails)),
+        ]),
+    );
+    Ok(Materialized {
+        after: P::bind_view(&Y::encode_document(&document)?, operation)?,
+        frames: build.frames,
+        context,
+    })
 }
 fn finish(
     build: Build<'_>,
@@ -740,36 +973,26 @@ pub(crate) fn clock_transition(
     let after_doc = A::destination(candidate.document())?;
     let capabilities = crate::reasoning_fields::capabilities(&before_doc, None)?;
     let profile = text(field(map(&capabilities)?, "profile")?)?;
-    let receipt = Receipt::pack(&crate::history_transaction::semantic_receipt(
+    let receipt = crate::history_transaction::semantic_receipt(
         profile,
         &capabilities,
         &A::obj([("document", before_doc)]),
         &A::obj([("document", after_doc.clone())]),
-    )?)?;
-    let mut build = Build::new(capture, operation)?;
-    let mut nodes = components(
-        &capture.snapshot,
-        &capture.snapshot.transactions.keys().cloned().collect(),
-        None,
     )?;
-    build.evidence(&mut nodes, receipt.before(), "before")?;
-    build.evidence(&mut nodes, receipt.after(), "after")?;
-    let options = A::obj([(
-        "evidence",
-        V::Map(
-            evidence
-                .iter()
-                .map(|(p, raw)| (p.clone(), s(&crate::identity::sha256(raw))))
-                .collect(),
-        ),
-    )]);
-    finish(
-        build,
-        receipt,
+    let context = crate::history_node_transaction::create(
+        &capture.snapshot,
+        &A::obj([("kind", s("source-clocks"))]),
+        A::empty(),
+        &A::empty(),
+        evidence,
+        &after_doc,
+        &receipt,
+    )?;
+    finish_context(
+        Build::new(capture, operation)?,
         after_doc,
         operation,
-        crate::history_node_clocks::FORMAT,
-        options,
+        context,
     )
 }
 
@@ -804,7 +1027,7 @@ pub fn prepare_edits(
         format!("evidence/view-edits/{}.yaml", options.operation),
         raw,
     )]);
-    let result = materialize(
+    let result = materialize_ledger(
         &capture,
         &action,
         options,
@@ -861,7 +1084,7 @@ fn prepare_evidence(
         crate::history_node_hypothesis::sources(root)?;
     }
     let capture = Capture::read(root)?;
-    let result = materialize(
+    let result = materialize_ledger(
         &capture,
         action,
         options,
@@ -886,6 +1109,14 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
     if prepared
         .context()?
         .as_ref()
+        .is_some_and(|c| crate::history_node_legacy::kind(c, crate::history_node_physical::FORMAT))
+    {
+        return crate::history_node_physical::verify(root, prepared);
+    }
+
+    if prepared
+        .context()?
+        .as_ref()
         .is_some_and(|c| crate::history_node_clocks::is_clocks(c).unwrap_or(false))
     {
         return crate::history_node_clocks::verify(root, prepared);
@@ -896,6 +1127,13 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         .is_some_and(|c| crate::history_node_branch::is_union(c).unwrap_or(false))
     {
         return crate::history_node_branch::verify(root, prepared);
+    }
+    if prepared
+        .context()?
+        .as_ref()
+        .is_some_and(crate::history_node_transaction::is_context)
+    {
+        return verify_ledger(root, prepared, runtime);
     }
     require(
         prepared.imports()?.is_empty(),
@@ -946,19 +1184,34 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         current_archive == *field(intent, "archive")?,
         "concurrent_archive_edit",
     )?;
-    let parents = capture
-        .snapshot
-        .transactions
-        .iter()
-        .filter(|(_, tx)| {
-            tx.context.as_ref().is_some_and(|c| {
-                !crate::history_node_branch::is_union(c).unwrap_or(false)
-                    && !crate::history_node_clocks::is_clocks(c).unwrap_or(false)
+    let audit = ReplayAudit::from_receipts_lazy(&recorded, || {
+        let receipt_components =
+            crate::history_node_receipt_components::Components::new(&capture.snapshot)?;
+        capture
+            .snapshot
+            .transactions
+            .iter()
+            .filter(|(_, tx)| {
+                tx.context.as_ref().is_some_and(|c| {
+                    !crate::history_node_branch::is_union(c).unwrap_or(false)
+                        && !crate::history_node_clocks::is_clocks(c).unwrap_or(false)
+                        && !crate::history_node_legacy::kind(
+                            c,
+                            crate::history_node_legacy::CHECKPOINT,
+                        )
+                        && !crate::history_node_legacy::kind(
+                            c,
+                            crate::history_node_bootstrap::FORMAT,
+                        )
+                        && !crate::history_node_legacy::kind(
+                            c,
+                            crate::history_node_physical::FORMAT,
+                        )
+                })
             })
-        })
-        .map(|(op, _)| receipt(&capture.snapshot, op))
-        .collect::<Result<Vec<_>>>()?;
-    let audit = ReplayAudit::from_receipts(&recorded, &parents)?;
+            .map(|(op, _)| receipt_index(&capture.snapshot, op, &receipt_components))
+            .collect::<Result<Vec<_>>>()
+    })?;
     let replay = materialize(
         &capture,
         &action(&recorded)?,
@@ -972,6 +1225,77 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         replay.after == prepared.after_view()?
             && replay.frames == prepared.frames()?
             && replay.context == V::Map(c.clone()),
+        "node_authoring_replay_mismatch",
+    )
+}
+
+fn verify_ledger(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) -> Result<()> {
+    require(
+        prepared.imports()?.is_empty(),
+        "node_import_action_unsupported",
+    )?;
+    let (before, after) = prepared.snapshots(root)?;
+    let capture = Capture::from_snapshot(before)?;
+    Capture::from_snapshot(after)?;
+    let context = prepared
+        .context()?
+        .ok_or_else(|| error("node_transaction_missing_context"))?;
+    let c = crate::history_node_transaction::validate(&context)?;
+    let action = &c["action"];
+    let kind = text(field(map(action)?, "kind")?)?;
+    let is_edit = kind == "view-edit-proposals";
+    require(
+        is_edit == prepared.canonical_before()?.is_some(),
+        "node_edit_baseline_required",
+    )?;
+    let evidence = prepared.evidence()?;
+    if is_edit {
+        require(
+            evidence.get(&format!(
+                "evidence/view-edits/{}.yaml",
+                prepared.operation()
+            )) == prepared.before_view()?.as_ref(),
+            "node_edit_evidence_mismatch",
+        )?;
+    }
+    if ["same", "distinct"].contains(&kind) {
+        crate::history_node_identity::sources(root)?;
+    }
+    if kind == "hypothesis" {
+        crate::history_node_hypothesis::sources(root)?;
+    }
+    let current_archive = archive(root)?;
+    require(current_archive == c["archive"], "concurrent_archive_edit")?;
+    let audit =
+        ReplayAudit::from_compact(crate::history_node_transaction::audits(&context)?, || {
+            capture
+                .snapshot
+                .transactions
+                .iter()
+                .filter_map(|(op, tx)| tx.context.as_ref().map(|c| (op, c)))
+                .map(|(op, c)| {
+                    if crate::history_node_transaction::is_context(c) {
+                        Ok(crate::history_node_transaction::validate(c)?["audits"].clone())
+                    } else {
+                        ReplayAudit::compact(&receipt(&capture.snapshot, op)?)
+                    }
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+    let options = decode_options(prepared.operation(), &c["options"])?;
+    let replay = materialize_ledger(
+        &capture,
+        action,
+        &options,
+        runtime,
+        Some(&audit),
+        &current_archive,
+        &evidence,
+    )?;
+    require(
+        replay.after == prepared.after_view()?
+            && replay.frames == prepared.frames()?
+            && replay.context == context,
         "node_authoring_replay_mismatch",
     )
 }
@@ -994,6 +1318,21 @@ pub fn publish(
     )
 }
 pub(crate) fn verify_sources(root: &Path, prepared: &P::Prepared) -> Result<()> {
+    if let Some(context) = prepared
+        .context()?
+        .as_ref()
+        .filter(|c| crate::history_node_transaction::is_context(c))
+    {
+        let action = &crate::history_node_transaction::validate(context)?["action"];
+        let kind = text(field(map(action)?, "kind")?)?;
+        if kind == "hypothesis" {
+            crate::history_node_hypothesis::sources(root)?;
+        }
+        if ["same", "distinct"].contains(&kind) {
+            crate::history_node_identity::sources(root)?;
+        }
+        return Ok(());
+    }
     let c = prepared
         .context()?
         .ok_or_else(|| error("node_transaction_missing_context"))?;

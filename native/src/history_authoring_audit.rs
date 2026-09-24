@@ -129,6 +129,22 @@ fn recorded(receipt: &V) -> Result<Map> {
     Ok(audits)
 }
 
+fn compact_map(value: &V) -> Result<Map> {
+    let audits = map(value)?;
+    for (key, audit) in audits {
+        let implementation = map(audit)?;
+        require(
+            implementation
+                .get("adapter_source_sha256")
+                .and_then(|v| text(v).ok())
+                .is_some_and(|hash| hash.len() == 64 && crate::history_paths::object_id(hash))
+                && hash_without(audit, "adapter_source_sha256")? == key.as_str(),
+            "invalid_retained_implementation",
+        )?;
+    }
+    Ok(audits.clone())
+}
+
 fn witnessed(receipt: &V, parents: &history_authority::Files, actual: &str) -> Result<Map> {
     let mut witnesses = BTreeSet::new();
     for raw in parents.values() {
@@ -190,6 +206,50 @@ pub(crate) struct ReplayAudit {
     oracle: bool,
 }
 impl ReplayAudit {
+    pub(crate) fn validate_compact(value: &V) -> Result<()> {
+        compact_map(value).map(|_| ())
+    }
+    /// Persist only validated adapter implementations, never assessment reports.
+    pub(crate) fn compact(receipt: &V) -> Result<V> {
+        Ok(V::Map(recorded(receipt)?))
+    }
+
+    /// A compact parent map witnesses an old adapter only by its exact digest.
+    pub(crate) fn from_compact(
+        value: &V,
+        parents: impl FnOnce() -> Result<Vec<V>>,
+    ) -> Result<Self> {
+        let audits = compact_map(value)?;
+        let current = env!("KPOP_REASONING_ADAPTER_SHA256");
+        if audits
+            .values()
+            .all(|audit| string_is(&map(audit).unwrap()["adapter_source_sha256"], current))
+        {
+            return Ok(Self {
+                recorded: audits,
+                #[cfg(test)]
+                oracle: false,
+            });
+        }
+        let mut witnesses = BTreeSet::new();
+        for parent in parents()? {
+            for audit in compact_map(&parent)?.values() {
+                witnesses.insert(digest(audit)?);
+            }
+        }
+        for audit in audits.values() {
+            require(
+                string_is(&map(audit)?["adapter_source_sha256"], current)
+                    || witnesses.contains(&digest(audit)?),
+                "unknown_retained_adapter_audit",
+            )?;
+        }
+        Ok(Self {
+            recorded: audits,
+            #[cfg(test)]
+            oracle: false,
+        })
+    }
     /// Only receipts from verified causal ancestors may witness a retained adapter.
     pub(crate) fn from_receipts(receipt: &V, parents: &[V]) -> Result<Self> {
         let mut witnesses = BTreeSet::new();
@@ -206,6 +266,46 @@ impl ReplayAudit {
                     &map(audit)?["adapter_source_sha256"],
                     env!("KPOP_REASONING_ADAPTER_SHA256"),
                 ) || witnesses.contains(&digest(audit)?),
+                "unknown_retained_adapter_audit",
+            )?;
+        }
+        Ok(Self {
+            recorded: audits,
+            #[cfg(test)]
+            oracle: false,
+        })
+    }
+    /// Load causal-parent witnesses only when the receipt retains a foreign adapter audit.
+    /// The receipt is fully validated before the callback can perform expensive reconstruction.
+    pub(crate) fn from_receipts_lazy(
+        receipt: &V,
+        parents: impl FnOnce() -> Result<Vec<V>>,
+    ) -> Result<Self> {
+        let audits = recorded(receipt)?;
+        let current = env!("KPOP_REASONING_ADAPTER_SHA256");
+        let mut needs_witness = false;
+        for audit in audits.values() {
+            needs_witness |= !string_is(&map(audit)?["adapter_source_sha256"], current);
+        }
+        if !needs_witness {
+            return Ok(Self {
+                recorded: audits,
+                #[cfg(test)]
+                oracle: false,
+            });
+        }
+
+        let mut witnesses = BTreeSet::new();
+        for parent in parents()? {
+            crate::history_transaction::validate_receipt(&parent)?;
+            for audit in recorded(&parent)?.values() {
+                witnesses.insert(digest(audit)?);
+            }
+        }
+        for audit in audits.values() {
+            require(
+                string_is(&map(audit)?["adapter_source_sha256"], current)
+                    || witnesses.contains(&digest(audit)?),
                 "unknown_retained_adapter_audit",
             )?;
         }
@@ -264,6 +364,127 @@ impl ReplayAudit {
 mod tests {
     use super::*;
     use serde_json::Value as J;
+    #[test]
+    fn compact_audits_reject_wrong_key_before_parent_loading() {
+        let wrong = V::Map(Map::from([(
+            "wrong".into(),
+            V::Map(Map::from([(
+                "adapter_source_sha256".into(),
+                V::Text("0".repeat(64)),
+            )])),
+        )]));
+        let mut loaded = false;
+        assert!(
+            ReplayAudit::from_compact(&wrong, || {
+                loaded = true;
+                Ok(Vec::new())
+            })
+            .is_err()
+        );
+        assert!(!loaded);
+    }
+
+    fn fixture_receipt(group: &str, name: &str) -> V {
+        let data: J = serde_json::from_str(include_str!(
+            "../tests/fixtures/history-authoring-audit.json"
+        ))
+        .unwrap();
+        let case = data[group]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["name"] == name)
+            .unwrap();
+        let input = if group == "witnessed" {
+            &case["input"]["receipt"]
+        } else {
+            &case["input"]
+        };
+        V::from_tagged(input).unwrap()
+    }
+
+    #[test]
+    fn lazy_receipt_audit_skips_parent_loading_without_foreign_audits() {
+        // The fixture is a Python audit; rebind its validated report to this native adapter.
+        let source = fixture_receipt("witnessed", "current");
+        let mut report = map(&map(&source).unwrap()["after"]).unwrap()["assessment"].clone();
+        computations(&mut report, |result| {
+            let Some(implementation) = result.get_mut("implementation").filter(|v| **v != V::Null)
+            else {
+                return Ok(());
+            };
+            map_mut(implementation)?.insert(
+                "adapter_source_sha256".into(),
+                V::Text(env!("KPOP_REASONING_ADAPTER_SHA256").into()),
+            );
+            let hash = digest(implementation)?;
+            map_mut(
+                result
+                    .get_mut("assurance")
+                    .ok_or_else(|| error("invalid_retained_implementation"))?,
+            )?
+            .insert("implementation".into(), V::Text(hash));
+            Ok(())
+        })
+        .unwrap();
+        let revision = hash_without(&report, "assessment_revision").unwrap();
+        map_mut(&mut report)
+            .unwrap()
+            .insert("assessment_revision".into(), V::Text(revision));
+        let side = V::Map(Map::from([("assessment".into(), report)]));
+        let current = T::semantic_receipt("core/v1", &V::Map(Map::new()), &side, &side).unwrap();
+        let mut called = false;
+        ReplayAudit::from_receipts_lazy(&current, || {
+            called = true;
+            Err(error("unexpected_parent_load"))
+        })
+        .unwrap();
+        assert!(!called);
+
+        let empty = V::Map(Map::from([("assessment".into(), V::Null)]));
+        let no_audit = T::semantic_receipt("core/v1", &V::Map(Map::new()), &empty, &empty).unwrap();
+        ReplayAudit::from_receipts_lazy(&no_audit, || {
+            called = true;
+            Err(error("unexpected_parent_load"))
+        })
+        .unwrap();
+        assert!(!called);
+
+        let invalid = fixture_receipt("recorded", "bad-assessment_revision");
+        let invalid_result = ReplayAudit::from_receipts_lazy(&invalid, || {
+            called = true;
+            Err(error("unexpected_parent_load"))
+        });
+        assert!(matches!(
+            invalid_result,
+            Err(refusal) if refusal.0 == "invalid_retained_assessment"
+        ));
+        assert!(!called);
+    }
+
+    #[test]
+    fn lazy_receipt_audit_loads_parent_witness_only_for_foreign_audits() {
+        let old = fixture_receipt("witnessed", "unwitnessed-old");
+        let mut called = false;
+        let refused = ReplayAudit::from_receipts_lazy(&old, || {
+            called = true;
+            Ok(Vec::new())
+        });
+        assert!(called);
+        assert!(matches!(
+            refused,
+            Err(refusal) if refusal.0 == "unknown_retained_adapter_audit"
+        ));
+
+        let mut called = false;
+        ReplayAudit::from_receipts_lazy(&old, || {
+            called = true;
+            Ok(vec![old.clone()])
+        })
+        .unwrap();
+        assert!(called);
+    }
+
     #[test]
     fn retained_adapter_audits_match_python_and_require_parent_witnesses() {
         let data: J = serde_json::from_str(include_str!(

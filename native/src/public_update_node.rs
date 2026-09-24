@@ -85,6 +85,66 @@ impl Context<'_> {
 fn portable(event: &str) -> String {
     format!("evidence/reports/{event}.txt")
 }
+/// Report admission needs only the request's caller context. Compact node
+/// transactions retain that request directly; older transactions retain it in
+/// their receipt-shaped authoring intent.
+fn report_context(prepared: &P::Prepared, after: &Capture) -> Result<V> {
+    if let Some(context) = prepared
+        .context()?
+        .as_ref()
+        .filter(|context| crate::history_node_transaction::is_context(context))
+    {
+        let compact = crate::history_node_transaction::validate(context)?;
+        let action = map(&compact["action"])?;
+        require(
+            action.get("kind").is_some_and(|kind| kind == &s("batch")),
+            "report_actions_changed",
+        )?;
+        return Ok(field(action, "context")?.clone());
+    }
+    let receipt = W::receipt(&after.snapshot, prepared.operation())?;
+    Ok(field(W::intent(&receipt)?, "context")?.clone())
+}
+
+/// The public report result keeps the semantic output needed by callers,
+/// without reconstructing a document-sized historical receipt.
+fn report_result(prepared: &P::Prepared, before: &Capture, after: &Capture) -> Result<V> {
+    if let Some(context) = prepared
+        .context()?
+        .as_ref()
+        .filter(|context| crate::history_node_transaction::is_context(context))
+    {
+        let compact = crate::history_node_transaction::validate(context)?;
+        let objects = after
+            .history
+            .objects()
+            .iter()
+            .filter(|(id, _)| !before.history.objects().contains_key(*id))
+            .map(|(id, object)| {
+                after.object(crate::history_contract::text(&map(object)?["subject"])?, id)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let diagnostics = map(&compact["result"])?
+            .get("diagnostics")
+            .cloned()
+            .unwrap_or_else(|| V::List(Vec::new()));
+        return Ok(obj([
+            ("format", s("node-ledger-report/v1")),
+            ("action", compact["action"].clone()),
+            (
+                "context",
+                field(map(&compact["action"])?, "context")?.clone(),
+            ),
+            ("objects", V::List(objects)),
+            ("result", compact["result"].clone()),
+            (
+                "after",
+                obj([("batch", obj([("diagnostics", diagnostics)]))]),
+            ),
+        ]));
+    }
+    W::receipt(&after.snapshot, prepared.operation())
+}
 fn journal(prepared: &P::Prepared, graphs: &(J, J), phase: &str) -> Result<J> {
     Ok(
         json!({"version":1,"kind":"native-node-report/v1","phase":phase,
@@ -158,12 +218,10 @@ fn verify(
             "private or unclear prepared source permission",
         )?;
     }
-    let receipt = W::receipt(&after.snapshot, prepared.operation())?;
-    let intent = W::intent(&receipt)?;
-    let context = field(intent, "context")?;
-    let target_hash = map(context)?.get("target_sha256");
+    let context = report_context(prepared, &after)?;
+    let target_hash = map(&context)?.get("target_sha256");
     require(
-        *context == ctx.intent(report, event, target_hash)?,
+        context == ctx.intent(report, event, target_hash)?,
         "report_preparation_stale: report policy or routing changed",
     )?;
     if let Some(expected) = ctx.expected_target {
@@ -202,7 +260,11 @@ fn verify(
     W::verify(ctx.root(), prepared, runtime)?;
     ctx.sources(report, event)?;
     let (before_graph, after_graph) = graphs(&before, &after, report, runtime)?;
-    Ok((before_graph, after_graph, receipt))
+    Ok((
+        before_graph,
+        after_graph,
+        report_result(prepared, &before, &after)?,
+    ))
 }
 fn retained_matches(
     ctx: &Context<'_>,
@@ -283,8 +345,9 @@ pub(crate) fn verify_recovery(
     let root = record.parent().unwrap();
     let (before, after) = prepared.snapshots(root)?;
     let before = Capture::from_snapshot(before)?;
-    let receipt = W::receipt(&after, prepared.operation())?;
-    let context = map(field(W::intent(&receipt)?, "context")?)?;
+    let after = Capture::from_snapshot(after)?;
+    let retained_context = report_context(prepared, &after)?;
+    let context = map(&retained_context)?;
     // Preserve the original lexical owner path while accepting another route spelling
     // for that same file (for example macOS /var versus /private/var).
     let recorded_record = PathBuf::from(crate::history_contract::text(field(context, "record")?)?);
@@ -456,9 +519,13 @@ pub(super) fn run(
                     .collect(),
             ),
         );
-        let (_, after) = prepared.snapshots(ctx.root())?;
-        let receipt = W::receipt(&after, prepared.operation())?;
-        Ok((prepared, expected_graphs, receipt))
+        let (before, after) = prepared.snapshots(ctx.root())?;
+        let result = report_result(
+            &prepared,
+            &Capture::from_snapshot(before)?,
+            &Capture::from_snapshot(after)?,
+        )?;
+        Ok((prepared, expected_graphs, result))
     })();
     let (answer, signals, code) = match outcome {
         Ok((prepared, graphs, semantic)) => {
@@ -578,7 +645,7 @@ mod tests {
         json!({"event_id":"node-report","date":"2026-09-24","source_quote":"exact quote: x is 2\r\n","updates":[{"kind":"set","id":"p.x","value":2}]})
     }
     #[test]
-    fn node_report_applies_with_exact_receipts_signals_and_portable_evidence() {
+    fn node_report_applies_with_semantic_result_signals_and_portable_evidence() {
         let (root, runtime) = fixture();
         let report = report();
         let bytes = serde_json::to_vec(&report).unwrap();
@@ -601,18 +668,33 @@ mod tests {
             fs::read(root.path().join(&portable)).unwrap(),
             report["source_quote"].as_str().unwrap().as_bytes()
         );
-        let snapshot = P::capture_snapshot(root.path()).unwrap();
-        let semantic = W::receipt(&snapshot, &format!("report-{event}")).unwrap();
-        assert_eq!(semantic.to_json().unwrap(), receipt["mutation"]["receipt"]);
-        let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
-        assert_eq!(
-            W::receipt(
-                &P::capture_snapshot(copy.path()).unwrap(),
-                &format!("report-{event}")
-            )
-            .unwrap(),
-            semantic
+        let semantic = &receipt["mutation"]["receipt"];
+        assert_eq!(semantic["format"], "node-ledger-report/v1");
+        assert_eq!(semantic["context"]["event_id"], event);
+        assert_eq!(semantic["action"]["kind"], "batch");
+        assert!(
+            semantic["action"]["actions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|action| action["id"] == "p.x")
         );
+        let ids = semantic["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|object| object["id"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        assert!(!ids.is_empty());
+        assert_eq!(
+            receipt["diagnostics"],
+            semantic["after"]["batch"]["diagnostics"]
+        );
+        let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+        let copied = Capture::read(copy.path()).unwrap();
+        for id in ids {
+            assert!(copied.history.objects().contains_key(&id));
+        }
         let again = run_with_probe(
             &options(root.path()),
             root.path(),

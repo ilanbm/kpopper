@@ -152,6 +152,10 @@ fn verified_git_clocks_resolve_after_admission_and_survive_source_loss() {
             .collect::<BTreeMap<_, _>>();
         let object_count = Capture::read(target.path()).unwrap().object_count();
         let p = Clocks::prepare(target.path(), "proof", &proof).unwrap();
+        assert!(
+            p.frames().unwrap().is_empty(),
+            "clock evidence must not rewrite node history"
+        );
         drop(repo);
         W::publish(target.path(), &p, None, |_| Ok(())).unwrap();
         W::publish(target.path(), &p, None, |_| panic!("retry wrote")).unwrap();
@@ -174,7 +178,9 @@ fn verified_git_clocks_resolve_after_admission_and_survive_source_loss() {
                 .get("p.clock")
                 .is_none()
         );
-        assert_eq!(receipt["after"]["document"]["known"]["p.clock"]["v"], 2);
+        assert_eq!(receipt["before"]["authoring"]["action"]["kind"], "source-clocks");
+        assert!(receipt["after"]["document"]["known"].get("p.clock").is_none(),
+            "compact receipt projection must not copy the current world");
         let copy = P::export(target.path()).unwrap().reconstruct().unwrap();
         drop(target);
         assert_eq!(acceptance(copy.path()), value(json!("accepted")));
@@ -206,12 +212,15 @@ fn source_clock_proof_recovers_at_every_durable_boundary() {
     for stop in [
         P::Phase::Journal,
         P::Phase::Evidence(0),
-        P::Phase::Append(0),
         P::Phase::Commit,
         P::Phase::View,
     ] {
         let target = baseline.reconstruct().unwrap();
         let p = Clocks::prepare(target.path(), "proof", &proof).unwrap();
+        assert!(
+            p.frames().unwrap().is_empty(),
+            "clock evidence must not rewrite node history"
+        );
         assert!(
             W::publish(target.path(), &p, None, |phase| if phase == stop {
                 Err(kpop_native::Error("stop".into()))

@@ -39,6 +39,110 @@ fn private(capture: &Capture) -> bool {
             .objects()
             .values()
             .any(Privacy::private_marker)
+        || capture.snapshot.legacy.values().any(|legacy| {
+            let captured = &legacy.captured;
+            Privacy::private_marker(&captured.document)
+                || captured.objects.values().any(Privacy::private_marker)
+                || captured.inactive_generations.values().any(|generation| {
+                    Privacy::private_marker(&generation.authority)
+                        || generation.objects.values().any(Privacy::private_marker)
+                        || generation
+                            .cancellation
+                            .as_ref()
+                            .is_some_and(Privacy::private_marker)
+                })
+        })
+        || capture.snapshot.raw_evidence.iter().any(|(path, raw)| {
+            if path.starts_with("evidence/legacy/") && path.ends_with(".zip")
+                || path.starts_with("evidence/bootstrap/") && path.ends_with(".zip")
+            {
+                return archive_private(raw);
+            }
+            if path.starts_with(".kpopper/hypotheses/")
+                && (path.ends_with(".yaml") || path.ends_with(".yml"))
+            {
+                return yaml_private(raw);
+            }
+            false
+        })
+}
+fn yaml_private(raw: &[u8]) -> bool {
+    crate::history_yaml::decode_source_value(raw)
+        .map(|value| Privacy::private_marker(&value.typed()))
+        .unwrap_or(true)
+}
+fn json_private(raw: &[u8]) -> bool {
+    serde_json::from_slice(raw)
+        .ok()
+        .and_then(|json| V::from_tagged(&json).or_else(|_| V::from_json(&json)).ok())
+        .is_none_or(|value| Privacy::private_marker(&value))
+}
+fn archive_private(raw: &[u8]) -> bool {
+    crate::history_node_archive::Archive::decode(raw)
+        .map(|archive| {
+            Privacy::private_marker(archive.metadata())
+                || archive.files().iter().any(|(path, raw)| {
+                    if path.ends_with(".yaml") || path.ends_with(".yml") {
+                        yaml_private(raw)
+                    } else if path.ends_with(".json") {
+                        json_private(raw)
+                    } else {
+                        false
+                    }
+                })
+        })
+        .unwrap_or(true)
+}
+
+#[cfg(test)]
+mod privacy_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn archived_inactive_source_and_physical_markers_are_private() {
+        let archive = crate::history_node_archive::Archive::new(
+            BTreeMap::from([
+                (
+                    "GROUNDING.yaml".into(),
+                    b"known: {p.a: {value: 1}}\n".to_vec(),
+                ),
+                (
+                    ".kpopper/replaced.yaml".into(),
+                    b"p.a: [{private: true}]\n".to_vec(),
+                ),
+            ]),
+            V::Map(BTreeMap::new()),
+        )
+        .unwrap();
+        assert!(archive_private(&archive.encode().unwrap()));
+        assert!(json_private(br#"{"private":true}"#));
+        assert!(yaml_private(b"hypothesis: {privacy: private}\nknown: {}\n"));
+        assert!(!yaml_private(
+            b"hypothesis: {privacy: project}\nknown: {}\n"
+        ));
+    }
+
+    #[test]
+    fn branch_privacy_sees_bootstrap_source_hidden_from_current_view() {
+        let base = tempfile::tempdir().unwrap();
+        let source = base.path().join("source");
+        std::fs::create_dir_all(source.join(".kpopper")).unwrap();
+        std::fs::write(source.join("GROUNDING.yaml"), b"known: {p.a: {value: 1}}\n").unwrap();
+        std::fs::write(
+            source.join(".kpopper/replaced.yaml"),
+            b"p.a: [{private: true}]\n",
+        )
+        .unwrap();
+        let copied = base.path().join("copy");
+        crate::history_node_bootstrap::Plan::prepare(&source.join("GROUNDING.yaml"))
+            .unwrap()
+            .publish(&copied)
+            .unwrap();
+        let capture = Capture::read(&copied).unwrap();
+        assert!(!Privacy::private_marker(capture.document()));
+        assert!(private(&capture));
+    }
 }
 fn clean(route: &WriteRoute, root: &Path) -> Result<()> {
     let files = P::export(root)?.files()?;
@@ -96,7 +200,12 @@ pub(crate) fn verify_recovery(
         .ok_or_else(|| error("node_transaction_missing_context"))?;
     require(
         crate::history_node_branch::is_union(&context)?
-            && map(&W::context(&context)?["options"])?.contains_key("adoption"),
+            && map(&if crate::history_node_transaction::is_context(&context) {
+                crate::history_node_transaction::validate(&context)?
+            } else {
+                W::context(&context)?
+            }["options"])?
+            .contains_key("adoption"),
         "node_branch_admission_required",
     )?;
     let root = route.paths()[0].parent().unwrap();

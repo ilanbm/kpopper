@@ -22,6 +22,9 @@ pub struct Options {
     /// Absent destination directory for a verified history copy.
     #[arg(long)]
     pub to: Option<PathBuf>,
+    /// Create a verified copy using compact node history; preserve the original files.
+    #[arg(long)]
+    pub node_history: bool,
     #[arg(long, value_parser = ["live", "frozen"])]
     pub read_mode: Option<String>,
     #[arg(long)]
@@ -59,6 +62,7 @@ impl Options {
     pub fn selects_public_operation(&self) -> bool {
         self.record.is_some()
             || self.to.is_some()
+            || self.node_history
             || self.read_mode.is_some()
             || self.subject.is_some()
             || self.target.is_some()
@@ -175,6 +179,31 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             || operation == "reconcile" && options.record_proposals,
         "node_history_operation_unsupported",
     )?;
+    if options.node_history {
+        require(
+            operation == "migrate",
+            "--node-history belongs to history migrate",
+        )?;
+        let destination = options
+            .to
+            .as_ref()
+            .ok_or_else(|| error("history migrate requires --to DIRECTORY"))?;
+        let destination = cwd.join(destination);
+        require(
+            !crate::history_node_publication::selected(entry)?,
+            "node_history_copy_already_active",
+        )?;
+        let route = crate::legacy_authoring::authority_route(entry)?;
+        return if route == crate::legacy_authoring::AuthorityRoute::History {
+            crate::history_node_migration::Plan::prepare(entry)?
+                .publish(&destination)?
+                .to_json()
+        } else {
+            crate::history_node_bootstrap::Plan::prepare(entry)?
+                .publish(&destination)?
+                .to_json()
+        };
+    }
     let result = match operation {
         "adopt" => {
             let revision = options

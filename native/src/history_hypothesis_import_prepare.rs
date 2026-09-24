@@ -138,13 +138,32 @@ pub fn prepare(
     operation: &str,
     recorded_at: &str,
 ) -> Result<V> {
+    prepare_with_reduce(
+        base_objects,
+        sources,
+        base_document,
+        entry,
+        operation,
+        recorded_at,
+        &|objects| R::reduce(objects, None, None),
+    )
+}
+pub(crate) fn prepare_with_reduce(
+    base_objects: &Map,
+    sources: &[Source],
+    base_document: &V,
+    entry: &str,
+    operation: &str,
+    recorded_at: &str,
+    reduce: &dyn Fn(&Map) -> Result<V>,
+) -> Result<V> {
     token(&s(operation))?;
     require(!recorded_at.is_empty(), "invalid_recorded_time")?;
     Y::validate_value(base_document, MAX_REQUEST_BYTES)?;
     map(base_document)?;
     validate_closure(base_objects)?;
     let sources = normalize(sources, entry)?;
-    let state = R::reduce(base_objects, None, None)?;
+    let state = reduce(base_objects)?;
     let states = map(&map(&state)?["subjects"])?;
     let known_base = entries(base_document)?;
     for (subject, (collection, body)) in &known_base {
@@ -390,7 +409,7 @@ pub fn prepare(
     let mut combined = base_objects.clone();
     combined.extend(objects.clone());
     validate_closure(&combined)?;
-    let result = R::reduce(&combined, None, None)?;
+    let result = reduce(&combined)?;
     let result = map(&map(&result)?["subjects"])?;
     for group in groups.values() {
         for (subject, version) in map(&map(group)?["versions"])? {

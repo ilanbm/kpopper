@@ -525,11 +525,12 @@ pub(crate) fn load(
         }
     }
     document.hypotheses = physical(&hypdir, inventory)?;
-    require(
-        document.node_history.is_none() || map(&document.hypotheses)?.is_empty(),
-        "node_history_hypotheses_unsupported",
-    )?;
-    if let Some(capture) = &document.history {
+    let history_root = document
+        .history
+        .as_ref()
+        .map(|c| c.root.clone())
+        .or_else(|| document.node_history.as_ref().map(|(root, _)| root.clone()));
+    if let Some(history_root) = history_root {
         let typed_doc = document.source.strict_typed()?;
         let doc = V::from_typed(&typed_doc);
         if let Some(imported) = map(&doc)?
@@ -548,7 +549,7 @@ pub(crate) fn load(
             for item in crate::ordinary_value::list(&map(imported)?["physical"])? {
                 let item = map(item)?;
                 let key = text(&item["name"])?;
-                let path = F::target(&capture.root, text(&item["path"])?)?;
+                let path = F::target(&history_root, text(&item["path"])?)?;
                 let hyp = hypotheses
                     .get(key)
                     .ok_or_else(|| error("missing_imported_hypothesis"))?;
@@ -563,6 +564,10 @@ pub(crate) fn load(
                 hypotheses.remove(key);
             }
         }
+        require(
+            document.node_history.is_none() || map(&document.hypotheses)?.is_empty(),
+            "node_history_hypotheses_unsupported",
+        )?;
         let (named, _) = crate::history_hypotheses::layers(
             document.history_projection.as_ref().unwrap(),
             &typed_doc,

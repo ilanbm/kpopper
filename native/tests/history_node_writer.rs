@@ -12,6 +12,19 @@ fn map(v: &V) -> &BTreeMap<String, V> {
     let V::Map(m) = v else { panic!() };
     m
 }
+fn compact<'a>(snapshot: &'a P::Snapshot, op: &str) -> &'a BTreeMap<String, V> {
+    let context = snapshot.transactions[op].context.as_ref().unwrap();
+    let fields = map(context);
+    assert_eq!(fields["format"], value(json!("node-ledger-authoring/v1")));
+    for key in [
+        "options", "action", "archive", "evidence", "template", "audits", "result",
+    ] {
+        map(fields
+            .get(key)
+            .unwrap_or_else(|| panic!("{op} missing {key}")));
+    }
+    fields
+}
 fn setup() -> tempfile::TempDir {
     let root = tempfile::tempdir().unwrap();
     fs::create_dir(root.path().join(".kpopper")).unwrap();
@@ -46,7 +59,7 @@ fn write(root: &std::path::Path, op: &str, action: &V) -> P::Prepared {
     p
 }
 #[test]
-fn writes_receipts_lazy_creation_exact_retries_and_source_free_pins() {
+fn writes_compact_context_lazy_creation_exact_retries_and_source_free_pins() {
     let root = setup();
     let initial = write(root.path(), "add-a", &add());
     assert!(
@@ -67,11 +80,18 @@ fn writes_receipts_lazy_creation_exact_retries_and_source_free_pins() {
     let changed = write(root.path(), "set-a", &set(2));
     W::publish(root.path(), &changed, None, |_| panic!("retry wrote bytes")).unwrap();
     let snapshot = P::capture_snapshot(root.path()).unwrap();
-    let receipt = W::receipt(&snapshot, "set-a").unwrap();
+    let context = compact(&snapshot, "set-a");
+    assert_eq!(context["action"], set(2));
+    assert_eq!(map(&context["options"])["by"], value(json!("writer")));
     assert_eq!(
-        map(&map(&map(&receipt)["after"])["document"])["known"],
-        value(json!({"p.a":{"v":2,"of":"2026-09-24"}}))
+        map(&map(capture.document())["known"])["p.a"],
+        value(json!({"v":1,"of":"2026-09-24"}))
     );
+    assert_eq!(
+        map(&map(Capture::read(root.path()).unwrap().document())["known"])["p.a"],
+        value(json!({"v":2,"of":"2026-09-24"}))
+    );
+    let source_state = Capture::read(root.path()).unwrap().state().clone();
     let bundle = P::export(root.path()).unwrap();
     let copy = bundle.reconstruct().unwrap();
     drop(root);
@@ -82,10 +102,14 @@ fn writes_receipts_lazy_creation_exact_retries_and_source_free_pins() {
             .unwrap(),
         original
     );
+    let copied = Capture::read(copy.path()).unwrap();
     assert_eq!(
-        W::receipt(&P::capture_snapshot(copy.path()).unwrap(), "set-a").unwrap(),
-        receipt
+        map(&map(copied.document())["known"])["p.a"],
+        value(json!({"v":2,"of":"2026-09-24"}))
     );
+    assert_eq!(copied.state(), &source_state);
+    let copied_snapshot = P::capture_snapshot(copy.path()).unwrap();
+    assert_eq!(compact(&copied_snapshot, "set-a")["action"], set(2));
 }
 #[test]
 fn real_verifier_recovers_every_boundary_and_torn_append() {
@@ -299,7 +323,8 @@ fn strict_creation_retains_acceptance_in_current_until_the_first_later_change() 
             .join(".kpopper/history")
             .join(C::subject_path("p.a").unwrap());
         assert!(!stream.exists());
-        let receipt = W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap();
+        let creation = P::capture_snapshot(root.path()).unwrap();
+        assert_eq!(compact(&creation, "strict-add")["action"], add());
         opts.operation = "strict-set".into();
         let p = W::prepare(root.path(), &set(2), &opts, None).unwrap();
         assert!(
@@ -318,8 +343,8 @@ fn strict_creation_retains_acceptance_in_current_until_the_first_later_change() 
         assert!(stream.exists());
         assert_eq!(Capture::read(root.path()).unwrap().object_count(), 4);
         assert_eq!(
-            W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap(),
-            receipt
+            compact(&P::capture_snapshot(root.path()).unwrap(), "strict-add")["action"],
+            add()
         );
     }
 }
@@ -339,13 +364,17 @@ fn lazy_creation_tail_cannot_hide_a_disconnected_same_operation_root() {
     let V::Map(history) = meta.get_mut("node_history").unwrap() else {
         panic!()
     };
-    let V::Map(tails) = history.get_mut("tails").unwrap() else {
-        panic!()
-    };
-    let V::Text(tail) = tails.get_mut("p.a").unwrap() else {
-        panic!()
-    };
-    let mut raw = STANDARD.decode(&*tail).unwrap();
+    let tails = history
+        .entry("tails".into())
+        .or_insert_with(|| V::Map(BTreeMap::new()));
+    let V::Map(tails) = tails else { panic!() };
+    let mut raw = tails
+        .get("p.a")
+        .map(|tail| {
+            let V::Text(tail) = tail else { panic!() };
+            STANDARD.decode(tail).unwrap()
+        })
+        .unwrap_or_default();
     raw.extend(
         C::Event::create(
             "p.a",
@@ -358,7 +387,7 @@ fn lazy_creation_tail_cannot_hide_a_disconnected_same_operation_root() {
         .encode()
         .unwrap(),
     );
-    *tail = STANDARD.encode(raw);
+    tails.insert("p.a".into(), V::Text(STANDARD.encode(raw)));
     assert!(
         P::prepare_with_context(
             root.path(),
@@ -523,8 +552,10 @@ fn explicit_retirement_retains_lazy_creation_and_replays_after_each_crash() {
         let original = before
             .object("p.a", if let V::Text(id) = &id { id } else { panic!() })
             .unwrap();
-        let creation =
-            W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap();
+        assert_eq!(
+            compact(&P::capture_snapshot(root.path()).unwrap(), "strict-add")["action"],
+            add()
+        );
         let stream = root
             .path()
             .join(".kpopper/history")
@@ -557,8 +588,8 @@ fn explicit_retirement_retains_lazy_creation_and_replays_after_each_crash() {
             original
         );
         assert_eq!(
-            W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap(),
-            creation
+            compact(&P::capture_snapshot(root.path()).unwrap(), "strict-add")["action"],
+            add()
         );
         let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
         drop(root);
@@ -567,7 +598,7 @@ fn explicit_retirement_retains_lazy_creation_and_replays_after_each_crash() {
 }
 
 #[test]
-fn proposals_keep_current_and_exact_hypothetical_receipts_until_explicit_acceptance() {
+fn proposals_keep_current_and_hypothetical_objects_until_explicit_acceptance() {
     for existing in [false, true] {
         let root = setup();
         let mut opts = options("proposal-a");
@@ -587,14 +618,17 @@ fn proposals_keep_current_and_exact_hypothetical_receipts_until_explicit_accepta
             assert_eq!(map(&doc["p.a"])["v"], value(json!(1)));
         }
         let snapshot = P::capture_snapshot(root.path()).unwrap();
-        let receipt = W::receipt(&snapshot, "proposal-a").unwrap();
-        let proposal = map(&map(&receipt)["after"])["proposal"].clone();
-        assert_eq!(
-            map(&map(&map(&proposal)["document"])["known"])["p.a"],
-            value(json!({"v":8}))
-        );
-        let after = map(&map(&map(&receipt)["after"])["authoring"]);
-        let id = after["proposal"].to_json().unwrap();
+        assert_eq!(compact(&snapshot, "proposal-a")["action"], request);
+        let V::List(proposals) = &map(&map(&map(capture.state())["subjects"])["p.a"])["proposals"]
+        else {
+            panic!()
+        };
+        let V::Text(proposal_id) = &proposals[0] else {
+            panic!()
+        };
+        let proposal = capture.object("p.a", proposal_id).unwrap();
+        assert_eq!(map(&map(&proposal)["body"])["v"], value(json!(8)));
+        let id = json!(proposal_id);
         let over = if existing {
             vec![
                 map(&map(&map(capture.state())["subjects"])["p.a"])["head"]
@@ -617,9 +651,11 @@ fn proposals_keep_current_and_exact_hypothetical_receipts_until_explicit_accepta
         );
         let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
         drop(root);
+        let copied = Capture::read(copy.path()).unwrap();
+        assert_eq!(copied.object("p.a", proposal_id).unwrap(), proposal);
         assert_eq!(
-            W::receipt(&P::capture_snapshot(copy.path()).unwrap(), "proposal-a").unwrap(),
-            receipt
+            compact(&P::capture_snapshot(copy.path()).unwrap(), "proposal-a")["action"],
+            request
         );
         assert_eq!(Capture::read(copy.path()).unwrap().state(), after.state());
     }
@@ -697,12 +733,15 @@ fn batch_is_atomic_retains_intermediate_versions_and_final_dependency_pins() {
     let streams = root.path().join(".kpopper/history");
     assert!(streams.join(C::subject_path("p.a").unwrap()).exists());
     assert!(!streams.join(C::subject_path("p.c").unwrap()).exists());
-    let receipt = W::receipt(&P::capture_snapshot(root.path()).unwrap(), "batch-a").unwrap();
+    assert_eq!(
+        compact(&P::capture_snapshot(root.path()).unwrap(), "batch-a")["action"],
+        action
+    );
     let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
     drop(root);
     assert_eq!(
-        W::receipt(&P::capture_snapshot(copy.path()).unwrap(), "batch-a").unwrap(),
-        receipt
+        compact(&P::capture_snapshot(copy.path()).unwrap(), "batch-a")["action"],
+        action
     );
     assert_eq!(Capture::read(copy.path()).unwrap().state(), c.state());
 }
@@ -799,16 +838,17 @@ fn core_batch_forward_pins_and_hypothetical_proposal_survive_source_free_roundtr
     );
     let p = W::prepare(root.path(), &action, &opts, Some(&runtime)).unwrap();
     W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
-    let receipts = ["core-batch", "core-proposal"]
-        .map(|op| W::receipt(&P::capture_snapshot(root.path()).unwrap(), op).unwrap());
+    let source = P::capture_snapshot(root.path()).unwrap();
+    let contexts =
+        ["core-batch", "core-proposal"].map(|op| (op, compact(&source, op)["action"].clone()));
+    let source_state = Capture::read(root.path()).unwrap().state().clone();
     let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
     drop(root);
-    for (op, expected) in ["core-batch", "core-proposal"].into_iter().zip(receipts) {
-        assert_eq!(
-            W::receipt(&P::capture_snapshot(copy.path()).unwrap(), op).unwrap(),
-            expected
-        );
+    let restored = P::capture_snapshot(copy.path()).unwrap();
+    for (op, expected) in contexts {
+        assert_eq!(compact(&restored, op)["action"], expected);
     }
+    assert_eq!(Capture::read(copy.path()).unwrap().state(), &source_state);
 }
 
 #[test]
@@ -995,7 +1035,7 @@ fn hypothesis(action: serde_json::Value, name: Option<&str>) -> V {
     value(action)
 }
 #[test]
-fn named_hypotheses_edit_review_fold_refute_and_source_free_receipts() {
+fn named_hypotheses_edit_review_fold_refute_and_source_free_context() {
     let root = named_setup();
     let (_cache, runtime) = named_runtime();
     let write = |root: &std::path::Path, op: &str, action: &V| {
@@ -1084,14 +1124,14 @@ fn named_hypotheses_edit_review_fold_refute_and_source_free_receipts() {
         value(json!(2))
     );
     let snapshot = P::capture_snapshot(root.path()).unwrap();
-    let receipts = ["h-set", "h-add", "h-review", "h-fold", "h-new", "h-refute"]
-        .map(|op| (op, W::receipt(&snapshot, op).unwrap()));
+    let contexts = ["h-set", "h-add", "h-review", "h-fold", "h-new", "h-refute"]
+        .map(|op| (op, compact(&snapshot, op)["action"].clone()));
     let export = P::export(root.path()).unwrap();
     let copy = export.reconstruct().unwrap();
     drop(root);
     let snapshot = P::capture_snapshot(copy.path()).unwrap();
-    for (op, receipt) in receipts {
-        assert_eq!(W::receipt(&snapshot, op).unwrap(), receipt);
+    for (op, action) in contexts {
+        assert_eq!(compact(&snapshot, op)["action"], action);
     }
     assert_eq!(
         Capture::read(copy.path())

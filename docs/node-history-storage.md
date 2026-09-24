@@ -1,229 +1,72 @@
 # Experimental node-local history storage
 
-The native library contains an experimental node-local history format. Existing records
-and automatic creation retain the existing history format. Explicitly marked disposable
-records support public add/set/review, ordinary and core reads, status and recovery.
-These modules do not activate or migrate a record, and the format is not a supported
-interchange contract.
+Node history is an explicitly marked native format for a single `GROUNDING.yaml`. Its
+authority marker is version 3 with `profile: node-history/v1`, `authority: history`, and
+`requires: [node-history/v1]`. The marker keeps legacy writers from changing a
+node-history record. Existing records and ordinary `history migrate` continue to use the
+established history format by default.
 
-`history_node_codec` encodes independently hashed JSONL events with typed mapping
-patches, explicit initial/change/merge relationships, a bound encoding predecessor,
-and a result digest. Missing state differs from a present null. Ordered lists retain
-their order. The root history object's sorted `saw` set supports exact additions and
-removals; it never infers observation from acceptance. Full stream decoding checks all
-parents regardless of file order and bounds frame, stream and reconstructed sizes.
-
-`history_node_current::Original` retains an original event's metadata alongside its
-body in the readable current document. The metadata does not repeat the body. First
-change reconstructs and verifies the original event before retaining it in a stream.
-Pins to that original event continue to identify the same typed state. Storage event
-identity is distinct from a legacy semantic object identity; callers must retain and
-validate legacy identities when importing them.
-
-`history_node_evidence` separates verified computation recipes from a node's reusable
-payload. A recipe replaces an identifier only after recomputing the exact original
-identifier. Restoration requires the recorded snapshot context. Unknown recipes and
-unrelated snapshot identifiers remain literal. This representation does not authorize
-reusing a computation in a different world; semantic admission must still validate all
-inputs, clocks, runtime provenance and capabilities.
-
-`history_node_receipt` partitions supported receipts into node pieces and record context.
-Document entries, assessment nodes, baseline heads and open acts leave the record context;
-full selection is reconstructed from exact sorted assessment membership. Original receipt
-digests are checked after typed reconstruction. Named hypothesis and temporal Snapshot bodies
-are also partitioned by subject. Unsupported nested reports and physical hypothesis evidence
-refuse. This is a decomposition API, not a persistence layout: writers must persist only
-changed pieces and derive historical selection from the transaction and node histories.
-Storing every partition on each write would still reproduce the graph.
-Its `Nodes` preparation view emits before/after images only for changed subjects. A
-component absent from an entire receipt side remains retained but inactive; absence
-inside an active component removes that node's value. This avoids repeatedly deleting
-and restoring baseline fields as before/after sides alternate. Application checks all
-before-images before replacing the in-memory state. The typed evidence embedding keeps
-normalized maps patchable instead of embedding an opaque tagged transport list.
-
-`history_node_observation` stores exact observation sets as sparse deltas over named
-encoding bases. It supports unordered DAG loading and a visitor that applies and undoes
-deltas while holding one expanded set across branches. It validates cardinality and
-observation digests. The original semantic ID is supplied by the caller; verifying the
-legacy object identity remains a separate semantic boundary.
-
-`history_node_semantics::History` restores one exact observation set at a time, verifies
-the original object identity and every cross-object reference, then retains the object
-without its expanded `saw`. A sparse interval index supplies direct membership to the
-existing acceptance reducer. It does not infer transitive observation. Legacy byte-based
-reduction keeps its original source-order behavior; the compact provider uses canonical
-typed order and does not substitute for retaining original imported YAML bytes.
-
-`history_node_capture::Capture` consumes the complete byte-verified publication snapshot,
-reuses its decoded versions, checks semantic operation bindings, and verifies the visible
-current bodies against the reduced history. Pin lookup takes an original semantic ID;
-storage-event lookup is separate. Pure `prepare_claims` uses the same add/set/review logic
-as legacy authoring before receipt materialization or file-image preparation. It does not
-write files or grant admission to publish. The legacy path separately constructs its
-original receipts and transaction images, preserving its replay contract.
-
-`history_node_projection` builds a version-2 computational projection after full closure
-validation. It expands observations only for selected heads, proposals, open acts, reviews
-and their recursively pinned claims. Original semantic IDs and review evidence survive
-the public source-capture boundary. The source reader brackets the node revision as well
-as its ordinary source inventory; a pending journal or changed closure refuses the read.
-Legacy mutation consumers reject the node capture instead of treating it as ordinary YAML.
-
-`history_node_publication` exercises append publication behind an explicit version-3
-`node-history/v1` experimental authority marker. Legacy storage writers refuse this marker.
-The marker must already exist in a disposable fixture; no activation command is exposed.
-The current view binds its operation through `meta.node_publication`. Lazy originals
-live in `meta.node_history.originals`; a node stream appears only when those originals
-need to be retained. Transaction manifests contain touched event hashes and parent
-transaction digests, never the whole graph or the complete receipt.
-
-Publication uses the existing directory guard. The journal retains touched stream
-prefix hashes, offsets and intended append bytes, plus current-view before/after bytes.
-The durable manifest is the commit decision. Recovery without that manifest rolls back
-only exact journal-owned tails; recovery with it finishes forward. Unknown tails,
-changed authority, changed inventory and unrelated committed corruption refuse recovery.
-The verifier receives the exact prepared operation, views and touched frames, and its
-execution is bracketed by revalidation. Exact before/after snapshots can also be restored
-under the lock during retry and recovery, including partially appended streams.
-
-`history_node_writer` connects add/set/review, explicit disposition acts, proposals, final-world
-batches and native-claim identity preparation to that publication boundary. Shared planners
-also serve legacy authoring while retaining its original mutation/receipt byte contract.
-It stores changed receipt components alongside node events and compact side contexts in
-the transaction. Evidence-only events have an explicit versioned kind and must preserve
-their parent's semantic payload; they never create duplicate claims. Receipt restoration
-uses the transaction's causal closure and validates the original digest. Admission replays
-the retained intent against the exact before snapshot, then compares the resulting current
-bytes, frames and context. Recovery uses the same verifier before changing any bytes.
-Archive and optimistic current-snapshot guards are checked during preparation and replay.
-New claims retain their receipt components with their lazy current binding;
-adding an unrelated claim does not create a history file for an unchanged node.
-Strict creation keeps the claim, its explicit acceptance and receipt evidence in the
-version-2 current binding. Tail frames must form a single chain from the original and
-share its creation operation. The first later change retains that exact chain in the
-node stream, including all original semantic identities.
-
-Public authoring uses this adapter for a single marked `GROUNDING.yaml` in Simple mode.
-It preserves privacy selection, source/archive checks, optimistic snapshot checks and
-locked project routing. A transient journal guard retains the original route and policy;
-it is excluded from permanent transaction manifests. Public recovery rechecks that guard,
-privacy and semantic replay before following the durable commit decision. Forced rollback
-is refused; an uncommitted transaction rolls back and a committed transaction finishes.
-Public explicit accept/refute/correct/propose/retire and core same/distinct use the same guarded
-adapter. Historical private targets remain private even when absent from current. Identity
-requires native-authored source order; legacy conversion must retain exact original source bytes.
-Identity operations support named hypotheses and refuse physical hypotheses and a separate brief/view file.
-Their source guards are rechecked around publication phases and during recovery.
-Named edit, fold and refute operations retain node-local hypothesis evidence. Public Git branch operations,
-pending overlays and activation remain unsupported. Low-level proposal and batch APIs are available;
-edited-file proposals use an explicit canonical baseline on marked Simple records:
+To make a separate node-history copy, run:
 
 ```sh
-kpop history reconcile --record-proposals --baseline saved-GROUNDING.yaml --because "explain the edits"
+kpop history migrate --node-history --to /path/to/new-copy
 ```
 
-Save the exact accepted generated view before editing. New nodes keep their only body in the
-current document until first change, so a hash cannot recover a body overwritten by an external
-editor. The supplied baseline must match the committed manifest byte for byte. Missing, stale,
-or altered baselines refuse; the command never infers accepted values from edited text.
+The destination must be absent. The command builds and verifies a sibling temporary
+copy, rechecks the source, then publishes with a no-overwrite rename. It does not switch
+the original record to the new format. A copy of an active legacy history retains the
+exact authoritative entry, marker, commits, objects, cancellations, retained migration
+files, and relevant physical originals in a hash-bound ZIP archive. Active transactions
+are converted in causal order with their original semantic object IDs and exact source
+mapping order. Repeated ancestor object references do not create duplicate claims. The
+final checkpoint binds the current readable view and its semantic receipt components.
+Earlier legacy transactions retain their original receipts in the archive; the
+conversion does not invent historical node-format view hashes. Inactive and cancelled
+generations remain archived evidence, separate from the active reduced state.
 
-All changed bodies become proposals against that canonical world, including authored snapshots;
-existing accepted values are preserved. Template, collection, deletion and incomplete-subject
-changes require a separate disposition and refuse here. Exact edited bytes (including comments
-and line endings) are retained under `evidence/view-edits/<operation>.yaml`. The journal separates
-raw observed bytes for concurrency/rollback from the canonical baseline for semantic replay.
-Recovery uses its retained baseline even if the external saved file is unavailable. Public
-recovery rechecks route, source and privacy guards; the entire raw file is checked for private
-content because the entire file becomes evidence. No activation or legacy migration is implied.
+A copy of an ordinary record archives its exact source closure and creates initial
+claims with explicit unknown historical author, operation, and pin provenance. It does
+not infer past observations from the present document. Physical hypothesis files keep
+their exact raw bytes at their original paths and enter the copy as named proposals,
+without acceptance. Ordinary-reader folding remains unsupported; the implemented fold
+boundary is `core/v1` known nodes.
 
-Source reports use the node writer on marked Simple records. Exact quote bytes are immutable
-files under `evidence/reports/`; manifests bind only their relative paths and hashes. The bounded
-publication journal holds exact quote bytes and records whether each file already existed.
-Uncommitted recovery removes only new, unchanged evidence; committed recovery restores the exact
-retained bytes. Full-closure reads and exports verify every committed evidence hash.
-Report context contains source/envelope, policy, routing and optional target hashes, never report
-bodies or complete graphs. Public report journals retain graph receipts privately and bind the
-prepared transaction to the report envelope. Publication and retry check target type and hashes,
-requested profile, privacy, routing, sources and semantic replay before reporting success.
-Unpartitioned evidence and unsupported writes refuse before publication.
-A successful low-level byte publication alone still does not establish semantic admission.
+For native authored actions, a subject-local ledger groups the objects emitted by one
+action into one frame for each touched subject. Slots keep the distinct original
+semantic IDs for claims and acts, while common authored fields are stored once. An
+`emit` list identifies this action's objects; old slots do not become new claims. The
+guarded writer serves supported Simple-mode add/set/review and explicit disposition acts
+on marked records. The current readable body stays in `GROUNDING.yaml` for a new
+unchanged singleton. Its original event binding and any receipt tail live in
+`meta.node_history`; the stream is created when later changes require retention.
+Historical streams are JSONL events with explicit parent, merge, encoding base, and
+result hashes. Storage event IDs are distinct from semantic object IDs.
 
-Final-world batches retain deterministic child operation IDs separately from the atomic
-publication ID. Membership is derived from the bounded explicit intent, never inferred from
-storage parents. Intermediate versions are retained; only a single creation whose body is
-visible in the final current document can stay lazy. Proposal-world evidence is decomposed
-into per-node components and compact context. Nested generated worlds and unpartitioned physical evidence still refuse.
+Each original `saw` set is represented by a sparse observation node with an explicit
+encoding base, additions, removals, cardinality, and digest. Replay reconstructs the
+exact direct observation set and validates the original object identity and source-order
+witness. Publication ancestry constrains what an observation could contain; it does not
+turn acceptance or transaction order into a source observation.
 
-Temporal receipts retain exact native Snapshot JSON through a checked recipe: per-subject
-bodies, named hypothesis bodies/conflicts and claim-version references live with node evidence;
-as-of clocks, snapshot identifiers, schema and authored revision stay in the side context.
-When the Snapshot document equals its own receipt side document, a checked reference reuses
-that document instead of writing duplicate node pieces; proposal worlds use their own side.
-Derived Snapshot nodes are rebuilt and verified against the original snapshot identifier and
-receipt digest. A clock-only change does not rewrite unchanged world membership. Hypothetical
-proposal snapshots use the same partition. Noncanonical Snapshot JSON and nested captured-history
-or scenario contexts refuse until their raw evidence/representation is supported.
+Permanent transaction manifests bind the authority hash, causal parent manifest digests,
+touched frame hashes, view hash when present, and evidence paths and hashes. Native
+authoring uses a compact `node-ledger-authoring/v1` context: bounded options and action,
+archive and evidence references, a current-template replacement or delta from a parent,
+compact replay audits, and small result metadata such as notes or diagnostics. Claim
+bodies live with their subject. Retained legacy receipts reconstruct exactly; new
+receipt-shaped output is a projection of the recorded intent, object IDs, template and
+small result metadata, not a retained full diagnostic report. Full reports and complete
+per-write world inventories are not stored in manifests. Exact report or edited-view bytes, when
+required, are separate immutable evidence files referenced by hash.
 
-Temporal capture shares the legacy causal-frontier validator. It checks every retained observation
-against the exact accepted world at that operation, including historical claim versions that are
-no longer current. Projection and source-free assessment preserve current, anchored and general
-applicability and counterexamples. Missing or bounded-out observations remain explicitly incomplete.
-Publication ancestry establishes which objects an observation could contain; it does not establish
-source-clock ancestry. The low-level `history_node_branch::prepare` API unions verified portable captures under an
-identical authority marker. It preserves original transactions and semantic IDs, and keeps
-conflicting claims contested until an explicit later act. Multi-parent storage frames join
-receipt components without creating or accepting a semantic claim. Each old receipt uses only
-its original causal closure; a merge observation includes both parents. Same-authority union
-has no Git-ref association or publication/privacy admission by itself.
+Publication is journaled under the directory guard. Before a durable manifest appears,
+recovery removes only verified journal-owned additions; after the manifest appears, it
+finishes the same transaction forward. Capture and export verify the complete committed
+closure, including evidence hashes, and a portable export can reconstruct an isolated
+source-free copy. Semantic replay remains required for authoring; a successful byte
+publication alone is not evidence that an action was admissible.
 
-Import manifests and changed node frames share the publication journal and visibility boundary.
-Before the merge manifest is durable, recovery removes only verified journal-owned imports and
-tails; afterward it finishes forward from retained evidence without the source branches. The
-permanent manifest contains the parent frontier and touched bindings, not an inventory of the
-world. Target and imported singleton current nodes stay lazy when their bodies remain visible.
-Source bundles are bounded to 16 and their aggregate raw input, including target bytes, to 64 MiB.
-Different authority markers, incompatible templates, stale targets and corrupt imports refuse.
-Physical hypotheses currently make export and branch union refuse rather than omit their bytes.
-
-Source-clock order can be admitted separately through `history_source_ancestry::Proof::capture`
-and `history_node_clocks::prepare`, followed by the ordinary node publisher. Capture requires exact
-full Git commit IDs and verifies each retained raw commit against its SHA-1 or SHA-256 identity.
-Only positive parent paths from those bytes establish ancestry; refs, replacements, recording time
-and publication parents supply none. Commit bytes are retained under their own identity and reused
-by export, branch union and recovery without contacting Git. This proves content ancestry, not the
-truth of a source claim or who authored it.
-
-A proof publication changes the accepted projection and receipt components without adding a claim.
-Prior receipts remain exact, and temporal reduction uses only proofs available in each operation's
-causal closure. Absent proof leaves commit clocks unordered. Capture permits at most 256 commits and
-4 MiB of visited bytes; the verified graph is bounded to 4,096 commits and each reduction to four
-million traversal steps. Exhaustion refuses instead of reporting unrelated source clocks.
-
-`consolidate --from` also captures marked node records from one pinned Git commit, presents a
-revision-bound preview, and requires an explicit actor and a choice for each overlapping subject.
-Source frontiers, commit/entry association, choices and actor are retained as compact context;
-original imported manifests remain exact. Acceptance acts and merge evidence share one atomic
-publication. A source's Git association is a local-reader observation, not a Merkle inclusion
-proof. `pull --from` shows original claims, pins, proposals and source revision without adoption.
-
-Public branch adoption preserves Simple/Advanced routing and refuses uncommitted target history.
-Private source history produces a private draft without publishing shared history. Recovery
-revalidates the recorded route and privacy boundary using retained evidence, so deleted source
-refs do not prevent completion. Advanced node reads with no pending ledger or publication target work normally; an
-existing pending ledger or target still refuses in live mode, while explicit frozen reads ignore pending
-state. Ordinary pending-write support, authority generation changes and physical named-hypothesis
-compatibility remain unfinished.
-
-A complete export can reconstruct an isolated temporary copy without source paths.
-It preserves the exact new-format bytes and audits the entire committed closure. It
-is not a legacy migration archive and does not preserve original legacy YAML lexemes
-unless the caller retains that evidence separately. This export verifies retained bytes and
-reconstructs receipts; it does not yet replay every historical command against its exact
-original before-view bytes.
-
-The format retains full-closure verification. No scoped fast-read integrity policy
-is enabled. The semantic provider retains the existing object and reduction-work bounds;
-the integrated core path does not establish
-10k full-writer support. In particular, passing
-codec growth tests does not establish the throughput or memory cost of the full writer.
+The format remains experimental. Full-closure verification is retained, and no scoped
+fast-read integrity policy is enabled. Model-free storage and full-writer measurements
+are pending; no throughput, memory, 10k-writer, or launch-readiness claim follows from
+codec or copy tests.
