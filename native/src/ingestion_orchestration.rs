@@ -95,6 +95,15 @@ fn bound_target(
     let expected = event
         .get("target_snapshot")
         .ok_or_else(|| error("invalid ingestion event"))?;
+    // A retained node report owns exact before/after worlds, including a pending
+    // publication whose current view is intentionally unreadable. Its writer verifies
+    // the original target binding while replaying the retained envelope.
+    if let Some(id) = event["event_id"].as_str()
+        && S::read_json(&layout.path("journals", id))?
+            .is_some_and(|journal| journal["kind"] == "native-node-report/v1")
+    {
+        return Ok(expected.clone());
+    }
     let current = crate::public_update::capture_target(envelope, record, cwd)?;
     if current["body_sha256"] == expected["body_sha256"] {
         return Ok(expected.clone());
@@ -238,6 +247,12 @@ fn tasklist_liveness(output: &str, pid: u32) -> Option<bool> {
 }
 
 fn record_writer_journal(record: &Path) -> bool {
+    if record.parent().is_some_and(|root| {
+        root.join(".kpopper/.history-node-publication.json")
+            .is_file()
+    }) {
+        return true;
+    }
     let Ok(store) = crate::history_store::Store::new(record) else { return false };
     let primary = store.root.join(&store.layout.journal);
     let shared = store.root.join(crate::direct_history::journal(&store));
@@ -809,5 +824,75 @@ mod tests {
         )
         .unwrap();
         assert!(record_writer_journal(&record));
+    }
+    #[test]
+    fn node_report_recovery_keeps_the_original_target_until_writer_verification() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("GROUNDING.yaml");
+        std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
+        let layout = S::Layout::create(&record, Some(&temp.path().join("state"))).unwrap();
+        let event = json!({"event_id":"e","target_snapshot":{"body_sha256":"captured"}});
+        assert!(bound_target(&layout, &event, &json!({}), &record, temp.path()).is_err());
+        S::save_json(
+            &layout.path("journals", "e"),
+            &json!({"kind":"native-node-report/v1"}),
+        )
+        .unwrap();
+        let pending = temp.path().join(".kpopper/.history-node-publication.json");
+        std::fs::create_dir_all(pending.parent().unwrap()).unwrap();
+        std::fs::write(&pending, b"pending").unwrap();
+        assert!(record_writer_journal(&record));
+        assert_eq!(
+            bound_target(&layout, &event, &json!({}), &record, temp.path()).unwrap(),
+            event["target_snapshot"]
+        );
+        std::fs::remove_file(pending).unwrap();
+        assert!(!record_writer_journal(&record));
+    }
+
+    #[test]
+    fn malformed_pending_node_publication_remains_recovery_required() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("GROUNDING.yaml");
+        let state = temp.path().join("state");
+        std::fs::write(&record, "known: {s.old: {url: 'https://example.test', read: 2026-09-24}, p.a: {v: 1, from: s.old, at: table}}\n").unwrap();
+        let envelope = json!({"event_id":"queued","source_quote":"a is 2","date":"2026-09-24","target":"p.a","value":2});
+        let captured = capture(
+            &serde_json::to_vec(&envelope).unwrap(),
+            Some(&record),
+            Some(&state),
+            temp.path(),
+            false,
+        )
+        .unwrap();
+        let id = captured["event_id"].as_str().unwrap();
+        let layout = S::Layout::existing_from(&record, Some(&state), temp.path())
+            .unwrap()
+            .unwrap();
+        let event = S::read_json(&layout.path("events", id)).unwrap().unwrap();
+        assert_eq!(event["capture_issue"], J::Null);
+        S::save_json(
+            &layout.path("journals", id),
+            &json!({"kind":"native-node-report/v1"}),
+        )
+        .unwrap();
+        std::fs::create_dir_all(temp.path().join(".kpopper")).unwrap();
+        std::fs::write(temp.path().join(".kpopper/history.yaml"), "version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
+        std::fs::write(
+            temp.path().join(".kpopper/.history-node-publication.json"),
+            b"malformed",
+        )
+        .unwrap();
+        let outputs = process(Some(&record), Some(&state), temp.path(), Some(id), 1).unwrap();
+        assert_eq!(outputs[0]["state"], "recovery_required");
+        assert!(
+            S::read_json(&layout.path("receipts", id))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            S::read_json(&layout.path("events", id)).unwrap().unwrap()["state"],
+            "recovery_required"
+        );
     }
 }

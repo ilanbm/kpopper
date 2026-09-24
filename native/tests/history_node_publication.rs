@@ -562,3 +562,127 @@ fn recovery_admission_receives_the_exact_retained_operation() {
     })
     .unwrap();
 }
+
+#[test]
+fn evidence_is_atomic_hash_bound_and_exported_without_source_files() {
+    for existed in [false, true] {
+        for phase in [
+            P::Phase::Journal,
+            P::Phase::Evidence(0),
+            P::Phase::Commit,
+            P::Phase::View,
+        ] {
+            let root = setup();
+            let path = "evidence/reports/source.txt";
+            let quote = b"exact source quote\r\nsecond line\n";
+            if existed {
+                fs::create_dir_all(root.path().join("evidence/reports")).unwrap();
+                fs::write(root.path().join(path), quote).unwrap();
+            }
+            let prepared = P::prepare_with_evidence(
+                root.path(),
+                "report",
+                P::bind_view(b"known: {}\n", "report").unwrap(),
+                BTreeMap::new(),
+                None,
+                BTreeMap::from([(path.into(), quote.to_vec())]),
+            )
+            .unwrap();
+            let encoded = prepared.to_bytes().unwrap();
+            let prepared = P::Prepared::from_bytes(&encoded).unwrap();
+            P::publish(
+                root.path(),
+                &prepared,
+                |_| Ok(()),
+                |at| {
+                    if at == phase {
+                        Err(Error("crash".into()))
+                    } else {
+                        Ok(())
+                    }
+                },
+            )
+            .unwrap_err();
+            assert!(P::capture(root.path()).is_err());
+            let committed = matches!(phase, P::Phase::Commit | P::Phase::View);
+            assert_eq!(
+                P::recover(root.path(), |_| Ok(())).unwrap(),
+                if committed {
+                    "committed"
+                } else {
+                    "rolled_back"
+                }
+            );
+            assert_eq!(root.path().join(path).exists(), committed || existed);
+            P::publish(root.path(), &prepared, |_| Ok(()), |_| Ok(())).unwrap();
+            let manifest =
+                fs::read_to_string(root.path().join(".kpopper/history-commits/report.json"))
+                    .unwrap();
+            assert!(!manifest.contains("exact source quote"));
+            let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+            drop(root);
+            assert_eq!(fs::read(copy.path().join(path)).unwrap(), quote);
+            fs::write(copy.path().join(path), b"changed").unwrap();
+            assert!(P::capture(copy.path()).is_err());
+            assert!(P::export(copy.path()).is_err());
+            fs::remove_file(copy.path().join(path)).unwrap();
+            assert!(P::capture(copy.path()).is_err());
+        }
+    }
+}
+
+#[test]
+fn evidence_recovery_refuses_foreign_bytes_and_verifier_changes() {
+    let root = setup();
+    let path = "evidence/reports/source.txt";
+    let prepared = P::prepare_with_evidence(
+        root.path(),
+        "report",
+        P::bind_view(b"known: {}\n", "report").unwrap(),
+        BTreeMap::new(),
+        None,
+        BTreeMap::from([(path.into(), b"quote".to_vec())]),
+    )
+    .unwrap();
+    P::publish(
+        root.path(),
+        &prepared,
+        |_| Ok(()),
+        |at| {
+            if at == P::Phase::Evidence(0) {
+                Err(Error("crash".into()))
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .unwrap_err();
+    fs::write(root.path().join(path), b"foreign").unwrap();
+    assert!(P::recover(root.path(), |_| Ok(())).is_err());
+    assert_eq!(fs::read(root.path().join(path)).unwrap(), b"foreign");
+    fs::write(root.path().join(path), b"quote").unwrap();
+    assert!(
+        P::recover(root.path(), |_| {
+            fs::remove_file(root.path().join(path))?;
+            Ok(())
+        })
+        .is_err()
+    );
+    assert!(
+        root.path()
+            .join(".kpopper/.history-node-publication.json")
+            .exists()
+    );
+    assert_eq!(P::recover(root.path(), |_| Ok(())).unwrap(), "rolled_back");
+    assert!(
+        P::prepare_with_evidence(
+            root.path(),
+            "bad",
+            P::bind_view(b"known: {}\n", "bad").unwrap(),
+            BTreeMap::new(),
+            None,
+            BTreeMap::from([("GROUNDING.yaml".into(), b"quote".to_vec())])
+        )
+        .is_err()
+    );
+}

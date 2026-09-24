@@ -685,6 +685,7 @@ fn node_run(
             probe(match phase {
                 P::Phase::Journal => "journal",
                 P::Phase::Append(_) => "append",
+                P::Phase::Evidence(_) => "evidence",
                 P::Phase::Commit => "committed",
                 P::Phase::View => "view",
             })?;

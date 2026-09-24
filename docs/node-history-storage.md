@@ -113,11 +113,21 @@ is refused; an uncommitted transaction rolls back and a committed transaction fi
 Public explicit accept/refute/correct/propose/retire and core same/distinct use the same guarded
 adapter. Historical private targets remain private even when absent from current. Identity
 requires native-authored source order; legacy conversion must retain exact original source bytes.
-Identity operations currently refuse named or physical hypotheses and a separate brief/view file.
+Identity operations support named hypotheses and refuse physical hypotheses and a separate brief/view file.
 Their source guards are rechecked around publication phases and during recovery.
-Named hypotheses, branch operations, pending overlays and activation remain unsupported.
-Low-level proposal and batch APIs are available; report/update and edited-file proposal
-publication remain on their existing path and refuse node records.
+Named edit, fold and refute operations retain node-local hypothesis evidence. Branch operations,
+pending overlays and activation remain unsupported. Low-level proposal and batch APIs are available;
+edited-file proposal publication remains on its existing path and refuses node records.
+
+Source reports use the node writer on marked Simple records. Exact quote bytes are immutable
+files under `evidence/reports/`; manifests bind only their relative paths and hashes. The bounded
+publication journal holds exact quote bytes and records whether each file already existed.
+Uncommitted recovery removes only new, unchanged evidence; committed recovery restores the exact
+retained bytes. Full-closure reads and exports verify every committed evidence hash.
+Report context contains source/envelope, policy, routing and optional target hashes, never report
+bodies or complete graphs. Public report journals retain graph receipts privately and bind the
+prepared transaction to the report envelope. Publication and retry check target type and hashes,
+requested profile, privacy, routing, sources and semantic replay before reporting success.
 Unpartitioned evidence and unsupported writes refuse before publication.
 A successful low-level byte publication alone still does not establish semantic admission.
 
@@ -126,7 +136,7 @@ publication ID. Membership is derived from the bounded explicit intent, never in
 storage parents. Intermediate versions are retained; only a single creation whose body is
 visible in the final current document can stay lazy. Proposal-world evidence is decomposed
 into per-node components and compact context. Nested generated worlds and unpartitioned
-physical, temporal or batch-source evidence still refuse.
+physical or temporal evidence still refuse.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
 It preserves the exact new-format bytes and audits the entire committed closure. It

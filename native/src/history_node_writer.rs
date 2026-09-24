@@ -157,7 +157,13 @@ pub fn receipt(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
 pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<()> {
     for (op, tx) in &snapshot.transactions {
         if tx.context.is_some() {
-            receipt(snapshot, op)?;
+            let restored = receipt(snapshot, op)?;
+            let expected = intent(&restored)?
+                .get("evidence")
+                .cloned()
+                .unwrap_or_else(A::empty);
+            let actual = V::Map(tx.evidence.iter().map(|(p, h)| (p.clone(), s(h))).collect());
+            require(actual == expected, "node_receipt_evidence_mismatch")?;
         }
     }
     Ok(())
@@ -433,10 +439,14 @@ pub(crate) fn action(receipt: &V) -> Result<V> {
             ("because", field(intent, "because")?.clone()),
         ]))
     } else if intent.get("kind").is_some_and(|v| string_is(v, "batch")) {
-        Ok(A::obj([
+        let mut action = A::obj([
             ("kind", s("batch")),
             ("actions", field(intent, "actions")?.clone()),
-        ]))
+        ]);
+        if let Some(context) = intent.get("context").filter(|v| **v != A::empty()) {
+            map_mut(&mut action)?.insert("context".into(), context.clone());
+        }
+        Ok(action)
     } else {
         Ok(field(intent, "action")?.clone())
     }
@@ -457,10 +467,15 @@ fn materialize(
     runtime: Option<&Runtime>,
     audit: Option<&ReplayAudit>,
     archive: &V,
+    evidence: &BTreeMap<String, Vec<u8>>,
 ) -> Result<Materialized> {
     // Preserve the optimistic snapshot guard on the same exact before bytes used by replay.
     capture.check_expected(action)?;
     let kind = text(field(map(action)?, "kind")?)?;
+    require(
+        kind == "batch" || evidence.is_empty(),
+        "node_evidence_action_unsupported",
+    )?;
     let mut effective_options = options.clone();
     if ["batch", "hypothesis"].contains(&kind) {
         effective_options.strict = true;
@@ -497,7 +512,7 @@ fn materialize(
     } else if ["same", "distinct"].contains(&kind) {
         crate::history_node_identity::prepare(capture, action, options, runtime, audit, archive)?
     } else if kind == "batch" {
-        let a = schema(action, &["kind", "actions"], &[])?;
+        let a = schema(action, &["kind", "actions"], &["context"])?;
         let mut actions = list(&a["actions"])?.to_vec();
         require(!actions.is_empty() && actions.len() <= 64, "invalid_batch")?;
         for action in &mut actions {
@@ -512,9 +527,21 @@ fn materialize(
         let batch = crate::history_authoring_batch::BatchOptions {
             authoring: options.clone(),
             receipt_version: version,
-            context: A::empty(),
-            evidence: BTreeMap::new(),
+            context: a.get("context").cloned().unwrap_or_else(A::empty),
+            evidence: evidence.clone(),
         };
+        crate::history_node_receipt::report_context(&batch.context)?;
+        if !map(&batch.context)?.is_empty() {
+            let c = map(&batch.context)?;
+            let path = format!("evidence/reports/{}.txt", text(&c["event_id"])?);
+            require(
+                evidence.len() == 1
+                    && evidence.get(&path).is_some_and(|raw| {
+                        string_is(&c["source_sha256"], &crate::identity::sha256(raw))
+                    }),
+                "node_report_evidence_mismatch",
+            )?;
+        }
         let plan = crate::history_authoring_batch_core::prepare(
             capture, &actions, &batch, runtime, audit, archive,
         )?;
@@ -639,6 +666,30 @@ pub fn prepare(
     options: &A::Options,
     runtime: Option<&Runtime>,
 ) -> Result<P::Prepared> {
+    prepare_evidence(root, action, options, runtime, BTreeMap::new())
+}
+
+pub fn prepare_batch(
+    root: &Path,
+    actions: &[V],
+    batch: &crate::history_authoring_batch::BatchOptions,
+    runtime: Option<&Runtime>,
+) -> Result<P::Prepared> {
+    let mut action = A::obj([("kind", s("batch")), ("actions", V::List(actions.to_vec()))]);
+    if batch.context != A::empty() {
+        map_mut(&mut action)?.insert("context".into(), batch.context.clone());
+    }
+    let mut options = batch.authoring.clone();
+    options.receipt_version = Some(batch.receipt_version);
+    prepare_evidence(root, &action, &options, runtime, batch.evidence.clone())
+}
+fn prepare_evidence(
+    root: &Path,
+    action: &V,
+    options: &A::Options,
+    runtime: Option<&Runtime>,
+    evidence: BTreeMap<String, Vec<u8>>,
+) -> Result<P::Prepared> {
     let _lock = FS::DirectoryGuard::acquire(root, false)?;
     if map(action)?
         .get("kind")
@@ -653,13 +704,22 @@ pub fn prepare(
         crate::history_node_hypothesis::sources(root)?;
     }
     let capture = Capture::read(root)?;
-    let result = materialize(&capture, action, options, runtime, None, &archive(root)?)?;
-    let prepared = P::prepare_with_context(
+    let result = materialize(
+        &capture,
+        action,
+        options,
+        runtime,
+        None,
+        &archive(root)?,
+        &evidence,
+    )?;
+    let prepared = P::prepare_with_evidence(
         root,
         &options.operation,
         result.after,
         result.frames,
         Some(&result.context),
+        evidence,
     )?;
     verify(root, &prepared, runtime)?;
     Ok(prepared)
@@ -706,6 +766,7 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         runtime,
         Some(&audit),
         &current_archive,
+        &prepared.evidence()?,
     )?;
     require(
         replay.after == prepared.after_view()?

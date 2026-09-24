@@ -72,6 +72,8 @@ struct Manifest {
     after_view: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     context: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    evidence: BTreeMap<String, String>,
     digest: String,
 }
 impl Manifest {
@@ -91,6 +93,13 @@ impl Manifest {
             "node_publication_manifest",
         )?;
         token(&m.operation)?;
+        for (path, hash) in &m.evidence {
+            evidence_path(path)?;
+            require(
+                crate::history_paths::object_id(hash),
+                "node_publication_evidence",
+            )?;
+        }
         for parent in m.parents.keys() {
             token(parent)?;
         }
@@ -107,6 +116,13 @@ struct Append {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct EvidenceFile {
+    path: String,
+    raw: String,
+    existed: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Journal {
     format: String,
     manifest: Manifest,
@@ -114,6 +130,8 @@ struct Journal {
     after_view: String,
     appends: Vec<Append>,
     retained: Vec<Touch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    evidence: Vec<EvidenceFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     guard: Option<serde_json::Value>,
     digest: String,
@@ -141,6 +159,19 @@ impl Journal {
             digest(&before) == self.manifest.before_view
                 && sha256(&after) == self.manifest.after_view,
             "node_publication_view",
+        )?;
+        let mut evidence = BTreeMap::new();
+        for file in &self.evidence {
+            evidence_path(&file.path)?;
+            let raw = unbytes(&Some(file.raw.clone()))?.unwrap();
+            require(
+                evidence.insert(file.path.clone(), sha256(&raw)).is_none(),
+                "node_publication_evidence",
+            )?;
+        }
+        require(
+            evidence == self.manifest.evidence,
+            "node_publication_evidence",
         )?;
         let mut subjects = BTreeSet::new();
         let mut touches = Vec::new();
@@ -196,6 +227,32 @@ pub struct Prepared {
     journal: Journal,
 }
 impl Prepared {
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        self.journal.validate()?;
+        self.journal.encode()
+    }
+    pub fn from_bytes(raw: &[u8]) -> Result<Self> {
+        require(raw.len() <= MAX_BYTES, "node_publication_limit")?;
+        let journal: Journal = serde_json::from_slice(raw)?;
+        journal.validate()?;
+        require(journal.encode()? == raw, "node_publication_journal")?;
+        Ok(Self { journal })
+    }
+    pub fn digest(&self) -> &str {
+        &self.journal.manifest.digest
+    }
+    pub fn evidence(&self) -> Result<BTreeMap<String, Vec<u8>>> {
+        self.journal
+            .evidence
+            .iter()
+            .map(|file| {
+                Ok((
+                    file.path.clone(),
+                    unbytes(&Some(file.raw.clone()))?.unwrap(),
+                ))
+            })
+            .collect()
+    }
     pub(crate) fn with_guard(mut self, guard: &crate::value::TypedValue) -> Result<Self> {
         self.journal.guard = Some(guard.to_tagged()?);
         self.journal.digest = self.journal.identity()?;
@@ -245,6 +302,7 @@ impl Prepared {
 pub enum Phase {
     Journal,
     Append(usize),
+    Evidence(usize),
     Commit,
     View,
 }
@@ -441,6 +499,34 @@ pub(crate) fn selected(entry: &Path) -> Result<bool> {
     )?;
     Ok(true)
 }
+pub(crate) fn evidence_path(path: &str) -> Result<()> {
+    let name = path
+        .strip_prefix("evidence/reports/")
+        .and_then(|p| p.strip_suffix(".txt"))
+        .ok_or_else(|| bad("node_publication_evidence_path"))?;
+    token(name)?;
+    require(!name.contains('/'), "node_publication_evidence_path")
+}
+fn evidence_directories(root: &Path, journal: &Journal) -> Result<()> {
+    if !journal.evidence.is_empty() {
+        // Sync each newly linked parent before publishing a durable manifest.
+        for relative in ["evidence", "evidence/reports"] {
+            let path = F::target(root, relative)?;
+            fs::create_dir_all(&path)?;
+            F::sync(path.parent().unwrap())?;
+        }
+    }
+    Ok(())
+}
+fn evidence_state(root: &Path, file: &EvidenceFile) -> Result<Option<Vec<u8>>> {
+    let current = read(root, &file.path)?;
+    let expected = unbytes(&Some(file.raw.clone()))?.unwrap();
+    require(
+        current.as_ref().is_none_or(|raw| *raw == expected) && (!file.existed || current.is_some()),
+        "node_publication_evidence_changed",
+    )?;
+    Ok(current)
+}
 fn inventory(root: &Path) -> Result<BTreeMap<String, Manifest>> {
     let authority_sha256 = authority(root)?;
     let mut total_bytes = 0;
@@ -555,6 +641,24 @@ pub fn prepare_with_context(
     frames: BTreeMap<String, Vec<u8>>,
     context: Option<&crate::value::TypedValue>,
 ) -> Result<Prepared> {
+    prepare_with_evidence(
+        root,
+        operation,
+        after_view,
+        frames,
+        context,
+        BTreeMap::new(),
+    )
+}
+
+pub fn prepare_with_evidence(
+    root: &Path,
+    operation: &str,
+    after_view: Vec<u8>,
+    frames: BTreeMap<String, Vec<u8>>,
+    context: Option<&crate::value::TypedValue>,
+    evidence: BTreeMap<String, Vec<u8>>,
+) -> Result<Prepared> {
     let _lock = F::DirectoryGuard::acquire(root, false)?;
     guard(root)?;
     token(operation)?;
@@ -609,6 +713,23 @@ pub fn prepare_with_context(
         }
     }
     touched.sort_by(|a, b| (&a.subject, &a.event).cmp(&(&b.subject, &b.event)));
+    let mut evidence_files = Vec::new();
+    let mut evidence_hashes = BTreeMap::new();
+    for (path, raw) in evidence {
+        evidence_path(&path)?;
+        require(raw.len() <= MAX_BYTES, "node_publication_limit")?;
+        let current = read(root, &path)?;
+        require(
+            current.as_ref().is_none_or(|old| *old == raw),
+            "node_publication_evidence_changed",
+        )?;
+        evidence_hashes.insert(path.clone(), sha256(&raw));
+        evidence_files.push(EvidenceFile {
+            path,
+            raw: STANDARD.encode(raw),
+            existed: current.is_some(),
+        });
+    }
     let mut manifest = Manifest {
         format: FORMAT.into(),
         operation: operation.into(),
@@ -617,6 +738,7 @@ pub fn prepare_with_context(
         touched,
         before_view: digest(&before),
         after_view: sha256(&after_view),
+        evidence: evidence_hashes,
         context: context
             .map(crate::value::TypedValue::to_tagged)
             .transpose()?,
@@ -630,6 +752,7 @@ pub fn prepare_with_context(
         after_view: STANDARD.encode(after_view),
         appends,
         retained,
+        evidence: evidence_files,
         guard: None,
         digest: String::new(),
     };
@@ -646,6 +769,9 @@ pub fn prepare_with_context(
         raw.truncate(append.offset as usize);
         raw.extend(frames);
         overlay.insert(stream(&append.subject)?, Some(raw));
+    }
+    for file in &journal.evidence {
+        overlay.insert(file.path.clone(), unbytes(&Some(file.raw.clone()))?);
     }
     verify_history_with(
         root,
@@ -664,6 +790,25 @@ fn verify_history_with(
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
     current_view: Option<&[u8]>,
 ) -> Result<BTreeMap<String, BTreeMap<String, C::Version>>> {
+    let mut evidence = BTreeMap::new();
+    for m in all.values() {
+        for (path, hash) in &m.evidence {
+            if let Some(prior) = evidence.insert(path, hash) {
+                require(prior == hash, "node_publication_evidence_collision")?;
+            }
+        }
+    }
+    let mut evidence_bytes = 0usize;
+    for (path, hash) in evidence {
+        let raw = match overlay.get(path) {
+            Some(raw) => raw.clone(),
+            None => read(root, path)?,
+        }
+        .ok_or_else(|| bad("node_publication_evidence_missing"))?;
+        evidence_bytes = evidence_bytes.saturating_add(raw.len());
+        require(evidence_bytes <= MAX_BYTES, "node_publication_limit")?;
+        require(sha256(&raw) == *hash, "node_publication_evidence_changed")?;
+    }
     let mut verified = BTreeMap::new();
     let mut expected = BTreeMap::<String, BTreeMap<String, String>>::new();
     for m in all.values() {
@@ -776,6 +921,13 @@ fn verify_history_with(
     Ok(verified)
 }
 fn revalidate(root: &Path, journal: &Journal) -> Result<()> {
+    for file in &journal.evidence {
+        let current = evidence_state(root, file)?;
+        require(
+            current.is_some() == file.existed,
+            "node_publication_evidence_changed",
+        )?;
+    }
     let all = inventory(root)?;
     require(
         frontier(&all) == journal.manifest.parents,
@@ -861,11 +1013,27 @@ pub fn publish(
         fs::create_dir_all(&path)?;
         sync_directory(path.parent().unwrap())?;
     }
+    evidence_directories(root, journal)?;
     F::replace(&F::target(root, JOURNAL)?, Some(&journal.encode()?))?;
     boundary(Phase::Journal)?;
     for (i, append) in journal.appends.iter().enumerate() {
         append_frames(root, append)?;
         boundary(Phase::Append(i))?;
+    }
+    for (i, file) in journal.evidence.iter().enumerate() {
+        F::publish_immutable(
+            root,
+            &file.path,
+            &unbytes(&Some(file.raw.clone()))?.unwrap(),
+        )?;
+        boundary(Phase::Evidence(i))?;
+    }
+    // Callbacks may have changed an earlier evidence file.
+    for file in &journal.evidence {
+        require(
+            evidence_state(root, file)?.is_some(),
+            "node_publication_evidence_missing",
+        )?;
     }
     F::publish_immutable(
         root,
@@ -878,6 +1046,12 @@ pub fn publish(
         unbytes(&Some(journal.after_view.clone()))?.as_deref(),
     )?;
     boundary(Phase::View)?;
+    for file in &journal.evidence {
+        require(
+            evidence_state(root, file)?.is_some(),
+            "node_publication_evidence_missing",
+        )?;
+    }
     F::remove(&F::target(root, JOURNAL)?)
 }
 /// No manifest means rollback exact journal-owned tails; matching manifest means finish forward.
@@ -926,6 +1100,12 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         };
         overlay.insert(path, reconstructed);
     }
+    for file in &journal.evidence {
+        observed.insert(file.path.clone(), digest(&evidence_state(root, file)?));
+        if committed.is_some() {
+            overlay.insert(file.path.clone(), unbytes(&Some(file.raw.clone()))?);
+        }
+    }
     validate_complete_streams(root, &journal)?;
     let observed_inventory = inventory(root)?;
     verify_history_with(
@@ -955,6 +1135,12 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
             "node_publication_verifier_changed_inputs",
         )?;
     }
+    for file in &journal.evidence {
+        require(
+            digest(&evidence_state(root, file)?) == observed[&file.path],
+            "node_publication_verifier_changed_inputs",
+        )?;
+    }
     let current_inventory = inventory(root)?;
     require(
         current_inventory == observed_inventory,
@@ -971,6 +1157,14 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         },
     )?;
     if committed.is_some() {
+        evidence_directories(root, &journal)?;
+        for file in &journal.evidence {
+            F::publish_immutable(
+                root,
+                &file.path,
+                &unbytes(&Some(file.raw.clone()))?.unwrap(),
+            )?;
+        }
         for append in &journal.appends {
             append_frames(root, append)?;
         }
@@ -991,6 +1185,11 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
                     file.set_len(append.offset)?;
                     file.sync_all()?;
                 }
+            }
+        }
+        for file in &journal.evidence {
+            if !file.existed && evidence_state(root, file)?.is_some() {
+                F::remove(&F::target(root, &file.path)?)?;
             }
         }
         F::replace(&F::target(root, VIEW)?, before.as_deref())?;
@@ -1019,6 +1218,7 @@ pub struct Transaction {
     pub digest: String,
     pub parents: Vec<String>,
     pub context: Option<crate::value::TypedValue>,
+    pub evidence: BTreeMap<String, String>,
 }
 
 fn snapshot(
@@ -1058,6 +1258,7 @@ fn snapshot(
                     id.clone(),
                     Transaction {
                         digest: m.digest.clone(),
+                        evidence: m.evidence.clone(),
                         parents: m.parents.keys().cloned().collect(),
                         context: m
                             .context
@@ -1104,6 +1305,10 @@ impl Prepared {
             );
             prefix.extend(frames);
             after_overlay.insert(stream(&append.subject)?, Some(prefix));
+        }
+        for file in &j.evidence {
+            evidence_state(root, file)?;
+            after_overlay.insert(file.path.clone(), unbytes(&Some(file.raw.clone()))?);
         }
         let before = self.before_view()?;
         let after = self.after_view()?;
@@ -1195,7 +1400,11 @@ impl Bundle {
             let manifest_path = relative.parent() == Some(Path::new(".kpopper/history-commits"))
                 && name.strip_suffix(".json").is_some_and(|s| token(s).is_ok());
             require(
-                path == VIEW || path == ".kpopper/history.yaml" || stream_path || manifest_path,
+                path == VIEW
+                    || path == ".kpopper/history.yaml"
+                    || stream_path
+                    || manifest_path
+                    || evidence_path(path).is_ok(),
                 "node_publication_bundle_path",
             )?;
             let bytes = unbytes(&Some(raw.clone()))?.unwrap();
@@ -1219,6 +1428,7 @@ pub fn export(root: &Path) -> Result<Bundle> {
     let mut paths = BTreeSet::from([VIEW.to_owned(), ".kpopper/history.yaml".into()]);
     for (operation, manifest) in all {
         paths.insert(commit(&operation)?);
+        paths.extend(manifest.evidence.keys().cloned());
         for touch in manifest.touched {
             let path = stream(&touch.subject)?;
             if read(root, &path)?.is_some() {

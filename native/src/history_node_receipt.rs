@@ -50,6 +50,56 @@ fn scoped_document_collections(document: &V) -> Result<Map> {
         .map(|(name, value)| Ok((name.clone(), V::Map(map(value)?.clone()))))
         .collect()
 }
+/// Report intent carries exact hashes and routing identity, never the report or graph itself.
+pub(crate) fn report_context(value: &V) -> Result<()> {
+    if map(value)?.is_empty() {
+        return Ok(());
+    }
+    let c = schema(
+        value,
+        &[
+            "kind",
+            "event_id",
+            "source_sha256",
+            "envelope_sha256",
+            "record",
+            "state_dir",
+            "policy_sha256",
+            "routing_sha256",
+        ],
+        &["target_sha256"],
+    )?;
+    require(
+        string_is(&c["kind"], "source-report-node/v1"),
+        "node_receipt_batch_context_unsupported",
+    )?;
+    let event = text(&c["event_id"])?;
+    require(
+        event.len() == 32
+            && event
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
+        "node_receipt_report_event",
+    )?;
+    for key in [
+        "source_sha256",
+        "envelope_sha256",
+        "policy_sha256",
+        "routing_sha256",
+        "target_sha256",
+    ] {
+        if let Some(hash) = c.get(key) {
+            require(
+                crate::history_paths::object_id(text(hash)?),
+                "node_receipt_report_hash",
+            )?;
+        }
+    }
+    for key in ["record", "state_dir"] {
+        require(text(&c[key])?.len() <= 4096, "node_receipt_report_path")?;
+    }
+    Ok(())
+}
 fn authoring(value: &V, hypothesis: bool) -> Result<()> {
     let allowed = if hypothesis {
         &[
@@ -152,11 +202,16 @@ fn authoring(value: &V, hypothesis: bool) -> Result<()> {
             )?;
         }
     }
-    for name in ["context", "evidence"] {
-        if let Some(value) = a.get(name) {
+    if let Some(context) = a.get("context") {
+        report_context(context)?;
+    }
+    if let Some(evidence) = a.get("evidence") {
+        require(map(evidence)?.len() <= 64, "node_receipt_evidence_limit")?;
+        for (path, hash) in map(evidence)? {
+            crate::history_node_publication::evidence_path(path)?;
             require(
-                map(value)?.is_empty(),
-                "node_receipt_batch_context_unsupported",
+                crate::history_paths::object_id(text(hash)?),
+                "node_receipt_evidence_hash",
             )?;
         }
     }

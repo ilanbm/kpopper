@@ -1305,3 +1305,68 @@ fn public_identity_and_named_edit_inspect_private_named_worlds() {
         assert_eq!(P::export(root.path()).unwrap().encode().unwrap(), before);
     }
 }
+
+#[test]
+fn public_cli_update_retains_source_quote_and_reader_evidence() {
+    let root = setup();
+    write(
+        root.path(),
+        "source",
+        &value(
+            json!({"kind":"add","id":"s.old","into":"known","body":{"url":"https://example.test","read":"2026-09-23"}}),
+        ),
+    );
+    write(
+        root.path(),
+        "reading",
+        &value(
+            json!({"kind":"add","id":"p.a","as_of":"2026-09-23","into":"known","body":{"v":1,"from":"s.old","at":"table"}}),
+        ),
+    );
+    fs::write(root.path().join("report.json"), serde_json::to_vec(&json!({"event_id":"cli-report","date":"2026-09-24","source_quote":"a is now 2","target":"p.a","value":2})).unwrap()).unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(root.path())
+            .args(args)
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .output()
+            .unwrap()
+    };
+    let out = run(&[
+        "update",
+        "--file",
+        "report.json",
+        "--state-dir",
+        root.path().join("reports").to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let receipt: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(receipt["state"], "applied");
+    let event = receipt["event_id"].as_str().unwrap();
+    assert_eq!(
+        fs::read(root.path().join(format!("evidence/reports/{event}.txt"))).unwrap(),
+        b"a is now 2"
+    );
+    for args in [["open", "--json"], ["pull", "p.a"]] {
+        let out = run(&args);
+        assert!(
+            out.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    drop(root);
+    assert_eq!(
+        map(&map(Capture::read(copy.path()).unwrap().document())["known"])["p.a"]
+            .to_json()
+            .unwrap()["v"],
+        2
+    );
+}

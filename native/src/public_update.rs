@@ -1,6 +1,8 @@
 //! Native synchronous application of one explicit source report.
 #[path = "public_update_advanced.rs"]
 mod advanced;
+#[path = "public_update_node.rs"]
+pub(crate) mod node;
 use crate::{
     Result,
     history_contract::{error, map},
@@ -209,6 +211,20 @@ pub fn capture_target(envelope: &J, record: &Path, cwd: &Path) -> Result<J> {
         .collect::<Result<Vec<_>>>()?;
     crate::require(paths.len() == 1, "ingestion requires one record path")?;
     let routing = crate::source_capture::routing_observation(&original, cwd)?;
+    if crate::history_node_publication::selected(&paths[0])? {
+        let captured = crate::history_node_capture::Capture::read(paths[0].parent().unwrap())?;
+        let snapshot = crate::ingestion_target::snapshot(
+            captured.document(),
+            captured.entry_bytes(),
+            &report.raw,
+        )?;
+        captured.verify_current(paths[0].parent().unwrap())?;
+        crate::require(
+            crate::source_capture::routing_observation(&original, cwd)? == routing,
+            "project_route_changed",
+        )?;
+        return Ok(snapshot);
+    }
     let mut inventory = Inventory::default();
     let captured = crate::source_document::load(&paths, &mut inventory, false)?;
     crate::require(
@@ -757,16 +773,7 @@ fn verify_requested_profile(
     Ok(())
 }
 
-fn target_after_sha256(
-    mutation: &crate::history_transaction::PreparedMutation,
-    report: &Report,
-) -> Result<String> {
-    let raw = mutation
-        .files()
-        .iter()
-        .find(|f| f.role == "record")
-        .and_then(|f| f.after.as_deref())
-        .ok_or_else(|| error("report mutation has no record result"))?;
+fn target_after_bytes(raw: &[u8], report: &Report) -> Result<String> {
     let document = crate::history_yaml::decode_ordinary_source_value(raw)?.projected();
     let entries = crate::reasoning_snapshot::entries(&document)?;
     let value = if report.batch {
@@ -841,23 +848,59 @@ fn receipt(
     supplied_graphs: Option<&(J, J)>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<(J, Vec<J>)> {
+    let data = mutation.map(|m| m.to_data().to_json()).transpose()?;
+    let after_bytes = mutation
+        .and_then(|m| m.files().iter().find(|f| f.role == "record"))
+        .and_then(|f| f.after.as_deref());
+    let graphs = match mutation {
+        Some(m) => Some(
+            supplied_graphs
+                .cloned()
+                .map(Ok)
+                .unwrap_or_else(|| mutation_graphs(m, report, runtime))?,
+        ),
+        None => None,
+    };
+    receipt_parts(
+        report,
+        record,
+        root,
+        event,
+        source,
+        envelope_sha,
+        state,
+        reason,
+        recovered,
+        data.as_ref(),
+        after_bytes,
+        graphs.as_ref(),
+    )
+}
+fn receipt_parts(
+    report: &Report,
+    record: &Path,
+    root: &Path,
+    event: &str,
+    source: &Path,
+    envelope_sha: &str,
+    state: &str,
+    reason: Option<&str>,
+    recovered: bool,
+    mutation: Option<&J>,
+    after_bytes: Option<&[u8]>,
+    graphs: Option<&(J, J)>,
+) -> Result<(J, Vec<J>)> {
     let source_id = format!("s.ingest_{event}");
     let diagnostics = mutation
-        .and_then(|mutation| {
-            mutation.to_data().to_json().ok().and_then(|v| {
-                v["receipt"]["after"]["batch"]["diagnostics"]
-                    .as_array()
-                    .cloned()
-            })
+        .and_then(|data| {
+            data["receipt"]["after"]["batch"]["diagnostics"]
+                .as_array()
+                .cloned()
         })
         .unwrap_or_default();
-    let (before, after, fired, actionable) = if let Some(mutation) = mutation {
-        let (before, after) = supplied_graphs
-            .cloned()
-            .map(Ok)
-            .unwrap_or_else(|| mutation_graphs(mutation, report, runtime))?;
-        let (fired, actionable) = classification(&before, &after);
-        (Some(before), Some(after), fired, actionable)
+    let (before, after, fired, actionable) = if let Some((before, after)) = graphs {
+        let (fired, actionable) = classification(before, after);
+        (Some(before.clone()), Some(after.clone()), fired, actionable)
     } else {
         (None, None, vec![], vec![])
     };
@@ -931,12 +974,14 @@ fn receipt(
     if let Some(at) = report.raw.get("at") {
         value["at"] = at.clone();
     }
-    if let Some(mutation) = mutation {
-        let data = mutation.to_data().to_json()?;
+    if let Some(data) = mutation {
         value["mutation"] = json!({"operation":data["operation"],"digest":data["digest"],"receipt":data["receipt"]});
         value["graph_before"] = before.unwrap()["hash"].clone();
         value["graph_after"] = after.unwrap()["hash"].clone();
-        value["target_after_sha256"] = json!(target_after_sha256(mutation, report)?);
+        value["target_after_sha256"] = json!(target_after_bytes(
+            after_bytes.ok_or_else(|| error("report mutation has no record result"))?,
+            report
+        )?);
     }
     Ok((value, signals))
 }
@@ -1181,6 +1226,28 @@ fn run_bound(
             text: format!("{}\n", serde_json::to_string(&answer)?),
             code: 1,
         });
+    }
+    let node_journal = retained_report.as_ref().is_some_and(|raw| {
+        serde_json::from_slice::<J>(raw).is_ok_and(|v| v["kind"] == "native-node-report/v1")
+    });
+    if node_journal || crate::history_node_publication::selected(&record)? {
+        drop(_state_lock);
+        return node::run(
+            &report,
+            &event,
+            node::Context {
+                route: &route,
+                original: &original,
+                record: &record,
+                state: &root,
+                source: &source_path,
+                envelope_sha: &envelope_sha,
+                expected_target,
+                supplied_runtime,
+            },
+            retained_report.as_deref(),
+            probe,
+        );
     }
     if let Some(raw) = retained_report {
         let mut journal =

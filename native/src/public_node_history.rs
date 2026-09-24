@@ -256,6 +256,7 @@ pub(crate) fn write_with_runtime(
             probe(match phase {
                 P::Phase::Journal => "journal",
                 P::Phase::Append(_) => "append",
+                P::Phase::Evidence(_) => "evidence",
                 P::Phase::Commit => "committed",
                 P::Phase::View => "view",
             })?;
@@ -310,6 +311,16 @@ pub(crate) fn recover(
     let root = route.paths()[0].parent().unwrap();
     let mut operation = String::new();
     let state = P::recover(root, |p| {
+        if p.guard()?
+            .as_ref()
+            .and_then(|v| map(v).ok())
+            .and_then(|v| v.get("kind"))
+            .is_some_and(|kind| string_is(kind, "public-node-report/v1"))
+        {
+            crate::public_update::node::verify_recovery(route, original, p, runtime_override)?;
+            operation = p.operation().into();
+            return Ok(());
+        }
         verify_guard(route, original, p)?;
         let (before, after, action, objects) = candidate(root, p)?;
         let folded = if string_is(field(map(&action)?, "kind")?, "hypothesis") {
