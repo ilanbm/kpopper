@@ -57,6 +57,7 @@ pub mod history_migration;
 mod history_migration_copy;
 mod history_migration_source;
 pub mod history_native_declaration;
+pub mod history_node_branch;
 pub mod history_node_capture;
 mod history_node_edits;
 mod history_node_frame;

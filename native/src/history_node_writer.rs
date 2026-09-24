@@ -92,13 +92,17 @@ fn node_value(version: &C::Version) -> Result<&V> {
         .state()
         .ok_or_else(|| error("node_semantic_absent_unsupported"))
 }
-fn context(value: &V) -> Result<&Map> {
+pub(crate) fn context(value: &V) -> Result<&Map> {
     let c = schema(
         value,
         &["format", "options", "header", "before", "after"],
         &[],
     )?;
-    require(string_is(&c["format"], FORMAT), "node_transaction_format")?;
+    require(
+        string_is(&c["format"], FORMAT)
+            || string_is(&c["format"], crate::history_node_branch::FORMAT),
+        "node_transaction_format",
+    )?;
     Ok(c)
 }
 fn ancestors(snapshot: &P::Snapshot, operation: &str) -> Result<BTreeSet<String>> {
@@ -174,10 +178,14 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<()> {
     for (op, tx) in &snapshot.transactions {
         if tx.context.is_some() {
             let restored = receipt(snapshot, op)?;
-            let expected = intent(&restored)?
-                .get("evidence")
-                .cloned()
-                .unwrap_or_else(A::empty);
+            let expected = if crate::history_node_branch::is_union(tx.context.as_ref().unwrap())? {
+                crate::history_node_branch::evidence(tx.context.as_ref().unwrap())?
+            } else {
+                intent(&restored)?
+                    .get("evidence")
+                    .cloned()
+                    .unwrap_or_else(A::empty)
+            };
             let actual = V::Map(tx.evidence.iter().map(|(p, h)| (p.clone(), s(h))).collect());
             require(actual == expected, "node_receipt_evidence_mismatch")?;
         }
@@ -796,6 +804,17 @@ fn prepare_evidence(
 }
 
 pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) -> Result<()> {
+    if prepared
+        .context()?
+        .as_ref()
+        .is_some_and(|c| crate::history_node_branch::is_union(c).unwrap_or(false))
+    {
+        return crate::history_node_branch::verify(root, prepared);
+    }
+    require(
+        prepared.imports()?.is_empty(),
+        "node_import_action_unsupported",
+    )?;
     let (before, after) = prepared.snapshots(root)?;
     let capture = Capture::from_snapshot(before)?;
     // Capturing after verifies semantic IDs, exact observations, receipt digests and current bodies.
@@ -845,7 +864,11 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         .snapshot
         .transactions
         .iter()
-        .filter(|(_, tx)| tx.context.is_some())
+        .filter(|(_, tx)| {
+            tx.context
+                .as_ref()
+                .is_some_and(|c| !crate::history_node_branch::is_union(c).unwrap_or(false))
+        })
         .map(|(op, _)| receipt(&capture.snapshot, op))
         .collect::<Result<Vec<_>>>()?;
     let audit = ReplayAudit::from_receipts(&recorded, &parents)?;

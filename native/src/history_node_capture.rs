@@ -134,6 +134,12 @@ impl Capture {
         )
     }
     pub(crate) fn from_snapshot(snapshot: P::Snapshot) -> Result<Self> {
+        Self::from_snapshot_inner(snapshot, false)
+    }
+    pub(crate) fn from_union(snapshot: P::Snapshot) -> Result<Self> {
+        Self::from_snapshot_inner(snapshot, true)
+    }
+    fn from_snapshot_inner(snapshot: P::Snapshot, union: bool) -> Result<Self> {
         let raw = snapshot
             .current
             .as_deref()
@@ -186,7 +192,29 @@ impl Capture {
             ("publication".into(), publication),
         ]));
         let rendered = render(&document, history.objects(), &state, false)?;
-        require(rendered == document, "node_semantic_view_mismatch")?;
+        if !union {
+            require(rendered == document, "node_semantic_view_mismatch")?;
+        }
+        if union {
+            let expected = crate::history_authority::document_template(&document)?;
+            let parents = snapshot
+                .transactions
+                .values()
+                .flat_map(|t| t.parents.iter())
+                .collect::<BTreeSet<_>>();
+            for (op, _) in snapshot
+                .transactions
+                .iter()
+                .filter(|(op, _)| !parents.contains(op))
+            {
+                let receipt = crate::history_node_writer::receipt(&snapshot, op)?;
+                let doc = field(map(&map(&receipt)?["after"])?, "document")?;
+                require(
+                    crate::history_authority::document_template(doc)? == expected,
+                    "divergent_templates",
+                )?;
+            }
+        }
         let document = render(&document, history.objects(), &state, true)?;
         let mut captured = Self {
             snapshot,

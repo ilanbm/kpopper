@@ -338,3 +338,66 @@ fn first_temporal_snapshot_keeps_unchanged_dependency_lazy() {
         "first temporal evidence materialized an unchanged dependency"
     );
 }
+
+#[test]
+fn branch_siblings_keep_exact_temporal_worlds_and_merge_both_parents() {
+    let cache = tempfile::tempdir().unwrap();
+    let runtime = runtime(cache.path());
+    let target = setup();
+    seed(target.path(), &runtime, "general");
+    let sibling = P::export(target.path()).unwrap().reconstruct().unwrap();
+    write(target.path(), &runtime, "left-fired", set(9));
+    write(
+        sibling.path(),
+        &runtime,
+        "right-only",
+        v(json!({"kind":"add","id":"p.sibling","into":"readings","body":{"v":7}})),
+    );
+    let left_receipt =
+        W::receipt(&P::capture_snapshot(target.path()).unwrap(), "left-fired").unwrap();
+    let p = kpop_native::history_node_branch::prepare(
+        target.path(),
+        &[P::export(sibling.path()).unwrap()],
+        "merge",
+    )
+    .unwrap();
+    drop(sibling);
+    W::publish(target.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    let copy = P::export(target.path()).unwrap().reconstruct().unwrap();
+    drop(target);
+    let c = Capture::read(copy.path()).unwrap();
+    let snapshot = P::capture_snapshot(copy.path()).unwrap();
+    assert_eq!(
+        snapshot.transactions["merge"].parents,
+        ["left-fired", "right-only"]
+    );
+    assert_eq!(W::receipt(&snapshot, "left-fired").unwrap(), left_receipt);
+    let projected = Projection::capture(&c).unwrap();
+    let temporal = m(&m(projected.projection())["temporal"]);
+    let observations = l(&temporal["observations"]);
+    let mut left_seen = false;
+    let mut merged_seen = false;
+    for observation in observations {
+        let o = m(observation);
+        let V::Text(raw) = &o["snapshot"] else {
+            panic!()
+        };
+        let data = Snapshot::from_json(raw.as_bytes()).unwrap().to_data();
+        let nodes = m(&m(&data)["nodes"]);
+        if o["operation"] == v(json!("left-fired")) {
+            assert!(!nodes.contains_key("p.sibling"));
+            left_seen = true;
+        }
+        if o["operation"] == v(json!("merge")) && o["phase"] == v(json!("after")) {
+            assert!(nodes.contains_key("p.sibling"));
+            assert_eq!(m(&m(&nodes["p.input"])["body"])["v"], v(json!(9)));
+            merged_seen = true;
+        }
+    }
+    assert!(left_seen && merged_seen);
+    let report = assessment(copy.path(), &runtime);
+    assert_eq!(
+        m(&m(&m(&m(&report)["history_subjects"])["d.ready"])["temporal"])["status"],
+        v(json!("counterexample"))
+    );
+}

@@ -132,6 +132,10 @@ struct Journal {
     after_view: String,
     appends: Vec<Append>,
     retained: Vec<Touch>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    imports: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target_parents: Option<BTreeMap<String, String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     evidence: Vec<EvidenceFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -155,6 +159,19 @@ impl Journal {
             "node_publication_journal",
         )?;
         Manifest::decode(&self.manifest.encode()?)?;
+        require(
+            self.imports.is_empty() || self.target_parents.is_some(),
+            "node_import_frontier",
+        )?;
+        for (op, raw) in &self.imports {
+            let m = Manifest::decode(&unbytes(&Some(raw.clone()))?.unwrap())?;
+            require(
+                m.operation == *op
+                    && op != &self.manifest.operation
+                    && m.authority_sha256 == self.manifest.authority_sha256,
+                "node_import_manifest",
+            )?;
+        }
         let before = unbytes(&self.before_view)?;
         let after = unbytes(&Some(self.after_view.clone()))?.unwrap();
         require(
@@ -253,6 +270,13 @@ impl Prepared {
     pub(crate) fn canonical_before(&self) -> Result<Option<Vec<u8>>> {
         unbytes(&self.journal.canonical_before)
     }
+    pub(crate) fn imports(&self) -> Result<BTreeMap<String, Vec<u8>>> {
+        self.journal
+            .imports
+            .iter()
+            .map(|(op, raw)| Ok((op.clone(), unbytes(&Some(raw.clone()))?.unwrap())))
+            .collect()
+    }
     pub fn digest(&self) -> &str {
         &self.journal.manifest.digest
     }
@@ -315,6 +339,7 @@ impl Prepared {
 /// Boundaries are observable for deterministic crash tests; callbacks cannot confer admission.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
+    Import(usize),
     Journal,
     Append(usize),
     Evidence(usize),
@@ -369,7 +394,7 @@ fn verify_view(all: &BTreeMap<String, Manifest>, raw: &[u8]) -> Result<()> {
         "node_publication_view_mismatch",
     )
 }
-fn current_origins(raw: &[u8]) -> Result<BTreeMap<(String, String), C::Event>> {
+pub(crate) fn current_origins(raw: &[u8]) -> Result<BTreeMap<(String, String), C::Event>> {
     // Empty/legacy-shaped documents carry no lazy originals. A declared namespace is strict.
     let document = crate::history_yaml::decode_document(raw)?;
     let mut result = BTreeMap::new();
@@ -552,14 +577,24 @@ fn evidence_state(root: &Path, file: &EvidenceFile) -> Result<Option<Vec<u8>>> {
     Ok(current)
 }
 fn inventory(root: &Path) -> Result<BTreeMap<String, Manifest>> {
+    inventory_with(root, &BTreeMap::new())
+}
+fn inventory_with(
+    root: &Path,
+    imports: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, Manifest>> {
     let authority_sha256 = authority(root)?;
     let mut total_bytes = 0;
     let dir = F::target(root, ".kpopper/history-commits")?;
     let mut all = BTreeMap::new();
-    if !dir.exists() {
-        return Ok(all);
+    for item in if dir.exists() {
+        Some(fs::read_dir(dir)?)
+    } else {
+        None
     }
-    for item in fs::read_dir(dir)? {
+    .into_iter()
+    .flatten()
+    {
         let item = item?;
         let name = item
             .file_name()
@@ -583,6 +618,30 @@ fn inventory(root: &Path) -> Result<BTreeMap<String, Manifest>> {
         all.insert(op.into(), m);
         require(all.len() <= C::MAX_EVENTS, "node_publication_limit")?;
     }
+    for (op, raw) in imports {
+        let raw = unbytes(&Some(raw.clone()))?.unwrap();
+        if !all.contains_key(op) {
+            total_bytes += raw.len();
+        }
+        let m = Manifest::decode(&raw)?;
+        require(
+            m.operation == *op && m.authority_sha256 == authority_sha256,
+            "node_import_manifest",
+        )?;
+        require(
+            all.get(op).is_none_or(|old| old == &m),
+            "node_import_collision",
+        )?;
+        all.insert(op.clone(), m);
+    }
+    require(
+        total_bytes <= MAX_BYTES && all.len() <= C::MAX_EVENTS,
+        "node_publication_limit",
+    )?;
+    validate_inventory(&all)?;
+    Ok(all)
+}
+fn validate_inventory(all: &BTreeMap<String, Manifest>) -> Result<()> {
     for m in all.values() {
         for (op, digest) in &m.parents {
             require(
@@ -591,6 +650,77 @@ fn inventory(root: &Path) -> Result<BTreeMap<String, Manifest>> {
             )?;
         }
     }
+    let mut remaining = all
+        .iter()
+        .map(|(op, m)| (op.clone(), m.parents.len()))
+        .collect::<BTreeMap<_, _>>();
+    let mut children = BTreeMap::<String, Vec<String>>::new();
+    for (op, m) in all {
+        for parent in m.parents.keys() {
+            children.entry(parent.clone()).or_default().push(op.clone());
+        }
+    }
+    let mut ready = remaining
+        .iter()
+        .filter(|(_, n)| **n == 0)
+        .map(|(op, _)| op.clone())
+        .collect::<Vec<_>>();
+    let mut count = 0;
+    while let Some(op) = ready.pop() {
+        count += 1;
+        for child in children.get(&op).into_iter().flatten() {
+            let n = remaining.get_mut(child).unwrap();
+            *n -= 1;
+            if *n == 0 {
+                ready.push(child.clone());
+            }
+        }
+    }
+    require(count == all.len(), "node_publication_parent_cycle")
+}
+fn verify_imports(root: &Path, journal: &Journal) -> Result<()> {
+    for (op, raw) in &journal.imports {
+        require(
+            read(root, &commit(op)?)? == unbytes(&Some(raw.clone()))?,
+            "node_import_missing",
+        )?;
+    }
+    Ok(())
+}
+fn target_inventory(root: &Path, journal: &Journal) -> Result<BTreeMap<String, Manifest>> {
+    let mut all = inventory_with(root, &journal.imports)?;
+    if let Some(m) = all.remove(&journal.manifest.operation) {
+        require(
+            m == journal.manifest,
+            "node_publication_operation_collision",
+        )?;
+    }
+    for op in journal.imports.keys() {
+        all.remove(op);
+    }
+    validate_inventory(&all)?;
+    require(
+        frontier(&all)
+            == *journal
+                .target_parents
+                .as_ref()
+                .unwrap_or(&journal.manifest.parents),
+        "node_publication_stale_frontier",
+    )?;
+    Ok(all)
+}
+fn combined_inventory(root: &Path, journal: &Journal) -> Result<BTreeMap<String, Manifest>> {
+    let mut all = inventory_with(root, &journal.imports)?;
+    if let Some(m) = all.remove(&journal.manifest.operation) {
+        require(
+            m == journal.manifest,
+            "node_publication_operation_collision",
+        )?;
+    }
+    require(
+        frontier(&all) == journal.manifest.parents,
+        "node_publication_stale_frontier",
+    )?;
     Ok(all)
 }
 fn frontier(all: &BTreeMap<String, Manifest>) -> BTreeMap<String, String> {
@@ -683,7 +813,16 @@ pub fn prepare_with_evidence(
     context: Option<&crate::value::TypedValue>,
     evidence: BTreeMap<String, Vec<u8>>,
 ) -> Result<Prepared> {
-    prepare_inner(root, operation, after_view, frames, context, evidence, None)
+    prepare_inner(
+        root,
+        operation,
+        after_view,
+        frames,
+        context,
+        evidence,
+        None,
+        BTreeMap::new(),
+    )
 }
 
 /// An edited view has two distinct before images: observed bytes for concurrency/rollback,
@@ -705,6 +844,30 @@ pub(crate) fn prepare_edited(
         Some(context),
         evidence,
         Some(canonical),
+        BTreeMap::new(),
+    )
+}
+pub(crate) fn prepare_union(
+    root: &Path,
+    operation: &str,
+    after: Vec<u8>,
+    frames: BTreeMap<String, Vec<u8>>,
+    context: &crate::value::TypedValue,
+    evidence: BTreeMap<String, Vec<u8>>,
+    imports: BTreeMap<String, Vec<u8>>,
+) -> Result<Prepared> {
+    prepare_inner(
+        root,
+        operation,
+        after,
+        frames,
+        Some(context),
+        evidence,
+        None,
+        imports
+            .into_iter()
+            .map(|(op, raw)| (op, STANDARD.encode(raw)))
+            .collect(),
     )
 }
 fn prepare_inner(
@@ -715,6 +878,7 @@ fn prepare_inner(
     context: Option<&crate::value::TypedValue>,
     evidence: BTreeMap<String, Vec<u8>>,
     canonical: Option<&[u8]>,
+    imports: BTreeMap<String, String>,
 ) -> Result<Prepared> {
     let _lock = F::DirectoryGuard::acquire(root, false)?;
     guard(root)?;
@@ -728,6 +892,11 @@ fn prepare_inner(
     require(!all.contains_key(operation), "operation_already_prepared")?;
     // Complete closure verification is retained; this is never a scoped fast-read promise.
     verify_history_with(root, &all, &BTreeMap::new(), canonical)?;
+    let target_parents = (!imports.is_empty()).then(|| frontier(&all));
+    for op in imports.keys() {
+        require(!all.contains_key(op), "node_import_existing")?;
+    }
+    let all = inventory_with(root, &imports)?;
     let before = read(root, VIEW)?;
     if canonical.is_some() {
         require(!all.is_empty(), "history_bootstrap_required")?;
@@ -769,6 +938,7 @@ fn prepare_inner(
         };
         if let Some(old) = known.get(event.id()) {
             require(*old == touch, "node_publication_retained_mismatch")?;
+            retained.push(touch);
         } else {
             touched.push(touch);
         }
@@ -814,6 +984,8 @@ fn prepare_inner(
         after_view: STANDARD.encode(after_view),
         appends,
         retained,
+        imports,
+        target_parents,
         evidence: evidence_files,
         guard: None,
         digest: String::new(),
@@ -990,18 +1162,17 @@ fn revalidate(root: &Path, journal: &Journal) -> Result<()> {
             "node_publication_evidence_changed",
         )?;
     }
-    let all = inventory(root)?;
-    require(
-        frontier(&all) == journal.manifest.parents,
-        "node_publication_stale_frontier",
-    )?;
+    for op in journal.imports.keys() {
+        require(read(root, &commit(op)?)?.is_none(), "node_import_existing")?;
+    }
+    let all = target_inventory(root, journal)?;
     verify_history_with(
         root,
         &all,
         &BTreeMap::new(),
         unbytes(&journal.canonical_before)?.as_deref(),
     )?;
-    let known = known_touches(&all)?;
+    let known = known_touches(&combined_inventory(root, journal)?)?;
     for touch in &journal.retained {
         require(
             known.get(&touch.event) == Some(touch),
@@ -1095,6 +1266,12 @@ pub fn publish(
         )?;
         boundary(Phase::Evidence(i))?;
     }
+    for (i, (op, raw)) in journal.imports.iter().enumerate() {
+        F::publish_immutable(root, &commit(op)?, &unbytes(&Some(raw.clone()))?.unwrap())?;
+        boundary(Phase::Import(i))?;
+    }
+    verify_imports(root, journal)?;
+    combined_inventory(root, journal)?;
     // Callbacks may have changed an earlier evidence file.
     for file in &journal.evidence {
         require(
@@ -1119,6 +1296,7 @@ pub fn publish(
             "node_publication_evidence_missing",
         )?;
     }
+    verify_imports(root, journal)?;
     F::remove(&F::target(root, JOURNAL)?)
 }
 /// No manifest means rollback exact journal-owned tails; matching manifest means finish forward.
@@ -1175,7 +1353,16 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
     }
     validate_complete_streams(root, &journal)?;
     let canonical_before = unbytes(&journal.canonical_before)?;
-    let observed_inventory = inventory(root)?;
+    let observed_imports = journal
+        .imports
+        .keys()
+        .map(|op| Ok((op.clone(), read(root, &commit(op)?)?)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let observed_inventory = if committed.is_some() {
+        inventory_with(root, &journal.imports)?
+    } else {
+        target_inventory(root, &journal)?
+    };
     verify_history_with(
         root,
         &observed_inventory,
@@ -1209,7 +1396,17 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
             "node_publication_verifier_changed_inputs",
         )?;
     }
-    let current_inventory = inventory(root)?;
+    for (op, raw) in &observed_imports {
+        require(
+            read(root, &commit(op)?)? == *raw,
+            "node_publication_verifier_changed_inventory",
+        )?;
+    }
+    let current_inventory = if committed.is_some() {
+        inventory_with(root, &journal.imports)?
+    } else {
+        target_inventory(root, &journal)?
+    };
     require(
         current_inventory == observed_inventory,
         "node_publication_verifier_changed_inventory",
@@ -1225,6 +1422,9 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         },
     )?;
     if committed.is_some() {
+        for (op, raw) in &journal.imports {
+            F::publish_immutable(root, &commit(op)?, &unbytes(&Some(raw.clone()))?.unwrap())?;
+        }
         evidence_directories(root, &journal)?;
         for file in &journal.evidence {
             F::publish_immutable(
@@ -1239,10 +1439,12 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         verify_history_with(root, &inventory(root)?, &BTreeMap::new(), after.as_deref())?;
         F::replace(&F::target(root, VIEW)?, after.as_deref())?;
     } else {
-        require(
-            frontier(&inventory(root)?) == journal.manifest.parents,
-            "node_publication_stale_frontier",
-        )?;
+        target_inventory(root, &journal)?;
+        for op in journal.imports.keys() {
+            if read(root, &commit(op)?)?.is_some() {
+                F::remove(&F::target(root, &commit(op)?)?)?;
+            }
+        }
         for append in &journal.appends {
             let (path, current, _) = append_state(root, append)?;
             if current.is_some() {
@@ -1350,17 +1552,8 @@ impl Prepared {
             authority(root)? == j.manifest.authority_sha256,
             "node_publication_authority_changed",
         )?;
-        let mut before_all = inventory(root)?;
-        if let Some(committed) = before_all.remove(self.operation()) {
-            require(
-                committed == j.manifest,
-                "node_publication_operation_collision",
-            )?;
-        }
-        require(
-            frontier(&before_all) == j.manifest.parents,
-            "node_publication_stale_frontier",
-        )?;
+        let before_all = target_inventory(root, j)?;
+        let combined = combined_inventory(root, j)?;
         let mut before_overlay = BTreeMap::new();
         let mut after_overlay = BTreeMap::new();
         for append in &j.appends {
@@ -1386,7 +1579,7 @@ impl Prepared {
             &before_overlay,
             Some(before.as_deref().unwrap_or_default()),
         )?;
-        let mut after_all = before_all.clone();
+        let mut after_all = combined;
         after_all.insert(self.operation().into(), j.manifest.clone());
         let after_versions = verify_history_with(root, &after_all, &after_overlay, Some(&after))?;
         Ok((
@@ -1439,6 +1632,13 @@ pub struct Bundle {
     digest: String,
 }
 impl Bundle {
+    pub(crate) fn files(&self) -> Result<BTreeMap<String, Vec<u8>>> {
+        self.files
+            .iter()
+            .map(|(path, raw)| Ok((path.clone(), unbytes(&Some(raw.clone()))?.unwrap())))
+            .collect()
+    }
+
     fn identity(&self) -> Result<String> {
         let mut copy = self.clone();
         copy.digest.clear();
@@ -1505,6 +1705,8 @@ impl Bundle {
 }
 pub fn export(root: &Path) -> Result<Bundle> {
     let _lock = F::DirectoryGuard::acquire(root, false)?;
+    // Physical layers cannot silently disappear from a portable branch capture.
+    crate::history_node_hypothesis::sources(root)?;
     capture(root)?;
     let all = inventory(root)?;
     let mut paths = BTreeSet::from([VIEW.to_owned(), ".kpopper/history.yaml".into()]);

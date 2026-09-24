@@ -115,7 +115,7 @@ adapter. Historical private targets remain private even when absent from current
 requires native-authored source order; legacy conversion must retain exact original source bytes.
 Identity operations support named hypotheses and refuse physical hypotheses and a separate brief/view file.
 Their source guards are rechecked around publication phases and during recovery.
-Named edit, fold and refute operations retain node-local hypothesis evidence. Branch operations,
+Named edit, fold and refute operations retain node-local hypothesis evidence. Public Git branch operations,
 pending overlays and activation remain unsupported. Low-level proposal and batch APIs are available;
 edited-file proposals use an explicit canonical baseline on marked Simple records:
 
@@ -170,8 +170,24 @@ against the exact accepted world at that operation, including historical claim v
 no longer current. Projection and source-free assessment preserve current, anchored and general
 applicability and counterexamples. Missing or bounded-out observations remain explicitly incomplete.
 Publication ancestry establishes which objects an observation could contain; it does not establish
-source-clock ancestry. Node branch union/admission, independently authenticated source ancestry,
-authority generation changes and physical named-hypothesis compatibility remain unfinished.
+source-clock ancestry. The low-level `history_node_branch::prepare` API unions verified portable captures under an
+identical authority marker. It preserves original transactions and semantic IDs, and keeps
+conflicting claims contested until an explicit later act. Multi-parent storage frames join
+receipt components without creating or accepting a semantic claim. Each old receipt uses only
+its original causal closure; a merge observation includes both parents. Same-authority union
+has no Git-ref association or publication/privacy admission by itself.
+
+Import manifests and changed node frames share the publication journal and visibility boundary.
+Before the merge manifest is durable, recovery removes only verified journal-owned imports and
+tails; afterward it finishes forward from retained evidence without the source branches. The
+permanent manifest contains the parent frontier and touched bindings, not an inventory of the
+world. Target and imported singleton current nodes stay lazy when their bodies remain visible.
+Source bundles are bounded to 16 and their aggregate raw input, including target bytes, to 64 MiB.
+Different authority markers, incompatible templates, stale targets and corrupt imports refuse.
+Physical hypotheses currently make export and branch union refuse rather than omit their bytes.
+
+Public Git branch admission, independently authenticated source-clock ancestry, authority generation
+changes and physical named-hypothesis compatibility remain unfinished.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
 It preserves the exact new-format bytes and audits the entire committed closure. It

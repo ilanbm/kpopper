@@ -103,9 +103,17 @@ pub(crate) fn validate_evidence(
     payload: &Payload,
 ) -> Result<()> {
     if !payload.is_semantic {
-        require(version.parents().len() == 1, "node_evidence_parent")?;
-        let parent = versions
-            .get(&version.parents()[0])
+        require(!version.parents().is_empty(), "node_evidence_parent")?;
+        // A storage merge may reuse an existing semantic payload; it never creates a claim.
+        let parent = version
+            .parents()
+            .iter()
+            .filter_map(|id| versions.get(id))
+            .find(|v| {
+                v.state()
+                    .and_then(|s| decode(s).ok())
+                    .is_some_and(|p| p.semantic == payload.semantic)
+            })
             .ok_or_else(|| error("node_evidence_parent"))?;
         let previous = decode(
             parent

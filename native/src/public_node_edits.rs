@@ -121,6 +121,7 @@ pub(crate) fn run(
                 P::Phase::Journal => "journal",
                 P::Phase::Append(_) => "append",
                 P::Phase::Evidence(_) => "evidence",
+                P::Phase::Import(_) => "import",
                 P::Phase::Commit => "committed",
                 P::Phase::View => "view",
             })?;
