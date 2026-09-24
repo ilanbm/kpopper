@@ -127,14 +127,20 @@ def main(argv):
     parser.add_argument("--served", type=pathlib.Path, metavar="FILE",
                         help="require crates.io to serve exactly this .crate file")
     parser.add_argument("--version", help="the version the release planner published")
+    parser.add_argument("--source-directory", type=pathlib.Path,
+                        help="read version and package metadata from this verified candidate checkout")
     options = parser.parse_args(argv)
-    found = release.versions_in(release.read_texts())
+    source = options.source_directory.resolve() if options.source_directory else ROOT
+    # The code remains from the trusted workflow revision. Only metadata comes
+    # from the checked candidate, whose version need not be on main yet.
+    found = release.versions_in({name: (source / name).read_text(encoding="utf-8")
+                                 for name in release.VERSION_FILES})
     if len(set(found.values())) != 1:
         raise SystemExit("the version files disagree: " + json.dumps(found))
     version = found["VERSION"]
     if options.version and options.version != version:
         raise SystemExit(f"the release planner published {options.version}, but this tree carries {version}")
-    name = PACKAGE_NAME.search((ROOT / "native" / "Cargo.toml").read_text(encoding="utf-8"))
+    name = PACKAGE_NAME.search((source / "native" / "Cargo.toml").read_text(encoding="utf-8"))
     if not name or name.group(1) != CRATE:
         raise SystemExit(f"native/Cargo.toml does not name the package {CRATE}")
     if options.served:
