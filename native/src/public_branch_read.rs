@@ -114,7 +114,10 @@ fn entries(document: &V) -> Result<std::collections::BTreeMap<String, (String, V
 }
 
 fn history_side(subject: &str, capture: &Capture, snapshot: &V) -> Result<V> {
-    let states = map(&map(&capture.state)?["subjects"])?;
+    semantic_side(subject, &capture.state, &capture.objects, snapshot)
+}
+fn semantic_side(subject: &str, state: &V, objects: &Map, snapshot: &V) -> Result<V> {
+    let states = map(&map(state)?["subjects"])?;
     let state = states.get(subject).map(map).transpose()?;
     let mut originals = Vec::new();
     if let Some(state) = state {
@@ -126,8 +129,7 @@ fn history_side(subject: &str, capture: &Capture, snapshot: &V) -> Result<V> {
             .map(text)
             .collect::<Result<BTreeSet<_>>>()?;
         for version in versions {
-            let object = map(capture
-                .objects
+            let object = map(objects
                 .get(version)
                 .ok_or_else(|| error("missing_history_object"))?)?;
             originals.push(V::Map(Map::from([
@@ -333,6 +335,99 @@ fn history_pull(
     })
 }
 
+fn node_history_pull(
+    query: PullQuery<'_>,
+    root: &Path,
+    entry: &str,
+    oid: &str,
+    current: &crate::history_node_capture::Capture,
+    current_snapshot: V,
+) -> Result<C::Output> {
+    let observed = crate::history_branch_git::capture_node(root, oid, entry)?;
+    let branch = observed.capture()?;
+    let projection = crate::history_node_projection::capture(&branch)?;
+    let (groups, _) =
+        crate::history_hypotheses::layers(projection.projection(), projection.document())?;
+    let hypotheses = map(&groups)?
+        .iter()
+        .map(|(name, g)| {
+            let g = map(g)?;
+            Ok((
+                name.clone(),
+                V::Map(Map::from([
+                    ("document".into(), g["doc"].clone()),
+                    ("head".into(), g["head"].clone()),
+                    ("error".into(), g["error"].clone()),
+                ])),
+            ))
+        })
+        .collect::<Result<Map>>()?;
+    let branch_snapshot = V::Map(Map::from([("hypotheses".into(), V::Map(hypotheses))]));
+    let mut candidates = map(&map(current.state())?["subjects"])?
+        .keys()
+        .chain(map(&map(branch.state())?["subjects"])?.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    for snapshot in [&current_snapshot, &branch_snapshot] {
+        for h in map(&map(snapshot)?["hypotheses"])?.values() {
+            candidates.extend(entries(&map(h)?["document"])?.into_keys());
+        }
+    }
+    let mut selected = BTreeSet::new();
+    let mut unmatched = Vec::new();
+    for seed in query.seeds {
+        let prefix = format!("{}.", seed.trim_end_matches('.'));
+        let found = candidates
+            .iter()
+            .filter(|id| *id == seed || id.starts_with(&prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        if found.is_empty() {
+            unmatched.push(seed.clone());
+        }
+        selected.extend(found);
+    }
+    let mut lines = vec![
+        "BRANCH OBSERVATION — no target acceptance or adoption".into(),
+        format!("source ref: {}", query.reference),
+        format!("source commit: {oid}"),
+        format!("source entry: {entry}"),
+        format!("source revision: {}", observed.revision()?),
+        format!("current revision: {}", current.revision()),
+        format!(
+            "subjects shown: {}; omitted by budget: {}",
+            selected.len().min(query.budget as usize),
+            selected.len().saturating_sub(query.budget as usize)
+        ),
+    ];
+    if !unmatched.is_empty() {
+        lines.push(format!("unmatched seeds: {}", unmatched.join(", ")));
+    }
+    let mut bytes = lines.iter().map(|line| line.len() + 1).sum();
+    for subject in selected.iter().take(query.budget as usize) {
+        lines.push(format!("SUBJECT {subject}"));
+        for (label, capture, snapshot) in [
+            ("current", current, &current_snapshot),
+            ("branch", &branch, &branch_snapshot),
+        ] {
+            lines.push(format!("{label}:"));
+            indent_yaml(
+                &semantic_side(
+                    subject,
+                    capture.state(),
+                    capture.history.objects(),
+                    snapshot,
+                )?,
+                &mut lines,
+                &mut bytes,
+            )?;
+        }
+    }
+    let text = lines.join("\n") + "\n";
+    require(text.len() <= OUTPUT_LIMIT, "branch_pull_output_limit")?;
+    Ok(C::Output { text, code: 0 })
+}
+
 fn ordinary_hypothesis(name: &str, document: OV, head: OV) -> OV {
     OV::Map(OMap::from([
         ("name".into(), os(name)),
@@ -440,7 +535,7 @@ pub(super) fn pull(
     require((1..=1000).contains(&budget), "invalid_pull_budget")?;
     // A record without history is read as an ordinary reader reads it before any branch is
     // looked for.
-    if current.history_capture().is_none() {
+    if current.history_capture().is_none() && current.node_history_capture().is_none() {
         current.require_ordinary_reader()?;
     }
     let (entry, root, relative, oid, day) = context(paths, cwd, reference)?;
@@ -450,6 +545,20 @@ pub(super) fn pull(
         .is_some_and(|value| crate::ordinary_value::string_is(value, "core/v1"))
     {
         return Err(error("unsupported_capability: use core/v1 consumer"));
+    }
+    if let Some(capture) = current.node_history_capture() {
+        return node_history_pull(
+            PullQuery {
+                reference,
+                seeds,
+                budget,
+            },
+            &root,
+            &relative,
+            &oid,
+            capture,
+            current.snapshot()?.to_data(),
+        );
     }
     if current.history_capture().is_some() {
         history_pull(

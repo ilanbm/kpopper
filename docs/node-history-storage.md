@@ -200,7 +200,19 @@ causal closure. Absent proof leaves commit clocks unordered. Capture permits at 
 4 MiB of visited bytes; the verified graph is bounded to 4,096 commits and each reduction to four
 million traversal steps. Exhaustion refuses instead of reporting unrelated source clocks.
 
-Public Git branch admission, authority generation changes and physical named-hypothesis
+`consolidate --from` also captures marked node records from one pinned Git commit, presents a
+revision-bound preview, and requires an explicit actor and a choice for each overlapping subject.
+Source frontiers, commit/entry association, choices and actor are retained as compact context;
+original imported manifests remain exact. Acceptance acts and merge evidence share one atomic
+publication. A source's Git association is a local-reader observation, not a Merkle inclusion
+proof. `pull --from` shows original claims, pins, proposals and source revision without adoption.
+
+Public branch adoption preserves Simple/Advanced routing and refuses uncommitted target history.
+Private source history produces a private draft without publishing shared history. Recovery
+revalidates the recorded route and privacy boundary using retained evidence, so deleted source
+refs do not prevent completion. Advanced node reads with no pending ledger or publication target work normally; an
+existing pending ledger or target still refuses in live mode, while explicit frozen reads ignore pending
+state. Ordinary pending-write support, authority generation changes and physical named-hypothesis
 compatibility remain unfinished.
 
 A complete export can reconstruct an isolated temporary copy without source paths.

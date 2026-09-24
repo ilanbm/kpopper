@@ -304,7 +304,11 @@ pub(crate) fn recover(
     before: bool,
     runtime_override: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<V> {
-    scope(route)?;
+    require(
+        route.paths().len() == 1 && P::selected(&route.paths()[0])?,
+        "node_publication_authority_required",
+    )?;
+    route.verify()?;
     require(
         !before,
         "node_history_recovery_uses_durable_commit_decision",
@@ -312,6 +316,16 @@ pub(crate) fn recover(
     let root = route.paths()[0].parent().unwrap();
     let mut operation = String::new();
     let state = P::recover(root, |p| {
+        if p.guard()?
+            .as_ref()
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get("kind"))
+            .is_some_and(|kind| string_is(kind, "public-node-branch/v1"))
+        {
+            crate::public_node_branch::verify_recovery(route, original, p)?;
+            operation = p.operation().into();
+            return Ok(());
+        }
         if p.guard()?
             .as_ref()
             .and_then(|v| map(v).ok())

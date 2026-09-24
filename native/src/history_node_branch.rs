@@ -29,7 +29,7 @@ pub(crate) fn is_union(context: &V) -> Result<bool> {
 }
 pub(crate) fn evidence(context: &V) -> Result<V> {
     let c = W::context(context)?;
-    let o = schema(&c["options"], &["evidence"], &[])?;
+    let o = schema(&c["options"], &["evidence"], &["adoption"])?;
     map(&o["evidence"])?;
     Ok(o["evidence"].clone())
 }
@@ -92,7 +92,7 @@ fn merge_snapshot(target: &mut P::Snapshot, source: &P::Snapshot) -> Result<()> 
 struct Plan {
     after: Vec<u8>,
     context: V,
-    joins: BTreeMap<String, C::Event>,
+    joins: BTreeMap<String, Vec<C::Event>>,
     lazy: BTreeSet<String>,
 }
 fn plan(
@@ -100,6 +100,7 @@ fn plan(
     union: P::Snapshot,
     operation: &str,
     evidence: &BTreeMap<String, Vec<u8>>,
+    adoption: Option<&V>,
 ) -> Result<Plan> {
     token(&s(operation))?;
     require(
@@ -107,14 +108,23 @@ fn plan(
         "operation_already_prepared",
     )?;
     let capture = Capture::from_union(union)?;
-    let document = crate::history_authoring::destination(capture.document())?;
+    let (candidate, objects) = if let Some(adoption) = adoption {
+        crate::history_node_adoption::apply(target, &capture, operation, adoption)?
+    } else {
+        (capture.clone(), vec![])
+    };
+    let document = crate::history_authoring::destination(candidate.document())?;
     let capabilities = crate::reasoning_fields::capabilities(&document, None)?;
     let profile = text(field(map(&capabilities)?, "profile")?)?;
+    let before_side = V::Map(Map::from([(
+        "document".into(),
+        crate::history_authoring::destination(capture.document())?,
+    )]));
     let side = V::Map(Map::from([("document".into(), document.clone())]));
     let receipt = Receipt::pack(&crate::history_transaction::semantic_receipt(
         profile,
         &capabilities,
-        &side,
+        &before_side,
         &side,
     )?)?;
     let mut nodes = Nodes::from_values(Map::new())?;
@@ -137,6 +147,17 @@ fn plan(
         .iter()
         .map(|c| c.subject.as_str())
         .collect::<BTreeSet<_>>();
+    let after_changes = nodes.prepare(receipt.after())?;
+    let mut after_nodes = nodes.clone();
+    after_nodes.apply(&after_changes)?;
+    let after_changed = after_changes
+        .iter()
+        .map(|c| c.subject.as_str())
+        .collect::<BTreeSet<_>>();
+    let objects = objects
+        .into_iter()
+        .map(|v| Ok((text(&map(&v)?["subject"])?.to_owned(), v)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
     let mut joins = BTreeMap::new();
     let mut lazy = BTreeSet::new();
     let mut originals = Map::new();
@@ -156,6 +177,8 @@ fn plan(
     for (subject, held) in bases {
         let base = held[0];
         let payload = Frame::decode(state(base)?)?;
+        let mut events = Vec::new();
+        let mut tip = base.clone();
         if held.len() > 1 || changed.contains(subject.as_str()) {
             let value = Frame::encode(
                 &payload.semantic,
@@ -169,7 +192,58 @@ fn plan(
             } else {
                 C::Event::create(&subject, operation, parents, Some(base), Some(value))?
             };
-            joins.insert(subject, event);
+            tip = event.reconstruct(Some(base))?;
+            events.push(event);
+        }
+        if let Some(object) = objects.get(&subject) {
+            let o = map(object)?;
+            let saw = crate::history_view::list(&o["saw"])?
+                .iter()
+                .map(|v| text(v).map(str::to_owned))
+                .collect::<Result<BTreeSet<_>>>()?;
+            let old = map(&payload.semantic)?;
+            let old_id = text(&map(&map(&old["context"])?["header"])?["id"])?;
+            let observation = crate::history_node_observation::ObservationNode::between(
+                text(&o["id"])?,
+                old_id,
+                &capture.history.observations().replay(old_id)?,
+                &saw,
+            )?;
+            let value = Frame::encode(
+                &crate::history_node_capture::payload(object, &observation)?,
+                "semantic",
+                "semantic",
+                nodes.values().get(&subject),
+            )?;
+            let event = C::Event::create(
+                &subject,
+                operation,
+                vec![tip.id().into()],
+                Some(&tip),
+                Some(value),
+            )?;
+            tip = event.reconstruct(Some(&tip))?;
+            events.push(event);
+        }
+        if after_changed.contains(subject.as_str()) {
+            let payload = Frame::decode(state(&tip)?)?;
+            let value = Frame::encode(
+                &payload.semantic,
+                "evidence",
+                "after",
+                after_nodes.values().get(&subject),
+            )?;
+            let event = C::Event::create(
+                &subject,
+                operation,
+                vec![tip.id().into()],
+                Some(&tip),
+                Some(value),
+            )?;
+            events.push(event);
+        }
+        if !events.is_empty() {
+            joins.insert(subject, events);
             continue;
         }
         // A singleton initial version whose body is still visible remains in the current view.
@@ -230,7 +304,7 @@ fn plan(
             ("tails".into(), V::Map(tails)),
         ])),
     );
-    let context = V::Map(Map::from([
+    let mut context = V::Map(Map::from([
         ("format".into(), s(FORMAT)),
         (
             "options".into(),
@@ -248,6 +322,10 @@ fn plan(
         ("before".into(), receipt.before().context().clone()),
         ("after".into(), receipt.after().context().clone()),
     ]));
+    if let Some(adoption) = adoption {
+        map_mut(map_mut(&mut context)?.get_mut("options").unwrap())?
+            .insert("adoption".into(), adoption.clone());
+    }
     Ok(Plan {
         after: P::bind_view(&Y::encode_document(&doc)?, operation)?,
         context,
@@ -284,6 +362,22 @@ fn frames(
 /// share the same authority marker. Conflicts remain disputed and require an explicit later act.
 /// No source refs or external paths are reread by publication or recovery.
 pub fn prepare(root: &Path, sources: &[P::Bundle], operation: &str) -> Result<P::Prepared> {
+    prepare_inner(root, sources, operation, None)
+}
+pub(crate) fn prepare_adoption(
+    root: &Path,
+    sources: &[P::Bundle],
+    operation: &str,
+    adoption: &V,
+) -> Result<P::Prepared> {
+    prepare_inner(root, sources, operation, Some(adoption))
+}
+fn prepare_inner(
+    root: &Path,
+    sources: &[P::Bundle],
+    operation: &str,
+    adoption: Option<&V>,
+) -> Result<P::Prepared> {
     require(
         !sources.is_empty() && sources.len() <= 16,
         "node_branch_source_limit",
@@ -347,8 +441,11 @@ pub fn prepare(root: &Path, sources: &[P::Bundle], operation: &str) -> Result<P:
         }
         merge_snapshot(&mut union, &capture.snapshot)?;
     }
-    require(!imports.is_empty(), "node_branch_no_new_history")?;
-    let built = plan(&target, union, operation, &evidence)?;
+    require(
+        !imports.is_empty() || adoption.is_some(),
+        "node_branch_no_new_history",
+    )?;
+    let built = plan(&target, union, operation, &evidence, adoption)?;
     let mut appends = BTreeMap::new();
     for (subject, versions) in raw {
         if built.lazy.contains(&subject) {
@@ -363,8 +460,10 @@ pub fn prepare(root: &Path, sources: &[P::Bundle], operation: &str) -> Result<P:
                 bytes.extend(raw);
             }
         }
-        if let Some(event) = built.joins.get(&subject) {
-            bytes.extend(event.encode()?);
+        if let Some(events) = built.joins.get(&subject) {
+            for event in events {
+                bytes.extend(event.encode()?);
+            }
         }
         if !bytes.is_empty() {
             appends.insert(subject, bytes);
@@ -390,10 +489,7 @@ pub(crate) fn verify(root: &Path, prepared: &P::Prepared) -> Result<()> {
         prepared.canonical_before()?.is_none(),
         "node_import_edited_view",
     )?;
-    require(
-        !prepared.imports()?.is_empty(),
-        "node_branch_no_new_history",
-    )?;
+
     let (target, after) = prepared.snapshots(root)?;
     Capture::from_snapshot(target.clone())?;
     Capture::from_snapshot(after.clone())?;
@@ -406,7 +502,15 @@ pub(crate) fn verify(root: &Path, prepared: &P::Prepared) -> Result<()> {
     }
     union.versions.retain(|_, v| !v.is_empty());
     union.current = target.current.clone();
-    let expected = plan(&target, union, operation, &prepared.evidence()?)?;
+    let context = prepared
+        .context()?
+        .ok_or_else(|| error("node_transaction_missing_context"))?;
+    let adoption = map(&W::context(&context)?["options"])?.get("adoption");
+    require(
+        !prepared.imports()?.is_empty() || adoption.is_some(),
+        "node_branch_no_new_history",
+    )?;
+    let expected = plan(&target, union, operation, &prepared.evidence()?, adoption)?;
     let actual = after
         .versions
         .iter()
@@ -420,6 +524,7 @@ pub(crate) fn verify(root: &Path, prepared: &P::Prepared) -> Result<()> {
     let wanted = expected
         .joins
         .iter()
+        .flat_map(|(s, events)| events.iter().map(move |event| (s, event)))
         .map(|(s, event)| {
             Ok((
                 (s.clone(), event.id().to_owned()),

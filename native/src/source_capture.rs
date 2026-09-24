@@ -566,6 +566,12 @@ impl<T> CapturedSource<T> {
     pub fn files(&self) -> &BTreeMap<PathBuf, Vec<u8>> {
         &self.inventory.files
     }
+    pub(crate) fn node_history_capture(&self) -> Option<&crate::history_node_capture::Capture> {
+        self.document
+            .node_history
+            .as_ref()
+            .map(|(_, capture)| capture)
+    }
     pub fn history_capture(&self) -> Option<&crate::history_capture::Capture> {
         self.document.history.as_ref()
     }
@@ -730,17 +736,20 @@ fn capture_ordinary_with(
                 .is_some_and(|p| p.ledger.head.is_some());
         let mut doc = D::load(&initial.selected, &mut inventory, allow_missing)?;
         if canonical && let Some(pending) = &initial.pending {
-            require(
-                doc.node_history.is_none(),
-                "node_history_pending_unsupported",
-            )?;
-            doc.overlay = Some(crate::ordinary_overlay::apply(
-                &mut doc,
-                pending,
-                &initial.root,
-                text(&map(&initial.config)?["record"])?,
-                runtime,
-            )?);
+            if doc.node_history.is_some() {
+                require(
+                    pending.ledger.head.is_none() && pending.target.is_none(),
+                    "node_history_pending_unsupported",
+                )?;
+            } else {
+                doc.overlay = Some(crate::ordinary_overlay::apply(
+                    &mut doc,
+                    pending,
+                    &initial.root,
+                    text(&map(&initial.config)?["record"])?,
+                    runtime,
+                )?);
+            }
         }
         after_load(pass, &doc)?;
         inventory.verify()?;

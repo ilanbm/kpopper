@@ -1648,6 +1648,19 @@ pub struct Bundle {
     digest: String,
 }
 impl Bundle {
+    pub(crate) fn from_files(files: BTreeMap<String, Vec<u8>>) -> Result<Self> {
+        let mut bundle = Self {
+            format: "node-history-bundle-experiment/v1".into(),
+            files: files
+                .into_iter()
+                .map(|(p, raw)| (p, STANDARD.encode(raw)))
+                .collect(),
+            digest: String::new(),
+        };
+        bundle.digest = bundle.identity()?;
+        bundle.encode()?;
+        Ok(bundle)
+    }
     pub(crate) fn files(&self) -> Result<BTreeMap<String, Vec<u8>>> {
         self.files
             .iter()
