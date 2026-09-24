@@ -39,7 +39,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-rust-${{ github.ref }}-${{ (inputs.validation == 'distribution' || github.event_name == 'push') && github.sha || 'checks' }}
+  group: native-rust-${{ github.ref }}-${{ inputs.validation || 'full' }}-${{ (inputs.validation == 'distribution' || github.event_name == 'push') && github.sha || 'checks' }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
