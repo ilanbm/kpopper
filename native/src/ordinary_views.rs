@@ -2264,6 +2264,8 @@ impl Projection<'_> {
             }
         }
         note.extend(self.priors_line()?);
+        note.extend(self.legend_notes());
+        note.extend(self.alias_notes()?);
         for (id, asked, hint) in self.page_unserved(brief)? {
             note.push(format!("{id} is served by no tab - asked: {asked}"));
             note.push(hint);
@@ -2566,3 +2568,5 @@ mod condition_check_tests {
 }
 
 include!("ordinary_hub_semantics.rs");
+
+include!("ordinary_check_notes.rs");

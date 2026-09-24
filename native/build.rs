@@ -63,6 +63,7 @@ fn check_copies(sources: &BTreeMap<String, String>) {
     let mut copies = Vec::new();
     files(Path::new("shared/session/lean"), &mut copies);
     let mut pairs = vec![(PathBuf::from("LICENSE"), PathBuf::from("../LICENSE"))];
+    pairs.push((PathBuf::from("shared/board.png"), PathBuf::from("../assets/diagrams/two-working-modes.png")));
     for copy in copies {
         let outside = originals.join(copy.strip_prefix("shared").unwrap());
         pairs.push((copy, outside));

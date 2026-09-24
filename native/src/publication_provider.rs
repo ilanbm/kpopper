@@ -37,7 +37,7 @@ impl GitHubProvider {
         }
     }
 
-    fn identity(&self) -> Result<(String, String)> {
+    pub(crate) fn identity(&self) -> Result<(String, String)> {
         static SSH: LazyLock<Regex> =
             LazyLock::new(|| Regex::new(r"^git@([^:]+):([^/]+/[^/]+?)(?:\.git)?$").unwrap());
         static NAME: LazyLock<Regex> =
@@ -115,6 +115,28 @@ impl GitHubProvider {
             head: value["head"]["sha"].as_str().unwrap_or_default().into(),
             body: value["body"].as_str().unwrap_or_default().into(),
         })
+    }
+
+    /// Read-only connection evidence; a successful check is not a publication receipt.
+    pub fn inspect_destination(&self, target: Option<&str>) -> Result<Value> {
+        let (_, name) = self.identity()?;
+        let repo = self.api("GET", &format!("repos/{name}"), None)?;
+        require(repo["full_name"].as_str().is_some_and(|v| v.eq_ignore_ascii_case(&name)),
+            "provider returned a different repository; inspect the destination again")?;
+        let target = target.or_else(|| repo["default_branch"].as_str())
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| Error("the repository has no target branch yet".into()))?;
+        let encoded = target.bytes().map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() }
+            else { format!("%{b:02X}") }
+        }).collect::<String>();
+        let reference = self.api("GET", &format!("repos/{name}/git/ref/heads/{encoded}"), None)?;
+        require(reference["ref"] == format!("refs/heads/{target}")
+            && reference["object"]["sha"].as_str().is_some_and(|v| !v.is_empty()),
+            "the configured target branch could not be verified")?;
+        Ok(json!({"repository":self.repository,"name":repo["full_name"],
+            "target":target,"target_commit":reference["object"]["sha"],
+            "can_push":repo["permissions"]["push"] == true}))
     }
 }
 

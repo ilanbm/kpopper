@@ -13,12 +13,14 @@ When mentioning this skill to the user, include the plugin name: `kpopper:record
 
 ## The first write
 
-Use the project mode: Simple shares one graph and named hypotheses across sessions; Advanced keeps branch context and `pending_grounding` for shareable findings independent of a feature, even with one checkout.
-Privacy comes first: private or unclear permission means a structured private draft outside Git. Preserve exact source, scope and commit; measured unmerged facts are scoped facts, not automatically hypotheses. Capture, remote proposal and verified acceptance differ. Merge never proves truth, raises confidence or refreshes `seen`. See [project modes](../../docs/project-modes.md) for routing and publication.
+For a Git project with no record or selected mode, use `kpop board` and the start guide to choose Simple's external location or Advanced (experimental). Skipping a tutorial or disabling guidance does not forbid future recording: obtain the concrete choice at the next authorized write without repeating the tutorial. Silence is not Advanced consent. Once selected, `kpop add` creates the first sourced record at its resolved location. Preserve existing records until a validated transition.
+
+Simple shares one graph; Advanced keeps branch context and kpopper Board for feature-independent findings. Private or unclear sharing permission takes priority and retains a private draft. Keep exact source, scope and commit; unmerged measurements are scoped facts, not automatically hypotheses. Capture, proposal and acceptance differ; merge neither proves truth nor refreshes `seen`. See [project modes](../../docs/project-modes.md). **Route before writing:** an authorized shared report needs `shareability: "project"` and `scope: {"kind": "external", "environment": "service/account"}` (or project scope). Verify `project_captured` and its receipt. `applied` means local writing; an unannotated report does not feed the Board. Code/feature findings stay with the branch. Neither a remote nor confident wording grants sharing rights.
+
+If hypotheses cause `needs_primary`, review the retained report. An independent complete finding can use primary `add --scope external --environment ENV --shareability project` with permitted portable evidence; verify `state: captured`. Do not fold unrelated hypotheses merely to collect it. `kpop board` shows publication configuration; its one-time offer owns setup.
 
 Record the first useful finding within the user's authorization. Sources and facts are valid alone; `add` fills `seen` for actual judgments. After a semantic refusal, reconsider the representation, not just the value's format: follow [live representation evolution](../kpopper/EVOLUTION.md), then execute supported corrections within the task's authority. Installation creates no record, and a one-off can finish without one.
 
-**Write a decision in one `add`: its conclusion, actual premises and a meaningful failure condition; let the writer fill `seen`.**
 For uncertain syntax, append `--dry-run` to the same `add`, `set` or `review`; read the profile and diagnostics, then remove the flag to write. Never create scratch entries. [Examples and profile-specific guidance](../kpopper/EXPRESSIONS.md#preview-a-candidate) explain the next step after a refusal.
 
 Where no record resolves for the workspace, `kpop add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
@@ -115,10 +117,8 @@ that unrelated entry does. If a rendered number is not exactly one reference, it
 
 ## The sign that would make it wrong
 
-Every judgment says what would make it wrong, and the reader evaluates it where it honestly can.
-Use `wrong_if: {expr: "..."}` over entries the judgment rests on, for example
-`acme.seats < 150` or `flue.clear == false`. Ordinary records support one comparison;
-`core/v1` also supports composed Boolean conditions. Use the grammar for the actual record.
+Every judgment names what would make it wrong: use `wrong_if: {expr: "..."}` over its declared premises, e.g. `acme.seats < 150` or `flue.clear == false`.
+Ordinary records support one comparison; `core/v1` also supports composed Boolean conditions. Use the grammar for the actual record.
 A predicate that cannot be evaluated says so with `blocked_on` and why; a decision taken on a
 session's prior, or on taste, names the prose sign that would re-open it in `reopened_by`. Never
 invent a threshold to make a predicate evaluable, and never write prose in a predicate field.

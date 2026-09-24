@@ -91,6 +91,8 @@ enum Command {
     Knowledge(kpop_native::public_knowledge::Options),
     /// Inspect local pending contribution state.
     Pending(kpop_native::public_pending::Options),
+    /// Connect the shared findings Board or keep it local.
+    Board(kpop_native::public_board::Options),
     /// Manage durable local followups.
     Followups(kpop_native::public_followups::Args),
     /// Check branch compatibility and coordinate local observation delivery.
@@ -186,6 +188,9 @@ struct ConsolidateArgs {
     subjects: Vec<String>,
     #[arg(long)]
     dry_run: bool,
+    /// Resolve independent record changes in an in-progress Git merge, without staging or committing.
+    #[arg(long)]
+    resolve: bool,
     #[arg(long, num_args = 2, value_names = ["NAME", "WHY"])]
     refute: Vec<String>,
     #[arg(long = "as")]
@@ -208,6 +213,7 @@ struct ConsolidateArgs {
 impl ConsolidateArgs {
     fn options(&self) -> Result<kpop_native::public_consolidation::Options> {
         let mut options = kpop_native::public_consolidation::Options {
+            resolve: self.resolve,
             dry_run: self.dry_run,
             refute: self.refute.first().cloned(),
             why: self.refute.get(1).cloned(),
@@ -243,6 +249,18 @@ fn stdin_bytes() -> Result<Vec<u8>> {
     require(raw.len() <= MAX_BYTES, "byte_limit")?;
     Ok(raw)
 }
+fn retry_session_snapshot<T>(mut read: impl FnMut() -> Result<T>) -> Result<T> {
+    for attempt in 0..4 {
+        match read() {
+            Err(error) if error.0 == "snapshot_changed" && attempt < 3 => {
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            result => return result,
+        }
+    }
+    unreachable!()
+}
+
 fn session(options: &kpop_native::public_session::StartOptions) -> Result<String> {
     let raw = stdin_bytes()?;
     let mut payload = if raw.iter().all(u8::is_ascii_whitespace) {
@@ -297,7 +315,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let mut output = Vec::<String>::new();
     let mut opening_failed = false;
     let first_use = location.as_ref().map(|location| {
-        kpop_native::onboarding::context_with_host(location, options.host.as_deref())
+        kpop_native::onboarding::context_with_mode(location, options.host.as_deref(), mode)
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
     });
     if location.as_ref().is_some_and(|l| l.status == "unavailable") {
@@ -307,7 +325,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let result = Store::open(&root)?;
         output.push(format!("Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}", result["commits"], serde_json::to_string(&result["document"]["readings"])?));
     } else if let Some(location) = location.as_ref().filter(|l| l.status != "missing") {
-        match kpop_native::session_admin::hook_opening(&root, mode) {
+        match retry_session_snapshot(|| kpop_native::session_admin::hook_opening(&root, mode)) {
             Ok(Some(text)) => {
                 output.push(text.trim_end().into());
                 if let Some(host) = options.host.as_deref() {
@@ -325,13 +343,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     from_hook: true,
                     ..Default::default()
                 };
-                match kpop_native::public_readers::run_auto(
+                match retry_session_snapshot(|| kpop_native::public_readers::run_auto(
                     "open",
                     &options,
                     &root,
                     mode,
                     kpop_native::public_readers::Reply::View,
-                ) {
+                )) {
                     Ok(opening) => {
                         if !opening.text.is_empty() {
                             output.push(opening.text.trim_end().into());
@@ -376,17 +394,27 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         // A baseline that cannot be saved leaves the opening intact; prompt
         // diagnostics then stay silent for this session. A failed opening has
         // already put its diagnostic on stderr, so none is added for the baseline.
-        match kpop_native::public_session::start_mark(&root, &payload, mode) {
+        match retry_session_snapshot(|| kpop_native::public_session::start_mark(&root, &payload, mode)) {
             Err(error) if !opening_failed => {
                 eprintln!("kpop: session baseline was not saved: {error}")
             }
             _ => (),
         }
     }
+    // Finish every checked read and baseline before a child may change the
+    // publication observations those reads pin.
+    if !feasibility && mode == kpop_native::source_capture::ReadMode::Live
+        && let Ok(project) = kpop_native::project_modes::Project::open(&root) {
+        kpop_native::pending_publication::trigger_after_capture(&project);
+    }
     Ok(output.join("\n"))
 }
 
 fn run(args: Args) -> Result<Value> {
+    if let Command::Board(options) = &args.command {
+        let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
+        return kpop_native::public_board::run(options, &root);
+    }
     if let Command::Map(options) = &args.command {
         let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
         return kpop_native::public_map::run(options, &root);
@@ -567,6 +595,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Export(_)
         | Command::Knowledge(_)
         | Command::Pending(_)
+        | Command::Board(_)
         | Command::Expressions(_)
         | Command::Search(_)
         | Command::Config(_)

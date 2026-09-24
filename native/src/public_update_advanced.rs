@@ -516,13 +516,28 @@ fn finish(
 
 /// Return `None` for routes that keep the existing local/private report path.
 /// A captured result owns its complete ingestion receipt and writes no record image.
+#[derive(Debug)]
+pub(crate) enum CaptureFailure {
+    NeedsPrimary(&'static str),
+    Error(Error),
+}
+impl CaptureFailure {
+    #[cfg(test)]
+    fn message(&self) -> &str {
+        match self { Self::NeedsPrimary(reason) => reason, Self::Error(error) => &error.0 }
+    }
+}
+impl From<Error> for CaptureFailure {
+    fn from(error: Error) -> Self { Self::Error(error) }
+}
+
 pub(crate) fn capture(
     report: &Report,
     event: &str,
     context: Context<'_>,
-) -> Result<Option<Output>> {
+) -> std::result::Result<Option<Output>, CaptureFailure> {
     if let Some(reason) = super::private_reason(report)? {
-        return Err(Error(reason.into()));
+        return Err(Error(reason.into()).into());
     }
     if !applies(report, &context.route)? {
         return Ok(None);
@@ -536,14 +551,12 @@ pub(crate) fn capture(
         &mut inventory,
         false,
     )?;
-    require(
-        captured.members == [context.record.to_path_buf()],
-        "multi-file and pointer records require primary review",
-    )?;
-    require(
-        map(&captured.hypotheses)?.is_empty(),
-        "a record with hypothesis context requires primary review",
-    )?;
+    if captured.members != [context.record.to_path_buf()] {
+        return Err(CaptureFailure::NeedsPrimary("multi-file and pointer records require primary review"));
+    }
+    if !map(&captured.hypotheses)?.is_empty() {
+        return Err(CaptureFailure::NeedsPrimary("a record with hypothesis context requires primary review"));
+    }
     let document = captured.source.projected();
     super::verify_captured_target(
         &document,
@@ -895,8 +908,7 @@ mod tests {
                     after_capture: &mut stop,
                 },
             )
-            .unwrap_err()
-            .0,
+            .unwrap_err().message(),
             "stop after capture"
         );
         assert_eq!(fs::read(&record).unwrap(), before);

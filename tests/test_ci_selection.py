@@ -57,7 +57,7 @@ class Selection(unittest.TestCase):
         changes = ["README.md", "assets/README.md", "assets/brand-guide.md", ".kpopper/view.yaml",
                    "CHANGELOG.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "skills/ground/SKILL.md",
                    "GROUNDING.yaml", ".kpopper/measure.yaml", "package.json", "hooks/hooks.json",
-                   "bin/kpop", ".claude-plugin/plugin.json", "native/README.md",
+                   "scripts/bin/kpop", ".claude-plugin/plugin.json", "native/README.md",
                    ".github/pull_request_template.md", ".github/ISSUE_TEMPLATE/bug_report.yml"]
         for path in changes:
             with self.subTest(path=path):
@@ -228,6 +228,27 @@ class RequiredResults(unittest.TestCase):
         needs["changes"]["outputs"]["platforms"] = "all"
         self.assertEqual(CI.required_failures(needs, pull_request=False), [])
         self.assertTrue(CI.required_failures(needs, pull_request=True))
+
+
+class NativeDocumentUI(unittest.TestCase):
+    def test_document_inputs_select_the_native_lane(self):
+        for path in ('tests/test_document_ui.cjs', 'tests/document_ui_fixture.py',
+                     'tests/document_native_bridge.py', 'tests/document-support/package-lock.json',
+                     'native/src/annotated_document.rs', 'native/shared/document/layer.js',
+                     'native/ci/document_ui.py'):
+            self.assertIn('rust', lanes([path]), path)
+            self.assertTrue(CI.lane_reads(CI.LANES['rust'], path), path)
+
+    def test_required_linux_native_job_runs_the_dom_suite(self):
+        import yaml
+        jobs = yaml.safe_load((ROOT / '.github/workflows/native-rust.yml').read_text())['jobs']
+        steps = jobs['tests']['steps']
+        step = next((s for s in steps if 'python native/ci/document_ui.py' in s.get('run', '')), None)
+        self.assertIsNotNone(step, 'the required native test job must execute DOM interaction tests')
+        self.assertIn("linux-x86_64", step['if'])
+        self.assertNotIn('continue-on-error', step)
+        self.assertTrue(any('npm ci' in s.get('run', '') for s in steps))
+        self.assertIn('tests', jobs['verdict']['needs'])
 
 
 class WorkflowCoverage(unittest.TestCase):

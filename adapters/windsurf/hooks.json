@@ -2,7 +2,7 @@
   "hooks": {
     "post_write_code": [
       {
-        "command": "sh -c 'if grep -qE \"(GROUNDING|PROVENANCE)[.]yaml\"; then cat >/dev/null; \"/absolute/path/to/kpopper/bin/kpop\" check >/dev/null 2>&1; fi; exit 0'",
+        "command": "sh -c 'if grep -qE \"(GROUNDING|PROVENANCE)[.]yaml\"; then cat >/dev/null; \"/absolute/path/to/kpopper/scripts/bin/kpop\" check >/dev/null 2>&1; fi; exit 0'",
         "show_output": false
       }
     ]

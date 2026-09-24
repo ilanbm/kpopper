@@ -4,9 +4,13 @@ use std::{
     path::{Path, PathBuf},
 };
 fn archive() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../scripts/reasoning/native")
-        .join(format!("{}.kpopper-runtime", target_name().unwrap()))
+    std::env::var_os("KPOP_REASONING_ARCHIVE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../scripts/reasoning/native")
+                .join(format!("{}.kpopper-runtime", target_name().unwrap()))
+        })
 }
 #[test]
 fn actual_packaged_lean_matches_pinned_python_across_scalar_and_composition_requests() {
@@ -234,4 +238,75 @@ fn foreign_source_manifest_cannot_activate_an_otherwise_valid_archive() {
         "packaged runtime does not match its source revision"
     );
     assert!(!temp.path().join("cache").exists());
+}
+
+#[test]
+#[ignore = "requires an explicitly built replacement GMP library"]
+fn modified_gmp_library_is_loaded_and_disclosed() {
+    use kpop_native::{identity::sha256, reasoning_runtime::run_command_capture};
+    use std::{process::Command, time::Duration};
+    let replacement = PathBuf::from(
+        std::env::var_os("KPOP_REASONING_REPLACEMENT_LIBRARY")
+            .expect("select the separately modified GMP library"),
+    );
+    let cache = tempfile::tempdir().unwrap();
+    let archive = archive();
+    let original = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
+    let binary_hash = sha256(&fs::read(&original.binary).unwrap());
+    let request = serde_json::json!({"nodes":{},"declared":[],
+        "expression":{"op":"div","args":[{"num":"1"},{"num":"3"}]}});
+    let expected = original.request_many(std::slice::from_ref(&request)).unwrap();
+    let libraries = original.manifest["libraries"].as_array().unwrap();
+    assert_eq!(
+        libraries.len(),
+        1,
+        "the replacement probe must name the GMP member unambiguously"
+    );
+    fs::copy(
+        replacement,
+        original.root.join(libraries[0].as_str().unwrap()),
+    )
+    .unwrap();
+    let modified = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
+    assert_eq!(
+        modified.implementation["modified_libraries"],
+        original.manifest["libraries"]
+    );
+    assert_eq!(sha256(&fs::read(&modified.binary).unwrap()), binary_hash);
+    assert_eq!(modified.request_many(&[request]).unwrap(), expected);
+    let receipt = run_command_capture(
+        &mut Command::new(&modified.binary),
+        b"KP2\t1000\t128\t256\t0\t0\tn\t1\n".to_vec(),
+        Duration::from_secs(10),
+        1024 * 1024,
+    )
+    .unwrap();
+    assert!(receipt.status.success());
+    assert!(
+        String::from_utf8_lossy(&receipt.stderr).contains("KPOPPER_GMP_REPLACEMENT_PROBE"),
+        "the replacement must actually execute, not only appear in metadata: {:?}",
+        receipt
+    );
+}
+
+#[test]
+fn explicit_missing_candidate_never_falls_back_to_the_committed_archive() {
+    let root = tempfile::tempdir().unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "actual_packaged_lean_matches_pinned_python_across_scalar_and_composition_requests",
+            "--nocapture",
+        ])
+        .env(
+            "KPOP_REASONING_ARCHIVE",
+            root.path().join("missing.kpopper-runtime"),
+        )
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "a missing selected candidate must fail, not validate a different archive"
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 failed"));
 }

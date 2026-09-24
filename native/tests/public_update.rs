@@ -442,6 +442,55 @@ fn advanced_cli_routes_project_private_and_local_reports_and_replays_success() {
 }
 
 #[test]
+fn shared_report_with_hypotheses_retains_a_primary_review_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo"); fs::create_dir(&root).unwrap(); record(&root);
+    success_git(&root, &["init", "-q", "-b", "main"]);
+    let hypotheses = root.join(".kpopper/hypotheses");
+    fs::create_dir_all(&hypotheses).unwrap();
+    fs::write(hypotheses.join("unrelated.yaml"), "known:\n  p.unrelated: {v: 99}\n").unwrap();
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let report = json!({"event_id":"shared-hypothesis", "date":"2026-09-24",
+        "source_quote":"Vendor price is 12", "target":"p.price", "value":12,
+        "shareability":"project", "scope":{"kind":"external","environment":"vendor"}});
+    let state = temp.path().join("state");
+    let output = run(&root, &state, &report);
+    let receipt: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(output.status.code(), Some(1), "{receipt}");
+    assert_eq!(receipt["state"], "needs_primary");
+    assert_eq!(receipt["reason"], "a record with hypothesis context requires primary review");
+    let replay = run(&root, &state, &report);
+    assert_eq!(replay.status.code(), Some(1));
+    assert_eq!(serde_json::from_slice::<Value>(&replay.stdout).unwrap(), receipt);
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert!(!Command::new("git").arg("-C").arg(&root).args(["rev-parse","--verify","refs/kpopper/pending_grounding"]).output().unwrap().status.success());
+}
+
+fn success_git(root: &Path, args: &[&str]) {
+    let output = Command::new("git").arg("-C").arg(root).args(args).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+}
+
+#[test]
+fn shared_stale_report_keeps_its_error_instead_of_a_terminal_review_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo"); fs::create_dir(&root).unwrap(); record(&root);
+    success_git(&root, &["init", "-q", "-b", "main"]);
+    let state = temp.path().join("state");
+    let report = json!({"event_id":"shared-stale", "date":"2026-09-24",
+        "source_quote":"Vendor price is 12", "record_sha256":"0".repeat(64),
+        "updates":[{"kind":"add", "id":"p.new", "body":{"v":12}}],
+        "shareability":"project", "scope":{"kind":"external","environment":"vendor"}});
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let output = run(&root, &state, &report);
+    assert_eq!(output.status.code(), Some(2));
+    let answer: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(answer["error"].as_str().unwrap().contains("record changed"));
+    assert!(state.join("receipts").read_dir().unwrap().next().is_none());
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+}
+
+#[test]
 fn source_and_two_dependent_writes_publish_once_and_retry_exactly() {
     let temp = tempfile::tempdir().unwrap();
     record(temp.path());

@@ -114,6 +114,7 @@ pub mod public_identity;
 pub mod public_ingestion;
 pub mod public_knowledge;
 pub mod public_pending;
+pub mod public_board;
 pub mod public_update;
 pub mod public_workspace;
 pub mod publication_provider;
