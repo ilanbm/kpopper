@@ -78,7 +78,7 @@ RECORD_JOB = (
     "tests/test_ci_selection.py", "tests/test_ci_release_flow.py", "tests/test_ci_audit.py", "tests/test_native_release_assets.py",
     "tests/test_native_launcher.py", "tests/test_hook_delivery.py", ".github/requirements-test.txt",
     ".github/scripts/release.py", ".github/scripts/publish_release.py",
-    ".github/scripts/publish_crate.py", ".github/scripts/native_assets.py",
+    ".github/scripts/publish_crate.py", ".github/scripts/publish_source.py", ".github/scripts/native_assets.py",
 )
 
 # Exercise CI selection and auditing on Linux. Their routing logic is platform-independent;
