@@ -1,37 +1,93 @@
 name: publish
 
 # Publish only the packages from successful main-push checks of the release commit.
+# workflow_run only dispatches: crates.io rejects that event's OIDC identity.
+# Publication runs through workflow_dispatch, keeping the same trusted publisher.
 # This workflow never rebuilds them. The legacy PyPI/npm lines remain untouched.
 on:
   workflow_run:
     workflows: [kpopper check]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      check_run_id:
+        description: Successful kpopper check run from a push to main
+        required: true
+        type: string
+      commit:
+        description: Full release commit SHA checked by that run
+        required: true
+        type: string
 
 permissions:
   contents: read
   actions: read
 
-# Rerunning a completed check may request publication again; serialize by source commit.
+# Separate the dispatcher from its child; serialize publication by source commit.
 concurrency:
-  group: publish-${{ github.event.workflow_run.head_sha }}
+  group: publish-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || inputs.commit }}
   cancel-in-progress: false
 
 jobs:
-  plan:
+  dispatch:
     if: >-
+      github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Start publication with a supported trusted-publishing event
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CHECK_RUN_ID: ${{ github.event.workflow_run.id }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: >-
+          gh workflow run publish.yml --ref main
+          -f check_run_id="$CHECK_RUN_ID" -f commit="$COMMIT"
+
+  source:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      run_id: ${{ steps.source.outputs.run_id }}
+    steps:
+      # Validate inputs using this workflow's code, before checking out release code.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - id: source
+        name: Verify the exact successful main-push check run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_RUN_ID: ${{ inputs.check_run_id }}
+          COMMIT: ${{ inputs.commit }}
+        run: python .github/scripts/publish_source.py --run-id "$CHECK_RUN_ID" --commit "$COMMIT"
+
+  plan:
+    needs: source
+    runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.plan.outputs.publish }}
       version: ${{ steps.plan.outputs.version }}
+      commit: ${{ needs.source.outputs.commit }}
+      run_id: ${{ needs.source.outputs.run_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.source.outputs.commit }}
           fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -59,7 +115,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.plan.outputs.commit }}
           fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -67,7 +123,7 @@ jobs:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           pattern: native-distribution-*
           path: ${{ runner.temp }}/native-artifacts
@@ -91,14 +147,14 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.plan.outputs.commit }}
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
@@ -120,7 +176,7 @@ jobs:
   # after an upload whose reply was lost ends green instead of publishing twice.
   crate-publish:
     needs: [plan, crate]
-    if: needs.crate.outputs.action == 'publish'
+    if: github.event_name == 'workflow_dispatch' && needs.crate.outputs.action == 'publish'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: crates-io
@@ -134,11 +190,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.plan.outputs.commit }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
@@ -210,14 +266,14 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.plan.outputs.commit }}
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate

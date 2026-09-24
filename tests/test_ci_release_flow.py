@@ -1,12 +1,15 @@
 """Release coverage is run once, and only its successful artifacts may be published."""
 import importlib.util
+import io
 import json
+import os
 import pathlib
 import re
 import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+from contextlib import redirect_stdout
 
 import yaml
 
@@ -14,6 +17,76 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("ci_selection", ROOT / ".github/scripts/ci_selection.py")
 CI = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(CI)
+spec = importlib.util.spec_from_file_location("publish_source", ROOT / ".github/scripts/publish_source.py")
+SOURCE = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(SOURCE)
+
+
+class PublicationSource(unittest.TestCase):
+    commit = "a" * 40
+    repository = "ilanbm/kpopper"
+
+    def setUp(self):
+        self.workflow = {"id": 123, "path": ".github/workflows/check.yml"}
+        self.run = {"id": 456, "event": "push", "status": "completed", "conclusion": "success",
+                    "head_branch": "main", "head_sha": self.commit, "workflow_id": 123,
+                    "path": ".github/workflows/check.yml",
+                    "repository": {"full_name": self.repository},
+                    "head_repository": {"full_name": self.repository}}
+
+    def validate(self):
+        return SOURCE.validate(self.run, self.workflow, self.repository, "456", self.commit)
+
+    def test_successful_main_push_resolves_exact_source(self):
+        self.assertEqual(self.validate(), {"commit": self.commit, "run_id": "456"})
+        with patch.dict(self.run, {"path": ".github/workflows/check.yml@refs/heads/main"}):
+            self.assertEqual(self.validate(), {"commit": self.commit, "run_id": "456"})
+
+    def test_untrusted_failed_incomplete_or_mismatched_runs_are_rejected(self):
+        for key, bad in (("id", 789), ("event", "pull_request"), ("event", "workflow_dispatch"),
+                         ("status", "in_progress"), ("conclusion", "failure"),
+                         ("conclusion", "cancelled"), ("conclusion", None),
+                         ("head_branch", "feature"), ("head_sha", "b" * 40),
+                         ("workflow_id", 789), ("path", ".github/workflows/other.yml"),
+                         ("repository", {"full_name": "other/kpopper"}),
+                         ("head_repository", {"full_name": "other/kpopper"}),
+                         ("head_repository", None)):
+            with self.subTest(key=key, bad=bad), patch.dict(self.run, {key: bad}):
+                with self.assertRaises(SystemExit):
+                    self.validate()
+        for key in self.run:
+            missing = {name: value for name, value in self.run.items() if name != key}
+            with self.subTest(missing=key), patch.object(self, "run", missing):
+                with self.assertRaises(SystemExit):
+                    self.validate()
+        for workflow in ({}, {"id": 123, "path": ".github/workflows/other.yml"}):
+            with patch.object(self, "workflow", workflow), self.assertRaises(SystemExit):
+                self.validate()
+
+    def test_cli_confirms_inputs_with_github_before_emitting_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "output"
+            env = {"GITHUB_REPOSITORY": self.repository, "GITHUB_OUTPUT": str(output)}
+            with patch.dict(os.environ, env), patch.object(SOURCE, "api", side_effect=[self.workflow, self.run]) as api, \
+                    redirect_stdout(io.StringIO()):
+                self.assertEqual(SOURCE.main(["--run-id", "456", "--commit", self.commit]), 0)
+            self.assertEqual([call.args[0] for call in api.call_args_list], [
+                "repos/ilanbm/kpopper/actions/workflows/check.yml", "repos/ilanbm/kpopper/actions/runs/456"])
+            self.assertEqual(output.read_text(), f"commit={self.commit}\nrun_id=456\n")
+            output.unlink()
+            with patch.dict(os.environ, env), patch.dict(self.run, {"conclusion": "failure"}), \
+                    patch.object(SOURCE, "api", side_effect=[self.workflow, self.run]), \
+                    self.assertRaises(SystemExit):
+                SOURCE.main(["--run-id", "456", "--commit", self.commit])
+            self.assertFalse(output.exists())
+
+    def test_malformed_dispatch_inputs_never_reach_github(self):
+        for run_id, commit in (("1/../../other", self.commit), ("0", self.commit),
+                               ("456", "main"), ("456", self.commit + "\nrun_id=789")):
+            with self.subTest(run_id=run_id, commit=commit), patch.object(SOURCE, "api") as api, \
+                    patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+                SOURCE.main(["--run-id", run_id, "--commit", commit])
+            api.assert_not_called()
 
 
 class ReleaseSelection(unittest.TestCase):
@@ -130,26 +203,48 @@ class PublishBoundary(unittest.TestCase):
 
     def test_publish_waits_for_successful_main_push_checks_and_never_rebuilds(self):
         workflow = self.workflow("publish.yml")
-        self.assertEqual(workflow["on"], {"workflow_run": {
-            "workflows": ["kpopper check"], "types": ["completed"], "branches": ["main"]}})
+        self.assertEqual(workflow["on"]["workflow_run"], {
+            "workflows": ["kpopper check"], "types": ["completed"], "branches": ["main"]})
+        self.assertEqual(set(workflow["on"]["workflow_dispatch"]["inputs"]), {"check_run_id", "commit"})
         jobs = workflow["jobs"]
         self.assertNotIn("build", jobs)
-        gate = jobs["plan"]["if"]
-        for condition in ("github.event.workflow_run.conclusion == 'success'",
+        gate = jobs["dispatch"]["if"]
+        for condition in ("github.event_name == 'workflow_run'",
+                          "github.event.workflow_run.conclusion == 'success'",
                           "github.event.workflow_run.event == 'push'",
                           "github.event.workflow_run.head_repository.full_name == github.repository"):
             self.assertIn(condition, gate)
+        self.assertEqual(jobs["dispatch"]["permissions"], {"actions": "write"})
+        dispatch = jobs["dispatch"]["steps"]
+        self.assertFalse(any("uses" in step for step in dispatch))
+        self.assertIn("gh workflow run publish.yml", dispatch[0]["run"])
+        self.assertIn("--ref main", dispatch[0]["run"])
+        self.assertIn('check_run_id="$CHECK_RUN_ID"', dispatch[0]["run"])
+        self.assertIn('commit="$COMMIT"', dispatch[0]["run"])
+        self.assertEqual(jobs["source"]["if"],
+                         "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'")
+        self.assertEqual(jobs["plan"]["needs"], "source")
         self.assertEqual(jobs["publish"]["needs"], "plan")
+        # OIDC may never be requested by the workflow_run invocation, even if a
+        # future routing change accidentally makes the other prerequisites pass.
+        self.assertIn("github.event_name == 'workflow_dispatch'", jobs["crate-publish"]["if"])
+        self.assertIn("github.event_name", workflow["concurrency"]["group"])
+        self.assertIn("inputs.commit", workflow["concurrency"]["group"])
 
     def test_every_checkout_and_download_is_bound_to_the_checked_run(self):
         workflow = self.workflow("publish.yml")
-        for job in workflow["jobs"].values():
+        for name, job in workflow["jobs"].items():
             for step in job.get("steps", []):
                 use = step.get("uses", "")
                 if use.startswith("actions/checkout@"):
-                    self.assertEqual(step["with"]["ref"], "${{ github.event.workflow_run.head_sha }}")
+                    # Only the read-only validator runs from the workflow's tree;
+                    # every publishing job uses the validated release commit.
+                    expected = ("${{ github.sha }}" if name == "source" else
+                                "${{ needs.source.outputs.commit }}" if name == "plan" else
+                                "${{ needs.plan.outputs.commit }}")
+                    self.assertEqual(step["with"]["ref"], expected)
                 elif use.startswith("actions/download-artifact@"):
-                    self.assertEqual(step["with"]["run-id"], "${{ github.event.workflow_run.id }}")
+                    self.assertEqual(step["with"]["run-id"], "${{ needs.plan.outputs.run_id }}")
                     self.assertEqual(step["with"]["github-token"], "${{ github.token }}")
         for name in ("publish", "crate-publish"):
             self.assertEqual(workflow["jobs"][name]["permissions"]["actions"], "read")
