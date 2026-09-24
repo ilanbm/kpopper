@@ -253,13 +253,22 @@ can read different papers and compare explanations against the same sourced reco
 with what it already holds, check the combined dependencies and resolve conflicting claims.
 A proposal can be folded in, refuted with its reason retained, or left pending.
 
-**Advanced — branch contexts and shared findings.** Each branch's record describes its
-version of the code. A cache decision on one branch may depend on results being public,
+**Advanced (experimental) — branch contexts and shared findings.** Each branch's record
+describes its version of the code. A cache decision on one branch may depend on results being public,
 while another branch introduces private results. Keeping those premises with their branches
 lets review check whether the reasoning still holds when the changes are combined.
 Consolidation reconciles those records: it identifies overlapping subjects and conflicting
 claims, and checks which decisions need another look under the combined premises. Resolve
 what needs judgment before folding a proposal in; unresolved hypotheses remain explicit.
+
+> [!WARNING]
+> **Advanced mode is experimental.** Parallel branches can add different entries to the
+> same part of `GROUNDING.yaml`, leaving an already-checked PR with a merge conflict after
+> another PR lands. Resolving it can trigger another CI run. Automatic conflict-free
+> integration is not implemented. We are keeping the readable file while this remains an
+> [open design question: the problem, alternatives and their tradeoffs](docs/advanced-mode-merging.md).
+
+For a supported local record conflict, [preview a resolution with `kpop consolidate --resolve --dry-run`](docs/coding-and-ci.md#resolve-a-stopped-git-merge-locally). Competing claims still need a decision.
 
 Knowledge then follows two paths:
 
@@ -289,9 +298,9 @@ remains a hypothesis. Merging means the team accepted the contribution; it does 
 the claim, increase confidence or refresh its last review. Private material and information
 whose sharing permission is unclear stay in a structured private draft.
 
-Projects without Git start in Simple; new Git projects start in Advanced, including those
-with only one checkout. Simple can also be configured for a Git project with one external
-shared record. Existing registered shared records keep their current location and behavior;
+Projects without Git start in Simple; new Git projects currently start in experimental
+Advanced mode, including those with only one checkout. Simple can also be configured for
+a Git project with one external shared record. Existing registered shared records keep their current location and behavior;
 changing mode requires explicit reconciliation.
 
 See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
@@ -946,6 +955,10 @@ require explicit adoption. Collection queries use the declared `query/v1` capabi
 The checks cover recorded inputs and supported rules. The agent still interprets sources
 and makes judgments. Your existing documents, tools and memory stay where they are.
 
+Advanced mode's branch and shared-findings workflow is **experimental**. Parallel PRs can
+still conflict on the record and need another CI run after resolution. See the
+[open merge design question](docs/advanced-mode-merging.md) before relying on this workflow.
+
 **Optional experimental tools**
 
 | What you want to do | Tool and scope | Example |
@@ -1543,6 +1556,7 @@ read-only assessment and the packaged Windows reasoning runtime remain available
 | Core | Available | CLI and focused Markdown exports with optional Mermaid. |
 | Application | Experimental, optional | kpopper Hub and Annotated Documents, with selected evidence and copy updates. |
 | Core | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
+| Workflow | Experimental; default for new Git projects | Advanced mode: branch records and shared findings. [Record merge conflicts and repeated CI remain an open design problem](docs/advanced-mode-merging.md). |
 | Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |

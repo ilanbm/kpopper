@@ -263,6 +263,10 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.advanced_mode_merging:
+    name: "Advanced mode: the open merge problem"
+    file: "docs/advanced-mode-merging.md"
+    read: "2026-09-24"
   doc.applications:
     name: "Optional experimental applications and the core boundary"
     from: s.2026_09_18_experimental_applications
@@ -1188,6 +1192,14 @@ sources:
          roles a partial schema declares, so a first judgment it wrote carried seen: where the schema
          named another snapshot field and checked as never compared; it now keeps them, as native
          does."
+  s.2026_09_24_advanced_mode_experimental:
+    name: "Keep the readable record and expose Advanced mode merge friction as an open design
+           question"
+    asked: "The maintainer proposed keeping the current GROUNDING.yaml approach, marking Advanced
+            mode experimental especially in the README, and linking a detailed living document about
+            the merge problem, alternatives and their drawbacks."
+    fidelity: paraphrase
+    read: "2026-09-24"
   s.2026_09_24_ci_release_once:
     name: "Linux pull requests and one complete release validation"
     asked: "נשמע מצויין, בוא נעשה את זה. ביומיים האחרונים הרגיש שאי אפשר לעבוד מרוב שהכל איטי,
@@ -1204,6 +1216,15 @@ sources:
          validation; changes to platform execution inputs still expand coverage."
     read: "2026-09-24"
     fidelity: paraphrase
+  s.2026_09_24_consolidate_resolve:
+    name: "Resolve an existing Git record conflict through a bounded consolidation command"
+    asked: "Add a CLI option described as consolidate and resolve for Advanced mode record
+            conflicts; coordinate its implementation separately from onboarding and Board setup."
+    fidelity: paraphrase
+    read: "2026-09-24"
+    of: "Local Git merge resolution: preview first, preserve independent records and supported
+         immutable history, refuse competing claims, and leave staging, commit and publication to the
+         user."
   s.2026_09_24_hub_parity:
     name: "Native Hub notes, Record layout and readable HTML restored against python-final"
     read: "2026-09-24"
@@ -4140,6 +4161,16 @@ known:
     of: "2026-09-11"
 
 open:
+  q.advanced_mode_merging:
+                         name: "How can Advanced mode combine branch knowledge without repeated
+                                record conflicts and project-specific CI work?"
+                         question: "Which workflow and storage representation can preserve readable
+                                    current knowledge, complete historical evidence and explicit
+                                    unresolved claims while avoiding routine record-only merge
+                                    conflicts and repeated CI? The current format remains in place
+                                    and Advanced mode is experimental while the alternatives in the
+                                    design note stay open."
+                         from: doc.advanced_mode_merging
   q.crates_io_resources:
                          name: "What a crates.io install does about the verified resources"
                          question: "A crate installed from crates.io carries the two commands

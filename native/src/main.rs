@@ -186,6 +186,9 @@ struct ConsolidateArgs {
     subjects: Vec<String>,
     #[arg(long)]
     dry_run: bool,
+    /// Resolve independent record changes in an in-progress Git merge, without staging or committing.
+    #[arg(long)]
+    resolve: bool,
     #[arg(long, num_args = 2, value_names = ["NAME", "WHY"])]
     refute: Vec<String>,
     #[arg(long = "as")]
@@ -208,6 +211,7 @@ struct ConsolidateArgs {
 impl ConsolidateArgs {
     fn options(&self) -> Result<kpop_native::public_consolidation::Options> {
         let mut options = kpop_native::public_consolidation::Options {
+            resolve: self.resolve,
             dry_run: self.dry_run,
             refute: self.refute.first().cloned(),
             why: self.refute.get(1).cloned(),
