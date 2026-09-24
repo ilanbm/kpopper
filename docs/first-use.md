@@ -7,7 +7,16 @@ offered here. The timing of that offer - once, at a suitable moment in real work
 greeting - is the [map skill](../skills/map/SKILL.md)'s. The opener creates no record and
 scans no materials by itself.
 
-Choose **Learn while working**, **Initial map**, or **Deeper investigation** in the conversation.
+For an unconfigured Git project, the first offer is **Simple (recommended)** or **Advanced
+(experimental)**, with the existing README illustration. Simple uses one external record at
+a location you choose, shared by local worktrees. Advanced keeps records with their code
+branches, and can use kpopper Board for shared findings. Parallel branch records can produce
+merge conflicts and repeated CI; see the [open merge question](advanced-mode-merging.md).
+Existing mode choices are preserved. Choosing a local Board is not the same as Simple.
+See [mode and Board setup](project-modes.md#choose-a-mode-then-connect-the-board) for the
+location, migration and publication boundaries.
+
+For a non-Git project, choose **Learn while working**, **Initial map**, or **Deeper investigation** in the conversation.
 An initial map covers your goals, current situation, commitments, decisions, evidence and
 open questions. A deeper investigation adds historical context within agreed subjects,
 sources and dates. The agent uses the tools and materials available in that session; choosing
@@ -38,13 +47,15 @@ kpop map --deep
 kpop config
 kpop config --guidance off
 kpop config --guidance on
+kpop board
 ```
 
 `open` reads the current context. When no record exists it explains the starting options;
 it creates no file. `map` returns a concrete task to the calling agent, which accepts it,
 performs the mapping with its tools and reports the result. `--deep` requests a deeper
 investigation. `config` reads preferences or updates the guidance setting. Learning during
-ordinary work is the default and needs no command.
+ordinary work is the default. Git onboarding selects where that record will live; no empty
+record is created by setup. `board` inspects the mode choice and publication state locally.
 
 Select the working directory before the operation:
 
@@ -90,6 +101,9 @@ of the same repository. Introduction and explanation acknowledgements are stored
 local user so a new project does not repeat the tutorial. These files contain preferences
 and acknowledgements, not copies of source material. They are separate from `GROUNDING.yaml`
 and are not synced between devices by kpopper.
+Git mode and Board choices live in the repository's common Git directory so sibling
+worktrees inherit them. The selected Simple record itself stays at the external location
+the owner approved; the preference files are not a replacement copy of that record.
 
 The existing record opener still supplies the current view, including an enabled checked
 session view. The first-use path works without the optional session dependencies. Claude,

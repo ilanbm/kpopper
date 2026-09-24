@@ -35,6 +35,8 @@ pub enum Command {
     Status(StatusOptions),
     /// Reconcile and attempt one authorized publication cycle.
     Publish(PublishOptions),
+    #[command(name = "_publish", hide = true)]
+    AutomaticPublish,
     /// Retain an exact local publication scope and permission.
     Configure(ConfigureOptions),
     /// Pause local publication attempts.
@@ -201,6 +203,7 @@ pub fn run(options: &Options, workspace: &Path) -> Result<V> {
             options.authorize,
             options.retry,
         ),
+        Command::AutomaticPublish => crate::pending_publication::publish_automatic(Project::open(workspace)?),
         Command::Configure(options) => {
             let project = Project::open(workspace)?;
             crate::pending_control::configure(

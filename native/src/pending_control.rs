@@ -205,6 +205,15 @@ pub struct Configure<'a> {
 }
 
 pub fn configure(project: &Project, options: &Configure<'_>) -> Result<V> {
+    configure_expected(project, options, None)
+}
+
+/// Bind a Board activation to the repository and policy actually shown to its owner.
+pub(crate) fn configure_expected(
+    project: &Project,
+    options: &Configure<'_>,
+    expected: Option<(&str, u64)>,
+) -> Result<V> {
     require(project.is_git(), "publication needs Git")?;
     let policy = project.lock()?;
     let mut config = policy.config().clone();
@@ -261,6 +270,13 @@ pub fn configure(project: &Project, options: &Configure<'_>) -> Result<V> {
         success && urls.len() == 1,
         "publication needs exactly one push destination",
     )?;
+    if let Some((repository, generation)) = expected {
+        require(
+            urls[0] == repository
+                && map(&config)?["generation"].to_json()? == serde_json::json!(generation),
+            "Board destination or project policy changed; inspect it again before connecting",
+        )?;
+    }
     let same = previous.get("remote") == Some(&s(remote))
         && previous.get("repository") == Some(&s(urls[0]))
         && previous.get("target") == Some(&s(target))

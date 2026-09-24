@@ -14,7 +14,106 @@ files and prior agent sessions can all be sources. Code, commits and pull reques
 sources for software projects. An account or folder is a clue, not a complete definition of
 the project. Use the user's language and their names for the work.
 
-## The first offer
+## Git projects: choose Simple or Advanced (experimental)
+
+`kpop board` reports both mode selection and Board publication. These are different choices:
+Simple uses one shared project context; keeping the Board local still uses Advanced branch
+contexts. Never describe Board-local as Simple. The existing Git fallback is Advanced, but
+`mode_selected: false` means the owner has not configured a mode yet. Do not silently change
+an existing project because Advanced is now experimental.
+
+At the first suitable moment in meaningful user work, if `mode_offer` is true, show the
+existing Simple/Advanced README illustration with an enlargement link and two mode choices.
+If `illustration` is null, run `kpop board illustration` to export the exact image bundled
+with this runtime and use its returned local path. Do not substitute an older release URL.
+Use the user's language. Explain the following before accepting the choice:
+
+> **How should this Git project keep its knowledge?**
+>
+> **Simple (recommended)** — all local sessions and worktrees share one record outside the
+> code checkouts. We can keep it at **SUGGESTED_PATH**, or use another location you choose.
+> The record is not tied to a branch and is not included in your code PRs. Keep exact commit
+> scope on code measurements; one shared context does not make every claim apply to every branch.
+>
+> **Advanced (experimental)** — each branch carries its own `GROUNDING.yaml`, preserving
+> the knowledge that belongs to that code. Independent findings can also go on kpopper Board.
+> Parallel PRs can conflict in the record even when their code merges cleanly; resolving the
+> record can require another CI run. kpopper can help consolidate and resolve, but conflicting
+> claims still need a decision.
+
+Use `simple_record_suggestion` as a proposed location, not as permission to create it. The
+owner may choose another path outside every checkout. An ignored file in the primary checkout
+is not supported by the current Simple routing: ignore rules alone do not change branch
+ownership or stop tracking a tracked file. Do not offer that as a working alternative.
+For existing Simple projects, show the resolved location when asked and preserve it.
+
+**Apply Simple after its location is selected.** If no record or sidecar closure exists yet,
+create only the chosen parent directory, then run `kpop config --mode simple --record PATH
+--expected-generation N` and read `config --json` back. The setup creates no empty YAML;
+the first authorized sourced finding creates the record. If a record already exists, inspect
+`config --mode simple --record PATH --check` first. Retain and reconcile its complete record,
+history, sources and hypotheses before switching; a missing destination, differing branch
+records or pending publication must not be bypassed. Do not silently copy only GROUNDING.yaml
+or discard a branch's knowledge. A blocked transition is not a completed mode selection.
+
+**Apply Advanced after the owner selects it.** Run `kpop config --mode advanced
+--expected-generation N`, using `--record GROUNDING.yaml` when transitioning from an external
+Simple record. Existing-record transitions still require preparation and reconciliation.
+Read `config --json` back; then handle the Board choice below. Advanced selection alone
+never grants remote publication permission.
+
+After actually showing the mode choices, run `kpop board shown --mode`. It records display,
+not consent. Skipping or silence changes neither mode nor publication permission. Keep doing
+independent work; setup is not a prerequisite for the requested task. Never offer on a greeting,
+during urgent work or in a background task. Choices are shared by the repository's worktrees;
+a saved choice is not announced again. Mapping remains available on request without another
+onboarding questionnaire.
+A dismissed tutorial or disabled guidance does not permanently prevent recording. If no
+mode has been selected when the next authorized record write is needed, obtain just the
+concrete mode/location choice then. Do not repeat the tutorial or infer Advanced consent.
+When `mode_selected` is true and neither offer is due, respond only to the user's actual
+task. Do not mention the saved mode, record path or Board, or announce that setup is being
+skipped, unless the user asks about them.
+
+For a stopped Git merge, the companion consolidation interface is `kpop consolidate --resolve
+--dry-run`, then `kpop consolidate --resolve` after reviewing the proposed result. Resolve
+other conflicted files first. The command operates locally, leaves unresolved same-ID claims
+for judgment, and does not fetch, push or commit. Review and `git add` remain explicit. Check
+that the installed runtime exposes `--resolve` before recommending it; older runtimes need
+the existing manual resolution flow. Do not promise support for every history format.
+
+## Connect kpopper Board after choosing Advanced
+
+If `offer` is true, inspect the intended remote with `kpop board inspect --remote REMOTE`.
+It reads access and the actual target without granting permission. With several remotes,
+establish the intended one; never infer the target from the feature branch. When access is
+unavailable, explain the limitation and keep findings local.
+
+Present **Enable a shared Board** or **Keep Board local**, with the exact repository and
+ target. Explain that shared activation automatically creates/updates one managed knowledge
+branch and PR. It does not authorize merging, install a timer or copy private sources. The
+first shared finding starts the PR; no empty PR is created. Immediate pending reading is
+across local worktrees, not automatic synchronization of a separate clone's ledger.
+
+Apply shared selection with `kpop board connect --remote REMOTE --repository EXACT_URL
+--target TARGET --generation N --grant`, using the freshly inspected policy. This rechecks
+access, binds permission to the approved scope, and reads the saved configuration back.
+Report verified connection separately from completed publication; a refusal is not success.
+Do not ask again whether to create the branch or PR. If the initial Advanced choice already
+explicitly included shared publication to the displayed destination, reuse that authorization
+instead of asking a second time. Use `board local` when the user keeps the Board local.
+
+Run `board shown` only after the Board offer has been displayed. Preserve existing permission,
+local choices and pause state. A user can connect later through `board inspect` and `board
+connect`. Use the existing illustration once during this setup; do not show it a second time
+or generate another diagram. On a text-only host, provide its link. Respect source sharing
+rights and the scope of record-writing authorization throughout.
+Transient network failures retain findings and back off between later active sessions;
+they do not permanently exhaust automatic retries. The Board status exposes the retry state.
+Busy publishers process the durable queue with bounded waiting/batches; a started child
+or a queued contribution is not a verified publication. Pauses remain explicit.
+
+## The first offer for Simple projects
 
 An absent file does not mean an empty body of knowledge or a new user. Respect the opener's
 record location, including a record elsewhere or in a parent directory. An unavailable

@@ -23,6 +23,52 @@ silently copies or removes records. Different branch records, unresolved hypothe
 unsettled publication obligations must be reconciled first. Original record bytes and
 the previous policy are retained as rollback evidence.
 
+## Choose a mode, then connect the Board
+
+**Advanced is experimental.** Independent entries can collide in `GROUNDING.yaml` when
+parallel PRs merge; resolving a record conflict can lead to another CI run. The readable
+record and existing history formats remain unchanged. The problem and alternatives remain
+an [open design question](advanced-mode-merging.md).
+
+The first meaningful user session offers **Simple (recommended)** or **Advanced
+(experimental)** with the existing README illustration. `kpop board` reports the mode,
+whether it was explicitly selected, and a suggested external Simple record path. Advanced
+remains the low-level fallback for an unconfigured Git project; detection does not count
+as consent and onboarding never silently switches modes or moves existing records.
+
+Simple uses one shared record outside all checkouts, at a location chosen by the owner.
+For a new project, prepare its parent directory and use `config --mode simple --record PATH
+--expected-generation N`; no empty record is created. The first useful sourced write creates
+it. Existing records, history and pending contributions need reconciliation before changing
+mode. A gitignored file inside the primary checkout is not a supported Simple destination.
+
+Advanced keeps the record with each branch and includes **kpopper Board** for shared findings.
+The Board can remain local or connect to an exact remote repository and target. Mode selection
+alone does not grant publication permission; if that same user choice explicitly included
+remote publication, setup reuses it. Choosing Board-local does not choose Simple. The mode
+and Board choices are remembered across worktrees and never repeated on every session.
+
+`kpop board` reports local state without contacting a remote. `kpop board inspect --remote
+origin` verifies repository access and discovers the actual default target without granting
+permission. After the owner chooses shared publication, connect the exact inspected scope:
+
+```sh
+kpop board connect --remote origin --repository https://github.com/OWNER/REPO.git \
+  --target main --generation N --grant
+```
+
+Use the URL, target and generation returned by inspection. Connect verifies access again,
+refuses a changed destination or policy, and reads the saved grant back. It reports verified
+connection separately from completed publication. An empty Board has no PR yet; the first
+shared finding starts one. There is one open knowledge PR per review cycle, titled
+`kpopper Board: shared findings`; after acceptance, new findings start the next cycle.
+`kpop board local` remembers local-only work and revokes standing publication permission.
+The Board choice does not change the project's mode, install a timer or authorize merging.
+
+Pending local reading is shared by worktrees in the same repository. Publishing the review
+branch does not automatically import its pending ledger into a separate clone. Permission
+is local to the configured repository; a new clone must be connected explicitly.
+
 ## Record a finding in its scope
 
 Inspect the project and its current obligations:
@@ -178,6 +224,13 @@ name immutable revisions: for example `pending withdraw REVISION --reason "Reaso
 With permission, capture starts a nonblocking publication attempt. Active session openings
 retry with bounded backoff. A stopped host is not a running service; background queues do
 not install a schedule or wake a computer.
+The opener completes its record reads before starting publication. Concurrent captures are
+retained in the ledger; publishers wait for the active local publisher and process arrivals
+in bounded batches. A busy/queued or started attempt is not evidence of remote publication.
+Transient failures retry on later active sessions after backoff, capped at five minutes;
+they do not permanently exhaust automatic retries. `board` reports waiting, retry-due,
+paused and attention states. Explicit pauses and uncertain remote-write reconciliation are
+preserved. Acceptance checks still inspect previously proposed contributions after merges.
 
 The publisher keeps one cumulative PR. It checks the remote head before updating it and
 stops for an unexpected writer instead of overwriting their work. Network uncertainty

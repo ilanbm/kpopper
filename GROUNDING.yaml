@@ -4007,7 +4007,9 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 23591
+    v: 24669
+    # Same-day tree correction: previously 23591; skill_bytes_largest measures
+    # skills/record/SKILL.md at 24669 bytes in 5650a64e (Board onboarding).
     # set 2026-09-23: measured by skill_bytes_largest at 279df6a
     # Same-day code measurement after adding guarded representation guidance.
     # set 2026-09-22: Measured from the native default skill text by skill_bytes_largest
@@ -4018,7 +4020,7 @@ known:
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
-    scope: {kind: code, environment: kpopper skill sources, commit: d429f4126e74ebb86e1f4d156a431a6165390a46, working_tree: true}
+    scope: {kind: code, environment: kpopper skill sources, commit: 5650a64ebae06fc0cfc2a6d68617865b3df5e56e, working_tree: false}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it

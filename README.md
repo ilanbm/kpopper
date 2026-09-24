@@ -235,7 +235,7 @@ that directory with the YAML when sharing or versioning the record.
   <a href="assets/diagrams/two-working-modes.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/two-working-modes-mobile.png">
-      <img src="assets/diagrams/two-working-modes.png" alt="Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.">
+      <img src="assets/diagrams/two-working-modes.png" alt="Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced (experimental): Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing kpopper Board, shared findings pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.">
     </picture>
   </a>
 </p>
@@ -286,7 +286,15 @@ to merge. It appears alongside their branch record; reading it does not adopt it
 their recorded premises. Their consolidation dry run tests it against that record too, and turns
 red when accepting it would break a recorded decision, until a person decides the finding.
 
-With the project's publication permission, shared findings accumulate in one knowledge PR.
+**kpopper Board** is this continuing shared-findings area. At the start of meaningful work
+in an unconfigured Git project, kpopper offers **Simple (recommended)** with a chosen external
+shared record, or **Advanced (experimental)** with branch-specific knowledge. The illustration
+above explains both. Advanced can keep Board findings local or publish them to a named
+repository and target through one continuing knowledge PR. A publication choice enables
+branch and PR updates, not merging; it is remembered across local worktrees. `kpop board`
+shows the current mode, selection and publication state.
+
+With the project's publication permission, Board findings accumulate in one knowledge PR.
 Consolidation reconciles the proposed knowledge with the target record before acceptance;
 conflicts and changed premises need resolution. Accepted contributions are then verified
 in the target branch, shown as `main` above. The same publication branch is reused for

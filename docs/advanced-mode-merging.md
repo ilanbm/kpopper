@@ -9,8 +9,8 @@ is a workflow that is simple for people using kpopper, including people without 
 Actions. Moving work from a merge conflict into setup, background automation or a separate
 filing step is a cost, not automatically a solution.
 
-Advanced remains the current default for new Git projects. This experimental label
-describes its branch and shared-findings workflow; it does not change mode selection,
+Advanced remains the low-level fallback for unconfigured Git projects. First-use onboarding
+now offers an explicit choice of Simple or Advanced (experimental); it does not silently
 migrate existing records or make the core checks optional. See [project modes](project-modes.md)
 for the implemented behavior and [history](history-contract.md) for its preservation rules.
 
