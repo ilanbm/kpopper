@@ -79,7 +79,8 @@ RECORD_JOB = (
     ".github/scripts/publish_crate.py", ".github/scripts/native_assets.py",
 )
 
-# CI's own machinery decides what every lane means, so a change to it runs everything.
+# Exercise CI selection and auditing on Linux. Their routing logic is platform-independent;
+# changes to native execution are classified separately below.
 CI_MACHINERY = (
     ".github/workflows/check.yml", ".github/scripts/ci_selection.py", ".github/scripts/ci_audit.py",
 )
@@ -94,7 +95,7 @@ PLATFORM_INPUTS = (
     "scripts/reasoning/native/*", "scripts/reasoning/build_runtime.py",
     "scripts/reasoning/third_party/*", ".github/workflows/reasoning-runtime.yml",
     ".github/workflows/reasoning-target.yml", ".claude-plugin/*", ".codex-plugin/*",
-) + CI_MACHINERY
+)
 PLATFORM_SCOPES = ("linux-x86_64", "linux-windows", "linux-macos", "all")
 
 _release_spec = importlib.util.spec_from_file_location("release", Path(__file__).with_name("release.py"))
@@ -283,6 +284,63 @@ def version_only(path, base, head, cwd=None):
         return False
 
 
+def native_execution_contract(text):
+    """The native workflow's execution inputs, apart from routing and artifact upload.
+
+    Matrix branches may select existing runners differently without changing execution on
+    any runner. Compare their complete row set instead. Unrecognized shapes fail open.
+    """
+    import yaml
+
+    try:
+        workflow = yaml.load(text, Loader=yaml.BaseLoader)
+    except yaml.YAMLError as error:
+        raise ValueError("unreadable workflow") from error
+    if not isinstance(workflow, dict) or not isinstance(workflow.get("jobs"), dict):
+        raise ValueError("unrecognized workflow")
+    inputs = workflow.get("on", {}).get("workflow_call", {}).get("inputs", {})
+    contract = {
+        "env": workflow.get("env"), "defaults": workflow.get("defaults"),
+        "inputs": {key: value for key, value in inputs.items()
+                   if key not in ("target", "validation", "publish", "audit")},
+        "jobs": {},
+    }
+    for name, job in workflow["jobs"].items():
+        runner = job.get("runs-on", "")
+        if isinstance(runner, str) and runner.startswith("ubuntu-") and "strategy" not in job:
+            continue  # Linux-only control jobs are exercised by the Linux run.
+        execution = {key: value for key, value in job.items() if key not in (
+            "name", "needs", "if", "timeout-minutes", "concurrency", "permissions", "outputs")}
+        if "strategy" in execution:
+            matrix = execution["strategy"]["matrix"]
+            if set(matrix) != {"include"} or not isinstance(matrix["include"], str):
+                raise ValueError("unrecognized platform matrix")
+            arrays = re.findall(r"'(\[\{\"runner\".*?\])'", matrix["include"])
+            if not arrays:
+                raise ValueError("platform matrix has no declared runners")
+            rows = {json.dumps(row, sort_keys=True) for array in arrays for row in json.loads(array)}
+            execution["strategy"] = sorted(rows)
+        execution["steps"] = [
+            {key: value for key, value in step.items() if key != "name"}
+            for step in job.get("steps", [])
+            if not step.get("uses", "").startswith("actions/upload-artifact@")
+        ]
+        contract["jobs"][name] = execution
+    if not contract["jobs"]:
+        raise ValueError("workflow has no platform jobs")
+    return contract
+
+
+def native_routing_only(path, base, head, cwd=None):
+    if not base:
+        return False
+    try:
+        before, after = (native_execution_contract(source_at(ref, path, cwd)) for ref in (base, head))
+        return before == after
+    except (OSError, subprocess.CalledProcessError, UnicodeError, ImportError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
 def platforms(changes, full=False, push=False, release=False, base="", head="HEAD", cwd=None):
     changes = normalized(changes)
     if full or release or not changes:
@@ -296,6 +354,10 @@ def platforms(changes, full=False, push=False, release=False, base="", head="HEA
             return "all"
         if status == "M" and version_only(path, base, head, cwd):
             continue
+        if path == ".github/workflows/native-rust.yml":
+            if status == "M" and native_routing_only(path, base, head, cwd):
+                continue
+            return "all"
         if path.endswith(".ps1") or "windows" in path.lower():
             windows = True
         elif "darwin" in path.lower() or "macos" in path.lower():

@@ -28,13 +28,21 @@ because the record job runs them on every pull request anyway.
 
 Ordinary pull requests default to `linux-x86_64` for both tests and installed acceptance.
 Windows inputs add Windows; macOS inputs add both macOS architectures. Shared platform
-inputs (toolchains, dependencies, installers, packaging and CI machinery), unknown files,
+inputs (toolchains, dependencies, installers and packaging), unknown files,
 and unavailable history select all five targets. Changed Rust files are read at both ends
 of the diff: existing platform-conditional code keeps its platform coverage even if the
 conditional itself was not edited. Unix or architecture-specific code takes every target.
 A manifest whose only change is the package version keeps the Linux default; a simultaneous
 dependency or configuration change still selects all platforms. The release PR needs no
 special title or label to qualify for this rule.
+
+Changes to CI selection, auditing and the Linux control workflow exercise the selected lanes
+on Linux. A native workflow change also stays on Linux when only routing, scheduling or
+artifact upload changes: the selector compares the platform jobs' execution inputs and
+complete set of runner mappings at both revisions. Changed build commands, step conditions,
+shells, environment, actions or runner mappings still select every target. An unreadable or
+unrecognized native workflow also keeps the full matrix. Workflow syntax and routing
+contracts are tested separately from executing the product on every platform.
 
 Ordinary pushes to main run the record and contract checks alone. A commit that changes
 `VERSION` runs every lane and platform, using the same release planner as publication.

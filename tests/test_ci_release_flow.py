@@ -69,6 +69,60 @@ class ReleaseSelection(unittest.TestCase):
             self.assertEqual(CI.platforms(["native/Cargo.toml"], **args), "all")
 
 
+class WorkflowSelection(unittest.TestCase):
+    path = ".github/workflows/native-rust.yml"
+
+    def workflow(self):
+        return yaml.load((ROOT / self.path).read_text(), Loader=yaml.BaseLoader)
+
+    def scope(self, before, after):
+        with patch.object(CI, "source_at", side_effect=[yaml.safe_dump(before), yaml.safe_dump(after)]):
+            return CI.platforms([self.path], base="base")
+
+    def test_routing_and_upload_changes_need_only_linux(self):
+        before, after = self.workflow(), self.workflow()
+        after["concurrency"]["group"] = "another-routing-group"
+        after["on"]["workflow_call"]["inputs"]["target"]["default"] = "linux-x86_64"
+        for name in ("tests", "release"):
+            job = after["jobs"][name]
+            job["timeout-minutes"] = "90"
+            job["needs"] = ["another-job"]
+            job["strategy"]["fail-fast"] = "true"
+            # More routes to the same runners do not change how those runners execute.
+            job["strategy"]["matrix"]["include"] = job["strategy"]["matrix"]["include"].replace(
+                "inputs.target == 'linux-x86_64'", "inputs.target == 'linux-only'")
+            for step in job["steps"]:
+                if step.get("uses", "").startswith("actions/upload-artifact@"):
+                    step["if"] = "inputs.publish"
+        self.assertEqual(self.scope(before, after), "linux-x86_64")
+
+    def test_platform_execution_changes_keep_full_coverage(self):
+        for field, value in (("run", "cargo build --new-flag"), ("shell", "pwsh"),
+                             ("env", {"RUSTFLAGS": "--new-flag"}), ("if", "runner.os == 'Windows'")):
+            before, after = self.workflow(), self.workflow()
+            step = next(step for step in after["jobs"]["release"]["steps"] if "cargo build" in step.get("run", ""))
+            step[field] = value
+            with self.subTest(field=field):
+                self.assertEqual(self.scope(before, after), "all")
+
+    def test_runner_or_global_environment_changes_keep_full_coverage(self):
+        before, after = self.workflow(), self.workflow()
+        job = after["jobs"]["tests"]
+        job["strategy"]["matrix"]["include"] = job["strategy"]["matrix"]["include"].replace("windows-2022", "windows-2025")
+        self.assertEqual(self.scope(before, after), "all")
+        after = self.workflow()
+        after["env"] = {"RUSTFLAGS": "--new-flag"}
+        self.assertEqual(self.scope(before, after), "all")
+
+    def test_unreadable_or_unrecognized_workflow_keeps_full_coverage(self):
+        for text in ("not a workflow", "jobs: [invalid"):
+            with self.subTest(text=text), patch.object(CI, "source_at", return_value=text):
+                self.assertEqual(CI.platforms([self.path], base="base"), "all")
+        before, after = self.workflow(), self.workflow()
+        after["jobs"]["tests"]["strategy"]["matrix"]["include"] = "${{ fromJSON(needs.plan.outputs.matrix) }}"
+        self.assertEqual(self.scope(before, after), "all")
+
+
 class PublishBoundary(unittest.TestCase):
     def workflow(self, name):
         # BaseLoader preserves the YAML 1.2 Actions key `on`.

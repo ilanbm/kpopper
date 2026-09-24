@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Install the workflow reader for platform selection
+        run: python -m pip install PyYAML==6.0.3
       - name: Identify a release commit before selecting its coverage
         id: release
         if: github.event_name == 'push'

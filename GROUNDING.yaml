@@ -1197,6 +1197,13 @@ sources:
          release commit whose tested packages are published only after all checks pass."
     read: "2026-09-24"
     fidelity: paraphrase
+  s.2026_09_24_ci_routing_linux:
+    name: "CI routing changes need Linux validation without an automatic platform matrix"
+    asked: "אני לא מבין גם למה PR כזה שמתעסק רק עם CI בכלל קשור להרצה על מכשירים שונים. תצמצם בבקשה"
+    of: "The maintainer requested narrowing PR 240 so CI routing and scheduling changes use Linux
+         validation; changes to platform execution inputs still expand coverage."
+    read: "2026-09-24"
+    fidelity: paraphrase
   s.2026_09_24_source_file_references:
     name: "Source files after the Python reader was removed"
     asked: "Report entries whose local source file is gone, keep historical sources openable at

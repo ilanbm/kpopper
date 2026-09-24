@@ -112,11 +112,11 @@ class Selection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("rust", lanes([path]))
 
-    def test_ci_machinery_runs_every_lane_on_every_platform(self):
+    def test_ci_machinery_exercises_every_lane_on_linux(self):
         for path in CI.CI_MACHINERY:
             with self.subTest(path=path):
                 self.assertEqual(lanes([path]), ALL)
-                self.assertEqual(CI.platforms([path]), "all")
+                self.assertEqual(CI.platforms([path]), "linux-x86_64")
 
     def test_unclaimed_paths_run_everything(self):
         for path in ("new-component/config.toml", "native.toml", ".github/workflows/new.yml"):
