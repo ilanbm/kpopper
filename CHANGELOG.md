@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0 — 2026-09-24
+
+- Run node report recovery scenarios independently (#257) — patch
+- Publish native candidates before exposing plugin versions (#252) — patch
+- Add compact node history with lossless copy migration (#251) — minor
+- Fix crates.io trusted publishing trigger (#254) — patch
+- Give Intel macOS release acceptance enough time (#253) — patch
+
+Decisions recorded: d.compact_history_preserves_evidence
+
 ## 0.12.0 — 2026-09-24
 
 - Clarify guided plugin installation (#249) — patch
