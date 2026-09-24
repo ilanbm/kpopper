@@ -1,10 +1,11 @@
 //! Exact, same-authority branch union. The reducer preserves concurrent disputes; union
 //! neither selects a head nor turns publication ancestry into source-clock ancestry.
+#[cfg(test)]
+use crate::history_node_frame as Frame;
 use crate::{
     Result, history_contract::*, history_node_capture::Capture, history_node_codec as C,
-    history_node_current::Original, history_node_frame as Frame, history_node_publication as P,
-    history_node_writer as W, history_view::map_mut, history_yaml as Y, require,
-    value::TypedValue as V,
+    history_node_current::Original, history_node_publication as P, history_node_writer as W,
+    history_view::map_mut, history_yaml as Y, require, value::TypedValue as V,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},

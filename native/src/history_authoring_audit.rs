@@ -250,31 +250,6 @@ impl ReplayAudit {
             oracle: false,
         })
     }
-    /// Only receipts from verified causal ancestors may witness a retained adapter.
-    pub(crate) fn from_receipts(receipt: &V, parents: &[V]) -> Result<Self> {
-        let mut witnesses = BTreeSet::new();
-        for parent in parents {
-            crate::history_transaction::validate_receipt(parent)?;
-            for audit in recorded(parent)?.values() {
-                witnesses.insert(digest(audit)?);
-            }
-        }
-        let audits = recorded(receipt)?;
-        for audit in audits.values() {
-            require(
-                string_is(
-                    &map(audit)?["adapter_source_sha256"],
-                    env!("KPOP_REASONING_ADAPTER_SHA256"),
-                ) || witnesses.contains(&digest(audit)?),
-                "unknown_retained_adapter_audit",
-            )?;
-        }
-        Ok(Self {
-            recorded: audits,
-            #[cfg(test)]
-            oracle: false,
-        })
-    }
     /// Load causal-parent witnesses only when the receipt retains a foreign adapter audit.
     /// The receipt is fully validated before the callback can perform expensive reconstruction.
     pub(crate) fn from_receipts_lazy(

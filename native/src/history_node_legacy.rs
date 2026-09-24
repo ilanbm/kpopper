@@ -1,9 +1,9 @@
 //! Immutable legacy receipt definitions in a lossless copy archive. Source bytes
 //! are hash-checked before a cached decode can be reused; no legacy writer runs.
 use crate::{
-    history_contract::*, history_node_archive::Archive, history_node_publication::Snapshot,
+    Result, history_contract::*, history_node_archive::Archive, history_node_publication::Snapshot,
     history_node_semantics::History, history_view::list, history_yaml as Y, require,
-    value::TypedValue as V, Result,
+    value::TypedValue as V,
 };
 use std::{
     cell::RefCell,
@@ -169,12 +169,6 @@ fn inventory_of(manifest: &V) -> Result<BTreeSet<String>> {
 pub(crate) fn inventory(snapshot: &Snapshot, operation: &str) -> Result<BTreeSet<String>> {
     let (_, manifest, _) = definition(snapshot, operation)?;
     inventory_of(manifest)
-}
-/// Original inventory entries newly visible at this transaction's causal boundary.
-/// Legacy manifests can repeat exact ancestor objects without creating them again.
-pub(crate) fn introduced(snapshot: &Snapshot, operation: &str) -> Result<BTreeSet<String>> {
-    let (legacy, manifest, _) = definition(snapshot, operation)?;
-    introduced_from(legacy, manifest)
 }
 fn introduced_from(legacy: &Legacy, manifest: &V) -> Result<BTreeSet<String>> {
     let mut introduced = inventory_of(manifest)?;
