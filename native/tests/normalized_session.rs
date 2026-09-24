@@ -267,3 +267,33 @@ fn replay_recomputes_falsifiers_and_enforces_the_opening_budget() {
     assert!(!small.status.success());
     assert!(String::from_utf8_lossy(&small.stderr).contains("minimum complete opening"));
 }
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_input_paths_refuse_without_panicking() {
+    use std::os::unix::ffi::OsStrExt;
+    let (t, resources) = fixture();
+    let input = t
+        .path()
+        .join(std::ffi::OsStr::from_bytes(b"input-\xff.json"));
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args([
+            "session",
+            "open",
+            "--normalized",
+            "--no-settings",
+            "--project",
+            "replay",
+            "--input",
+        ])
+        .arg(&input)
+        .args(["--state"])
+        .arg(t.path().join("state"))
+        .env("KPOPPER_NATIVE_RESOURCES", resources)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("not UTF-8"), "{error}");
+    assert!(!error.contains("panicked"));
+}

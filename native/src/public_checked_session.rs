@@ -237,6 +237,10 @@ impl Service {
                 .next()
                 .ok_or_else(|| error("record_required"))?,
         };
+        crate::require(
+            !options.normalized || input.to_str().is_some(),
+            "normalized input path is not UTF-8",
+        )?;
         let mut inputs = Inventory::default();
         let settings_directory = if options.input.is_some() {
             input.parent().unwrap_or(&cwd)

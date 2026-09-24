@@ -10,6 +10,9 @@ impl OrdinarySession {
         profile: Option<&V>,
     ) -> Result<Self> {
         validate_normalized_graph(&graph)?;
+        let input_path = input_path
+            .to_str()
+            .ok_or_else(|| Error("normalized input path is not UTF-8".into()))?;
         // These reader-owned fields bind the result to the actual input and program.
         graph["normalized_input"] =
             json!({"kind":"normalized/v1","sha256":sha256(source),"path":input_path});
