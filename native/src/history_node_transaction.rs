@@ -240,6 +240,31 @@ pub(crate) fn create(
     validate(&context)?;
     Ok(context)
 }
+pub(crate) fn with_temporal_supplement(mut context: V, receipt: &V) -> Result<V> {
+    let temporal = crate::history_node_temporal_recipe::encode(receipt)?;
+    if temporal == V::Null {
+        return Ok(context);
+    }
+    let extra_audits = crate::history_authoring_audit::ReplayAudit::compact(receipt)?;
+    let c = map_mut(&mut context)?;
+    let result = map_mut(c.get_mut("result").ok_or_else(|| error("invalid_schema"))?)?;
+    require(
+        !result.contains_key("temporal"),
+        "temporal_duplicate_retention",
+    )?;
+    result.insert("temporal".into(), temporal);
+    let audits = map_mut(c.get_mut("audits").ok_or_else(|| error("invalid_schema"))?)?;
+    for (key, value) in map(&extra_audits)? {
+        require(
+            audits.get(key).is_none_or(|old| old == value),
+            "ambiguous_retained_adapter_audit",
+        )?;
+        audits.insert(key.clone(), value.clone());
+    }
+    validate(&context)?;
+    Ok(context)
+}
+
 fn legacy_template(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
     let receipt = crate::history_node_writer::receipt(snapshot, operation)?;
     template(field(map(field(map(&receipt)?, "after")?)?, "document")?)

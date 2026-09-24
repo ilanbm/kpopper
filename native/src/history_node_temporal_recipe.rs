@@ -1,10 +1,16 @@
 //! Small retained commitments for compact temporal transactions.
 //! Snapshot bodies and assessment nodes remain in verified semantic history.
 use crate::{
-    Result,
+    Result, history_authoring as A,
+    history_authoring_audit::ReplayAudit,
+    history_authoring_core::Input,
     history_contract::*,
-    history_transaction as T, reasoning_history_assessment as H,
+    history_node_capture::Capture,
+    history_transaction as T,
+    reasoning_authoring::World,
+    reasoning_fields as F, reasoning_history_assessment as H,
     reasoning_runtime::OperationalBounds,
+    reasoning_runtime::Runtime,
     reasoning_snapshot::{Snapshot, digest},
     reasoning_temporal, require,
     value::TypedValue as V,
@@ -16,6 +22,54 @@ fn s(value: &str) -> V {
 }
 fn hash(value: &V) -> bool {
     text(value).is_ok_and(|s| s.len() == 64 && crate::history_paths::object_id(s))
+}
+fn accepted_temporal(document: &V, versions: &Map) -> Result<bool> {
+    let entries = crate::reasoning_snapshot::entries(document)?;
+    Ok(versions.keys().any(|subject| {
+        entries
+            .get(subject)
+            .and_then(|(_, body)| map(body).ok())
+            .and_then(|body| body.get("temporal"))
+            .is_some_and(|temporal| matches!(temporal, V::Map(_)))
+    }))
+}
+
+/// Temporary accepted-world receipt for node-only operations whose ordinary
+/// diagnostic receipt omitted temporal replay. The caller retains only `encode`.
+pub(crate) fn supplement(
+    capture: &Capture,
+    objects: &[V],
+    document: &V,
+    runtime: Option<&Runtime>,
+    audit: Option<&ReplayAudit>,
+) -> Result<Option<V>> {
+    let candidate = capture.candidate_with_template(objects, document)?;
+    let before = A::destination(capture.document())?;
+    let after = A::destination(candidate.document())?;
+    let before_versions = Input::accepted_versions(capture)?;
+    let after_versions = Input::accepted_versions(&candidate)?;
+    if !accepted_temporal(&before, &before_versions)?
+        && !accepted_temporal(&after, &after_versions)?
+    {
+        return Ok(None);
+    }
+    let capabilities = F::capabilities(&after, None)?;
+    require(
+        string_is(&map(&capabilities)?["profile"], "core/v1"),
+        "node_temporal_recipe_profile",
+    )?;
+    let mut before_world = World::new(&before, None, runtime, OperationalBounds::default())?;
+    let mut after_world = World::new(&after, None, runtime, OperationalBounds::default())?;
+    let before_evidence =
+        A::evidence_with_versions(&before, &mut before_world, audit, &before_versions)?;
+    let after_evidence =
+        A::evidence_with_versions(&after, &mut after_world, audit, &after_versions)?;
+    Ok(Some(T::semantic_receipt(
+        "core/v1",
+        &capabilities,
+        &before_evidence,
+        &after_evidence,
+    )?))
 }
 fn parse_bounds(value: &V) -> Result<OperationalBounds> {
     let limits = schema(

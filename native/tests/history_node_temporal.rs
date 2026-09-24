@@ -472,6 +472,89 @@ fn compact_recipe_commits_multiple_temporal_claims_as_one_digest() {
 }
 
 #[test]
+fn identity_and_named_hypothesis_writes_retain_accepted_temporal_worlds() {
+    let root = setup();
+    let cache = tempfile::tempdir().unwrap();
+    let runtime = runtime(cache.path());
+    seed(root.path(), &runtime, "current");
+    let write_strict = |operation: &str, action: V| {
+        let mut opts = options(operation);
+        opts.strict = true;
+        let prepared = W::prepare(root.path(), &action, &opts, Some(&runtime))
+            .unwrap_or_else(|error| panic!("{operation}: {error}"));
+        W::publish(root.path(), &prepared, Some(&runtime), |_| Ok(())).unwrap();
+    };
+    write(
+        root.path(),
+        &runtime,
+        "alias",
+        v(json!({"kind":"add", "id":"p.alias", "into":"readings", "body":{"v":1}})),
+    );
+    write_strict(
+        "same",
+        v(json!({"kind":"same", "a":"p.input", "b":"p.alias", "keep":"p.input"})),
+    );
+    write(
+        root.path(),
+        &runtime,
+        "other",
+        v(json!({"kind":"add", "id":"p.other", "into":"readings", "body":{"v":3}})),
+    );
+    write_strict(
+        "distinct",
+        v(json!({"kind":"distinct", "a":"p.input", "b":"p.other", "because":"different readings"})),
+    );
+    write_strict(
+        "h-edit",
+        v(json!({"kind":"hypothesis", "name":"alpha", "action":{
+            "kind":"set", "id":"p.input", "value":2
+        }})),
+    );
+    write_strict(
+        "h-fold",
+        v(json!({"kind":"hypothesis", "action":{
+            "kind":"fold", "names":["alpha"], "because":"tested"
+        }})),
+    );
+    write_strict(
+        "h-beta",
+        v(json!({"kind":"hypothesis", "name":"beta", "action":{
+            "kind":"set", "id":"p.input", "value":9
+        }})),
+    );
+    write_strict(
+        "h-refute",
+        v(json!({"kind":"hypothesis", "action":{
+            "kind":"refute", "names":["beta"], "because":"not supported"
+        }})),
+    );
+    let capture = Capture::read(root.path()).unwrap();
+    let projection = Projection::capture(&capture).unwrap();
+    let temporal = m(&m(projection.projection())["temporal"]);
+    assert_eq!(temporal["complete"], V::Bool(true));
+    assert!(l(&temporal["findings"]).is_empty());
+    for op in ["same", "distinct", "h-edit", "h-fold", "h-beta", "h-refute"] {
+        let tx = &P::capture_snapshot(root.path()).unwrap().transactions[op];
+        let context = m(tx.context.as_ref().unwrap());
+        let result = m(&context["result"]);
+        assert!(
+            result.contains_key("temporal"),
+            "missing compact temporal recipe: {op}"
+        );
+    }
+    let before = assessment(root.path(), &runtime);
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    drop(root);
+    assert_eq!(assessment(copy.path(), &runtime), before);
+    assert_eq!(
+        Projection::capture(&Capture::read(copy.path()).unwrap())
+            .unwrap()
+            .projection(),
+        projection.projection()
+    );
+}
+
+#[test]
 fn branch_siblings_keep_exact_temporal_worlds_and_merge_both_parents() {
     let cache = tempfile::tempdir().unwrap();
     let runtime = runtime(cache.path());

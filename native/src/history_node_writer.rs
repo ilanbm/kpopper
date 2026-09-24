@@ -227,6 +227,29 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String,
                 .context
                 .as_ref()
                 .ok_or_else(|| error("node_active_evidence_kind"))?;
+            if crate::history_node_branch::is_union(c)? {
+                let allowed = ancestors(snapshot, op)?;
+                for (path, hash) in tx.evidence.iter().filter(|(p, _)| active_evidence_path(p)) {
+                    require(
+                        allowed.iter().any(|parent| {
+                            let owner = &snapshot.transactions[parent];
+                            parent != op
+                                && owner.evidence.get(path) == Some(hash)
+                                && owner.context.as_ref().is_some_and(|c| {
+                                    [
+                                        crate::history_node_bootstrap::FORMAT,
+                                        crate::history_node_physical::FORMAT,
+                                        crate::history_node_legacy::CHECKPOINT,
+                                    ]
+                                    .iter()
+                                    .any(|format| crate::history_node_legacy::kind(c, format))
+                                })
+                        }),
+                        "node_active_evidence_owner",
+                    )?;
+                }
+            }
+
             require(
                 [
                     crate::history_node_bootstrap::FORMAT,
@@ -789,6 +812,8 @@ fn materialize_mode(
             archive,
             evidence,
             &receipt,
+            runtime,
+            audit,
         );
     }
     let receipt = Receipt::pack(&receipt)?;
@@ -870,6 +895,8 @@ fn ledger_materialized(
     archive: &V,
     evidence: &BTreeMap<String, Vec<u8>>,
     receipt: &V,
+    runtime: Option<&Runtime>,
+    audit: Option<&ReplayAudit>,
 ) -> Result<Materialized> {
     let mut build = Build::new(capture, &options.operation)?;
     let mut observations = capture.history.observations().clone();
@@ -922,7 +949,7 @@ fn ledger_materialized(
             build.append(&subject, value)?;
         }
     }
-    let context = crate::history_node_transaction::create(
+    let mut context = crate::history_node_transaction::create(
         &capture.snapshot,
         action,
         encoded_options,
@@ -931,6 +958,17 @@ fn ledger_materialized(
         &document,
         receipt,
     )?;
+    let kind = text(field(map(action)?, "kind")?)?;
+    if ["same", "distinct", "hypothesis"].contains(&kind)
+        && !map(&map(&context)?["result"])?.contains_key("temporal")
+    {
+        if let Some(supplement) = crate::history_node_temporal_recipe::supplement(
+            capture, objects, &document, runtime, audit,
+        )? {
+            context =
+                crate::history_node_transaction::with_temporal_supplement(context, &supplement)?;
+        }
+    }
     finish_context(build, document, &options.operation, context)
 }
 fn finish_context(
@@ -1430,6 +1468,36 @@ mod tests {
     fn v(j: serde_json::Value) -> V {
         V::from_json(&j).unwrap()
     }
+    #[test]
+    fn union_cannot_be_the_only_owner_of_active_layer_evidence() {
+        let snapshot = P::Snapshot {
+            authority: V::Null,
+            revision: String::new(),
+            current: None,
+            versions: BTreeMap::new(),
+            operations: BTreeMap::new(),
+            source_clocks: Default::default(),
+            legacy: Default::default(),
+            raw_evidence: Default::default(),
+            transactions: BTreeMap::from([(
+                "forged".into(),
+                P::Transaction {
+                    digest: String::new(),
+                    parents: vec![],
+                    context: Some(A::obj([("format", s(crate::history_node_branch::FORMAT))])),
+                    evidence: BTreeMap::from([(
+                        ".kpopper-history-migration/planted.yaml".into(),
+                        "0".repeat(64),
+                    )]),
+                },
+            )]),
+        };
+        assert_eq!(
+            verify_receipts(&snapshot).unwrap_err().0,
+            "node_active_evidence_owner"
+        );
+    }
+
     #[test]
     fn core_add_set_review_replays_receipts_and_preserves_original_pins() {
         let root = tempfile::tempdir().unwrap();
