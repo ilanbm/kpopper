@@ -38,6 +38,9 @@ pub struct Options {
     pub operation: Operation,
     #[arg(long)]
     pub input: Option<PathBuf>,
+    /// Read a normalized JSON graph instead of a record.
+    #[arg(long)]
+    pub normalized: bool,
     #[arg(long)]
     pub no_settings: bool,
     #[arg(long = "global")]
@@ -101,6 +104,9 @@ pub struct ContextCommand {
     pub ids: Vec<String>,
     #[arg(long)]
     pub input: Option<PathBuf>,
+    /// Read a normalized JSON graph instead of a record.
+    #[arg(long)]
+    pub normalized: bool,
     #[arg(long)]
     pub no_settings: bool,
     #[arg(long)]
@@ -133,6 +139,7 @@ impl ContextCommand {
         Options {
             operation: Operation::Context,
             input: self.input.clone(),
+            normalized: self.normalized,
             no_settings: self.no_settings,
             global_scope: false,
             rebuild: false,
@@ -188,6 +195,19 @@ fn settings(inventory: &mut Inventory, directory: &Path, cwd: &Path) -> Result<J
     crate::session_settings::current(inventory, directory, cwd)
 }
 
+enum SessionCapture {
+    Record(Box<source_capture::CapturedSource>),
+    Normalized(Inventory),
+}
+impl SessionCapture {
+    fn verify(&self) -> Result<()> {
+        match self {
+            Self::Record(capture) => capture.verify(),
+            Self::Normalized(input) => input.verify(),
+        }
+    }
+}
+
 pub struct Service {
     cwd: PathBuf,
     input: PathBuf,
@@ -199,11 +219,16 @@ pub struct Service {
     navigation_source: Option<Vec<u8>>,
     profile_path: Option<PathBuf>,
     requested_profile: Option<String>,
+    normalized: bool,
     state: PathBuf,
     semantic: Option<E5Index>,
 }
 impl Service {
     pub fn new(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Self> {
+        crate::require(
+            !options.normalized || options.assessment_profile.as_deref() != Some("core/v1"),
+            "normalized input requires checked-reader/v1",
+        )?;
         let cwd = project_modes::resolved(cwd)?;
         let input = match &options.input {
             Some(p) => path(&cwd, p)?,
@@ -212,6 +237,10 @@ impl Service {
                 .next()
                 .ok_or_else(|| error("record_required"))?,
         };
+        crate::require(
+            !options.normalized || input.to_str().is_some(),
+            "normalized input path is not UTF-8",
+        )?;
         let mut inputs = Inventory::default();
         let settings_directory = if options.input.is_some() {
             input.parent().unwrap_or(&cwd)
@@ -316,6 +345,7 @@ impl Service {
             navigation_source,
             profile_path,
             requested_profile: options.assessment_profile.clone(),
+            normalized: options.normalized,
             state,
             semantic,
         })
@@ -340,6 +370,9 @@ impl Service {
             "--state".into(),
             Self::shell_quote(&self.state),
         ];
+        if self.normalized {
+            command.push("--normalized".into());
+        }
         let ordinary = self.ordinary()?;
         if !ordinary {
             command.extend(["--assessment-profile".into(), "core/v1".into()]);
@@ -370,6 +403,9 @@ impl Service {
     }
 
     fn ordinary(&self) -> Result<bool> {
+        if self.normalized {
+            return Ok(true);
+        }
         if let Some(profile) = &self.requested_profile {
             return Ok(profile == "checked-reader/v1");
         }
@@ -389,12 +425,34 @@ impl Service {
     fn ordinary_session(
         &self,
     ) -> Result<(
-        source_capture::CapturedSource,
+        SessionCapture,
         crate::reasoning_runtime::Runtime,
         crate::ordinary_checked_session::OrdinarySession,
     )> {
         let runtime = W::runtime()?
             .ok_or_else(|| error("checked session core is not ready; run kpop session setup"))?;
+        if self.normalized {
+            let mut input = Inventory::default();
+            let bytes = input.read(&self.input)?;
+            let graph = crate::json_ingress::parse_slice(
+                &bytes,
+                crate::json_ingress::DuplicateKeys::LastWins,
+            )?;
+            let program = runtime
+                .ordinary_program()
+                .ok_or_else(|| error("ordinary expression program is not configured"))?;
+            let session = crate::ordinary_checked_session::OrdinarySession::from_normalized(
+                graph,
+                &bytes,
+                &self.input,
+                program,
+                &self.project,
+                self.navigation.as_ref(),
+            )?
+            .with_proposals(self.store.proposals()?)?;
+            input.verify()?;
+            return Ok((SessionCapture::Normalized(input), runtime, session));
+        }
         let capture = source_capture::capture_source_with_runtime(
             std::slice::from_ref(&self.input),
             &self.cwd,
@@ -422,7 +480,7 @@ impl Service {
         .with_navigation_order(navigation_source.as_ref())
         .with_proposals(self.store.proposals()?)?;
         capture.verify()?;
-        Ok((capture, runtime, session))
+        Ok((SessionCapture::Record(Box::new(capture)), runtime, session))
     }
 
     pub fn opening(&self, tokens: usize) -> Result<String> {
