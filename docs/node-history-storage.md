@@ -30,8 +30,8 @@ inputs, clocks, runtime provenance and capabilities.
 `history_node_receipt` partitions supported receipts into node pieces and record context.
 Document entries, assessment nodes, baseline heads and open acts leave the record context;
 full selection is reconstructed from exact sorted assessment membership. Original receipt
-digests are checked after typed reconstruction. Unsupported nested reports, physical
-hypothesis evidence, nonempty hypothesis documents, and unpartitioned temporal evidence
+digests are checked after typed reconstruction. Named hypothesis and temporal Snapshot bodies
+are also partitioned by subject. Unsupported nested reports and physical hypothesis evidence
 refuse. This is a decomposition API, not a persistence layout: writers must persist only
 changed pieces and derive historical selection from the transaction and node histories.
 Storing every partition on each write would still reproduce the graph.
@@ -153,8 +153,25 @@ Final-world batches retain deterministic child operation IDs separately from the
 publication ID. Membership is derived from the bounded explicit intent, never inferred from
 storage parents. Intermediate versions are retained; only a single creation whose body is
 visible in the final current document can stay lazy. Proposal-world evidence is decomposed
-into per-node components and compact context. Nested generated worlds and unpartitioned
-physical or temporal evidence still refuse.
+into per-node components and compact context. Nested generated worlds and unpartitioned physical evidence still refuse.
+
+Temporal receipts retain exact native Snapshot JSON through a checked recipe: per-subject
+bodies, named hypothesis bodies/conflicts and claim-version references live with node evidence;
+as-of clocks, snapshot identifiers, schema and authored revision stay in the side context.
+When the Snapshot document equals its own receipt side document, a checked reference reuses
+that document instead of writing duplicate node pieces; proposal worlds use their own side.
+Derived Snapshot nodes are rebuilt and verified against the original snapshot identifier and
+receipt digest. A clock-only change does not rewrite unchanged world membership. Hypothetical
+proposal snapshots use the same partition. Noncanonical Snapshot JSON and nested captured-history
+or scenario contexts refuse until their raw evidence/representation is supported.
+
+Temporal capture shares the legacy causal-frontier validator. It checks every retained observation
+against the exact accepted world at that operation, including historical claim versions that are
+no longer current. Projection and source-free assessment preserve current, anchored and general
+applicability and counterexamples. Missing or bounded-out observations remain explicitly incomplete.
+Publication ancestry establishes which objects an observation could contain; it does not establish
+source-clock ancestry. Node branch union/admission, independently authenticated source ancestry,
+authority generation changes and physical named-hypothesis compatibility remain unfinished.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
 It preserves the exact new-format bytes and audits the entire committed closure. It

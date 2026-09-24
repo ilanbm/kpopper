@@ -207,6 +207,14 @@ impl History {
     pub fn observations(&self) -> &ObservationChain {
         &self.observations
     }
+    pub(crate) fn reduce_subset(
+        &self,
+        objects: &BTreeMap<String, V>,
+        rules: Option<&BTreeMap<String, V>>,
+        ancestry: Option<&crate::source_clock::Ancestry<'_>>,
+    ) -> Result<V> {
+        history_reduce::reduce_compact(objects, &self.index, rules, ancestry)
+    }
     pub fn reduce(
         &self,
         rules: Option<&BTreeMap<String, V>>,

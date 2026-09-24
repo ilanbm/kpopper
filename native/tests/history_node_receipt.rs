@@ -520,3 +520,188 @@ fn proposal_world_is_partitioned_by_node_and_nested_graphs_refuse() {
     .unwrap();
     assert!(Receipt::pack(&nested).is_err());
 }
+
+#[test]
+fn temporal_receipts_partition_snapshots_and_restore_exact_digests() {
+    let data: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/temporal-authoring.json")).unwrap();
+    let mut count = 0;
+    let mut nested = false;
+    for case in data["cases"].as_array().unwrap() {
+        let Some(receipt) = case.get("receipt") else {
+            continue;
+        };
+        // Historical batch versions below 6 are not admitted by the node writer.
+        if case["family"] == "batch" && case["version"].as_u64().unwrap() < 6 {
+            continue;
+        }
+        let receipt = V::from_tagged(receipt).unwrap();
+        let packed = Receipt::pack(&receipt).unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
+        assert_eq!(packed.restore().unwrap(), receipt, "{}", case["name"]);
+        for side in [packed.before(), packed.after()] {
+            assert!(!map(&map(side.context())["literal"]).contains_key("temporal_replay"));
+            if let Some(temporal) = map(side.context()).get("temporal") {
+                assert!(!map(temporal).contains_key("claims"));
+                assert!(!map(&map(temporal)["snapshot"]).contains_key("nodes"));
+                assert!(!map(&map(temporal)["snapshot"]).contains_key("document"));
+            }
+        }
+        if map(&map(&receipt)["after"])
+            .get("proposal")
+            .is_some_and(|p| map(p).contains_key("temporal_replay"))
+        {
+            nested = true;
+            let mut tampered = packed.after().context().clone();
+            let proposal = map_mut(map_mut(&mut tampered).get_mut("proposal").unwrap());
+            let temporal = map_mut(proposal.get_mut("temporal").unwrap());
+            let V::Bool(reuse) = temporal["document_from_side"] else {
+                panic!()
+            };
+            temporal.insert("document_from_side".into(), V::Bool(!reuse));
+            assert!(Side::from_parts(tampered, packed.after().nodes().clone()).is_err());
+            let context = map(packed.after().context());
+            assert!(context.contains_key("temporal"));
+            assert!(map(&context["proposal"]).contains_key("temporal"));
+            assert!(packed.after().nodes().values().any(|node| {
+                map(node)
+                    .get("proposal")
+                    .is_some_and(|p| map(p).contains_key("temporal"))
+            }));
+        }
+        count += 1;
+    }
+    assert!(nested, "missing nested temporal proposal coverage");
+    assert!(count >= 15, "only {count} receipts");
+}
+
+#[test]
+fn temporal_clock_changes_do_not_rewrite_world_membership() {
+    use kpop_native::reasoning_snapshot::{CaptureOptions, Snapshot};
+    let mut document = V::from_json(&json!({"meta":{},"known":{}})).unwrap();
+    for i in 0..100 {
+        map_mut(map_mut(&mut document).get_mut("known").unwrap())
+            .insert(format!("p.{i:03}"), V::from_json(&json!({"v":i})).unwrap());
+    }
+    let side = |doc: &V, day: &str| {
+        let snapshot = Snapshot::from_data(
+            doc,
+            CaptureOptions {
+                as_of: Some(V::Text(day.into())),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        V::Map(BTreeMap::from([(
+            "temporal_replay".into(),
+            V::from_json(&json!({
+                "version":1,"snapshot":snapshot.to_json().unwrap(),"claims":{}
+            }))
+            .unwrap(),
+        )]))
+    };
+    let before = side(&document, "2026-09-24");
+    let after = side(&document, "2026-09-25");
+    let receipt =
+        T::semantic_receipt("core/v1", &V::Map(BTreeMap::new()), &before, &after).unwrap();
+    let packed = Receipt::pack(&receipt).unwrap();
+    let mut changed_flag = packed.after().context().clone();
+    map_mut(map_mut(&mut changed_flag).get_mut("temporal").unwrap())
+        .insert("document_from_side".into(), V::Bool(true));
+    assert!(Side::from_parts(changed_flag, packed.after().nodes().clone()).is_err());
+    let mut nodes = Nodes::new();
+    nodes
+        .apply(&nodes.prepare(packed.before()).unwrap())
+        .unwrap();
+    assert!(nodes.prepare(packed.after()).unwrap().is_empty());
+    assert_eq!(
+        nodes
+            .side(packed.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        after
+    );
+    map_mut(map_mut(&mut document).get_mut("known").unwrap())
+        .insert("p.000".into(), V::from_json(&json!({"v":999})).unwrap());
+    let changed = side(&document, "2026-09-25");
+    let receipt =
+        T::semantic_receipt("core/v1", &V::Map(BTreeMap::new()), &before, &changed).unwrap();
+    let packed = Receipt::pack(&receipt).unwrap();
+    let changes = nodes.prepare(packed.after()).unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].subject, "p.000");
+    // Rehashed snapshot metadata still cannot authorize mismatched node pieces.
+    let mut context = packed.after().context().clone();
+    let temporal = map_mut(map_mut(&mut context).get_mut("temporal").unwrap());
+    map_mut(temporal.get_mut("snapshot").unwrap())
+        .insert("as_of".into(), V::Text("2026-09-26".into()));
+    assert!(Side::from_parts(context, packed.after().nodes().clone()).is_err());
+}
+
+#[test]
+fn noncanonical_temporal_snapshot_bytes_refuse_instead_of_normalizing() {
+    use kpop_native::reasoning_snapshot::{CaptureOptions, Snapshot};
+    let snapshot = Snapshot::from_data(
+        &V::from_json(&json!({"known":{"p.a":{"v":1}}})).unwrap(),
+        CaptureOptions::default(),
+    )
+    .unwrap();
+    let tagged: serde_json::Value = serde_json::from_str(&snapshot.to_json().unwrap()).unwrap();
+    let raw = serde_json::to_string_pretty(&tagged).unwrap();
+    assert!(Snapshot::from_json(raw.as_bytes()).is_ok());
+    let side =
+        V::from_json(&json!({"temporal_replay":{"version":1,"snapshot":raw,"claims":{}}})).unwrap();
+    let receipt = T::semantic_receipt("core/v1", &V::Map(BTreeMap::new()), &side, &side).unwrap();
+    assert_eq!(
+        Receipt::pack(&receipt).unwrap_err().0,
+        "node_temporal_snapshot_encoding"
+    );
+}
+
+#[test]
+fn first_temporal_snapshot_reuses_the_same_side_document() {
+    use kpop_native::reasoning_snapshot::{CaptureOptions, Snapshot};
+    let document = V::from_json(&json!({"known":{"p.a":{"v":1},"p.b":{"v":2}}})).unwrap();
+    let snapshot = Snapshot::from_data(&document, CaptureOptions::default()).unwrap();
+    let before = V::Map(BTreeMap::from([("document".into(), document.clone())]));
+    let mut after = before.clone();
+    map_mut(&mut after).insert(
+        "temporal_replay".into(),
+        V::from_json(&json!({
+            "version":1,"snapshot":snapshot.to_json().unwrap(),"claims":{}
+        }))
+        .unwrap(),
+    );
+    let receipt =
+        T::semantic_receipt("core/v1", &V::Map(BTreeMap::new()), &before, &after).unwrap();
+    let packed = Receipt::pack(&receipt).unwrap();
+    for mutation in ["flag", "missing_document"] {
+        let mut context = packed.after().context().clone();
+        if mutation == "flag" {
+            map_mut(map_mut(&mut context).get_mut("temporal").unwrap())
+                .insert("document_from_side".into(), V::Bool(false));
+        } else {
+            map_mut(map_mut(&mut context).get_mut("literal").unwrap()).remove("document");
+        }
+        assert!(
+            Side::from_parts(context, packed.after().nodes().clone()).is_err(),
+            "accepted {mutation}"
+        );
+    }
+    let mut nodes = Nodes::new();
+    nodes
+        .apply(&nodes.prepare(packed.before()).unwrap())
+        .unwrap();
+    assert!(
+        nodes.prepare(packed.after()).unwrap().is_empty(),
+        "unchanged document copied into temporal node pieces"
+    );
+    assert_eq!(
+        nodes
+            .side(packed.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        after
+    );
+}

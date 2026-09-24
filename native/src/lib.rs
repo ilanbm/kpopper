@@ -66,6 +66,8 @@ mod public_node_history;
 mod public_node_edits;
 pub mod history_node_semantics;
 pub mod history_node_receipt;
+mod history_node_temporal_receipt;
+mod history_node_temporal;
 pub mod history_node_codec;
 pub mod history_node_current;
 pub mod history_node_evidence;

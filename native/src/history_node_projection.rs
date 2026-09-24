@@ -1,7 +1,7 @@
 //! Computational projection from a fully verified node history. Only witnesses expand `saw`.
 use crate::{
     Result, history_contract::*, history_node_capture::Capture,
-    history_projection::CapturedHistory, history_view::list, require, value::TypedValue as V,
+    history_projection::CapturedHistory, history_view::list, value::TypedValue as V,
 };
 use std::collections::BTreeSet;
 fn s(v: &str) -> V {
@@ -26,10 +26,9 @@ pub fn capture(c: &Capture) -> Result<CapturedHistory> {
         .map(|k| (k.clone(), Vec::new()))
         .collect::<std::collections::BTreeMap<_, _>>();
     for (id, value) in c.history.objects() {
-        require(
-            !crate::history_authority::has_temporal_metadata(value)?,
-            "node_temporal_projection_unsupported",
-        )?;
+        if crate::history_authority::has_temporal_metadata(value)? {
+            wanted.insert(id.clone());
+        }
         let o = map(value)?;
         if !string_is(&o["kind"], "act") {
             continue;
@@ -155,6 +154,9 @@ pub fn capture(c: &Capture) -> Result<CapturedHistory> {
         ("heads", V::Map(heads)),
         ("open_acts", V::Map(open)),
     ]);
+    if let Some(temporal) = &c.temporal {
+        findings.extend(list(&map(temporal)?["findings"])?.iter().cloned());
+    }
     let complete = findings.is_empty();
     let mut projection = object([
         ("projection_version", V::from_json(&serde_json::json!(2))?),
@@ -191,11 +193,16 @@ pub fn capture(c: &Capture) -> Result<CapturedHistory> {
             .and_then(|v| map(v).ok())
             .is_some_and(|m| m.get("strict") == Some(&V::Bool(true)))
     });
+    let mut required = BTreeSet::new();
     if strict {
-        crate::history_view::map_mut(&mut projection)?.insert(
-            "requires".into(),
-            strings([crate::history_authority::ROOT_DISPOSITION.into()]),
-        );
+        required.insert(crate::history_authority::ROOT_DISPOSITION.to_owned());
+    }
+    if let Some(temporal) = &c.temporal {
+        required.insert(crate::history_authority::TEMPORAL_APPLICABILITY.to_owned());
+        crate::history_view::map_mut(&mut projection)?.insert("temporal".into(), temporal.clone());
+    }
+    if !required.is_empty() {
+        crate::history_view::map_mut(&mut projection)?.insert("requires".into(), strings(required));
     }
     let template = crate::history_authority::document_template(c.document())?;
     crate::history_adapter::capture_history(&objects, &projection, Some(&template))

@@ -513,13 +513,16 @@ fn components(context: &V) -> Result<BTreeSet<&'static str>> {
     let context = schema(
         context,
         &["format", "literal", "selection_from_nodes"],
-        &["proposal"],
+        &["proposal", "temporal"],
     )?;
     let mut literal = context["literal"].clone();
     let side = map(&literal)?;
     let mut result = BTreeSet::new();
     if context.contains_key("proposal") {
         result.insert("proposal");
+    }
+    if context.contains_key("temporal") {
+        result.insert("temporal");
     }
     if side.contains_key("document") {
         result.insert("document");
@@ -601,6 +604,7 @@ impl Nodes {
                     "proposal",
                     "hypotheses",
                     "conflicts",
+                    "temporal",
                 ],
             )?;
             require(!node.is_empty(), "node_receipt_empty_piece")?;
@@ -685,7 +689,7 @@ impl Nodes {
     }
 }
 impl Side {
-    fn pack(side: &V) -> Result<Self> {
+    pub(crate) fn pack(side: &V) -> Result<Self> {
         schema(
             side,
             &[],
@@ -697,6 +701,7 @@ impl Side {
                 "hypothesis_authoring",
                 "proposal",
                 "identity_authoring",
+                "temporal_replay",
             ],
         )?;
         if let Some(value) = map(side)?.get("authoring") {
@@ -717,11 +722,28 @@ impl Side {
         let mut literal = side.clone();
         let scoped_hypotheses = scoped_hypothesis_context(&literal);
         let mut nodes = Map::new();
+        let temporal = map_mut(&mut literal)?
+            .remove("temporal_replay")
+            .map(|value| {
+                let (context, parts) = crate::history_node_temporal_receipt::pack(
+                    &value,
+                    map(&literal)?.get("document"),
+                )?;
+                for (subject, part) in parts {
+                    piece(&mut nodes, &subject)?.insert("temporal".into(), part);
+                }
+                Ok::<V, crate::Error>(context)
+            })
+            .transpose()?;
         let proposal = map_mut(&mut literal)?
             .remove("proposal")
             .map(|value| {
                 // Exactly one hypothetical world; recursive/nested authoring remains unsupported.
-                schema(&value, &[], &["kind", "document", "assessment"])?;
+                schema(
+                    &value,
+                    &[],
+                    &["kind", "document", "assessment", "temporal_replay"],
+                )?;
                 let side = Self::pack(&value)?;
                 for (subject, value) in side.nodes {
                     piece(&mut nodes, &subject)?.insert("proposal".into(), value);
@@ -824,7 +846,9 @@ impl Side {
         let mut context = V::Map(Map::from([
             (
                 "format".into(),
-                s(if scoped_hypotheses {
+                s(if temporal.is_some() {
+                    "node-receipt-side/v4"
+                } else if scoped_hypotheses {
                     "node-receipt-side/v3"
                 } else if proposal.is_some() {
                     "node-receipt-side/v2"
@@ -837,6 +861,9 @@ impl Side {
         ]));
         if let Some(proposal) = proposal {
             map_mut(&mut context)?.insert("proposal".into(), proposal);
+        }
+        if let Some(temporal) = temporal {
+            map_mut(&mut context)?.insert("temporal".into(), temporal);
         }
         let parts = Self { context, nodes };
         require(parts.restore()? == *side, "node_receipt_roundtrip")?;
@@ -858,14 +885,16 @@ impl Side {
         let context = schema(
             &self.context,
             &["format", "literal", "selection_from_nodes"],
-            &["proposal"],
+            &["proposal", "temporal"],
         )?;
         let has_scoped_parts = self.nodes.values().any(|node| {
             map(node)
                 .ok()
                 .is_some_and(|m| m.contains_key("hypotheses") || m.contains_key("conflicts"))
         });
-        let expected = if has_scoped_parts {
+        let expected = if context.contains_key("temporal") {
+            "node-receipt-side/v4"
+        } else if has_scoped_parts {
             "node-receipt-side/v3"
         } else if context.contains_key("proposal") {
             "node-receipt-side/v2"
@@ -942,6 +971,7 @@ impl Side {
         require(self.nodes.len() <= MAX_OBJECTS, "node_receipt_limit")?;
         let mut selected = Vec::new();
         let mut proposal_nodes = Map::new();
+        let mut temporal_nodes = Map::new();
         for (subject, node) in &self.nodes {
             let node = schema(
                 node,
@@ -954,13 +984,18 @@ impl Side {
                     "proposal",
                     "hypotheses",
                     "conflicts",
+                    "temporal",
                 ],
             )?;
             require(!node.is_empty(), "node_receipt_empty_piece")?;
+            if let Some(value) = node.get("temporal") {
+                require(context.contains_key("temporal"), "node_receipt_temporal")?;
+                temporal_nodes.insert(subject.clone(), value.clone());
+            }
             if let Some(value) = node.get("proposal") {
                 require(context.contains_key("proposal"), "node_receipt_proposal")?;
                 // Nested payloads are node-local and cannot themselves contain another proposal.
-                schema(value, &[], &["document", "assessment"])?;
+                schema(value, &[], &["document", "assessment", "temporal"])?;
                 proposal_nodes.insert(subject.clone(), value.clone());
             }
             if let Some(document) = node.get("document") {
@@ -1095,11 +1130,23 @@ impl Side {
             schema(
                 proposal,
                 &["format", "literal", "selection_from_nodes"],
-                &[],
+                &["temporal"],
             )?;
             let restored = Self::from_parts(proposal.clone(), proposal_nodes)?.restore()?;
-            schema(&restored, &[], &["kind", "document", "assessment"])?;
+            schema(
+                &restored,
+                &[],
+                &["kind", "document", "assessment", "temporal_replay"],
+            )?;
             map_mut(&mut literal)?.insert("proposal".into(), restored);
+        }
+        if let Some(temporal) = context.get("temporal") {
+            let restored = crate::history_node_temporal_receipt::restore(
+                temporal,
+                &temporal_nodes,
+                map(&literal)?.get("document"),
+            )?;
+            map_mut(&mut literal)?.insert("temporal_replay".into(), restored);
         }
         Ok(literal)
     }

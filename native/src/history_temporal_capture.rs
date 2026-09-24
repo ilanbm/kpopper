@@ -33,32 +33,82 @@ fn finding(code: &str, subject: &str, version: &str, detail: &str) -> V {
 fn numeric_one(v: &V) -> bool {
     is_int(v, "1") || *v == V::Bool(true) || matches!(v,V::Float(n) if n.get() == 1.0)
 }
-struct Causal<'a> {
-    capture: &'a Capture,
+/// A committed semantic world provider. These edges are observation ancestry, not source clocks.
+pub(crate) trait Source {
+    fn operations(&self) -> BTreeSet<String>;
+    fn parents(&self, operation: &str) -> Result<BTreeSet<String>>;
+    fn introduced(&self, operation: &str) -> Result<BTreeSet<String>>;
+    fn objects(&self) -> &Map;
+    fn receipt(&self, operation: &str) -> Result<V>;
+    fn active(&self, operation: &str) -> Result<bool>;
+    fn reduce(&self, objects: &Map) -> Result<V>;
+    fn template(&self, operations: &BTreeSet<String>) -> Result<V>;
+}
+struct Legacy<'a> {
+    captured: &'a Capture,
     manifests: BTreeMap<String, V>,
+}
+impl Source for Legacy<'_> {
+    fn operations(&self) -> BTreeSet<String> {
+        self.manifests.keys().cloned().collect()
+    }
+    fn parents(&self, operation: &str) -> Result<BTreeSet<String>> {
+        Ok(map(&map(&self.manifests[operation])?["parents"])?
+            .keys()
+            .cloned()
+            .collect())
+    }
+    fn introduced(&self, operation: &str) -> Result<BTreeSet<String>> {
+        list(&map(&self.manifests[operation])?["objects"])?
+            .iter()
+            .map(|v| text(&map(v)?["id"]).map(str::to_owned))
+            .collect()
+    }
+    fn objects(&self) -> &Map {
+        &self.captured.objects
+    }
+    fn receipt(&self, operation: &str) -> Result<V> {
+        T::validate_receipt(&map(&self.manifests[operation])?["receipt"])
+    }
+    fn active(&self, operation: &str) -> Result<bool> {
+        Ok(
+            matches!(map(&self.manifests[operation])?.get("requires"),Some(V::List(v))
+            if v.iter().any(|v|string_is(v,A::TEMPORAL_APPLICABILITY))),
+        )
+    }
+    fn reduce(&self, objects: &Map) -> Result<V> {
+        W::selected_state(self.captured, objects, &self.captured.object_bytes)
+    }
+    fn template(&self, operations: &BTreeSet<String>) -> Result<V> {
+        W::template(
+            &operations
+                .iter()
+                .map(|op| (op.clone(), self.captured.commits[op].clone()))
+                .collect(),
+        )
+    }
+}
+struct Causal<'a> {
+    source: &'a dyn Source,
     closures: BTreeMap<(String, bool), BTreeSet<String>>,
     visits: usize,
 }
 impl Causal<'_> {
-    fn parents(&self, operation: &str) -> Result<&Map> {
-        let m = self
-            .manifests
-            .get(operation)
-            .ok_or_else(|| error("incomplete_commit"))?;
-        map(&map(m)?["parents"])
+    fn parents(&self, operation: &str) -> Result<BTreeSet<String>> {
+        self.source.parents(operation)
     }
     fn operations(&self, operation: &str, after: bool) -> Result<BTreeSet<String>> {
         let mut pending = if after {
             vec![operation.into()]
         } else {
-            self.parents(operation)?.keys().cloned().collect()
+            self.parents(operation)?.into_iter().collect()
         };
         let mut seen = BTreeSet::new();
         while let Some(current) = pending.pop() {
             if !seen.insert(current.clone()) {
                 continue;
             }
-            pending.extend(self.parents(&current)?.keys().cloned());
+            pending.extend(self.parents(&current)?);
             require(seen.len() <= MAX_OBJECTS, "history_limit")?;
         }
         Ok(seen)
@@ -70,7 +120,7 @@ impl Causal<'_> {
             let mut pending = if after {
                 vec![operation.into()]
             } else {
-                self.parents(operation)?.keys().cloned().collect()
+                self.parents(operation)?.into_iter().collect()
             };
             let mut seen = BTreeSet::new();
             let mut ids = BTreeSet::new();
@@ -78,16 +128,10 @@ impl Causal<'_> {
                 if !seen.insert(current.clone()) {
                     continue;
                 }
-                let m = self
-                    .manifests
-                    .get(&current)
-                    .ok_or_else(|| error("incomplete_commit"))?;
                 self.visits += 1;
                 require(self.visits <= MAX_VISITS, "temporal_frontier_limit")?;
-                for item in list(&map(m)?["objects"])? {
-                    ids.insert(text(&map(item)?["id"])?.into());
-                }
-                pending.extend(self.parents(&current)?.keys().cloned());
+                ids.extend(self.source.introduced(&current)?);
+                pending.extend(self.parents(&current)?);
                 require(seen.len() <= MAX_OBJECTS, "history_limit")?;
             }
             self.closures.insert(key.clone(), ids);
@@ -95,15 +139,15 @@ impl Causal<'_> {
         let objects = self.closures[&key]
             .iter()
             .map(|v| {
-                self.capture
-                    .objects
+                self.source
+                    .objects()
                     .get(v)
                     .cloned()
                     .map(|o| (v.clone(), o))
                     .ok_or_else(|| error("incomplete_commit"))
             })
             .collect::<Result<Map>>()?;
-        let state = W::selected_state(self.capture, &objects, &self.capture.object_bytes)?;
+        let state = self.source.reduce(&objects)?;
         Ok(map(&map(&state)?["subjects"])?
             .iter()
             .filter_map(|(subject, state)| {
@@ -119,14 +163,10 @@ impl Causal<'_> {
     }
     fn reconstructed(&self, operation: &str, after: bool, frontier: &Map) -> Result<Snapshot> {
         let operations = self.operations(operation, after)?;
-        let commits = operations
-            .into_iter()
-            .map(|op| (op.clone(), self.capture.commits[&op].clone()))
-            .collect();
-        let mut document = W::template(&commits)?;
+        let mut document = self.source.template(&operations)?;
         let mut profile = None;
         for (subject, version) in frontier {
-            let object = &self.capture.objects[text(version)?];
+            let object = &self.source.objects()[text(version)?];
             let authored = Adapter::authored(object)?;
             let next_profile = text(&authored["profile"])?;
             require(
@@ -176,22 +216,26 @@ pub(crate) fn capture(captured: &Capture, required: &BTreeSet<String>) -> Result
         A::validate_commit(&manifest)?;
         manifests.insert(op.clone(), manifest);
     }
-    let mut causal = Causal {
-        capture: captured,
+    capture_source(&Legacy {
+        captured,
         manifests,
+    })
+}
+
+pub(crate) fn capture_source(source: &dyn Source) -> Result<Option<V>> {
+    let operations = source.operations();
+    let mut causal = Causal {
+        source,
         closures: BTreeMap::new(),
         visits: 0,
     };
-    let mut children: BTreeMap<String, Vec<String>> = causal
-        .manifests
-        .keys()
-        .map(|k| (k.clone(), Vec::new()))
-        .collect();
+    let mut children: BTreeMap<String, Vec<String>> =
+        operations.iter().map(|k| (k.clone(), Vec::new())).collect();
     let mut remaining = BTreeMap::new();
-    for operation in causal.manifests.keys() {
+    for operation in &operations {
         let parents = causal.parents(operation)?;
         remaining.insert(operation.clone(), parents.len());
-        for parent in parents.keys() {
+        for parent in &parents {
             children
                 .get_mut(parent)
                 .ok_or_else(|| error("incomplete_commit"))?
@@ -205,9 +249,8 @@ pub(crate) fn capture(captured: &Capture, required: &BTreeSet<String>) -> Result
         .collect();
     let mut lineage = BTreeMap::new();
     while let Some(operation) = ready.pop_first() {
-        let m = map(&causal.manifests[&operation])?;
-        let active = matches!(m.get("requires"),Some(V::List(v)) if v.iter().any(|v|string_is(v,A::TEMPORAL_APPLICABILITY)))
-            || causal.parents(&operation)?.keys().any(|p| lineage[p]);
+        let active =
+            source.active(&operation)? || causal.parents(&operation)?.iter().any(|p| lineage[p]);
         lineage.insert(operation.clone(), active);
         for child in &children[&operation] {
             let n = remaining.get_mut(child).unwrap();
@@ -217,9 +260,9 @@ pub(crate) fn capture(captured: &Capture, required: &BTreeSet<String>) -> Result
             }
         }
     }
-    require(lineage.len() == causal.manifests.len(), "cyclic_commits")?;
+    require(lineage.len() == operations.len(), "cyclic_commits")?;
     let mut temporal = Map::new();
-    for (vid, object) in &captured.objects {
+    for (vid, object) in source.objects() {
         if A::has_temporal_metadata(object)? {
             temporal.insert(vid.clone(), object.clone());
         }
@@ -235,8 +278,8 @@ pub(crate) fn capture(captured: &Capture, required: &BTreeSet<String>) -> Result
     let mut truncated = false;
     let mut missing_contexts = 0;
     let mut missing: BTreeMap<(String, String), usize> = BTreeMap::new();
-    for operation in captured.commits.keys() {
-        let receipt = T::validate_receipt(&map(&causal.manifests[operation])?["receipt"])?;
+    for operation in &operations {
+        let receipt = T::validate_receipt(&source.receipt(operation)?)?;
         for phase in ["before", "after"] {
             let evidence = map(&map(&receipt)?[phase])?;
             let recorded = evidence.get("temporal_replay").filter(|v| **v != V::Null);
@@ -245,7 +288,7 @@ pub(crate) fn capture(captured: &Capture, required: &BTreeSet<String>) -> Result
                 && !(if after {
                     lineage[operation]
                 } else {
-                    causal.parents(operation)?.keys().any(|p| lineage[p])
+                    causal.parents(operation)?.iter().any(|p| lineage[p])
                 })
             {
                 continue;
@@ -319,7 +362,7 @@ pub(crate) fn capture(captured: &Capture, required: &BTreeSet<String>) -> Result
                 "temporal_causal_frontier_mismatch",
             )?;
             for (subject, version) in &frontier {
-                let object = &captured.objects[text(version)?];
+                let object = &source.objects()[text(version)?];
                 let authored = Adapter::authored(object)?;
                 let node = map(&nodes[subject])?;
                 let fields = ROLES

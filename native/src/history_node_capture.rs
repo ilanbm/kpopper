@@ -112,6 +112,7 @@ pub struct Capture {
     pub(crate) snapshot: P::Snapshot,
     pub(crate) history: History,
     pub(crate) state: V,
+    pub(crate) temporal: Option<V>,
     document: V,
     baseline: V,
     pub(crate) semantic_events: BTreeMap<String, String>,
@@ -187,14 +188,17 @@ impl Capture {
         let rendered = render(&document, history.objects(), &state, false)?;
         require(rendered == document, "node_semantic_view_mismatch")?;
         let document = render(&document, history.objects(), &state, true)?;
-        Ok(Self {
+        let mut captured = Self {
             snapshot,
             history,
             state,
             document,
             baseline,
             semantic_events,
-        })
+            temporal: None,
+        };
+        captured.temporal = crate::history_node_temporal::capture(&captured)?;
+        Ok(captured)
     }
     /// Original semantic identity lookup; storage-event IDs cannot silently replace pins.
     pub fn object(&self, subject: &str, id: &str) -> Result<V> {
