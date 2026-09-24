@@ -85,7 +85,7 @@ fn writes_compact_context_lazy_creation_exact_retries_and_source_free_pins() {
     assert_eq!(map(&context["options"])["by"], value(json!("writer")));
     assert_eq!(
         map(&map(capture.document())["known"])["p.a"],
-        value(json!({"v":1,"of":"2026-09-24"}))
+        map(&original)["body"]
     );
     assert_eq!(
         map(&map(Capture::read(root.path()).unwrap().document())["known"])["p.a"],
