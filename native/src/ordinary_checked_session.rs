@@ -2118,6 +2118,8 @@ fn navigation_index(graph: &J) -> Result<Navigation> {
     Ok(tree)
 }
 
+include!("ordinary_normalized_session.rs");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2371,5 +2373,3 @@ mod tests {
         }
     }
 }
-
-include!("ordinary_normalized_session.rs");
