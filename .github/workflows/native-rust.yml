@@ -9,6 +9,10 @@ on:
       target:
         type: string
         default: all
+      publish:
+        description: Retain the verified crate for publication from this release commit.
+        type: boolean
+        default: false
       audit:
         description: "On Linux x86_64, fail when the checks read a file the rust lane does not declare."
         type: boolean
@@ -32,6 +36,9 @@ on:
         type: choice
         options:
           - all
+          - linux-x86_64
+          - linux-windows
+          - linux-macos
           - without-darwin-x86_64
           - windows-x86_64
 
@@ -39,7 +46,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-rust-${{ github.ref }}-${{ inputs.validation == 'distribution' && github.sha || 'checks' }}
+  group: native-rust-${{ github.ref }}-${{ (inputs.publish || inputs.validation == 'distribution') && github.sha || 'checks' }}
   cancel-in-progress: true
 
 jobs:
@@ -52,7 +59,13 @@ jobs:
       fail-fast: false
       matrix:
         include: >-
-          ${{ fromJSON(inputs.target == 'windows-x86_64'
+          ${{ fromJSON(inputs.target == 'linux-x86_64'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
+            || inputs.target == 'linux-windows'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+            || inputs.target == 'linux-macos'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
+            || inputs.target == 'windows-x86_64'
             && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
             || inputs.target == 'without-darwin-x86_64'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
@@ -358,13 +371,19 @@ jobs:
   release:
     # Release compilation, acceptance and packaging take under half an hour on every target.
     timeout-minutes: 45
-    # A pull request that changes no platform input passes without-darwin-x86_64, which checks
-    # the release on linux-x86_64 alone; the tests keep every target but Intel macOS.
+    # Tests and release acceptance use the same selected targets. The older manual
+    # without-darwin-x86_64 scope retains its Linux-only release build for compatibility.
     strategy:
       fail-fast: false
       matrix:
         include: >-
-          ${{ fromJSON(inputs.target == 'windows-x86_64'
+          ${{ fromJSON(inputs.target == 'linux-x86_64'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
+            || inputs.target == 'linux-windows'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+            || inputs.target == 'linux-macos'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
+            || inputs.target == 'windows-x86_64'
             && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
             || inputs.target == 'without-darwin-x86_64'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
@@ -483,7 +502,7 @@ jobs:
           cp "$CARGO_TARGET_DIR/package/kpopper-$version.crate" "$RUNNER_TEMP/verified-crate/"
           rm -rf "$CARGO_TARGET_DIR"
       - name: Retain the verified crate for publication
-        if: ${{ !cancelled() && steps.native-crate.outcome == 'success' && env.KPOPPER_CI_VALIDATION == 'distribution' }}
+        if: ${{ !cancelled() && steps.native-crate.outcome == 'success' && (inputs.publish || env.KPOPPER_CI_VALIDATION == 'distribution') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: verified-crate
