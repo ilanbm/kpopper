@@ -155,6 +155,37 @@ fn live_sources_symbolic_references_prose_urls_and_patterns_are_not_missing_file
     let out = text(f.check("sources:\n  s.file: {file: sources/original.txt}\n  s.web: {file: 'https://example.test/a'}\nknown:\n  p.reference: {v: 1, from: s.file}\n  p.unknown: {v: 1, from: s.other}\n  p.prose: {v: 1, from: 'a comparison of sources/ on another machine'}\n  p.pattern: {v: 1, from: 'sources/*.txt'}\n"));
     assert!(!out.contains("file "), "{out}");
 }
+
+#[test]
+fn line_number_citations_and_relative_colon_names_are_not_pins() {
+    let f = Fixture::new();
+    fs::write(f.root.path().join("sources/part:name.py"), "source").unwrap();
+    let out = text(f.check(
+        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.colon: {file: 'sources/part:name.py'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
+    ));
+    assert!(!out.contains("pinned file"), "{out}");
+    for id in ["s.line", "s.range", "s.colon", "p.line"] {
+        assert!(!out.contains(&format!("NOTE {id}:")), "{out}");
+    }
+
+    let missing = text(f.check("sources:\n  s.missing_line: {file: 'sources/missing.py:42'}\n"));
+    assert!(
+        missing.contains("NOTE s.missing_line: file sources/missing.py:42 is absent"),
+        "{missing}"
+    );
+    assert!(!missing.contains("pinned file"), "{missing}");
+
+    let missing_colon_path =
+        text(f.check("sources:\n  s.missing_colon: {file: 'sources/missing:part.py'}\n"));
+    assert!(
+        missing_colon_path.contains("NOTE s.missing_colon: file sources/missing:part.py is absent"),
+        "{missing_colon_path}"
+    );
+    assert!(
+        !missing_colon_path.contains("pinned file"),
+        "{missing_colon_path}"
+    );
+}
 #[test]
 fn absolute_paths_are_checked_only_inside_this_repository() {
     let f = Fixture::new();
@@ -187,6 +218,41 @@ fn a_pin_does_not_hide_an_unknown_revision_or_a_missing_blob() {
         assert!(out.contains(&format!("NOTE {id}: pinned file")), "{out}");
     }
     assert!(out.contains("git show"), "{out}");
+}
+
+#[cfg(unix)]
+#[test]
+fn pinned_git_probe_io_failures_are_advisory_notes() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    let bin = f.private.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let git = bin.join("git");
+    fs::write(
+        &git,
+        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = cat-file ]; then printf '%2048s' ''; exit 0; fi\ndone\nexec /usr/bin/git \"$@\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
+    let record = "sources:\n  s.pinned: {file: 'source-final:sources/original.txt'}\n";
+    let mut command = f.command(f.root.path());
+    command.env(
+        "PATH",
+        format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
+    fs::write(f.root.path().join("GROUNDING.yaml"), record).unwrap();
+    let output = command.output().unwrap();
+    let out = text(output);
+    assert!(out.contains("NOTE s.pinned: pinned file"), "{out}");
+    assert!(
+        out.contains("git show source-final:sources/original.txt"),
+        "{out}"
+    );
+    assert!(out.contains("0 problems"), "{out}");
 }
 #[test]
 fn file_paths_resolve_from_the_repository_when_called_in_a_subdirectory() {

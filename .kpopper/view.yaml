@@ -53,7 +53,8 @@ groups:
 tabs:
   - title: Now
     occasion: "you are picking up this project and need what is still open, and what the sessions before you were asked for"
-    serves: [s.native_default_release, s.2026_09_19_native_live_bootstrap_continuation,
+    serves: [s.2026_09_25_source_reference_review,
+             s.native_default_release, s.2026_09_19_native_live_bootstrap_continuation,
              s.2026_09_19_native_temporal_continuation,
              s.2026_09_19_native_temporal_authoring,
              s.2026_09_19_native_ordinary_authoring,
@@ -77,6 +78,15 @@ tabs:
       - title: What each session was asked
         why: frozen, in the requester's own words - a tab may claim to serve one of these only by picking what that session wrote
         pick: s.
+        as: lines
+      - title: Last readings from the removed Python implementation
+        why: retain historical package counts separately from the current native reader and leave native place counts open
+        pick: [p.grouping_mentions, p.reference_resolvers, p.script_copies,
+               p.supersede_doors, p.union_tests]
+        as: table
+      - title: Historical source citations and their current readers
+        why: separate the date and revision originally read from the later availability check and native replacement source
+        pick: [s.2026_09_25_source_reference_review, doc.native_browser_checks]
         as: lines
     shape: {entries: 117, judgments: 95, flagged: 2, blocked: 0}
 

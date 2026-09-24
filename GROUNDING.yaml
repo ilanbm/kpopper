@@ -1277,6 +1277,17 @@ sources:
          errors, and bounds retries for transient Windows sharing violations without allowing delete
          sharing or replacing identity checks. Windows regression tests cover transient and
          persistent DELETE handles; actual Windows CI remains the platform acceptance gate."
+  s.2026_09_25_source_reference_review:
+    name: "Source-reference provenance review and historical Python recount"
+    asked: "Correct PR #236 source-read dates and keep historical revision identity distinct from
+            the requested python-final file pin; verify any source content whose read date is
+            advanced, and label retired Python counts as historical."
+    of: "On 2026-09-25, the cited Python-final source sections and regression tests were read again.
+         Static counts were reproduced: one may_supersede, one reference_text, one union_of, one
+         package-dir mapping, and three fronts occurrences. Several historical source blobs differ
+         from python-final; original revision metadata is retained. No current native door count is
+         inferred."
+    read: "2026-09-25"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1286,9 +1297,13 @@ sources:
   s.branch_comparison_core:
     name: "Cross-branch and in-memory consolidation checks"
     file: "python-final:scripts/consolidate.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-10 at d17225095c856b147d03522981f2c639e57f73e1; Historical file
-         availability verified at python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-10 at d17225095c856b147d03522981f2c639e57f73e1; source content
+         reread on 2026-09-25 at scripts/consolidate.py: re-read union_of, reversed-decision gate,
+         and branch-source comparison; python-final blob is not the exact historical d172 blob,
+         retained separately as revision.; python-final remains the openable historical pin as
+         requested."
+    revision: d17225095c856b147d03522981f2c639e57f73e1
   s.ci_execution_evidence:
     name: "CI execution measurements and agreed optimization scope"
     url: "https://github.com/ilanbm/kpopper/actions/runs/35320374247"
@@ -1304,21 +1319,30 @@ sources:
   s.core_followups_contract:
     name: "Core followup captured reading contract"
     file: "python-final:scripts/followup_core.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-18 at 1b445298e413af12f24d6c0ab7a67637b5e9df84; Historical file
-         availability verified at python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-18 at 1b445298e413af12f24d6c0ab7a67637b5e9df84; source content
+         reread on 2026-09-25 at scripts/followup_core.py: re-read semantic evidence projection and
+         captured-core reading; pinned blob matches original revision 1b445298.; python-final remains
+         the openable historical pin as requested."
+    revision: "1b445298e413af12f24d6c0ab7a67637b5e9df84"
   s.core_observer_operations:
     name: "Core observers and prepared history fold checks"
     file: "python-final:scripts/history_prospective.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-19 at 446321d; Historical file availability verified at
-         python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-19 at 446321d; source content reread on 2026-09-25 at
+         scripts/history_prospective.py: re-read _prospective_capture and detached mutation-role
+         validation; python-final blob differs from original 446321d revision, retained separately.;
+         python-final remains the openable historical pin as requested."
+    revision: "446321d"
   s.core_operational_contract:
     name: "Captured core operational assessment contract"
     file: "python-final:scripts/reasoning/operations.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-18 at ac61f7f; Historical file availability verified at
-         python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-18 at ac61f7f; source content reread on 2026-09-25 at
+         scripts/reasoning/operations.py: re-read selected and _ordinary history refusal;
+         python-final blob differs from original ac61f7f revision, retained separately.; python-final
+         remains the openable historical pin as requested."
+    revision: ac61f7f
   s.crates_workflow_run_failure:
     name: "crates.io authentication failure for release 0.12.0"
     url: "https://github.com/ilanbm/kpopper/actions/runs/36055556588/job/107821819310"
@@ -1331,21 +1355,30 @@ sources:
   s.followups_daily:
     name: "Daily review prompt, work budget and receipts"
     file: "python-final:scripts/followup_daily.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; Historical file
-         availability verified at python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; source content
+         reread on 2026-09-25 at scripts/followup_daily.py: re-read plan, binding, status and host
+         schedule contracts; python-final blob differs from original 7bbd2fcd revision, retained
+         separately.; python-final remains the openable historical pin as requested."
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
   s.followups_install:
     name: "Daily installation inspection and readback protocol"
     file: "python-final:scripts/followup_install.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; Historical file
-         availability verified at python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; source content
+         reread on 2026-09-25 at scripts/followup_install.py: re-read _packet and check-only/readback
+         instructions; pinned blob matches original 7bbd2fcd revision.; python-final remains the
+         openable historical pin as requested."
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
   s.followups_state:
     name: "Followup storage, claims and retained outcomes"
     file: "python-final:scripts/followups.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; Historical file
-         availability verified at python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; source content
+         reread on 2026-09-25 at scripts/followups.py: re-read YAML loading and claim/scan contracts;
+         python-final blob differs from original 7bbd2fcd revision, retained separately.;
+         python-final remains the openable historical pin as requested."
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
   s.gaze_direction_study:
     name: "The influence of banner advertisements on attention and memory: human faces with averted
            gaze can enhance advertising effectiveness"
@@ -1354,9 +1387,12 @@ sources:
   s.history_operation_context:
     name: "Captured context for prepared history previews"
     file: "python-final:scripts/reasoning/operations.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-19 at 34ce81a; Historical file availability verified at
-         python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-19 at 34ce81a; source content reread on 2026-09-25 at
+         scripts/reasoning/operations.py: re-read context capability selection and captured
+         operations; python-final blob differs from original 34ce81a revision, retained separately.;
+         python-final remains the openable historical pin as requested."
+    revision: "34ce81a"
   s.ingest_64eac369f0d3ca58463f27679fa42bb0:
     name: "Captured report"
     file: "/Users/ilanbm/.local/state/kpopper/ingestion/d38be57d78902508217b8f6b3d18d9c39fcf1b9fd9a67b76790e4473e1fe5b68/sources/64eac369f0d3ca58463f27679fa42bb0.txt"
@@ -1885,11 +1921,11 @@ sources:
     name: "Source clock grouping and retained mapping order"
     from: s.2026_09_19_native_transactions
     file: "python-final:scripts/versions.py"
-    at: "_subject_entry lines 488-492 at b639cdbab1e3c624ad52708350166d222821aec1;
-         native/src/history_reduce.rs lines 281-294 at 0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f;
-         Originally read 2026-09-19; Historical file availability verified at python-final on
-         2026-09-24"
-    read: "2026-09-24"
+    at: "Originally read 2026-09-19; source content reread on 2026-09-25 at scripts/versions.py
+         lines 488-492 at python-final; checked same blob at b639cdb (4b34e2b9); native counterpart
+         history_reduce.rs 281-294 at 0b6c99a.; python-final remains the openable historical pin as
+         requested."
+    read: "2026-09-25"
     scope: {kind: code, commit: "0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"}
   doc.history_writer_contract_c5cc6a3:
     name: "History writer, replay and branch adoption contract at c5cc6a3"
@@ -1925,9 +1961,18 @@ sources:
   doc.ingestion_contract:
     name: "The source update and recording gate regression contract"
     file: "python-final:tests/test_ingestion.py"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-07; Historical file availability verified at python-final on
-         2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-07; source content reread on 2026-09-25 at tests/test_ingestion.py:
+         re-read test_set_updates_the_value_and_its_citation,
+         test_citation_only_update_is_not_a_value_noop, and hypothesis citation behavior.;
+         python-final remains the openable historical pin as requested."
+  doc.native_browser_checks:
+    name: "Native source for the current bundled Hub browser-check path"
+    file: "native/src/public_hub.rs"
+    at: "browser_checks writes include_bytes!(\"../shared/verify_page.js\") to a temporary script
+         and executes it with node against the requested page; failures report the
+         Node/playwright-core requirement."
+    read: "2026-09-25"
   doc.native_candidate_reasons:
     name: "Native source for p.candidate_reasons"
     file: "native/src/ordinary_candidate_algorithm.rs"
@@ -1987,11 +2032,11 @@ sources:
   doc.pending_dry_run:
     name: "Pending findings in the consolidation dry run"
     file: "python-final:tests/test_consolidate_pending.py"
-    read: "2026-09-24"
-    at: "Each active finding over the record alone and together; red on a finding the base cannot
-         read as it says, a contested id, a falsifier, a hole, a refused reading or a reversal;
-         nothing adopted; a frozen run has no pending part; Originally read 2026-09-23; Historical
-         file availability verified at python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-23; source content reread on 2026-09-25 at
+         tests/test_consolidate_pending.py: re-read pending-isolated checks, falsifier/moved/hole
+         cases, and no-adoption assertions.; python-final remains the openable historical pin as
+         requested."
   doc.plugin_runtime:
     name: "Explicit Python setup and runtime selection for plugin hooks"
     file: "docs/plugin-runtime.md"
@@ -1999,9 +2044,11 @@ sources:
   doc.prompt_reminders:
     name: "Advisory recording reminder regression contract"
     file: "python-final:tests/test_nudge.py"
-    read: "2026-09-24"
-    at: "Prompt context, ninth-turn Stop silence, changed files and host skill forms; Originally
-         read 2026-09-22; Historical file availability verified at python-final on 2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-22; source content reread on 2026-09-25 at tests/test_nudge.py:
+         re-read test_record_writes_keep_attribution_checks and
+         test_changed_tree_reminder_names_each_host_without_blocking.; python-final remains the
+         openable historical pin as requested."
   doc.session_activity:
     name: "Session write attribution and Stop delivery contract"
     file: "docs/reference.md"
@@ -2012,9 +2059,11 @@ sources:
     of: "PredicateLiteralContract.setUpClass; also ReadableRuntime.setUpClass in
          tests/test_readable_expressions.py and cache validation in scripts/session/core.py
          Core.__init__"
-    read: "2026-09-24"
-    at: "Originally read 2026-09-17; Historical file availability verified at python-final on
-         2026-09-24"
+    read: "2026-09-25"
+    at: "Originally read 2026-09-17; source content reread on 2026-09-25 at
+         tests/test_predicate_literals.py: re-read class setup, required-core behavior, expression
+         preservation, and native assessment assertions.; python-final remains the openable
+         historical pin as requested."
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html
@@ -3852,20 +3901,19 @@ known:
     v: 1
     name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
            judgment's verdict"
-    from: s.2026_09_24_source_file_references
-    at: "python-final:scripts/provenance.py: reference_text - the page's spans, pull and open all
-         call it; last Python reading 2026-09-03, value 1; closed on 2026-09-24 because this counts
-         places inside the removed implementation. It is not a count of the native reader;
-         q.reader_places_counted_once retains that question."
-    of: "2026-09-24"
+    from: s.2026_09_25_source_reference_review
+    at: "python-final:scripts/provenance.py; AST count of FunctionDef named reference_text. This is
+         the last-Python implementation metric only; q.reader_places_counted_once remains the open
+         native-count question."
+    of: "2026-09-25"
   p.script_copies:
     v: 1
     name: "Editable copies of the reader and the renderer"
-    from: s.2026_09_24_source_file_references
-    of: "2026-09-24"
-    at: "python-final:pyproject.toml: package-directory mapping; last Python reading 2026-09-01,
-         value 1. Closed on 2026-09-24 because the mapped Python package was removed. This is not a
-         count of native reader implementations."
+    from: s.2026_09_25_source_reference_review
+    of: "2026-09-25"
+    at: "python-final:pyproject.toml:56; the package-dir mapping has one kpopper-to-scripts mapping.
+         This is the last-Python implementation metric only; q.reader_places_counted_once remains the
+         open native-count question."
   prior.confidence_needs_calibration:
     v: 0.95
     unit: confidence
@@ -3936,12 +3984,11 @@ known:
     v: 1
     name: "Functions that decide whether a write under an id the base holds may replace what it
            holds"
-    from: s.2026_09_24_source_file_references
-    at: "python-final:scripts/provenance.py: may_supersede - set of a value and add under a standing
-         judgment's id both ask it; last Python reading 2026-09-04, value 1; closed on 2026-09-24
-         because this counts places inside the removed implementation. It is not a count of the
-         native reader; q.reader_places_counted_once retains that question."
-    of: "2026-09-24"
+    from: s.2026_09_25_source_reference_review
+    at: "python-final:scripts/provenance.py; AST count of FunctionDef named may_supersede. This is
+         the last-Python implementation metric only; q.reader_places_counted_once remains the open
+         native-count question."
+    of: "2026-09-25"
   p.tree_positions_kept:
     v: 0
     name: "Places a dragged position is written down"
@@ -3969,25 +4016,23 @@ known:
     from: doc.three_briefs
   p.grouping_mentions:
     v: 3
-    name: "Places the renderer still reads the older name for a grouping, fronts - kept as an
-           alias for briefs not yet renamed"
-    from: s.2026_09_24_source_file_references
-    of: "2026-09-24"
-    at: "python-final:scripts/render_page.py: Places the renderer still reads the older name for a
-         grouping, fronts - kept as an alias for briefs not yet renamed; last Python reading
-         2026-09-03, value 3; closed on 2026-09-24 because this counts places inside the removed
-         implementation. It is not a count of the native reader; q.reader_places_counted_once retains
-         that question."
+    name: "Places the renderer still reads the older name for a grouping, fronts - kept as an alias
+           for briefs not yet renamed"
+    from: s.2026_09_25_source_reference_review
+    of: "2026-09-25"
+    at: "python-final:scripts/render_page.py; counted the three exact fronts occurrences at the
+         GROUPED_SHAPES declaration, brief fallback and output compatibility alias. This is the
+         last-Python implementation metric only; q.reader_places_counted_once remains the open
+         native-count question."
   p.union_tests:
     v: 1
     name: "Places the record is tested with its hypotheses laid over it - the dry run, and nowhere
            else; check evaluates the base alone"
-    from: s.2026_09_24_source_file_references
-    at: "python-final:scripts/consolidate.py: union_of, which lays the hypotheses over the base by
-         id and runs the reader's own check on the result; last Python reading 2026-09-04, value 1;
-         closed on 2026-09-24 because this counts places inside the removed implementation. It is not
-         a count of the native reader; q.reader_places_counted_once retains that question."
-    of: "2026-09-24"
+    from: s.2026_09_25_source_reference_review
+    at: "python-final:scripts/consolidate.py; AST count of FunctionDef named union_of. This is the
+         last-Python implementation metric only; q.reader_places_counted_once remains the open
+         native-count question."
+    of: "2026-09-25"
   m.multi.sessions:
     v: 7
     name: "Sessions that worked on this repository in one day, every one opened by the hook"
@@ -5335,10 +5380,11 @@ judgments:
               person deciding knows. Naming the id is one flag per reversal per fold - the price a
               reversal should cost - and the sequence is the one tree's own, reading, red, repair,
               with the integrator as the one who repairs. {{m.door.unfired_flips_named_reversed}} of
-              the same flips are now reversed and red until named; {{p.supersede_doors}} is still the
-              count that would show a second door."
+              the same flips are now reversed and red until named; {{p.supersede_doors}} is a fresh
+              recount of the frozen Python source only; it does not measure the native reader. The
+              current native count remains open as q.reader_places_counted_once."
     wrong_if: "m.door.unfired_flips_named_reversed < 3"
-    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-16"]
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-16", "the standing judgment holds, and a person takes this over it by name on 2026-09-25"]
     seen:
       s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_04_consolidate: "read 2026-09-04"
@@ -7993,21 +8039,20 @@ judgments:
     seen: {prior.ts_direction: 0.7, p.npm_files: 1, p.script_copies: 1,
            lit.registry_names: "kpopper is published on both npm and PyPI since 2026-09-03, first at 0.21.0 on each; ground-tree is unregistered on both"}
   d.checks_ship_with_the_reader:
-    rests_on: [p.checks_in_the_wheel, p.script_copies]
-    verdict: "the browser checks install with the command line - `kpopper page --checks` runs the
-              copy that came with the reader, wherever it was installed"
-    because: "The checks are the only thing that answers whether the page actually behaves, and a
-              wheel that leaves them out withholds that answer from everyone who installed the
-              ordinary way. Being Node is a reason to want node on the path, not a reason to live in
-              another registry - and an installed copy sits somewhere nobody would think to look, so
-              the dispatcher finds it instead of the person. The file ships in both packages and is
-              edited in neither."
+    rests_on: [doc.native_browser_checks]
+    verdict: "the native Hub browser checks are bundled with the reader - `kpop experimental hub
+              --checks <page>` runs the embedded verifier"
+    because: "The earlier decision concerned the Python wheel and package copies; those counts are
+              retained only as the last Python readings, not as evidence about the native
+              distribution. The native Hub embeds verify_page.js and invokes it through Node for the
+              requested page (doc.native_browser_checks). The check remains with the installed
+              reader, while Node/playwright-core availability is a separate installation condition."
     reopened_by: "an installed reader whose page check cannot run because the browser check did not
                   come with it; an installed reader whose page check cannot run because the browser
                   check did not come with it; an installed reader whose page check cannot run because
                   the browser check did not come with it"
-    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
-    seen: {p.checks_in_the_wheel: 1, p.script_copies: 1}
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23", "the standing judgment holds, and a person takes this over it by name on 2026-09-25"]
+    seen: {doc.native_browser_checks: "read 2026-09-25"}
   d.tree_springs_back:
     rests_on: [d.page_reads_only, p.tree_positions_kept]
     verdict: "the tree can be handled - pulled about, and grown into place once - and nothing a
