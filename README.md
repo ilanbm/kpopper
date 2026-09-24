@@ -706,8 +706,8 @@ steps that need your input.
 
 ```text
 Dear agent,
-Please install kpopper. Open the guide below and follow the installation
-instructions for your environment:
+Please help me install kpopper in this environment. Open the guide below and
+follow the installation instructions for your environment:
 https://github.com/ilanbm/kpopper#get-started
 Complete the setup, including the required runtime. Guide me through any
 steps that need my input, and tell me when to start a new session.
@@ -776,8 +776,9 @@ See [Codex setup and behavior](adapters/codex/README.md).
 ### Claude Cowork
 
 **In Cowork:** paste the [installation request above](#get-started) for guided setup.
-The app installation step is **Customize → Plugins → Add marketplace**: enter
-`ilanbm/kpopper`, then install **kpopper**.
+Claude guides the setup while you complete the marketplace and Install clicks in
+**Customize → Plugins**: select **Add marketplace**, enter `ilanbm/kpopper`, then
+install **kpopper**.
 
 Cowork runs tasks in its own environment, where kpopper has not yet been verified
 end to end; see the [Cowork notes](adapters/claude-cowork/README.md).
