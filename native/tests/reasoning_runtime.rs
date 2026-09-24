@@ -83,10 +83,14 @@ fn rebuilt_replacement_gmp_is_loaded_by_the_candidate_runtime() {
         changed.implementation["modified_libraries"],
         serde_json::json!([library])
     );
-    let data: serde_json::Value =
-        serde_json::from_str(include_str!("fixtures/reasoning-runtime.json")).unwrap();
-    let case = &data["cases"][0];
-    let mut input = kpop_native::reasoning_transport::encode_request(&case["request"])
+    let request = serde_json::json!({
+        "nodes": {},
+        "declared": [],
+        "expression": {"op":"add","args":[
+            {"num":"18446744073709551615"}, {"num":"1"}
+        ]}
+    });
+    let mut input = kpop_native::reasoning_transport::encode_request(&request)
         .unwrap()
         .into_bytes();
     input.push(b'\n');
@@ -109,7 +113,10 @@ fn rebuilt_replacement_gmp_is_loaded_by_the_candidate_runtime() {
     );
     assert!(String::from_utf8_lossy(&output.stderr).contains("KPOPPER_GMP_REPLACEMENT_PROBE"));
     let actual = kpop_native::reasoning_transport::decode_response(&output.stdout).unwrap();
-    assert_eq!(actual, case["output"]);
+    assert_eq!(
+        actual["value"],
+        serde_json::json!({"type":"number","numerator":"18446744073709551616","denominator":"1"})
+    );
 }
 #[cfg(unix)]
 #[test]

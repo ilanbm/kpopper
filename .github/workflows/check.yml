@@ -149,6 +149,7 @@ jobs:
     uses: ./.github/workflows/reasoning-runtime.yml
     with:
       rebuild: true
+      target-scope: ${{ needs.changes.outputs.platforms }}
 
   ci-required:
     timeout-minutes: 10

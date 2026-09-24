@@ -6,15 +6,23 @@ on:
       rebuild:
         type: boolean
         required: true
+      target-scope:
+        type: string
+        default: all
   workflow_dispatch:
     inputs:
+      target-scope:
+        description: "Platform scope for this validation run."
+        type: choice
+        options: [all, pull-request]
+        default: all
       candidate-only:
         description: "Build replacement candidates before committing updated bundles; omit installed validation."
         type: boolean
         default: false
 
 concurrency:
-  group: reasoning-runtime-${{ github.ref }}
+  group: reasoning-runtime-${{ github.ref }}-${{ github.event_name }}-${{ inputs.target-scope }}-${{ inputs.candidate-only }}
   cancel-in-progress: true
 
 permissions:
@@ -38,15 +46,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {runner: ubuntu-24.04, target: linux-x86_64}
-          - {runner: ubuntu-24.04-arm, target: linux-aarch64}
-          - {runner: macos-15, target: darwin-arm64}
-          - {runner: macos-15-intel, target: darwin-x86_64}
-          - {runner: windows-2022, target: windows-x86_64}
+        include: >-
+          ${{ fromJSON(inputs.target-scope == 'pull-request'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64"},{"runner":"macos-15","target":"darwin-arm64"},{"runner":"windows-2022","target":"windows-x86_64"}]'
+            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64"},{"runner":"macos-15","target":"darwin-arm64"},{"runner":"macos-15-intel","target":"darwin-x86_64"},{"runner":"windows-2022","target":"windows-x86_64"}]') }}
     uses: ./.github/workflows/reasoning-target.yml
     with:
       runner: ${{ matrix.runner }}
       target: ${{ matrix.target }}
+      target-scope: ${{ inputs.target-scope }}
       rebuild: ${{ inputs.rebuild || github.event_name == 'workflow_dispatch' }}
-      validate-installed: ${{ github.event_name != 'workflow_dispatch' || !inputs.candidate-only }}
+      validate-candidate: ${{ github.event_name != 'workflow_dispatch' || !inputs.candidate-only }}

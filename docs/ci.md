@@ -10,6 +10,7 @@ directories.
 | Lane | Jobs | Reads |
 |---|---|---|
 | `rust` | The command on each platform: compilation, its tests, the release build and installed acceptance | `native/`, the plugin's shell plumbing and host wrappers, the packaging tools, the installers, the runtime resources and the Lean sources |
+| `runtime` | Rebuild the Lean/GMP reasoning runtime and exercise the fresh archive plus a replacement GMP library | Lean sources, runtime recipe and corresponding-source archive, native runtime integration test |
 
 The declarations are checked, not trusted. On Linux, `.github/scripts/ci_audit.py` watches
 every file the audited lanes open, through fanotify, which costs no measurable time. It maps
@@ -41,8 +42,12 @@ skill, release, selection and native-plumbing contracts, then reads this reposit
 with the `kpop` built from the same tree. A push to main caches its build by the hash of
 `native/`; a pull request restores that build and saves none, so only a pull request that
 changes the native sources builds one, and that pull request checks the record with the
-reader it changes. On main all five targets are covered; installed acceptance uses the
-committed bundles, cold runtime caches and no compiler on PATH.
+reader it changes. On main, all five targets are covered. The reasoning-runtime job checks
+committed-bundle integrity and source correspondence, rebuilds fresh candidates, then validates
+both the build-tree archive and the downloaded artifacts. Pull requests use the same platform
+scope as the native lane; changes to runtime
+platform inputs and main pushes cover all five targets; manual dispatch defaults
+to all five and exposes the pull-request subset as an explicit choice.
 
 Native builds cache pinned download archives and successfully tested GMP prefixes.
 Cache keys include the target, source and recipe hashes, compiler/build tools,
@@ -88,8 +93,12 @@ artifacts, which every checkout rebuilds. Pull requests read main's entries.
 
 To generate candidates before updating committed bundles, dispatch
 `reasoning-runtime` with `candidate-only=true`. This explicit maintainer mode
-builds all target candidates without claiming installed validation of the old
-committed payload. Normal PR, main and release calls keep the integrity gate and
-installed matrix. Changes to either native workflow or the builder must regenerate
+builds and validates the candidate on each selected target while skipping the
+committed-bundle preflight and the second validation after artifact download.
+Full validation keeps the integrity gate and checks the matching downloaded
+candidate again. The candidate tests run the native scalar, composition and query
+corpus, then replace the extracted GMP with a separately built probe library and
+check both its load marker and a large-integer arithmetic result. Changes to either
+runtime workflow or the builder must regenerate
 `scripts/reasoning/native/gmp-source-and-build.tar.gz`, which carries their exact
 source and build instructions.

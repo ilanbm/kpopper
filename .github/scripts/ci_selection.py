@@ -63,7 +63,7 @@ LANES = {
         "scripts/reasoning/lean/*", "scripts/reasoning/native/*",
         "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
         ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
-    ), enforced=False),
+    ), audited=False, enforced=False),
 }
 LANE_NAMES = tuple(LANES)
 

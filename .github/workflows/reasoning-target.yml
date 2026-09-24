@@ -12,7 +12,7 @@ on:
       rebuild:
         type: boolean
         required: true
-      validate-installed:
+      validate-candidate:
         type: boolean
         default: true
 
@@ -106,13 +106,11 @@ jobs:
           path: scripts/reasoning/native/gmp-source-and-build.tar.gz
           if-no-files-found: error
 
-  installed:
+  candidate-validation:
     timeout-minutes: 45
     needs: build
     # Validate the exact candidate and replacement library produced for this target.
-    if: inputs.validate-installed && needs.build.result == 'success'
-    strategy:
-      fail-fast: false
+    if: inputs.validate-candidate && needs.build.result == 'success'
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4

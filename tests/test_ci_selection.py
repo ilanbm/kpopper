@@ -256,6 +256,16 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("without-darwin-x86_64", job["with"]["target"])
         self.assertIn("needs.changes.outputs.platforms == 'all'", job["with"]["target"])
 
+    def test_runtime_matrix_respects_pr_platform_scope_and_dispatch_defaults_to_all(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
+        matrix = workflow["jobs"]["target"]["strategy"]["matrix"]["include"]
+        self.assertIn("inputs.target-scope == 'pull-request'", matrix)
+        for target in ("linux-x86_64", "linux-aarch64", "darwin-arm64", "windows-x86_64"):
+            self.assertIn(target, matrix)
+        self.assertIn("darwin-x86_64", matrix)
+        dispatch = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]
+        self.assertEqual(dispatch["target-scope"]["default"], "all")
+
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
         steps = self.jobs()["changes"]["steps"]
         gate = next(step for step in steps if "--check-bundles" in step.get("run", ""))
