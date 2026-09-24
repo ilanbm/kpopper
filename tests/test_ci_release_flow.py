@@ -24,9 +24,11 @@ class ReleaseSelection(unittest.TestCase):
         self.assertEqual(CI.select(["native/src/main.rs"], push=True), {"rust": False})
         self.assertEqual(CI.platforms(["native/src/main.rs"], push=True), "linux-x86_64")
 
-    def test_release_main_always_runs_everything(self):
-        self.assertEqual(CI.select(["VERSION"], push=True, release=True), {"rust": True})
-        self.assertEqual(CI.platforms(["VERSION"], push=True, release=True), "all")
+    def test_release_builds_native_and_filters_tests_by_accumulated_changes(self):
+        self.assertEqual(CI.select(["README.md"], release=True), {"rust": True})
+        self.assertEqual(CI.platforms(["native/src/main.rs"], release=True), "linux-x86_64")
+        self.assertEqual(CI.platforms(["install.ps1"], release=True), "linux-windows")
+        self.assertEqual(CI.platforms([], release=True), "all")
 
     def test_windows_installer_keeps_linux_and_windows(self):
         self.assertEqual(CI.platforms(["install.ps1"]), "linux-windows")
@@ -128,31 +130,54 @@ class PublishBoundary(unittest.TestCase):
         # BaseLoader preserves the YAML 1.2 Actions key `on`.
         return yaml.load((ROOT / ".github/workflows" / name).read_text(), Loader=yaml.BaseLoader)
 
-    def test_publish_waits_for_successful_main_push_checks_and_never_rebuilds(self):
+    def test_publish_is_explicit_and_runs_trusted_code_on_main(self):
         workflow = self.workflow("publish.yml")
-        self.assertEqual(workflow["on"], {"workflow_run": {
-            "workflows": ["kpopper check"], "types": ["completed"], "branches": ["main"]}})
+        self.assertEqual(set(workflow["on"]), {"workflow_dispatch"})
+        self.assertEqual(set(workflow["on"]["workflow_dispatch"]["inputs"]), {"release_pr", "check_run"})
         jobs = workflow["jobs"]
         self.assertNotIn("build", jobs)
-        gate = jobs["plan"]["if"]
-        for condition in ("github.event.workflow_run.conclusion == 'success'",
-                          "github.event.workflow_run.event == 'push'",
-                          "github.event.workflow_run.head_repository.full_name == github.repository"):
-            self.assertIn(condition, gate)
+        self.assertEqual(jobs["plan"]["if"], "github.ref == 'refs/heads/main'")
         self.assertEqual(jobs["publish"]["needs"], "plan")
+        plan = next(step for step in jobs["plan"]["steps"] if step.get("id") == "plan")
+        self.assertIn("release_candidate.py --plan", plan["run"])
 
-    def test_every_checkout_and_download_is_bound_to_the_checked_run(self):
+    def test_candidate_checks_can_read_the_pr_and_bot_dispatches_them(self):
+        self.assertEqual(self.workflow("check.yml")["permissions"]["pull-requests"], "read")
+        self.assertEqual(self.workflow("release.yml")["permissions"]["actions"], "write")
+        script = (ROOT / ".github/scripts/release.py").read_text()
+        self.assertIn('"workflow", "run", "check.yml", "--ref", branch', script)
+
+    def test_downloads_are_bound_to_checked_run_and_publisher_is_trusted(self):
         workflow = self.workflow("publish.yml")
         for job in workflow["jobs"].values():
             for step in job.get("steps", []):
                 use = step.get("uses", "")
-                if use.startswith("actions/checkout@"):
-                    self.assertEqual(step["with"]["ref"], "${{ github.event.workflow_run.head_sha }}")
-                elif use.startswith("actions/download-artifact@"):
-                    self.assertEqual(step["with"]["run-id"], "${{ github.event.workflow_run.id }}")
+                if use.startswith("actions/download-artifact@"):
+                    self.assertEqual(step["with"]["run-id"], "${{ needs.plan.outputs.run_id }}")
                     self.assertEqual(step["with"]["github-token"], "${{ github.token }}")
-        for name in ("publish", "crate-publish"):
-            self.assertEqual(workflow["jobs"][name]["permissions"]["actions"], "read")
+        checkouts = [step["with"] for step in workflow["jobs"]["publish"]["steps"]
+                     if step.get("uses", "").startswith("actions/checkout@")]
+        self.assertEqual(checkouts[0]["ref"], "${{ github.sha }}")
+        self.assertEqual(checkouts[1]["path"], "candidate")
+        self.assertEqual(checkouts[1]["ref"], "${{ needs.plan.outputs.source }}")
+        script = next(step["run"] for step in workflow["jobs"]["publish"]["steps"]
+                      if "publish_release.py" in step.get("run", ""))
+        self.assertIn("--source-directory candidate", script)
+        rerun = workflow["jobs"]["merge-gate"]["steps"][0]["run"]
+        self.assertIn("/actions/jobs/$GATE_JOB/rerun", rerun)
+
+    def test_publisher_and_refresher_serialize_candidate_changes(self):
+        publisher, refresher = self.workflow("publish.yml"), self.workflow("release.yml")
+        self.assertEqual(publisher["concurrency"], refresher["concurrency"])
+        self.assertEqual(publisher["concurrency"]["cancel-in-progress"], "false")
+
+    def test_release_build_matrix_remains_complete_when_tests_are_filtered(self):
+        workflow = self.workflow("native-rust.yml")
+        expression = workflow["jobs"]["release"]["strategy"]["matrix"]["include"]
+        rows = json.loads(re.search(r"inputs.publish && '([^']+)'", expression).group(1))
+        self.assertEqual({row["target"] for row in rows}, {
+            "linux-x86_64", "linux-aarch64", "darwin-arm64", "darwin-x86_64", "windows-x86_64"})
+        self.assertNotIn("inputs.publish &&", workflow["jobs"]["tests"]["strategy"]["matrix"]["include"])
 
     def test_new_main_push_does_not_cancel_a_release_being_checked(self):
         workflow = self.workflow("check.yml")

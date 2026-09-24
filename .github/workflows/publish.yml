@@ -1,65 +1,72 @@
 name: publish
 
-# Publish only the packages from successful main-push checks of the release commit.
-# This workflow never rebuilds them. The legacy PyPI/npm lines remain untouched.
+# A maintainer chooses a checked candidate. Publish native downloads before exposing its plugin.
 on:
-  workflow_run:
-    workflows: [kpopper check]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_pr:
+        description: Release pull request number
+        type: string
+        required: true
+      check_run:
+        description: Candidate kpopper check run ID (candidate-checked must have passed)
+        type: string
+        required: true
 
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
-# Rerunning a completed check may request publication again; serialize by source commit.
+# Publication and the release-PR refresher must never move the same candidate concurrently.
 concurrency:
-  group: publish-${{ github.event.workflow_run.head_sha }}
+  group: release-candidate
   cancel-in-progress: false
 
 jobs:
   plan:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      publish: ${{ steps.plan.outputs.publish }}
       version: ${{ steps.plan.outputs.version }}
+      source: ${{ steps.plan.outputs.source }}
+      run_id: ${{ steps.plan.outputs.run_id }}
+      gate_job: ${{ steps.plan.outputs.gate_job }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 2
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - id: plan
-        name: Identify an exact native version change
-        shell: python
-        run: |
-          import json, os, subprocess, sys
-          plan = json.loads(subprocess.check_output(
-              [sys.executable, '.github/scripts/publish_release.py', '--plan'], text=True))
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('publish=' + str(plan['publish']).lower() + '\n')
-              output.write('version=' + plan['version'] + '\n')
+        name: Require the current version-only candidate and its successful checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.release_pr }}
+          CHECK_RUN: ${{ inputs.check_run }}
+        run: python .github/scripts/release_candidate.py --plan --pr "$PR" --run-id "$CHECK_RUN"
 
   publish:
     needs: plan
-    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
       actions: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.plan.outputs.source }}
+          path: candidate
           fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -67,23 +74,46 @@ jobs:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           pattern: native-distribution-*
           path: ${{ runner.temp }}/native-artifacts
-      - name: Verify and publish the native release
+      - name: Recheck the candidate immediately before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.release_pr }}
+          CHECK_RUN: ${{ inputs.check_run }}
+        run: python .github/scripts/release_candidate.py --plan --pr "$PR" --run-id "$CHECK_RUN"
+      - name: Verify and publish the exact native distributions
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python .github/scripts/publish_release.py
+          python .github/scripts/publish_release.py --source-directory candidate
           --artifacts "${{ runner.temp }}/native-artifacts"
+      - name: The anonymous runtime downloads are available
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.release_pr }}
+        run: python .github/scripts/release_candidate.py --verify-pr --pr "$PR"
+
+  merge-gate:
+    needs: [plan, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Recheck only the merge gate, without repeating builds or tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GATE_JOB: ${{ needs.plan.outputs.gate_job }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/actions/jobs/$GATE_JOB/rerun"
 
   # crates.io receives the crate from the commit the GitHub release was just made from, once
   # that release is out: the bytes the build job verified, which it checked to build from their
   # own files and to be the program the release ships. This job holds no registry identity.
   crate:
     needs: [plan, publish]
-    if: needs.plan.outputs.publish == 'true'
+    if: needs.plan.outputs.source != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -91,14 +121,15 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
+          path: trusted
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
@@ -108,7 +139,7 @@ jobs:
         env:
           VERSION: ${{ needs.plan.outputs.version }}
         run: >-
-          python .github/scripts/publish_crate.py --plan --version "$VERSION"
+          python trusted/.github/scripts/publish_crate.py --plan --version "$VERSION"
           --crate "$RUNNER_TEMP/verified-crate/kpopper-$VERSION.crate"
 
   # The one job that can publish, so it runs as little as publishing needs: no repository
@@ -134,11 +165,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.plan.outputs.source }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
@@ -210,14 +241,15 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
+          path: trusted
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.plan.outputs.run_id }}
           github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
@@ -225,5 +257,5 @@ jobs:
         env:
           VERSION: ${{ needs.plan.outputs.version }}
         run: >-
-          python .github/scripts/publish_crate.py --version "$VERSION"
+          python trusted/.github/scripts/publish_crate.py --version "$VERSION"
           --served "$RUNNER_TEMP/verified-crate/kpopper-$VERSION.crate"

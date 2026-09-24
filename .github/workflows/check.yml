@@ -2,6 +2,11 @@ name: kpopper check
 
 on:
   workflow_dispatch:
+    inputs:
+      release_pr:
+        description: Release pull request number (leave empty for a full diagnostic run)
+        type: string
+        required: false
   pull_request:
     branches: [main]
   push:
@@ -9,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 # Superseded PRs cancel; a later main push must not cancel a release being validated.
 concurrency:
@@ -23,6 +29,8 @@ jobs:
       rust: ${{ steps.select.outputs.rust }}
       platforms: ${{ steps.select.outputs.platforms }}
       release: ${{ steps.select.outputs.release }}
+      promotion: ${{ steps.candidate.outputs.promotion }}
+      source: ${{ steps.candidate.outputs.source }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,32 +40,29 @@ jobs:
           python-version: "3.13"
       - name: Install the workflow reader for platform selection
         run: python -m pip install PyYAML==6.0.3
-      - name: Identify a release commit before selecting its coverage
-        id: release
-        if: github.event_name == 'push'
-        shell: python
-        run: |
-          import json, os, subprocess, sys
-          plan = json.loads(subprocess.check_output(
-              [sys.executable, '.github/scripts/publish_release.py', '--plan'], text=True))
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('publish=' + str(plan['publish']).lower() + '\n')
+      - name: Identify the candidate and its last published baseline
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/release_candidate.py --select
       - name: Select the lanes the change reads
         id: select
         env:
           EVENT: ${{ github.event_name }}
-          RELEASE: ${{ steps.release.outputs.publish }}
+          RELEASE: ${{ steps.candidate.outputs.release }}
+          BASELINE: ${{ steps.candidate.outputs.baseline }}
+          SOURCE: ${{ steps.candidate.outputs.source }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PUSH_BASE: ${{ github.event.before }}
           PUSH_HEAD: ${{ github.sha }}
         run: |
-          if [ "$EVENT" = pull_request ]; then
+          if [ "$RELEASE" = true ]; then
+            python .github/scripts/ci_selection.py --release --base "$BASELINE" --head "$SOURCE"
+          elif [ "$EVENT" = pull_request ]; then
             python .github/scripts/ci_selection.py --base "$PR_BASE" --head "$PR_HEAD"
           elif [ "$EVENT" = push ]; then
-            release=()
-            if [ "$RELEASE" = true ]; then release=(--release); fi
-            python .github/scripts/ci_selection.py --push "${release[@]}" --base "$PUSH_BASE" --head "$PUSH_HEAD"
+            python .github/scripts/ci_selection.py --push --base "$PUSH_BASE" --head "$PUSH_HEAD"
           else
             python .github/scripts/ci_selection.py --full
           fi
@@ -66,10 +71,14 @@ jobs:
         run: python scripts/reasoning/build_runtime.py --check-bundles
 
   record:
+    needs: changes
+    if: needs.changes.outputs.promotion != 'true'
     timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.changes.outputs.source }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -91,7 +100,7 @@ jobs:
         run: >-
           python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
           tests.test_ci_release_flow tests.test_ci_audit tests.test_native_distribution tests.test_native_release_assets
-          tests.test_native_launcher tests.test_hook_delivery -v
+          tests.test_native_launcher tests.test_hook_delivery tests.test_release_candidate -v
 
       # The record is read by the native kpop of this tree. A reader main built from the same
       # native/ sources is reused, so only a change under native/ pays for the build. Only a
@@ -157,9 +166,10 @@ jobs:
     with:
       target: ${{ needs.changes.outputs.platforms }}
       publish: ${{ needs.changes.outputs.release == 'true' }}
+      source_ref: ${{ needs.changes.outputs.source }}
       audit: true
 
-  ci-required:
+  candidate-checked:
     timeout-minutes: 10
     needs: [changes, record, native-cli]
     if: always()
@@ -173,3 +183,32 @@ jobs:
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
         run: python .github/scripts/ci_selection.py --required
+
+  # Release checks finish before publication. Only this small gate is rerun afterwards.
+  ci-required:
+    timeout-minutes: 10
+    needs: [changes, candidate-checked]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Require successful candidate checks
+        env:
+          RESULT: ${{ needs.candidate-checked.result }}
+        run: test "$RESULT" = success
+      - name: The matching runtime must be public before the plugin can merge
+        if: needs.changes.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.release_pr }}
+        run: python .github/scripts/release_candidate.py --verify-pr --pr "$PR"
+      - name: Main is exactly the candidate already checked and published
+        if: needs.changes.outputs.promotion == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/release_candidate.py --verify-main

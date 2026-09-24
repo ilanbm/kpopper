@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Publish the source-bound native release on GitHub.
 
-Runs on every push to main. When the version the version files carry is not the one the
-commit before carried, this commit is the release: it is tagged v<version>, and a release
-is opened carrying that version's changelog section and the files built here.
+The trusted publish workflow supplies an already checked version-changing candidate.
+It is tagged v<version>, with its changelog section and the verified distribution files.
 
 Everything the release holds comes from this one commit - the tag, the text and the files -
 because the checkout is that commit. Publishing an older version from a later checkout would
 attach files built from a tree the tag does not point at, which is the one thing a release
-must never do. So a push that moved no version publishes nothing, and a release that failed
+must never do. So a candidate that moved no version publishes nothing, and a release that failed
 is made by rerunning that run, which replays the same commit. A version already published is
 left alone, so a rerun that succeeded changes nothing.
 
@@ -138,7 +137,14 @@ def main(argv):
     parser.add_argument("--plan", action="store_true", help="emit source-only JSON planning data")
     parser.add_argument("--verify", action="store_true", help="validate and stage assets without publishing")
     parser.add_argument("--artifacts", type=pathlib.Path)
+    parser.add_argument("--source-directory", type=pathlib.Path,
+                        help="read candidate files with this trusted publisher")
     options = parser.parse_args(argv)
+    if options.source_directory is not None:
+        global ROOT, DIST
+        ROOT = options.source_directory.resolve()
+        release.ROOT = ROOT
+        DIST = ROOT / "dist"
     if options.artifacts is not None:
         ARTIFACTS = options.artifacts
     found = release.versions_in(release.read_texts())

@@ -756,6 +756,30 @@ d.ci_selects_families:
       without recompiling native source.
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-24'
+- name: Select PR checks by declared input families and require selected work to succeed
+  from: s.2026_09_17_selective_ci
+  rests_on:
+  - p.ci_native_build_inputs
+  - s.2026_09_24_ci_release_once
+  verdict: Keep record and cheap contracts unconditional. Pull requests select expensive families from
+    their full diff and default to Linux, with conservative extra platform coverage. Ordinary main pushes
+    keep record and contracts; a version-changing main commit runs all native tests and distribution acceptance
+    once before publishing those artifacts.
+  because: The maintainer accepts later discovery of platform-specific failures in exchange for responsive
+    ordinary pull requests. Shared platform inputs and unknown changes retain full coverage, and publication
+    must wait for the exact release commit to pass the entire matrix.
+  reopened_by: A changed platform input affects an omitted target; a selected job fails or skips while
+    ci-required passes; a version-only edit hides a dependency change; or a release is published without
+    successful complete coverage of its own commit.
+  request: s.2026_09_24_ci_release_once
+  seen:
+    p.ci_native_build_inputs: Native sources, builder, bundled runtime, native loader and replacement
+      probes, notices, and native-workflow changes select native builds; unknown paths select all checks.
+      Selector-only changes use mandatory contracts. Packaging metadata alone tests consumers and installation
+      without recompiling native source.
+    s.2026_09_24_ci_release_once: read 2026-09-24
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
 d.native_release_beside_tests:
 - name: The native release is built and accepted beside its tests, and on Linux alone for a pull request
   verdict: Each target builds, accepts, packages and uploads its native release in a job of its own that
@@ -775,5 +799,46 @@ d.native_release_beside_tests:
   from: s.2026_09_23_native_ci_speed
   seen:
     s.2026_09_23_native_ci_speed: read 2026-09-23
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.merge_publishes_the_release:
+- rests_on:
+  - d.release_is_its_own_pull_request
+  - s.2026_09_13_github_releases
+  verdict: the push that lands a version publishes it - tagged at the commit that moved the version, carrying
+    that version's changelog entry and the files built from that commit
+  because: 'Three versions were released in one day and left nothing to point at: no tag, no release,
+    only a changelog section. And the files that reach a registry were built by hand from a directory
+    nobody clears, so what a person installs was never what any check ran against. The commit that moved
+    the version is the one place those two can be tied together, and the merge is the moment it exists
+    - a release built anywhere else is a claim about a tree rather than that tree. The pull request cannot
+    do it, because until it merges its commit is not on the branch anyone installs from.'
+  blocked_on: 'observational: falsified if uploads to the registries keep using locally built files instead
+    of these, or if a version lands with the publish step red and nobody notices until the next one'
+  seen:
+    d.release_is_its_own_pull_request: the version moves in a release pull request of its own, computed
+      from what merged since the last release; a feature pull request never touches it
+    s.2026_09_13_github_releases: read 2026-09-13
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.release_is_one_tree:
+- rests_on:
+  - d.merge_publishes_the_release
+  - s.2026_09_14_publish_review
+  verdict: a release is made from a single commit - the tag, the text and the attached files all come
+    from it, and only the commit that moves the version publishes
+  because: 'The first shape of this tagged the commit that moved the version while building the files
+    from whatever was checked out, which on any later push is a different tree: the tag would have said
+    one thing and the wheel beside it another, and nobody downloading it could tell. Publishing only from
+    the commit that moved the version makes the three agree by construction rather than by care, and costs
+    the ability to tag an old version after the fact - which was never worth having, because the files
+    for it would have come from the wrong tree anyway. What it also costs is retrying on the next push,
+    and that is what rerunning a run is for: it replays the same commit.'
+  blocked_on: 'observational: falsified if a release is ever wanted for a version already behind main,
+    or if a failed publish is left unmade because rerunning its own run is not reachable by whoever notices'
+  seen:
+    d.merge_publishes_the_release: the push that lands a version publishes it - tagged at the commit that
+      moved the version, carrying that version's changelog entry and the files built from that commit
+    s.2026_09_14_publish_review: read 2026-09-14
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-24'

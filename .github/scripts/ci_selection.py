@@ -4,8 +4,9 @@ Every lane declares the tracked files its checks read, and the directories whose
 list. A pull request runs the lanes whose inputs it changes. The declarations are not trusted
 on their own: on Linux, `ci_audit.py` records every file an audited lane opens and fails the
 pull request that makes it read something undeclared, which is also the pull request whose
-changes the lane already runs for. Pull requests default to Linux; the release commit runs
-every platform once. Ordinary main pushes retain the record and contract checks alone.
+changes the lane already runs for. Pull requests default to Linux. Release candidates select
+tests from all changes since the previous public release and build every distribution.
+Ordinary main pushes retain the record and contract checks alone.
 """
 import argparse
 import fnmatch
@@ -79,6 +80,7 @@ RECORD_JOB = (
     "tests/test_native_launcher.py", "tests/test_hook_delivery.py", ".github/requirements-test.txt",
     ".github/scripts/release.py", ".github/scripts/publish_release.py",
     ".github/scripts/publish_crate.py", ".github/scripts/native_assets.py",
+    ".github/scripts/release_candidate.py", "tests/test_release_candidate.py",
 )
 
 # Exercise CI selection and auditing on Linux. Their routing logic is platform-independent;
@@ -345,7 +347,7 @@ def native_routing_only(path, base, head, cwd=None):
 
 def platforms(changes, full=False, push=False, release=False, base="", head="HEAD", cwd=None):
     changes = normalized(changes)
-    if full or release or not changes:
+    if full or not changes:
         return "all"
     if push:
         return "linux-x86_64"
@@ -422,10 +424,12 @@ def changed_files(base, head, cwd=None, merge_base=True):
 
 def required_failures(needs, pull_request=True):
     failures = []
-    for job in ("changes", "record"):
-        if needs.get(job, {}).get("result") != "success":
-            failures.append(job + " must succeed")
     outputs = needs.get("changes", {}).get("outputs", {})
+    promotion = outputs.get("promotion", "false") == "true"
+    for job in ("changes", "record"):
+        expected = "skipped" if job == "record" and promotion and not pull_request else "success"
+        if needs.get(job, {}).get("result") != expected:
+            failures.append(job + " must be " + expected)
     for lane in LANE_NAMES:
         if outputs.get(lane) not in ("true", "false"):
             failures.append("missing or invalid selection: " + lane)
@@ -436,8 +440,10 @@ def required_failures(needs, pull_request=True):
     release = outputs.get("release")
     if release not in ("true", "false"):
         failures.append("missing or invalid release selection")
-    if release == "true" and (pull_request or scope != "all" or not all(selected.values())):
-        failures.append("release requires every lane and platform on main")
+    if release == "true" and not all(selected.values()):
+        failures.append("release requires native distribution builds")
+    if promotion and (pull_request or release == "true" or any(selected.values())):
+        failures.append("promotion must reuse the published candidate without native jobs")
     for job, lanes in JOB_LANES.items():
         expected = "success" if any(selected[lane] for lane in lanes) else "skipped"
         actual = needs.get(job, {}).get("result")
@@ -455,8 +461,8 @@ def main():
     parser.add_argument("--release", action="store_true")
     parser.add_argument("--required", action="store_true")
     args = parser.parse_args()
-    if args.release and not args.push:
-        parser.error("--release requires --push")
+    if args.release and args.push:
+        parser.error("release checks run before merge, not on main")
     if args.required:
         failures = required_failures(json.loads(os.environ["CI_NEEDS"]),
                                      os.environ.get("GITHUB_EVENT_NAME") == "pull_request")
@@ -464,12 +470,12 @@ def main():
             print(failure)
         return 1 if failures else 0
     changes, base_dirs, head_dirs = ([], None, None) if args.full else \
-        changed_files(args.base, args.head, merge_base=not args.push)
+        changed_files(args.base, args.head, merge_base=not (args.push or args.release))
     selected = select(changes, full=args.full, push=args.push, release=args.release,
                       base_dirs=base_dirs, head_dirs=head_dirs)
     # Platform comparisons use the same merge base as the lane selection.
     base = args.base
-    if base and not args.push:
+    if base and not (args.push or args.release):
         try:
             base = subprocess.check_output(["git", "merge-base", base, args.head], stderr=subprocess.PIPE).decode().strip()
         except (OSError, subprocess.CalledProcessError):
