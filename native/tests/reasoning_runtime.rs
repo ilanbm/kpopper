@@ -255,7 +255,7 @@ fn modified_gmp_library_is_loaded_and_disclosed() {
     let binary_hash = sha256(&fs::read(&original.binary).unwrap());
     let request = serde_json::json!({"nodes":{},"declared":[],
         "expression":{"op":"div","args":[{"num":"1"},{"num":"3"}]}});
-    let expected = original.request_many(&[request.clone()]).unwrap();
+    let expected = original.request_many(std::slice::from_ref(&request)).unwrap();
     let libraries = original.manifest["libraries"].as_array().unwrap();
     assert_eq!(
         libraries.len(),
