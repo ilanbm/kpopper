@@ -125,6 +125,44 @@ fn dry_run_missing_falsifier_explains_the_next_step_without_scratch_entries() {
 }
 
 #[test]
+fn malformed_dependency_shape_is_not_reported_as_an_expression_error() {
+    let temp = tempfile::tempdir().unwrap();
+    success(run(temp.path(), &["add", "rooms.all_public", "v=true"]));
+    let before = authoring_files(temp.path());
+    for dependency in [
+        "rests_on=rooms.all_public",
+        "rests_on=[42]",
+        "rests_on=[]",
+        "rests_on={room: rooms.all_public}",
+    ] {
+        for extra in [vec![], vec!["--dry-run"], vec!["--hypothesis", "cache", "--dry-run"]] {
+            let args = [
+                "add", "d.cache", "verdict=Cache by query while all rooms are public",
+                dependency, "wrong_if={expr: 'rooms.all_public == false'}",
+            ];
+            let result = run(temp.path(), &[&args[..], &extra].concat());
+            assert!(!result.status.success(), "{dependency}");
+            let error = String::from_utf8_lossy(&result.stderr);
+            assert!(error.contains("rests_on must be a list of entry ids"), "{error}");
+            assert!(!error.contains("invalid_expression"), "{error}");
+            assert!(!error.contains("Use wrong_if="), "{error}");
+            assert!(!error.contains("blocked_on"), "{error}");
+            assert_eq!(authoring_files(temp.path()), before);
+        }
+    }
+    // Correct only the dependency field; keep the original, meaningful condition.
+    let fixed = [
+        "add", "d.cache", "verdict=Cache by query while all rooms are public",
+        "rests_on=[rooms.all_public]", "wrong_if={expr: 'rooms.all_public == false'}",
+    ];
+    success(run(temp.path(), &[&fixed[..], &["--dry-run"]].concat()));
+    assert_eq!(authoring_files(temp.path()), before);
+    success(run(temp.path(), &fixed));
+    let record = fs::read_to_string(temp.path().join("GROUNDING.yaml")).unwrap();
+    assert!(record.contains("rooms.all_public == false"), "{record}");
+}
+
+#[test]
 fn dry_run_named_candidate_is_the_proposal_and_preserves_both_layers() {
     for core in [false, true] {
         let temp = tempfile::tempdir().unwrap();

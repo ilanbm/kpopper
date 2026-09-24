@@ -1590,6 +1590,11 @@ sources:
     name: "Contribution and developer setup guide"
     file: CONTRIBUTING.md
     read: "2026-09-16"
+  doc.dependency_field_diagnostic:
+    name: "Malformed dependency fields retain their own diagnostic"
+    file: "native/tests/public_authoring.rs"
+    at: malformed_dependency_shape_is_not_reported_as_an_expression_error
+    read: "2026-09-24"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -4778,6 +4783,19 @@ judgments:
       m.ci_spend_by_trigger: "108.83 dollars on pull requests against 29.99 on pushes to main; of
                               the 199 Darwin session jobs, 151 came from pull request commits and 48
                               from pushes"
+  d.dependency_shape_precedes_computation:
+    name: "A malformed dependency field is diagnosed before computation"
+    verdict: "Core authoring preserves the dependency-list refusal before attempting computation.
+              Preview guidance does not suggest rewriting a condition when the dependency field has
+              the wrong shape."
+    rests_on: [doc.dependency_field_diagnostic]
+    because: "Evaluation cannot use a malformed dependency collection. Replacing its field-level
+              refusal with invalid_expression sends the author to repair a different field and can
+              discard a valid condition."
+    reopened_by: "A malformed dependency collection reaches computation and produces
+                  invalid_expression, or preview advice asks for a different condition when
+                  correcting only the dependency collection makes the original condition valid."
+    seen: {doc.dependency_field_diagnostic: "read 2026-09-24"}
   d.detached_worker_test_cleanup:
     name: "Wait for detached worker shutdown before deleting its test state"
     rests_on: [s.2026_09_13_worker_cleanup]

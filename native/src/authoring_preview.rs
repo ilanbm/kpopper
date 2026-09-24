@@ -78,10 +78,11 @@ pub(crate) fn render(
 
 pub(crate) fn explain(error: Error) -> Error {
     let mut message = error.0;
-    if message.contains("wrong_if")
-        || message.contains("predicate")
-        || message.contains("condition")
-        || message.contains("expression")
+    if !message.contains("must be a list of entry ids")
+        && (message.contains("wrong_if")
+            || message.contains("predicate")
+            || message.contains("condition")
+            || message.contains("expression"))
     {
         message.push_str(
             "\nUse wrong_if={expr: \"...\"} with actual recorded premises declared in rests_on.",
@@ -102,4 +103,20 @@ pub(crate) fn explain(error: Error) -> Error {
 
 pub(crate) fn in_profile(profile: &str, error: Error) -> Error {
     Error(format!("{profile}: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_dependency_field_named_expression_does_not_trigger_predicate_advice() {
+        let output = explain(Error(
+            "core/v1: expression_inputs must be a list of entry ids".into(),
+        )).0;
+        assert!(output.contains("expression_inputs must be a list"));
+        assert!(output.contains("nothing recorded"));
+        assert!(!output.contains("Use wrong_if="));
+        assert!(!output.contains("blocked_on"));
+    }
 }
