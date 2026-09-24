@@ -119,3 +119,17 @@ Each target waits only for its matching build; verified GMP dependencies can be
 reused without skipping runtime or installed replacement checks. See
 [CI selection and execution](../../../docs/ci.md) for the cache contract, test
 suites and the explicit `candidate-only` workflow dispatch used to refresh bundles.
+
+
+The `reasoning-runtime` workflow validates rebuilt candidates with the native
+scalar, composition and query conformance suites. Its replacement-library test
+requires the separately modified GMP library to execute and report its identity
+without changing the evaluator binary. Candidate-only runs upload validated
+candidates; other runs also invoke the native distribution acceptance once across
+all supported targets. Python is used for the build tooling, not as the installed
+reader or a wheel/sdist validation channel.
+
+Maintainers invoke this workflow explicitly. PR and push checks validate the
+committed bundles through native platform acceptance; they do not rebuild all
+reasoning candidates automatically. This keeps candidate generation separate from
+acceptance of the bytes proposed for release.
