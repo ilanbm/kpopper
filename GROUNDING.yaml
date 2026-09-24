@@ -1188,6 +1188,22 @@ sources:
          roles a partial schema declares, so a first judgment it wrote carried seen: where the schema
          named another snapshot field and checked as never compared; it now keeps them, as native
          does."
+  s.2026_09_24_ci_release_once:
+    name: "Linux pull requests and one complete release validation"
+    asked: "נשמע מצויין, בוא נעשה את זה. ביומיים האחרונים הרגיש שאי אפשר לעבוד מרוב שהכל איטי,
+            חייבים להתייעל פה"
+    of: "Approval of Linux by default for ordinary and release pull requests, extra coverage for
+         platform-sensitive changes, short main checks, and one complete platform matrix at the
+         release commit whose tested packages are published only after all checks pass."
+    read: "2026-09-24"
+    fidelity: paraphrase
+  s.2026_09_24_ci_routing_linux:
+    name: "CI routing changes need Linux validation without an automatic platform matrix"
+    asked: "אני לא מבין גם למה PR כזה שמתעסק רק עם CI בכלל קשור להרצה על מכשירים שונים. תצמצם בבקשה"
+    of: "The maintainer requested narrowing PR 240 so CI routing and scheduling changes use Linux
+         validation; changes to platform execution inputs still expand coverage."
+    read: "2026-09-24"
+    fidelity: paraphrase
   s.2026_09_24_source_file_references:
     name: "Source files after the Python reader was removed"
     asked: "Report entries whose local source file is gone, keep historical sources openable at
@@ -1338,6 +1354,17 @@ sources:
          history_branch_git local capture; history-branch.json 49 Python cases with 30 accepted
          envelopes and Git SHA1/SHA256 tests"
     read: "2026-09-19"
+  s.native_check_diagnostic_parity:
+    name: "Ordinary check notes and migration refusal parity"
+    file: "native/tests/check_notes.rs"
+    read: "2026-09-24"
+    at: "native/tests/public_expression_regressions.rs also covers mixed scalar keys and unchanged
+         source bytes"
+    of: "check reports live identities named by also and malformed prefix legends without turning
+         those notes into failures. The dependency-field exception and valid retired identities stay
+         quiet. Expression migration retains the public mixed-key refusal without duplicate
+         serialization diagnostics; integer, boolean, float, null and date keys remain refused
+         without changing source files."
   s.native_checked_token_budgets:
     name: "Native checked-reader reference token budgets"
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-checked-f269506-tests.log"
@@ -1389,6 +1416,15 @@ sources:
     at: "Exact Python fixture comparisons, immutable replay and storage recovery regressions;
          source-aware merge module and current local/UTC date checks"
     read: "2026-09-19"
+  s.native_identity_source_notes:
+    name: "Identity summaries retain source-file notes"
+    file: "native/tests/ordinary_identity.rs"
+    read: "2026-09-24"
+    at: same_embeds_the_public_record_check_with_an_unserved_question
+    of: "The same command and standalone check agree on declared-note counts with present or missing
+         source files, both with and without an unserved question. Identity preparation includes
+         source-reference observations in its existing inventory for before and after projections.
+         Missing source files remain advisory and do not become a migration refusal."
   s.native_live_capture:
     from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Native pending and committed target capture evidence"
@@ -1486,6 +1522,18 @@ sources:
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-PUBLIC-READERS-RESULT.md"
     read: "2026-09-19"
     at: "Task 01a0b961-13a4-7033-afc7-e5bb48720e14; actual CLI and final Python fixture conformance"
+  s.native_reader_consistency:
+    name: "Native command consistency regressions"
+    file: "native/tests/ordinary_identity.rs"
+    read: "2026-09-24"
+    at: "same_embeds_the_public_record_check_with_an_unserved_question;
+         native/tests/public_json.rs::core_option_refusals_use_exit_one_and_unprefixed_diagnostics;
+         native/tests/public_checked_session.rs::unknown_core_session_revision_tells_the_reader_to_reopen"
+    of: "The same migration summary uses the public record check without optional page coverage.
+         Core-option reader refusals exit 1 without a command prefix in text and JSON. A missing
+         retained core revision says unknown core session revision; reopen. The session regression
+         creates its record through add in an empty Git repository and confirms the retained valid
+         revision still reads."
   s.native_scenario_watch:
     name: "Native captured scenarios and pure history watch conformance"
     from: s.2026_09_19_native_temporal_authoring
@@ -4584,23 +4632,27 @@ judgments:
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
     from: s.2026_09_17_selective_ci
-    rests_on: [p.ci_native_build_inputs]
-    verdict: "Keep record and cheap contracts unconditional; select expensive families
-              conservatively from the full PR diff, cancel superseded runs, and retain broad consumer
-              checks on main."
-    because: "Skills and prose do not require native compilation. Packaging needs evidence about the
-              installed committed payload, while changed native inputs need compilation and
-              replacement-library integration. Unknown paths select all checks; the aggregate gate
-              refuses an unexpected skip so selecting less cannot silently convert missing work into
-              success."
-    reopened_by: "A changed input affects a skipped family; a selected job is skipped or fails while
-                  ci-required passes; or main no longer exercises all consumer families."
+    rests_on: [p.ci_native_build_inputs, s.2026_09_24_ci_release_once]
+    verdict: "Keep record and cheap contracts unconditional. Pull requests select expensive families
+              from their full diff and default to Linux, with conservative extra platform coverage.
+              Ordinary main pushes keep record and contracts; a version-changing main commit runs all
+              native tests and distribution acceptance once before publishing those artifacts."
+    because: "The maintainer accepts later discovery of platform-specific failures in exchange for
+              responsive ordinary pull requests. Shared platform inputs and unknown changes retain
+              full coverage, and publication must wait for the exact release commit to pass the
+              entire matrix."
+    reopened_by: "A changed platform input affects an omitted target; a selected job fails or skips
+                  while ci-required passes; a version-only edit hides a dependency change; or a
+                  release is published without successful complete coverage of its own commit."
+    request: s.2026_09_24_ci_release_once
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
                                  replacement probes, notices, and native-workflow changes select
                                  native builds; unknown paths select all checks. Selector-only
                                  changes use mandatory contracts. Packaging metadata alone tests
                                  consumers and installation without recompiling native source."
+      s.2026_09_24_ci_release_once: "read 2026-09-24"
   d.claude_plugin_has_no_nested_zip:
     name: "Claude plugin package avoids nested ZIP entries"
     request: s.2026_09_19_claude_install_request
@@ -5717,24 +5769,25 @@ judgments:
   d.native_release_beside_tests:
     name: "The native release is built and accepted beside its tests, and on Linux alone for a pull
            request"
-    verdict: "Each target builds, accepts, packages and uploads its native release in a job of its
-              own that runs beside its tests, and a verdict job fails when either job fails or is
-              skipped where the validation needs it. A pull request that changes no platform input
-              builds and accepts the release on linux-x86_64 only; main, publication and a pull
-              request that changes a platform input keep all five targets."
-    because: "The release waited behind the slowest test run of its own job, 8 to 19 minutes per
-              target at the median. In 94 pull request runs from 2026-09-22 to 2026-09-23, no release
-              or acceptance step failed on another platform for a change that touched no platform
-              input. Once split, the release job is shorter than the tests on every target, so
-              checking it on the other platforms in a pull request costs machines rather than
-              minutes."
-    rests_on: [s.2026_09_23_native_ci_speed]
-    reopened_by: "A native job fails or is skipped while ci-required passes; publication uploads
-                  bytes that were not built and accepted in the same job; or on main a release or
-                  acceptance step fails on a platform other than Linux after a change that touched no
-                  platform input."
+    verdict: "Build and accept each selected native release beside its tests. Ordinary and
+              version-only pull requests default to linux-x86_64; platform-sensitive changes add
+              affected targets. The release commit on main runs all five targets once; publication
+              waits for that successful run and downloads its verified packages and crate without
+              rebuilding."
+    because: "Parallel tests and release acceptance shorten the critical path. Reusing the complete
+              release commit run removes duplicate builds while keeping publication bound to
+              successful tests and installation of the exact files distributed."
+    rests_on: [s.2026_09_23_native_ci_speed, s.2026_09_24_ci_release_once]
+    reopened_by: "A native or record check fails while publication proceeds; published packages
+                  belong to another commit or run; a later main push cancels a release check; or
+                  platform-specific regressions are discovered too late for the agreed release
+                  workflow."
     from: s.2026_09_23_native_ci_speed
-    seen: {s.2026_09_23_native_ci_speed: "read 2026-09-23"}
+    request: s.2026_09_24_ci_release_once
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
+    seen:
+      s.2026_09_23_native_ci_speed: "read 2026-09-23"
+      s.2026_09_24_ci_release_once: "read 2026-09-24"
   d.native_tests_one_pool:
     name: "The native tests run in one pool"
     verdict: "CI runs the native suite with cargo-nextest at a pinned, checksum-verified version:

@@ -170,6 +170,92 @@ fn ordinary_identity_in_an_advanced_project_matches_the_same_python_images() {
 }
 
 #[test]
+fn same_embeds_the_public_record_check_with_an_unserved_question() {
+    for (add_question, missing_source) in
+        [(false, false), (true, false), (false, true), (true, true)]
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/page");
+        for entry in fs::read_dir(fixture).unwrap() {
+            let entry = entry.unwrap();
+            fs::copy(entry.path(), root.join(entry.file_name())).unwrap();
+        }
+        if !missing_source {
+            fs::create_dir(root.join("boiler")).unwrap();
+            fs::write(root.join("boiler/service-2025.pdf"), "fixture source").unwrap();
+        }
+        advanced_project(root);
+        for args in [
+            vec!["add", "."],
+            vec![
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-qm",
+                "fixture",
+            ],
+        ] {
+            assert!(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(root)
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        resources(root);
+        if add_question {
+            let added = kpop(root)
+                .args(["add", "q.frames", "asked=do the frames need replacing?"])
+                .output()
+                .unwrap();
+            assert!(
+                added.status.success(),
+                "{}",
+                String::from_utf8_lossy(&added.stderr)
+            );
+        }
+        let same = kpop(root)
+            .args(["same", "heat.loss_kw", "heat.deficit_kw"])
+            .output()
+            .unwrap();
+        assert!(
+            same.status.success(),
+            "{}",
+            String::from_utf8_lossy(&same.stderr)
+        );
+        let checked = kpop(root).arg("check").output().unwrap();
+        assert!(
+            checked.status.success(),
+            "{}",
+            String::from_utf8_lossy(&checked.stderr)
+        );
+        let check_text = String::from_utf8(checked.stdout).unwrap();
+        let summary = check_text.lines().last().unwrap();
+        assert_eq!(
+            summary,
+            format!(
+                "3 judgments, {} entries, 0 problems, {} declared",
+                if add_question { 14 } else { 13 },
+                2 + usize::from(missing_source)
+            )
+        );
+        let same_text = String::from_utf8(same.stdout).unwrap();
+        assert_eq!(
+            same_text
+                .lines()
+                .find_map(|line| line.strip_prefix("  check: ")),
+            Some(summary)
+        );
+    }
+}
+
+#[test]
 fn private_identity_closure_is_retained_outside_shared_files() {
     for command in ["same", "distinct"] {
         let temp = tempfile::tempdir().unwrap();
