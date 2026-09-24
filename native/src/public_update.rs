@@ -1347,7 +1347,7 @@ fn run_bound(
             == crate::legacy_authoring::AuthorityRoute::Legacy
     {
         drop(_record_lock);
-        return advanced::capture(
+        let captured = advanced::capture(
             &report,
             &event,
             advanced::Context {
@@ -1360,8 +1360,32 @@ fn run_bound(
                 supplied_runtime,
                 after_capture: &mut || probe("advanced_captured"),
             },
-        )?
-        .ok_or_else(|| error("advanced report capture unavailable"));
+        );
+        return match captured {
+            Ok(output) => output.ok_or_else(|| error("advanced report capture unavailable")),
+            Err(error) if !matches!(error.0.as_str(),
+                "multi-file and pointer records require primary review"
+                    | "a record with hypothesis context requires primary review") => Err(error),
+            Err(error) => {
+                let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
+                // A retained journal may already describe a durable capture.
+                // Leave its recovery path intact instead of claiming no write.
+                if journal_path.is_file() { return Err(error); }
+                if let Some(raw) = F::read(&receipt_path)? {
+                    let saved: J = serde_json::from_slice(&raw)?;
+                    return Ok(Output { code:receipt_code(&saved), text:format!("{saved}\n") });
+                }
+                let (answer, signals) = receipt(&report, &record, &root, &event,
+                    &source_path, &envelope_sha, "needs_primary", Some(&error.0),
+                    false, None, None, supplied_runtime)?;
+                for signal in &signals {
+                    save(&root.join("signals").join(format!("{}.json", signal["id"].as_str().unwrap())), signal)?;
+                }
+                save(&receipt_path, &answer)?;
+                save(&root.join("results").join(format!("{event}.json")), &json!({"receipt":answer,"signals":signals}))?;
+                Ok(Output { text:format!("{answer}\n"), code:1 })
+            }
+        };
     }
 
     let mut pending_history = None;

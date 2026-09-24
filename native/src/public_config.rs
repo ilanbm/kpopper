@@ -320,6 +320,10 @@ fn transition_report(
         } else {
             digest(&path)?
         };
+        if hash.is_none() && path.parent().is_some_and(|parent|
+            parent.join(".kpopper").exists() || parent.join("PROVENANCE.d").exists()) {
+            blockers.push(format!("record is missing but its sidecars remain; reconcile before changing mode: {}", path.display()));
+        }
         snapshots.insert(path_string(&path)?, hash);
         if has_hypotheses(&path)? {
             blockers.push(format!(
@@ -365,11 +369,16 @@ fn transition_report(
                         target.display()
                     ));
                 }
-            } else {
+            } else if !old_hashes.is_empty() {
                 blockers.push(format!(
                     "destination record is unavailable; prepare it before changing mode: {}",
                     target.display()
                 ));
+            } else if !target.parent().is_some_and(Path::is_dir) {
+                blockers.push(format!("prepare the selected record directory before configuring its first write: {}", target.display()));
+            } else if target.parent().is_some_and(|parent| parent.join(".kpopper").exists()
+                || parent.join("PROVENANCE.d").exists()) {
+                blockers.push(format!("destination has existing record sidecars; reconcile before changing mode: {}", target.display()));
             }
             snapshots.entry(path_string(target)?).or_insert(hash);
             if has_hypotheses(target)? {

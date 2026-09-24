@@ -19,7 +19,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -1564,7 +1564,7 @@ impl<'a, P: Provider> Publisher<'a, P> {
                 self.push(&mut state, &scope, &intent, authorized)?;
             }
             let marker = marker(&scope)?;
-            let title = "Incorporate pending project knowledge";
+            let title = "kpopper Board: shared findings";
             let mut body = format!("{marker}\n\nPortable contributions for review:\n");
             for revision in &pending {
                 body.push_str(&format!("- `{revision}`\n"));
@@ -1736,6 +1736,65 @@ pub fn publish(project: Project, authorized: bool, force_retry: bool) -> Result<
         .unwrap_or("");
     let mut provider = GitHubProvider::new(repository);
     Publisher::new(project, &mut provider).run(authorized, force_retry)
+}
+
+/// Schedule one ordinary publication cycle under existing standing authority.
+/// The child rechecks authority, remote heads and publisher state itself. This
+/// creates no schedule and never waits for a network operation in the caller.
+pub fn trigger_after_capture(project: &Project) -> V {
+    match trigger_with_executable(project, std::env::current_exe, now) {
+        Ok(result) => result,
+        Err(error) => object([("started", V::Bool(false)), ("reason", s(&error.0))]),
+    }
+}
+
+fn trigger_with_executable(
+    project: &Project,
+    executable: impl FnOnce() -> std::io::Result<PathBuf>,
+    clock: fn() -> f64,
+) -> Result<V> {
+    let skipped = |reason: &str| object([("started", V::Bool(false)), ("reason", s(reason))]);
+    let config = project.config()?;
+    let fields = map(&config)?;
+    let granted = fields.get("publication")
+        .and_then(|v| map(v).ok())
+        .and_then(|v| v.get("standing_permission")) == Some(&V::Bool(true));
+    if !project.is_git() || !string_is(&fields["mode"], "advanced") || !granted {
+        return Ok(skipped("no standing publication permission"));
+    }
+    let state = pending_control::load_state(&project.state.join("publication.json"))?;
+    let fields = map(&state)?;
+    let retry_at = match field(fields, "retry_at")? {
+        V::Integer(value) => value.as_str().parse::<f64>().unwrap_or(0.0),
+        V::Float(value) => value.get(),
+        _ => return Err(Error("invalid publication retry time".into())),
+    };
+    if truth(fields.get("paused")) || integer(field(fields, "failures")?)? >= MAX_FAILURES || clock() < retry_at {
+        return Ok(skipped("paused or bounded backoff"));
+    }
+    if pending_state::resolve(&project.root, pending_state::REF)?.is_none() {
+        return Ok(skipped("no captured contributions"));
+    }
+    let mut command = Command::new(executable()?);
+    command.arg("--workspace").arg(&project.root).args(["pending", "publish"])
+        .current_dir(&project.root)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        command.creation_flags(0x00000008 | 0x00000200);
+    }
+    let mut child = command.spawn()?;
+    let pid = child.id();
+    // Reap in long-lived library callers; CLI exit does not wait on this thread.
+    std::thread::spawn(move || { let _ = child.wait(); });
+    Ok(object([("started", V::Bool(true)), ("pid", n(pid.into()))]))
 }
 
 pub fn verify(project: Project) -> Result<V> {

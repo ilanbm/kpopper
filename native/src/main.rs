@@ -91,6 +91,8 @@ enum Command {
     Knowledge(kpop_native::public_knowledge::Options),
     /// Inspect local pending contribution state.
     Pending(kpop_native::public_pending::Options),
+    /// Connect the shared findings Board or keep it local.
+    Board(kpop_native::public_board::Options),
     /// Manage durable local followups.
     Followups(kpop_native::public_followups::Args),
     /// Check branch compatibility and coordinate local observation delivery.
@@ -296,7 +298,14 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
     let mut opening_failed = false;
-    let first_use = location.as_ref().map(|location| {
+    if !feasibility && mode == kpop_native::source_capture::ReadMode::Live {
+        // Retry only already-authorized publication. Opening remains useful
+        // offline and frozen reads never start a background publisher.
+        if let Ok(project) = kpop_native::project_modes::Project::open(&root) {
+            kpop_native::pending_publication::trigger_after_capture(&project);
+        }
+    }
+    let first_use = location.as_ref().filter(|_| mode == kpop_native::source_capture::ReadMode::Live).map(|location| {
         kpop_native::onboarding::context_with_host(location, options.host.as_deref())
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
     });
@@ -387,6 +396,10 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
 }
 
 fn run(args: Args) -> Result<Value> {
+    if let Command::Board(options) = &args.command {
+        let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
+        return kpop_native::public_board::run(options, &root);
+    }
     if let Command::Map(options) = &args.command {
         let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
         return kpop_native::public_map::run(options, &root);
@@ -567,6 +580,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Export(_)
         | Command::Knowledge(_)
         | Command::Pending(_)
+        | Command::Board(_)
         | Command::Expressions(_)
         | Command::Search(_)
         | Command::Config(_)

@@ -253,12 +253,16 @@ pub fn context_with_host(
         ));
     }
     let mut lines = Vec::new();
+    let board = crate::public_board::status(&location.workspace)?;
+    if let Some(offer) = crate::public_board::opening(&board)? {
+        lines.push(offer);
+    }
     if matches!(string("mapping"), "ready" | "running") {
         lines.push(format!("A mapping task is {} for session {} (request {}). Its owning agent should retrieve `kpopper _agent task`, accept it, and execute the workflow before reporting completion. Preserve the agreed scope. A returned task is not completed work.", string("mapping"), string("owner"), string("request")));
     } else if string("mapping") == "requested" {
         lines.push("An older mapping preference was saved but never dispatched. Run `kpop map` in an active session if the user still wants that work.".into());
     }
-    if string("status") == "missing" {
+    if string("status") == "missing" && board["is_git"] != true {
         let (record, mapping) = match host {
             Some("claude") => ("/kpopper:record", "/kpopper:map"),
             Some("codex") => ("$record", "$map"),

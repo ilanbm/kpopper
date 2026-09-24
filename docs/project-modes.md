@@ -3,7 +3,7 @@
 The mode belongs to the project. Sessions do not choose different storage rules or create
 a new graph whenever they start.
 
-| | Simple | Advanced |
+| | Simple | Advanced (experimental) |
 |---|---|---|
 | Knowledge context | One shared project graph | A graph for the branch's code world, with shared project contributions |
 | Concurrent proposals | Named hypotheses beside the shared graph | Named hypotheses within the branch context |
@@ -16,6 +16,52 @@ an external shared record; all sessions then use that same record. Switching mod
 silently copies or removes records. Different branch records, unresolved hypotheses or
 unsettled publication obligations must be reconciled first. Original record bytes and
 the previous policy are retained as rollback evidence.
+
+## Choose a mode, then connect the Board
+
+**Advanced is experimental.** Independent entries can collide in `GROUNDING.yaml` when
+parallel PRs merge; resolving a record conflict can lead to another CI run. The readable
+record and existing history formats remain unchanged. The problem and alternatives remain
+an [open design question](advanced-mode-merging.md).
+
+The first meaningful user session offers **Simple (recommended)** or **Advanced
+(experimental)** with the existing README illustration. `kpop board` reports the mode,
+whether it was explicitly selected, and a suggested external Simple record path. Advanced
+remains the low-level fallback for an unconfigured Git project; detection does not count
+as consent and onboarding never silently switches modes or moves existing records.
+
+Simple uses one shared record outside all checkouts, at a location chosen by the owner.
+For a new project, prepare its parent directory and use `config --mode simple --record PATH
+--expected-generation N`; no empty record is created. The first useful sourced write creates
+it. Existing records, history and pending contributions need reconciliation before changing
+mode. A gitignored file inside the primary checkout is not a supported Simple destination.
+
+Advanced keeps the record with each branch and includes **kpopper Board** for shared findings.
+The Board can remain local or connect to an exact remote repository and target. Mode selection
+alone does not grant publication permission; if that same user choice explicitly included
+remote publication, setup reuses it. Choosing Board-local does not choose Simple. The mode
+and Board choices are remembered across worktrees and never repeated on every session.
+
+`kpop board` reports local state without contacting a remote. `kpop board inspect --remote
+origin` verifies repository access and discovers the actual default target without granting
+permission. After the owner chooses shared publication, connect the exact inspected scope:
+
+```sh
+kpop board connect --remote origin --repository https://github.com/OWNER/REPO.git \
+  --target main --generation N --grant
+```
+
+Use the URL, target and generation returned by inspection. Connect verifies access again,
+refuses a changed destination or policy, and reads the saved grant back. It reports verified
+connection separately from completed publication. An empty Board has no PR yet; the first
+shared finding starts one. There is one open knowledge PR per review cycle, titled
+`kpopper Board: shared findings`; after acceptance, new findings start the next cycle.
+`kpop board local` remembers local-only work and revokes standing publication permission.
+The Board choice does not change the project's mode, install a timer or authorize merging.
+
+Pending local reading is shared by worktrees in the same repository. Publishing the review
+branch does not automatically import its pending ledger into a separate clone. Permission
+is local to the configured repository; a new clone must be connected explicitly.
 
 ## Record a finding in its scope
 
