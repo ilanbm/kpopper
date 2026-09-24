@@ -4,7 +4,8 @@ Every lane declares the tracked files its checks read, and the directories whose
 list. A pull request runs the lanes whose inputs it changes. The declarations are not trusted
 on their own: on Linux, `ci_audit.py` records every file an audited lane opens and fails the
 pull request that makes it read something undeclared, which is also the pull request whose
-changes the lane already runs for. Every push to main runs every lane on every platform.
+changes the lane already runs for. Every main push runs the runtime rebuild when its inputs
+change; the native lane checks committed runtime bundles on every push.
 """
 import argparse
 import fnmatch
@@ -57,8 +58,8 @@ LANES = {
     # A fresh Lean/GMP runtime candidate must be rebuilt and exercised on every
     # supported target when its sources, archive recipe, or native consumer changes.
     "runtime": Lane((
-        "native/Cargo.toml", "native/Cargo.lock", "native/rust-toolchain.toml",
-        "native/src/reasoning_runtime.rs", "native/src/reasoning_transport.rs",
+        "native/Cargo.toml", "native/Cargo.lock", "native/rust-toolchain.toml", "native/build.rs",
+        "native/src/*",
         "native/tests/reasoning_runtime.rs", "native/tests/fixtures/reasoning-runtime.json",
         "scripts/reasoning/lean/*", "scripts/reasoning/native/*",
         "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",

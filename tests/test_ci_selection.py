@@ -46,14 +46,15 @@ class Claims(unittest.TestCase):
 
 
 class Selection(unittest.TestCase):
-    def test_rust_change_runs_the_rust_lane_without_intel_macos(self):
+    def test_native_crate_change_runs_both_lanes_without_intel_macos(self):
         changes = ["native/src/ordinary_checked_session.rs", "native/src/public_ordinary_readers.rs",
                    "native/src/source_capture.rs", "native/tests/ordinary_checked_session.rs"]
-        self.assertEqual(lanes(changes), {"rust"})
+        self.assertEqual(lanes(changes), {"rust", "runtime"})
         self.assertEqual(CI.platforms(changes), "pull-request")
 
     def test_reasoning_runtime_inputs_select_the_runtime_lane(self):
         for path in ("scripts/reasoning/lean/Main.lean", "scripts/reasoning/build_runtime.py",
+                     "native/build.rs", "native/src/reasoning_query.rs",
                      "native/tests/reasoning_runtime.rs"):
             with self.subTest(path=path):
                 self.assertIn("runtime", lanes([path]))
@@ -74,7 +75,8 @@ class Selection(unittest.TestCase):
 
     def test_adding_a_file_runs_the_lanes_that_list_its_directory(self):
         added = ("A", "native/src/new_reader.rs")
-        expected = {name for name, lane in CI.LANES.items() if CI.lane_lists(lane, "native/src")}
+        expected = {name for name, lane in CI.LANES.items()
+                    if CI.lane_lists(lane, "native/src") or CI.lane_reads(lane, added[1])}
         self.assertEqual(lanes([added], base_dirs={"", "native", "native/src"}), expected)
         self.assertEqual(lanes([("M", "assets/navigation/README.md")]), set())
 
@@ -314,6 +316,11 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("github.sha", workflow["concurrency"]["group"])
         self.assertEqual(workflow["concurrency"]["cancel-in-progress"],
                          "${{ github.event_name == 'pull_request' }}")
+
+    def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
+        self.assertIn("github.run_id", workflow["concurrency"]["group"])
+        self.assertFalse(workflow["concurrency"]["cancel-in-progress"])
 
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
         steps = self.jobs()["changes"]["steps"]

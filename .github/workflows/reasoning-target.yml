@@ -101,7 +101,7 @@ jobs:
   candidate-validation:
     timeout-minutes: 10
     needs: build
-    # Validate the exact candidate and replacement library produced for this target.
+    # Verify the artifact round trip for this target.
     if: inputs.validate-candidate && needs.build.result == 'success'
     runs-on: ubuntu-latest
     steps:

@@ -19,8 +19,8 @@ on:
         default: false
 
 concurrency:
-  group: reasoning-runtime-${{ github.ref }}-${{ github.event_name }}-${{ inputs.target-scope }}-${{ inputs.candidate-only }}
-  cancel-in-progress: true
+  group: reasoning-runtime-${{ github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: read

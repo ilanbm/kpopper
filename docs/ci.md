@@ -10,7 +10,7 @@ directories.
 | Lane | Jobs | Reads |
 |---|---|---|
 | `rust` | The command on each platform: compilation, its tests, the release build and installed acceptance | `native/`, the plugin's shell plumbing and host wrappers, the packaging tools, the installers, the runtime resources and the Lean sources |
-| `runtime` | Rebuild the Lean/GMP reasoning runtime and exercise the fresh archive plus a replacement GMP library | Lean sources, runtime recipe and corresponding-source archive, native runtime integration test |
+| `runtime` | Rebuild the Lean/GMP reasoning runtime and exercise the fresh archive plus a replacement GMP library | Lean sources, runtime recipe and corresponding-source archive, native build script and crate sources |
 
 The audited lanes' declarations are checked, not trusted. On Linux,
 `.github/scripts/ci_audit.py` watches every file those lanes open, through fanotify, which costs
