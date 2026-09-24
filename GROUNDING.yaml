@@ -1298,10 +1298,14 @@ sources:
   s.branch_comparison_core:
     name: "Cross-branch and in-memory consolidation checks"
     file: "python-final:scripts/consolidate.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-10 at d17225095c856b147d03522981f2c639e57f73e1 (original blob 7fa9d86ae7c42dafd77da0bcd7b802157b3de560). Re-read union_of, its supersession gate and cross-branch source comparison at python-final on 2026-09-25 (blob eef629448feae93c2a2175dc83665627eac2f7ce). The tag content differs from the original read; revision records the exact current reread commit, and the original content revision is retained here.
+    at: "Originally read 2026-09-10 at d17225095c856b147d03522981f2c639e57f73e1 (original blob
+         7fa9d86ae7c42dafd77da0bcd7b802157b3de560). Re-read union_of, its supersession gate and
+         cross-branch source comparison at python-final on 2026-09-25 (blob
+         eef629448feae93c2a2175dc83665627eac2f7ce). The tag content differs from the original read;
+         revision records the exact current reread commit, and the original content revision is
+         retained here."
   s.ci_execution_evidence:
     name: "CI execution measurements and agreed optimization scope"
     url: "https://github.com/ilanbm/kpopper/actions/runs/35320374247"
@@ -1317,24 +1321,32 @@ sources:
   s.core_followups_contract:
     name: "Core followup captured reading contract"
     file: "python-final:scripts/followup_core.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-18 at 1b445298e413af12f24d6c0ab7a67637b5e9df84. Re-read _evidence, _reading and project-baseline handling in followup_core.py at python-final on 2026-09-25 (blob 03399d25d54b9d2dbfdc068ab2d4aff884b6ddcf), matching the original content blob.
+    at: "Originally read 2026-09-18 at 1b445298e413af12f24d6c0ab7a67637b5e9df84. Re-read _evidence,
+         _reading and project-baseline handling in followup_core.py at python-final on 2026-09-25
+         (blob 03399d25d54b9d2dbfdc068ab2d4aff884b6ddcf), matching the original content blob."
   s.core_observer_operations:
     name: "Core observers and prepared history fold checks"
     file: "python-final:scripts/history_prospective.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-19 at 446321d41d858e4e3f92242687eb4e9d8d9a589d (original blob 402900333277a77e088054e0056062d7e1860051). Re-read _prospective_capture in history_prospective.py; history_hypotheses._finish and verify_prepared; watch.compare; and remeasure._measure_core at python-final on 2026-09-25. The history_prospective.py tag blob 3dd1adf72639cbb0c27b13491459e25244c9e38e differs from the original; original identity is retained here.
+    at: "Originally read 2026-09-19 at 446321d41d858e4e3f92242687eb4e9d8d9a589d (original blob
+         402900333277a77e088054e0056062d7e1860051). Re-read _prospective_capture in
+         history_prospective.py; history_hypotheses._finish and verify_prepared; watch.compare; and
+         remeasure._measure_core at python-final on 2026-09-25. The history_prospective.py tag blob
+         3dd1adf72639cbb0c27b13491459e25244c9e38e differs from the original; original identity is
+         retained here."
   s.core_operational_contract:
     name: "Captured core operational assessment contract"
     file: "python-final:scripts/reasoning/operations.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-18 at ac61f7f69d3d362d8111ff89b0085d8337529fd9 (original blob 76df13806dd2f0e6af2c26c2695ac8967c2aa2ca). Re-read World, load, derive and findings in operations.py, plus consolidate.read, union_of and fold at python-final on 2026-09-25. The operations.py tag blob 8c5335154fa9f150aec6c37be8c531cf116ce45d differs from the original; original identity is retained here.
+    at: "Originally read 2026-09-18 at ac61f7f69d3d362d8111ff89b0085d8337529fd9 (original blob
+         76df13806dd2f0e6af2c26c2695ac8967c2aa2ca). Re-read World, load, derive and findings in
+         operations.py, plus consolidate.read, union_of and fold at python-final on 2026-09-25. The
+         operations.py tag blob 8c5335154fa9f150aec6c37be8c531cf116ce45d differs from the original;
+         original identity is retained here."
   s.crates_workflow_run_failure:
     name: "crates.io authentication failure for release 0.12.0"
     url: "https://github.com/ilanbm/kpopper/actions/runs/36055556588/job/107821819310"
@@ -1347,24 +1359,29 @@ sources:
   s.followups_daily:
     name: "Daily review prompt, work budget and receipts"
     file: "python-final:scripts/followup_daily.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3 (original blob dd9bfb9a2bd60a97ce33c5b521a9f304da8b640e). Re-read plan, binding and status in followup_daily.py at python-final on 2026-09-25. The tag blob differs from the original; original identity is retained here.
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3 (original blob
+         dd9bfb9a2bd60a97ce33c5b521a9f304da8b640e). Re-read plan, binding and status in
+         followup_daily.py at python-final on 2026-09-25. The tag blob differs from the original;
+         original identity is retained here."
   s.followups_install:
     name: "Daily installation inspection and readback protocol"
     file: "python-final:scripts/followup_install.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3. Re-read _packet, inspect_host and finish in followup_install.py at python-final on 2026-09-25. The tag blob matches the original file at that revision.
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3. Re-read _packet,
+         inspect_host and finish in followup_install.py at python-final on 2026-09-25. The tag blob
+         matches the original file at that revision."
   s.followups_state:
     name: "Followup storage, claims and retained outcomes"
     file: "python-final:scripts/followups.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3 (original blob e8c492e3e54e98d3967e37643dbbae52e7637c06). Re-read YAML loading, scan/claim behavior and Store.finish, resolve and restore in followups.py at python-final on 2026-09-25. The tag blob differs from the original; original identity is retained here.
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3 (original blob
+         e8c492e3e54e98d3967e37643dbbae52e7637c06). Re-read YAML loading, scan/claim behavior and
+         Store.finish, resolve and restore in followups.py at python-final on 2026-09-25. The tag
+         blob differs from the original; original identity is retained here."
   s.gaze_direction_study:
     name: "The influence of banner advertisements on attention and memory: human faces with averted
            gaze can enhance advertising effectiveness"
@@ -1373,10 +1390,12 @@ sources:
   s.history_operation_context:
     name: "Captured context for prepared history previews"
     file: "python-final:scripts/reasoning/operations.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-19 at 34ce81ae81c77d3867a6821a526b99046dbbca14 (original blob 43b215016bd78dc91ff09db829ee27b79b9997a5). Re-read operations.load, prepared, derive, World and findings at python-final on 2026-09-25. The tag blob differs from the original; original identity is retained here.
+    at: "Originally read 2026-09-19 at 34ce81ae81c77d3867a6821a526b99046dbbca14 (original blob
+         43b215016bd78dc91ff09db829ee27b79b9997a5). Re-read operations.load, prepared, derive, World
+         and findings at python-final on 2026-09-25. The tag blob differs from the original; original
+         identity is retained here."
   s.ingest_64eac369f0d3ca58463f27679fa42bb0:
     name: "Captured report"
     file: "/Users/ilanbm/.local/state/kpopper/ingestion/d38be57d78902508217b8f6b3d18d9c39fcf1b9fd9a67b76790e4473e1fe5b68/sources/64eac369f0d3ca58463f27679fa42bb0.txt"
@@ -1905,11 +1924,14 @@ sources:
     name: "Source clock grouping and retained mapping order"
     from: s.2026_09_19_native_transactions
     file: "python-final:scripts/versions.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     scope: {kind: code, commit: "0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"}
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-19 at b639cdbab1e3c624ad52708350166d222821aec1. Re-read _subject_entry grouping at python-final:scripts/versions.py:488-492 on 2026-09-25; this file has the same blob 4b34e2b9054d4b6dd9a082709d0c3297ffdf3376 at the original revision. The native counterpart is history_reduce.rs:281-294 at 0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f.
+    at: "Originally read 2026-09-19 at b639cdbab1e3c624ad52708350166d222821aec1. Re-read
+         _subject_entry grouping at python-final:scripts/versions.py:488-492 on 2026-09-25; this file
+         has the same blob 4b34e2b9054d4b6dd9a082709d0c3297ffdf3376 at the original revision. The
+         native counterpart is history_reduce.rs:281-294 at
+         0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f."
   doc.history_writer_contract_c5cc6a3:
     name: "History writer, replay and branch adoption contract at c5cc6a3"
     file: "docs/history-contract.md"
@@ -1944,10 +1966,12 @@ sources:
   doc.ingestion_contract:
     name: "The source update and recording gate regression contract"
     file: "python-final:tests/test_ingestion.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-07. Re-read test_set_updates_the_value_and_its_citation, test_citation_only_update_is_not_a_value_noop, test_hypothesis_keeps_the_new_source_and_leaves_base_untouched, and source-update gates in tests/test_ingestion.py at python-final on 2026-09-25.
+    at: "Originally read 2026-09-07. Re-read test_set_updates_the_value_and_its_citation,
+         test_citation_only_update_is_not_a_value_noop,
+         test_hypothesis_keeps_the_new_source_and_leaves_base_untouched, and source-update gates in
+         tests/test_ingestion.py at python-final on 2026-09-25."
   doc.native_browser_checks:
     name: "Native source for the current bundled Hub browser-check path"
     file: "native/src/public_hub.rs"
@@ -2015,10 +2039,11 @@ sources:
   doc.pending_dry_run:
     name: "Pending findings in the consolidation dry run"
     file: "python-final:tests/test_consolidate_pending.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-23. Re-read pending-value falsifier, moved premise, hole, verdict-reversal and no-adoption assertions in tests/test_consolidate_pending.py at python-final on 2026-09-25.
+    at: "Originally read 2026-09-23. Re-read pending-value falsifier, moved premise, hole,
+         verdict-reversal and no-adoption assertions in tests/test_consolidate_pending.py at
+         python-final on 2026-09-25."
   doc.plugin_runtime:
     name: "Explicit Python setup and runtime selection for plugin hooks"
     file: "docs/plugin-runtime.md"
@@ -2026,10 +2051,12 @@ sources:
   doc.prompt_reminders:
     name: "Advisory recording reminder regression contract"
     file: "python-final:tests/test_nudge.py"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-22. Re-read test_record_writes_keep_attribution_checks, test_file_changes_without_record_writes_never_block_stop, and test_changed_tree_reminder_names_each_host_without_blocking in tests/test_nudge.py at python-final on 2026-09-25.
+    at: "Originally read 2026-09-22. Re-read test_record_writes_keep_attribution_checks,
+         test_file_changes_without_record_writes_never_block_stop, and
+         test_changed_tree_reminder_names_each_host_without_blocking in tests/test_nudge.py at
+         python-final on 2026-09-25."
   doc.session_activity:
     name: "Session write attribution and Stop delivery contract"
     file: "docs/reference.md"
@@ -2040,10 +2067,11 @@ sources:
     of: "PredicateLiteralContract.setUpClass; also ReadableRuntime.setUpClass in
          tests/test_readable_expressions.py and cache validation in scripts/session/core.py
          Core.__init__"
-    read: "2026-09-24"
+    read: "2026-09-25"
     revision: ed5d65ef766def5ccc918c869a5febc5f97359fd
-    at: >-
-      Originally read 2026-09-17. Re-read PredicateLiteralContract setup, required-core behavior, expression preservation and native assessment assertions in tests/test_predicate_literals.py at python-final on 2026-09-25.
+    at: "Originally read 2026-09-17. Re-read PredicateLiteralContract setup, required-core behavior,
+         expression preservation and native assessment assertions in tests/test_predicate_literals.py
+         at python-final on 2026-09-25."
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html

@@ -161,7 +161,7 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
     let f = Fixture::new();
     fs::write(f.root.path().join("sources/part:name.py"), "source").unwrap();
     let out = text(f.check(
-        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.colon: {file: 'sources/part:name.py'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
+        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.colon: {file: 'sources/part:name.py'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
     ));
     assert!(!out.contains("pinned file"), "{out}");
     for id in ["s.line", "s.range", "s.colon", "p.line"] {
@@ -185,6 +185,12 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
         !missing_colon_path.contains("pinned file"),
         "{missing_colon_path}"
     );
+    let trailing_colon = text(f.check("sources:\n  s.trailing: {file: 'docs/guide:'}\n"));
+    assert!(
+        trailing_colon.contains("NOTE s.trailing: file docs/guide: is absent"),
+        "{trailing_colon}"
+    );
+    assert!(!trailing_colon.contains("pinned file"), "{trailing_colon}");
 }
 #[test]
 fn absolute_paths_are_checked_only_inside_this_repository() {
@@ -211,13 +217,31 @@ fn pinned_sources_remain_openable_after_the_working_file_is_deleted() {
     f.git(&["show", "source-final:sources/original.txt"]);
 }
 #[test]
+fn slash_revisions_are_pinned_when_the_git_ref_resolves() {
+    let f = Fixture::new();
+    f.git(&["branch", "feature/source-reference"]);
+    let out = text(f.check(
+        "sources:\n  s.branch: {file: 'feature/source-reference:sources/original.txt'}\n  s.missing: {file: 'feature/source-reference:sources/missing.txt'}\n",
+    ));
+    assert!(!out.contains("NOTE s.branch:"), "{out}");
+    assert!(out.contains("NOTE s.missing: pinned file"), "{out}");
+}
+#[test]
 fn a_pin_does_not_hide_an_unknown_revision_or_a_missing_blob() {
     let f = Fixture::new();
-    let out = text(f.check("sources:\n  s.ref: {file: 'no-such-ref:sources/original.txt'}\n  s.blob: {file: 'source-final:sources/missing.txt'}\n  s.tree: {file: 'source-final:sources'}\n"));
-    for id in ["s.ref", "s.blob", "s.tree"] {
+    let out = text(f.check("sources:\n  s.ref: {file: 'no-such-ref:sources/original.txt'}\n  s.blob: {file: 'source-final:sources/missing.txt'}\n  s.tree: {file: 'source-final:sources'}\n  s.line: {file: 'source-final:sources/missing.txt:42'}\n"));
+    for id in ["s.ref", "s.blob", "s.tree", "s.line"] {
         assert!(out.contains(&format!("NOTE {id}: pinned file")), "{out}");
     }
     assert!(out.contains("git show"), "{out}");
+    assert!(
+        out.contains("git show source-final:sources/missing.txt, or re-read"),
+        "{out}"
+    );
+    assert!(
+        !out.contains("git show source-final:sources/missing.txt:42"),
+        "{out}"
+    );
 }
 
 #[cfg(unix)]
@@ -225,6 +249,7 @@ fn a_pin_does_not_hide_an_unknown_revision_or_a_missing_blob() {
 fn pinned_git_probe_io_failures_are_advisory_notes() {
     use std::os::unix::fs::PermissionsExt;
     let f = Fixture::new();
+    f.git(&["branch", "feature/source-reference"]);
     let bin = f.private.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
     let git = bin.join("git");
@@ -234,7 +259,7 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
     )
     .unwrap();
     fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
-    let record = "sources:\n  s.pinned: {file: 'source-final:sources/original.txt'}\n";
+    let record = "sources:\n  s.pinned: {file: 'source-final:sources/original.txt'}\n  s.slash_pin: {file: 'feature/source-reference:sources/original.txt'}\n";
     let mut command = f.command(f.root.path());
     command.env(
         "PATH",
@@ -248,8 +273,13 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
     let output = command.output().unwrap();
     let out = text(output);
     assert!(out.contains("NOTE s.pinned: pinned file"), "{out}");
+    assert!(out.contains("NOTE s.slash_pin: pinned file"), "{out}");
     assert!(
         out.contains("git show source-final:sources/original.txt"),
+        "{out}"
+    );
+    assert!(
+        out.contains("git show feature/source-reference:sources/original.txt"),
         "{out}"
     );
     assert!(out.contains("0 problems"), "{out}");

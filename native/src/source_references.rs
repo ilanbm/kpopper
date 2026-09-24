@@ -22,30 +22,41 @@ fn strip_line_suffix(locator: &str) -> &str {
     }
 }
 
-fn pinned_file_exists(root: &Path, revision: &str, path: &str) -> Option<bool> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PinnedFileStatus {
+    Available,
+    Missing,
+    Unresolved,
+    Unavailable,
+}
+
+fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStatus {
     if revision.is_empty() || path.is_empty() || revision.contains('\0') || path.contains('\0') {
-        return Some(false);
+        return PinnedFileStatus::Unresolved;
     }
     let reference = format!("{revision}^{{commit}}");
-    let Ok(Some(commit)) = crate::pending_state::git(
+    let commit = match crate::pending_state::git(
         root,
         &["rev-parse", "--verify", "--end-of-options", &reference],
         1024,
         true,
-    ) else {
-        return None;
+    ) {
+        Ok(Some(commit)) => commit,
+        Ok(None) => return PinnedFileStatus::Unresolved,
+        Err(_) => return PinnedFileStatus::Unavailable,
     };
     let commit = String::from_utf8_lossy(&commit);
     let commit = commit.trim();
     if ![40, 64].contains(&commit.len()) || !commit.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Some(false);
+        return PinnedFileStatus::Unresolved;
     }
     // The resolved object ID keeps authored option-like revisions out of cat-file's arguments.
     let object = format!("{commit}:{path}");
-    Some(matches!(
-        crate::pending_state::git(root, &["cat-file", "-t", &object], 1024, true),
-        Ok(Some(kind)) if kind == b"blob\n"
-    ))
+    match crate::pending_state::git(root, &["cat-file", "-t", &object], 1024, true) {
+        Ok(Some(kind)) if kind == b"blob\n" => PinnedFileStatus::Available,
+        Ok(_) => PinnedFileStatus::Missing,
+        Err(_) => PinnedFileStatus::Unavailable,
+    }
 }
 
 pub(crate) fn notes(
@@ -122,19 +133,26 @@ pub(crate) fn notes(
             if !Path::new(raw).is_absolute()
                 && let Some((revision, pinned_path)) = raw.split_once(':')
             {
-                // A dotted/slashed prefix commonly means path:line. Only treat it as a pin
-                // when the revision resolves, or the suffix itself looks like a repository path.
-                // Revisions with a slash are ambiguous with a path prefix (for example
-                // sources/part:name.py), so this locator form reserves a slash-free revision.
-                let revision_shape = !revision.is_empty() && !revision.contains(['/', '\\']);
-                let pin = revision_shape
-                    .then(|| pinned_file_exists(&project.root, revision, pinned_path))
-                    .flatten();
-                let explicit_pin = revision_shape
-                    && (pin.is_some() || (!pinned_path.is_empty() && pinned_path.contains('/')));
+                // Existing local paths were handled above. Any revision that resolves is a pin,
+                // including refs with slashes; an unresolved slash-free revision with a
+                // repository path suffix remains an advisory pin candidate.
+                let pin = (!revision.is_empty() && !pinned_path.is_empty())
+                    .then(|| pinned_file_status(&project.root, revision, pinned_path));
+                let explicit_pin = matches!(
+                    pin,
+                    Some(
+                        PinnedFileStatus::Available
+                            | PinnedFileStatus::Missing
+                            | PinnedFileStatus::Unavailable
+                    )
+                )
+                    || (!revision.is_empty()
+                        && !revision.contains(['/', '\\'])
+                        && !pinned_path.is_empty()
+                        && pinned_path.contains('/'));
                 if explicit_pin {
-                    if pin != Some(true) {
-                        notes.push(format!("{id}: pinned file {locator} is unavailable in this repository; verify the revision and path with git show {locator}, or re-read the source"));
+                    if pin != Some(PinnedFileStatus::Available) {
+                        notes.push(format!("{id}: pinned file {locator} is unavailable in this repository; verify the revision and path with git show {raw}, or re-read the source"));
                     }
                     continue;
                 }
