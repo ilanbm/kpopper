@@ -1951,6 +1951,12 @@ sources:
     at: "pointermove keeps transient drag state; pointerup and pointercancel call drop and spring
          every displaced node home, without storing a position"
     read: "2026-09-24"
+  doc.node_history_storage:
+    name: "Compact node history and lossless copy contract"
+    file: "docs/node-history-storage.md"
+    at: "Explicit opt-in format, lossless originals, subject-local action frames and full-closure
+         verification"
+    read: "2026-09-24"
   doc.pending_dry_run:
     name: "Pending findings in the consolidation dry run"
     file: "python-final:tests/test_consolidate_pending.py"
@@ -4805,6 +4811,34 @@ judgments:
     seen:
       p.community_guidance: "GitHub recommends discoverable community files and issue templates;
                              workflow status badges report actual workflow results."
+  d.compact_history_preserves_evidence:
+    name: "Compact history preserves the evidence it replaces"
+    rests_on: [d.history_authority_is_explicit, p.history_source_clock_order]
+    verdict: "Opt-in history copies store subject-local action deltas and retain exact legacy
+              originals in a lossless archive. Compact storage keeps semantic identities, direct
+              observations and source mapping order; it does not turn presence into acceptance."
+    because: "Repeated diagnostic worlds are redundant storage. Keeping claims and acts distinct,
+              authenticating publication boundaries, and comparing independently retained original
+              bytes allow smaller history without inferring past knowledge or changing accepted
+              state."
+    blocked_on: observational
+    reopened_by: "An independently reproduced source-free copy, crash recovery or branch adoption
+                  changes an original file hash, semantic identity, direct observation, source-clock
+                  grouping or accepted state despite an unchanged source and explicit decision.
+                  Compare original bytes and semantic outcomes outside the generated current-view
+                  checks."
+    from: doc.node_history_storage
+    seen:
+      d.history_authority_is_explicit: "Activated records select authority through a validated
+                                        generation marker and explicit acts. Retaining or importing
+                                        an immutable claim does not accept it; cancellation preserves
+                                        later evidence as inactive history."
+      p.history_source_clock_order: "Source-clock grouping uses the Python string representation of
+                                     body.from, which preserves nested mapping order. Captured
+                                     reduction retains original source mapping order separately from
+                                     canonical typed identity. Canonicalizing source bytes before
+                                     reduction can change accepted heads while preserving typed
+                                     object identity."
   d.components_follow_shape:
     rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
     verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed
