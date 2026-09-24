@@ -79,7 +79,7 @@ def _eval_github_expression(expression, context):
                 value = atom[1:-1]
             else:
                 if atom not in context:
-                    raise AssertionError(f"unknown GitHub concurrency expression name: {atom}")
+                    raise AssertionError(f"unknown or unsupported GitHub concurrency expression name: {atom}")
                 value = context[atom]
             if not truthy(value):
                 and_result = value
@@ -93,9 +93,10 @@ def _eval_github_expression(expression, context):
 
 def _render_group(template, context):
     for expression in re.findall(r"\$\{\{(.*?)\}\}", template):
-        for atom in re.findall(r"\b(?:github|inputs)\.[A-Za-z_][A-Za-z0-9_]*", expression):
+        unquoted = re.sub(r"'[^']*'", "", expression)
+        for atom in re.findall(r"\b[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)+", unquoted):
             if atom not in context:
-                raise AssertionError(f"unknown GitHub concurrency expression name: {atom}")
+                raise AssertionError(f"unknown or unsupported GitHub concurrency expression name: {atom}")
     return re.sub(
         r"\$\{\{(.*?)\}\}",
         lambda match: str(_eval_github_expression(match.group(1), context)),
@@ -450,8 +451,10 @@ class WorkflowCoverage(unittest.TestCase):
             11,
         )
         test_context = context("kpopper check", "pull_request", "refs/pull/5/merge", "head", "run")
-        with self.assertRaisesRegex(AssertionError, "unknown GitHub concurrency expression name"):
-            _render_group("test-${{ 'valid' || github.run_id_typo }}", test_context)
+        for misspelled in ("github.run_id_typo", "inputs.target-scopx", "env.TEST"):
+            with self.subTest(misspelled=misspelled):
+                with self.assertRaisesRegex(AssertionError, "unknown or unsupported"):
+                    _render_group("test-${{ 'valid' || " + misspelled + " }}", test_context)
 
     def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
