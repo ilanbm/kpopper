@@ -71,8 +71,10 @@ limited to numerical thresholds.
 | `kpop assess <entry> [entries...]` | Read versioned findings and scoped attention as JSON. See [assessment contract](assessment.md). |
 
 In a Git checkout, `check` notes a `file:` locator whose path is absent from the repository.
-It also checks single path tokens in `from:`; entry IDs and prose remain citations, so use `./`
-for a root filename in `from:`. Absolute paths outside the repository and glob patterns are
+It also checks single path tokens in `from:`, including bare filenames with common extensions
+such as `pyproject.toml`; recorded entry IDs take precedence. Use `./` or a source's `file:`
+for an unfamiliar root filename. Relative paths start beside the primary record, as in the Hub;
+Git pins use repository-relative paths. Absolute paths outside the repository and glob patterns are
 not checked. A missing file is a note rather than a failed claim: re-read the surviving source,
 or preserve a historical locator as `file: "python-final:scripts/example.py"` (Git's
 `revision:path` form). It remains openable with `git show python-final:scripts/example.py`.

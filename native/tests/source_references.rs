@@ -46,6 +46,9 @@ impl Fixture {
     }
     fn check_in(&self, record: &str, cwd: &Path) -> Output {
         fs::write(self.root.path().join("GROUNDING.yaml"), record).unwrap();
+        self.command(cwd).output().unwrap()
+    }
+    fn command(&self, cwd: &Path) -> Command {
         let mut c = Command::new(env!("CARGO_BIN_EXE_kpop"));
         for (name, _) in std::env::vars_os() {
             if name.to_string_lossy().starts_with("GIT_") {
@@ -58,9 +61,8 @@ impl Fixture {
             .env("XDG_CONFIG_HOME", self.private.path())
             .env("KPOPPER_NATIVE_CACHE", self.private.path().join("cache"))
             .env_remove("KPOPPER_ROOT")
-            .env_remove("KPOPPER_NATIVE_RESOURCES")
-            .output()
-            .unwrap()
+            .env_remove("KPOPPER_NATIVE_RESOURCES");
+        c
     }
 }
 fn text(output: Output) -> String {
@@ -91,6 +93,39 @@ fn missing_file_is_a_note_with_a_reread_or_revision_hint() {
 }
 
 #[test]
+fn a_bare_filename_is_checked_without_mistaking_entry_ids_for_files() {
+    let f = Fixture::new();
+    fs::write(f.root.path().join("package.json"), "{}").unwrap();
+    let out = text(f.check("sources:\n  s.report: {name: report}\n  s.actual.md: {name: source id}\nknown:\n  p.gone: {v: 1, from: pyproject.toml}\n  p.present: {v: 1, from: package.json}\n  p.ref: {v: 1, from: s.report}\n  p.file_like_id: {v: 1, from: s.actual.md}\n"));
+    assert!(out.contains("NOTE p.gone: file pyproject.toml"), "{out}");
+    for id in ["p.present", "p.ref", "p.file_like_id"] {
+        assert!(!out.contains(&format!("NOTE {id}: file")), "{out}");
+    }
+}
+
+#[test]
+fn relative_sources_follow_the_primary_record_even_when_named_from_another_directory() {
+    let f = Fixture::new();
+    let nested = f.root.path().join("nested");
+    fs::create_dir(&nested).unwrap();
+    fs::write(nested.join("source.txt"), "present").unwrap();
+    fs::write(
+        nested.join("GROUNDING.yaml"),
+        "sources:\n  s.present: {file: source.txt}\n  s.missing: {file: gone.txt}\n",
+    )
+    .unwrap();
+    for mut command in [f.command(&nested), {
+        let mut c = f.command(f.root.path());
+        c.arg("nested/GROUNDING.yaml");
+        c
+    }] {
+        let out = text(command.output().unwrap());
+        assert!(!out.contains("NOTE s.present:"), "{out}");
+        assert!(out.contains("NOTE s.missing: file gone.txt"), "{out}");
+    }
+}
+
+#[test]
 fn core_check_reports_the_same_advisory_without_a_false_computation_failure() {
     let f = Fixture::new();
     let target = kpop_native::reasoning_runtime::target_name().unwrap();
@@ -105,13 +140,9 @@ fn core_check_reports_the_same_advisory_without_a_false_computation_failure() {
     )
     .unwrap();
     fs::write(f.root.path().join("GROUNDING.yaml"), "meta: {reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nsources:\n  s.missing: {file: sources/no.txt}\n").unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .args(["--frozen", "check"])
-        .current_dir(f.root.path())
+    let output = f
+        .command(f.root.path())
         .env("KPOPPER_NATIVE_RESOURCES", resources)
-        .env("KPOPPER_NATIVE_CACHE", f.private.path().join("cache"))
-        .env("XDG_STATE_HOME", f.private.path().join("state"))
-        .env("XDG_CONFIG_HOME", f.private.path().join("config"))
         .output()
         .unwrap();
     let out = text(output);

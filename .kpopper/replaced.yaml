@@ -721,3 +721,18 @@ d.tree_reads_as_a_hypothesis:
     p.union_tests: 1
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-24'
+d.one_tree_two_channels:
+- rests_on:
+  - skill.two_shapes
+  - p.script_copies
+  verdict: the command line and the plugin ship the same files - packaging maps the script directory rather
+    than copying it
+  because: 'Two installable copies of the same reader is this method''s own worst mistake, shipped: they
+    drift in silence, and every reader afterwards has to know which of them answered. Mapping the directory
+    costs one line and cannot drift.'
+  wrong_if: p.script_copies > 1
+  seen:
+    skill.two_shapes: Two parallel records is the most expensive mistake available here
+    p.script_copies: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'

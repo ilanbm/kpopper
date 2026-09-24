@@ -684,6 +684,7 @@ pub fn run(
         crate::source_references::notes(
             capture.ordinary_document(),
             &location.workspace,
+            paths[0].parent().unwrap_or(&location.workspace),
             &mut inventory,
         )?
     } else {

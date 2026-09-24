@@ -3663,8 +3663,11 @@ known:
   p.script_copies:
     v: 1
     name: "Editable copies of the reader and the renderer"
-    from: "pyproject.toml"
-    of: "2026-09-01"
+    from: s.2026_09_24_source_file_references
+    of: "2026-09-24"
+    at: "python-final:pyproject.toml: package-directory mapping; last Python reading 2026-09-01,
+         value 1. Closed on 2026-09-24 because the mapped Python package was removed. This is not a
+         count of native reader implementations."
   prior.confidence_needs_calibration:
     v: 0.95
     unit: confidence
@@ -4033,10 +4036,11 @@ open:
                            of: "2026-09-24"
                            because: "Thirteen historical source locators are pinned to python-final
                                      with their original reading dates and revisions retained. Eight
-                                     surviving readings now cite native sources; four counts of
-                                     Python implementation places are closed and their judgments use
-                                     observable reopeners. The crate decision now names native/shared
-                                     as the original. Counting equivalent places in native remains
+                                     surviving readings now cite native sources; five readings about
+                                     Python implementation places or packaging are closed, and the
+                                     judgments that tested those counts use observable reopeners. The
+                                     crate decision now names native/shared as the original. Counting
+                                     equivalent places in native remains
                                      q.reader_places_counted_once."
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
                          a dedicated execution session? No per-item dispatch policy is currently
@@ -7662,15 +7666,25 @@ judgments:
       doc.ingestion_contract: "read 2026-09-07"
       doc.hook_delivery: "read 2026-09-22"
   d.one_tree_two_channels:
-    rests_on: [skill.two_shapes, p.script_copies]
-    verdict: "the command line and the plugin ship the same files - packaging maps the script
-              directory rather than copying it"
-    because: "Two installable copies of the same reader is this method's own worst mistake,
-              shipped: they drift in silence, and every reader afterwards has to know which of
-              them answered. Mapping the directory costs one line and cannot drift."
-    wrong_if: "p.script_copies > 1"
-    seen: {skill.two_shapes: "Two parallel records is the most expensive mistake available here",
-           p.script_copies: 1}
+    rests_on: [skill.two_shapes, p.script_copies, d.one_implementation_ships]
+    verdict: "The command line and plugin execute the same native reader; the plugin selects the
+              binary shipped with its active package. Cargo builds that reader from native/, and its
+              runtime resources must match the release. The former Python package-directory mapping
+              is retired."
+    because: "Two independently editable implementations drift between installations. There is now
+              one native implementation. p.script_copies retains only the last Python package-mapping
+              count; d.one_implementation_ships describes the current implementation boundary."
+    from: s.2026_09_24_source_file_references
+    reopened_by: "The command line and the active plugin report different results for the same
+                  record using the same release resources, or an independently editable reader
+                  implementation is shipped again."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
+    seen:
+      skill.two_shapes: "Two parallel records is the most expensive mistake available here"
+      p.script_copies: 1
+      d.one_implementation_ships: "the tree ships one reader, the native command line; what the
+                                   record says about how a record is read is read from it, and no
+                                   second implementation of the same behaviour lives beside it"
   d.name_registered_when_earned:
     rests_on: [lit.registry_names, lit.name_risk]
     verdict: "only kpopper is published; ground-tree stays unregistered until the tree has

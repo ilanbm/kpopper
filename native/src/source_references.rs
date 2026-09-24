@@ -37,6 +37,7 @@ fn pinned_file_exists(root: &Path, revision: &str, path: &str) -> Result<bool> {
 pub(crate) fn notes(
     document: &Value,
     workspace: &Path,
+    record_root: &Path,
     inventory: &mut Inventory,
 ) -> Result<Vec<String>> {
     let project = Project::open(workspace)?;
@@ -58,16 +59,28 @@ pub(crate) fn notes(
                 continue;
             };
             let raw = raw.trim();
-            // from can be an entry ID or prose. A literal path there is explicit through a
-            // slash (use ./ for a root filename); file is always an explicit locator.
+            // from can be an entry ID or prose. Slashes, pins and common file extensions
+            // identify path tokens; file makes an unfamiliar root filename explicit.
+            let file_extension = Path::new(raw)
+                .extension()
+                .and_then(|v| v.to_str())
+                .is_some_and(|v| {
+                    [
+                        "md", "rst", "txt", "toml", "json", "yaml", "yml", "py", "rs", "js", "ts",
+                        "tsx", "jsx", "sh", "ps1", "lean", "c", "h", "cpp", "hpp", "html", "css",
+                        "csv", "tsv", "pdf", "docx", "xlsx", "xml", "ini", "cfg", "sql",
+                    ]
+                    .contains(&v.to_ascii_lowercase().as_str())
+                });
             if raw.is_empty()
                 || raw.chars().any(char::is_control)
                 || raw.contains("://")
                 || raw.starts_with("mailto:")
+                || (raw.starts_with("\\\\") && !Path::new(raw).starts_with(&project.root))
                 || raw.contains(['*', '?', '[', '<', '>'])
                 || (field == "from"
                     && (ids.contains(&raw.to_owned())
-                        || (!raw.contains('/') && !raw.contains(':'))
+                        || (!raw.contains('/') && !raw.contains(':') && !file_extension)
                         || raw.chars().any(char::is_whitespace)))
             {
                 continue;
@@ -89,7 +102,9 @@ pub(crate) fn notes(
                 }
                 continue;
             }
-            let path = absolute(&project.root.join(path))?;
+            // Match the hub's existing file links: relative to the primary record,
+            // while Git's revision:path locator stays relative to the repository.
+            let path = absolute(&record_root.join(path))?;
             let resolved = crate::project_modes::resolved(&path)?;
             if !resolved.starts_with(&project.root) {
                 continue;
