@@ -77,6 +77,8 @@ def _eval_github_expression(expression, context):
                 value = left == right
             elif atom.startswith("'") and atom.endswith("'"):
                 value = atom[1:-1]
+            elif atom in {"true", "false", "null"}:
+                value = {"true": True, "false": False, "null": None}[atom]
             else:
                 if atom not in context:
                     raise AssertionError(f"unknown or unsupported GitHub concurrency expression name: {atom}")
@@ -93,10 +95,16 @@ def _eval_github_expression(expression, context):
 
 def _render_group(template, context):
     for expression in re.findall(r"\$\{\{(.*?)\}\}", template):
-        unquoted = re.sub(r"'[^']*'", "", expression)
-        for atom in re.findall(r"\b[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)+", unquoted):
+        normalized = re.sub(r"\[\s*'([^']*)'\s*\]", r".\1", expression)
+        unquoted = re.sub(r"'[^']*'", "", normalized)
+        dotted = re.compile(r"\b[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)+")
+        for atom in dotted.findall(unquoted):
             if atom not in context:
                 raise AssertionError(f"unknown or unsupported GitHub concurrency expression name: {atom}")
+        remainder = dotted.sub(" ", unquoted)
+        for token in re.finditer(r"\b[A-Za-z_][A-Za-z0-9_-]*\b", remainder):
+            if token.group() not in {"true", "false", "null"}:
+                raise AssertionError(f"unknown or unsupported GitHub concurrency expression name: {token.group()}")
     return re.sub(
         r"\$\{\{(.*?)\}\}",
         lambda match: str(_eval_github_expression(match.group(1), context)),
@@ -451,7 +459,8 @@ class WorkflowCoverage(unittest.TestCase):
             11,
         )
         test_context = context("kpopper check", "pull_request", "refs/pull/5/merge", "head", "run")
-        for misspelled in ("github.run_id_typo", "inputs.target-scopx", "env.TEST"):
+        for misspelled in ("github.run_id_typo", "inputs.target-scopx", "env.TEST",
+                           "inputs['target-scopx']", "githb"):
             with self.subTest(misspelled=misspelled):
                 with self.assertRaisesRegex(AssertionError, "unknown or unsupported"):
                     _render_group("test-${{ 'valid' || " + misspelled + " }}", test_context)
