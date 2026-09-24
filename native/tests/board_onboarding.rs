@@ -552,6 +552,11 @@ fn simple_setup_does_not_hide_a_record_on_an_unopened_branch() {
     let diagnostic = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     assert!(diagnostic.contains("record history exists"), "{diagnostic}");
     assert!(!f.root.join(".git/kpopper/project/project.json").exists());
+    // Once the owner prepares the selected record from its retained history,
+    // the historical branch must not make the transition impossible.
+    fs::write(&destination, f.git(&["show", "record-branch:GROUNDING.yaml"])).unwrap();
+    let configured = f.cli(&["config", "--mode", "simple", "--record", destination.to_str().unwrap(), "--json"]);
+    assert_eq!(configured["project"]["mode"], "simple");
 }
 
 #[test]

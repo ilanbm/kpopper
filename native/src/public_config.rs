@@ -360,7 +360,7 @@ fn transition_report(
             .values()
             .filter_map(Clone::clone)
             .collect::<BTreeSet<_>>();
-        if old_hashes.is_empty() && project.is_git() {
+        if old_hashes.is_empty() && project.is_git() && targets.iter().any(|target| !target.exists()) {
             // An unopened branch (or prior recorded history) is not an empty
             // project. Include custom configured paths and both legacy names.
             let (available, history) = crate::pending_control::git(&project.root, &[
