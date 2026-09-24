@@ -126,6 +126,9 @@ pub(super) fn run(
         "--refute takes one hypothesis and its why, and nothing else",
     )?;
     let entry = &route.paths()[0];
+    if crate::history_node_publication::selected(entry)? {
+        return crate::public_node_branch::run(options, route, original, probe);
+    }
     if !super::active_history(entry)? {
         return ordinary(options, route, runtime, probe);
     }

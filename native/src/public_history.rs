@@ -22,6 +22,9 @@ pub struct Options {
     /// Absent destination directory for a verified history copy.
     #[arg(long)]
     pub to: Option<PathBuf>,
+    /// Create a verified copy using compact node history; preserve the original files.
+    #[arg(long)]
+    pub node_history: bool,
     #[arg(long, value_parser = ["live", "frozen"])]
     pub read_mode: Option<String>,
     #[arg(long)]
@@ -48,6 +51,9 @@ pub struct Options {
     pub preview: bool,
     #[arg(long)]
     pub record_proposals: bool,
+    /// Exact saved accepted GROUNDING.yaml for node-history edited-file proposals.
+    #[arg(long)]
+    pub baseline: Option<PathBuf>,
     #[arg(long)]
     pub proposal_subject: Vec<String>,
 }
@@ -56,6 +62,7 @@ impl Options {
     pub fn selects_public_operation(&self) -> bool {
         self.record.is_some()
             || self.to.is_some()
+            || self.node_history
             || self.read_mode.is_some()
             || self.subject.is_some()
             || self.target.is_some()
@@ -66,6 +73,7 @@ impl Options {
             || self.revision.is_some()
             || !self.choose.is_empty()
             || self.preview
+            || self.baseline.is_some()
             || self.record_proposals
             || !self.proposal_subject.is_empty()
     }
@@ -83,6 +91,18 @@ pub(crate) fn fresh_id(prefix: &str) -> Result<String> {
 }
 
 fn status(entry: &Path) -> Result<Value> {
+    if crate::history_node_publication::selected(entry)? {
+        let root = entry.parent().ok_or_else(|| error("invalid_path"))?;
+        let capture = crate::history_node_capture::Capture::read(root)?;
+        let subjects = map(&map(capture.state())?["subjects"])? .iter().map(|(name, value)| {
+            let value=map(value)?;
+            Ok((name.clone(), json!({"acceptance":value["acceptance"].to_json()?, "heads":value["heads"].to_json()?})))
+        }).collect::<Result<serde_json::Map<String,Value>>>()?;
+        capture.verify_current(root)?;
+        return Ok(
+            json!({"state":"captured","record":entry,"authority":capture.snapshot.authority.to_json()?,"commits":capture.snapshot.transactions.len(),"objects":capture.object_count(),"subjects":subjects}),
+        );
+    }
     let capture = history_capture::capture(entry, None, None)?;
     let subjects = map(&map(&capture.state)?["subjects"])?
         .iter()
@@ -141,6 +161,10 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
         options.to.is_none() || operation == "migrate",
         "--to belongs to history migrate",
     )?;
+    require(
+        options.baseline.is_none() || operation == "reconcile" && options.record_proposals,
+        "--baseline belongs to history reconcile --record-proposals",
+    )?;
     let cwd = cwd.canonicalize()?;
     let original = match &options.record {
         Some(path) => vec![cwd.join(path)],
@@ -149,6 +173,37 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let paths = project_modes::write_paths(&original, &cwd)?;
     require(paths.len() == 1, "choose one logical record entry")?;
     let entry = &paths[0];
+    require(
+        !crate::history_node_publication::selected(entry)?
+            || ["status", "accept", "refute", "correct", "propose", "retire"].contains(&operation)
+            || operation == "reconcile" && options.record_proposals,
+        "node_history_operation_unsupported",
+    )?;
+    if options.node_history {
+        require(
+            operation == "migrate",
+            "--node-history belongs to history migrate",
+        )?;
+        let destination = options
+            .to
+            .as_ref()
+            .ok_or_else(|| error("history migrate requires --to DIRECTORY"))?;
+        let destination = cwd.join(destination);
+        require(
+            !crate::history_node_publication::selected(entry)?,
+            "node_history_copy_already_active",
+        )?;
+        let route = crate::legacy_authoring::authority_route(entry)?;
+        return if route == crate::legacy_authoring::AuthorityRoute::History {
+            crate::history_node_migration::Plan::prepare(entry)?
+                .publish(&destination)?
+                .to_json()
+        } else {
+            crate::history_node_bootstrap::Plan::prepare(entry)?
+                .publish(&destination)?
+                .to_json()
+        };
+    }
     let result = match operation {
         "adopt" => {
             let revision = options
@@ -187,13 +242,33 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
                 .ok_or_else(|| error("recording proposals requires --because"))?;
             let subjects = (!options.proposal_subject.is_empty())
                 .then_some(options.proposal_subject.as_slice());
-            json_value(&crate::direct_history::proposals(
-                &original,
-                &cwd,
-                subjects,
-                because,
-                options.by.as_deref(),
-            )?)?
+            if crate::history_node_publication::selected(entry)? {
+                let baseline = options
+                    .baseline
+                    .as_deref()
+                    .ok_or_else(|| error("node_edit_baseline_required"))?;
+                json_value(&crate::public_node_edits::run(
+                    &original,
+                    &cwd,
+                    baseline,
+                    subjects,
+                    because,
+                    options.by.as_deref(),
+                    &mut |_| Ok(()),
+                )?)?
+            } else {
+                require(
+                    options.baseline.is_none(),
+                    "--baseline requires node-history authority",
+                )?;
+                json_value(&crate::direct_history::proposals(
+                    &original,
+                    &cwd,
+                    subjects,
+                    because,
+                    options.by.as_deref(),
+                )?)?
+            }
         }
         "status" => status(entry)?,
         "reconcile" => json_value(&Store::new(entry)?.prepare_reconciliation(None, true, &[])?)?,

@@ -15,6 +15,10 @@ use std::{
 };
 
 pub const MAX_REDUCTION_WORK: usize = 4_000_000;
+pub(crate) trait SawProvider {
+    fn saw_is_empty(&self, id: &str) -> Result<bool>;
+    fn saw_contains(&self, observer: &str, target: &str) -> Result<bool>;
+}
 fn s(value: &str) -> V {
     V::Text(value.into())
 }
@@ -56,6 +60,15 @@ pub fn reduce(objects: &Map, rules: Option<&Map>, ancestry: Option<&Ancestry<'_>
         .collect();
     reduce_sources(objects, &sources, rules, ancestry)
 }
+pub(crate) fn reduce_compact(
+    objects: &Map,
+    sources: &BTreeMap<String, S>,
+    saw: &dyn SawProvider,
+    rules: Option<&Map>,
+    ancestry: Option<&Ancestry<'_>>,
+) -> Result<V> {
+    reduce_sources_with(objects, sources, rules, ancestry, Some(saw))
+}
 pub fn reduce_bytes(
     raw: &ObjectBytes,
     rules: Option<&Map>,
@@ -84,6 +97,15 @@ fn reduce_sources(
     sources: &BTreeMap<String, S>,
     rules: Option<&Map>,
     ancestry: Option<&Ancestry<'_>>,
+) -> Result<V> {
+    reduce_sources_with(objects, sources, rules, ancestry, None)
+}
+fn reduce_sources_with(
+    objects: &Map,
+    sources: &BTreeMap<String, S>,
+    rules: Option<&Map>,
+    ancestry: Option<&Ancestry<'_>>,
+    saw_provider: Option<&dyn SawProvider>,
 ) -> Result<V> {
     let mut active_rules = Map::from([
         ("version".into(), n(2)),
@@ -115,7 +137,7 @@ fn reduce_sources(
             kinds.iter().filter(|k| **k != "act").count() <= 1,
             "mixed_subject_kind",
         )?;
-        if let Some(entry) = subject_entry(&subject, &held, sources, ancestry)? {
+        if let Some(entry) = subject_entry(&subject, &held, sources, ancestry, saw_provider)? {
             implied.extend(list(&map(&entry)?["implied"]).iter().cloned());
             subjects.insert(subject, entry);
         }
@@ -135,6 +157,7 @@ fn subject_entry(
     held: &Map,
     sources: &BTreeMap<String, S>,
     ancestry: Option<&Ancestry<'_>>,
+    saw_provider: Option<&dyn SawProvider>,
 ) -> Result<Option<V>> {
     let mut claims = BTreeMap::new();
     let mut acts = BTreeMap::new();
@@ -151,11 +174,12 @@ fn subject_entry(
     }
     let mut ordered: Vec<_> = acts.values().copied().collect();
     ordered.sort_by_key(|v| (text(&v["on"]).expect("time"), text(&v["id"]).expect("id")));
-    let roots: BTreeSet<String> = claims
-        .iter()
-        .filter(|(_, v)| list(&v["saw"]).is_empty())
-        .map(|(id, _)| (*id).clone())
-        .collect();
+    let mut roots = BTreeSet::new();
+    for (id, v) in &claims {
+        if saw_provider.map_or_else(|| Ok(list(&v["saw"]).is_empty()), |p| p.saw_is_empty(id))? {
+            roots.insert((*id).clone());
+        }
+    }
     let mut words: BTreeMap<String, Vec<(&Map, String)>> = BTreeMap::new();
     let mut reviews = Vec::new();
     for a in ordered {
@@ -229,7 +253,12 @@ fn subject_entry(
         let mut answered = BTreeSet::new();
         for (a, _) in ws {
             for (b, _) in ws {
-                if a["id"] != b["id"] && list(&b["saw"]).contains(&a["id"]) {
+                if a["id"] != b["id"]
+                    && saw_provider.map_or_else(
+                        || Ok(list(&b["saw"]).contains(&a["id"])),
+                        |p| p.saw_contains(text(&b["id"])?, text(&a["id"])?),
+                    )?
+                {
                     answered.insert(text(&a["id"])?.to_owned());
                 }
             }

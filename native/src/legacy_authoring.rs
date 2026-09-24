@@ -83,6 +83,7 @@ fn entry_layout(entry: &Path) -> Result<Layout> {
 /// Resolve only from durable policy and authority state. Invalid or interrupted
 /// authority must never fall through to the ordinary writer.
 pub(crate) fn authority_route(entry: &Path) -> Result<AuthorityRoute> {
+    if crate::history_node_publication::selected(entry)? { return Ok(AuthorityRoute::History); }
     let layout = entry_layout(entry)?;
     let authority_path = entry
         .parent()

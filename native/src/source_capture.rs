@@ -160,8 +160,13 @@ fn origin(base: &Path, path: &Path) -> Result<String> {
     let path = absolute(path)?;
     Ok(match path.strip_prefix(base) {
         Ok(relative) => {
-            let components = relative.components()
-                .map(|part| part.as_os_str().to_str().ok_or_else(|| error("invalid_path")))
+            let components = relative
+                .components()
+                .map(|part| {
+                    part.as_os_str()
+                        .to_str()
+                        .ok_or_else(|| error("invalid_path"))
+                })
                 .collect::<Result<Vec<_>>>()?;
             format!("origin:{}", components.join("/"))
         }
@@ -561,6 +566,12 @@ impl<T> CapturedSource<T> {
     pub fn files(&self) -> &BTreeMap<PathBuf, Vec<u8>> {
         &self.inventory.files
     }
+    pub(crate) fn node_history_capture(&self) -> Option<&crate::history_node_capture::Capture> {
+        self.document
+            .node_history
+            .as_ref()
+            .map(|(_, capture)| capture)
+    }
     pub fn history_capture(&self) -> Option<&crate::history_capture::Capture> {
         self.document.history.as_ref()
     }
@@ -568,6 +579,9 @@ impl<T> CapturedSource<T> {
         self.inventory.verify()?;
         if let Some(history) = &self.document.history {
             history.verify_current()?;
+        }
+        if let Some((root, history)) = &self.document.node_history {
+            history.verify_current(root)?;
         }
         let mut members = self.document.members.clone();
         members.extend(self.routing.selected.iter().cloned());
@@ -722,24 +736,39 @@ fn capture_ordinary_with(
                 .is_some_and(|p| p.ledger.head.is_some());
         let mut doc = D::load(&initial.selected, &mut inventory, allow_missing)?;
         if canonical && let Some(pending) = &initial.pending {
-            doc.overlay = Some(crate::ordinary_overlay::apply(
-                &mut doc,
-                pending,
-                &initial.root,
-                text(&map(&initial.config)?["record"])?,
-                runtime,
-            )?);
+            if doc.node_history.is_some() {
+                require(
+                    pending.ledger.head.is_none() && pending.target.is_none(),
+                    "node_history_pending_unsupported",
+                )?;
+            } else {
+                doc.overlay = Some(crate::ordinary_overlay::apply(
+                    &mut doc,
+                    pending,
+                    &initial.root,
+                    text(&map(&initial.config)?["record"])?,
+                    runtime,
+                )?);
+            }
         }
         after_load(pass, &doc)?;
         inventory.verify()?;
         if let Some(history) = &doc.history {
             history.verify_current()?;
         }
+        if let Some((root, history)) = &doc.node_history {
+            history.verify_current(root)?;
+        }
         require(
             initial == observation(&paths, &cwd, mode)?,
             "snapshot_changed",
         )?;
-        let history_inventory = doc.history.as_ref().map(|h| h.inventory.clone());
+        let history_inventory = (
+            doc.history.as_ref().map(|h| h.inventory.clone()),
+            doc.node_history
+                .as_ref()
+                .map(|(_, h)| h.revision().to_owned()),
+        );
         if let Some((old, old_history)) = &previous {
             require(
                 old == &inventory.events && old_history == &history_inventory,
