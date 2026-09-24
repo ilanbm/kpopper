@@ -614,6 +614,7 @@ pub(crate) fn evidence_path(path: &str) -> Result<()> {
                 part.contains(':')
                     || name.eq_ignore_ascii_case(".git")
                     || name.eq_ignore_ascii_case(".gitattributes")
+                    || name.eq_ignore_ascii_case(".gitignore")
             }),
             "node_publication_evidence_git_control",
         )?;
@@ -1915,6 +1916,8 @@ mod transport_policy_tests {
     fn retained_migration_evidence_cannot_override_git_transport() {
         for path in [
             ".kpopper-history-migration/.gitattributes",
+            ".kpopper-history-migration/.gitignore",
+            ".kpopper-history-migration/sub/.GITIGNORE. ",
             ".kpopper-history-migration/sub/.GITATTRIBUTES. ",
             ".kpopper-history-migration/.git/config",
             ".kpopper-history-migration/.GIT/config",
