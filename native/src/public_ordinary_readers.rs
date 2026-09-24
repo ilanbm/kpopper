@@ -1145,7 +1145,7 @@ pub(crate) fn display(value: &V) -> String {
     }
     py(value)
 }
-fn fmt(value: &V) -> String {
+pub(crate) fn fmt(value: &V) -> String {
     if let V::Integer(n) = value {
         let t = n.as_str();
         let (sign, digits) = t.strip_prefix('-').map_or(("", t), |d| ("-", d));

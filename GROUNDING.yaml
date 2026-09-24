@@ -1204,6 +1204,19 @@ sources:
          validation; changes to platform execution inputs still expand coverage."
     read: "2026-09-24"
     fidelity: paraphrase
+  s.2026_09_24_hub_parity:
+    name: "Native Hub notes, Record layout and readable HTML restored against python-final"
+    read: "2026-09-24"
+    of: "Comparison based on main a82f221a and python-final: native/tests/fixtures/page, the
+         repository record, examples/greenhouse-report, examples/launch-party, and python-final
+         tests/fixtures/hypotheses and remeasure, plus a page.unserved arrangement that fires after
+         page counts are assigned. Native verify output, Record panel markup, page title and footer
+         match the reference on these seven records; generated files are 0644. Regression tests cover
+         final-count flags in selectors, cards, spill and alerts, unknown page counts, note order,
+         reasoning length, literal dependency references, numeric precision, movement, prefix
+         navigation and file replacement permissions. This is scoped to these surfaces and fixtures,
+         not whole-page HTML equality."
+    at: "native/tests/public_hub.rs; python-final:scripts/render_page.py and scripts/page_lint.py"
   s.2026_09_24_source_file_references:
     name: "Source files after the Python reader was removed"
     asked: "Report entries whose local source file is gone, keep historical sources openable at
