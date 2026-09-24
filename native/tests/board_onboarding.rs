@@ -145,12 +145,15 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
         status["remotes"][0]["repository"],
         "https://github.invalid/fixture/repo.git"
     );
-    assert!(
-        status["illustration"]
-            .as_str()
-            .unwrap()
-            .ends_with("two-working-modes.png")
+    // Out-of-tree builds and installed binaries need not have adjacent source assets.
+    assert_eq!(
+        status["illustration_command"],
+        json!(["board", "illustration"])
     );
+    if let Some(image) = status["illustration"].as_str() {
+        assert!(image.ends_with("two-working-modes.png"));
+        assert!(Path::new(image).is_file());
+    }
     assert!(!f.root.join(".git/kpopper/project/project.json").exists());
     assert!(f.opener().contains("kpopper Board"));
     f.cli(&["config", "--mode", "advanced", "--json"]);

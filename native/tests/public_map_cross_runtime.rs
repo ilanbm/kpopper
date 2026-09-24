@@ -1,5 +1,6 @@
-//! Full map/onboarding oracle comparison.  This is opt-in because it needs the pinned Python 1.8
-//! distribution and a built native executable; no model or host agent is started.
+//! Map/onboarding protocol comparison with the pinned Python 1.8 distribution.
+//! Each runtime must deliver its own complete guide: the native guide additionally
+//! covers Simple/Advanced selection and Board. No model or host agent is started.
 use serde_json::Value;
 use std::{
     fs,
@@ -95,6 +96,15 @@ fn python_and_native_map_packets_match_except_explicit_provenance() {
             ),
         );
     }
+    assert_eq!(
+        expected["instructions"],
+        fs::read_to_string(oracle.join("scripts/start-guide.md")).unwrap()
+    );
+    assert_eq!(
+        nat["instructions"],
+        include_str!("../shared/start-guide.md")
+    );
+    expected["instructions"] = nat["instructions"].clone();
     assert_eq!(expected, nat);
     let pstate = fs::read_dir(state.join("kpopper/first-use/projects"))
         .unwrap()
@@ -398,7 +408,16 @@ fn first_use_context_and_guide_match_python() {
             );
             assert!(guide.status.success());
             assert!(guide.stderr.is_empty());
-            sequence.push(String::from_utf8(guide.stdout).unwrap());
+            let expected_guide = if script.is_some() {
+                fs::read_to_string(oracle.join("scripts/start-guide.md")).unwrap()
+            } else {
+                include_str!("../shared/start-guide.md").to_owned()
+            };
+            assert_eq!(
+                String::from_utf8(guide.stdout).unwrap().trim_end(),
+                expected_guide.trim_end()
+            );
+            sequence.push("VERIFIED_BUNDLED_GUIDE".to_owned());
             outputs.push(sequence);
         }
         assert_eq!(outputs[0], outputs[1], "with_record={with_record}");
