@@ -107,6 +107,15 @@ To generate candidates before updating committed bundles, dispatch
 `reasoning-runtime` with `candidate-only=true`. This explicit maintainer mode
 builds all target candidates without claiming installed validation of the old
 committed payload. Normal PR, main and release calls keep the integrity gate and
-installed matrix. Changes to either native workflow or the builder must regenerate
+installed matrix. Changes to `reasoning-runtime.yml`, `reasoning-target.yml` or the builder must regenerate
 `scripts/reasoning/native/gmp-source-and-build.tar.gz`, which carries their exact
 source and build instructions.
+
+
+The Linux native test job also executes the offline Annotated Documents DOM
+suite with pinned Node dependencies. Its synthetic HTML and export validation
+come from a test-only bridge compiled into the same native library test binary;
+no Python reader is installed. The recovered interaction assertions cover review
+choices, source navigation, focus, layout and saved copies. They model a DOM,
+not a browser sandbox or pixel rendering. Run locally after `npm ci` in
+`tests/document-support` with `python3 native/ci/document_ui.py`.

@@ -18,7 +18,7 @@ kpop session enable --tokens 1000
 The bundled path needs no Lean installation at runtime. `kpop session status`
 reports whether the core is ready.
 
-Setup compiles only the Lean source shipped with the package. It does not download a toolchain or execute record-supplied commands. The executable and its manifest are published together in a local cache keyed by source hash, operating system and architecture. A valid cache is reused; reads never build it. `session setup --rebuild` quarantines an invalid or existing cache before replacing it. Running session servers must restart after a program replacement.
+Setup prepares the verified programs bundled with the native distribution. It does not download or compile a toolchain, or execute record-supplied commands. A valid local runtime cache is reused; reads never build a program. `session setup --rebuild` retains the previous cache and extracts a fresh verified copy. Running session servers must restart after a program replacement.
 
 ## Open and read
 
@@ -28,7 +28,7 @@ kpop session read --input GROUNDING.yaml --project example \
   --revision REVISION_FROM_OPEN --ref node:some.claim
 ```
 
-The default input is the current project's root or registered record, including when the command runs in a repository subdirectory. `--input`, `--project`, `--state` and `--profile` can bind a service explicitly. An explicit input resolves project settings against that record's location, independently of the process directory. `--normalized` accepts a normalized JSON snapshot for replay. Every read uses the revision returned by open; a changed record rejects an old revision.
+The default input is the current project's root or registered record, including when the command runs in a repository subdirectory. `--input`, `--project`, `--state` and `--profile` can bind a service explicitly. An explicit input resolves project settings against that record's location, independently of the process directory. `--normalized` accepts a normalized JSON graph (`nodes`, `topics`, and optional `edges`/`node_order`) for replay, including with `context`. The graph is structurally validated and evaluated again; embedded findings are not accepted as verified results. Revisions bind the input path, bytes, project, navigation and executing program. Pass `--normalized` on follow-up commands too; it uses `checked-reader/v1` and cannot be combined with `--assessment-profile core/v1`. Every read uses the revision returned by open; a changed record rejects an old revision.
 
 References include:
 

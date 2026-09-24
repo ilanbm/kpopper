@@ -35,19 +35,49 @@ jobs:
 
   target:
     needs: preflight
+    if: inputs.rebuild || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {runner: ubuntu-24.04, target: linux-x86_64, pythons: '["3.9", "3.13"]'}
-          - {runner: ubuntu-24.04-arm, target: linux-aarch64, pythons: '["3.9", "3.13"]'}
-          - {runner: macos-15, target: darwin-arm64, pythons: '["3.13"]'}
-          - {runner: macos-15-intel, target: darwin-x86_64, pythons: '["3.9", "3.13"]'}
-          - {runner: windows-2022, target: windows-x86_64, pythons: '["3.9", "3.13"]'}
+          - {runner: ubuntu-24.04, target: linux-x86_64}
+          - {runner: ubuntu-24.04-arm, target: linux-aarch64}
+          - {runner: macos-15, target: darwin-arm64}
+          - {runner: macos-15-intel, target: darwin-x86_64}
+          - {runner: windows-2022, target: windows-x86_64}
     uses: ./.github/workflows/reasoning-target.yml
     with:
       runner: ${{ matrix.runner }}
       target: ${{ matrix.target }}
-      python-versions: ${{ matrix.pythons }}
-      rebuild: ${{ inputs.rebuild || github.event_name == 'workflow_dispatch' }}
-      validate-installed: ${{ github.event_name != 'workflow_dispatch' || !inputs.candidate-only }}
+
+  installed:
+    needs: [preflight, target]
+    if: >-
+      !cancelled() && needs.preflight.result == 'success' &&
+      (needs.target.result == 'success' || needs.target.result == 'skipped') &&
+      (github.event_name != 'workflow_dispatch' || !inputs.candidate-only)
+    uses: ./.github/workflows/native-rust.yml
+    with:
+      validation: distribution
+      target: all
+
+  verdict:
+    if: always()
+    needs: [preflight, target, installed]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected validation to complete
+        env:
+          REBUILD: ${{ inputs.rebuild || github.event_name == 'workflow_dispatch' }}
+          CANDIDATE_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate-only }}
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          TARGET_RESULT: ${{ needs.target.result }}
+          INSTALLED_RESULT: ${{ needs.installed.result }}
+        run: |
+          expected_target=skipped
+          expected_installed=success
+          if [ "$REBUILD" = true ]; then expected_target=success; fi
+          if [ "$CANDIDATE_ONLY" = true ]; then expected_installed=skipped; fi
+          test "$PREFLIGHT_RESULT" = success
+          test "$TARGET_RESULT" = "$expected_target"
+          test "$INSTALLED_RESULT" = "$expected_installed"
