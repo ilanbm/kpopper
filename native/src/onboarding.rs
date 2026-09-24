@@ -237,6 +237,13 @@ pub fn context_with_host(
     location: &crate::public_workspace::Location,
     host: Option<&str>,
 ) -> Result<String> {
+    context_with_mode(location, host, crate::source_capture::ReadMode::Live)
+}
+pub fn context_with_mode(
+    location: &crate::public_workspace::Location,
+    host: Option<&str>,
+    read_mode: crate::source_capture::ReadMode,
+) -> Result<String> {
     let current = status_at(
         &location.workspace,
         &location.key,
@@ -253,12 +260,25 @@ pub fn context_with_host(
         ));
     }
     let mut lines = Vec::new();
+    let board = crate::public_board::status(&location.workspace)?;
+    if read_mode == crate::source_capture::ReadMode::Live
+        && let Some(offer) = crate::public_board::opening(&board)? {
+        lines.push(offer);
+    }
+    if string("status") == "missing" && board["is_git"] == true {
+        let path = serde_json::to_string(&current["record"])?;
+        if board["mode_selected"] == true {
+            lines.push(format!("Recording context for the agent: the selected record is {path}. For the first authorized sourced finding, use the record skill and `kpop add`; the first write creates it. No additional onboarding is needed. Do not create an empty template or narrate this reminder."));
+        } else {
+            lines.push(format!("Recording context for the agent: no mode/location has been selected yet (current fallback: {path}). Continue the user's work. When an authorized record write is next needed, obtain a concrete Simple location or Advanced choice; a skipped tutorial or disabled guidance is not a permanent recording ban and is not consent to Advanced. Use `kpop config --mode ...` and the record skill. Do not repeatedly offer a tutorial."));
+        }
+    }
     if matches!(string("mapping"), "ready" | "running") {
         lines.push(format!("A mapping task is {} for session {} (request {}). Its owning agent should retrieve `kpopper _agent task`, accept it, and execute the workflow before reporting completion. Preserve the agreed scope. A returned task is not completed work.", string("mapping"), string("owner"), string("request")));
     } else if string("mapping") == "requested" {
         lines.push("An older mapping preference was saved but never dispatched. Run `kpop map` in an active session if the user still wants that work.".into());
     }
-    if string("status") == "missing" {
+    if string("status") == "missing" && board["is_git"] != true {
         let (record, mapping) = match host {
             Some("claude") => ("/kpopper:record", "/kpopper:map"),
             Some("codex") => ("$record", "$map"),

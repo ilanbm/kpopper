@@ -1,6 +1,8 @@
 //! Public named-hypothesis consolidation over ordinary records and active history.
 #[path = "public_branch_consolidation.rs"]
 mod branch;
+#[path = "consolidation_resolve.rs"]
+mod resolve;
 #[path = "ordinary_consolidation_full.rs"]
 mod full;
 pub(crate) use full::branch_differences;
@@ -75,6 +77,7 @@ fn preview_output(
 
 #[derive(Clone, Default)]
 pub struct Options {
+    pub resolve: bool,
     pub names: Vec<String>,
     pub dry_run: bool,
     pub refute: Option<String>,
@@ -414,6 +417,9 @@ fn dispatch_with_runtime(
     }
     validate(&validation)?;
     let cwd = cwd.canonicalize()?;
+    if options.resolve {
+        return resolve::run(options, &cwd);
+    }
     let paths = options
         .record
         .as_ref()

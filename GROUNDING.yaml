@@ -263,6 +263,10 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.advanced_mode_merging:
+    name: "Advanced mode: the open merge problem"
+    file: "docs/advanced-mode-merging.md"
+    read: "2026-09-24"
   doc.applications:
     name: "Optional experimental applications and the core boundary"
     from: s.2026_09_18_experimental_applications
@@ -1188,6 +1192,62 @@ sources:
          roles a partial schema declares, so a first judgment it wrote carried seen: where the schema
          named another snapshot field and checked as never compared; it now keeps them, as native
          does."
+  s.2026_09_24_advanced_mode_experimental:
+    name: "Keep the readable record and expose Advanced mode merge friction as an open design
+           question"
+    asked: "The maintainer proposed keeping the current GROUNDING.yaml approach, marking Advanced
+            mode experimental especially in the README, and linking a detailed living document about
+            the merge problem, alternatives and their drawbacks."
+    fidelity: paraphrase
+    read: "2026-09-24"
+  s.2026_09_24_ci_release_once:
+    name: "Linux pull requests and one complete release validation"
+    asked: "נשמע מצויין, בוא נעשה את זה. ביומיים האחרונים הרגיש שאי אפשר לעבוד מרוב שהכל איטי,
+            חייבים להתייעל פה"
+    of: "Approval of Linux by default for ordinary and release pull requests, extra coverage for
+         platform-sensitive changes, short main checks, and one complete platform matrix at the
+         release commit whose tested packages are published only after all checks pass."
+    read: "2026-09-24"
+    fidelity: paraphrase
+  s.2026_09_24_ci_routing_linux:
+    name: "CI routing changes need Linux validation without an automatic platform matrix"
+    asked: "אני לא מבין גם למה PR כזה שמתעסק רק עם CI בכלל קשור להרצה על מכשירים שונים. תצמצם בבקשה"
+    of: "The maintainer requested narrowing PR 240 so CI routing and scheduling changes use Linux
+         validation; changes to platform execution inputs still expand coverage."
+    read: "2026-09-24"
+    fidelity: paraphrase
+  s.2026_09_24_consolidate_resolve:
+    name: "Resolve an existing Git record conflict through a bounded consolidation command"
+    asked: "Add a CLI option described as consolidate and resolve for Advanced mode record
+            conflicts; coordinate its implementation separately from onboarding and Board setup."
+    fidelity: paraphrase
+    read: "2026-09-24"
+    of: "Local Git merge resolution: preview first, preserve independent records and supported
+         immutable history, refuse competing claims, and leave staging, commit and publication to the
+         user."
+  s.2026_09_24_hub_parity:
+    name: "Native Hub notes, Record layout and readable HTML restored against python-final"
+    read: "2026-09-24"
+    of: "Comparison based on main a82f221a and python-final: native/tests/fixtures/page, the
+         repository record, examples/greenhouse-report, examples/launch-party, and python-final
+         tests/fixtures/hypotheses and remeasure, plus a page.unserved arrangement that fires after
+         page counts are assigned. Native verify output, Record panel markup, page title and footer
+         match the reference on these seven records; generated files are 0644. Regression tests cover
+         final-count flags in selectors, cards, spill and alerts, unknown page counts, note order,
+         reasoning length, literal dependency references, numeric precision, movement, prefix
+         navigation and file replacement permissions. This is scoped to these surfaces and fixtures,
+         not whole-page HTML equality."
+    at: "native/tests/public_hub.rs; python-final:scripts/render_page.py and scripts/page_lint.py"
+  s.2026_09_24_plugin_commands_out_of_bin:
+    name: "The session that found why Cowork and Claude Code would not add the kpopper marketplace,
+           and moved the plugin's commands out of bin/ so Cowork's sync accepts the package"
+    asked: "למה ככה? [two screenshots of Add marketplace for ilanbm/kpopper - Cowork: \"Marketplace
+            sync failed. Check the repository URL and try again.\"; Code: \"Failed to add
+            marketplace.\"] / כן תתקן / לגבי cowork והשאלה ״להעביר?\" - כן בטח, תעביר"
+    of: "2026-09-24; Claude Desktop's main.log for the Code refusal (2026-09-23 20:21:29), the
+         repository at a82f221a, and a headless Claude Code 2.1.280 session with this branch's
+         plugin"
+    read: "2026-09-24"
   s.2026_09_24_source_file_references:
     name: "Source files after the Python reader was removed"
     asked: "Report entries whose local source file is gone, keep historical sources openable at
@@ -1338,6 +1398,17 @@ sources:
          history_branch_git local capture; history-branch.json 49 Python cases with 30 accepted
          envelopes and Git SHA1/SHA256 tests"
     read: "2026-09-19"
+  s.native_check_diagnostic_parity:
+    name: "Ordinary check notes and migration refusal parity"
+    file: "native/tests/check_notes.rs"
+    read: "2026-09-24"
+    at: "native/tests/public_expression_regressions.rs also covers mixed scalar keys and unchanged
+         source bytes"
+    of: "check reports live identities named by also and malformed prefix legends without turning
+         those notes into failures. The dependency-field exception and valid retired identities stay
+         quiet. Expression migration retains the public mixed-key refusal without duplicate
+         serialization diagnostics; integer, boolean, float, null and date keys remain refused
+         without changing source files."
   s.native_checked_token_budgets:
     name: "Native checked-reader reference token budgets"
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-checked-f269506-tests.log"
@@ -1368,6 +1439,16 @@ sources:
             preserve kpopper and kpop names, start the native GitHub release series at 0.9.0 and mark
             it Latest while retaining previous tags and legacy package releases."
     read: "2026-09-22"
+  s.native_document_interactions:
+    name: "Native document interaction coverage"
+    file: "tests/test_document_ui.cjs"
+    read: "2026-09-24"
+    at: "native/ci/document_ui.py and the test-only annotated_document bridge"
+    of: "The offline DOM suite exercises artifacts generated and validated by the checkout-built
+         Rust document library. Its 56 cases cover source navigation, review choices, saved copies,
+         focus, layout, Hebrew and hostile text. Corrupting the generated panel makes the runner
+         fail. The Linux native test job runs the suite with pinned DOM dependencies; this does not
+         establish real-browser CSP or pixel-rendering behavior."
   s.native_edit_rewrite:
     name: "Native view edit and identity rewrite conformance"
     file: "native/src/history_edits.rs"
@@ -1389,6 +1470,15 @@ sources:
     at: "Exact Python fixture comparisons, immutable replay and storage recovery regressions;
          source-aware merge module and current local/UTC date checks"
     read: "2026-09-19"
+  s.native_identity_source_notes:
+    name: "Identity summaries retain source-file notes"
+    file: "native/tests/ordinary_identity.rs"
+    read: "2026-09-24"
+    at: same_embeds_the_public_record_check_with_an_unserved_question
+    of: "The same command and standalone check agree on declared-note counts with present or missing
+         source files, both with and without an unserved question. Identity preparation includes
+         source-reference observations in its existing inventory for before and after projections.
+         Missing source files remain advisory and do not become a migration refusal."
   s.native_live_capture:
     from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Native pending and committed target capture evidence"
@@ -1411,6 +1501,18 @@ sources:
     at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
          and history-hypothesis-retained.json"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_normalized_session:
+    name: "Normalized checked-session replay"
+    file: "native/tests/normalized_session.rs"
+    read: "2026-09-24"
+    at: "Public session/context CLI; ordinary_normalized_session graph validation and
+         public_checked_session input capture"
+    of: "Normalized JSON snapshots use the checked reader without conversion into a project record.
+         Replay validates graph structure and assessment field mappings, recomputes findings, binds
+         revision to the input path and bytes, and retains the normalized option in hook follow-ups.
+         Changed input refuses old revisions; read, context, search and private proposals leave
+         source bytes unchanged. Local CLI and MCP replay were exercised against the final Python
+         contract."
   s.native_ordinary_authoring:
     name: "Ordinary native reader and immutable authoring conformance"
     from: s.2026_09_19_native_ordinary_authoring
@@ -1474,6 +1576,28 @@ sources:
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-PUBLIC-READERS-RESULT.md"
     read: "2026-09-19"
     at: "Task 01a0b961-13a4-7033-afc7-e5bb48720e14; actual CLI and final Python fixture conformance"
+  s.native_reader_consistency:
+    name: "Native command consistency regressions"
+    file: "native/tests/ordinary_identity.rs"
+    read: "2026-09-24"
+    at: "same_embeds_the_public_record_check_with_an_unserved_question;
+         native/tests/public_json.rs::core_option_refusals_use_exit_one_and_unprefixed_diagnostics;
+         native/tests/public_checked_session.rs::unknown_core_session_revision_tells_the_reader_to_reopen"
+    of: "The same migration summary uses the public record check without optional page coverage.
+         Core-option reader refusals exit 1 without a command prefix in text and JSON. A missing
+         retained core revision says unknown core session revision; reopen. The session regression
+         creates its record through add in an empty Git repository and confirms the retained valid
+         revision still reads."
+  s.native_reasoning_rebuild:
+    name: "Native reasoning candidate validation after Python removal"
+    file: "tests/test_native_distribution.py"
+    read: "2026-09-24"
+    at: "ReasoningWorkflow; native/tests/reasoning_runtime.rs; native/tests/reasoning_evaluate.rs"
+    of: "Reasoning candidates are checked by the native scalar, composition and query suites. A
+         separately modified GMP library must execute its probe while preserving the evaluator binary
+         and computation result. Candidate-only skips committed-bundle acceptance; other runs accept
+         native distributions once across the platform matrix. Local macOS arm64 candidate build and
+         conformance passed; cross-platform execution requires CI."
   s.native_scenario_watch:
     name: "Native captured scenarios and pure history watch conformance"
     from: s.2026_09_19_native_temporal_authoring
@@ -1721,6 +1845,15 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.grok_bot_setup:
+    name: "Grok Bot installation proposal and verification limits"
+    file: "adapters/grok-bot/README.md"
+    read: "2026-09-24"
+    of: "Cloud-computer installation and explicit project instructions, with a private skill
+         pointing to canonical files. Official Grok Bot computer and skills documentation reviewed on
+         2026-09-24. No live Grok Bot installation, skill-use or fresh-conversation validation has
+         been performed for this guide; Grok Build compatibility does not establish Grok Bot plugin
+         or hook support."
   doc.history_source_clock_order:
     name: "Source clock grouping and retained mapping order"
     from: s.2026_09_19_native_transactions
@@ -3278,6 +3411,30 @@ known:
     from: "Jensen and Snodgrass 1999, Temporal data management"
     at: "valid time and transaction time"
     of: "2026-09-16"
+  lit.claude_env_file:
+    name: "What Claude Code does with the lines a plugin's SessionStart hook writes to
+           CLAUDE_ENV_FILE"
+    v: "Claude Code gives a plugin's SessionStart command hook CLAUDE_ENV_FILE and runs the lines
+        written there before each later Bash tool command of the session: a line appending a
+        directory to PATH put that directory last on the session's PATH."
+    from: s.2026_09_24_plugin_commands_out_of_bin
+    at: "headless session 2a8ebf77-33b6-48ef-a589-f2e529ca2b4b run with --plugin-dir on this branch:
+         type -a kpopper listed <plugin>/scripts/bin/kpopper after every other kpopper"
+    of: "2026-09-24; Claude Code 2.1.280, macOS"
+  lit.claude_hosted_plugin_bin:
+    name: "What claude.ai-hosted plugin sync does with a plugin whose root holds bin/"
+    v: "claude.ai refuses to sync a plugin with a top-level bin/ directory (error_code
+        marketplace_sync_bin_directory_not_allowed): claude.ai-hosted plugins may not ship bin/
+        executables, because Claude Code adds them to PATH while the admin approval surface does not
+        show them, and executable entry points belong in hooks, commands or mcpServers. Claude
+        Desktop's Add marketplace dialog says only: Marketplace sync failed. Check the repository URL
+        and try again."
+    fidelity: paraphrase
+    from: "two public issue reports quoting the error Claude Desktop logs in claude.ai-web.log"
+    at: "https://github.com/AgriciDaniel/claude-seo/issues/298 (2026-09-10, the sync error with its
+         error_code) and https://github.com/CrowdStrike/fusion-skills/issues/17 (2026-07-31, the same
+         rule from a plugin upload)"
+    of: "read 2026-09-24"
   lit.crdt_mv_register:
     v: "a single timestamp cannot tell concurrent writes apart - a write must carry what it was
         based on; a multi-value register keeps every concurrent write visible and a later write that
@@ -3850,7 +4007,9 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 23591
+    v: 24669
+    # Same-day tree correction: previously 23591; skill_bytes_largest measures
+    # skills/record/SKILL.md at 24669 bytes in 5650a64e (Board onboarding).
     # set 2026-09-23: measured by skill_bytes_largest at 279df6a
     # Same-day code measurement after adding guarded representation guidance.
     # set 2026-09-22: Measured from the native default skill text by skill_bytes_largest
@@ -3861,7 +4020,7 @@ known:
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
-    scope: {kind: code, environment: kpopper skill sources, commit: d429f4126e74ebb86e1f4d156a431a6165390a46, working_tree: true}
+    scope: {kind: code, environment: kpopper skill sources, commit: 5650a64ebae06fc0cfc2a6d68617865b3df5e56e, working_tree: false}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
@@ -4004,6 +4163,16 @@ known:
     of: "2026-09-11"
 
 open:
+  q.advanced_mode_merging:
+                         name: "How can Advanced mode combine branch knowledge without repeated
+                                record conflicts and project-specific CI work?"
+                         question: "Which workflow and storage representation can preserve readable
+                                    current knowledge, complete historical evidence and explicit
+                                    unresolved claims while avoiding routine record-only merge
+                                    conflicts and repeated CI? The current format remains in place
+                                    and Advanced mode is experimental while the alternatives in the
+                                    design note stay open."
+                         from: doc.advanced_mode_merging
   q.crates_io_resources:
                          name: "What a crates.io install does about the verified resources"
                          question: "A crate installed from crates.io carries the two commands
@@ -4572,23 +4741,27 @@ judgments:
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
     from: s.2026_09_17_selective_ci
-    rests_on: [p.ci_native_build_inputs]
-    verdict: "Keep record and cheap contracts unconditional; select expensive families
-              conservatively from the full PR diff, cancel superseded runs, and retain broad consumer
-              checks on main."
-    because: "Skills and prose do not require native compilation. Packaging needs evidence about the
-              installed committed payload, while changed native inputs need compilation and
-              replacement-library integration. Unknown paths select all checks; the aggregate gate
-              refuses an unexpected skip so selecting less cannot silently convert missing work into
-              success."
-    reopened_by: "A changed input affects a skipped family; a selected job is skipped or fails while
-                  ci-required passes; or main no longer exercises all consumer families."
+    rests_on: [p.ci_native_build_inputs, s.2026_09_24_ci_release_once]
+    verdict: "Keep record and cheap contracts unconditional. Pull requests select expensive families
+              from their full diff and default to Linux, with conservative extra platform coverage.
+              Ordinary main pushes keep record and contracts; a version-changing main commit runs all
+              native tests and distribution acceptance once before publishing those artifacts."
+    because: "The maintainer accepts later discovery of platform-specific failures in exchange for
+              responsive ordinary pull requests. Shared platform inputs and unknown changes retain
+              full coverage, and publication must wait for the exact release commit to pass the
+              entire matrix."
+    reopened_by: "A changed platform input affects an omitted target; a selected job fails or skips
+                  while ci-required passes; a version-only edit hides a dependency change; or a
+                  release is published without successful complete coverage of its own commit."
+    request: s.2026_09_24_ci_release_once
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
                                  replacement probes, notices, and native-workflow changes select
                                  native builds; unknown paths select all checks. Selector-only
                                  changes use mandatory contracts. Packaging metadata alone tests
                                  consumers and installation without recompiling native source."
+      s.2026_09_24_ci_release_once: "read 2026-09-24"
   d.claude_plugin_has_no_nested_zip:
     name: "Claude plugin package avoids nested ZIP entries"
     request: s.2026_09_19_claude_install_request
@@ -5705,24 +5878,25 @@ judgments:
   d.native_release_beside_tests:
     name: "The native release is built and accepted beside its tests, and on Linux alone for a pull
            request"
-    verdict: "Each target builds, accepts, packages and uploads its native release in a job of its
-              own that runs beside its tests, and a verdict job fails when either job fails or is
-              skipped where the validation needs it. A pull request that changes no platform input
-              builds and accepts the release on linux-x86_64 only; main, publication and a pull
-              request that changes a platform input keep all five targets."
-    because: "The release waited behind the slowest test run of its own job, 8 to 19 minutes per
-              target at the median. In 94 pull request runs from 2026-09-22 to 2026-09-23, no release
-              or acceptance step failed on another platform for a change that touched no platform
-              input. Once split, the release job is shorter than the tests on every target, so
-              checking it on the other platforms in a pull request costs machines rather than
-              minutes."
-    rests_on: [s.2026_09_23_native_ci_speed]
-    reopened_by: "A native job fails or is skipped while ci-required passes; publication uploads
-                  bytes that were not built and accepted in the same job; or on main a release or
-                  acceptance step fails on a platform other than Linux after a change that touched no
-                  platform input."
+    verdict: "Build and accept each selected native release beside its tests. Ordinary and
+              version-only pull requests default to linux-x86_64; platform-sensitive changes add
+              affected targets. The release commit on main runs all five targets once; publication
+              waits for that successful run and downloads its verified packages and crate without
+              rebuilding."
+    because: "Parallel tests and release acceptance shorten the critical path. Reusing the complete
+              release commit run removes duplicate builds while keeping publication bound to
+              successful tests and installation of the exact files distributed."
+    rests_on: [s.2026_09_23_native_ci_speed, s.2026_09_24_ci_release_once]
+    reopened_by: "A native or record check fails while publication proceeds; published packages
+                  belong to another commit or run; a later main push cancels a release check; or
+                  platform-specific regressions are discovered too late for the agreed release
+                  workflow."
     from: s.2026_09_23_native_ci_speed
-    seen: {s.2026_09_23_native_ci_speed: "read 2026-09-23"}
+    request: s.2026_09_24_ci_release_once
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
+    seen:
+      s.2026_09_23_native_ci_speed: "read 2026-09-23"
+      s.2026_09_24_ci_release_once: "read 2026-09-24"
   d.native_tests_one_pool:
     name: "The native tests run in one pool"
     verdict: "CI runs the native suite with cargo-nextest at a pinned, checksum-verified version:
@@ -6012,6 +6186,36 @@ judgments:
       s.2026_09_23_pending_dry_run: "read 2026-09-23"
       doc.pending_dry_run: "read 2026-09-23"
       p.live_dry_run_gates: 0
+  d.plugin_commands_live_in_scripts_bin:
+    name: "Where the plugin's kpop and kpopper live, and how they reach PATH"
+    verdict: "The package's kpop and kpopper live in scripts/bin/ and its root holds no bin/. In
+              Claude Code the session opener appends scripts/bin to PATH through CLAUDE_ENV_FILE;
+              every other host and adapter runs <package>/scripts/bin/kpop by its path."
+    because: "claude.ai refuses to sync a plugin whose root holds bin/, so Cowork could not add the
+              marketplace at all while the commands lived there. Claude Code put a plugin's bin/ last
+              on PATH, and the opener putting scripts/bin in the same place keeps a kpop already on
+              PATH in front, as before. The move changes the path the checkout adapters document, so
+              a hook or workflow that copied the old path needs it updated once."
+    rests_on: [lit.claude_hosted_plugin_bin, lit.claude_env_file]
+    reopened_by: "Cowork's marketplace sync still refuses the package once main holds no bin/,
+                  claude.ai accepts a plugin whose root holds bin/ again, or Claude Code stops
+                  running the CLAUDE_ENV_FILE lines of a plugin's SessionStart hook before shell
+                  commands."
+    from: s.2026_09_24_plugin_commands_out_of_bin
+    seen:
+      lit.claude_hosted_plugin_bin: "claude.ai refuses to sync a plugin with a top-level bin/
+                                     directory (error_code
+                                     marketplace_sync_bin_directory_not_allowed): claude.ai-hosted
+                                     plugins may not ship bin/ executables, because Claude Code adds
+                                     them to PATH while the admin approval surface does not show
+                                     them, and executable entry points belong in hooks, commands or
+                                     mcpServers. Claude Desktop's Add marketplace dialog says only:
+                                     Marketplace sync failed. Check the repository URL and try
+                                     again."
+      lit.claude_env_file: "Claude Code gives a plugin's SessionStart command hook CLAUDE_ENV_FILE
+                            and runs the lines written there before each later Bash tool command of
+                            the session: a line appending a directory to PATH put that directory last
+                            on the session's PATH."
   d.plugin_descriptions_lead_with_reasoning:
     from: s.2026_09_19_pr_and_plugin_descriptions
     rests_on: [s.2026_09_19_pr_and_plugin_descriptions, d.readme_opens_with_what_it_does, d.html_applications_are_optional]

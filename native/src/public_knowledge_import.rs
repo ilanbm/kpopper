@@ -377,26 +377,7 @@ fn update_ref(root: &Path, old: Option<&str>, new: &str) -> Result<bool> {
     Ok(status.success())
 }
 
-fn publication_attempt(config: &V) -> Result<V> {
-    let permission = map(config)?
-        .get("publication")
-        .and_then(|value| map(value).ok())
-        .and_then(|value| value.get("standing_permission"))
-        == Some(&V::Bool(true));
-    Ok(object([
-        ("started", V::Bool(false)),
-        (
-            "reason",
-            s(if permission {
-                "native capture does not start publication"
-            } else {
-                "no standing publication permission"
-            }),
-        ),
-    ]))
-}
-
-fn receipt(project: &Project, event: &V, head: &str, replay: bool, config: &V) -> Result<V> {
+fn receipt(project: &Project, event: &V, head: &str, replay: bool) -> Result<V> {
     let event_id = text(field(map(event)?, "event_id")?)?;
     let path = format!("events/{event_id}.json");
     let first = git_text(
@@ -416,7 +397,6 @@ fn receipt(project: &Project, event: &V, head: &str, replay: bool, config: &V) -
         ("ledger_commit".into(), s(head)),
         ("ref".into(), s(pending_state::REF)),
         ("replay".into(), V::Bool(replay)),
-        ("publication_attempt".into(), publication_attempt(config)?),
     ]));
     Ok(out)
 }
@@ -432,7 +412,7 @@ pub(crate) fn capture_pending(
     contribution_id: &str,
     verify_source: &mut dyn FnMut() -> Result<()>,
 ) -> Result<V> {
-    capture_pending_with_hooks(
+    let mut receipt = capture_pending_with_hooks(
         project,
         bundle,
         files,
@@ -441,7 +421,14 @@ pub(crate) fn capture_pending(
         verify_source,
         &mut |_, _, _| Ok(()),
         &mut || Ok(()),
-    )
+    )?;
+    // The capture and its policy lock have completed. A failed or deferred
+    // publication attempt cannot turn this durable receipt into a failed write.
+    map_mut(&mut receipt)?.insert(
+        "publication_attempt".into(),
+        crate::pending_publication::trigger_after_capture(project),
+    );
+    Ok(receipt)
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -490,7 +477,6 @@ fn capture_pending_with_hooks(
                 event,
                 old.as_deref().unwrap(),
                 true,
-                &expected_config,
             );
         }
         let existing = tree(&project.root, old.as_deref())?;
@@ -534,7 +520,7 @@ fn capture_pending_with_hooks(
         )?;
         if update_ref(&project.root, old.as_deref(), &commit)? {
             after_cas()?;
-            return receipt(project, &event, &commit, false, &expected_config);
+            return receipt(project, &event, &commit, false);
         }
     }
     Err(Error(

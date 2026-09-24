@@ -1,3 +1,3 @@
 #!/bin/sh
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
-exec sh "$HERE/../scripts/native_runtime.sh" --exec "$@"
+exec sh "$HERE/../native_runtime.sh" --exec "$@"

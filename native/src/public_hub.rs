@@ -457,6 +457,13 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     )?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
     temporary.write_all(html.as_bytes())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        temporary
+            .as_file()
+            .set_permissions(fs::Permissions::from_mode(0o644))?;
+    }
     temporary.as_file().sync_all()?;
     captured.verify()?;
     inventory.verify()?;

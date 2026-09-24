@@ -20,14 +20,14 @@ Keep a full kpopper checkout at a stable absolute path. The skills link to sibli
 skills, references, and `../../docs/`; copying just their `SKILL.md` files loses those
 resources. A temporary worktree or an expiring plugin cache is not a stable install.
 
-Install that checkout's native runtime and put its `bin/` on `PATH`. The installer
+Install that checkout's native runtime and put its `scripts/bin/` on `PATH`. The installer
 downloads the release matching the checkout's `VERSION` and checks its SHA-256; see
 [Install the native runtime](../../docs/plugin-runtime.md#install-the-native-runtime).
 
 ```sh
 KPOPPER_CHECKOUT=/absolute/path/to/kpopper
 sh "$KPOPPER_CHECKOUT/scripts/install_native.sh"
-export PATH="$KPOPPER_CHECKOUT/bin:$PATH"
+export PATH="$KPOPPER_CHECKOUT/scripts/bin:$PATH"
 ```
 
 In the project where you want to use kpopper, merge these fields into `opencode.json`

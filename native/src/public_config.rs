@@ -320,6 +320,10 @@ fn transition_report(
         } else {
             digest(&path)?
         };
+        if hash.is_none() && path.parent().is_some_and(|parent|
+            parent.join(".kpopper").exists() || parent.join("PROVENANCE.d").exists()) {
+            blockers.push(format!("record is missing but its sidecars remain; reconcile before changing mode: {}", path.display()));
+        }
         snapshots.insert(path_string(&path)?, hash);
         if has_hypotheses(&path)? {
             blockers.push(format!(
@@ -356,6 +360,18 @@ fn transition_report(
             .values()
             .filter_map(Clone::clone)
             .collect::<BTreeSet<_>>();
+        if old_hashes.is_empty() && project.is_git() && targets.iter().any(|target| !target.exists()) {
+            // An unopened branch (or prior recorded history) is not an empty
+            // project. Include custom configured paths and both legacy names.
+            let (available, history) = crate::pending_control::git(&project.root, &[
+                "log", "--all", "--format=%H", "-1", "--",
+                current["record"].as_str().unwrap(), "GROUNDING.yaml", "PROVENANCE.yaml",
+            ])?;
+            require(available, "record history could not be inspected before changing mode")?;
+            if !history.is_empty() {
+                blockers.push("record history exists outside the current worktrees; reconcile it before selecting an empty destination".into());
+            }
+        }
         for target in &targets {
             let hash = digest(target)?;
             if let Some(hash) = &hash {
@@ -365,11 +381,16 @@ fn transition_report(
                         target.display()
                     ));
                 }
-            } else {
+            } else if !old_hashes.is_empty() {
                 blockers.push(format!(
                     "destination record is unavailable; prepare it before changing mode: {}",
                     target.display()
                 ));
+            } else if !target.parent().is_some_and(Path::is_dir) {
+                blockers.push(format!("prepare the selected record directory before configuring its first write: {}", target.display()));
+            } else if target.parent().is_some_and(|parent| parent.join(".kpopper").exists()
+                || parent.join("PROVENANCE.d").exists()) {
+                blockers.push(format!("destination has existing record sidecars; reconcile before changing mode: {}", target.display()));
             }
             snapshots.entry(path_string(target)?).or_insert(hash);
             if has_hypotheses(target)? {

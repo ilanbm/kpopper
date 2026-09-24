@@ -460,11 +460,10 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         "{started}"
     );
     let refused = f.run(&["open", "--host", "claude"]);
-    assert_eq!(refused.status.code(), Some(2));
-    assert!(
-        String::from_utf8_lossy(&refused.stderr)
-            .contains("core_profile_option_unsupported: --host"),
-        "{}",
-        String::from_utf8_lossy(&refused.stderr)
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(refused.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&refused.stderr),
+        "core_profile_option_unsupported: --host\n"
     );
 }

@@ -62,9 +62,13 @@ fn without_adapter(mut value: J) -> J {
 }
 #[test]
 fn actual_lean_evaluator_preserves_complete_envelopes_across_all_protocols() {
-    let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../scripts/reasoning/native")
-        .join(format!("{}.kpopper-runtime", target_name().unwrap()));
+    let archive = std::env::var_os("KPOP_REASONING_ARCHIVE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../scripts/reasoning/native")
+                .join(format!("{}.kpopper-runtime", target_name().unwrap()))
+        });
     let cache = tempfile::tempdir().unwrap();
     let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
     let empty = Snapshot::from_data(

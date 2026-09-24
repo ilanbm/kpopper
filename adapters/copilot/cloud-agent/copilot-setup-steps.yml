@@ -25,7 +25,8 @@ jobs:
         # variable (Settings > Secrets and variables > Actions > Variables) or hardcode
         # the path below. the installer downloads the runtime for that checkout's VERSION
         # from the kpopper GitHub release and checks its SHA-256, so the agent can run
-        # "$KPOPPER_ROOT/bin/kpop". silent no-op without it, same as the local session opener.
+        # "$KPOPPER_ROOT/scripts/bin/kpop". silent no-op without it, same as the local
+        # session opener.
         env:
           KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
         run: |
@@ -40,7 +41,7 @@ jobs:
           KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
         run: |
           if { [ -f GROUNDING.yaml ] || [ -f PROVENANCE.yaml ]; } && [ -n "$KPOPPER_ROOT" ]; then
-            "$KPOPPER_ROOT/bin/kpop" open --chars 2000
+            "$KPOPPER_ROOT/scripts/bin/kpop" open --chars 2000
           else
             echo "no record, or KPOPPER_ROOT unset - nothing to open"
           fi
