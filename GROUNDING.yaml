@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-24
+  updated: 2026-09-25
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -1264,6 +1264,19 @@ sources:
             python-final, re-read surviving subjects in native sources, and close readings whose
             subject was the removed implementation."
     read: "2026-09-24"
+  s.2026_09_25_windows_proposal_publication:
+    name: "Repair concurrent Windows proposal publication after release CI exposed sharing failures"
+    read: "2026-09-25"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/36057726444/job/107828911560"
+    asked: "Repair PR 252 after its conflicts with merged release fixes and Windows test failure
+            were reported."
+    of: "The Windows checked_session_store concurrent_proposal_creation_has_one_complete_value test
+         failed with retained-context sharing violation (OS error 32) and publish-state access denied
+         (OS error 5); 948 other tests passed. The repair closes the temporary writer before
+         no-clobber publication, reads and validates an existing winner on occupied-destination
+         errors, and bounds retries for transient Windows sharing violations without allowing delete
+         sharing or replacing identity checks. Windows regression tests cover transient and
+         persistent DELETE handles; actual Windows CI remains the platform acceptance gate."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"

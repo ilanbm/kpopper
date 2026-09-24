@@ -450,10 +450,23 @@ impl CheckedSessionStore {
             file.write_all(&bytes)
                 .and_then(|_| file.as_file().sync_all())
                 .map_err(|e| Error(format!("temporary state: {e}")))?;
-            match file.persist_noclobber(&path) {
+            // Close the writer before publishing the name. Readers deliberately
+            // deny delete sharing so a retained context cannot be replaced.
+            match file.into_temp_path().persist_noclobber(&path) {
                 Ok(_) => {}
-                Err(e) if e.error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(Error(format!("publish state: {}", e.error))),
+                Err(e) => {
+                    let occupied = e.error.kind() == std::io::ErrorKind::AlreadyExists;
+                    // MoveFileEx can report access/sharing denied, rather than
+                    // AlreadyExists, when a competing creator's destination is
+                    // open. Accept only a safely read complete winner; callers
+                    // still compare its identity and payload with their own.
+                    #[cfg(windows)]
+                    let occupied = occupied || matches!(e.error.raw_os_error(), Some(5 | 32));
+                    if occupied && let Some(held) = self.read_json_optional(name)? {
+                        return Ok(held);
+                    }
+                    return Err(Error(format!("publish state: {}", e.error)));
+                }
             }
             self.read_json(name)
         }
@@ -849,7 +862,7 @@ fn open_bounded_at(root: &File, _root_path: &Path, name: &str) -> Result<File> {
             "invalid retained context name",
         )?;
         let path = root_path.join(name);
-        let metadata = fs::symlink_metadata(&path).map_err(|e| {
+        let metadata = retry_windows_sharing(|| fs::symlink_metadata(&path)).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Error("state file missing".into())
             } else {
@@ -860,18 +873,20 @@ fn open_bounded_at(root: &File, _root_path: &Path, name: &str) -> Result<File> {
             metadata.is_file() && !metadata.file_type().is_symlink(),
             "retained context is not a regular file",
         )?;
-        let file = fs::OpenOptions::new()
-            .read(true)
-            .share_mode(0x0000_0001 | 0x0000_0002) // deny FILE_SHARE_DELETE
-            .custom_flags(0x0020_0000) // FILE_FLAG_OPEN_REPARSE_POINT
-            .open(&path)
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    Error("state file missing".into())
-                } else {
-                    Error(format!("retained context: {e}"))
-                }
-            })?;
+        let file = retry_windows_sharing(|| {
+            fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0x0000_0001 | 0x0000_0002) // deny FILE_SHARE_DELETE
+                .custom_flags(0x0020_0000) // FILE_FLAG_OPEN_REPARSE_POINT
+                .open(&path)
+        })
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Error("state file missing".into())
+            } else {
+                Error(format!("retained context: {e}"))
+            }
+        })?;
         require(
             file.metadata()
                 .map_err(|e| Error(format!("retained context: {e}")))?
@@ -880,7 +895,7 @@ fn open_bounded_at(root: &File, _root_path: &Path, name: &str) -> Result<File> {
         )?;
         let opened = same_file::Handle::from_file(file.try_clone()?)
             .map_err(|e| Error(format!("retained context: {e}")))?;
-        let named = same_file::Handle::from_path(&path)
+        let named = retry_windows_sharing(|| same_file::Handle::from_path(&path))
             .map_err(|e| Error(format!("retained context: {e}")))?;
         require(opened == named, "retained context path changed")?;
         Ok(file)
@@ -896,6 +911,24 @@ fn open_bounded_at(root: &File, _root_path: &Path, name: &str) -> Result<File> {
             }
         })
     }
+}
+
+#[cfg(windows)]
+fn retry_windows_sharing<T>(
+    mut operation: impl FnMut() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    // A just-published name can be visible before MoveFileEx releases its
+    // transient DELETE handle. Keep denying FILE_SHARE_DELETE, but allow that
+    // handle to close. Permanent denial and every other error still fail.
+    for attempt in 0..32 {
+        match operation() {
+            Err(error) if error.raw_os_error() == Some(32) && attempt < 31 => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => return result,
+        }
+    }
+    unreachable!()
 }
 
 #[cfg(windows)]
