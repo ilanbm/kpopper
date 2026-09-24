@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-24
+  updated: 2026-09-25
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -1238,6 +1238,16 @@ sources:
          navigation and file replacement permissions. This is scoped to these surfaces and fixtures,
          not whole-page HTML equality."
     at: "native/tests/public_hub.rs; python-final:scripts/render_page.py and scripts/page_lint.py"
+  s.2026_09_24_native_before_plugin:
+    name: "Publish the native candidate before exposing its matching plugin"
+    read: "2026-09-24"
+    asked: "The maintainer reported a Cowork installation of plugin 0.12.0 while its native release
+            still returned 404, approved moving checks and native publication before the version PR
+            merge, and then requested applying conditional test selection to release PRs too."
+    of: "The approved ordering is candidate checks, public native downloads, then plugin exposure by
+         merge. Select release tests from all changes since the preceding published release; still
+         build and exercise every distribution. Do not repeat candidate builds and tests on main when
+         the merged tree is identical."
   s.2026_09_24_plugin_commands_out_of_bin:
     name: "The session that found why Cowork and Claude Code would not add the kpopper marketplace,
            and moved the plugin's commands out of bin/ so Cowork's sync accepts the package"
@@ -1254,6 +1264,19 @@ sources:
             python-final, re-read surviving subjects in native sources, and close readings whose
             subject was the removed implementation."
     read: "2026-09-24"
+  s.2026_09_25_windows_proposal_publication:
+    name: "Repair concurrent Windows proposal publication after release CI exposed sharing failures"
+    read: "2026-09-25"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/36057726444/job/107828911560"
+    asked: "Repair PR 252 after its conflicts with merged release fixes and Windows test failure
+            were reported."
+    of: "The Windows checked_session_store concurrent_proposal_creation_has_one_complete_value test
+         failed with retained-context sharing violation (OS error 32) and publish-state access denied
+         (OS error 5); 948 other tests passed. The repair closes the temporary writer before
+         no-clobber publication, reads and validates an existing winner on occupied-destination
+         errors, and bounds retries for transient Windows sharing violations without allowing delete
+         sharing or replacing identity checks. Windows regression tests cover transient and
+         persistent DELETE handles; actual Windows CI remains the platform acceptance gate."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -4759,20 +4782,21 @@ judgments:
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
     from: s.2026_09_17_selective_ci
-    rests_on: [p.ci_native_build_inputs, s.2026_09_24_ci_release_once]
-    verdict: "Keep record and cheap contracts unconditional. Pull requests select expensive families
-              from their full diff and default to Linux, with conservative extra platform coverage.
-              Ordinary main pushes keep record and contracts; a version-changing main commit runs all
-              native tests and distribution acceptance once before publishing those artifacts."
-    because: "The maintainer accepts later discovery of platform-specific failures in exchange for
-              responsive ordinary pull requests. Shared platform inputs and unknown changes retain
-              full coverage, and publication must wait for the exact release commit to pass the
-              entire matrix."
-    reopened_by: "A changed platform input affects an omitted target; a selected job fails or skips
-                  while ci-required passes; a version-only edit hides a dependency change; or a
-                  release is published without successful complete coverage of its own commit."
-    request: s.2026_09_24_ci_release_once
-    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
+    rests_on: [p.ci_native_build_inputs, s.2026_09_24_ci_release_once, s.2026_09_24_native_before_plugin]
+    verdict: "Ordinary PRs select checks from their complete diff. Release PRs select test platforms
+              from the entire diff since the last published native release, while building and
+              installing all five distributions. Missing history or unknown inputs selects full
+              coverage. Ordinary main pushes retain record and contract checks; version merges only
+              verify the published candidate tree and downloads."
+    because: "The maintainer requested conditional tests for release PRs as well as ordinary PRs. A
+              version PR alone hides the accumulated product changes, so the last public release is
+              the comparison baseline. Complete distribution acceptance remains necessary for
+              installation on every supported platform."
+    reopened_by: "A release test selection omits an affected platform, uses only the version bump
+                  instead of the accumulated changes, accepts missing history as no change, omits a
+                  distribution, or main reuses checks for a different tree."
+    request: s.2026_09_24_native_before_plugin
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24", "the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
                                  replacement probes, notices, and native-workflow changes select
@@ -4780,6 +4804,7 @@ judgments:
                                  changes use mandatory contracts. Packaging metadata alone tests
                                  consumers and installation without recompiling native source."
       s.2026_09_24_ci_release_once: "read 2026-09-24"
+      s.2026_09_24_native_before_plugin: "read 2026-09-24"
   d.claude_plugin_has_no_nested_zip:
     name: "Claude plugin package avoids nested ZIP entries"
     request: s.2026_09_19_claude_install_request
@@ -5833,24 +5858,26 @@ judgments:
     distinct_from: d.minimal_repair
     # distinct 2026-09-04: minimal repair is how much structural change a fired trigger buys; this is what may fire one at all
   d.merge_publishes_the_release:
-    rests_on: [d.release_is_its_own_pull_request, s.2026_09_13_github_releases]
-    verdict: "the push that lands a version publishes it - tagged at the commit that moved the
-              version, carrying that version's changelog entry and the files built from that commit"
-    because: "Three versions were released in one day and left nothing to point at: no tag, no
-              release, only a changelog section. And the files that reach a registry were built by
-              hand from a directory nobody clears, so what a person installs was never what any check
-              ran against. The commit that moved the version is the one place those two can be tied
-              together, and the merge is the moment it exists - a release built anywhere else is a
-              claim about a tree rather than that tree. The pull request cannot do it, because until
-              it merges its commit is not on the branch anyone installs from."
-    blocked_on: "observational: falsified if uploads to the registries keep using locally built
-                 files instead of these, or if a version lands with the publish step red and nobody
-                 notices until the next one"
+    rests_on: [d.release_is_its_own_pull_request, s.2026_09_13_github_releases, s.2026_09_24_native_before_plugin]
+    verdict: "An explicit release action publishes the tested native candidate and verifies public
+              downloads before the version PR can merge. The merge then exposes the matching plugin.
+              Publication freezes the candidate; main requires an up-to-date ci-required check and
+              nothing merges automatically."
+    because: "A plugin fetched from main immediately sees version changes, whereas post-merge
+              publication left the installer pointing to unavailable native downloads. Publishing the
+              selected candidate first removes that window. Requiring an up-to-date branch prevents
+              later main changes from silently entering the already published candidate."
+    blocked_on: "observational: a version PR merges before matching native downloads work,
+                 publication accepts a stale candidate, or the release refresher rewrites a draft or
+                 published version."
+    request: s.2026_09_24_native_before_plugin
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       d.release_is_its_own_pull_request: "the version moves in a release pull request of its own,
                                           computed from what merged since the last release; a feature
                                           pull request never touches it"
       s.2026_09_13_github_releases: "read 2026-09-13"
+      s.2026_09_24_native_before_plugin: "read 2026-09-24"
   d.named_until_read:
     rests_on: [s.2026_09_10_skills_split, d.hooks_carry_pointers]
     verdict: "an entry is named until it is read: a read leg marks the ids that passed through a
@@ -7079,25 +7106,28 @@ judgments:
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
   d.release_is_one_tree:
-    rests_on: [d.merge_publishes_the_release, s.2026_09_14_publish_review]
-    verdict: "a release is made from a single commit - the tag, the text and the attached files all
-              come from it, and only the commit that moves the version publishes"
-    because: "The first shape of this tagged the commit that moved the version while building the
-              files from whatever was checked out, which on any later push is a different tree: the
-              tag would have said one thing and the wheel beside it another, and nobody downloading
-              it could tell. Publishing only from the commit that moved the version makes the three
-              agree by construction rather than by care, and costs the ability to tag an old version
-              after the fact - which was never worth having, because the files for it would have come
-              from the wrong tree anyway. What it also costs is retrying on the next push, and that
-              is what rerunning a run is for: it replays the same commit."
-    blocked_on: "observational: falsified if a release is ever wanted for a version already behind
-                 main, or if a failed publish is left unmade because rerunning its own run is not
-                 reachable by whoever notices"
+    rests_on: [d.merge_publishes_the_release, s.2026_09_14_publish_review, s.2026_09_24_native_before_plugin]
+    verdict: "The release tag, changelog and verified artifacts name one tested candidate commit.
+              Publication reuses those artifacts without rebuilding. A subsequent squash merge may
+              have a different commit ID but must preserve the complete candidate tree; otherwise
+              main refuses to reuse its checks."
+    because: "Publishing before plugin exposure moves the source commit from main to the version PR.
+              Binding artifacts to that immutable commit preserves provenance, and complete tree
+              comparison permits squash merges without pretending their commit IDs are equal. A
+              changed or abandoned published candidate requires a new version."
+    blocked_on: "observational: a release tag names a different source than its files, candidate
+                 artifacts are rebuilt for publication, or an altered merged tree passes the
+                 promotion check."
+    request: s.2026_09_24_native_before_plugin
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
-      d.merge_publishes_the_release: "the push that lands a version publishes it - tagged at the
-                                      commit that moved the version, carrying that version's
-                                      changelog entry and the files built from that commit"
+      d.merge_publishes_the_release: "An explicit release action publishes the tested native
+                                      candidate and verifies public downloads before the version PR
+                                      can merge. The merge then exposes the matching plugin.
+                                      Publication freezes the candidate; main requires an up-to-date
+                                      ci-required check and nothing merges automatically."
       s.2026_09_14_publish_review: "read 2026-09-14"
+      s.2026_09_24_native_before_plugin: "read 2026-09-24"
   d.relevance_stays_declared:
     rests_on: [doc.fact_moves, m.record_scale]
     verdict: "retrieval follows declared edges and names; no learned relevance at record scale"

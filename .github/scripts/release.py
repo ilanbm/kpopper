@@ -115,11 +115,12 @@ def pr_body(version, previous, bump, merged, decisions):
     if decisions:
         lines += ["", "## Decisions the record gained", ""] + [f"- `{d}`" for d in decisions]
     lines += ["", "---", "",
-              "Merging this builds and publishes the native GitHub release, then publishes the "
-              "same commit's crate to crates.io; crates.io never takes a version back. Install "
-              "the matching archive with the release installer; after updating plugin files, "
-              "install the same runtime into the active plugin copy. This pull request is "
-              "refreshed on every push to main until it merges; it never merges by itself.", "",
+              "This candidate builds every native distribution and selects tests from all changes "
+              "since the last published release. When candidate-checked passes, run the publish "
+              "workflow on main with this PR number and check run ID. The ci-required gate stays "
+              "red until the matching native downloads are public, then only that gate is rerun. "
+              "Publication freezes this candidate; merge it to expose the matching plugin. "
+              "It never merges by itself. Published version numbers cannot be reused.", "",
               "Bump: none — this is the release"]
     return "\n".join(lines) + "\n"
 
@@ -172,6 +173,19 @@ def decisions_added(rev):
     return out
 
 
+def frozen_releases(current):
+    """A draft or public newer version locks the candidate until main carries it."""
+    pages = json.loads(sh("gh", "api", "--paginate", "--slurp", "repos/{owner}/{repo}/releases?per_page=100"))
+    frozen = []
+    for page in pages:
+        for item in page:
+            version = item["tag_name"].removeprefix("v")
+            if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+                if tuple(map(int, version.split("."))) > tuple(map(int, current.split("."))):
+                    frozen.append(item["tag_name"])
+    return frozen
+
+
 def main(argv):
     dry = "--dry-run" in argv
     texts = read_texts()
@@ -179,6 +193,11 @@ def main(argv):
     if len(set(found.values())) != 1:
         raise SystemExit("the version files disagree: " + json.dumps(found))
     current = found["VERSION"]
+    frozen = frozen_releases(current)
+    if frozen:
+        print("Release candidate is frozen: " + ", ".join(sorted(frozen)) +
+              ". Merge its unchanged PR, or supersede it with a new version; no branches changed.")
+        return 0
     rel = release_commit(current)
     if not rel:
         raise SystemExit(f"no commit carries version {current} in VERSION")
@@ -208,8 +227,7 @@ def main(argv):
     log = ROOT / "CHANGELOG.md"
     log.write_text(prepend(log.read_text(encoding="utf-8") if log.exists() else "", entry),
                    encoding="utf-8")
-    # the release pull request is opened by a token whose pull requests run no checks,
-    # so the record's own checks run here, on the tree the release would ship
+    # The bot's PR event does not trigger checks. Dispatch the candidate workflow below.
     sh("kpop", "--frozen", "check")
     sh("kpop", "--frozen", "experimental", "hub", "--verify")
     sh("git", "add", "CHANGELOG.md", *VERSION_FILES)
@@ -241,6 +259,11 @@ def main(argv):
             return 1
         print(p.stdout.strip())
     body_file.unlink(missing_ok=True)
+    number = sh("gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number",
+                "--jq", ".[0].number").strip()
+    if not number.isdigit():
+        raise SystemExit("release PR was not found; candidate checks were not dispatched")
+    sh("gh", "workflow", "run", "check.yml", "--ref", branch, "-f", f"release_pr={number}")
     return 0
 
 

@@ -131,9 +131,9 @@ class Selection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(CI.platforms([path]), "linux-x86_64")
 
-    def test_release_main_runs_every_lane_on_every_platform(self):
-        self.assertEqual(lanes(["README.md"], push=True, release=True), ALL)
-        self.assertEqual(CI.platforms(["README.md"], push=True, release=True), "all")
+    def test_release_builds_every_distribution_but_selects_test_platforms(self):
+        self.assertEqual(lanes(["README.md"], release=True), ALL)
+        self.assertEqual(CI.platforms(["README.md"], release=True), "linux-x86_64")
 
     def test_empty_diff_manual_run_and_missing_history_run_everything(self):
         self.assertEqual(lanes([]), ALL)
@@ -221,11 +221,18 @@ class RequiredResults(unittest.TestCase):
                 del needs["changes"]["outputs"][output]
                 self.assertTrue(CI.required_failures(needs))
 
-    def test_release_cannot_run_the_pull_request_platform_subset(self):
+    def test_release_can_filter_tests_but_cannot_skip_native_builds(self):
         needs = self.results(["native/src/main.rs"])
         needs["changes"]["outputs"]["release"] = "true"
-        self.assertTrue(CI.required_failures(needs, pull_request=False))
-        needs["changes"]["outputs"]["platforms"] = "all"
+        self.assertEqual(CI.required_failures(needs), [])
+        needs["changes"]["outputs"]["rust"] = "false"
+        needs["native-cli"]["result"] = "skipped"
+        self.assertTrue(CI.required_failures(needs))
+
+    def test_main_promotion_checks_identity_without_repeating_candidate_checks(self):
+        needs = self.results(["README.md"])
+        needs["changes"]["outputs"]["promotion"] = "true"
+        needs["record"]["result"] = "skipped"
         self.assertEqual(CI.required_failures(needs, pull_request=False), [])
         self.assertTrue(CI.required_failures(needs, pull_request=True))
 
@@ -257,9 +264,10 @@ class WorkflowCoverage(unittest.TestCase):
 
     def test_summary_covers_every_job_and_every_lane(self):
         jobs = self.jobs()
-        self.assertEqual(set(jobs["ci-required"]["needs"]), set(jobs) - {"ci-required"})
-        self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms", "release"})
+        self.assertEqual(set(jobs["candidate-checked"]["needs"]), set(jobs) - {"candidate-checked", "ci-required"})
+        self.assertEqual(set(jobs["ci-required"]["needs"]), {"candidate-checked", "changes"})
+        self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"candidate-checked", "ci-required", "changes", "record"})
+        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms", "release", "promotion", "source"})
         self.assertEqual({lane for lanes in CI.JOB_LANES.values() for lane in lanes}, ALL)
 
     def test_native_targets_follow_the_selector_and_start_without_waiting_for_record(self):

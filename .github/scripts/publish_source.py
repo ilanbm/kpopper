@@ -15,13 +15,11 @@ import subprocess
 CHECK_WORKFLOW = ".github/workflows/check.yml"
 
 
-def validate(run, workflow, repository, run_id, commit):
+def validate_run(run, workflow, repository, run_id, commit):
+    """Common provenance boundary; callers additionally enforce their release policy."""
     expected = {
         "id": int(run_id),
-        "event": "push",
         "status": "completed",
-        "conclusion": "success",
-        "head_branch": "main",
         "head_sha": commit,
     }
     for key, value in expected.items():
@@ -37,6 +35,14 @@ def validate(run, workflow, repository, run_id, commit):
         if (run.get(key) or {}).get("full_name") != repository:
             raise SystemExit(f"publication source {key} is not {repository}")
     return {"commit": commit, "run_id": str(run["id"])}
+
+
+def validate(run, workflow, repository, run_id, commit):
+    values = validate_run(run, workflow, repository, run_id, commit)
+    for key, value in {"event": "push", "conclusion": "success", "head_branch": "main"}.items():
+        if run.get(key) != value:
+            raise SystemExit(f"publication source {key} must be {value!r}, got {run.get(key)!r}")
+    return values
 
 
 def api(path):

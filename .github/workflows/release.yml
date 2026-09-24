@@ -3,7 +3,7 @@ name: release
 # Every push to main refreshes one pull request, "Release x.y.z", holding the version files
 # and the changelog entry for everything merged since the last release. The bump is
 # the largest one the merged pull requests declared. A person merges it; nothing else does.
-# Merging it is also what publishes the release - see publish.yml.
+# Publish its tested native candidate before merging it - see publish.yml.
 
 on:
   push:
@@ -12,10 +12,11 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 concurrency:
-  group: release
-  cancel-in-progress: true
+  group: release-candidate
+  cancel-in-progress: false
 
 jobs:
   release:

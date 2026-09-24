@@ -358,12 +358,15 @@ fn concurrent_proposal_creation_has_one_complete_value() {
     let revision = store.save(&c, &fresh).unwrap();
     let input = request("question", "What next?", &[], "");
     let mut workers = Vec::new();
+    let barrier = Arc::new(std::sync::Barrier::new(8));
     for _ in 0..8 {
         let store = store.clone();
         let revision = revision.clone();
         let fresh = fresh.clone();
         let input = input.clone();
+        let barrier = barrier.clone();
         workers.push(std::thread::spawn(move || {
+            barrier.wait();
             store.propose(&revision, &fresh, &input).unwrap()
         }));
     }
@@ -373,6 +376,75 @@ fn concurrent_proposal_creation_has_one_complete_value() {
         .collect::<Vec<_>>();
     assert!(results.iter().all(|result| result == &results[0]));
     assert_eq!(store.proposals().unwrap().len(), 1);
+}
+
+#[cfg(windows)]
+#[test]
+fn proposal_reader_waits_for_transient_publisher_delete_handle() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let c = context();
+    let fresh = snapshot(&c);
+    let store = CheckedSessionStore::open(
+        dir.path().join("state"),
+        "fixture",
+        &source,
+        None,
+        Encoding::O200kBase,
+    )
+    .unwrap();
+    let revision = store.save(&c, &fresh).unwrap();
+    let input = request("question", "What next?", &[], "");
+    let expected = store.propose(&revision, &fresh, &input).unwrap();
+    let path = dir.path().join("state").join(format!(
+        "proposal-{}.json",
+        expected["id"].as_str().unwrap()
+    ));
+    // Model the DELETE handle held while MoveFileEx publishes a name. It
+    // permits readers, but a reader denying delete sharing must wait for it.
+    let publisher = fs::OpenOptions::new()
+        .access_mode(0x0001_0000) // DELETE
+        .share_mode(0x0000_0001 | 0x0000_0002 | 0x0000_0004)
+        .open(&path)
+        .unwrap();
+    let closer = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        drop(publisher);
+    });
+    let result = store.propose(&revision, &fresh, &input);
+    closer.join().unwrap();
+    assert_eq!(result.unwrap(), expected);
+    assert_eq!(store.proposals().unwrap().len(), 1);
+}
+
+#[cfg(windows)]
+#[test]
+fn proposal_reader_still_refuses_a_persistent_delete_handle() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let store = CheckedSessionStore::open(
+        dir.path().join("state"),
+        "fixture",
+        &source,
+        None,
+        Encoding::O200kBase,
+    )
+    .unwrap();
+    let publisher = fs::OpenOptions::new()
+        .access_mode(0x0001_0000)
+        .share_mode(0x0000_0001 | 0x0000_0002 | 0x0000_0004)
+        .open(dir.path().join("state/project.json"))
+        .unwrap();
+    let started = std::time::Instant::now();
+    let error = store.proposals().unwrap_err();
+    assert!(error.0.contains("retained context"), "{}", error.0);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    drop(publisher);
+    assert!(store.proposals().unwrap().is_empty());
 }
 
 #[test]

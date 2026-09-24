@@ -33,8 +33,13 @@ and unavailable history select all five targets. Changed Rust files are read at 
 of the diff: existing platform-conditional code keeps its platform coverage even if the
 conditional itself was not edited. Unix or architecture-specific code takes every target.
 A manifest whose only change is the package version keeps the Linux default; a simultaneous
-dependency or configuration change still selects all platforms. The release PR needs no
-special title or label to qualify for this rule.
+dependency or configuration change still selects all platforms.
+
+Release candidates apply the same test selection to the complete diff from the last public
+native release to the candidate. They never select tests from just their version bump.
+The comparison uses the two exact trees, even when an earlier release was squash-merged.
+With no prior release or missing Git history, tests run on all platforms. Regardless of the
+test selection, a release candidate builds and installs all five distribution packages.
 
 Changes to CI selection, auditing and the Linux control workflow exercise the selected lanes
 on Linux. A native workflow change also stays on Linux when only routing, scheduling or
@@ -45,9 +50,11 @@ unrecognized native workflow also keeps the full matrix. Workflow syntax and rou
 contracts are tested separately from executing the product on every platform.
 
 Ordinary pushes to main run the record and contract checks alone. A commit that changes
-`VERSION` runs every lane and platform, using the same release planner as publication.
-The final `ci-required` job rejects failed or unexpectedly skipped checks, missing output,
-and a release selection that omits any lane or platform. Manual full checks remain available.
+`VERSION` only verifies that its complete Git tree matches the published candidate and that
+all native downloads remain available. It does not repeat the candidate's tests or builds.
+The `candidate-checked` job rejects failed or unexpectedly skipped selected checks. The
+required `ci-required` job also refuses to merge a release candidate until its native
+release is public. Manual full diagnostic checks remain available.
 
 Before provisioning expensive jobs, `changes` validates the committed native bundles,
 their source identity and the corresponding-source archive. Native checks then run beside
@@ -73,14 +80,44 @@ program. Its final `verdict` requires both matrices to succeed, rejecting failur
 cancellation and unexpected skips. The standalone manual `distribution` mode remains
 available for packaging diagnostics; it does not authorize publication.
 
-Publication starts only after a successful `kpopper check` run triggered by a push to main
-in this repository. It checks out that run's exact commit and downloads its distribution
-artifacts and verified crate by run ID. It does not rebuild them. The native asset verifier
-requires all five targets and checks their version, source commit, contents and hashes.
-Thus a failed test, record check or installation prevents publication. Later main pushes do
-not cancel a release being checked. If publication fails, rerun that publish run; if checks
-fail, rerun the original check run. Both retain the original source commit. Artifacts are
-kept for seven days; an expired artifact requires rerunning its check run before publication.
+Release PRs contain one version/changelog commit on the current main. The release bot
+explicitly dispatches `check.yml` on that branch, because PRs written by `GITHUB_TOKEN` do
+not trigger another workflow automatically. Checks and packages use the exact candidate
+commit; ordinary PR checks retain their synthetic merge tree. `ci-required` initially fails
+with the unavailable release while `candidate-checked` records whether the tests passed.
+
+To release, run **publish** from **main**, supplying the release PR number and its **kpopper
+check** run ID. This is the explicit decision to publish an immutable version. The trusted
+publisher verifies the current same-repository PR, its version-only changes, originating
+workflow and SHA, and successful candidate checks. It downloads the existing artifacts by
+run ID; it never rebuilds distributions. The asset verifier requires all five targets and
+checks their version, source commit, contents and hashes. Publisher scripts come from main,
+not from downloaded artifacts or the candidate checkout. The crate is published from the
+same tagged candidate using the existing registry verification and identity boundary.
+
+After publication, anonymous download URLs are checked and only the small `ci-required`
+job is rerun. Merge the release PR once that gate succeeds. Native is available first;
+merging exposes the corresponding plugin. A squash merge may change the commit ID, but it
+must preserve the entire tested tree; the release tag remains on the original candidate.
+Nothing merges automatically. Manual checks on a version-changing branch must supply
+`release_pr` and pass the same publication gate; a diagnostic dispatch cannot bypass it.
+
+The existing main ruleset must require `ci-required` **and require branches to be up to
+date before merging**. Publication refuses if this prerequisite is absent. This prevents a
+candidate from merging after main advances and silently acquiring untested changes. A
+ruleset bypass is an explicit override of the release guarantee, not a supported shortcut.
+
+The release refresher and publisher share one non-cancelling concurrency group. A draft or
+published version ahead of main freezes refreshes and branch deletion, including after a
+partially completed publication. If main advances after publication, do not refresh or
+rebase the published candidate: close it and prepare a new version/changelog-only candidate
+with a greater version on current main, then run its checks. Never reuse a published version.
+The old published native version remains valid; its plugin was never exposed by main.
+
+If publication fails, rerun the same publish run while the candidate and main remain
+unchanged. A failed candidate test must be fixed and checked before publication. Artifacts
+are kept for seven days; missing artifacts require rerunning the candidate checks. A source
+mismatch or unavailable release fails closed instead of silently rebuilding on main.
 
 The `tests` job runs every native test in one pool with nextest, which schedules the tests of
 all the test binaries together, where `cargo test` runs the binaries one after another and a
