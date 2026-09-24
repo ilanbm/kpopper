@@ -37,6 +37,7 @@ on:
         options:
           - all
           - linux-x86_64
+          - darwin-x86_64
           - linux-windows
           - linux-macos
           - without-darwin-x86_64
@@ -59,7 +60,9 @@ jobs:
       fail-fast: false
       matrix:
         include: >-
-          ${{ fromJSON(inputs.target == 'linux-x86_64'
+          ${{ fromJSON(inputs.target == 'darwin-x86_64'
+            && '[{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
+            || inputs.target == 'linux-x86_64'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
             || inputs.target == 'linux-windows'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
@@ -383,15 +386,17 @@ jobs:
   # Every validation runs this job; hooks builds no release, so of its release steps only the
   # license notices run.
   release:
-    # Release compilation, acceptance and packaging take under half an hour on every target.
-    timeout-minutes: 45
+    # A cold Intel macOS build can take 41 minutes before acceptance and packaging.
+    timeout-minutes: ${{ matrix.target == 'darwin-x86_64' && 60 || 45 }}
     # Tests and release acceptance use the same selected targets. The older manual
     # without-darwin-x86_64 scope retains its Linux-only release build for compatibility.
     strategy:
       fail-fast: false
       matrix:
         include: >-
-          ${{ fromJSON(inputs.target == 'linux-x86_64'
+          ${{ fromJSON(inputs.target == 'darwin-x86_64'
+            && '[{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
+            || inputs.target == 'linux-x86_64'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
             || inputs.target == 'linux-windows'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
