@@ -84,9 +84,8 @@ prevent change; it prevents *half* a change, which is what actually kills record
 
 ## Finding the reader
 
-A reader ships with this plugin at `scripts/provenance.py`, and the `kpop` command line is the
-same code with a shorter name. Run it from the directory the record sits in — it needs only
-Python and PyYAML:
+The reader ships with this plugin as the native runtime, and `kpop` is its command line.
+Run it from the directory the record sits in — it needs nothing else installed:
 
 ```bash
 kpop open                             # what to read instead of the whole record
@@ -116,8 +115,8 @@ checkout can also install its matching runtime explicitly with `scripts/install_
 
 Locate it through the active plugin helper rather than relying on `$CLAUDE_PLUGIN_ROOT`: that variable is documented for
 hook and MCP configuration, and is **not** set in the shell a skill's commands run in — a command
-written against it silently becomes `/scripts/provenance.py` and fails. If neither the command nor
-the find turns up anything the plugin is not installed; say so rather than writing your own copy.
+written against it silently becomes `/scripts/native_runtime.sh` and fails. If neither the command nor
+the helper turns up anything the plugin is not installed; say so rather than writing your own copy.
 
 Do not rewrite it, and do not write a second one beside a project that already has its own build
 doing this work.

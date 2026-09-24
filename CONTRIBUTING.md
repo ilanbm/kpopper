@@ -37,8 +37,8 @@ cargo build --locked --release
 ```
 
 The command and durable report batching support Windows. A few build and packaging
-tools under `scripts/` and `.github/scripts/` run on the Python standard library alone;
-Python 3.13 matches CI and nothing in this repository needs a virtual environment.
+tools under `scripts/` and `.github/scripts/` run on the Python standard library alone,
+and the tooling contract tests beside them read YAML; Python 3.13 matches CI.
 
 The earlier Python implementation left this tree at
 [`python-final`](https://github.com/ilanbm/kpopper/releases/tag/python-final); its last
@@ -81,7 +81,8 @@ The checks that run on every pull request beside the record are a small unittest
 of tooling contracts. Run them, and the record checks, before submitting:
 
 ```sh
-python -m unittest discover -s tests
+python -m pip install -r .github/requirements-test.txt
+python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
 kpop --frozen check
 kpop --frozen consolidate --dry-run
 kpop --frozen experimental hub --verify
@@ -294,7 +295,7 @@ goes through.
 
 ## The browser pass
 
-`scripts/verify_page.js` opens a rendered page in Chrome and exercises the provenance
+`native/shared/verify_page.js` opens a rendered page in Chrome and exercises the provenance
 layer in both themes and under reduced motion — what `--verify` cannot reach. It installs with
 every channel, but the driver that drives the browser ships with none of them, so it stays a
 local step:

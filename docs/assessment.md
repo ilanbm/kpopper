@@ -103,14 +103,10 @@ observed event. An action names information to consider; it is neither a task-ex
 nor authorization to rewrite a decision. A task unrelated to an affected entry can continue.
 
 `falsifiers-only/v1` selects only conditions that hold. Switching policy changes attention,
-not the findings or assessment identity. Applications can also select actions from an existing
-report without another record read or evaluator call:
+not the findings or assessment identity:
 
-```python
-from kpopper.assessment import load, selected_attention
-
-report = load(["GROUNDING.yaml"])
-relevant = selected_attention(report, ids=["launch.announcement"], actions=["review"])
+```sh
+kpop assess launch.announcement --policy falsifiers-only/v1 --attention-only
 ```
 
 `--attention-only` applies selection to the requested IDs while preserving scope and revision

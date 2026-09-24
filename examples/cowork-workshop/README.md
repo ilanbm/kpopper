@@ -127,9 +127,9 @@ judgments:
 ## Read and run
 
 ```sh
-python3 scripts/kpopper check examples/cowork-workshop/before/GROUNDING.yaml
-python3 scripts/kpopper check examples/cowork-workshop/after/GROUNDING.yaml
-python3 scripts/kpopper affects workshop.format examples/cowork-workshop/after/GROUNDING.yaml
+kpop check examples/cowork-workshop/before/GROUNDING.yaml
+kpop check examples/cowork-workshop/after/GROUNDING.yaml
+kpop affects workshop.format examples/cowork-workshop/after/GROUNDING.yaml
 ```
 
 Both checks exit zero. The after check reports `MOVED` for `workshop.agenda`,

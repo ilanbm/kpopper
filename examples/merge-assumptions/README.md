@@ -9,7 +9,7 @@ decision's condition fails when the merged inputs are measured.
 
 ## Run
 
-With Git, Python 3.9+ with the repository's Python dependencies installed, and
+With Git, a Python 3 interpreter for the example projects' own tests, and
 a native `kpop` on PATH:
 
 ```sh

@@ -5,7 +5,7 @@ paths. Use the instructions for the surface you actually run.
 
 | Surface | Route | Verification, 2026-09-16 |
 |---|---|---|
-| **Copilot CLI** | Canonical skills, shared instructions and the [CLI hook bridge](cli/hook.sh) | CLI 1.0.75 on macOS, with the earlier Python bridge: actual hook discovery, context delivery, resume and one stop continuation passed against a local stub provider. Eight component tests passed. The native bridge has repository tests only. See the live-workflow qualification below. |
+| **Copilot CLI** | Canonical skills, shared instructions and the [CLI hook bridge](cli/hook.sh) | CLI 1.0.75 on macOS, with the earlier bridge: actual hook discovery, context delivery, resume and one stop continuation passed against a local stub provider. Eight component tests passed. The native bridge has repository tests only. See the live-workflow qualification below. |
 | **VS Code local agent** | [Instructions](vscode/copilot-instructions.md); optional hook sketch | Documentation reviewed; no VS Code runtime test. |
 | **Copilot cloud agent** | [Setup workflow](cloud-agent/copilot-setup-steps.yml) and [PR check](cloud-agent/provenance-check.yml) | Documentation reviewed; no hosted job tested. |
 

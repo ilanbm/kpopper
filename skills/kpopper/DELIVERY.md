@@ -1,7 +1,7 @@
 # Deliver important findings to the originating Codex task
 
 Use this path when the current Codex host provides both native background agents and
-`send_message_to_thread`. The latter is an agent tool supplied by the host, not a Python API.
+`send_message_to_thread`. The latter is an agent tool supplied by the host, not a library call.
 The originating task must already authorize background record maintenance and follow-up findings.
 Without those capabilities, use ordinary capture and the host's hook delivery.
 

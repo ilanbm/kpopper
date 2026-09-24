@@ -99,11 +99,9 @@ decimal exponents, and computed numerators/denominators to 1024 decimal characte
 ## Computation and review snapshots
 
 The local core is required for structured calculations. Before authoring the first one,
-run `kpop session status`. If it is not ready, make Lean **4.33.1** available and run
-`kpop session setup` (or pass `--lean-root /path/to/toolchain`). Both commands work with
-the base Python package; session transport extras are needed only for checked session views.
+run `kpop session status`. If it is not ready, run `kpop session setup`.
 Setup compiles the pinned source once. Reads never download or compile it, and there is no
-second arithmetic evaluator. After a package update changes the core source, run setup again.
+second arithmetic evaluator. After an update changes the core source, run setup again.
 
 A missing, invalid or incompatible core makes structured calculations explicitly unavailable.
 Conditions that need them read `UNKNOWN`; ordinary scalar reads, independent writes and
@@ -113,7 +111,7 @@ core for rules or conditions as a failure unless they explicitly declare why the
 blocked; success is not a substitute for a missing computation.
 
 `pull`, source search, the page and checked sessions use the same calculation semantics.
-The Python layer derives references and display text and calls Lean for arithmetic. Results
+The command derives references and display text and calls Lean for arithmetic. Results
 are cached by record content, expression and core/parser identity; changing an input
 invalidates the result. A bounded per-process cache holds up to 512 parsed formulas, keyed
 by their source and grammar version. Changing values reuses the parsed formula. Changing

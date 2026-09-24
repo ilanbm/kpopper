@@ -33,11 +33,10 @@ HTML request and completion of a map do not automatically select these applicati
 The canonical commands are `kpop experimental hub` and `kpop experimental annotated-doc`.
 The old `page` and `document` names still work both directly (`kpop page`) and under
 `experimental` (`kpop experimental page`), with a compatibility notice on stderr.
-All aliases use the same implementation and optional dependencies. The canonical skills
+All aliases use the same implementation. The canonical skills
 are `$hub` and `$annotated-doc` (Claude: `/kpopper:hub` and `/kpopper:annotated-doc`);
 `$page` and `$document` remain explicit compatibility aliases.
-Help works without installing HTML dependencies; commands never install them implicitly.
-`kpop experimental --json` lists application layer, maturity and installation metadata.
+`kpop experimental --json` lists each application's layer, maturity and command.
 
 ## Boundaries
 
@@ -47,23 +46,22 @@ Help works without installing HTML dependencies; commands never install them imp
 - Page measurements are not ordinary recorded facts. A condition depending on an
   unavailable `page.*` value remains unevaluated; it is not reported as having passed.
 - Legacy arrangement and section authoring can compute page counts with the shipped
-  renderer, which needs only PyYAML and the standard library. These write helpers do
-  not require the optional document libraries.
+  renderer. These write helpers need nothing beyond the installed command.
 - Consolidation consults presentation facts only when a brief exists and a changed
   judgment references `page.*`. Graph-only conditions remain core checks.
 - The page renders a snapshot of the record. Standalone document refresh and review
   affect a document copy, never the source record. Core findings retain their original
   identity when displayed by either application.
 
-The application entry points are `scripts/applications/hub.py` and
-`scripts/applications/annotated_doc.py`. Existing renderer and
-document modules remain implementation modules at their compatible paths. Existing
+The application entry points are `kpop experimental hub` and
+`kpop experimental annotated-doc`; their renderer and document layers are internal
+modules of the command. Existing
 `page.*` record fields, artifact schemas and output paths retain their meanings. Core reader
 operations do not depend on those entry points; explicit presentation authoring crosses
 the application boundary deliberately.
 
 History runtime declarations include the application modules in their source manifest.
-The optional installation adds dependencies; it does not change that source inventory.
+Installing an application bundle does not change that source inventory.
 
 ## Maturity
 

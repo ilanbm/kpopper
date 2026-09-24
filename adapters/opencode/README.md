@@ -1,7 +1,7 @@
 # kpopper for OpenCode
 
 The verification below predates the application rename and the native runtime: it
-ran the Python CLI, and the native install steps here have not had a live host run.
+ran the earlier implementation, and the native install steps here have not had a live host run.
 The current bundle has eight canonical skills plus the `page` and `document`
 compatibility aliases; the application skills are now `hub` and `annotated-doc`.
 

@@ -1515,7 +1515,8 @@ records. The [reasoning runtime is packaged](docs/reasoning-core.md); existing
 legacy records require explicit adoption.
 
 Legacy records with structured expressions and computed snapshots require at least
-1.6.0 and their [documented Lean setup](skills/kpopper/EXPRESSIONS.md#reader-compatibility).
+0.9.0 in every reader and writer that touches them; see
+[reader compatibility](skills/kpopper/EXPRESSIONS.md#reader-compatibility).
 Upgrade every reader and writer together. On native Windows, legacy records support
 individual `add`/`set` writes and deliberate reviews; durable report batching requires
 POSIX file locking.
