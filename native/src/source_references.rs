@@ -8,17 +8,20 @@ use crate::{
 use std::{collections::BTreeSet, path::Path};
 
 fn strip_line_suffix(locator: &str) -> &str {
-    let Some((path, suffix)) = locator.rsplit_once(':') else {
-        return locator;
-    };
-    let (first, last) = suffix.split_once('-').unwrap_or((suffix, ""));
-    if !first.is_empty()
-        && first.bytes().all(|byte| byte.is_ascii_digit())
-        && (last.is_empty() || last.bytes().all(|byte| byte.is_ascii_digit()))
-    {
-        path
-    } else {
-        locator
+    let mut path = locator;
+    loop {
+        let Some((prefix, suffix)) = path.rsplit_once(':') else {
+            return path;
+        };
+        let (first, last) = suffix.split_once('-').unwrap_or((suffix, ""));
+        if !first.is_empty()
+            && first.bytes().all(|byte| byte.is_ascii_digit())
+            && (last.is_empty() || last.bytes().all(|byte| byte.is_ascii_digit()))
+        {
+            path = prefix;
+        } else {
+            return path;
+        }
     }
 }
 
@@ -26,6 +29,7 @@ fn strip_line_suffix(locator: &str) -> &str {
 enum PinnedFileStatus {
     Available,
     Missing,
+    RevisionUnavailable,
     Unresolved,
     Unavailable,
 }
@@ -43,7 +47,7 @@ fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStat
     ) {
         Ok(Some(commit)) => commit,
         Ok(None) => return PinnedFileStatus::Unresolved,
-        Err(_) => return PinnedFileStatus::Unavailable,
+        Err(_) => return PinnedFileStatus::RevisionUnavailable,
     };
     let commit = String::from_utf8_lossy(&commit);
     let commit = commit.trim();
@@ -138,6 +142,12 @@ pub(crate) fn notes(
                 // repository path suffix remains an advisory pin candidate.
                 let pin = (!revision.is_empty() && !pinned_path.is_empty())
                     .then(|| pinned_file_status(&project.root, revision, pinned_path));
+                if pin == Some(PinnedFileStatus::RevisionUnavailable) {
+                    notes.push(format!(
+                        "{id}: could not check locator {locator} because Git's revision probe was unavailable; retry the check or re-read the source"
+                    ));
+                    continue;
+                }
                 let explicit_pin = matches!(
                     pin,
                     Some(

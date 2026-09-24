@@ -161,10 +161,17 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
     let f = Fixture::new();
     fs::write(f.root.path().join("sources/part:name.py"), "source").unwrap();
     let out = text(f.check(
-        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.colon: {file: 'sources/part:name.py'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
+        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.column: {file: 'sources/original.txt:42:7'}\n  s.pinned_column: {file: 'source-final:sources/original.txt:42:7'}\n  s.colon: {file: 'sources/part:name.py'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
     ));
     assert!(!out.contains("pinned file"), "{out}");
-    for id in ["s.line", "s.range", "s.colon", "p.line"] {
+    for id in [
+        "s.line",
+        "s.range",
+        "s.column",
+        "s.pinned_column",
+        "s.colon",
+        "p.line",
+    ] {
         assert!(!out.contains(&format!("NOTE {id}:")), "{out}");
     }
 
@@ -250,12 +257,16 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
     use std::os::unix::fs::PermissionsExt;
     let f = Fixture::new();
     f.git(&["branch", "feature/source-reference"]);
+    let real_git = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|directory| directory.join("git"))
+        .find(|candidate| candidate.is_file())
+        .expect("git must be available on the original PATH");
     let bin = f.private.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
     let git = bin.join("git");
     fs::write(
         &git,
-        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = cat-file ]; then printf '%2048s' ''; exit 0; fi\ndone\nexec /usr/bin/git \"$@\"\n",
+        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = cat-file ]; then printf '%2048s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
     )
     .unwrap();
     fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
@@ -269,6 +280,7 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
             std::env::var("PATH").unwrap_or_default()
         ),
     );
+    command.env("KPOPPER_TEST_GIT", real_git);
     fs::write(f.root.path().join("GROUNDING.yaml"), record).unwrap();
     let output = command.output().unwrap();
     let out = text(output);
@@ -282,6 +294,45 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
         out.contains("git show feature/source-reference:sources/original.txt"),
         "{out}"
     );
+    assert!(out.contains("0 problems"), "{out}");
+}
+#[cfg(unix)]
+#[test]
+fn failed_revision_probes_are_advisory_without_claiming_a_pin_or_absent_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    let real_git = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|directory| directory.join("git"))
+        .find(|candidate| candidate.is_file())
+        .expect("git must be available on the original PATH");
+    let bin = f.private.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let git = bin.join("git");
+    fs::write(
+        &git,
+        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = --verify ]; then printf '%2048s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut command = f.command(f.root.path());
+    command.env(
+        "PATH",
+        format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
+    command.env("KPOPPER_TEST_GIT", real_git);
+    fs::write(
+        f.root.path().join("GROUNDING.yaml"),
+        "sources:\n  s.slash_pin: {file: 'feature/source-reference:sources/original.txt'}\n",
+    )
+    .unwrap();
+    let out = text(command.output().unwrap());
+    assert!(out.contains("NOTE s.slash_pin: could not check locator"), "{out}");
+    assert!(!out.contains("pinned file"), "{out}");
+    assert!(!out.contains("file feature/source-reference:sources/original.txt is absent"), "{out}");
     assert!(out.contains("0 problems"), "{out}");
 }
 #[test]
