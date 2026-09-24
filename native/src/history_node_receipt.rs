@@ -21,6 +21,19 @@ pub struct Receipt {
     before: Side,
     after: Side,
 }
+/// Retained receipt components for one node. Component absence in a side's record
+/// context is different from deletion of that component for a particular subject.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Change {
+    pub subject: String,
+    pub before: Option<V>,
+    pub after: Option<V>,
+}
+/// An in-memory preparation view of node-local evidence; never a manifest payload.
+#[derive(Clone, Debug, Default)]
+pub struct Nodes {
+    values: Map,
+}
 fn s(value: &str) -> V {
     V::Text(value.into())
 }
@@ -219,6 +232,116 @@ fn baseline(side: &mut V) -> Result<Option<&mut Map>> {
     };
     Ok(Some(map_mut(baseline)?))
 }
+fn components(context: &V) -> Result<BTreeSet<&'static str>> {
+    let context = schema(context, &["format", "literal", "selection_from_nodes"], &[])?;
+    let mut literal = context["literal"].clone();
+    let side = map(&literal)?;
+    let mut result = BTreeSet::new();
+    if side.contains_key("document") {
+        result.insert("document");
+    }
+    if side.contains_key("assessment") {
+        result.insert("assessment");
+    }
+    if let Some(baseline) = baseline(&mut literal)? {
+        for field in ["heads", "open_acts"] {
+            if baseline.contains_key(field) {
+                result.insert(field);
+            }
+        }
+    }
+    Ok(result)
+}
+impl Nodes {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Import independently verified per-node payloads, never an authoritative global index.
+    pub fn from_values(values: Map) -> Result<Self> {
+        require(values.len() <= MAX_OBJECTS, "node_receipt_limit")?;
+        for node in values.values() {
+            let node = schema(node, &[], &["document", "assessment", "heads", "open_acts"])?;
+            require(!node.is_empty(), "node_receipt_empty_piece")?;
+        }
+        Ok(Self { values })
+    }
+    pub fn values(&self) -> &Map {
+        &self.values
+    }
+    /// Prepare atomic before/after images for changed subjects only. Inactive components
+    /// remain available for later sides; active components remove genuinely absent nodes.
+    pub fn prepare(&self, side: &Side) -> Result<Vec<Change>> {
+        side.restore()?;
+        let active = components(side.context())?;
+        let subjects = self
+            .values
+            .keys()
+            .chain(side.nodes.keys())
+            .collect::<BTreeSet<_>>();
+        let mut changes = Vec::new();
+        for subject in subjects {
+            let before = self.values.get(subject).cloned();
+            let mut after = before
+                .as_ref()
+                .map(map)
+                .transpose()?
+                .cloned()
+                .unwrap_or_default();
+            let wanted = side.nodes.get(subject).map(map).transpose()?;
+            for component in &active {
+                if let Some(value) = wanted.and_then(|m| m.get(*component)) {
+                    after.insert((*component).into(), value.clone());
+                } else {
+                    after.remove(*component);
+                }
+            }
+            let after = (!after.is_empty()).then_some(V::Map(after));
+            if before != after {
+                changes.push(Change {
+                    subject: subject.clone(),
+                    before,
+                    after,
+                });
+            }
+        }
+        Ok(changes)
+    }
+    /// Apply only after every before-image and resulting payload has passed validation.
+    pub fn apply(&mut self, changes: &[Change]) -> Result<()> {
+        let mut seen = BTreeSet::new();
+        let mut candidate = self.values.clone();
+        for change in changes {
+            require(seen.insert(&change.subject), "node_receipt_duplicate")?;
+            require(
+                self.values.get(&change.subject) == change.before.as_ref(),
+                "node_receipt_stale_piece",
+            )?;
+            if let Some(after) = &change.after {
+                candidate.insert(change.subject.clone(), after.clone());
+            } else {
+                candidate.remove(&change.subject);
+            }
+        }
+        *self = Self::from_values(candidate)?;
+        Ok(())
+    }
+    /// Reconstruct only the components declared by this side's context.
+    pub fn side(&self, context: &V) -> Result<Side> {
+        let active = components(context)?;
+        let mut nodes = Map::new();
+        for (subject, value) in &self.values {
+            let node = map(value)?
+                .iter()
+                .filter(|(k, _)| active.contains(k.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect::<Map>();
+            if !node.is_empty() {
+                nodes.insert(subject.clone(), V::Map(node));
+            }
+        }
+        Side::from_parts(context.clone(), nodes)
+    }
+}
 impl Side {
     fn pack(side: &V) -> Result<Self> {
         schema(
@@ -294,8 +417,7 @@ impl Side {
                 selection = true;
             }
             for (subject, evidence) in subjects {
-                let encoded = Evidence::pack(&evidence, &snapshot, &declared)?.encode()?;
-                let value = V::from_json(&serde_json::from_slice(&encoded)?)?;
+                let value = Evidence::pack(&evidence, &snapshot, &declared)?.to_value()?;
                 piece(&mut nodes, &subject)?.insert("assessment".into(), value);
             }
             report.insert("nodes".into(), empty());
@@ -414,11 +536,7 @@ impl Side {
                         .ok_or_else(|| error("node_receipt_assessment"))?,
                 )?;
                 let snapshot = text(field(report, "snapshot_id")?)?;
-                let raw = serde_json::to_vec(&evidence.to_json()?)?;
-                // Evidence::decode checks canonical struct ordering; typed maps are ordered
-                // by key, so reconstruct the typed transport before canonical encoding.
-                let evidence: Evidence = serde_json::from_slice(&raw)?;
-                let restored = Evidence::decode(&evidence.encode()?)?.restore(snapshot)?;
+                let restored = Evidence::from_value(evidence)?.restore(snapshot)?;
                 let entries = map_mut(
                     report
                         .get_mut("nodes")

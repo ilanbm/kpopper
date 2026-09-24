@@ -1,5 +1,5 @@
 use kpop_native::{
-    history_node_receipt::{Receipt, Side},
+    history_node_receipt::{Nodes, Receipt, Side},
     history_transaction as T,
     value::TypedValue as V,
 };
@@ -136,4 +136,115 @@ fn unsupported_nested_authoring_reports_are_not_retained_as_record_context() {
         map(&map(&source)["before"])["document"].clone(),
     );
     assert!(Side::from_parts(context, packed.before().nodes().clone()).is_err());
+}
+
+#[test]
+fn inactive_baseline_components_do_not_rewrite_unchanged_nodes() {
+    let source = receipt(1000);
+    let before = map(&source)["before"].clone();
+    let mut after = before.clone();
+    map_mut(&mut after).remove("authoring");
+    let source =
+        T::semantic_receipt("core/v1", &map(&source)["capabilities"], &before, &after).unwrap();
+    let packed = Receipt::pack(&source).unwrap();
+    let mut retained = Nodes::new();
+    let first = retained.prepare(packed.before()).unwrap();
+    assert_eq!(first.len(), 1000);
+    retained.apply(&first).unwrap();
+    assert!(retained.prepare(packed.after()).unwrap().is_empty());
+    assert_eq!(
+        retained
+            .side(packed.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        after
+    );
+    assert_eq!(
+        retained
+            .side(packed.before().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        before
+    );
+
+    let mut changed = after.clone();
+    let doc = map_mut(map_mut(&mut changed).get_mut("document").unwrap());
+    map_mut(doc.get_mut("known").unwrap())
+        .insert("p.00000".into(), V::from_json(&json!({"v":99})).unwrap());
+    let source =
+        T::semantic_receipt("core/v1", &map(&source)["capabilities"], &before, &changed).unwrap();
+    let changed = Receipt::pack(&source).unwrap();
+    let updates = retained.prepare(changed.after()).unwrap();
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0].subject, "p.00000");
+    retained.apply(&updates).unwrap();
+    assert_eq!(
+        retained
+            .side(changed.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        map(&source)["after"]
+    );
+}
+
+#[test]
+fn node_deletion_stale_before_images_and_branch_preparation_are_exact() {
+    let source = receipt(2);
+    let packed = Receipt::pack(&source).unwrap();
+    let mut base = Nodes::new();
+    base.apply(&base.prepare(packed.before()).unwrap()).unwrap();
+    let mut next = map(&source)["after"].clone();
+    map_mut(&mut next).remove("authoring");
+    let doc = map_mut(map_mut(&mut next).get_mut("document").unwrap());
+    map_mut(doc.get_mut("known").unwrap()).remove("p.00000");
+    let report = map_mut(map_mut(&mut next).get_mut("assessment").unwrap());
+    map_mut(report.get_mut("nodes").unwrap()).remove("p.00000");
+    report.insert(
+        "selection".into(),
+        V::from_json(&json!(["p.00001"])).unwrap(),
+    );
+    let next = T::semantic_receipt(
+        "core/v1",
+        &map(&source)["capabilities"],
+        &map(&source)["before"],
+        &next,
+    )
+    .unwrap();
+    let packed_next = Receipt::pack(&next).unwrap();
+    let changes = base.prepare(packed_next.after()).unwrap();
+    assert_eq!(changes.len(), 1);
+    let mut branch = base.clone();
+    branch.apply(&changes).unwrap();
+    assert_eq!(
+        branch
+            .side(packed_next.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        map(&next)["after"]
+    );
+    assert_eq!(
+        base.side(packed.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        map(&source)["after"]
+    );
+    let frozen = branch.values().clone();
+    assert!(branch.apply(&changes).is_err());
+    assert_eq!(*branch.values(), frozen);
+    // Reversing the exact images restores the previous branch; no ordering by time is involved.
+    let reverse = changes
+        .iter()
+        .map(|c| kpop_native::history_node_receipt::Change {
+            subject: c.subject.clone(),
+            before: c.after.clone(),
+            after: c.before.clone(),
+        })
+        .collect::<Vec<_>>();
+    branch.apply(&reverse).unwrap();
+    assert_eq!(branch.values(), base.values());
 }

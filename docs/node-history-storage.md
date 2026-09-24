@@ -33,6 +33,12 @@ hypothesis evidence, nonempty hypothesis documents, and unpartitioned temporal e
 refuse. This is a decomposition API, not a persistence layout: writers must persist only
 changed pieces and derive historical selection from the transaction and node histories.
 Storing every partition on each write would still reproduce the graph.
+Its `Nodes` preparation view emits before/after images only for changed subjects. A
+component absent from an entire receipt side remains retained but inactive; absence
+inside an active component removes that node's value. This avoids repeatedly deleting
+and restoring baseline fields as before/after sides alternate. Application checks all
+before-images before replacing the in-memory state. The typed evidence embedding keeps
+normalized maps patchable instead of embedding an opaque tagged transport list.
 
 `history_node_observation` stores exact observation sets as sparse deltas over named
 encoding bases. It supports unordered DAG loading and a visitor that applies and undoes

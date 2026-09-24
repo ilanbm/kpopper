@@ -164,6 +164,32 @@ fn locate<'a>(mut value: &'a mut V, path: &[Step]) -> Result<&'a mut Map> {
     }
 }
 impl Evidence {
+    /// A typed embedding for node patches. Keeping the normalized payload typed lets
+    /// the node codec patch maps instead of replacing an entire tagged transport list.
+    pub fn to_value(&self) -> Result<V> {
+        self.encode()?;
+        Ok(V::Map(Map::from([
+            ("format".into(), V::Text(self.format.clone())),
+            ("value".into(), V::from_tagged(&self.value)?),
+            (
+                "recipes".into(),
+                V::from_json(&serde_json::to_value(&self.recipes)?)?,
+            ),
+        ])))
+    }
+    pub fn from_value(value: &V) -> Result<Self> {
+        let m = crate::history_contract::schema(value, &["format", "value", "recipes"], &[])?;
+        require(
+            m["format"] == V::Text(FORMAT.into()),
+            "node_evidence_invalid",
+        )?;
+        let evidence = Self {
+            format: FORMAT.into(),
+            value: m["value"].to_tagged()?,
+            recipes: serde_json::from_value(m["recipes"].to_json()?)?,
+        };
+        Self::decode(&evidence.encode()?)
+    }
     pub fn pack(value: &V, snapshot: &str, declarations: &[Vec<String>]) -> Result<Self> {
         require(
             snapshot.len() == 64 && crate::history_paths::object_id(snapshot),
