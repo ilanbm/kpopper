@@ -70,6 +70,15 @@ limited to numerical thresholds.
 | `kpop check` | Report structural problems, declared gaps, movement and fired conditions. |
 | `kpop assess <entry> [entries...]` | Read versioned findings and scoped attention as JSON. See [assessment contract](assessment.md). |
 
+In a Git checkout, `check` notes a `file:` locator whose path is absent from the repository.
+It also checks single path tokens in `from:`; entry IDs and prose remain citations, so use `./`
+for a root filename in `from:`. Absolute paths outside the repository and glob patterns are
+not checked. A missing file is a note rather than a failed claim: re-read the surviving source,
+or preserve a historical locator as `file: "python-final:scripts/example.py"` (Git's
+`revision:path` form). It remains openable with `git show python-final:scripts/example.py`.
+The named revision must contain that file; an unknown revision or absent blob is noted too.
+`at:` still identifies the place within the source, and `read:` still records when it was read.
+
 The legacy opener uses line and character budgets; its output reports omitted attention
 items. It is not a complete read of every entry. The optional
 [checked session mode](checked-sessions.md) provides complete branch accounting, exact

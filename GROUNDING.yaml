@@ -1188,6 +1188,12 @@ sources:
          roles a partial schema declares, so a first judgment it wrote carried seen: where the schema
          named another snapshot field and checked as never compared; it now keeps them, as native
          does."
+  s.2026_09_24_source_file_references:
+    name: "Source files after the Python reader was removed"
+    asked: "Report entries whose local source file is gone, keep historical sources openable at
+            python-final, re-read surviving subjects in native sources, and close readings whose
+            subject was the removed implementation."
+    read: "2026-09-24"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1196,9 +1202,10 @@ sources:
             that need attention."
   s.branch_comparison_core:
     name: "Cross-branch and in-memory consolidation checks"
-    file: "scripts/consolidate.py"
-    read: "2026-09-10"
-    revision: d17225095c856b147d03522981f2c639e57f73e1
+    file: "python-final:scripts/consolidate.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-10 at d17225095c856b147d03522981f2c639e57f73e1; Historical file
+         availability verified at python-final on 2026-09-24"
   s.ci_execution_evidence:
     name: "CI execution measurements and agreed optimization scope"
     url: "https://github.com/ilanbm/kpopper/actions/runs/35320374247"
@@ -1213,19 +1220,22 @@ sources:
     from: s.2026_09_17_selective_ci
   s.core_followups_contract:
     name: "Core followup captured reading contract"
-    file: "scripts/followup_core.py"
-    read: "2026-09-18"
-    revision: "1b445298e413af12f24d6c0ab7a67637b5e9df84"
+    file: "python-final:scripts/followup_core.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-18 at 1b445298e413af12f24d6c0ab7a67637b5e9df84; Historical file
+         availability verified at python-final on 2026-09-24"
   s.core_observer_operations:
     name: "Core observers and prepared history fold checks"
-    file: "scripts/history_prospective.py"
-    read: "2026-09-19"
-    revision: "446321d"
+    file: "python-final:scripts/history_prospective.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-19 at 446321d; Historical file availability verified at
+         python-final on 2026-09-24"
   s.core_operational_contract:
     name: "Captured core operational assessment contract"
-    file: "scripts/reasoning/operations.py"
-    read: "2026-09-18"
-    revision: ac61f7f
+    file: "python-final:scripts/reasoning/operations.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-18 at ac61f7f; Historical file availability verified at
+         python-final on 2026-09-24"
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -1233,19 +1243,22 @@ sources:
     revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
   s.followups_daily:
     name: "Daily review prompt, work budget and receipts"
-    file: "scripts/followup_daily.py"
-    read: "2026-09-10"
-    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+    file: "python-final:scripts/followup_daily.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; Historical file
+         availability verified at python-final on 2026-09-24"
   s.followups_install:
     name: "Daily installation inspection and readback protocol"
-    file: "scripts/followup_install.py"
-    read: "2026-09-10"
-    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+    file: "python-final:scripts/followup_install.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; Historical file
+         availability verified at python-final on 2026-09-24"
   s.followups_state:
     name: "Followup storage, claims and retained outcomes"
-    file: "scripts/followups.py"
-    read: "2026-09-10"
-    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+    file: "python-final:scripts/followups.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-10 at 7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3; Historical file
+         availability verified at python-final on 2026-09-24"
   s.gaze_direction_study:
     name: "The influence of banner advertisements on attention and memory: human faces with averted
            gaze can enhance advertising effectiveness"
@@ -1253,9 +1266,10 @@ sources:
     read: "2026-09-13"
   s.history_operation_context:
     name: "Captured context for prepared history previews"
-    file: "scripts/reasoning/operations.py"
-    read: "2026-09-19"
-    revision: "34ce81a"
+    file: "python-final:scripts/reasoning/operations.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-19 at 34ce81a; Historical file availability verified at
+         python-final on 2026-09-24"
   s.ingest_64eac369f0d3ca58463f27679fa42bb0:
     name: "Captured report"
     file: "/Users/ilanbm/.local/state/kpopper/ingestion/d38be57d78902508217b8f6b3d18d9c39fcf1b9fd9a67b76790e4473e1fe5b68/sources/64eac369f0d3ca58463f27679fa42bb0.txt"
@@ -1710,10 +1724,12 @@ sources:
   doc.history_source_clock_order:
     name: "Source clock grouping and retained mapping order"
     from: s.2026_09_19_native_transactions
-    file: "scripts/versions.py"
+    file: "python-final:scripts/versions.py"
     at: "_subject_entry lines 488-492 at b639cdbab1e3c624ad52708350166d222821aec1;
-         native/src/history_reduce.rs lines 281-294 at 0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"
-    read: "2026-09-19"
+         native/src/history_reduce.rs lines 281-294 at 0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f;
+         Originally read 2026-09-19; Historical file availability verified at python-final on
+         2026-09-24"
+    read: "2026-09-24"
     scope: {kind: code, commit: "0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"}
   doc.history_writer_contract_c5cc6a3:
     name: "History writer, replay and branch adoption contract at c5cc6a3"
@@ -1748,35 +1764,91 @@ sources:
     read: "2026-09-02"
   doc.ingestion_contract:
     name: "The source update and recording gate regression contract"
-    file: "tests/test_ingestion.py"
-    read: "2026-09-07"
+    file: "python-final:tests/test_ingestion.py"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-07; Historical file availability verified at python-final on
+         2026-09-24"
+  doc.native_candidate_reasons:
+    name: "Native source for p.candidate_reasons"
+    file: "native/src/ordinary_candidate_algorithm.rs"
+    at: "near assigns four ranks: a precise source or file/url locator, the same from, the same
+         rule, and shared premises; name overlap only orders within a rank"
+    read: "2026-09-24"
+  doc.native_contested_meanings:
+    name: "Native source for p.contested_meanings"
+    file: "native/src/ordinary_views.rs"
+    at: "Projection::new and check, with ordinary_domain_counts.rs and
+         ordinary_consolidation_pending.rs: contested denotes rival claims requiring a choice; these
+         readers do not adopt a winner"
+    read: "2026-09-24"
+  doc.native_fields_a_build_writes:
+    name: "Native source for p.fields_a_build_writes"
+    file: "native/src/public_readers.rs"
+    at: "run routes check/open through captured read projections and verifies the capture before
+         returning; the hub renders derived files, not record fields"
+    read: "2026-09-24"
+  doc.native_fields_read_by_name:
+    name: "Native source for p.fields_read_by_name"
+    file: "native/src/ordinary_fields.rs"
+    at: "Role discovery excludes reopened_by, request, replaced and also; reasoning_fields.rs
+         carries the same four names"
+    read: "2026-09-24"
+  doc.native_hypothesis_homes:
+    name: "Native source for p.hypothesis_homes"
+    file: "native/src/public_config.rs"
+    at: "hypothesis_dir selects the one directory beside the entry file: .kpopper/hypotheses for
+         GROUNDING.yaml, otherwise PROVENANCE.d; this counts selected locations, not implementations
+         of the selector"
+    read: "2026-09-24"
+  doc.native_hypothesis_name_inputs:
+    name: "Native source for p.hypothesis_name_inputs"
+    file: "native/src/reasoning_authoring_guards.rs"
+    at: "hypothesis derives the base name from the sanitized entry id and six hex characters of the
+         normalized claim digest; only existing local hypotheses determine a collision suffix"
+    read: "2026-09-24"
+  doc.native_pointer_home:
+    name: "Native source for p.pointer_home"
+    file: "native/src/project_modes.rs"
+    at: "Project::record reads kpopper-record under the Git common directory; public_workspace.rs
+         uses the same pointer"
+    read: "2026-09-24"
+  doc.native_tree_positions_kept:
+    name: "Native source for p.tree_positions_kept"
+    file: "native/shared/page/page.js"
+    at: "pointermove keeps transient drag state; pointerup and pointercancel call drop and spring
+         every displaced node home, without storing a position"
+    read: "2026-09-24"
   doc.pending_dry_run:
     name: "Pending findings in the consolidation dry run"
-    file: "tests/test_consolidate_pending.py"
-    read: "2026-09-23"
+    file: "python-final:tests/test_consolidate_pending.py"
+    read: "2026-09-24"
     at: "Each active finding over the record alone and together; red on a finding the base cannot
          read as it says, a contested id, a falsifier, a hole, a refused reading or a reversal;
-         nothing adopted; a frozen run has no pending part"
+         nothing adopted; a frozen run has no pending part; Originally read 2026-09-23; Historical
+         file availability verified at python-final on 2026-09-24"
   doc.plugin_runtime:
     name: "Explicit Python setup and runtime selection for plugin hooks"
     file: "docs/plugin-runtime.md"
     read: "2026-09-17"
   doc.prompt_reminders:
     name: "Advisory recording reminder regression contract"
-    file: "tests/test_nudge.py"
-    read: "2026-09-22"
-    at: "Prompt context, ninth-turn Stop silence, changed files and host skill forms"
+    file: "python-final:tests/test_nudge.py"
+    read: "2026-09-24"
+    at: "Prompt context, ninth-turn Stop silence, changed files and host skill forms; Originally
+         read 2026-09-22; Historical file availability verified at python-final on 2026-09-24"
   doc.session_activity:
     name: "Session write attribution and Stop delivery contract"
     file: "docs/reference.md"
     read: "2026-09-19"
   doc.session_test_gates:
     name: "Checked-session integration test readiness gates"
-    file: "tests/test_predicate_literals.py"
+    file: "python-final:tests/test_predicate_literals.py"
     of: "PredicateLiteralContract.setUpClass; also ReadableRuntime.setUpClass in
          tests/test_readable_expressions.py and cache validation in scripts/session/core.py
          Core.__init__"
-    read: "2026-09-17"
+    read: "2026-09-24"
+    at: "Originally read 2026-09-17; Historical file availability verified at python-final on
+         2026-09-24"
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html
@@ -2345,9 +2417,10 @@ known:
     v: 4
     name: "Reasons the candidate list draws from - the same source and place, the same source, the
            same rule, the same premises; a name ranks and is not among them"
-    from: "scripts/sameness.py"
-    at: "near - the reasons a pair is named; overlap only orders"
-    of: "2026-09-04"
+    from: doc.native_candidate_reasons
+    at: "near assigns four ranks: a precise source or file/url locator, the same from, the same
+         rule, and shared premises; name overlap only orders within a rank"
+    of: "2026-09-24"
     also: [p.sameness_reasons]
   p.ci_native_build_inputs:
     name: "Inputs requiring the five-target native build and modified-GMP audit"
@@ -2370,10 +2443,11 @@ known:
     v: 1
     name: "Meanings the reader gives the word contested - a rival claim laid against what the record
            holds, which nothing but a person decides"
-    from: "scripts/provenance.py"
-    at: "contested, and the opener's standing line; the dry run's report and the page's arrangement
-         note say the word of the door's refusal and of a question - the same rival claim"
-    of: "2026-09-04"
+    from: doc.native_contested_meanings
+    at: "Projection::new and check, with ordinary_domain_counts.rs and
+         ordinary_consolidation_pending.rs: contested denotes rival claims requiring a choice; these
+         readers do not adopt a winner"
+    of: "2026-09-24"
   p.context_command:
     name: "Direct graph-context command"
     v: "Native kpop context and the explicit Python compatibility dispatcher read exact records with
@@ -2451,17 +2525,18 @@ known:
   p.fields_a_build_writes:
     v: 0
     name: "Fields of the record a read command - check, open, page - writes"
-    from: "scripts/provenance.py"
-    at: "check_lines, opening and the page's build read the record; only set, add and review write
-         it"
-    of: "2026-09-04"
+    from: doc.native_fields_a_build_writes
+    at: "run routes check/open through captured read projections and verifies the capture before
+         returning; the hub renders derived files, not record fields"
+    of: "2026-09-24"
   p.fields_read_by_name:
     v: 4
     name: "Field names the reader excludes from role voting, reading them by name instead of by
            shape"
-    from: "scripts/provenance.py"
-    at: "REOPENED, ARRANGEMENT_PROSE and IDENTITIES - reopened_by, request, replaced, also"
-    of: "2026-09-04"
+    from: doc.native_fields_read_by_name
+    at: "Role discovery excludes reopened_by, request, replaced and also; reasoning_fields.rs
+         carries the same four names"
+    of: "2026-09-24"
   p.github_python_registries:
     v: 0
     name: "Python registries GitHub Packages offers"
@@ -2589,19 +2664,19 @@ known:
   p.hypothesis_homes:
     v: 1
     name: "Places the reader reads hypothesis files from"
-    from: "scripts/provenance.py"
-    at: "hypothesis_dir - .kpopper/hypotheses beside the file the reader opens first, PROVENANCE.d
-         beside a record kept under the old name"
-    of: "2026-09-04"
+    from: doc.native_hypothesis_homes
+    at: "hypothesis_dir selects the one directory beside the entry file: .kpopper/hypotheses for
+         GROUNDING.yaml, otherwise PROVENANCE.d; this counts selected locations, not implementations
+         of the selector"
+    of: "2026-09-24"
   p.hypothesis_name_inputs:
     v: 2
     name: "What the name a refused write suggests for its hypothesis file is derived from - the
            entry id and the claim being written; nothing of the branch or the session enters it"
-    from: "scripts/provenance.py"
-    at: "_hypothesis_name - the id with what a file name cannot hold replaced, and six characters of
-         a digest of the whole claim; the numeric suffix beside them counts only the hypotheses this
-         checkout already holds, so it never fires across branches"
-    of: "2026-09-04"
+    from: doc.native_hypothesis_name_inputs
+    at: "hypothesis derives the base name from the sanitized entry id and six hex characters of the
+         normalized claim digest; only existing local hypotheses determine a collision suffix"
+    of: "2026-09-24"
   p.hypothesis_thresholds:
     v: 0
     name: "Thresholds the hypothesis count line carries in code - an age or a reach past which it
@@ -2813,9 +2888,11 @@ known:
     of: "2026-09-21"
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
+    of: "2026-09-24"
     name: "Where a record the tree cannot hold registers its path"
-    from: "scripts/provenance.py"
-    at: "registered_record"
+    from: doc.native_pointer_home
+    at: "Project::record reads kpopper-record under the Git common directory; public_workspace.rs
+         uses the same pointer"
   goal.portable:
     v: "usable by any session, in any project, with no author present"
     name: "The generality bar"
@@ -3577,9 +3654,12 @@ known:
     v: 1
     name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
            judgment's verdict"
-    from: "scripts/provenance.py"
-    at: "reference_text - the page's spans, pull and open all call it"
-    of: "2026-09-03"
+    from: s.2026_09_24_source_file_references
+    at: "python-final:scripts/provenance.py: reference_text - the page's spans, pull and open all
+         call it; last Python reading 2026-09-03, value 1; closed on 2026-09-24 because this counts
+         places inside the removed implementation. It is not a count of the native reader;
+         q.reader_places_counted_once retains that question."
+    of: "2026-09-24"
   p.script_copies:
     v: 1
     name: "Editable copies of the reader and the renderer"
@@ -3655,15 +3735,19 @@ known:
     v: 1
     name: "Functions that decide whether a write under an id the base holds may replace what it
            holds"
-    from: "scripts/provenance.py"
-    at: "may_supersede - set of a value and add under a standing judgment's id both ask it"
-    of: "2026-09-04"
+    from: s.2026_09_24_source_file_references
+    at: "python-final:scripts/provenance.py: may_supersede - set of a value and add under a standing
+         judgment's id both ask it; last Python reading 2026-09-04, value 1; closed on 2026-09-24
+         because this counts places inside the removed implementation. It is not a count of the
+         native reader; q.reader_places_counted_once retains that question."
+    of: "2026-09-24"
   p.tree_positions_kept:
     v: 0
     name: "Places a dragged position is written down"
-    from: "scripts/render_page.py"
-    at: "the tree's pointer handlers"
-    of: "2026-09-01"
+    from: doc.native_tree_positions_kept
+    at: "pointermove keeps transient drag state; pointerup and pointercancel call drop and spring
+         every displaced node home, without storing a position"
+    of: "2026-09-24"
   p.install_segments:
     v: 1
     name: "Path segments an install inserts between the plugin directory and scripts/"
@@ -3686,16 +3770,23 @@ known:
     v: 3
     name: "Places the renderer still reads the older name for a grouping, fronts - kept as an
            alias for briefs not yet renamed"
-    from: "scripts/render_page.py"
-    of: "2026-09-03"
+    from: s.2026_09_24_source_file_references
+    of: "2026-09-24"
+    at: "python-final:scripts/render_page.py: Places the renderer still reads the older name for a
+         grouping, fronts - kept as an alias for briefs not yet renamed; last Python reading
+         2026-09-03, value 3; closed on 2026-09-24 because this counts places inside the removed
+         implementation. It is not a count of the native reader; q.reader_places_counted_once retains
+         that question."
   p.union_tests:
     v: 1
     name: "Places the record is tested with its hypotheses laid over it - the dry run, and nowhere
            else; check evaluates the base alone"
-    from: "scripts/consolidate.py"
-    at: "union_of, which lays the hypotheses over the base by id and runs the reader's own check on
-         the result"
-    of: "2026-09-04"
+    from: s.2026_09_24_source_file_references
+    at: "python-final:scripts/consolidate.py: union_of, which lays the hypotheses over the base by
+         id and runs the reader's own check on the result; last Python reading 2026-09-04, value 1;
+         closed on 2026-09-24 because this counts places inside the removed implementation. It is not
+         a count of the native reader; q.reader_places_counted_once retains that question."
+    of: "2026-09-24"
   m.multi.sessions:
     v: 7
     name: "Sessions that worked on this repository in one day, every one opened by the hook"
@@ -3932,6 +4023,21 @@ open:
                                     and which were about the implementation itself and should be
                                     closed the way the measured readings were?"
                          from: s.2026_09_23_python_exit
+                         answered:
+                           by: d.source_file_availability_is_a_note
+                           said: "check reports a missing repository file locator as a note, with a
+                                  re-read or revision pin hint. file and literal from paths accept
+                                  revision:path; the revision must hold a blob. Absolute external
+                                  paths, symbolic entry references, prose and glob patterns are
+                                  outside this check."
+                           of: "2026-09-24"
+                           because: "Thirteen historical source locators are pinned to python-final
+                                     with their original reading dates and revisions retained. Eight
+                                     surviving readings now cite native sources; four counts of
+                                     Python implementation places are closed and their judgments use
+                                     observable reopeners. The crate decision now names native/shared
+                                     as the original. Counting equivalent places in native remains
+                                     q.reader_places_counted_once."
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
                          a dedicated execution session? No per-item dispatch policy is currently
                          implemented."
@@ -4605,9 +4711,11 @@ judgments:
               {{m.door.opposed_verdicts_named_reversed}} are named now. The same premises under
               different ids stay different subjects until someone says otherwise. One function
               decides all of it; {{p.supersede_doors}} is the count that would show a second one
-              creeping in."
-    wrong_if: "p.supersede_doors > 1"
-    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-16"]
+              creeping in. The count in p.supersede_doors is retained only as the last Python
+              reading; it no longer measures places in the native reader."
+    reopened_by: "Two native replacing writes decide differently whether the same id and reading day
+                  may replace the same held claim."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-16", "the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_hypotheses: "read 2026-09-03"
@@ -4709,20 +4817,21 @@ judgments:
                                   falsifiers"
       p.coverage_thresholds: 0
   d.crate_carries_shared_copies:
-    name: "The published crate carries its own copies of the files it shares"
-    verdict: "native/ builds on its own: the files the crate embeds or fingerprints from scripts/
-              are copied into native/shared/, and the licence into native/LICENSE. scripts/ stays the
-              place to edit them; a stale copy stops a native build in the repository and fails the
-              release tests. A crate built from crates.io declares the adapter fingerprint of the
-              same version built from the repository."
-    because: "crates.io receives native/ alone, while the plugin and the Python reader read these
-              files from scripts/ by path, so the originals cannot move. Cargo publishes a rewritten
-              manifest and keeps the original as Cargo.toml.orig; the build hashes that original, so
-              receipts and the runtime declaration name one program whichever channel built it."
+    name: "The published crate carries the shared originals it embeds"
+    verdict: "native/ builds on its own: native/shared/ holds the original schemas, renderer files
+              and embedded source texts, and native/LICENSE holds the crate licence. The Lean build
+              trees under scripts/ stay synchronized with the embedded Lean copies. A crate built
+              from crates.io declares the same adapter fingerprint as the same version built from
+              this repository."
+    because: "crates.io receives native/ alone, so every file the crate embeds or fingerprints must
+              be inside it. There is no Python reader requiring originals under scripts/. Cargo
+              publishes a rewritten manifest and keeps Cargo.toml.orig; the build hashes that
+              original so receipts identify the same adapter across distribution channels."
     rests_on: [d.crates_io_every_release]
     reopened_by: "A crate built from crates.io refuses the verified resources of the release with
                   the same version, or declares a different adapter than that release's executable."
-    from: s.2026_09_23_crates_io
+    from: s.2026_09_24_source_file_references
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       d.crates_io_every_release: "Each release's crate is published to crates.io as kpopper, from
                                   the commit its GitHub release was made from and only once that
@@ -4836,8 +4945,11 @@ judgments:
               stays red on its own account. A premise that moved under a judgment blocks the fold and
               leaves the run green, since a move flags a judgment for a person and fails no build; a
               contested id, a falsifier that holds and a hole make it red. {{p.union_tests}} is the
-              count of places the union is tested."
-    wrong_if: "p.union_tests > 1"
+              count of places the union is tested. The count in p.union_tests is retained only as the
+              last Python reading; it no longer measures places in the native reader."
+    reopened_by: "A consolidation dry run and a check of its explicit union disagree about a
+                  structural failure or fired condition."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       s.2026_09_04_consolidate: "read 2026-09-04"
       d.consolidation_is_a_test: "consolidating hypotheses into the base tests whether the writers
@@ -5683,8 +5795,12 @@ judgments:
     because: "The card, the section text, the hover, pull and open each show a reasoning, and four
               renderings of one sentence would drift the day one of them learned a new case. So one
               function resolves, every surface calls it, and the count of such functions -
-              {{p.reference_resolvers}} today - is what would show a second one creeping in."
-    wrong_if: "p.reference_resolvers > 1"
+              {{p.reference_resolvers}} today - is what would show a second one creeping in. The
+              count in p.reference_resolvers is retained only as the last Python reading; it no
+              longer measures places in the native reader."
+    reopened_by: "The page, pull and open render different meanings for the same reference in the
+                  same record."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
                               the page's connective text lives in the brief; both resolve references
@@ -6980,16 +7096,23 @@ judgments:
               named both ids and would otherwise rest on the survivor twice; the survivor carries
               also: with the retired id, so a write under the old id is refused and pointed at it.
               Check after the write is what makes a migration safe to run without reading the diff: a
-              reference the rewrite missed fails there, and the files come back as they were."
-    wrong_if: "p.supersede_doors > 1"
+              reference the rewrite missed fails there, and the files come back as they were. The
+              count in p.supersede_doors is retained only as the last Python reading; it no longer
+              measures places in the native reader."
+    reopened_by: "Identity migration admits a replacement that the ordinary write path refuses for
+                  the same held claim and reading day."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       s.2026_09_04_sameness: "read 2026-09-04"
-      d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
-                                      with a value read no later than the base's own reading, or with
-                                      a different verdict, is refused into the base and named a
-                                      hypothesis; a newer reading supersedes, a standing judgment is
-                                      superseded only when its wrong_if holds or the request that
-                                      asked for the change is named; the same premises under
+      d.contradiction_by_id_and_day: "a contradiction is told by the id, the day and the base's own
+                                      readings: the same id with a value read no later than the
+                                      base's own reading, or with a different verdict, or with the
+                                      same verdict on other grounds, is refused into the base and
+                                      named a hypothesis; a newer reading supersedes and one dated
+                                      after today is refused; a standing judgment is superseded only
+                                      when its wrong_if holds on what the base holds; across the
+                                      branch line a reading from another source with another value
+                                      waits for a person to name the source; the same premises under
                                       different ids are different subjects"
       d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
                              nearest existing entries when one is written and candidates when
@@ -7126,6 +7249,22 @@ judgments:
                                      arrangement's review also rewrites the shape of the one tab, or
                                      of the tab serving a session source it rests on; nothing
                                      refreshes a snapshot by itself"
+  d.source_file_availability_is_a_note:
+    name: "A missing source file calls for another reading"
+    verdict: "check reports a missing repository file locator as a note, with a re-read or revision
+              pin hint. file and literal from paths accept revision:path; the revision must hold a
+              blob. Absolute external paths, symbolic entry references, prose and glob patterns are
+              outside this check."
+    because: "The absence of a cited file removes the ability to revisit that source in the current
+              tree, but does not by itself refute the claim read from it. Like other unavailable
+              knowledge notes, this finding preserves check exit status. at scopes the citation and
+              read dates it; neither substitutes for an openable file locator."
+    rests_on: [s.2026_09_24_source_file_references]
+    from: s.2026_09_24_source_file_references
+    reopened_by: "A claim is treated as independently verified solely because check exits zero
+                  despite a missing source, a valid pinned blob is reported absent, or an absolute
+                  external path is reported as missing from this repository."
+    seen: {s.2026_09_24_source_file_references: "read 2026-09-24"}
   d.spill_on_every_tab:
     rests_on: [s.2026_09_03_coverage, d.author_free_build_guarantees]
     verdict: "what fell through the arrangement - flagged judgments nothing picked, and what a
@@ -7310,20 +7449,26 @@ judgments:
               of the same day that disagrees is two writers, and here the second writer is the author
               of the pull request, who corrects the number in it. The runner writes nothing: a value
               with nobody's reading behind it is not a reading, and a commit nobody reviewed is not
-              the record."
-    wrong_if: "p.union_tests > 1"
+              the record. The count in p.union_tests is retained only as the last Python reading; it
+              no longer measures places in the native reader."
+    reopened_by: "A measured hypothesis and an equivalent explicitly authored hypothesis receive
+                  different validation on the same base."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-24"]
     seen:
       s.2026_09_04_remeasure: "read 2026-09-04"
       d.dry_run_is_check_on_the_union: "the dry run is the reader's own check, run on the base with
                                         the hypotheses laid over it by id, said as what the fold
                                         would change: what arrives, what it replaces and what rests
                                         on that, what the union moves or breaks, what is contested"
-      d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
-                                      with a value read no later than the base's own reading, or with
-                                      a different verdict, is refused into the base and named a
-                                      hypothesis; a newer reading supersedes, a standing judgment is
-                                      superseded only when its wrong_if holds or the request that
-                                      asked for the change is named; the same premises under
+      d.contradiction_by_id_and_day: "a contradiction is told by the id, the day and the base's own
+                                      readings: the same id with a value read no later than the
+                                      base's own reading, or with a different verdict, or with the
+                                      same verdict on other grounds, is refused into the base and
+                                      named a hypothesis; a newer reading supersedes and one dated
+                                      after today is refused; a standing judgment is superseded only
+                                      when its wrong_if holds on what the base holds; across the
+                                      branch line a reading from another source with another value
+                                      waits for a person to name the source; the same premises under
                                       different ids are different subjects"
       d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
                           person; only a predicate that holds fails the build"
