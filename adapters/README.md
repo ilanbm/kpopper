@@ -39,6 +39,7 @@ checks](../docs/compatibility.md) state which boundaries have actually been test
 | **OpenClaw** | Explicit command or agent instruction | Explicit `check`; declared bundle hooks are not runnable hook packs | Canonical skills load as a Codex bundle. |
 | **OpenCode** | Agent instruction | Explicit `check`; no enforced gate | Native `skills.paths` loads the bundled skills; `instructions` loads the shared method. |
 | **Claude Cowork** | Same package import; runtime behavior needs verification | No verified parity with Claude Code | Claude plugin package; validate the native runtime, file access and persistence in Cowork. |
+| **Grok Bot** | Explicit command or saved skill instruction; live route unverified | Explicit `check` | Full checkout on the cloud computer plus a private skill pointing to shared instructions; plugin import and hooks unverified. |
 | **Windsurf / Cascade** | Agent instruction in the shipped rule | Explicit command; an optional hook runs `check` after record writes and discards its output | Condensed rule and an unverified host hook route; not reassessed in this compatibility pass. |
 
 `kpop experimental hub` is an optional experimental application; the native runtime
@@ -57,6 +58,7 @@ scheduler. Background delivery needs its own verification.
 - [OpenClaw](openclaw/README.md)
 - [OpenCode](opencode/README.md)
 - [Claude Cowork](claude-cowork/README.md)
+- [Grok Bot](grok-bot/README.md)
 - [Windsurf / Cascade](windsurf/README.md)
 - [ChatGPT Work and current limits](../docs/chatgpt-work.md)
 

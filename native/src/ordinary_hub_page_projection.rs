@@ -7,6 +7,7 @@ struct PageProjection {
     arrangement_owns: Vec<BTreeSet<usize>>,
     arrangement_facts: Map,
     hub: HubData,
+    picked_by_tab: Vec<BTreeSet<String>>,
 }
 #[allow(clippy::too_many_arguments)]
 fn page_projection(
@@ -258,5 +259,6 @@ fn page_projection(
         arrangement_owns,
         arrangement_facts,
         hub,
+        picked_by_tab,
     })
 }

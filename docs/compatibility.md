@@ -6,7 +6,7 @@ Report those capabilities separately when deciding whether a release is ready.
 
 The current bundle names the HTML application skills `hub` and `annotated-doc` and
 retains `page` and `document` as compatibility aliases. The dated host observations
-below predate this rename.
+from 2026-09-16 and 2026-09-17 below predate this rename.
 
 ## Verification matrix
 
@@ -26,6 +26,7 @@ supported end-to-end integration.
 | **Copilot CLI 1.0.75** | Actual CLI hooks and native payloads; real-model creation, fresh record read and changed-premise detection with canonical skills | Complete citation metadata, randomized fresh-session recall, live cross-agent handoff and other operating systems. |
 | **Cursor** | Shell wrappers handle native-shaped payloads, executable symlinks, paths with spaces and one follow-up; documentation reviewed | Actual local client delivery, resume/compaction and multi-root behavior. Hosted cloud lacks the opening event used by this adapter. |
 | **Claude Cowork** | Install route and runtime requirements reviewed against official documentation | Installation in Cowork, runtime access, hook behavior and persistence across conversations. |
+| **Grok Bot** | Official cloud filesystem and private-skill documentation reviewed on 2026-09-24; an instruction-based [setup guide](../adapters/grok-bot/README.md) is provided | Live cloud installation, skill use, CLI writes and fresh-conversation reads. Plugin import, hooks and background delivery are unverified. |
 | **Copilot VS Code / cloud** | Current documentation reviewed and guide corrected | Local/hosted executions of the provided route. |
 | **Windsurf / ChatGPT Work** | Existing guides retain their limitations; no new runtime verification | Host installation and session behavior. |
 

@@ -88,6 +88,47 @@ fn saved(root: &Path) -> (String, PathBuf) {
 }
 
 #[test]
+fn unknown_core_session_revision_tells_the_reader_to_reopen() {
+    let temp = fixture();
+    let root = temp.path();
+    fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+    ok(Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["init", "-q"])
+        .output()
+        .unwrap());
+    ok(Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root)
+        .args(["add", "p.start", "v=1"])
+        .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
+        .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
+        .env("XDG_STATE_HOME", root.join("private-state"))
+        .env_remove("KPOPPER_AGENT_SESSION")
+        .env_remove("CODEX_THREAD_ID")
+        .output()
+        .unwrap());
+    ok(command(root, "open", true).output().unwrap());
+    let (revision, retained) = saved(root);
+    let before = fs::read(&retained).unwrap();
+    let output = command(root, "read", false)
+        .args(["--ref", "/", "--revision", &"0".repeat(64)])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stderr).unwrap(),
+        json!({"error": "unknown core session revision; reopen"})
+    );
+    ok(command(root, "read", false)
+        .args(["--ref", "/", "--revision", &revision])
+        .output()
+        .unwrap());
+    assert_eq!(fs::read(retained).unwrap(), before);
+}
+
+#[test]
 fn public_context_captures_current_record_and_matches_legacy_route() {
     let temp = fixture();
     let root = temp.path();

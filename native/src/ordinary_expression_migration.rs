@@ -382,6 +382,17 @@ pub(super) fn migrate(cwd: &Path, record: &Path, apply: bool, compact: bool) -> 
     let mut errors = failures(after_document, brief.as_ref(), runtime.as_ref())?;
     let sorted_mapping_error = python_sorted_mapping_error(captured.source());
     if let (Some(reason), Some(predicate_field)) = (&sorted_mapping_error, predicate_field) {
+        // The source-key check supplies the reference's public refusal below.
+        // Replace only the matching internal diagnostic, retaining all other errors.
+        for id in &judgments {
+            for reason in [
+                "ordinary_json_key_order",
+                "ordinary JSON requires scalar JSON-compatible keys",
+            ] {
+                let internal = format!("{id}: condition cannot be computed: {reason}");
+                errors.retain(|error| error != &internal);
+            }
+        }
         errors.extend(judgments.iter().filter_map(|id| {
             map(&all[id].1)
                 .ok()

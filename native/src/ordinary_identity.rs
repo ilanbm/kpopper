@@ -28,6 +28,39 @@ static MEMBER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^( +)([A-Za-z_][A-Za-z0-9_.]*):(?: |$)").unwrap());
 static FLOW: &str = r#"("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^,}\n]+)"#;
 
+/// Use the public record check for both migration admission and its report.
+/// Optional page coverage belongs to the Hub, not the record's declared count.
+fn record_check(
+    source: &V,
+    hypotheses: &Map,
+    runtime: Option<&Runtime>,
+    entry: &Path,
+    workspace: &Path,
+    inventory: &mut Inventory,
+) -> Result<String> {
+    use crate::ordinary_value::{Map as OrdinaryMap, Value};
+    let hypotheses = hypotheses
+        .iter()
+        .map(|(name, value)| (name.clone(), Value::from_typed(value)))
+        .collect();
+    let source = Value::from_typed(source);
+    let notes = crate::source_references::notes(
+        &source,
+        workspace,
+        entry.parent().unwrap_or(workspace),
+        inventory,
+    )?;
+    crate::ordinary_views::Projection::new(
+        &source,
+        &hypotheses,
+        &OrdinaryMap::new(),
+        notes,
+        runtime,
+    )?
+    .check(None)
+    .map(|(text, _)| text)
+}
+
 struct Node {
     start: usize,
     end: usize,
@@ -459,9 +492,14 @@ pub(super) fn run(
             has_brief.then(|| side.brief.projected()).as_ref(),
             &sources,
         );
-        let before_check = before
-            .check(has_brief.then(|| side.brief.projected()).as_ref())?
-            .0;
+        let before_check = record_check(
+            &source,
+            hypotheses,
+            runtime,
+            entry,
+            &route.project().root,
+            &mut inventory,
+        )?;
         let mut aliases = BTreeMap::new();
         let mut notes = vec![];
         let base_survivor = source_body(&document.source, survivor)
@@ -640,12 +678,13 @@ pub(super) fn run(
             }
         }
         let (after_source, after_hypotheses) = rebuild(&document.members, hypotheses, &texts)?;
-        let after = Projection::new(
+        let after_check = record_check(
             &after_source.projected(),
             &after_hypotheses,
-            &Map::new(),
-            vec![],
             runtime,
+            entry,
+            &route.project().root,
+            &mut inventory,
         )
         .map_err(|e| {
             error(&format!(
@@ -672,15 +711,6 @@ pub(super) fn run(
                 }
             ),
         )?;
-        let brief = if has_brief {
-            Some(
-                crate::history_yaml::decode_ordinary_source_value(texts[&brief_path].as_bytes())?
-                    .projected(),
-            )
-        } else {
-            None
-        };
-        let after_check = after.check(brief.as_ref())?.0;
         let previous = before_check
             .lines()
             .filter_map(|v| v.strip_prefix("FAIL "))
