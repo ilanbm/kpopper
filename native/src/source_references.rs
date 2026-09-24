@@ -14,18 +14,19 @@ fn is_line_suffix(suffix: &str) -> bool {
         && (last.is_empty() || last.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
-fn strip_line_suffix(locator: &str) -> &str {
-    let mut path = locator;
-    loop {
+fn locator_candidates(locator: &str) -> Vec<&str> {
+    let mut candidates = vec![locator];
+    while candidates.len() < 9 {
+        let path = *candidates.last().expect("full locator is first");
         let Some((prefix, suffix)) = path.rsplit_once(':') else {
-            return path;
+            break;
         };
-        if is_line_suffix(suffix) {
-            path = prefix;
-        } else {
-            return path;
+        if !is_line_suffix(suffix) {
+            break;
         }
+        candidates.push(prefix);
     }
+    candidates
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -126,91 +127,81 @@ pub(crate) fn notes(
             {
                 continue;
             }
-            let path = Path::new(locator);
-            // Match the hub's existing file links: relative to the primary record,
-            // while Git's revision:path locator stays relative to the repository.
-            let path = absolute(&record_root.join(path))?;
-            let resolved = crate::project_modes::resolved(&path)?;
-            if !resolved.starts_with(&project.root) {
-                continue;
-            }
-            if inventory.exists(&path)? {
-                continue;
-            }
-            if let Some((revision, pinned_path)) = locator.split_once(':')
-                && !revision.is_empty()
-                && !pinned_path.contains(':')
-                && is_line_suffix(pinned_path)
-            {
-                match pinned_file_status(&project.root, revision, pinned_path) {
-                    PinnedFileStatus::Available => continue,
-                    PinnedFileStatus::Missing => {
-                        notes.push(format!("{id}: pinned file {locator} is unavailable in this repository; verify the revision and path with git show {locator}, or re-read the source"));
-                        continue;
-                    }
-                    PinnedFileStatus::RevisionUnavailable => {
-                        notes.push(format!(
-                            "{id}: could not check locator {locator} because Git's revision probe was unavailable; retry the check or re-read the source"
-                        ));
-                        continue;
-                    }
-                    PinnedFileStatus::Unavailable => {
-                        notes.push(format!(
-                            "{id}: could not check pinned file {locator} because Git's object probe was unavailable; retry the check or re-read the source"
-                        ));
-                        continue;
-                    }
-                    PinnedFileStatus::Unresolved => {}
-                }
-            }
-            let raw = strip_line_suffix(locator);
-            if raw != locator {
-                let path = Path::new(raw);
-                let path = absolute(&record_root.join(path))?;
+            // Try the full locator and each line/column-trimmed form. Check every
+            // local candidate before Git so existing citations never depend on Git.
+            let candidates = locator_candidates(locator);
+            let mut inside_candidates = Vec::new();
+            let mut local_exists = false;
+            for candidate in &candidates {
+                let path = absolute(&record_root.join(Path::new(candidate)))?;
                 let resolved = crate::project_modes::resolved(&path)?;
                 if !resolved.starts_with(&project.root) {
                     continue;
                 }
+                inside_candidates.push(*candidate);
                 if inventory.exists(&path)? {
-                    continue;
+                    local_exists = true;
+                    break;
                 }
             }
-            if !Path::new(raw).is_absolute()
-                && let Some((revision, pinned_path)) = raw.split_once(':')
-            {
-                // Existing local paths were handled above. Any revision that resolves is a pin,
-                // including refs with slashes; an unresolved slash-free revision with a
-                // repository path suffix remains an advisory pin candidate.
-                let pin = (!revision.is_empty() && !pinned_path.is_empty())
-                    .then(|| pinned_file_status(&project.root, revision, pinned_path));
-                if pin == Some(PinnedFileStatus::RevisionUnavailable) {
-                    notes.push(format!(
-                        "{id}: could not check locator {locator} because Git's revision probe was unavailable; retry the check or re-read the source"
-                    ));
-                    continue;
-                }
-                if pin == Some(PinnedFileStatus::Unavailable) {
-                    notes.push(format!(
-                        "{id}: could not check pinned file {locator} because Git's object probe was unavailable; retry the check or re-read the source"
-                    ));
-                    continue;
-                }
-                let explicit_pin = matches!(
-                    pin,
-                    Some(
-                        PinnedFileStatus::Available | PinnedFileStatus::Missing
-                    )
-                )
-                    || (!revision.is_empty()
-                        && !revision.contains(['/', '\\'])
-                        && !pinned_path.is_empty()
-                        && pinned_path.contains('/'));
-                if explicit_pin {
-                    if pin != Some(PinnedFileStatus::Available) {
-                        notes.push(format!("{id}: pinned file {locator} is unavailable in this repository; verify the revision and path with git show {raw}, or re-read the source"));
+            if local_exists {
+                continue;
+            }
+            if inside_candidates.is_empty() {
+                continue;
+            }
+
+            let mut missing_pin: Option<&str> = None;
+            let mut unavailable_pin: Option<PinnedFileStatus> = None;
+            let mut pin_available = false;
+            if !Path::new(locator).is_absolute() {
+                for candidate in &candidates {
+                    let Some((revision, pinned_path)) = candidate.split_once(':') else {
+                        continue;
+                    };
+                    if revision.is_empty() || pinned_path.is_empty() {
+                        continue;
                     }
-                    continue;
+                    // Resolved refs may contain slashes; retain the older slash-free
+                    // revision:path heuristic when Git confirms no revision exists.
+                    match pinned_file_status(&project.root, revision, pinned_path) {
+                        PinnedFileStatus::Available => {
+                            pin_available = true;
+                            break;
+                        }
+                        PinnedFileStatus::Missing => missing_pin = Some(candidate),
+                        status @ (PinnedFileStatus::RevisionUnavailable
+                        | PinnedFileStatus::Unavailable) => {
+                            unavailable_pin = Some(status);
+                            break;
+                        }
+                        PinnedFileStatus::Unresolved
+                            if !revision.contains(['/', '\\'])
+                                && pinned_path.contains('/') =>
+                        {
+                            missing_pin = Some(candidate);
+                        }
+                        PinnedFileStatus::Unresolved => {}
+                    }
                 }
+            }
+            if pin_available {
+                continue;
+            }
+            if let Some(status) = unavailable_pin {
+                let reason = match status {
+                    PinnedFileStatus::RevisionUnavailable => "revision",
+                    PinnedFileStatus::Unavailable => "object",
+                    _ => unreachable!("only unavailable probe states are stored"),
+                };
+                notes.push(format!(
+                    "{id}: could not check locator {locator} because Git's {reason} probe was unavailable; retry the check or re-read the source"
+                ));
+                continue;
+            }
+            if let Some(candidate) = missing_pin {
+                notes.push(format!("{id}: pinned file {locator} is unavailable in this repository; verify the revision and path with git show {candidate}, or re-read the source"));
+                continue;
             }
             notes.push(format!("{id}: file {locator} is absent from this repository; re-read the surviving source, or pin the historical file as revision:path (open it with git show revision:path)"));
         }

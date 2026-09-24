@@ -207,7 +207,9 @@ fn numeric_pinned_paths_are_not_stripped_as_line_numbers() {
     let f = Fixture::new();
     f.git(&["checkout", "-b", "numeric-paths"]);
     fs::write(f.root.path().join("2024"), "source").unwrap();
-    f.git(&["add", "2024"]);
+    fs::create_dir(f.root.path().join("logs")).unwrap();
+    fs::write(f.root.path().join("logs/run:1"), "source").unwrap();
+    f.git(&["add", "2024", "logs/run:1"]);
     f.git(&[
         "-c",
         "user.name=Fixture",
@@ -217,10 +219,15 @@ fn numeric_pinned_paths_are_not_stripped_as_line_numbers() {
         "-qm",
         "Add numeric path",
     ]);
+    f.git(&["tag", "numeric-paths"]);
+    fs::remove_file(f.root.path().join("2024")).unwrap();
+    fs::remove_file(f.root.path().join("logs/run:1")).unwrap();
     let out = text(f.check(
-        "sources:\n  s.numeric: {file: 'numeric-paths:2024'}\n  s.missing: {file: 'numeric-paths:2042'}\n",
+        "sources:\n  s.numeric: {file: 'numeric-paths:2024'}\n  s.numeric_line: {file: 'numeric-paths:2024:5'}\n  s.colon: {file: 'numeric-paths:logs/run:1'}\n  s.missing: {file: 'numeric-paths:2042'}\n",
     ));
     assert!(!out.contains("NOTE s.numeric:"), "{out}");
+    assert!(!out.contains("NOTE s.numeric_line:"), "{out}");
+    assert!(!out.contains("NOTE s.colon:"), "{out}");
     assert!(out.contains("NOTE s.missing: pinned file"), "{out}");
 }
 #[test]
@@ -309,11 +316,15 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
     let output = command.output().unwrap();
     let out = text(output);
     assert!(
-        out.contains("NOTE s.pinned: could not check pinned file"),
+        out.contains("NOTE s.pinned: could not check locator")
+            && out.contains("s.pinned")
+            && out.contains("object probe was unavailable"),
         "{out}"
     );
     assert!(
-        out.contains("NOTE s.slash_pin: could not check pinned file"),
+        out.contains("NOTE s.slash_pin: could not check locator")
+            && out.contains("s.slash_pin")
+            && out.contains("object probe was unavailable"),
         "{out}"
     );
     assert!(!out.contains("NOTE s.pinned: pinned file"), "{out}");
@@ -350,11 +361,12 @@ fn failed_revision_probes_are_advisory_without_claiming_a_pin_or_absent_file() {
     command.env("KPOPPER_TEST_GIT", real_git);
     fs::write(
         f.root.path().join("GROUNDING.yaml"),
-        "sources:\n  s.slash_pin: {file: 'feature/source-reference:sources/original.txt'}\n",
+        "sources:\n  s.slash_pin: {file: 'feature/source-reference:sources/original.txt'}\n  s.line: {file: 'sources/original.txt:42'}\n",
     )
     .unwrap();
     let out = text(command.output().unwrap());
     assert!(out.contains("NOTE s.slash_pin: could not check locator"), "{out}");
+    assert!(!out.contains("NOTE s.line:"), "{out}");
     assert!(!out.contains("pinned file"), "{out}");
     assert!(!out.contains("file feature/source-reference:sources/original.txt is absent"), "{out}");
     assert!(out.contains("0 problems"), "{out}");
