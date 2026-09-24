@@ -65,6 +65,13 @@ pub fn prepare(root: &Path, operation: &str, proof: &Proof) -> Result<P::Prepare
 }
 pub(crate) fn verify(root: &Path, prepared: &P::Prepared) -> Result<()> {
     require(
+        prepared
+            .context()?
+            .as_ref()
+            .is_some_and(crate::history_node_transaction::is_context),
+        "node_pre_release_journal_requires_original_runtime",
+    )?;
+    require(
         prepared.imports()?.is_empty() && prepared.canonical_before()?.is_none(),
         "source_ancestry_publication",
     )?;

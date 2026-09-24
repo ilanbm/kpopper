@@ -163,6 +163,7 @@ impl History {
                 string_is(map(&full)?.get("id").unwrap(), &node.id),
                 "identity_mismatch",
             )?;
+            // references validates the complete object identity before returning any edge.
             for reference in references(&full)? {
                 let target = compact
                     .get(&reference.id)

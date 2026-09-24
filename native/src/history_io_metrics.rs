@@ -7,6 +7,7 @@ pub struct Stats {
     pub read_bytes: u64,
     pub write_calls: u64,
     pub write_bytes: u64,
+    pub semantic_replays: u64,
 }
 
 thread_local! {
@@ -15,6 +16,7 @@ thread_local! {
         read_bytes: 0,
         write_calls: 0,
         write_bytes: 0,
+        semantic_replays: 0,
     }) };
 }
 
@@ -40,6 +42,14 @@ pub(crate) fn write(bytes: usize) {
         let mut stats = counters.get();
         stats.write_calls = stats.write_calls.saturating_add(1);
         stats.write_bytes = stats.write_bytes.saturating_add(bytes as u64);
+        counters.set(stats);
+    });
+}
+
+pub(crate) fn semantic_replay() {
+    COUNTERS.with(|counters| {
+        let mut stats = counters.get();
+        stats.semantic_replays = stats.semantic_replays.saturating_add(1);
         counters.set(stats);
     });
 }

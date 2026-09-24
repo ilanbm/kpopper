@@ -47,14 +47,22 @@ fn write(root: &std::path::Path, op: &str, action: &V) -> P::Prepared {
 }
 
 #[test]
-fn siblings_preserve_receipts_disputes_and_source_free_union() {
+fn siblings_preserve_context_disputes_and_source_free_union() {
     let target = setup();
     write(target.path(), "seed", &add());
     let sibling = P::export(target.path()).unwrap().reconstruct().unwrap();
     write(target.path(), "left", &set(2));
     write(sibling.path(), "right", &set(3));
-    let left = W::receipt(&P::capture_snapshot(target.path()).unwrap(), "left").unwrap();
-    let right = W::receipt(&P::capture_snapshot(sibling.path()).unwrap(), "right").unwrap();
+    let left = P::capture_snapshot(target.path()).unwrap().transactions["left"]
+        .context
+        .clone()
+        .unwrap();
+    let right = P::capture_snapshot(sibling.path()).unwrap().transactions["right"]
+        .context
+        .clone()
+        .unwrap();
+    assert_eq!(map(&left)["action"], set(2));
+    assert_eq!(map(&right)["action"], set(3));
     let bundle = P::export(sibling.path()).unwrap();
     let prepared =
         kpop_native::history_node_branch::prepare(target.path(), &[bundle], "merge").unwrap();
@@ -63,8 +71,11 @@ fn siblings_preserve_receipts_disputes_and_source_free_union() {
     W::publish(target.path(), &prepared, None, |_| panic!("retry wrote")).unwrap();
     let snapshot = P::capture_snapshot(target.path()).unwrap();
     assert_eq!(snapshot.transactions["merge"].parents, ["left", "right"]);
-    assert_eq!(W::receipt(&snapshot, "left").unwrap(), left);
-    assert_eq!(W::receipt(&snapshot, "right").unwrap(), right);
+    assert_eq!(snapshot.transactions["left"].context.as_ref(), Some(&left));
+    assert_eq!(
+        snapshot.transactions["right"].context.as_ref(),
+        Some(&right)
+    );
     let captured = Capture::read(target.path()).unwrap();
     assert_eq!(
         map(&map(&map(captured.state())["subjects"])["p.a"])["acceptance"],
@@ -75,6 +86,12 @@ fn siblings_preserve_receipts_disputes_and_source_free_union() {
     assert_eq!(
         Capture::read(copy.path()).unwrap().state(),
         captured.state()
+    );
+    let restored = P::capture_snapshot(copy.path()).unwrap();
+    assert_eq!(restored.transactions["left"].context.as_ref(), Some(&left));
+    assert_eq!(
+        restored.transactions["right"].context.as_ref(),
+        Some(&right)
     );
     // A later explicit choice uses the normal writer after merge.
     let subject = &map(&map(captured.state())["subjects"])["p.a"];
@@ -88,11 +105,15 @@ fn siblings_preserve_receipts_disputes_and_source_free_union() {
 }
 
 #[test]
-fn new_sibling_nodes_stay_lazy_and_unobserved_by_old_receipts() {
+fn new_sibling_nodes_stay_lazy_and_unobserved_by_old_context() {
     let target = setup();
     write(target.path(), "seed", &add());
     let sibling = P::export(target.path()).unwrap().reconstruct().unwrap();
     write(target.path(), "left", &set(2));
+    let old = P::capture_snapshot(target.path()).unwrap().transactions["left"]
+        .context
+        .clone()
+        .unwrap();
     write(
         sibling.path(),
         "right-new",
@@ -106,15 +127,8 @@ fn new_sibling_nodes_stay_lazy_and_unobserved_by_old_receipts() {
     .unwrap();
     W::publish(target.path(), &p, None, |_| Ok(())).unwrap();
     let snapshot = P::capture_snapshot(target.path()).unwrap();
-    let old = W::receipt(&snapshot, "left").unwrap();
-    assert!(
-        !map(&map(&map(&old)["after"])["document"])["known"]
-            .to_json()
-            .unwrap()
-            .as_object()
-            .unwrap()
-            .contains_key("p.b")
-    );
+    assert_eq!(snapshot.transactions["left"].context.as_ref(), Some(&old));
+    assert_eq!(map(&old)["action"], set(2));
     assert!(
         !target
             .path()

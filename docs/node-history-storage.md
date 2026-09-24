@@ -59,6 +59,12 @@ small result metadata, not a retained full diagnostic report. Full reports and c
 per-write world inventories are not stored in manifests. Exact report or edited-view bytes, when
 required, are separate immutable evidence files referenced by hash.
 
+Temporal authoring retains a constant-size commitment to the historical snapshot,
+attention policy, operational limits, and semantic result digests. Reads reconstruct
+that snapshot from the verified history and check replay against the commitment;
+serialized results carry transient witnesses so their verification cannot be forged.
+These witnesses and full reconstructed snapshots are not permanent transaction data.
+
 Publication is journaled under the directory guard. Before a durable manifest appears,
 recovery removes only verified journal-owned additions; after the manifest appears, it
 finishes the same transaction forward. Capture and export verify the complete committed
@@ -70,3 +76,9 @@ The format remains experimental. Full-closure verification is retained, and no s
 fast-read integrity policy is enabled. Model-free storage and full-writer measurements
 are pending; no throughput, memory, 10k-writer, or launch-readiness claim follows from
 codec or copy tests.
+
+Pending branch-union or source-clock journals written by earlier unreleased node-history
+prototypes must be recovered with their original runtime before upgrading. This runtime
+refuses those journals explicitly instead of replaying them through a different planner.
+Original retained legacy receipts remain readable; asking for an original full receipt
+from a compact native operation returns `node_receipt_not_retained`.

@@ -148,7 +148,7 @@ fn verified_git_clocks_resolve_after_admission_and_survive_source_loss() {
             .transactions
             .iter()
             .filter(|(_, tx)| tx.context.is_some())
-            .map(|(op, _)| (op.clone(), W::receipt(&before, op).unwrap()))
+            .map(|(op, tx)| (op.clone(), tx.context.clone().unwrap()))
             .collect::<BTreeMap<_, _>>();
         let object_count = Capture::read(target.path()).unwrap().object_count();
         let p = Clocks::prepare(target.path(), "proof", &proof).unwrap();
@@ -169,18 +169,17 @@ fn verified_git_clocks_resolve_after_admission_and_survive_source_loss() {
             2
         );
         let after = P::capture_snapshot(target.path()).unwrap();
-        for (op, receipt) in old {
-            assert_eq!(W::receipt(&after, &op).unwrap(), receipt);
+        for (op, context) in old {
+            assert_eq!(after.transactions[&op].context.as_ref(), Some(&context));
         }
-        let receipt = W::receipt(&after, "proof").unwrap().to_json().unwrap();
-        assert!(
-            receipt["before"]["document"]["known"]
-                .get("p.clock")
-                .is_none()
+        let context = map(after.transactions["proof"].context.as_ref().unwrap());
+        assert_eq!(context["format"], value(json!("node-ledger-authoring/v1")));
+        assert_eq!(
+            map(&context["action"])["kind"],
+            value(json!("source-clocks"))
         );
-        assert_eq!(receipt["before"]["authoring"]["action"]["kind"], "source-clocks");
-        assert!(receipt["after"]["document"]["known"].get("p.clock").is_none(),
-            "compact receipt projection must not copy the current world");
+        assert!(!context.contains_key("before") && !context.contains_key("after"));
+        assert!(!map(&context["evidence"]).is_empty());
         let copy = P::export(target.path()).unwrap().reconstruct().unwrap();
         drop(target);
         assert_eq!(acceptance(copy.path()), value(json!("accepted")));

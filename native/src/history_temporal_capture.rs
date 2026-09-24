@@ -43,6 +43,12 @@ pub(crate) trait Source {
     fn active(&self, operation: &str) -> Result<bool>;
     fn reduce(&self, objects: &Map, operations: &BTreeSet<String>) -> Result<V>;
     fn template(&self, operations: &BTreeSet<String>) -> Result<V>;
+    fn temporal_recipe(&self, _operation: &str, _phase: &str) -> Result<Option<V>> {
+        Ok(None)
+    }
+    fn requires_temporal_recipe(&self, _operation: &str) -> bool {
+        false
+    }
 }
 struct Legacy<'a> {
     captured: &'a Capture,
@@ -285,8 +291,14 @@ pub(crate) fn capture_source(source: &dyn Source) -> Result<Option<V>> {
         for phase in ["before", "after"] {
             let evidence = map(&map(&receipt)?[phase])?;
             let recorded = evidence.get("temporal_replay").filter(|v| **v != V::Null);
+            let recipe = source.temporal_recipe(operation, phase)?;
+            require(
+                recorded.is_none() || recipe.is_none(),
+                "temporal_duplicate_retention",
+            )?;
             let after = phase == "after";
             if recorded.is_none()
+                && recipe.is_none()
                 && !(if after {
                     lineage[operation]
                 } else {
@@ -314,10 +326,30 @@ pub(crate) fn capture_source(source: &dyn Source) -> Result<Option<V>> {
                     evidence.get("assessment").cloned().unwrap_or(V::Null),
                     "recorded_receipt",
                 )
+            } else if let Some(recipe) = &recipe {
+                crate::history_node_temporal_recipe::validate_side(recipe)?;
+                let snapshot = causal.reconstructed(operation, after, &frontier)?;
+                require(
+                    map(recipe)?["snapshot_id"] == s(snapshot.snapshot_id()),
+                    "temporal_recipe_snapshot_mismatch",
+                )?;
+                (
+                    obj([
+                        ("version", one()),
+                        ("snapshot", s(&snapshot.to_json()?)),
+                        ("claims", V::Map(expected.clone())),
+                    ]),
+                    V::Null,
+                    "retained_compact_recipe",
+                )
             } else {
                 if expected.is_empty() {
                     continue;
                 }
+                require(
+                    !source.requires_temporal_recipe(operation),
+                    "temporal_recipe_missing",
+                )?;
                 match causal
                     .reconstructed(operation, after, &frontier)
                     .and_then(|snapshot| snapshot.to_json())
@@ -432,7 +464,7 @@ pub(crate) fn capture_source(source: &dyn Source) -> Result<Option<V>> {
             if claims.is_empty() {
                 continue;
             }
-            let observation = obj([
+            let mut observation = obj([
                 ("operation", s(operation)),
                 ("phase", s(phase)),
                 ("evidence_kind", s(kind)),
@@ -440,6 +472,9 @@ pub(crate) fn capture_source(source: &dyn Source) -> Result<Option<V>> {
                 ("assessment", assessment),
                 ("claims", V::List(claims)),
             ]);
+            if let Some(recipe) = recipe {
+                map_mut(&mut observation)?.insert("recipe".into(), recipe);
+            }
             if observations.len() >= 64 {
                 truncated = true;
                 continue;

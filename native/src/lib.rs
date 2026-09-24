@@ -78,6 +78,7 @@ pub mod history_node_receipt;
 mod history_node_receipt_components;
 mod history_node_temporal_receipt;
 mod history_node_temporal;
+mod history_node_temporal_recipe;
 pub mod history_node_codec;
 pub mod history_node_current;
 pub mod history_node_evidence;

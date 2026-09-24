@@ -517,6 +517,7 @@ fn add_stats(total: &mut FileIoStats, next: FileIoStats) {
     total.read_calls = total.read_calls.saturating_add(next.read_calls);
     total.read_bytes = total.read_bytes.saturating_add(next.read_bytes);
     total.write_calls = total.write_calls.saturating_add(next.write_calls);
+    total.semantic_replays = total.semantic_replays.saturating_add(next.semantic_replays);
     total.write_bytes = total.write_bytes.saturating_add(next.write_bytes);
 }
 

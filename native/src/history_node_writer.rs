@@ -143,8 +143,21 @@ fn components(
 ) -> Result<Nodes> {
     crate::history_node_receipt_components::Components::new(snapshot)?.at(allowed, before)
 }
-/// Restore the exact original receipt using only its causal node components and compact context.
+/// Restore an original retained receipt. Compact native operations retain intent and audit
+/// evidence, not a full original diagnostic receipt, and explicitly refuse this API.
 pub fn receipt(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
+    require(
+        !snapshot
+            .transactions
+            .get(operation)
+            .and_then(|t| t.context.as_ref())
+            .is_some_and(crate::history_node_transaction::is_context),
+        "node_receipt_not_retained",
+    )?;
+    receipt_projection(snapshot, operation)
+}
+/// Internal compatibility projection; compact documents here are historical templates.
+pub(crate) fn receipt_projection(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
     if snapshot
         .transactions
         .get(operation)
@@ -202,10 +215,30 @@ pub(crate) fn receipt_index(
     Receipt::from_parts(c["header"].clone(), before, after)?.restore()
 }
 
+pub(crate) fn active_evidence_path(path: &str) -> bool {
+    path.starts_with(".kpopper/hypotheses/") || path.starts_with(".kpopper-history-migration/")
+}
 pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String, V>> {
     let templates = crate::history_node_transaction::templates(snapshot)?;
     let index = crate::history_node_receipt_components::Components::new(snapshot)?;
     for (op, tx) in &snapshot.transactions {
+        if tx.evidence.keys().any(|p| active_evidence_path(p)) {
+            let c = tx
+                .context
+                .as_ref()
+                .ok_or_else(|| error("node_active_evidence_kind"))?;
+            require(
+                [
+                    crate::history_node_bootstrap::FORMAT,
+                    crate::history_node_physical::FORMAT,
+                    crate::history_node_legacy::CHECKPOINT,
+                ]
+                .iter()
+                .any(|format| crate::history_node_legacy::kind(c, format))
+                    || crate::history_node_branch::is_union(c)?,
+                "node_active_evidence_kind",
+            )?;
+        }
         if let Some(value) = tx
             .context
             .as_ref()
@@ -996,6 +1029,8 @@ pub(crate) fn clock_transition(
     )
 }
 
+/// Construct an admitted plan from a verified capture. `publish` independently replays
+/// the plan under its guard before any journal write; callers may also invoke `verify`.
 pub fn prepare(
     root: &Path,
     action: &V,
@@ -1045,7 +1080,10 @@ pub fn prepare_edits(
         evidence,
         canonical,
     )?;
-    verify(root, &prepared, runtime)?;
+    // Admission was computed from a checked capture. Publication independently replays
+    // under its guard before writing the journal. Decoded journals and imported Prepared
+    // values never enter this constructor-only path.
+    check_constructed(root, &capture, &prepared)?;
     Ok(prepared)
 }
 
@@ -1101,11 +1139,44 @@ fn prepare_evidence(
         Some(&result.context),
         evidence,
     )?;
-    verify(root, &prepared, runtime)?;
+    // Admission was computed from a checked capture. Publication independently replays
+    // under its guard before writing the journal. Decoded journals and imported Prepared
+    // values never enter this constructor-only path.
+    check_constructed(root, &capture, &prepared)?;
     Ok(prepared)
 }
 
+fn check_constructed(root: &Path, capture: &Capture, prepared: &P::Prepared) -> Result<()> {
+    let value = prepared
+        .context()?
+        .ok_or_else(|| error("node_transaction_missing_context"))?;
+    let c = crate::history_node_transaction::validate(&value)?;
+    decode_options(prepared.operation(), &c["options"])?;
+    require(archive(root)? == c["archive"], "concurrent_archive_edit")?;
+    require(
+        !prepared.evidence()?.keys().any(|p| active_evidence_path(p)),
+        "node_active_evidence_kind",
+    )?;
+    let is_edit = string_is(field(map(&c["action"])?, "kind")?, "view-edit-proposals");
+    require(
+        is_edit == prepared.canonical_before()?.is_some(),
+        "node_edit_baseline_required",
+    )?;
+    if is_edit {
+        require(
+            prepared.evidence()?.get(&format!(
+                "evidence/view-edits/{}.yaml",
+                prepared.operation()
+            )) == prepared.before_view()?.as_ref(),
+            "node_edit_evidence_mismatch",
+        )?;
+    }
+    compact_audit(capture, &value)?;
+    verify_sources(root, prepared)
+}
+
 pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) -> Result<()> {
+    crate::history_io_metrics::semantic_replay();
     if prepared
         .context()?
         .as_ref()
@@ -1229,6 +1300,23 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
     )
 }
 
+fn compact_audit(capture: &Capture, context: &V) -> Result<ReplayAudit> {
+    ReplayAudit::from_compact(crate::history_node_transaction::audits(&context)?, || {
+        capture
+            .snapshot
+            .transactions
+            .iter()
+            .filter_map(|(op, tx)| tx.context.as_ref().map(|c| (op, c)))
+            .map(|(op, c)| {
+                if crate::history_node_transaction::is_context(c) {
+                    Ok(crate::history_node_transaction::validate(c)?["audits"].clone())
+                } else {
+                    ReplayAudit::compact(&receipt(&capture.snapshot, op)?)
+                }
+            })
+            .collect::<Result<Vec<_>>>()
+    })
+}
 fn verify_ledger(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) -> Result<()> {
     require(
         prepared.imports()?.is_empty(),
@@ -1266,22 +1354,7 @@ fn verify_ledger(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>)
     }
     let current_archive = archive(root)?;
     require(current_archive == c["archive"], "concurrent_archive_edit")?;
-    let audit =
-        ReplayAudit::from_compact(crate::history_node_transaction::audits(&context)?, || {
-            capture
-                .snapshot
-                .transactions
-                .iter()
-                .filter_map(|(op, tx)| tx.context.as_ref().map(|c| (op, c)))
-                .map(|(op, c)| {
-                    if crate::history_node_transaction::is_context(c) {
-                        Ok(crate::history_node_transaction::validate(c)?["audits"].clone())
-                    } else {
-                        ReplayAudit::compact(&receipt(&capture.snapshot, op)?)
-                    }
-                })
-                .collect::<Result<Vec<_>>>()
-        })?;
+    let audit = compact_audit(&capture, &context)?;
     let options = decode_options(prepared.operation(), &c["options"])?;
     let replay = materialize_ledger(
         &capture,
@@ -1393,7 +1466,7 @@ mod tests {
             publish(root.path(), &prepared, Some(&runtime), |_| Ok(()))
                 .unwrap_or_else(|e| panic!("publish {i}: {e}"));
             receipts.push(
-                receipt(
+                receipt_projection(
                     &P::capture_snapshot(root.path()).unwrap(),
                     &options.operation,
                 )
@@ -1432,7 +1505,7 @@ mod tests {
         let restored = Capture::read(copy.path()).unwrap();
         for (i, expected) in receipts.iter().enumerate() {
             assert_eq!(
-                receipt(&restored.snapshot, &format!("op-{i}")).unwrap(),
+                receipt_projection(&restored.snapshot, &format!("op-{i}")).unwrap(),
                 *expected
             );
         }

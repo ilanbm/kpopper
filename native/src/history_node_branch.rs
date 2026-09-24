@@ -118,6 +118,15 @@ fn plan(
     evidence: &BTreeMap<String, Vec<u8>>,
     adoption: Option<&V>,
 ) -> Result<Plan> {
+    for (path, raw) in evidence.iter().filter(|(p, _)| W::active_evidence_path(p)) {
+        require(
+            target
+                .raw_evidence
+                .get(path)
+                .is_some_and(|old| old.as_slice() == raw.as_slice()),
+            "node_branch_active_evidence_unsupported",
+        )?;
+    }
     token(&s(operation))?;
     require(
         !union.transactions.contains_key(operation),
@@ -474,6 +483,13 @@ fn prepare_inner(
 /// Rebuild the deterministic merge using only the journal and verified immutable closure.
 /// Imported events remain bound to their original manifests, receipts and semantic identities.
 pub(crate) fn verify(root: &Path, prepared: &P::Prepared) -> Result<()> {
+    require(
+        prepared
+            .context()?
+            .as_ref()
+            .is_some_and(crate::history_node_transaction::is_context),
+        "node_pre_release_journal_requires_original_runtime",
+    )?;
     crate::history_node_hypothesis::sources(root)?;
     require(
         prepared.canonical_before()?.is_none(),

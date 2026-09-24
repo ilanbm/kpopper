@@ -191,3 +191,54 @@ fn core_reading_update_does_not_append_receipt_events_to_fifty_dependents() {
         );
     }
 }
+
+#[test]
+fn capture_checks_identity_of_a_closed_acceptance_act() {
+    use kpop_native::{
+        history_node_observation::ObservationNode, history_node_semantics::History,
+        identity::typed_object_identity,
+    };
+    use std::collections::BTreeSet;
+    fn identify(object: &mut V) -> String {
+        let id = typed_object_identity(object).unwrap();
+        let V::Map(m) = object else { panic!() };
+        m.insert("id".into(), V::Text(id.clone()));
+        id
+    }
+    let mut claim = value(
+        json!({"schema_version":2,"id_scheme":"typed-history/v2","subject":"p.a","kind":"reading","by":"writer","on":"2000-01-01","op":"seed","body":{"v":1},"saw":[],"pins":{},"authored":{"collection":"known","profile":"ordinary-reader/v1","fields":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"}}}),
+    );
+    let claim_id = identify(&mut claim);
+    let claim_obs = ObservationNode::root(&claim_id, &BTreeSet::new()).unwrap();
+    let mut act = value(
+        json!({"schema_version":2,"id_scheme":"typed-history/v2","subject":"p.a","kind":"act","by":"writer","on":"2000-01-01","op":"accept","body":{"act":"accept","of":claim_id,"over":[],"because":"original"},"saw":[claim_id]}),
+    );
+    let act_id = identify(&mut act);
+    let act_obs = ObservationNode::root(&act_id, &BTreeSet::from([claim_id])).unwrap();
+    let V::Map(claim) = &mut claim else { panic!() };
+    claim.remove("saw");
+    let V::Map(act_map) = &mut act else { panic!() };
+    act_map.remove("saw");
+    assert!(
+        History::from_objects(vec![
+            (V::Map(claim.clone()), claim_obs.clone()),
+            (V::Map(act_map.clone()), act_obs.clone()),
+        ])
+        .is_ok(),
+        "control fixture is valid before tampering"
+    );
+    // The acceptance is closed, so a reader may never explicitly expand this act.
+    // Its identity must nevertheless be validated during complete capture.
+    let V::Map(body) = act_map.get_mut("body").unwrap() else {
+        panic!()
+    };
+    body.insert(
+        "because".into(),
+        V::Text("tampered without changing semantic id".into()),
+    );
+    let result = History::from_objects(vec![(V::Map(claim.clone()), claim_obs), (act, act_obs)]);
+    assert!(
+        result.is_err(),
+        "a valid observation id string is not proof of the object's identity"
+    );
+}

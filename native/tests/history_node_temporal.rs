@@ -118,8 +118,6 @@ fn retained_counterexamples_survive_recovery_and_source_free_export() {
     for applicability in ["current", "anchored", "general"] {
         let root = setup();
         seed(root.path(), &runtime, applicability);
-        let before = P::capture_snapshot(root.path()).unwrap();
-        let original = W::receipt(&before, "judgment").unwrap();
         write(root.path(), &runtime, "fired", set(9));
         write(root.path(), &runtime, "cleared", set(1));
         let report = assessment(root.path(), &runtime);
@@ -130,26 +128,32 @@ fn retained_counterexamples_survive_recovery_and_source_free_export() {
                 "recovered"
             } else {
                 "counterexample"
-            }))
+            })),
+            "temporal episodes: {temporal:?}"
         );
         assert!(
             l(&m(&temporal)["episodes"])
                 .iter()
                 .any(|e| m(e)["outcome"] == v(json!("counterexample")))
         );
+        let original_projection = Projection::capture(&Capture::read(root.path()).unwrap())
+            .unwrap()
+            .projection()
+            .clone();
         let bundle = P::export(root.path()).unwrap();
         let copy = bundle.reconstruct().unwrap();
         drop(root);
+        let copied = Capture::read(copy.path()).unwrap();
         assert_eq!(
-            W::receipt(&P::capture_snapshot(copy.path()).unwrap(), "judgment").unwrap(),
-            original
+            Projection::capture(&copied).unwrap().projection(),
+            &original_projection
         );
         assert_eq!(assessment(copy.path(), &runtime), report);
     }
 }
 
 #[test]
-fn temporal_writer_recovers_each_publication_phase_with_exact_receipts() {
+fn temporal_writer_recovers_each_publication_phase_with_retained_recipe() {
     let cache = tempfile::tempdir().unwrap();
     let runtime = runtime(cache.path());
     for phase in [
@@ -311,7 +315,13 @@ fn temporal_batch_and_nested_proposal_keep_accepted_world_and_distinct_snapshots
         .unwrap();
     assert_eq!(
         m(proposed_world)["evidence_kind"],
-        v(json!("reconstructed_committed_world"))
+        v(json!("retained_compact_recipe"))
+    );
+    let recipe = m(&m(proposed_world)["recipe"]);
+    assert_eq!(recipe["attention_policy"], v(json!("focused-review/v1")));
+    assert_eq!(
+        m(&recipe["operational_limits"])["timeout_seconds"],
+        v(json!(30))
     );
     for observation in observations {
         for claim in l(&m(observation)["claims"]) {
@@ -332,6 +342,61 @@ fn temporal_batch_and_nested_proposal_keep_accepted_world_and_distinct_snapshots
         m(&m(body)["body"])["wrong_if"],
         v(json!({"expr":"p.input > 5"}))
     );
+    let mut mismatched = projection.projection().clone();
+    let V::Map(projected) = &mut mismatched else {
+        panic!()
+    };
+    let V::Map(temporal) = projected.get_mut("temporal").unwrap() else {
+        panic!()
+    };
+    let V::List(observations) = temporal.get_mut("observations").unwrap() else {
+        panic!()
+    };
+    for observation in observations {
+        let V::Map(observation) = observation else {
+            panic!()
+        };
+        if observation["operation"] == v(json!("proposal"))
+            && observation["phase"] == v(json!("after"))
+        {
+            let V::Map(recipe) = observation.get_mut("recipe").unwrap() else {
+                panic!()
+            };
+            recipe.insert("semantic_digest".into(), V::Text("0".repeat(64)));
+        }
+    }
+    let historical = Snapshot::from_data(
+        projection.document(),
+        CaptureOptions {
+            context: Some(V::Map(BTreeMap::from([
+                ("read_mode".into(), v(json!("supplied"))),
+                ("source_collection".into(), v(json!("caller-owned"))),
+                ("history".into(), mismatched),
+            ]))),
+            as_of: Some(v(json!("2026-09-24"))),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mismatched_report = Assessment::assess(
+        &historical,
+        None,
+        "focused-review/v1",
+        Some(&runtime),
+        OperationalBounds::default(),
+        None,
+    )
+    .unwrap();
+    let episodes = l(
+        &m(&m(&m(&m(&mismatched_report)["history_subjects"])["d.ready"])["temporal"])["episodes"],
+    );
+    assert!(episodes.iter().any(|episode| {
+        let episode = m(episode);
+        episode["operation"] == v(json!("proposal"))
+            && episode["phase"] == v(json!("after"))
+            && episode["verification"] == v(json!("unknown"))
+            && episode["finding"] == v(json!("temporal replay result mismatch"))
+    }));
     let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
     drop(root);
     let copied = Capture::read(copy.path()).unwrap();
@@ -362,6 +427,51 @@ fn first_temporal_snapshot_keeps_unchanged_dependency_lazy() {
 }
 
 #[test]
+fn compact_recipe_commits_multiple_temporal_claims_as_one_digest() {
+    let root = setup();
+    let cache = tempfile::tempdir().unwrap();
+    let runtime = runtime(cache.path());
+    seed(root.path(), &runtime, "current");
+    write(
+        root.path(),
+        &runtime,
+        "second",
+        v(json!({
+            "kind":"add", "id":"d.second", "into":"judgments", "body":{
+                "verdict":"ready", "rests_on":["p.input"],
+                "wrong_if":{"expr":"p.input > 5"},
+                "temporal":{"version":1,"applicability":"general"}
+            }
+        })),
+    );
+    let projection = Projection::capture(&Capture::read(root.path()).unwrap()).unwrap();
+    let temporal = m(&m(projection.projection())["temporal"]);
+    let observation = l(&temporal["observations"])
+        .iter()
+        .find(|observation| {
+            let observation = m(observation);
+            observation["operation"] == v(json!("second"))
+                && observation["phase"] == v(json!("after"))
+        })
+        .unwrap();
+    assert_eq!(l(&m(observation)["claims"]).len(), 2);
+    let recipe = m(&m(observation)["recipe"]);
+    assert_eq!(recipe.len(), 5);
+    assert!(recipe.contains_key("semantic_digest"));
+    let report = assessment(root.path(), &runtime);
+    for subject in ["d.ready", "d.second"] {
+        let episodes =
+            l(&m(&m(&m(&m(&report)["history_subjects"])[subject])["temporal"])["episodes"]);
+        assert!(episodes.iter().any(|episode| {
+            let episode = m(episode);
+            episode["operation"] == v(json!("second"))
+                && episode["phase"] == v(json!("after"))
+                && episode["verification"] == v(json!("verified"))
+        }));
+    }
+}
+
+#[test]
 fn branch_siblings_keep_exact_temporal_worlds_and_merge_both_parents() {
     let cache = tempfile::tempdir().unwrap();
     let runtime = runtime(cache.path());
@@ -375,8 +485,6 @@ fn branch_siblings_keep_exact_temporal_worlds_and_merge_both_parents() {
         "right-only",
         v(json!({"kind":"add","id":"p.sibling","into":"readings","body":{"v":7}})),
     );
-    let left_receipt =
-        W::receipt(&P::capture_snapshot(target.path()).unwrap(), "left-fired").unwrap();
     let p = kpop_native::history_node_branch::prepare(
         target.path(),
         &[P::export(sibling.path()).unwrap()],
@@ -393,7 +501,6 @@ fn branch_siblings_keep_exact_temporal_worlds_and_merge_both_parents() {
         snapshot.transactions["merge"].parents,
         ["left-fired", "right-only"]
     );
-    assert_eq!(W::receipt(&snapshot, "left-fired").unwrap(), left_receipt);
     let projected = Projection::capture(&c).unwrap();
     let temporal = m(&m(projected.projection())["temporal"]);
     let observations = l(&temporal["observations"]);

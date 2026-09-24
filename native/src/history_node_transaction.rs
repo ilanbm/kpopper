@@ -155,7 +155,10 @@ pub(crate) fn validate(value: &V) -> Result<&Map> {
     }
     validate_delta(&t["delta"], 0)?;
     crate::history_authoring_audit::ReplayAudit::validate_compact(&c["audits"])?;
-    schema(&c["result"], &[], &["notes", "diagnostics"])?;
+    schema(&c["result"], &[], &["notes", "diagnostics", "temporal"])?;
+    if let Some(temporal) = map(&c["result"])?.get("temporal") {
+        crate::history_node_temporal_recipe::validate(temporal)?;
+    }
     require(
         value.canonical_bytes()?.len() <= MAX_CONTEXT_BYTES,
         "node_transaction_limit",
@@ -178,6 +181,11 @@ pub(crate) fn create(
     T::validate_receipt(diagnostic_receipt)?;
     let diagnostic_after = map(field(map(diagnostic_receipt)?, "after")?)?;
     let mut result = Map::new();
+    let temporal = crate::history_node_temporal_recipe::encode(diagnostic_receipt)?;
+    if temporal != V::Null {
+        result.insert("temporal".into(), temporal);
+    }
+
     if let Some(notes) = diagnostic_after
         .get("authoring")
         .map(map)

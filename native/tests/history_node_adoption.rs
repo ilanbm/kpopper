@@ -114,7 +114,7 @@ fn pinned_capture_ignores_dirty_worktree_and_survives_source_loss() {
     assert_eq!(&expected, observation.capture().unwrap().state());
 }
 #[test]
-fn explicit_overlap_choice_is_atomic_and_preserves_original_receipts() {
+fn explicit_overlap_choice_is_atomic_and_preserves_original_context() {
     let (target, source, observation, chosen) = observations();
     assert!(
         Adoption::prepare(
@@ -125,8 +125,16 @@ fn explicit_overlap_choice_is_atomic_and_preserves_original_receipts() {
         )
         .is_err()
     );
-    let old = W::receipt(&P::capture_snapshot(target.path()).unwrap(), "left").unwrap();
-    let source_old = W::receipt(&P::capture_snapshot(source.path()).unwrap(), "right").unwrap();
+    let old = P::capture_snapshot(target.path()).unwrap().transactions["left"]
+        .context
+        .clone()
+        .unwrap();
+    let source_old = P::capture_snapshot(source.path()).unwrap().transactions["right"]
+        .context
+        .clone()
+        .unwrap();
+    assert_eq!(map(&old)["action"], set(2));
+    assert_eq!(map(&source_old)["action"], set(3));
     let p = Adoption::prepare(
         target.path(),
         &[observation],
@@ -144,14 +152,23 @@ fn explicit_overlap_choice_is_atomic_and_preserves_original_receipts() {
         3
     );
     let snapshot = P::capture_snapshot(target.path()).unwrap();
-    assert_eq!(W::receipt(&snapshot, "left").unwrap(), old);
-    assert_eq!(W::receipt(&snapshot, "right").unwrap(), source_old);
+    assert_eq!(snapshot.transactions["left"].context.as_ref(), Some(&old));
+    assert_eq!(
+        snapshot.transactions["right"].context.as_ref(),
+        Some(&source_old)
+    );
     W::publish(target.path(), &p, None, |_| panic!("retry wrote")).unwrap();
     let copy = P::export(target.path()).unwrap().reconstruct().unwrap();
     drop(target);
     assert_eq!(
         Capture::read(copy.path()).unwrap().state(),
         captured.state()
+    );
+    let restored = P::capture_snapshot(copy.path()).unwrap();
+    assert_eq!(restored.transactions["left"].context.as_ref(), Some(&old));
+    assert_eq!(
+        restored.transactions["right"].context.as_ref(),
+        Some(&source_old)
     );
 }
 #[test]

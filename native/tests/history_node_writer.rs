@@ -77,10 +77,22 @@ fn writes_compact_context_lazy_creation_exact_retries_and_source_free_pins() {
         _ => panic!(),
     };
     let original = capture.object("p.a", &id).unwrap();
+    kpop_native::history_io_metrics::reset();
     let changed = write(root.path(), "set-a", &set(2));
+    assert_eq!(
+        kpop_native::history_io_metrics::snapshot().semantic_replays,
+        1,
+        "publication independently replays once before the journal"
+    );
     W::publish(root.path(), &changed, None, |_| panic!("retry wrote bytes")).unwrap();
     let snapshot = P::capture_snapshot(root.path()).unwrap();
     let context = compact(&snapshot, "set-a");
+    assert!(
+        W::receipt(&snapshot, "set-a")
+            .unwrap_err()
+            .0
+            .contains("node_receipt_not_retained")
+    );
     assert_eq!(context["action"], set(2));
     assert_eq!(map(&context["options"])["by"], value(json!("writer")));
     assert_eq!(

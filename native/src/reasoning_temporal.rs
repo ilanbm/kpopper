@@ -129,14 +129,19 @@ pub(crate) fn validate(value: &V) -> Result<()> {
                 "finding",
                 "result",
             ],
-            &[],
+            &["recipe_witness"],
         )?;
         require(
             eq_one(&e["evidence_version"])
                 && mode(&e["applicability"])
                 && text(&e["phase"]).is_ok_and(|s| ["before", "after"].contains(&s))
                 && text(&e["evidence_kind"]).is_ok_and(|s| {
-                    ["recorded_receipt", "reconstructed_committed_world"].contains(&s)
+                    [
+                        "recorded_receipt",
+                        "reconstructed_committed_world",
+                        "retained_compact_recipe",
+                    ]
+                    .contains(&s)
                 })
                 && text(&e["verification"]).is_ok_and(|s| ["verified", "unknown"].contains(&s))
                 && text(&e["outcome"]).is_ok_and(|s| {
@@ -150,6 +155,23 @@ pub(crate) fn validate(value: &V) -> Result<()> {
                     .is_ok_and(|m| m.keys().map(String::as_str).eq(["applies", "at", "on"])),
             "v3 schema: invalid temporal episode",
         )?;
+        let compact_verified = string_is(&e["evidence_kind"], "retained_compact_recipe")
+            && string_is(&e["verification"], "verified");
+        require(
+            e.contains_key("recipe_witness") == compact_verified,
+            "v3 schema: invalid temporal recipe witness",
+        )?;
+        if let Some(witness) = e.get("recipe_witness") {
+            let witness = schema(witness, &["nodes", "node"], &[])?;
+            let nodes = map(&witness["nodes"])?;
+            require(
+                !nodes.is_empty()
+                    && nodes.len() <= 64
+                    && nodes.values().all(hex)
+                    && matches!(witness["node"], V::Map(_)),
+                "v3 schema: invalid temporal recipe witness",
+            )?;
+        }
     }
     Ok(())
 }
@@ -261,6 +283,10 @@ pub(crate) fn retained(projection: &V, results: &Map) -> Result<Map> {
         // and Snapshot. Validation never needs independent mutable copies.
         let retained = retained.map(std::rc::Rc::new);
         let snapshot = snapshot.map(std::rc::Rc::new);
+        let subjects = list(at(observation, &["claims"]))?
+            .iter()
+            .map(|claim| text(at(claim, &["subject"])).map(str::to_owned))
+            .collect::<Result<BTreeSet<_>>>()?;
         for claim in list(at(observation, &["claims"]))? {
             let e = episode(observation, claim)?;
             expected.insert(
@@ -272,6 +298,8 @@ pub(crate) fn retained(projection: &V, results: &Map) -> Result<Map> {
                     retained.clone(),
                     at(observation, &["evidence_kind"]).clone(),
                     snapshot.clone(),
+                    at(observation, &["recipe"]).clone(),
+                    subjects.clone(),
                 ),
             );
         }
@@ -297,7 +325,8 @@ pub(crate) fn retained(projection: &V, results: &Map) -> Result<Map> {
                     && seen.insert(k.clone()),
                 "retained temporal evidence does not match source receipts",
             )?;
-            let (claim, snapshot_id, as_of, retained, kind, historical) = &expected[&k];
+            let (claim, snapshot_id, as_of, retained, kind, historical, recipe, subjects) =
+                &expected[&k];
             let claim = map(claim)?;
             require(
                 e["applicability"] == claim["applicability"]
@@ -312,6 +341,32 @@ pub(crate) fn retained(projection: &V, results: &Map) -> Result<Map> {
             }
             let result =
                 map(&e["result"]).map_err(|_| error("verified temporal evidence has no result"))?;
+            if string_is(kind, "retained_compact_recipe") {
+                crate::history_node_temporal_recipe::validate_side(recipe)?;
+                require(
+                    *snapshot_id == at(recipe, &["snapshot_id"]).clone(),
+                    "retained temporal recipe snapshot mismatch",
+                )?;
+                let witness = schema(field(e, "recipe_witness")?, &["nodes", "node"], &[])?;
+                let nodes = map(&witness["nodes"])?;
+                require(
+                    nodes.keys().cloned().collect::<BTreeSet<_>>() == subjects.clone()
+                        && digest(&witness["nodes"])? == text(at(recipe, &["semantic_digest"]))?,
+                    "retained temporal recipe digest mismatch",
+                )?;
+                require(
+                    nodes.get(subject) == Some(&s(&digest(&witness["node"])?)),
+                    "retained temporal recipe node mismatch",
+                )?;
+                require(
+                    digest(&semantic_falsifier(&e["result"])?)?
+                        == digest(&semantic_falsifier(at(
+                            &witness["node"],
+                            &["state", "falsifier"],
+                        ))?)?,
+                    "retained temporal recipe result mismatch",
+                )?;
+            }
             require(
                 ["status", "expression", "reads"]
                     .iter()
@@ -542,6 +597,48 @@ pub(crate) fn state(
     ])))
 }
 
+fn replay_recipe_nodes(
+    observation: &V,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<(Map, Map)> {
+    let recipe = at(observation, &["recipe"]);
+    let (policy, bounds) = crate::history_node_temporal_recipe::settings(recipe)?;
+    require(
+        at(observation, &["assessment"]) == &V::Null,
+        "temporal_duplicate_retention",
+    )?;
+    let historical = Snapshot::from_json(text(at(observation, &["snapshot"]))?.as_bytes())?;
+    require(
+        at(recipe, &["snapshot_id"]) == &s(historical.snapshot_id()),
+        "temporal_recipe_snapshot_mismatch",
+    )?;
+    let mut nodes = Map::new();
+    let mut semantic = Map::new();
+    for claim in list(at(observation, &["claims"]))? {
+        let subject = text(at(claim, &["subject"]))?;
+        require(
+            !nodes.contains_key(subject),
+            "temporal_recipe_duplicate_subject",
+        )?;
+        let report = crate::reasoning_assessment::assess(
+            &historical,
+            Some(&[subject.into()]),
+            policy,
+            runtime,
+            bounds.clone(),
+        )?;
+        let node = at(&report, &["nodes", subject]).clone();
+        semantic.insert(subject.into(), s(&digest(&semantic_node(&node)?)?));
+        nodes.insert(subject.into(), node);
+    }
+    require(!nodes.is_empty(), "temporal_recipe_empty")?;
+    require(
+        at(recipe, &["semantic_digest"]) == &s(&digest(&V::Map(semantic.clone()))?),
+        "temporal replay result mismatch",
+    )?;
+    Ok((nodes, semantic))
+}
+
 pub(crate) fn replay(
     projection: &V,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
@@ -550,6 +647,18 @@ pub(crate) fn replay(
     let mut results = Map::new();
     let mut count = 0;
     for observation in observations(projection)? {
+        let compact = at(observation, &["recipe"]);
+        let committed_nodes = if *compact == V::Null {
+            None
+        } else {
+            Some(
+                if list(at(observation, &["claims"]))?.len() > 64usize.saturating_sub(count) {
+                    Err(error("temporal_replay_limit"))
+                } else {
+                    replay_recipe_nodes(observation, runtime)
+                },
+            )
+        };
         for claim in list(at(observation, &["claims"]))? {
             let subject = text(at(claim, &["subject"]))?;
             let mut e = episode(observation, claim)?;
@@ -562,6 +671,15 @@ pub(crate) fn replay(
                 m.insert("snapshot_id".into(), s(historical.snapshot_id()));
                 m.insert("as_of".into(), at(historical.data(), &["as_of"]).clone());
                 let report = at(observation, &["assessment"]);
+                let recipe = compact;
+                if *recipe != V::Null {
+                    crate::history_node_temporal_recipe::validate_side(recipe)?;
+                    require(*report == V::Null, "temporal_duplicate_retention")?;
+                    require(
+                        at(recipe, &["snapshot_id"]) == &s(historical.snapshot_id()),
+                        "temporal_recipe_snapshot_mismatch",
+                    )?;
+                }
                 let retained = if *report == V::Null {
                     None
                 } else {
@@ -590,14 +708,25 @@ pub(crate) fn replay(
                     bounds.input_bytes = number("input_bytes")?;
                     bounds.output_bytes = number("output_bytes")?;
                 }
-                let replayed = A::assess(
-                    &historical,
-                    Some(&[subject.into()]),
-                    policy,
-                    runtime,
-                    bounds,
-                )?;
-                let node = at(&replayed, &["nodes", subject]);
+                let replayed_node = if let Some(result) = &committed_nodes {
+                    match result {
+                        Ok((nodes, _)) => nodes
+                            .get(subject)
+                            .cloned()
+                            .ok_or_else(|| error("temporal_recipe_subject_missing"))?,
+                        Err(error) => return Err(crate::Error(error.0.clone())),
+                    }
+                } else {
+                    let replayed = A::assess(
+                        &historical,
+                        Some(&[subject.into()]),
+                        policy,
+                        runtime,
+                        bounds,
+                    )?;
+                    at(&replayed, &["nodes", subject]).clone()
+                };
+                let node = &replayed_node;
                 if let Some(r) = &retained {
                     require(
                         digest(&semantic_node(node)?)?
@@ -610,6 +739,15 @@ pub(crate) fn replay(
                 m.insert("verification".into(), s("verified"));
                 m.insert("result".into(), result.clone());
                 m.insert("outcome".into(), s(outcome));
+                if let Some(Ok((_, hashes))) = &committed_nodes {
+                    m.insert(
+                        "recipe_witness".into(),
+                        obj([
+                            ("nodes", V::Map(hashes.clone())),
+                            ("node", semantic_node(node)?),
+                        ]),
+                    );
+                }
                 if outcome == "unknown" {
                     m.insert(
                         "finding".into(),
@@ -649,4 +787,82 @@ pub(crate) fn replay(
         });
     }
     Ok(results)
+}
+
+#[cfg(test)]
+mod compact_retention_tests {
+    use super::*;
+    #[test]
+    fn forged_verified_compact_witness_cannot_rebind_digest() {
+        let snapshot = Snapshot::from_data(
+            &obj([("known", V::Map(Map::new()))]),
+            crate::reasoning_snapshot::CaptureOptions::default(),
+        )
+        .unwrap();
+        let claim = obj([
+            ("subject", s("d.ready")),
+            ("claim_id", s(&"a".repeat(64))),
+            ("applicability", s("current")),
+            ("predicate_digest", s(&"b".repeat(64))),
+            (
+                "anchors",
+                obj([("on", V::Null), ("at", V::Null), ("applies", V::Null)]),
+            ),
+        ]);
+        let observation = obj([
+            ("operation", s("op")),
+            ("phase", s("after")),
+            ("evidence_kind", s("retained_compact_recipe")),
+            ("snapshot", s(&snapshot.to_json().unwrap())),
+            ("assessment", V::Null),
+            ("claims", V::List(vec![claim.clone()])),
+            (
+                "recipe",
+                obj([
+                    ("version", crate::history_authoring::n("1")),
+                    ("snapshot_id", s(snapshot.snapshot_id())),
+                    ("attention_policy", s("focused-review/v1")),
+                    (
+                        "operational_limits",
+                        obj([
+                            ("timeout_seconds", crate::history_authoring::n("30")),
+                            ("batch_requests", crate::history_authoring::n("1000")),
+                            ("input_bytes", crate::history_authoring::n("16777216")),
+                            ("output_bytes", crate::history_authoring::n("67108864")),
+                        ]),
+                    ),
+                    ("semantic_digest", s(&"c".repeat(64))),
+                ]),
+            ),
+        ]);
+        let projection = obj([(
+            "temporal",
+            obj([("observations", V::List(vec![observation.clone()]))]),
+        )]);
+        let mut supplied = episode(&observation, &claim).unwrap();
+        map_mut(&mut supplied)
+            .unwrap()
+            .insert("verification".into(), s("verified"));
+        map_mut(&mut supplied)
+            .unwrap()
+            .insert("result".into(), V::Map(Map::new()));
+        map_mut(&mut supplied)
+            .unwrap()
+            .insert("snapshot_id".into(), s(snapshot.snapshot_id()));
+        map_mut(&mut supplied).unwrap().insert(
+            "recipe_witness".into(),
+            obj([
+                (
+                    "nodes",
+                    V::Map(Map::from([("d.ready".into(), s(&"d".repeat(64)))])),
+                ),
+                ("node", V::Map(Map::new())),
+            ]),
+        );
+        let results = Map::from([("d.ready".into(), V::List(vec![supplied]))]);
+        assert_eq!(
+            retained(&projection, &results).unwrap_err().0,
+            "retained temporal recipe digest mismatch"
+        );
+    }
 }

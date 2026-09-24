@@ -51,6 +51,46 @@ impl Source for NodeSource<'_> {
     fn receipt(&self, operation: &str) -> Result<V> {
         W::receipt_index(&self.capture.snapshot, operation, &self.components)
     }
+    fn temporal_recipe(&self, operation: &str, phase: &str) -> Result<Option<V>> {
+        let Some(context) = self
+            .capture
+            .snapshot
+            .transactions
+            .get(operation)
+            .and_then(|tx| tx.context.as_ref())
+        else {
+            return Ok(None);
+        };
+        if !crate::history_node_transaction::is_context(context) {
+            return Ok(None);
+        }
+        let result = map(field(map(context)?, "result")?)?;
+        result
+            .get("temporal")
+            .map(|recipe| crate::history_node_temporal_recipe::phase(recipe, phase))
+            .transpose()
+            .map(Option::flatten)
+    }
+    fn requires_temporal_recipe(&self, operation: &str) -> bool {
+        self.capture
+            .snapshot
+            .transactions
+            .get(operation)
+            .and_then(|tx| tx.context.as_ref())
+            .is_some_and(|context| {
+                if !crate::history_node_transaction::is_context(context) {
+                    return false;
+                }
+                let kind = map(context)
+                    .ok()
+                    .and_then(|c| c.get("action"))
+                    .and_then(|action| map(action).ok())
+                    .and_then(|action| action.get("kind"));
+                !kind.is_some_and(|kind| {
+                    string_is(kind, "branch-union") || string_is(kind, "source-clocks")
+                })
+            })
+    }
     fn active(&self, operation: &str) -> Result<bool> {
         for id in self.introduced(operation)? {
             if A::has_temporal_metadata(&self.objects()[&id])? {
