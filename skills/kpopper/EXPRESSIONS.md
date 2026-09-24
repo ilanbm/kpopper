@@ -8,11 +8,11 @@ involved in evaluation. The stored expression remains the source of truth.
 ## Reader compatibility
 
 Structured rules and conditions (`expr` or tagged AST), and their `computed` review
-snapshots, require the native **0.9.0** runtime (or the legacy Python 1.6.0 reader)
-in every reader and writer that touches the record. Upgrade the standalone CLI, each
-host's plugin and CI together. Updating a plugin does not update a separately installed
-legacy pip/pipx CLI; restart sessions still using an older runtime. For unreleased source,
-use the same verified revision across these entrypoints.
+snapshots, require the **0.9.0** runtime or later in every reader and writer that
+touches the record. Upgrade the standalone CLI, each host's plugin and CI together.
+Updating a plugin does not update a separately installed CLI; restart sessions still
+using an older runtime. For unreleased source, use the same verified revision across
+these entrypoints.
 
 An older writer may mistake a structured rule for an ordinary entry and save an invalid
 historical reading such as `present`, or miss its dependencies. Until a compatible reader
@@ -105,11 +105,9 @@ decimal exponents, and computed numerators/denominators to 1024 decimal characte
 ## Computation and review snapshots
 
 The local core is required for structured calculations. Before authoring the first one,
-run `kpop session status`. If it is not ready, make Lean **4.33.1** available and run
-`kpop session setup` (or pass `--lean-root /path/to/toolchain`). Both commands work with
-the base Python package; session transport extras are needed only for checked session views.
+run `kpop session status`. If it is not ready, run `kpop session setup`.
 Setup compiles the pinned source once. Reads never download or compile it, and there is no
-second arithmetic evaluator. After a package update changes the core source, run setup again.
+second arithmetic evaluator. After an update changes the core source, run setup again.
 
 A missing, invalid or incompatible core makes structured calculations explicitly unavailable.
 Conditions that need them read `UNKNOWN`; ordinary scalar reads, independent writes and
@@ -119,7 +117,7 @@ core for rules or conditions as a failure unless they explicitly declare why the
 blocked; success is not a substitute for a missing computation.
 
 `pull`, source search, the page and checked sessions use the same calculation semantics.
-The Python layer derives references and display text and calls Lean for arithmetic. Results
+The command derives references and display text and calls Lean for arithmetic. Results
 are cached by record content, expression and core/parser identity; changing an input
 invalidates the result. A bounded per-process cache holds up to 512 parsed formulas, keyed
 by their source and grammar version. Changing values reuses the parsed formula. Changing
@@ -204,8 +202,7 @@ meaning. An unrelated write never migrates existing formulas.
 ## Finite-scope queries
 
 An explicit `core/v1` record may declare `query/v1` for `filter`, `project`,
-`select`, `count`, `sum`, `all` and `any`. Follow the [query specification](../../docs/query.md)
-and [runnable revisit example](../../examples/scoped-query/README.md). This
+`select`, `count`, `sum`, `all` and `any`. Follow the [query specification](../../docs/query.md). This
 packaged profile needs no separate Lean installation or checked-session setup.
 
 Name a scope with an explicit collection and sorted authored-field list. A row

@@ -13,11 +13,10 @@ does not relax evidence, isolation or record-integrity checks.
 
 ## Installation and use
 
-Native 0.9.0 bundles include the compiled HTML application runtime. Install the
+Release bundles include the compiled HTML application runtime. Install the
 bundle normally, then request either application explicitly:
 
 ```sh
-python -m pip install 'kpopper[html]'
 kpop experimental --help
 kpop experimental hub --open
 kpop experimental hub --verify
@@ -25,31 +24,19 @@ kpop experimental annotated-doc guide
 kpop experimental annotated-doc build --html draft.html --manifest evidence.json --out report.html
 ```
 
-For an explicit Python compatibility checkout, install `'.[html]'`. The extra then
-installs the legacy runtime dependencies. Applications are not separate packages or
-independently versioned releases.
-
-For a Claude Code or Codex plugin in Python compatibility mode, use the active
-plugin's runtime setup:
-
-```sh
-python3 /absolute/path/to/kpopper/scripts/plugin_runtime.py setup --applications html
-```
-
-Ordinary setup installs the core dependencies and timezone data for followups; hooks
-check only PyYAML before opening the record. Installing an application
-does not activate it on every task. Request the record page or kpopper's evidence-bearing
+Applications are not separate packages or independently versioned releases, and a
+plugin carries them in the runtime it installs. Installing an application does not
+activate it on every task. Request the record page or kpopper's evidence-bearing
 HTML document explicitly, or give the agent a standing preference to use it. A generic
 HTML request and completion of a map do not automatically select these applications.
 
 The canonical commands are `kpop experimental hub` and `kpop experimental annotated-doc`.
 The old `page` and `document` names still work both directly (`kpop page`) and under
 `experimental` (`kpop experimental page`), with a compatibility notice on stderr.
-All aliases use the same implementation and optional dependencies. The canonical skills
+All aliases use the same implementation. The canonical skills
 are `$hub` and `$annotated-doc` (Claude: `/kpopper:hub` and `/kpopper:annotated-doc`);
 `$page` and `$document` remain explicit compatibility aliases.
-Help works without installing HTML dependencies; commands never install them implicitly.
-`kpop experimental --json` lists application layer, maturity and installation metadata.
+`kpop experimental --json` lists each application's layer, maturity and command.
 
 ## Boundaries
 
@@ -59,23 +46,22 @@ Help works without installing HTML dependencies; commands never install them imp
 - Page measurements are not ordinary recorded facts. A condition depending on an
   unavailable `page.*` value remains unevaluated; it is not reported as having passed.
 - Legacy arrangement and section authoring can compute page counts with the shipped
-  renderer, which needs only PyYAML and the standard library. These write helpers do
-  not require the optional document libraries.
+  renderer. These write helpers need nothing beyond the installed command.
 - Consolidation consults presentation facts only when a brief exists and a changed
   judgment references `page.*`. Graph-only conditions remain core checks.
 - The page renders a snapshot of the record. Standalone document refresh and review
   affect a document copy, never the source record. Core findings retain their original
   identity when displayed by either application.
 
-The application entry points are `scripts/applications/hub.py` and
-`scripts/applications/annotated_doc.py`. Existing renderer and
-document modules remain implementation modules at their compatible paths. Existing
+The application entry points are `kpop experimental hub` and
+`kpop experimental annotated-doc`; their renderer and document layers are internal
+modules of the command. Existing
 `page.*` record fields, artifact schemas and output paths retain their meanings. Core reader
 operations do not depend on those entry points; explicit presentation authoring crosses
 the application boundary deliberately.
 
 History runtime declarations include the application modules in their source manifest.
-The optional installation adds dependencies; it does not change that source inventory.
+Installing an application bundle does not change that source inventory.
 
 ## Maturity
 

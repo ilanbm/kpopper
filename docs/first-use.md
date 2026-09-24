@@ -50,10 +50,8 @@ kpop --workspace "/path/to/Weekly planning" map --deep
 Every operation has `--help`. `--json` returns structured output; the existing record
 operations preserve their exit codes and include their output and error text in a JSON
 envelope. For example, `kpop check --json` still exits nonzero when its check fails.
-Prefer the canonical native executable named in `KPOPPER_AGENT_CONTEXT.command`.
-In explicit `KPOPPER_RUNTIME=python` compatibility mode, use the active plugin's
-`scripts/cli.py` with the same arguments. Do not silently choose an unrelated PATH,
-pip or Python installation.
+Prefer the canonical executable named in `KPOPPER_AGENT_CONTEXT.command`. Do not
+silently choose an unrelated installation from PATH.
 
 Mapping currently runs **inside the calling agent session**. It does not launch another LLM
 process from a plain terminal. The host hook supplies a session routing identity; Codex tool

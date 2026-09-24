@@ -34,6 +34,28 @@ static BARE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-
 static DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$").unwrap());
 
+// Layout readers and field emitters work on line contents. Keep a CRLF record's
+// separator outside those contents, including the empty last item that represents
+// a final newline. Mixed endings retain the existing LF-split behavior.
+pub(crate) fn source_newline(source: &str) -> &'static str {
+    if source.contains("\r\n")
+        && source
+            .match_indices('\n')
+            .all(|(at, _)| at > 0 && source.as_bytes()[at - 1] == b'\r')
+    {
+        "\r\n"
+    } else {
+        "\n"
+    }
+}
+
+pub(crate) fn source_lines(source: &str) -> Vec<String> {
+    source
+        .split(source_newline(source))
+        .map(str::to_owned)
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AuthorityRoute {
     History,
@@ -1452,7 +1474,7 @@ fn choose_add_owner(
             .ok_or_else(|| error("snapshot_changed"))?;
         let raw = std::str::from_utf8(bytes)
             .map_err(|_| error("nontext_record_authoring_unsupported"))?;
-        let lines = raw.split('\n').map(str::to_owned).collect::<Vec<_>>();
+        let lines = source_lines(raw);
         if locate(&lines, id).is_some() {
             return Ok(path.clone());
         }
@@ -1519,6 +1541,31 @@ fn update_review_candidate(
         body.insert("reviewed".into(), s(stamp));
     }
     Ok(candidate)
+}
+
+/// Whether a judgment holds something other than a mapping where its snapshot goes, such
+/// as a day written over it. It is read as never checked, and a review writes the snapshot
+/// whole, even one with nothing in it.
+fn written_over(body: &Map, snapshot: &str) -> bool {
+    body.get(snapshot).is_some_and(|value| map(value).is_err())
+}
+
+/// What a review says of a reversal it leaves open. A record that names its snapshot
+/// `reviewed` gets no review day, and the day is what clears one.
+fn open_reversal(reader: &Reader<'_>, body: &V, seen: &Map) -> Result<Option<String>> {
+    if crate::reasoning_authoring_guards::arrangement(reader, body) {
+        return Ok(None);
+    }
+    let mut written = map(body)?.clone();
+    written.insert("reviewed".into(), V::Map(seen.clone()));
+    Ok(
+        crate::ordinary_reader::reversal_pending(&V::Map(written)).map(|day| {
+            format!(
+                "  reversed on {day} stays open - the snapshot field is named reviewed, so review \
+                 writes no day"
+            )
+        }),
+    )
 }
 
 fn common_root(entry: &Path, members: &[PathBuf]) -> Result<PathBuf> {
@@ -1816,7 +1863,13 @@ fn prepare_with_inventory_mode(
     }
     let collection =
         collection.ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
+    // A record may name its snapshot `reviewed`, the field a review dates a judgment by:
+    // the snapshot is kept and no day is written over it.
+    let snapshot_is_reviewed = reader
+        .snapshot_field()
+        .is_ok_and(|field| field == "reviewed");
     let stamp_review = kind == "review"
+        && !snapshot_is_reviewed
         && map(&entries[&id].1).is_ok_and(|body| {
             body.contains_key("reviewed")
                 || body.contains_key("replaced")
@@ -1897,10 +1950,7 @@ fn prepare_with_inventory_mode(
         .ok_or_else(|| error("snapshot_changed"))?;
     let text_source =
         std::str::from_utf8(&before).map_err(|_| error("nontext_record_authoring_unsupported"))?;
-    let mut lines = text_source
-        .split('\n')
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
+    let mut lines = source_lines(text_source);
     if supersede {
         let old = supersede_old
             .as_ref()
@@ -2108,11 +2158,13 @@ fn prepare_with_inventory_mode(
             let (_, member) = locate(&lines, &id)
                 .ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
             let snapshot = reader.snapshot_field()?;
-            let old_seen = map(map(&entries[&id].1)?
+            let old_seen = map(&entries[&id].1)?
                 .get(snapshot)
-                .unwrap_or(&V::Map(Map::new())))?
-            .clone();
-            let changed = old_seen.len() != seen.len()
+                .and_then(|value| map(value).ok())
+                .cloned()
+                .unwrap_or_default();
+            let changed = written_over(map(&entries[&id].1)?, snapshot)
+                || old_seen.len() != seen.len()
                 || old_seen
                     .iter()
                     .any(|(key, value)| seen.get(key).is_none_or(|now| !same_legacy(value, now)));
@@ -2187,11 +2239,14 @@ fn prepare_with_inventory_mode(
                     _ => {}
                 }
             }
+            if snapshot_is_reviewed {
+                output.extend(open_reversal(&reader, &entries[&id].1, &seen)?);
+            }
         }
         _ => return Err(error("unsupported_legacy_authoring_kind")),
     }
     bump_updated(&mut lines, &stamp)?;
-    let after = lines.join("\n").into_bytes();
+    let after = lines.join(source_newline(text_source)).into_bytes();
     let parsed_before = crate::history_yaml::decode_ordinary_source_value(&before)?;
     let parsed = crate::history_yaml::decode_ordinary_source_value(&after)?;
     require(

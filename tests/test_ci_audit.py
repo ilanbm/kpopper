@@ -32,39 +32,33 @@ def repository(files):
 
 
 class Mapping(unittest.TestCase):
-    def test_checkout_installed_copies_and_bytecode_map_to_tracked_sources(self):
-        packages = [('/venv/lib/python3.13/site-packages/kpopper', 'scripts/')]
+    def test_checkout_files_and_bytecode_map_to_tracked_sources(self):
         cases = {
-            '/work/repo/scripts/cli.py': 'scripts/cli.py',
-            '/work/repo/scripts/__pycache__/cli.cpython-313.pyc': 'scripts/cli.py',
-            '/work/repo/tests/__pycache__/test_x.cpython-39-pytest-8.4.2.pyc': 'tests/test_x.py',
-            '/venv/lib/python3.13/site-packages/kpopper/provenance.py': 'scripts/provenance.py',
-            '/venv/lib/python3.13/site-packages/kpopper/session/__pycache__/core.cpython-313.pyc':
-                'scripts/session/core.py',
-            '/venv/lib/python3.13/site-packages/kpopper': 'scripts',
+            '/work/repo/tests/test_ci_audit.py': 'tests/test_ci_audit.py',
+            '/work/repo/tests/__pycache__/test_x.cpython-313.pyc': 'tests/test_x.py',
             '/work/repo': '',
             '/work/repo/native/src': 'native/src',
-            '/work/repository/scripts/cli.py': None,
-            '/tmp/plugin-stage/scripts/cli.py': None,
+            '/work/repository/native/src/main.rs': None,
+            '/tmp/plugin-stage/scripts/hook.sh': None,
         }
         for opened, expected in cases.items():
             with self.subTest(opened=opened):
-                self.assertEqual(AUDIT.repository_path(opened, '/work/repo', packages), expected)
+                self.assertEqual(AUDIT.repository_path(opened, '/work/repo'), expected)
 
 
 class Undeclared(unittest.TestCase):
     lanes = {'demo': CI.Lane(reads=('scripts/*', 'tests/*'), lists=('scripts*',))}
 
     def test_reads_and_listings_outside_the_declaration_are_reported(self):
-        directory, root = repository(['scripts/cli.py', 'tests/test_cli.py', 'docs/guide.md',
+        directory, root = repository(['scripts/hook.sh', 'tests/test_cli.py', 'docs/guide.md',
                                       'assets/logo.png', 'untracked-later/x'])
         with directory:
             (Path(root) / 'build').mkdir()
             (Path(root) / 'build/output.txt').write_text('generated')
-            opened = [root + '/scripts/cli.py', root + '/tests/test_cli.py', root + '/docs/guide.md',
+            opened = [root + '/scripts/hook.sh', root + '/tests/test_cli.py', root + '/docs/guide.md',
                       root + '/scripts', root + '/assets', root, root + '/build/output.txt',
                       root + '/.git/index', '/usr/lib/python3/os.py']
-            files, directories = AUDIT.undeclared('demo', opened, root, [], lanes=self.lanes)
+            files, directories = AUDIT.undeclared('demo', opened, root, lanes=self.lanes)
             self.assertEqual(files, ['docs/guide.md'])
             self.assertEqual(directories, ['', 'assets'])
 
@@ -72,7 +66,7 @@ class Undeclared(unittest.TestCase):
         directory, root = repository(['tests/test_release.py', 'tests/test_other.py'])
         with directory:
             files, _ = AUDIT.undeclared('demo', [root + '/tests/test_release.py', root + '/tests/test_other.py'],
-                                        root, [], lanes=self.lanes)
+                                        root, lanes=self.lanes)
             self.assertEqual(files, ['tests/test_release.py'])
 
     def test_the_workflows_audit_exactly_the_lanes_declared_audited(self):
@@ -91,12 +85,12 @@ class Undeclared(unittest.TestCase):
 
 class Verdicts(unittest.TestCase):
     def run_check(self, data, canary=None, enforced=True):
-        directory, root = repository(['scripts/cli.py', 'docs/guide.md'])
+        directory, root = repository(['scripts/hook.sh', 'docs/guide.md'])
         with directory, tempfile.TemporaryDirectory() as state:
             trace = Path(state) / 'reads.json'
             paths = [p.replace('ROOT', root) for p in data.pop('paths')]
             trace.write_text(json.dumps(dict(data, paths=paths)))
-            return AUDIT.check('demo', trace, root, [], canary and canary.replace('ROOT', root),
+            return AUDIT.check('demo', trace, root, canary and canary.replace('ROOT', root),
                                lanes={'demo': CI.Lane(reads=('scripts/*',), enforced=enforced)})
 
     def test_a_lane_in_report_mode_warns_without_failing(self):
@@ -104,17 +98,17 @@ class Verdicts(unittest.TestCase):
                                         enforced=False), 0)
 
     def test_declared_reads_pass(self):
-        self.assertEqual(self.run_check({'overflow': False, 'events': 1, 'paths': ['ROOT/scripts/cli.py']}), 0)
+        self.assertEqual(self.run_check({'overflow': False, 'events': 1, 'paths': ['ROOT/scripts/hook.sh']}), 0)
 
     def test_undeclared_read_fails(self):
         self.assertEqual(self.run_check({'overflow': False, 'events': 1, 'paths': ['ROOT/docs/guide.md']}), 1)
 
     def test_lost_events_and_a_blind_recorder_fail_closed(self):
-        self.assertEqual(self.run_check({'overflow': True, 'events': 1, 'paths': ['ROOT/scripts/cli.py']}), 1)
-        self.assertEqual(self.run_check({'overflow': False, 'events': 1, 'paths': ['ROOT/scripts/cli.py']},
+        self.assertEqual(self.run_check({'overflow': True, 'events': 1, 'paths': ['ROOT/scripts/hook.sh']}), 1)
+        self.assertEqual(self.run_check({'overflow': False, 'events': 1, 'paths': ['ROOT/scripts/hook.sh']},
                                         canary='ROOT/docs/guide.md'), 1)
         self.assertEqual(self.run_check({'overflow': False, 'events': 1,
-                                         'paths': ['ROOT/scripts/cli.py', 'ROOT/docs/guide.md']},
+                                         'paths': ['ROOT/scripts/hook.sh', 'ROOT/docs/guide.md']},
                                         canary='ROOT/docs/guide.md'), 0)
 
 
@@ -126,8 +120,8 @@ class Recorder(unittest.TestCase):
             (Path(watched) / 'sub').mkdir()
             (Path(watched) / 'sub/file.txt').write_text('content')
             output, ready = Path(watched) / 'reads.json', Path(watched) / 'ready'
-            # A prefix that does not exist yet, like a package installed later in the job.
-            later = str(Path(watched) / 'not-installed-yet/kpopper')
+            # A prefix that does not exist yet, like a directory the job creates later.
+            later = str(Path(watched) / 'not-created-yet/payload')
             process = subprocess.Popen([sys.executable, str(ROOT / '.github/scripts/ci_audit.py'), 'record',
                                         '--output', str(output), '--ready', str(ready), '--prefix', watched,
                                         '--prefix', later])

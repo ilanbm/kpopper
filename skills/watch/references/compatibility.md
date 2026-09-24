@@ -39,7 +39,7 @@ host outcome. It sends no completion chatter and never executes source text. The
 continues without waiting or acknowledging routine completion. Failed/expired jobs leave
 hook fallback; an uncertain send is not retried in that session, but may be offered on resume.
 The job is bounded; later batches can reserve another. A returned packet is not a dispatched
-agent, and an async Python processor cannot call a host messaging tool itself.
+agent, and an asynchronous processor cannot call a host messaging tool itself.
 
 ## Share external observations
 

@@ -22,10 +22,9 @@ there is no guaranteed response time.
 
 ## Local setup
 
-The native Rust runtime is the primary implementation and release artifact. Install
-Rust using the pinned toolchain, then build from `native/`. The Python environment
-below is retained for the source-only compatibility adapter and its test suite.
-Fork the repository on GitHub, then clone your fork (replace `YOUR-USERNAME`):
+The Rust command in `native/` is the implementation and the release artifact. Install
+Rust using the pinned toolchain, then build from `native/`. Fork the repository on GitHub,
+then clone your fork (replace `YOUR-USERNAME`):
 
 ```sh
 git clone https://github.com/YOUR-USERNAME/kpopper.git
@@ -35,25 +34,23 @@ git switch -c my-change
 rustup show
 cd native
 cargo build --locked --release
-cd ..
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[html]"
 ```
 
-On Windows, create the retained Python environment with `py -m venv .venv` and activate
-it in PowerShell with `.venv\Scripts\Activate.ps1`. Native Rust CLI and durable report
-batching support Windows; the legacy Python compatibility path retains its POSIX file
-locking limitation. Python followup/watch hooks also require POSIX; native Windows
-delivery tests check their behavior directly.
+The command and durable report batching support Windows. A few build and packaging
+tools under `scripts/` and `.github/scripts/` run on the Python standard library alone,
+and the tooling contract tests beside them read YAML; Python 3.13 matches CI.
+
+The earlier Python implementation left this tree at
+[`python-final`](https://github.com/ilanbm/kpopper/releases/tag/python-final); its last
+release is `kpopper` 1.8.1 on PyPI.
 
 | If you are changing… | Start here |
 |---|---|
 | The native CLI, reader or record writes | `native/src/`, `native/tests/` and the [reference](docs/reference.md) |
-| kpopper Hub or Annotated Documents | Native application modules in `native/src/`; Python compatibility modules and assets in `scripts/page/` and `scripts/document/` |
+| kpopper Hub or Annotated Documents | The application modules in `native/src/`, with their display resources in `native/shared/page/` and `native/shared/document/` |
 | Agent guidance or integration | `skills/`, `hooks/` and [adapters](adapters/README.md) |
 | An example or explanation | `examples/`, `docs/` and `README.md` |
-| The optional checked-session runtime | `scripts/session/` and [checked sessions](docs/checked-sessions.md) |
+| The optional checked-session runtime | `scripts/session/lean/` and [checked sessions](docs/checked-sessions.md) |
 | The experimental deterministic core | `scripts/reasoning/` and [core/v1](docs/reasoning-core.md) |
 
 ## Make and submit a change
@@ -74,22 +71,18 @@ cd ..
 See [native setup and resources](native/README.md) for tests that require the packaged
 reasoning engines. The required CI matrix also installs and exercises each platform archive.
 
-The published crate is `native/` alone, so the files it takes from `scripts/`, and the
-licence, are copied into `native/shared/` and `native/LICENSE`. Edit the originals, then
-refresh the copies with `python3 .github/scripts/native_shared.py`; a native build in this
-repository refuses a stale copy.
+The published crate is `native/` alone, so everything it embeds or fingerprints lives in
+`native/shared/`, with the licence as `native/LICENSE`. Two of those files are read from
+outside the crate as well: the Lean sources under `scripts/`, which the reasoning runtime
+is built from and the ordinary program is packaged from. A native build in this repository
+refuses a copy that has drifted from the file it is kept in step with.
 
-Run the relevant retained Python compatibility test module while working, for example:
-
-```sh
-KPOPPER_RUNTIME=python python -m unittest discover -s tests -p 'test_release.py'
-```
-
-Before submitting a code change, run the ordinary test suite and record checks:
+The checks that run on every pull request beside the record are a small unittest package
+of tooling contracts. Run them, and the record checks, before submitting:
 
 ```sh
-KPOPPER_RUNTIME=python python -m unittest discover -s tests
-# PowerShell: $env:KPOPPER_RUNTIME = 'python'; python -m unittest discover -s tests
+python -m pip install -r .github/requirements-test.txt
+python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
 kpop --frozen check
 kpop --frozen consolidate --dry-run
 kpop --frozen experimental hub --verify
@@ -101,23 +94,9 @@ Read the measurement recipes before running `kpop --frozen remeasure --run`; the
 Optional runtimes may skip tests locally. Changes to them need their documented setup and
 the corresponding CI job; skips are not proof that the integration passes.
 
-The retained Python compatibility suite exercises Python hooks and the legacy checked
-session adapter. Set `KPOPPER_RUNTIME=python` for those runs. If a matching kernel is
-cached from `kpop session setup`, some tests exercise the checked-session runtime.
-Install its optional dependencies in the same environment before running that suite:
-
-```sh
-python -m pip install -e '.[session]'
-```
-
-Without a matching cached kernel, the integration tests skip. Having Lean on `PATH`
-alone does not enable them. Set `KPOPPER_REQUIRE_CORE_TESTS=1` when testing this runtime
-to make an unavailable kernel fail instead of silently skipping, as CI does.
-
-For changes to that retained Python runtime, follow the full [checked-session setup](docs/checked-sessions.md)
-and use the toolchain pinned in `scripts/session/lean/lean-toolchain`. Python 3.13 matches
-the checked-session CI job. The base package's Python minimum does not imply that every
-optional dependency supports that version.
+For changes to the checked session, follow the full [checked-session setup](docs/checked-sessions.md)
+and use the toolchain pinned in `scripts/session/lean/lean-toolchain`. Without a matching
+cached kernel the integration tests skip; having Lean on `PATH` alone does not enable them.
 
 The experimental `core/v1` profile uses a separate packaged native runtime. Its normal
 execution needs no Lean compiler or checked-session setup. For changes to that core,
@@ -130,7 +109,7 @@ module change should preserve KP2/KP3 behavior and register its capability, prot
 and resource contract. A revision to an existing core module changes its compatibility
 contract and needs the corresponding review. Keep authored facts, computed results,
 proof claims and declared support separate in documentation. For query changes, the
-focused conformance boundary is `python -m unittest tests.test_reasoning_query_runtime`;
+focused conformance boundary is the `reasoning_query` test target under `native/tests`;
 run the relevant native validation from `scripts/reasoning/native/README.md` when the
 packaged runtime changes. These checks do not activate query support on real records.
 
@@ -151,9 +130,8 @@ and what would prompt reconsideration. Routine fixes need no new decision entry.
 
 ## Record and measurement checks
 
-Every pull request runs the skill/release contracts, CI selection tests, `kpop check`,
-`kpop consolidate --dry-run`, `kpop remeasure --run` and `kpop experimental hub --verify` on
-Python 3.13. It fails if `.kpopper/view.yaml` no longer matches the record it renders from.
+Every pull request runs the tooling contracts, `kpop check`, `kpop consolidate --dry-run`,
+`kpop remeasure --run` and `kpop experimental hub --verify`. It fails if `.kpopper/view.yaml` no longer matches the record it renders from.
 The checkout remains GitHub's proposed merge result.
 
 The mandatory contracts also check local file links and heading anchors in the four
@@ -173,7 +151,7 @@ lanes.
 |---|---|
 | Documentation, skills, examples, assets, community files or templates, edited in place | None: mandatory contracts and record checks still run. |
 | Rust sources and tests under `native/` | The native command on every platform except Intel macOS. |
-| Shared Python code, tests, fixtures, adapters, hooks or this repository's record | The Python suite on 3.9 and 3.13 and the checks that read the changed file. |
+| The plugin's shell hooks, the host wrappers, the installers or the packaging tools | The native lane, which stages a plugin from them and drives its hooks. |
 | Files added or removed | Also the lanes whose tests scan the checkout. |
 | Cargo manifests, the build script, installers, packaging scripts, committed runtimes or platform workflows | The affected lanes on every platform. |
 | The CI selection, the read audit, `check.yml`, an unclaimed path, an empty diff or unavailable Git history | Everything, on every platform. |
@@ -185,29 +163,15 @@ must be claimed by a lane or declared unread, or the selector contract tests fai
 a test that reads something new, expect the audit to ask for the declaration in the same pull
 request.
 
-Every push to `main` runs every lane on every platform, recompiling the reasoning runtime only
-when its sources changed. Manual dispatch forces the complete audit. New commits cancel older
+Every push to `main` runs every lane on every platform. Manual dispatch forces the complete audit. New commits cancel older
 checks for the same ref. Release and publish workflows keep their own cancellation policies.
 
 `ci-required` runs even if another job fails or is skipped. It requires every selected job
 to succeed and accepts skips only for unselected jobs. This is the aggregate status to use
 when configuring branch protection; changing a workflow does not change repository rules.
 
-The full Python suite uses the fixture record in `tests/fixtures/page`, which exercises
+The page tests use the fixture record in `native/tests/fixtures/page`, which exercises
 every field the reader and the page accept; a new field goes there first.
-
-Standalone-document changes also run the offline UI suite with Node 22 or later:
-
-```sh
-pip install .
-npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
-npm run test:documents
-```
-
-Set `PYTHON` to the Python interpreter with the package dependencies when it is not
-`python3`. These tests build real synthetic artifacts and execute their scripts in a
-DOM model. They cover review/export behavior; native browser layout, sandbox/CSP
-behavior and downloads require a separate permitted browser check.
 
 The dry run lays the hypotheses beside the record over it and checks the result: red on a
 contested id, a falsifier that holds, or a hole; a premise that moved under a judgment is green
@@ -266,8 +230,8 @@ learn. `minor` adds something — a command, a field the reader accepts, a compu
 behaviour. `major` removes something or changes its meaning.
 
 Every push to `main` refreshes one pull request, **Release x.y.z**, holding the native
-version and plugin manifests plus a changelog entry. The legacy Python and npm version
-files remain compatibility metadata; they do not define the native release number.
+version and plugin manifests plus a changelog entry. The npm version file remains
+compatibility metadata; it does not define the release number.
 The release pull request records what merged since the last release, the bump each
 declared, and the decisions the record gained. Merging it is the release; several merges
 in a day fold into one release if nobody merges it in between. After it lands:
@@ -331,7 +295,7 @@ goes through.
 
 ## The browser pass
 
-`scripts/verify_page.js` opens a rendered page in Chrome and exercises the provenance
+`native/shared/verify_page.js` opens a rendered page in Chrome and exercises the provenance
 layer in both themes and under reduced motion — what `--verify` cannot reach. It installs with
 every channel, but the driver that drives the browser ships with none of them, so it stays a
 local step:

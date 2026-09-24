@@ -24,7 +24,7 @@ echo "/abs/path/to/GROUNDING.yaml" > "$(git rev-parse --git-common-dir)/kpopper-
 ```
 
 The opener and every command below then find it from any checkout or worktree of that
-repository (`provenance.py where` prints what they found), and nothing enters the tree. Say
+repository (`kpop where` prints what they found), and nothing enters the tree. Say
 where it went in your reply and in whatever memory the project keeps — a record nobody can
 find is a record nobody updates.
 

@@ -115,12 +115,14 @@
       "d.checks_ship_with_the_reader",
       "d.locate_by_shape",
       "d.npm_holds_the_name",
+      "d.one_implementation_ships",
       "d.one_source",
       "d.one_tree_two_channels",
       "d.release_is_its_own_pull_request",
       "q.account_copy",
       "q.language_direction",
-      "q.locator_authority"
+      "q.locator_authority",
+      "q.reader_places_counted_once"
     ],
     "method/decisions": [
       "d.author_free_build_guarantees",

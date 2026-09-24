@@ -43,8 +43,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  platform:
-    # Full Intel tests, release compilation and artifact cleanup can exceed an hour.
+  tests:
+    # A distribution builds and accepts the release alone.
+    if: inputs.validation != 'distribution'
+    # Full Intel tests can approach an hour on a slow machine.
     timeout-minutes: 75
     strategy:
       fail-fast: false
@@ -86,14 +88,6 @@ jobs:
           lint: "false"
           use-mathlib-cache: "false"
           use-github-cache: "false"
-      - name: Install and bind the Python hook reference for parity tests
-        if: inputs.validation != 'distribution'
-        shell: python
-        run: |
-          import os, subprocess, sys
-          subprocess.run([sys.executable, '-m', 'pip', 'install', 'PyYAML==6.0.3', 'tzdata==2025.2'], check=True)
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
-              output.write('KPOP_HOST_ORACLE_PYTHON=' + sys.executable + '\n')
       - name: Bind the selected Lean toolchain and record Rust
         shell: bash
         run: |
@@ -108,19 +102,25 @@ jobs:
       - name: Build the existing ordinary Lean test resource
         shell: bash
         run: |
-          KPOPPER_CI_ORDINARY=$(python -c 'import os; from scripts.session.core import setup; print(setup(os.environ["KPOPPER_LEAN_ROOT"])["cache"])')
+          KPOPPER_CI_ORDINARY=$(sh native/ci/build_ordinary_program.sh "$KPOPPER_LEAN_ROOT")
           echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
-      - name: Restore Rust dependency and build cache
-        id: rust-cache
+      # Compiled Rust dependencies are kept per target and build profile: this job restores and
+      # saves the test build's entry, and the release job the release build's. The key's prefix
+      # hashes what makes every artifact stale - the toolchain and this workflow's cargo
+      # settings - and a restore never crosses it; the suffix hashes the manifests, so a
+      # lockfile change still starts from the nearest entry and rebuilds only what changed.
+      - name: Restore the test build's Rust dependencies
+        id: test-cache
+        if: inputs.validation != 'distribution'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            native/target
-          key: native-rust-${{ matrix.target }}-${{ hashFiles('native/Cargo.lock') }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/debug
+          key: native-rust-test-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml') }}
           restore-keys: |
-            native-rust-${{ matrix.target }}-
+            native-rust-test-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-
       - name: Initialize the platform evidence archive
         shell: bash
         run: |
@@ -143,6 +143,27 @@ jobs:
           shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), resources/'ordinary'/target)
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
+      - name: Bind the pinned Python reference for the host hook comparisons
+        # The hook tests compare the native hooks with the Python implementation of v0.10.0,
+        # never with the Python in this checkout.
+        if: inputs.validation != 'distribution'
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          reference = temporary/'native-host-oracle'
+          commit = 'dd099226bba989f4f22c2979cd7f96e99a36d733'
+          subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', commit], check=True)
+          subprocess.run(['git', 'worktree', 'add', '--detach', str(reference), commit], check=True)
+          environment = temporary/'native-host-oracle-python'
+          subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True)
+          windows = os.name == 'nt'
+          python = environment/('Scripts' if windows else 'bin')/('python.exe' if windows else 'python')
+          subprocess.run([str(python), '-m', 'pip', 'install', 'PyYAML==6.0.3', 'tzdata==2025.2'], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_HOST_ORACLE_ROOT=' + str(reference) + '\n')
+              output.write('KPOP_HOST_ORACLE_PYTHON=' + str(python) + '\n')
+          (temporary/'native-evidence'/'python-host-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
       - name: Generate Windows history group vectors with the pinned Python reference
         if: matrix.target == 'windows-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' && inputs.validation != 'hooks'
         shell: python
@@ -169,7 +190,49 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
               output.write('KPOP_HISTORY_GROUP_FIXTURE=' + str(fixture) + '\n')
           (temporary/'native-evidence'/'python-group-oracle-commit.txt').write_text(commit + '\n', encoding='utf-8')
+      # nextest runs every test of every test binary in one pool, where cargo test runs the
+      # binaries one after another. The archive of the pinned release is checked against the
+      # sha256 GitHub recorded for it before anything is extracted.
+      - name: Install cargo-nextest at its pinned version
+        if: inputs.validation != 'distribution'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=0.9.146
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Linux/X64) asset=cargo-nextest-0.9.146-x86_64-unknown-linux-gnu.tar.gz sha256=682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428 ;;
+            Linux/ARM64) asset=cargo-nextest-0.9.146-aarch64-unknown-linux-gnu.tar.gz sha256=b2e33d7c72de7ade0ff7b3a948ac37516b24f8a836b7a8870c1f634a94be9de9 ;;
+            macOS/ARM64 | macOS/X64) asset=cargo-nextest-0.9.146-universal-apple-darwin.tar.gz sha256=39785160b3c2f6ed9a765049cf4fa79f3b39aa02eb7598a5a0e2a1a0b9ffb9a8 ;;
+            Windows/X64) asset=cargo-nextest-0.9.146-x86_64-pc-windows-msvc.tar.gz sha256=809b01f2c94d031ab6cf5f4d4a4f477c8f51b69c96ab3cb2fe4db7ecb222d0d3 ;;
+            *)
+              echo "::error::No cargo-nextest archive is pinned for $RUNNER_OS/$RUNNER_ARCH." >&2
+              exit 1
+              ;;
+          esac
+          directory="$RUNNER_TEMP/cargo-nextest"
+          mkdir -p "$directory/bin"
+          # Inside it, with relative names: GNU tar on Windows takes "D:\..." for a remote host.
+          cd "$directory"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
+            --output "$asset" "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$version/$asset"
+          if [ "$RUNNER_OS" = macOS ]; then
+            actual=$(shasum -a 256 "$asset")
+          else
+            actual=$(sha256sum "$asset")
+          fi
+          actual=${actual%% *}
+          if [ "$actual" != "$sha256" ]; then
+            echo "::error::$asset has sha256 $actual, not the pinned $sha256." >&2
+            exit 1
+          fi
+          tar -xzf "$asset" -C bin
+          bin/cargo-nextest nextest --version
+          if [ "$RUNNER_OS" = Windows ]; then
+            directory=$(cygpath -m "$directory")
+          fi
+          echo "$directory/bin" >> "$GITHUB_PATH"
       - name: Test the native implementation (${{ inputs.validation || 'full' }})
+        id: native-tests
         if: inputs.validation != 'distribution'
         working-directory: native
         shell: bash
@@ -182,15 +245,19 @@ jobs:
           {
             case "$KPOPPER_CI_VALIDATION" in
               full)
-                cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3'
+                cargo nextest run --locked --no-fail-fast --profile ci
                 ;;
               hooks)
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test host_hooks --test cli_alias
+                cargo nextest run --locked --no-fail-fast --profile ci --test host_hooks --test cli_alias
                 ;;
               final-fixes)
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib store::locking_tests
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --lib ingestion_orchestration::tests
-                cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test cli --test public_update --test public_ingestion --test ingestion_hooks
+                # Name filters match as substrings, as cargo test's do.
+                # Each run rewrites the JUnit report, so the earlier two are kept under their own names.
+                cargo nextest run --locked --no-fail-fast --profile ci --lib store::locking_tests
+                cp target/nextest/ci/junit.xml "$RUNNER_TEMP/native-evidence/junit-store-locking.xml"
+                cargo nextest run --locked --no-fail-fast --profile ci --lib ingestion_orchestration::tests
+                cp target/nextest/ci/junit.xml "$RUNNER_TEMP/native-evidence/junit-ingestion-orchestration.xml"
+                cargo nextest run --locked --no-fail-fast --profile ci --test cli --test public_update --test public_ingestion --test ingestion_hooks
                 ;;
               *)
                 echo "Unsupported validation scope: $KPOPPER_CI_VALIDATION" >&2
@@ -198,6 +265,28 @@ jobs:
                 ;;
             esac
           } 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
+      - name: Keep each test's outcome and duration with the evidence
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          KPOPPER_CI_TEST_OUTCOME: ${{ steps.native-tests.outcome }}
+        run: |
+          report=native/target/nextest/ci/junit.xml
+          if [ -f "$report" ]; then
+            cp "$report" "$RUNNER_TEMP/native-evidence/junit.xml"
+          elif [ "$KPOPPER_CI_TEST_OUTCOME" = success ]; then
+            echo "::error::The tests passed but wrote no JUnit report at $report." >&2
+            exit 1
+          else
+            echo "The test run wrote no JUnit report."
+          fi
+      # The pool holds what nextest lists. This compares that listing with cargo's own, from the
+      # build the full run made, so a test cargo would run cannot drop out of the pool unseen.
+      - name: Nextest selects exactly the tests cargo runs
+        if: env.KPOPPER_CI_VALIDATION == 'full'
+        working-directory: native
+        shell: bash
+        run: python ci/nextest_listing.py --locked
       - name: Compare ingestion and branch commands with the pinned Python reference
         if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' && inputs.validation != 'hooks' }}
         shell: bash
@@ -220,7 +309,7 @@ jobs:
           cargo test --manifest-path native/Cargo.toml --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' \
             --test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation \
             -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
-      - name: Retain test diagnostics before release compilation
+      - name: Retain test diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -234,6 +323,134 @@ jobs:
           python -m unittest -v
           tests.test_native_distribution.NativeDistribution.test_windows_installer_refuses_modified_managed_public_files
           tests.test_native_distribution.NativeDistribution.test_cargo_metadata_utf8_does_not_depend_on_process_locale
+      - name: The native checks read only what their lane declares
+        if: inputs.audit && matrix.target == 'linux-x86_64' && !cancelled()
+        run: python .github/scripts/ci_audit.py finish --lane rust
+      - name: Archive platform evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-rust-tests-${{ matrix.target }}
+          path: ${{ runner.temp }}/native-evidence
+          if-no-files-found: error
+      # Only a job that succeeds on main saves, and only what another checkout can reuse: this
+      # package's own artifacts are rebuilt from every checkout. Pull requests read main's entries.
+      - name: Keep only third-party dependencies in the Rust caches
+        if: ${{ success() && github.ref == 'refs/heads/main' && steps.test-cache.outcome == 'success' && steps.test-cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        working-directory: native
+        shell: bash
+        run: |
+          cargo clean --locked -p kpopper
+          du -sh target/debug 2>/dev/null || true
+      - name: Save the test build's Rust dependencies
+        if: ${{ success() && github.ref == 'refs/heads/main' && steps.test-cache.outcome == 'success' && steps.test-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/debug
+          key: ${{ steps.test-cache.outputs.cache-primary-key }}
+
+  # Every validation runs this job; hooks builds no release, so of its release steps only the
+  # license notices run.
+  release:
+    # Release compilation, acceptance and packaging take under half an hour on every target.
+    timeout-minutes: 45
+    # A pull request that changes no platform input passes without-darwin-x86_64, which checks
+    # the release on linux-x86_64 alone; the tests keep every target but Intel macOS.
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJSON(inputs.target == 'windows-x86_64'
+            && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+            || inputs.target == 'without-darwin-x86_64'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
+            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]') }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      KPOPPER_CI_VALIDATION: ${{ inputs.validation || 'full' }}
+      ELAN_TOOLCHAIN: leanprover/lean4:v4.33.1
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      # Match the UTF-8 contract exported by the actual shell hook launcher.
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+      - name: Record the files the native checks open
+        if: inputs.audit && matrix.target == 'linux-x86_64'
+        run: python .github/scripts/ci_audit.py start
+      - name: Validate committed reasoning runtimes and corresponding source
+        id: native-source
+        run: python scripts/reasoning/build_runtime.py --check-bundles
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596
+        with:
+          lake-package-directory: scripts/session/lean
+          auto-config: "false"
+          build: "false"
+          test: "false"
+          lint: "false"
+          use-mathlib-cache: "false"
+          use-github-cache: "false"
+      - name: Bind the selected Lean toolchain and record Rust
+        shell: bash
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          KPOPPER_CI_LEAN_ROOT=$(lean --print-prefix)
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            KPOPPER_CI_LEAN_ROOT=$(cygpath -m "$KPOPPER_CI_LEAN_ROOT")
+          fi
+          echo "KPOPPER_LEAN_ROOT=$KPOPPER_CI_LEAN_ROOT" >> "$GITHUB_ENV"
+          echo "$KPOPPER_CI_LEAN_ROOT/bin" >> "$GITHUB_PATH"
+          echo "KPOPPER_CI_RUSTC=$(rustc --version --verbose | tr '\n' ' ')" >> "$GITHUB_ENV"
+      - name: Build the existing ordinary Lean test resource
+        shell: bash
+        run: |
+          KPOPPER_CI_ORDINARY=$(sh native/ci/build_ordinary_program.sh "$KPOPPER_LEAN_ROOT")
+          echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
+      - name: Initialize the platform evidence archive
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/native-evidence/commit.txt"
+          rustc --version --verbose > "$RUNNER_TEMP/native-evidence/rustc.txt"
+          printf '%s\n' "$KPOPPER_CI_VALIDATION" > "$RUNNER_TEMP/native-evidence/validation-scope.txt"
+      - name: Prepare resources for native integration tests
+        shell: python
+        env:
+          KPOPPER_CI_TARGET: ${{ matrix.target }}
+        run: |
+          import os, pathlib, shutil
+          root = pathlib.Path.cwd()
+          resources = pathlib.Path(os.environ['RUNNER_TEMP'])/'native-test-resources'
+          reasoning = resources/'reasoning'
+          reasoning.mkdir(parents=True)
+          target = os.environ['KPOPPER_CI_TARGET']
+          shutil.copy2(root/'scripts'/'reasoning'/'native'/(target + '.kpopper-runtime'), reasoning/(target + '.kpopper-runtime'))
+          shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), resources/'ordinary'/target)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
+      # The release build's own entry, keyed like the test build's in the tests job.
+      - name: Restore the release build's Rust dependencies
+        id: release-cache
+        if: ${{ !cancelled() && steps.native-source.outcome == 'success' && inputs.validation != 'hooks' }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/release
+          key: native-rust-release-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-${{ hashFiles('native/Cargo.lock', 'native/Cargo.toml') }}
+          restore-keys: |
+            native-rust-release-${{ matrix.target }}-${{ hashFiles('native/rust-toolchain.toml', '.github/workflows/native-rust.yml') }}-
       - name: Build the platform release
         id: native-release
         if: ${{ !cancelled() && steps.native-source.outcome == 'success' && inputs.validation != 'hooks' }}
@@ -373,15 +590,51 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: native-rust-${{ matrix.target }}
+          name: native-rust-release-${{ matrix.target }}
           path: ${{ runner.temp }}/native-evidence
           if-no-files-found: error
-      - name: Save reusable Rust dependencies after diagnostic runs
-        if: ${{ !cancelled() && steps.rust-cache.outputs.cache-hit != 'true' }}
+      # Only a job that succeeds on main saves, and only what another checkout can reuse: this
+      # package's own artifacts are rebuilt from every checkout. Pull requests read main's entries.
+      - name: Keep only third-party dependencies in the Rust caches
+        if: ${{ success() && github.ref == 'refs/heads/main' && steps.release-cache.outcome == 'success' && steps.release-cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        working-directory: native
+        shell: bash
+        run: |
+          cargo clean --locked -p kpopper --release
+          du -sh target/release 2>/dev/null || true
+      - name: Save the release build's Rust dependencies
+        if: ${{ success() && github.ref == 'refs/heads/main' && steps.release-cache.outcome == 'success' && steps.release-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            native/target
-          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            native/target/release
+          key: ${{ steps.release-cache.outputs.cache-primary-key }}
+
+  # A skipped job does not fail the workflow that calls this one. The verdict fails unless the
+  # release succeeded and the tests succeeded, or were skipped for a distribution.
+  verdict:
+    timeout-minutes: 5
+    needs: [tests, release]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require each job to end as this validation requires
+        shell: bash
+        env:
+          KPOPPER_CI_VALIDATION: ${{ inputs.validation || 'full' }}
+          KPOPPER_CI_TESTS: ${{ needs.tests.result }}
+          KPOPPER_CI_RELEASE: ${{ needs.release.result }}
+        run: |
+          echo "tests: $KPOPPER_CI_TESTS"
+          echo "release: $KPOPPER_CI_RELEASE"
+          tests=success
+          if [ "$KPOPPER_CI_VALIDATION" = distribution ]; then
+            tests=skipped
+          fi
+          if [ "$KPOPPER_CI_TESTS" != "$tests" ] || [ "$KPOPPER_CI_RELEASE" != success ]; then
+            echo "::error::The $KPOPPER_CI_VALIDATION validation requires tests $tests and release success."
+            exit 1
+          fi

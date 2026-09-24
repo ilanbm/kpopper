@@ -2,8 +2,9 @@
 
 These responses were captured from the six-paper [GROUNDING.yaml](GROUNDING.yaml).
 The commands read the record without modifying it. Run them from the repository
-root using an installed `kpop` command; from a source checkout, replace `kpop` with
-`python3 scripts/kpopper`.
+root using an installed `kpop` command; from a source checkout, build the native
+crate with `cargo build --manifest-path native/Cargo.toml --release` and use the
+resulting binary.
 
 | What you want | Command | What it returns |
 |---|---|---|

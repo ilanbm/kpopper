@@ -36,8 +36,7 @@ and execute the task using its internal protocol. A ready task is not completed 
 Use `kpop config --guidance off` to disable explanations. Prefer the canonical
 executable from `KPOPPER_AGENT_CONTEXT.command`. If it is unavailable, resolve the
 active plugin's runtime with `sh <plugin>/scripts/native_runtime.sh --path`; do not
-silently use PATH, pip or Python. The source-only Python dispatcher is available
-only when `KPOPPER_RUNTIME=python` is explicit.
+silently use PATH.
 After finding relevant IDs, prefer `context <id>` for declared dependencies and checks.
 Use `pull` for concise reads or if the checked reader is unavailable. Trace changes with
 `affects <changed-id>` or `context <changed-id> --direction impact`; gate on `check`.
@@ -54,7 +53,7 @@ confidence or refreshes `seen`. Remote publication needs explicit project author
 
 If the hook supplied no opening or first-use context, run:
 
-    python3 <plugin>/scripts/cli.py open
+    <plugin>/bin/kpop open
 
 `<plugin>` is wherever this kpopper checkout lives relative to the project (see
 adapters/codex/README.md for the install layout — hooks.json runs this for you once

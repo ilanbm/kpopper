@@ -1,6 +1,6 @@
 # Native host inspection and readback
 
-The Python command does not possess the host's scheduling tools. The agent uses those tools
+The command does not possess the host's scheduling tools. The agent uses those tools
 and normalizes their actual results into these small receipts. Do not invent tool output or
 mark an unknown property verified. Local receipts are not a substitute for host inspection.
 Use stdin (`--inspect -` / `--result -`) or a private temporary file, outside product source.

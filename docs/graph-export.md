@@ -17,7 +17,7 @@ kpop export doc.quote --direction impact --depth 2
 
 Use `--record path/to/GROUNDING.yaml` for an explicit record; it can be repeated for
 multiple inputs. Otherwise normal workspace discovery applies. From a source checkout,
-replace `kpop` with `python3 scripts/cli.py`.
+use the binary `cargo build` writes under `native/target`.
 
 The default is Markdown. `markdown-mermaid` appends an optional diagram to the same text;
 `mermaid` emits diagram source only. A destination must support Mermaid to render it.

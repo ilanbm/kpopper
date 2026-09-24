@@ -236,7 +236,7 @@ startup/resume, ready unresolved findings are offered again. Hooks only read and
 a returned context notice cannot create a new capture, worker or user request. Compaction within the same session does not repeatedly offer the same
 batch.
 
-The native Codex path uses the host-provided agent messaging tool. The Python worker and hook do
+The native Codex path uses the host-provided agent messaging tool. The worker and hook do
 not call that tool themselves. Capture reserves the job; the primary dispatches the native agent
 using [DELIVERY.md](DELIVERY.md). A finite lease preserves hook fallback if dispatch or messaging
 fails. This capability is conditional on the actual host's available tools, rather than inferred

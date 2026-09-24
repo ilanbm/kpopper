@@ -15,21 +15,8 @@ kpop session setup
 kpop session enable --tokens 1000
 ```
 
-The native path needs no Python or Lean installation at runtime. The source-only
-Python compatibility adapter remains available explicitly; it requires Python 3.10
-or newer and the optional dependencies:
-
-```sh
-python -m pip install 'kpopper[session]'
-```
-
-For the Python compatibility adapter, use Lean 4.33.1, either selected by `elan` on
-the path or supplied as a toolchain directory:
-
-```sh
-kpop session setup --lean-root /path/to/lean-4.33.1
-kpop session status
-```
+The bundled path needs no Lean installation at runtime. `kpop session status`
+reports whether the core is ready.
 
 Setup compiles only the Lean source shipped with the package. It does not download a toolchain or execute record-supplied commands. The executable and its manifest are published together in a local cache keyed by source hash, operating system and architecture. A valid cache is reused; reads never build it. `session setup --rebuild` quarantines an invalid or existing cache before replacing it. Running session servers must restart after a program replacement.
 
@@ -115,8 +102,7 @@ the hook and later CLI reads use the same runtime. Optional `--profile`, `--proj
 and `--state` values are project-scoped. `--global` enables or disables the default
 for this machine without binding all projects to one profile or proposal store. A
 project setting overrides the global default. `KPOPPER_SESSION_DISABLE=1` temporarily
-disables inherited settings. Python compatibility mode stores its Python executable
-instead.
+disables inherited settings.
 
 Checked CLI output, hook transport and the Lean JSON protocol use UTF-8 independently
 of the host code page. Captured source text retains its original line endings and
@@ -138,9 +124,9 @@ Bind each stdio server to one project explicitly. This avoids depending on wheth
 {
   "mcpServers": {
     "kpopper-example": {
-      "command": "/path/to/session-python",
+      "command": "/path/to/kpop",
       "args": [
-        "/path/to/kpopper/scripts/session_cli.py", "serve",
+        "session", "serve",
         "--input", "/path/to/project/GROUNDING.yaml",
         "--project", "example"
       ]
@@ -149,7 +135,7 @@ Bind each stdio server to one project explicitly. This avoids depending on wheth
 }
 ```
 
-An installed console entry can also launch `kpop session serve` with the same arguments. `serve` uses the explicitly launched Python environment; it does not switch interpreters based on project settings. The server offers `kpopper_open`, `kpopper_read`, `kpopper_propose` and `kpopper_verify_claims`. The verifier checks only listed structured assertions against the supplied snapshot, never accompanying prose, source reliability or action authority. Proposals remain pending and do not overwrite the canonical record.
+A `kpop` on PATH can be named instead of an absolute path. `serve` uses the runtime that launched it; it does not switch executables based on project settings. The server offers `kpopper_open`, `kpopper_read`, `kpopper_propose` and `kpopper_verify_claims`. The verifier checks only listed structured assertions against the supplied snapshot, never accompanying prose, source reliability or action authority. Proposals remain pending and do not overwrite the canonical record.
 
 ## Guarantees and limits
 
@@ -173,7 +159,7 @@ readable as source data; comparisons involving null are uncheckable.
 
 The core separates current values from review snapshots, unknown from false, executable conditions from prose, and premise confidence from judgment confidence. The view guard checks complete ID/link accounting, conflict signals, exact recovery references, event values and topic bindings. Native inferred field roles are passed separately from original source spelling; stale normalization is rejected. Unsupported predicates remain uncheckable, and malformed predicate types remain explicit assessment errors.
 
-The Python router, native adapter and text renderer are tested but not formally proved end to end. The compiler and locally managed cache are part of the trusted runtime. Source-world truth, human re-openers and arbitrary logical languages remain outside the checks. Platform CI builds the pinned source on Linux, macOS and Windows; local validation alone does not establish that every host integration behaves identically.
+The router, adapter and text renderer are tested but not formally proved end to end. The compiler and locally managed cache are part of the trusted runtime. Source-world truth, human re-openers and arbitrary logical languages remain outside the checks. Platform CI builds the pinned source on Linux, macOS and Windows; local validation alone does not establish that every host integration behaves identically.
 
 ## Formal guarantees
 
@@ -190,9 +176,7 @@ the checked-session core:
 
 The [proof audit](../scripts/session/lean/ProofAudit.lean) names these theorems and
 prints their axiom dependencies. Other runtime checks cover exact recovery references,
-topic bindings and event values. The [session CI workflow](../.github/workflows/session.yml)
-builds the pinned source, audits the named proofs and runs integration tests on Linux,
-macOS and Windows. The [arithmetic evaluator's proof scope](reasoning-core.md#runtime-licensing-and-assurance)
+topic bindings and event values. The [arithmetic evaluator's proof scope](reasoning-core.md#runtime-licensing-and-assurance)
 is documented separately.
 
 These guarantees concern defined data structures and checks. They do not establish

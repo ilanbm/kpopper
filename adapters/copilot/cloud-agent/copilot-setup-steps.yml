@@ -19,23 +19,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
-      - name: install PyYAML
-        run: pip install pyyaml
-
-      - name: open the record
+      - name: install the kpopper runtime
         # KPOPPER_ROOT: where this repo's kpopper checkout lives (a vendored copy, a
         # submodule, whatever the project's own convention is) - set as a repository
         # variable (Settings > Secrets and variables > Actions > Variables) or hardcode
-        # the path below. silent no-op without it, same as the local session opener.
+        # the path below. the installer downloads the runtime for that checkout's VERSION
+        # from the kpopper GitHub release and checks its SHA-256, so the agent can run
+        # "$KPOPPER_ROOT/bin/kpop". silent no-op without it, same as the local session opener.
+        env:
+          KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
+        run: |
+          if [ -n "$KPOPPER_ROOT" ]; then
+            sh "$KPOPPER_ROOT/scripts/install_native.sh"
+          else
+            echo "KPOPPER_ROOT unset - nothing to install"
+          fi
+
+      - name: open the record
         env:
           KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
         run: |
           if { [ -f GROUNDING.yaml ] || [ -f PROVENANCE.yaml ]; } && [ -n "$KPOPPER_ROOT" ]; then
-            python3 "$KPOPPER_ROOT/scripts/provenance.py" open --chars 2000
+            "$KPOPPER_ROOT/bin/kpop" open --chars 2000
           else
             echo "no record, or KPOPPER_ROOT unset - nothing to open"
           fi

@@ -18,11 +18,27 @@ fn sid(label: &str) -> String {
     )
 }
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_owned()
+fn fixtures() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+}
+/// The Python hooks the native ones are compared with come from a tree of the pinned
+/// reference, v0.10.0 (see native/README.md), never from this checkout. Without it the
+/// comparison is skipped, except under CI, which runs every comparison.
+fn reference() -> Option<PathBuf> {
+    match std::env::var_os("KPOP_HOST_ORACLE_ROOT").filter(|root| !root.is_empty()) {
+        Some(root) => Some(PathBuf::from(root)),
+        None if std::env::var_os("CI").is_some() => {
+            panic!(
+                "KPOP_HOST_ORACLE_ROOT is not set: CI compares the hooks with the Python of v0.10.0"
+            )
+        }
+        None => {
+            eprintln!(
+                "Python hook comparison skipped: set KPOP_HOST_ORACLE_ROOT to a tree of v0.10.0"
+            );
+            None
+        }
+    }
 }
 fn oracle_python() -> PathBuf {
     std::env::var_os("KPOP_HOST_ORACLE_PYTHON")
@@ -37,7 +53,7 @@ fn fixture() -> TempDir {
         "PROVENANCE.measure.yaml",
     ] {
         fs::copy(
-            repo().join("tests/fixtures/page").join(name),
+            fixtures().join("page").join(name),
             dir.path().join(name),
         )
         .unwrap();
@@ -172,6 +188,7 @@ fn native_recording_reminder_is_prompt_context_with_cooldown_and_no_mark_write()
     assert_eq!(fs::read(&mark).unwrap(), before);
 }
 fn python(
+    reference: &Path,
     script: &str,
     args: &[&str],
     payload: &serde_json::Value,
@@ -179,7 +196,7 @@ fn python(
     tmp: &Path,
 ) -> Output {
     let mut all = vec![
-        repo()
+        reference
             .join("scripts")
             .join(script)
             .to_string_lossy()
@@ -256,22 +273,34 @@ fn native_process_matches_python_ground_state_transitions_and_preserves_record()
     let before = fs::read(root.join("PROVENANCE.yaml")).unwrap();
     let py = json!({"cwd":root,"session_id":sid("ground-python"),"hook_event_name":"UserPromptSubmit","prompt":"the heat loss on a -5 night"});
     let native_payload = json!({"cwd":root,"session_id":sid("ground-native"),"hook_event_name":"UserPromptSubmit","prompt":"the heat loss on a -5 night"});
-    let p = python("ground_hook.py", &["claude", "prompt"], &py, &root, &root);
+    let reference = reference();
+    let p = reference.as_deref().map(|reference| {
+        python(
+            reference,
+            "ground_hook.py",
+            &["claude", "prompt"],
+            &py,
+            &root,
+            &root,
+        )
+    });
     let n = native(
         &["_hook", "ground", "claude", "prompt"],
         &native_payload,
         &root,
         &root,
     );
-    assert_eq!(p.status.code(), Some(0));
     assert_eq!(n.status.code(), Some(0));
-    assert_eq!(
-        context(&n),
-        context(&p),
-        "python:\n{}\nnative:\n{}",
-        diagnostic(&p),
-        diagnostic(&n)
-    );
+    if let Some(p) = &p {
+        assert_eq!(p.status.code(), Some(0));
+        assert_eq!(
+            context(&n),
+            context(p),
+            "python:\n{}\nnative:\n{}",
+            diagnostic(p),
+            diagnostic(&n)
+        );
+    }
     assert!(context(&n).contains("heat.loss_kw"));
     assert_eq!(
         context(&native(
@@ -324,9 +353,13 @@ fn native_process_matches_python_ground_state_transitions_and_preserves_record()
         .contains("heat.loss_kw")
     );
     assert_eq!(fs::read(root.join("PROVENANCE.yaml")).unwrap(), before);
+    let Some(reference) = reference else {
+        return;
+    };
     let cross = json!({"cwd":root,"session_id":sid("ground-cross"),"hook_event_name":"UserPromptSubmit","prompt":"the heat loss on a -5 night"});
     assert!(
         context(&python(
+            &reference,
             "ground_hook.py",
             &["claude", "prompt"],
             &cross,
@@ -361,9 +394,12 @@ fn native_process_matches_python_citation_selection_and_once_only_state() {
     let before = fs::read(root.join("PROVENANCE.yaml")).unwrap();
     let py = json!({"cwd":root,"session_id":sid("edit-python"),"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"boiler/service-2025.pdf"}});
     let nv = json!({"cwd":root,"session_id":sid("edit-native"),"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"boiler/service-2025.pdf"}});
-    let p = python("edit_hook.py", &["claude"], &py, &root, &root);
+    let p = reference()
+        .map(|reference| python(&reference, "edit_hook.py", &["claude"], &py, &root, &root));
     let n = native(&["_hook", "edit", "claude"], &nv, &root, &root);
-    assert_eq!(context(&n), context(&p));
+    if let Some(p) = &p {
+        assert_eq!(context(&n), context(p));
+    }
     assert!(context(&n).contains("doc.boiler_sheet"));
     assert_eq!(
         context(&native(&["_hook", "edit", "claude"], &nv, &root, &root)),
@@ -511,21 +547,23 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
     let backup = fs::read(store_root.join("followups.previous.yaml")).unwrap();
     let payload_py = json!({"cwd":work,"session_id":sid("follow-python")});
     let payload_nv = json!({"cwd":work,"session_id":sid("follow-native")});
-    let mut py = Command::new(oracle_python())
-        .arg(repo().join("scripts/followups_hook.py"))
-        .current_dir(&work)
-        .env("XDG_STATE_HOME", &state)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    py.stdin
-        .take()
-        .unwrap()
-        .write_all(serde_json::to_string(&payload_py).unwrap().as_bytes())
-        .unwrap();
-    let py = py.wait_with_output().unwrap();
+    let py = reference().map(|reference| {
+        let mut py = Command::new(oracle_python())
+            .arg(reference.join("scripts/followups_hook.py"))
+            .current_dir(&work)
+            .env("XDG_STATE_HOME", &state)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        py.stdin
+            .take()
+            .unwrap()
+            .write_all(serde_json::to_string(&payload_py).unwrap().as_bytes())
+            .unwrap();
+        py.wait_with_output().unwrap()
+    });
     let mut nv = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "followups"])
         .current_dir(&work)
@@ -541,7 +579,6 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
         .write_all(serde_json::to_string(&payload_nv).unwrap().as_bytes())
         .unwrap();
     let nv = nv.wait_with_output().unwrap();
-    assert_eq!(py.status.code(), Some(0), "{}", diagnostic(&py));
     assert_eq!(
         nv.status.code(),
         Some(0),
@@ -554,7 +591,6 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
         String::from_utf8_lossy(&nv.stderr)
     );
     let native_text = context(&nv);
-    let python_text = context(&py);
     assert!(
         native_text.starts_with("KPOPPER_FOLLOWUPS "),
         "native hook produced no followup context:\n{}",
@@ -579,44 +615,48 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
     let again = again.wait_with_output().unwrap();
     assert_eq!(again.status.code(), Some(0), "{}", diagnostic(&again));
     assert!(again.stdout.is_empty(), "{}", diagnostic(&again));
-    if cfg!(windows) {
-        // The retained Python hook explicitly refuses writes without POSIX fcntl.
-        // Native Windows delivery remains required and is asserted above.
-        assert!(python_text.is_empty(), "{}", diagnostic(&py));
-        assert!(
-            String::from_utf8_lossy(&py.stderr).contains("POSIX file locking"),
-            "{}",
-            diagnostic(&py)
-        );
-    } else {
-        assert!(
-            python_text.starts_with("KPOPPER_FOLLOWUPS "),
-            "python oracle produced no followup context:\n{}",
-            diagnostic(&py)
-        );
-        let native_json = serde_json::from_str::<serde_json::Value>(
-            native_text
-                .strip_prefix("KPOPPER_FOLLOWUPS ")
-                .unwrap()
-                .split_once('\n')
-                .unwrap()
-                .0,
-        )
-        .unwrap();
-        let python_json = serde_json::from_str::<serde_json::Value>(
-            python_text
-                .strip_prefix("KPOPPER_FOLLOWUPS ")
-                .unwrap()
-                .split_once('\n')
-                .unwrap()
-                .0,
-        )
-        .unwrap();
-        assert_eq!(native_json, python_json);
-        assert_eq!(
-            native_text.split_once('\n').unwrap().1,
-            python_text.split_once('\n').unwrap().1
-        );
+    if let Some(py) = &py {
+        assert_eq!(py.status.code(), Some(0), "{}", diagnostic(py));
+        let python_text = context(py);
+        if cfg!(windows) {
+            // The retained Python hook explicitly refuses writes without POSIX fcntl.
+            // Native Windows delivery remains required and is asserted above.
+            assert!(python_text.is_empty(), "{}", diagnostic(py));
+            assert!(
+                String::from_utf8_lossy(&py.stderr).contains("POSIX file locking"),
+                "{}",
+                diagnostic(py)
+            );
+        } else {
+            assert!(
+                python_text.starts_with("KPOPPER_FOLLOWUPS "),
+                "python oracle produced no followup context:\n{}",
+                diagnostic(py)
+            );
+            let native_json = serde_json::from_str::<serde_json::Value>(
+                native_text
+                    .strip_prefix("KPOPPER_FOLLOWUPS ")
+                    .unwrap()
+                    .split_once('\n')
+                    .unwrap()
+                    .0,
+            )
+            .unwrap();
+            let python_json = serde_json::from_str::<serde_json::Value>(
+                python_text
+                    .strip_prefix("KPOPPER_FOLLOWUPS ")
+                    .unwrap()
+                    .split_once('\n')
+                    .unwrap()
+                    .0,
+            )
+            .unwrap();
+            assert_eq!(native_json, python_json);
+            assert_eq!(
+                native_text.split_once('\n').unwrap().1,
+                python_text.split_once('\n').unwrap().1
+            );
+        }
     }
     assert_eq!(
         fs::read(store_root.join("followups.previous.yaml")).unwrap(),
@@ -692,25 +732,27 @@ fn watch_native_delivery_is_positive_on_windows_and_matches_python_where_support
     ];
     let py_payload =
         json!({"cwd":work,"session_id":sid("watch-python"),"hook_event_name":"PostToolUse"});
-    let mut py = Command::new(oracle_python())
-        .args([
-            repo().join("scripts/watch_hook.py").to_str().unwrap(),
-            "codex",
-            "wait",
-        ])
-        .current_dir(&work)
-        .env("XDG_STATE_HOME", &state)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    py.stdin
-        .take()
-        .unwrap()
-        .write_all(serde_json::to_string(&py_payload).unwrap().as_bytes())
-        .unwrap();
-    let py = py.wait_with_output().unwrap();
+    let py = reference().map(|reference| {
+        let mut py = Command::new(oracle_python())
+            .args([
+                reference.join("scripts/watch_hook.py").to_str().unwrap(),
+                "codex",
+                "wait",
+            ])
+            .current_dir(&work)
+            .env("XDG_STATE_HOME", &state)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        py.stdin
+            .take()
+            .unwrap()
+            .write_all(serde_json::to_string(&py_payload).unwrap().as_bytes())
+            .unwrap();
+        py.wait_with_output().unwrap()
+    });
     let nv_payload =
         json!({"cwd":work,"session_id":sid("watch-native"),"hook_event_name":"PostToolUse"});
     let mut nv = Command::new(env!("CARGO_BIN_EXE_kpop"))
@@ -752,20 +794,22 @@ fn watch_native_delivery_is_positive_on_windows_and_matches_python_where_support
         diagnostic(&claude)
     );
     assert!(context(&claude).contains("KPOPPER_WATCH"));
-    assert_eq!(py.status.code(), Some(0), "{}", diagnostic(&py));
     assert_eq!(nv.status.code(), Some(0), "{}", diagnostic(&nv));
-    let p = context(&py);
     let n = context(&nv);
     assert!(n.starts_with("KPOPPER_WATCH "), "{}", diagnostic(&nv));
     assert!(n.contains("c.checkout"));
-    if cfg!(windows) {
-        // Python watch setup requires POSIX locking. Its nonblocking hook may
-        // return silently during availability checks on Windows.
-        // Native Windows delivery remains required and is asserted above.
-        assert!(p.is_empty(), "{}", diagnostic(&py));
-    } else {
-        assert!(p.starts_with("KPOPPER_WATCH "), "{}", diagnostic(&py));
-        assert!(p.contains("c.checkout"));
+    if let Some(py) = &py {
+        assert_eq!(py.status.code(), Some(0), "{}", diagnostic(py));
+        let p = context(py);
+        if cfg!(windows) {
+            // Python watch setup requires POSIX locking. Its nonblocking hook may
+            // return silently during availability checks on Windows.
+            // Native Windows delivery remains required and is asserted above.
+            assert!(p.is_empty(), "{}", diagnostic(py));
+        } else {
+            assert!(p.starts_with("KPOPPER_WATCH "), "{}", diagnostic(py));
+            assert!(p.contains("c.checkout"));
+        }
     }
     let mut again = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "watch", "codex", "wait", "--wait-seconds", "0"])

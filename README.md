@@ -677,40 +677,18 @@ writer records each judgment's review snapshot. A proposed change of framework
 then reopens several interpretations and the synthesis. No model call or claim of
 live independent research is part of that replay.
 
-### The collection changes; the answer stays five
-
-The [advanced continuation](examples/dark-matter/advanced/README.md) starts with
-the five astronomical papers and an explicit selection rule: include a study
-when it is in this review and classified as astronomy. Adding the existing LZ
-laboratory paper grows the captured collection while leaving that selection equal.
-
-| Reading | Before LZ | After LZ | Replay of the earlier Snapshot |
-|---|---:|---:|---:|
-| Papers in the scope | 5 | 6 | 5 |
-| Selected astronomical papers | 5 | 5 | 5 |
-| Query basis | Earlier basis | Changed basis | Earlier basis recovered |
-| Particle identities | Unknown | Unknown | Unknown |
-
-The `core/v1` record uses `composition/v1` for the inclusion condition and
-`query/v1` for selection. Its basis includes nonmatching members, so an equal
-numeric answer does not hide a changed collection. The retained Snapshot
-recovers the earlier inputs and result even with the source files unavailable.
-
-These are scripted CLI and public API results, checked without model calls.
-The [runnable exercise and captured output](examples/dark-matter/advanced/README.md#run-it)
-also preserve the exact `75/14` density ratio and an unchanged qualitative
-review judgment. Five papers is a coverage count: RAR still reuses SPARC, model
-assumptions remain explicit, and neither the count nor replay proves the synthesis.
-
 </details>
 
 ## Get started
 
-**Start in your agent's chat.** Paste this request into any of the agents listed below.
-The agent can carry out the steps its tools allow and guide you through any clicks,
-approvals or administrator steps that need your input.
+You can use this request with any of the agents listed below. The agent can carry out
+the steps its tools allow and guide you through any clicks, approvals or administrator
+steps that need your input.
+
+**Copy and paste the following text to your agent:**
 
 ```text
+Dear agent,
 Please install kpopper. Open the guide below and follow the installation
 instructions for your environment:
 https://github.com/ilanbm/kpopper#get-started
@@ -835,7 +813,7 @@ Windows, under WSL). To start from what already exists, ask your agent to map th
 The native runtime needs no Python, Node, Rust or Lean toolchain.
 
 [Use the command line without an agent](docs/reference.md#try-it-from-the-command-line) ·
-[Python compatibility mode and troubleshooting](docs/plugin-runtime.md)
+[Runtime setup and troubleshooting](docs/plugin-runtime.md)
 
 **Installed? See it in your work:** [Coding agents](#user-content-example-1-coding-agent) ·
 [Claude Cowork / ChatGPT Work](#user-content-example-2-claude-cowork-and-chatgpt-work) ·
@@ -852,8 +830,7 @@ ordinary language.
 These commands assume an installed `kpop`. From a source checkout, build the native
 crate with `cargo build --manifest-path native/Cargo.toml --release` and use the
 resulting `kpop` binary. For plugin work, use the command supplied by the session's
-`KPOPPER_AGENT_CONTEXT`; source-only Python compatibility mode is explicit.
-`<id>` names a record entry, such as
+`KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
 `workshop.ingredient_plan`; `kpop --help` lists command groups.
 
 | Command | What you need |
@@ -944,8 +921,6 @@ the earlier evidence available when the work changes.
 | Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
 | Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged native reasoning runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#deterministically-checkable). | Check whether 24 guests fit a venue with 18 seats. |
 | Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). | Find apartments below $2,000 with an elevator and a lease that allows pets. |
-| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
-| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
 | Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). | Record a babysitter's cancellation and surface the evening plans that depended on it. |
 | Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#user-content-example-1-coding-agent). | One branch removes password login; another adds a feature that still requires it. |
 | Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). | A discarded prototype's documented API limit remains available to the next integration task. |
@@ -1097,56 +1072,6 @@ decision is right.**
 [Supported calculations and conditions](skills/kpopper/EXPRESSIONS.md) ·
 [What `check` reports](docs/reference.md#what-check-means) ·
 [The reasoning core's formal scope](docs/reasoning-core.md)
-
-<a id="same-result-different-basis"></a>
-
-<details>
-<summary><strong>A subtler case: the result stays the same, but its basis changed</strong></summary>
-
-A number can stay the same while the evidence behind it changes. kpopper compares both
-with the last review.
-
-In the [research example](examples/dark-matter/advanced/README.md), a literature review
-relies on a count: five of the collected studies are astronomy studies. A recorded rule
-does the counting: a study counts when it is in the review **and** its field is astronomy.
-
-> **User:** “Include the LZ paper. Does our selection of astronomy studies change?”
-
-LZ is a laboratory experiment, so the rule still selects the same five studies, now out
-of six. The count is unchanged; the collection it was computed from is not.
-
-After you [run the example](examples/dark-matter/advanced/README.md#run-it) with
-`--output /tmp/dark-matter-query`, this command reads the count, a second result and the
-review that relies on them. `jq` keeps four fields of the response for display:
-
-```sh
-kpop assess m.astronomy_count m.particle_identities d.review_scope \
-  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
-  jq -f examples/dark-matter/advanced/assessment-summary.jq
-```
-
-```json
-{
-  "studies_scanned": 6,
-  "astronomy_studies_selected": 5,
-  "particle_identity_status": "unknown",
-  "review_basis": "changed"
-}
-```
-
-- `studies_scanned` and `astronomy_studies_selected`: six studies were checked, and five
-  still match.
-- `review_basis: changed`: the review was saved when the count covered five studies, so
-  it needs another look.
-- `particle_identity_status: unknown`: no study records a dark-matter particle identity,
-  so that result stays unknown instead of being guessed.
-
-The agent can answer: **“The selection is unchanged, but the evidence considered has
-changed. The saved review needs another look.”** The example also replays the earlier
-computation from its saved snapshot, with the source files out of reach, and recovers
-the original five-study result.
-
-</details>
 
 ## Go deeper
 
@@ -1380,10 +1305,10 @@ opening illustrations in disposable local Git repositories:
 | Search cache | Add private projects; cache results by query because all results are public. | `search.results_public == false` |
 | Download promise | Retain files for seven days; promise downloads for 30 days. | `exports.retention_days < downloads.promised_days` |
 
-Run them with Git and the package's Python dependencies installed:
+Run them with Git and a native `kpop` on PATH:
 
 ```sh
-python3 examples/merge-assumptions/run.py
+sh examples/merge-assumptions/run.sh
 ```
 
 Each branch's tests and measurement checks pass. Git merges the branches without a text
@@ -1509,7 +1434,7 @@ checks. These serve related but distinct purposes:
 - **An optional checked view.** Experimental checked sessions expose a revision-bound view
   through CLI or MCP. A changed record rejects reads using the old revision. Enable this
   mode separately with `kpop session enable`; [setup and compatibility instructions](docs/checked-sessions.md)
-  cover the native bundles and the explicit Python adapter.
+  cover the packaged bundles.
 
 These guarantees do not establish that a source is accurate, that the recorded premises
 logically imply an agent's verdict, or that an action is permitted. The adapters, renderer,
@@ -1538,23 +1463,18 @@ make decisions worth revisiting. Optional applications build on that core:
 | kpopper Hub (`hub`) | A browsable snapshot of the record, with layouts and an interactive graph. | Experimental |
 | Annotated Documents (`annotated-doc`) | A standalone document with selected evidence and reviewable copy updates. | Experimental |
 
-Native release bundles include the compiled HTML applications. Request them
-explicitly; installation alone does not activate either application. In Python
-compatibility mode, install the optional HTML dependencies:
+Release bundles include the compiled HTML applications. Request them explicitly;
+installation alone does not activate either application.
 
 ```sh
-python -m pip install '.[html]'
 kpop experimental hub --open
 kpop experimental annotated-doc guide
 ```
 
-For a legacy Python release, use `kpopper[html]` instead of `.[html]`; check the
-[changelog](CHANGELOG.md) when using an older installation.
+Check the [changelog](CHANGELOG.md) when using an older installation.
 Request these applications explicitly or give the agent a standing preference. Their
 interfaces and artifact formats may change. Ordinary installation, record checks and
-session hooks work without activating the HTML applications. Python compatibility-mode
-plugin users can add its dependencies with `plugin_runtime.py setup --applications html`
-at their active plugin path.
+session hooks work without activating the HTML applications.
 
 [![Experimental Annotated Documents application: the Autumn Garden Workshop report with an evidence card beside its registration-window passage. The author's interpretation is labelled Not checked and linked to the source notes.](assets/standalone-document-reasoning.png)](assets/standalone-document-reasoning.png)
 
@@ -1573,8 +1493,7 @@ To share a small part of the record in a task, document or pull request, use
 readings and marks values omitted from the selection. From a source checkout:
 
 ```sh
-python3 scripts/cli.py export launch.announcement \
-  --record examples/launch-party/GROUNDING.yaml
+kpop export launch.announcement --record examples/launch-party/GROUNDING.yaml
 ```
 
 Add `--format markdown-mermaid` to keep the text and append a diagram for destinations
@@ -1596,7 +1515,8 @@ records. The [reasoning runtime is packaged](docs/reasoning-core.md); existing
 legacy records require explicit adoption.
 
 Legacy records with structured expressions and computed snapshots require at least
-1.6.0 and their [documented Lean setup](skills/kpopper/EXPRESSIONS.md#reader-compatibility).
+0.9.0 in every reader and writer that touches them; see
+[reader compatibility](skills/kpopper/EXPRESSIONS.md#reader-compatibility).
 Upgrade every reader and writer together. On native Windows, legacy records support
 individual `add`/`set` writes and deliberate reviews; durable report batching requires
 POSIX file locking.

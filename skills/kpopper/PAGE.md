@@ -1,24 +1,19 @@
 # kpopper Hub
 
-*Reference for `render_page.py`, which ships with the kpopper plugin. Read this when you
+*Reference for the Hub renderer, which ships with the kpopper plugin. Read this when you
 are about to build or change a page; it is not part of what a session reads to start.*
 
-`render_page.py` turns any record into one self-contained HTML file — no domain knowledge,
-nothing typed twice. The first two are what `kpop experimental hub` runs for you:
+The renderer turns any record into one self-contained HTML file — no domain knowledge,
+nothing typed twice:
 
 ```bash
-kpop experimental hub                                                # the page, at .kpopper/build/page.html
-kpop experimental hub --verify                                       # deterministic, no browser
+kpop experimental hub                                       # the page, at .kpopper/build/page.html
+kpop experimental hub --verify                              # deterministic, no browser
+kpop experimental hub --checks .kpopper/build/page.html     # what only looking catches
 ```
 
-The third has no wrapper, so it needs the directory the scripts sit in. Locate that the same way
-the skill locates the reader — skipping a checkout's own worktrees, highest version wins — rather
-than assuming where an installed plugin unpacks:
-
-```bash
-S=$(dirname "$(find ~/.claude -name worktrees -prune -o -path '*kpopper*/scripts/render_page.py' -print 2>/dev/null | sort -V | tail -1)")
-node "$S/verify_page.js" .kpopper/build/page.html           # what only looking catches
-```
+`--checks` runs the browser checker that came with the reader, so it needs no path of its
+own; it does need a browser driver beside the page (`npm i --no-save playwright-core`).
 
 What makes it worth opening is not the layout — it is the provenance layer. Hover any key to
 see where the value came from, click to pin, click a dependency to walk to it, back out with
@@ -488,7 +483,7 @@ ambiguity is an error and never a skip.
 
 Everything below is read, checked and reported now; where the page does not yet draw a field,
 `--verify` says so in a note rather than staying silent. A new field goes into the fixture
-record in `tests/fixtures/page` first, so the reader, the page and the tests agree on its shape.
+record in `native/tests/fixtures/page` first, so the reader, the page and the tests agree on its shape.
 
 **In the brief**
 

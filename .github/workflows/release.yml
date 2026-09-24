@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   release:
-    timeout-minutes: 15
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +30,35 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install the package the way a user gets it
-        run: pip install ".[html]"
+      # The record is read by the native kpop of this tree. A reader built from the same
+      # native/ sources is reused, so only a change under native/ pays for the build, and
+      # the entry is shared with the reader the record job of a check run builds.
+      - name: Reuse the native reader built from these sources
+        id: reader
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/kpopper-record-reader
+          key: record-reader-${{ runner.os }}-${{ hashFiles('native/**') }}
+      - name: Build the native reader from this tree
+        if: steps.reader.outputs.cache-hit != 'true'
+        # Inside native/, so that its rust-toolchain.toml selects the compiler.
+        working-directory: native
+        env:
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: |
+          cargo build --locked --bin kpop
+          mkdir -p ~/.cache/kpopper-record-reader
+          cp target/debug/kpop ~/.cache/kpopper-record-reader/kpop
+      - name: Keep this native reader for the pull requests that follow
+        if: steps.reader.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/kpopper-record-reader
+          key: ${{ steps.reader.outputs.cache-primary-key }}
+      - name: Put the native reader on PATH
+        run: echo "$HOME/.cache/kpopper-record-reader" >> "$GITHUB_PATH"
 
       - name: Keep the release pull request current
         env:

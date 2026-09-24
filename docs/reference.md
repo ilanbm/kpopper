@@ -28,18 +28,9 @@ archive and checksum. The binaries land in `PREFIX/bin`; put that directory on P
 the absolute `kpop` path. Release assets are named `kpopper-VERSION-TARGET.tar.gz` (Unix)
 or `.zip` (Windows).
 
-The legacy source-only CLI remains available with Python 3.9 or newer, but must be
-selected explicitly as compatibility mode:
-
-```sh
-pipx install kpopper
-# Alternatively, in a Python environment: python -m pip install kpopper
-# Run the resulting CLI with: KPOPPER_RUNTIME=python kpop ...
-```
-
-This installs PyYAML with the legacy CLI. The ordinary reader and HTML page need no Lean setup.
-An isolated CLI installation does not supply dependencies to an unrelated Python
-environment used by a host's hooks.
+The earlier Python implementation is no longer part of this tree. Its last release is
+`kpopper` 1.8.1 on PyPI, and its source is the tag
+[`python-final`](https://github.com/ilanbm/kpopper/releases/tag/python-final).
 
 The command is `kpop`. `kpopper` names the project and the installed package, and is
 kept as a second command name, so either spelling runs.
@@ -302,7 +293,7 @@ does not call for copying them into it; the complete graphs need not be identica
 Claude async hooks can wake their session. Ordinary Codex hooks deliver on the next model
 opportunity; `watch scan --notify-task HOST_TASK_ID` returns an optional native-agent delivery
 job for hosts supporting background agents and task messaging. A job must actually be dispatched;
-Python alone cannot call host tools. Persistent writes require POSIX locking. See the
+the command cannot call host tools itself. Persistent writes require POSIX locking. See the
 [watch protocol](../skills/watch/references/compatibility.md) for scope, delivery and recovery.
 
 ## Background capture
@@ -360,7 +351,7 @@ repository's measurement and CI contract.
 
 ## kpopper Hub and browser checks
 
-This is an optional experimental application. Install `kpopper[html]` first;
+This is an optional experimental application, carried by the installed command;
 see [application boundaries and compatibility](applications.md).
 
 ```sh
@@ -392,7 +383,7 @@ localization, coverage and prose-drift checks.
 
 ## Annotated Documents
 
-This is an optional experimental application using the same `kpopper[html]` extra.
+This is an optional experimental application, carried by the same installed command.
 
 `kpop experimental annotated-doc build` packages an authored document with its selected evidence,
 `annotated-doc inspect` validates and reads a saved copy without running its scripts, and
@@ -406,18 +397,16 @@ See [the user flow](documents.md) and run `kpop experimental annotated-doc guide
 | Part | Source |
 |---|---|
 | Method and agent guidance | [skills/kpopper](../skills/kpopper/SKILL.md), one skill per occasion beside it: [ground](../skills/ground/SKILL.md), [record](../skills/record/SKILL.md), [map](../skills/map/SKILL.md), [annotated-doc](../skills/annotated-doc/SKILL.md), [hub](../skills/hub/SKILL.md), [consolidate](../skills/consolidate/SKILL.md), [watch](../skills/watch/SKILL.md) |
-| Optional application entry points | [scripts/applications](../scripts/applications), [installation and boundaries](applications.md) |
-| CLI dispatcher | [scripts/cli.py](../scripts/cli.py), also exposed by `scripts/kpopper` |
-| YAML reader, checks and writer | [scripts/provenance.py](../scripts/provenance.py) |
-| Background report processing | [scripts/ingestion.py](../scripts/ingestion.py) |
-| Optional session transport and Lean core | [scripts/session](../scripts/session), [setup guide](checked-sessions.md) |
-| HTML renderer | [scripts/render_page.py](../scripts/render_page.py) |
-| Browser verification | [scripts/verify_page.js](../scripts/verify_page.js) |
+| The command: reader, checks, writer and applications | [native/src](../native/src), [installation and boundaries](applications.md) |
+| Display resources and schemas it embeds | [native/shared](../native/shared) |
+| Optional checked-session Lean core | [scripts/session/lean](../scripts/session/lean), [setup guide](checked-sessions.md) |
+| Browser verification | [native/shared/verify_page.js](../native/shared/verify_page.js) |
 | Agent integration | [hooks](../hooks/hooks.json), [adapters](../adapters/README.md) |
 
-PyPI installs the core Python CLI; the `html` extra supplies the optional application runtime. Agent plugins add the method and host-specific
-hooks. The npm package provides the Node browser checker, not the Python CLI. Shared code
-comes from the same source files, with one version across distribution manifests.
+The GitHub release carries one archive per platform, and crates.io the sources to build the
+same command. Agent plugins add the method and host-specific hooks. The npm package `kpopper`
+provides the Node browser checker alone and keeps its own 1.x version line; the release
+archives, the crate and the plugin manifests share one version.
 
 Every command reads the whole record, so a file's parsed form is kept under
 `$XDG_STATE_HOME/kpopper/cache`, or `~/.local/state/kpopper/cache`, one private entry per
@@ -461,10 +450,10 @@ Claude and Codex use regular async context for ingestion/watch findings; there i
 `asyncRewake` route. Other adapters expose current state at startup or through explicit
 checks, as described in the [capability matrix](../adapters/README.md#capability-matrix).
 
-From a source checkout, run `python3 scripts/cli.py <command>` or `scripts/kpopper <command>`.
-When using an installed plugin without a `kpop` command on `PATH`, use the same dispatcher
-under that plugin's `scripts/` directory. Installation paths are versioned; locate the
-active installation rather than retaining a path to an older copy.
+From a source checkout, build the command with `cargo build --bin kpop` inside `native/`.
+When using an installed plugin without a `kpop` command on `PATH`, run `bin/kpop` from that
+plugin's directory. Installation paths are versioned; locate the active installation rather
+than retaining a path to an older copy.
 
 The method's lasting constraints are traceable grounding, preserving derivation rules,
 propagating declared impact without automatically adopting conclusions, and migrations

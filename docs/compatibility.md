@@ -25,11 +25,11 @@ supported end-to-end integration.
 | **Gemini CLI 0.43.0** | Isolated extension link/list; installed host hook runner and aggregator accept startup JSON context; adapter regression tests | Live probe stopped before a model call because the selected API-key authentication had no key in the test environment; lifecycle/shutdown, resume and sandbox execution remain unverified. |
 | **Copilot CLI 1.0.75** | Actual CLI hooks and native payloads; real-model creation, fresh record read and changed-premise detection with canonical skills | Complete citation metadata, randomized fresh-session recall, live cross-agent handoff and other operating systems. |
 | **Cursor** | Shell wrappers handle native-shaped payloads, executable symlinks, paths with spaces and one follow-up; documentation reviewed | Actual local client delivery, resume/compaction and multi-root behavior. Hosted cloud lacks the opening event used by this adapter. |
-| **Claude Cowork** | Package route and runtime requirements reviewed against official documentation | Installation in Cowork, Python/runtime access, hook behavior and persistence across conversations. |
+| **Claude Cowork** | Install route and runtime requirements reviewed against official documentation | Installation in Cowork, runtime access, hook behavior and persistence across conversations. |
 | **Copilot VS Code / cloud** | Current documentation reviewed and guide corrected | Local/hosted executions of the provided route. |
 | **Windsurf / ChatGPT Work** | Existing guides retain their limitations; no new runtime verification | Host installation and session behavior. |
 
-Separately, an isolated Python package install exercised first use, source and
+Separately, an isolated install exercised first use, source and
 judgment writes, reopening, a later reading, impact tracing, an expected failing
 condition and HTML page generation. The earlier `seen` value remained intact.
 This validates the common runtime; it is not an OpenClaw or OpenCode model test.
@@ -54,13 +54,13 @@ or all-provider certification. Initial calls failed under the test's tool policy
 explicit approvals and JSON source reports allowed completion without changing
 that policy to unrestricted execution. The backend retained an existing Claude
 login/profile, including native skills/hooks, so its own hook output cannot prove
-OpenClaw bundle-hook support. The virtualenv CLI was verified independently.
+OpenClaw bundle-hook support. The separately installed CLI was verified independently.
 Messaging, sandboxing, remote execution and automated delivery remain untested.
 
 ### OpenClaw customization-isolated follow-up
 
 A second run closed the native-plugin fallback gap: a fresh checkout at the merged
-commit and fresh Python environment were used in separate OpenClaw state. A
+commit and a fresh runtime install were used in separate OpenClaw state. A
 test-only launcher removed user/project setting sources while preserving OpenClaw's
 explicit plugin, MCP/transport and permission arguments. Auto memory was disabled;
 existing subscription authentication and managed policy remained. This isolates

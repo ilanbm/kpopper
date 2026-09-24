@@ -9,16 +9,17 @@ decision's condition fails when the merged inputs are measured.
 
 ## Run
 
-With Git, Python 3.9+ and the repository's Python dependencies installed:
+With Git, a Python 3 interpreter for the example projects' own tests, and
+a native `kpop` on PATH:
 
 ```sh
-python3 examples/merge-assumptions/run.py
+sh examples/merge-assumptions/run.sh
 ```
 
 The runner creates disposable local Git repositories, commits the base and two
-branches, runs their tests, merges them and invokes the real kpopper CLI. It uses
-no network and does not change this checkout. Each recipe uses the same Python
-interpreter as the runner. The temporary repositories are removed when it finishes.
+branches, runs their tests, merges them and invokes the real `kpop` CLI. It uses
+no network and does not change this checkout. The temporary repositories are
+removed when it finishes.
 
 A successful run exits zero after confirming that both examples have:
 

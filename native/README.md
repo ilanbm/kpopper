@@ -1,14 +1,12 @@
 # Native Rust CLI (default runtime)
 
 The native distribution provides the public `kpop` CLI and `kpopper` alias. Its
-internal library crate is `kpop_native`; the 0.9.0 native line is the first
-pre-1.0 series and is independent of the legacy Python package's 1.6.0 release.
+internal library crate is `kpop_native`; the 0.9.0 line is the first pre-1.0 series.
 Prebuilt GitHub bundles are the primary install and include adjacent reasoning
 resources. Archives carry the project MIT license and dependency license texts and notices
 under `bin/resources/reasoning/notices/`. The exact GMP source and build recipe are
-included at `bin/resources/reasoning/native/gmp-source-and-build.tar.gz`. Python, Node and Rust are not required at runtime. The source-only
-Python implementation remains available only through explicit
-`KPOPPER_RUNTIME=python` compatibility mode.
+included at `bin/resources/reasoning/native/gmp-source-and-build.tar.gz`. Python, Node and
+Rust are not required at runtime, and `KPOPPER_RUNTIME` accepts `rust` alone.
 
 ## Install from crates.io
 
@@ -45,6 +43,10 @@ Development and test builds optimize SHA-256 hashing because launcher attestatio
 verifies complete executable and runtime artifacts within a bounded deadline.
 Run validation separately from other compilation jobs to avoid resource contention.
 
+`cargo test` stays the command for running the tests locally. CI runs the same tests through
+nextest, in one pool across all the test binaries, with the `ci` profile of
+`.config/nextest.toml`: `cargo nextest run --locked --profile ci` runs them as CI does.
+
 The full integration suite needs the same verified reasoning resources as a runtime
 bundle. For a macOS ARM64 bundle, run (use its matching target directory elsewhere):
 
@@ -54,8 +56,44 @@ KPOP_CONSOLIDATION_RESOURCES=/absolute/bundle/resources \
 cargo test --locked --no-fail-fast
 ```
 
+Without a bundle, compile the ordinary Lean program from this repository. `ci/build_ordinary_program.sh`
+needs a Lean 4.33.1 toolchain and nothing else; it prints the cache directory holding the
+program and its `build.json`, which is what `KPOP_TEST_ORDINARY_PROGRAM` expects:
+
+```sh
+KPOP_TEST_ORDINARY_PROGRAM=$(sh ci/build_ordinary_program.sh) cargo test --locked --no-fail-fast
+```
+
+Pass the toolchain prefix as an argument, or in `KPOPPER_LEAN_ROOT`, when `lean` is not on
+PATH; `--rebuild` replaces an existing cached program. The cache lives under
+`~/.cache/kpopper/lean/<target>/<source hash>`, which `KPOPPER_CORE_CACHE` or
+`XDG_CACHE_HOME` can relocate, and which the conformance tests fall back to when
+`KPOP_TEST_ORDINARY_PROGRAM` is unset. Rebuilding is only needed when the Lean source
+changes: each source hash keeps its own directory.
+
 The platform acceptance workflow builds these resources before testing. Tests that
 require an explicitly selected Python oracle or managed deployment remain opt-in.
+
+The host hook tests compare the native hooks with a fixed reference: the Python
+implementation at the v0.10.0 release tag (commit
+`dd099226bba989f4f22c2979cd7f96e99a36d733`, Python package 1.8.1), never the Python in
+the checkout under test. `KPOP_HOST_ORACLE_ROOT` is the absolute path of a tree of that
+commit, and `KPOP_HOST_ORACLE_PYTHON` an interpreter with PyYAML (`python3` by default,
+`python` on Windows). Without the root, the tests check the native hooks alone and print
+that the comparison was skipped; when `CI` is set they fail instead. The platform
+acceptance workflow fetches the commit and prepares that interpreter on every target. To
+run the comparisons locally, extract the tag with `git archive` (or check it out with
+`git worktree add --detach /tmp/kpopper-v0.10.0 v0.10.0`):
+
+```sh
+mkdir -p /tmp/kpopper-v0.10.0
+git archive v0.10.0 | tar -x -C /tmp/kpopper-v0.10.0
+python3 -m venv /tmp/kpopper-v0.10.0-python
+/tmp/kpopper-v0.10.0-python/bin/python -m pip install PyYAML==6.0.3 tzdata==2025.2
+KPOP_HOST_ORACLE_ROOT=/tmp/kpopper-v0.10.0 \
+KPOP_HOST_ORACLE_PYTHON=/tmp/kpopper-v0.10.0-python/bin/python \
+cargo test --locked --test host_hooks
+```
 
 Core commands and the compiled Hub/Annotated applications do not require Python,
 Node, Cargo or Rust on the runtime PATH. Optional browser checks use Node,

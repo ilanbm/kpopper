@@ -1,9 +1,0 @@
-domain: laboratory
-in_review: true
-from: paper.lz
-at: Abstract, version 4; p. 7, limit interpretation
-note: >-
-  The first-search analysis is consistent with background only. Its strongest
-  reported spin-independent limit is 9.2e-48 cm^2 at 36 GeV/c^2, 90% CL.
-  This constrains specified interactions, not every dark-matter candidate;
-  it supplies no particle_identity reading to this collection.

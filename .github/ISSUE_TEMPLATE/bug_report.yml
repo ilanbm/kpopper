@@ -30,16 +30,16 @@ body:
     id: version
     attributes:
       label: kpopper version and installation method
-      description: Use the version shown in your host's plugin manager, pip show kpopper, or the checkout commit. Say if unknown.
-      placeholder: "x.y.z; Claude Code marketplace / Codex plugin / pip / source checkout"
+      description: Use the version shown in your host's plugin manager, kpop --version, or the checkout commit. Say if unknown.
+      placeholder: "x.y.z; Claude Code marketplace / Codex plugin / release archive / source checkout"
     validations:
       required: true
   - type: input
     id: environment
     attributes:
       label: Environment
-      description: Host and version, operating system, Python version; browser for page or document problems.
-      placeholder: "Codex desktop; macOS; Python 3.13; Chrome"
+      description: Host and version, operating system; browser for page or document problems.
+      placeholder: "Codex desktop; macOS; Chrome"
     validations:
       required: true
   - type: textarea

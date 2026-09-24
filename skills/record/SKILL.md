@@ -5,7 +5,7 @@ description: "Write what the work found into the project's knowledge record, so 
 
 # Record
 
-Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Pass its `environment` to write commands too: the supplied session identity attributes successful writes but grants no access or permission. Never invent an identity. Do not guess a path or silently use PATH, pip or Python. Explicit Python compatibility mode uses the active plugin's `scripts/cli.py` only when `KPOPPER_RUNTIME=python` is set.
+Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Pass its `environment` to write commands too: the supplied session identity attributes successful writes but grants no access or permission. Never invent an identity. Do not guess a path or silently fall back to PATH.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:record` or "record from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
@@ -75,7 +75,7 @@ on — a `prior.*` claim whose value is the confidence; see *An agent's prior as
 than inferring by shape — a sentence has no distinctive shape. It costs one line at the
 moment you already know what you are writing down, and without it every surface that is not
 about keys has to fall back to `rate lock`, which is the system's name for the thing and not
-the reader's. `render_page.py --verify` reports how many entries are missing one. Sources
+the reader's. `kpop experimental hub --verify` reports how many entries are missing one. Sources
 need one as much as entries do: `pr352: {url: …}` is a key, and `name: "the pull request"`
 is what a reader sees in every hover that cites it.
 

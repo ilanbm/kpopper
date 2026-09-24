@@ -34,8 +34,7 @@ and execute the task using its internal protocol. A ready task is not completed 
 Use `kpop config --guidance off` to disable explanations. Prefer the canonical
 executable from `KPOPPER_AGENT_CONTEXT.command`. If it is unavailable, resolve the
 active plugin's runtime with `sh <plugin>/scripts/native_runtime.sh --path`; do not
-silently use PATH, pip or Python. The source-only Python dispatcher is available
-only when `KPOPPER_RUNTIME=python` is explicit.
+silently use PATH.
 After finding relevant IDs, prefer `context <id>` for declared dependencies and checks.
 Use `pull` for concise reads or if the checked reader is unavailable. Trace changes with
 `affects <changed-id>` or `context <changed-id> --direction impact`; gate on `check`.
@@ -50,15 +49,13 @@ a fact only in its stated scope. Merge accepts content; it never proves truth, i
 confidence or refreshes `seen`. Remote publication needs explicit project authority.
 <!-- /kpopper:method -->
 
-## This adapter's end check is advisory
+## This adapter has no end check
 
 `SessionStart` opens an existing record or supplies first-use guidance through
 Gemini's JSON `additionalContext` field. Reuse that opening and the CLI command it
 provides. The extension supplies this condensed method; it does not install the
 separate kpopper skills.
 
-`SessionEnd` requests a check through `scripts/checknote.sh`, wrapped as a JSON
-`systemMessage`. Gemini does not guarantee that this shutdown hook finishes and
-ignores its flow-control fields. This adapter does not implement an `AfterAgent`
-gate. Before finishing work you were asked to leave in a state worth returning to,
-run `kpop check` yourself and read the result.
+No `SessionEnd` or `AfterAgent` hook checks the record when the session ends. Before
+finishing work you were asked to leave in a state worth returning to, run `kpop check`
+yourself and read the result.

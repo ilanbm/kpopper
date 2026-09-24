@@ -1,26 +1,27 @@
 # kpopper for Gemini CLI
 
 Link this extension from a complete kpopper checkout. It supplies the method in
-`GEMINI.md`, opens the workspace's record at session start, and requests a final
-record check when the session ends.
+`GEMINI.md` and opens the workspace's record at session start. Nothing checks the
+record when the session ends; run `check` before finishing.
 
 ## Install
 
-You need Gemini CLI, Python 3.9 or newer with kpopper's dependencies, and a POSIX
-shell. Keep the whole checkout: the adapter reuses its `scripts/` directory.
+You need Gemini CLI and a POSIX shell. Keep the whole checkout: the adapter runs
+its `scripts/` directory and the native runtime installed there.
 
 ```sh
 KPOPPER_CHECKOUT=/absolute/path/to/kpopper
-python3 -m venv "$KPOPPER_CHECKOUT/.venv"
-"$KPOPPER_CHECKOUT/.venv/bin/python" -m pip install -e "$KPOPPER_CHECKOUT"
-export PATH="$KPOPPER_CHECKOUT/.venv/bin:$PATH"
+sh "$KPOPPER_CHECKOUT/scripts/install_native.sh"
+export PATH="$KPOPPER_CHECKOUT/bin:$PATH"
 gemini extensions link "$KPOPPER_CHECKOUT/adapters/gemini"
 gemini extensions list
 ```
 
-Launch Gemini from that shell so its hook commands resolve `python3` to the same
-environment. A different launcher must provide that runtime path too; installing
-dependencies in one interpreter does not make them available to another.
+`install_native.sh` downloads the runtime for the checkout's `VERSION` from the kpopper
+GitHub release and checks its SHA-256. The hook runs that runtime and never downloads or
+installs one: without it, the opening says so and names the install command. Start Gemini
+from a shell with that `PATH`, so `kpop` names this checkout's command; the hook itself
+does not depend on `PATH`.
 
 Accept Gemini's extension prompt after reviewing the checkout, then restart Gemini
 in the project you want to work on. The extension list should show `kpopper` enabled
@@ -28,7 +29,7 @@ and its `GEMINI.md` context file. Inspect `/hooks list` inside Gemini if the ope
 does not appear. Disabled hooks still require a manual `kpop open`.
 
 Use `link`, not `install` on the adapter folder: copying just this folder leaves out
-the shared Python scripts it needs. To relocate it, retain the whole checkout and
+the shared scripts and the runtime it needs. To relocate it, retain the whole checkout and
 link the new `adapters/gemini` path. Unlink it with `gemini extensions uninstall kpopper`.
 
 ## Use
@@ -39,17 +40,16 @@ The extension includes a condensed method, not the separate kpopper skills.
 
 Ask Gemini to ground an answer in the record, record a sourced finding, or trace
 what a changed fact affects. The corresponding CLI commands are `kpop pull`,
-`kpop add`, and `kpop affects`. Run `kpop check` before finishing. If the
-executable is not on PATH, the opening includes the Python command for this checkout.
+`kpop add`, and `kpop affects`. Run `kpop check` before finishing. If `kpop` is not
+on PATH, the opening names this checkout's runtime in `KPOPPER_AGENT_CONTEXT`.
 
 ## Hook behavior
 
 | File | Purpose |
 |---|---|
 | `gemini-extension.json` | Extension metadata and `GEMINI.md` context. |
-| `hooks/hooks.json` | Quoted commands anchored to `${extensionPath}`. |
-| `scripts/hook.py` | Wraps the shared opener's text as `hookSpecificOutput.additionalContext`; keeps legacy end invocations silent. Stdout contains JSON only. |
-| `scripts/checknote.sh` | Finds the record using the hook payload's `cwd`, runs `check`, and returns an advisory result even when problems exist. |
+| `hooks/hooks.json` | Runs `scripts/session-start.sh` at `SessionStart`, quoted and anchored to `${extensionPath}`. |
+| `scripts/session-start.sh` | Runs the checkout's native `kpop session-start --gemini`, which finds the record from the hook payload's `cwd` and returns the opening as `hookSpecificOutput.additionalContext`. A missing runtime is reported in the same field. Stdout contains JSON only. |
 
 Gemini's `SessionStart` context reaches the model through `additionalContext`.
 Plain text is insufficient: in CLI 0.43.0 the host converts it to a user-facing
@@ -65,8 +65,8 @@ documents linking, context loading, and path substitution. Checked 2026-09-16.
 
 ## Validation and limits
 
-Tested on 2026-09-16/17 with **Gemini CLI 0.43.0**, Node 24.14.0, Python 3.14.5 and
-macOS (Darwin 25.4.0):
+Tested on 2026-09-16/17 with **Gemini CLI 0.43.0**, Node 24.14.0 and
+macOS (Darwin 25.4.0), against the bridge this extension shipped then:
 
 - Linked and listed the extension using an isolated `GEMINI_CLI_HOME`; Gemini
   discovered the context file and enabled the extension.
@@ -76,10 +76,14 @@ macOS (Darwin 25.4.0):
   advisory failure reporting, an absent record, malformed input and closed stdin. Paths with
   spaces and a hook process running outside the project are covered.
 
-Run the repository checks with:
+The native hook, `scripts/session-start.sh`, has not yet run inside Gemini CLI.
+Repository tests cover `kpop session-start --gemini` itself (record opening, first-use
+guidance without creating a record, subagent and malformed payloads) and run the
+manifest's command against a checkout layout: the opening from the checkout's own
+runtime, a missing runtime, and the refusal of any other runtime choice. Run them with:
 
 ```sh
-python3 -m unittest tests.test_gemini_adapter -v
+cargo test --manifest-path native/Cargo.toml --test host_adapters
 ```
 
 These are CLI-management and hook-component checks. A model-driven session,

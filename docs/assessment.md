@@ -13,7 +13,7 @@ kpop assess launch.announcement --policy falsifiers-only/v1 --attention-only \
   --record examples/launch-party/GROUNDING.yaml
 ```
 
-Replace `kpop` with `python3 scripts/cli.py` in a source checkout. Exact IDs select the
+In a source checkout, use the binary `cargo build` writes under `native/target`. Exact IDs select the
 returned entries; assessment uses the full supplied base record. `--record` can be repeated.
 `--json` is accepted but unnecessary: this command returns JSON directly. Exit 0 means the
 assessment was read successfully, including when a condition holds or attention is present.
@@ -41,7 +41,7 @@ captured context. Omitting the profile preserves legacy behavior.
 
 ## Findings
 
-The [JSON Schema](../scripts/assessment.schema.json) ships with the package. `schema_version: 1`
+The [JSON Schema](../native/shared/assessment.schema.json) ships with the command. `schema_version: 1`
 identifies the shape. Each returned node preserves `body` alongside computed `state` and derived
 `attention`. A `state` field inside the authored body cannot replace the computed state.
 
@@ -103,14 +103,10 @@ observed event. An action names information to consider; it is neither a task-ex
 nor authorization to rewrite a decision. A task unrelated to an affected entry can continue.
 
 `falsifiers-only/v1` selects only conditions that hold. Switching policy changes attention,
-not the findings or assessment identity. Applications can also select actions from an existing
-report without another record read or evaluator call:
+not the findings or assessment identity:
 
-```python
-from kpopper.assessment import load, selected_attention
-
-report = load(["GROUNDING.yaml"])
-relevant = selected_attention(report, ids=["launch.announcement"], actions=["review"])
+```sh
+kpop assess launch.announcement --policy falsifiers-only/v1 --attention-only
 ```
 
 `--attention-only` applies selection to the requested IDs while preserving scope and revision

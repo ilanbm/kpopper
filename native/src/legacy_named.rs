@@ -44,7 +44,7 @@ fn carry(
                 .ok_or_else(|| error("snapshot_changed"))?,
         )
         .map_err(|_| error("invalid_history_yaml"))?;
-        let lines = text.split('\n').map(str::to_owned).collect::<Vec<_>>();
+        let lines = source_lines(text);
         if let Some((collection, member)) = locate(&lines, id) {
             let mut block = lines[member.start..block_end(&lines, &member)].to_vec();
             while block.last().is_some_and(|line| line.trim().is_empty()) {
@@ -295,7 +295,8 @@ fn prepare_mode(
             &id,
             snapshot,
             &seen,
-            body.contains_key("reviewed").then_some(stamp.as_str()),
+            // a snapshot named `reviewed` is kept, never dated over
+            (snapshot != "reviewed" && body.contains_key("reviewed")).then_some(stamp.as_str()),
         )?
     } else {
         reader.candidate(&V::Map(candidate_action))?
@@ -330,7 +331,7 @@ fn prepare_mode(
         .map_err(|_| error("invalid_history_yaml"))?
         .unwrap_or_else(|| format!("hypothesis: {{born: \"{stamp}\"}}\n"));
     let hyp_source = crate::history_yaml::decode_ordinary_source_value(initial.as_bytes())?;
-    let mut lines = initial.split('\n').map(str::to_owned).collect::<Vec<_>>();
+    let mut lines = source_lines(&initial);
     let mut output = notice.text.lines().map(str::to_owned).collect::<Vec<_>>();
     output.extend(notes.clone());
     let collection;
@@ -407,7 +408,8 @@ fn prepare_mode(
                 .unwrap_or_default();
             let seen = dependency_snapshot(&reader, body)?;
             let order = snapshot_order(&reader, body, &seen, &document.source, &hyp_source)?;
-            let changed = old.len() != seen.len()
+            let changed = written_over(body, snapshot)
+                || old.len() != seen.len()
                 || old
                     .iter()
                     .any(|(k, v)| seen.get(k).is_none_or(|n| !same_legacy(v, n)));
@@ -417,11 +419,13 @@ fn prepare_mode(
                 replace_field_ordered(&mut lines, &member, snapshot, &order)?;
             }
             let (_, member) = locate(&lines, &id).unwrap();
-            if inline(&lines[member.start]).starts_with('{') {
+            // A snapshot named `reviewed` is kept, never dated over.
+            let dated = snapshot != "reviewed";
+            if dated && inline(&lines[member.start]).starts_with('{') {
                 if body.contains_key("reviewed") {
                     in_braces(&mut lines, &member, "reviewed", "", None, Some(&stamp))?;
                 }
-            } else if field_span(&lines, &member, "reviewed").is_some() {
+            } else if dated && field_span(&lines, &member, "reviewed").is_some() {
                 replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
             }
             output.push(format!(
@@ -446,10 +450,13 @@ fn prepare_mode(
                     _ => {}
                 }
             }
+            if snapshot == "reviewed" {
+                output.extend(open_reversal(&reader, &reader.raw()[&id], &seen)?);
+            }
         }
         _ => return Err(error("unsupported_named_action")),
     }
-    let after = lines.join("\n").into_bytes();
+    let after = lines.join(source_newline(&initial)).into_bytes();
     let (head, after_doc) = parsed_hypothesis(&after)?;
     let expected_head = if fresh {
         object([("born", s(&stamp))])

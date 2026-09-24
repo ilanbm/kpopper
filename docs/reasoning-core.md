@@ -50,7 +50,7 @@ load code or change the installed module registry. A read never activates
 authoring or migrates stored content.
 
 The new assessment envelope has `schema_version: 2` and the schema at
-`scripts/reasoning/assessment.schema.json`. Existing ordinary assessments retain
+`native/shared/reasoning/assessment.schema.json`. Existing ordinary assessments retain
 their original v1 schema. `checked-reader/v1` names the existing checked-session
 semantics for compatibility documentation; older checked-session responses did
 not carry that identifier. Missing metadata keeps the existing surface's legacy
@@ -58,7 +58,7 @@ interpretation. An assessment's explicit `--profile core/v1` override does not
 rewrite a record.
 
 The optional `--history` route returns combined `schema_version: 3`, defined by
-`scripts/reasoning/history_assessment.schema.json`. It computes schema v2 once from one
+`native/shared/reasoning/history_assessment.schema.json`. It computes schema v2 once from one
 immutable Snapshot, then adds captured history subjects, pins, coverage, assurance and support
 reservations without a second evaluator or source read. `findings_revision` is the semantic
 identity; `envelope_revision` also binds policy and display selection. Existing core v2 and both
@@ -381,21 +381,18 @@ entries to continue. A native timeout returns `operational_error` with diagnosti
 `runtime_timeout`; loading or process failures use `runtime_unavailable`.
 Neither failure is a semantic false value or a cached arithmetic negative.
 
-Python callers can lower these bounds with `operational_limits={...}` on
-`evaluate`, `Evaluator`, `assess` or `Runtime`; the keys are `timeout_seconds`,
-`batch_requests`, `input_bytes` and `output_bytes`. Operational settings do not
+Operational settings do not
 change `computation_id`. Actual reads carry the same `{kind, id, fingerprint}`
 witness as the corresponding potential dependency, binding transitive input
 identity even when changed inputs produce the same value.
 
-## Snapshot and extension API
+## Snapshot capture
 
-```python
-from kpopper.reasoning.snapshot import Snapshot
-from kpopper.reasoning.evaluate import evaluate
+Every assessment starts from one immutable capture of the named records at an
+explicit `as_of`:
 
-snapshot = Snapshot.capture(['example.yaml'], as_of='2026-09-15')
-result = evaluate(snapshot, {'expr': 'm.total / 3'}, declared=['m.total'])
+```sh
+kpop assess m.total --profile core/v1 --record example.yaml --as-of 2026-09-15
 ```
 
 Capture binds source closure, project routing/generation, live/frozen mode,
@@ -422,9 +419,9 @@ changes whose numeric effects cancel. Missing old basis is `not_recorded`, not
 an automatic request to review. New history is not written by assessment.
 
 An entry can define `collection_scope: {collection: parameters, fields: [v]}`.
-Its members are derived from the captured collection. `snapshot.capture_scope(id)`
-returns member count, complete membership/projected-field witnesses and a limited
-view. `SnapshotView` grants exact nodes and fields and refuses undeclared reads.
+Its members are derived from the captured collection. Scope capture yields the
+member count together with complete membership and projected-field witnesses, and
+a limited view that grants exact nodes and fields and refuses undeclared reads.
 The separate `scope` field retains its existing contribution-provenance meaning.
 Scopes cannot grant the mapped historical snapshot field, `assessment`, or
 `current_assessment`, including when the collection is empty.
@@ -448,9 +445,7 @@ when the aggregate value stays equal. Row expressions read only declared authore
 fields; they do not evaluate member formulas or read another scope.
 
 See [the query specification](query.md) for syntax, empty/unknown/error behavior,
-resource limits and the contributor boundary. The [revisit exercise](../examples/scoped-query/README.md)
-uses an installed package to change two assumptions, add a scope member, retain
-an unknown forecast and replay an earlier snapshot.
+resource limits and the contributor boundary.
 
 ## Runtime, licensing and assurance
 
@@ -478,7 +473,7 @@ non-vacuous successful case under stated limits. The audited dependencies are
 
 These theorems do not prove parsing, references, adapters, snapshots, native code
 generation, source-world truth or arbitrary prose. Reference-bearing results are
-computed findings, not proof certificates. The Python/native transport and the
+computed findings, not proof certificates. The transport and the
 installed executable have behavioral tests in addition to the named proofs.
 Composition reuses the scalar primitives but adds no broader theorem or formal
 assurance claim; composed results keep `assurance.kind: computed` with an empty

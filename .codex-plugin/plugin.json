@@ -1,6 +1,6 @@
 {
   "name": "kpopper",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Make your agents' reasoning explicit, persistent, and deterministically checkable. Connect decisions to evidence and assumptions, and see what needs another look when a recorded premise changes.",
   "author": {
     "name": "Ilan Bar Magen"
@@ -22,6 +22,8 @@
     "longDescription": "kpopper makes your agents' reasoning explicit, persistent, and deterministically checkable. It connects decisions to evidence, assumptions and earlier decisions, records what would make them worth revisiting, and traces what needs another look when a recorded premise changes. Optional experimental applications include kpopper Hub for exploring the record and Annotated Documents for sharing HTML with evidence.",
     "developerName": "Ilan Bar Magen",
     "category": "Productivity",
+    "logo": "./assets/kpopper-icon.png",
+    "composerIcon": "./assets/kpopper-icon.png",
     "capabilities": [
       "Read",
       "Write"

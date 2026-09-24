@@ -1,7 +1,7 @@
 {
   "name": "kpopper",
   "version": "1.8.1",
-  "description": "Browser checks for a kpopper record page: the provenance layer, the tabs and the tree, in both themes and under reduced motion. The record itself is read by the Python package of the same name.",
+  "description": "Browser checks for a kpopper record page: the provenance layer, the tabs and the tree, in both themes and under reduced motion. The record itself is read by the kpopper command.",
   "keywords": [
     "provenance",
     "epistemic",
@@ -21,10 +21,10 @@
   },
   "type": "commonjs",
   "bin": {
-    "kpopper-verify": "scripts/verify_page.js"
+    "kpopper-verify": "native/shared/verify_page.js"
   },
   "files": [
-    "scripts/verify_page.js"
+    "native/shared/verify_page.js"
   ],
   "engines": {
     "node": ">=18"
@@ -36,8 +36,5 @@
     "playwright-core": {
       "optional": true
     }
-  },
-  "scripts": {
-    "test:documents": "node tests/test_document_ui.cjs"
   }
 }

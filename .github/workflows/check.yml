@@ -15,26 +15,13 @@ concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
 
-# The retained Python suite explicitly exercises the legacy reference.
-env:
-  KPOPPER_RUNTIME: python
-
 jobs:
   changes:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     outputs:
-      python: ${{ steps.select.outputs.python }}
-      documents: ${{ steps.select.outputs.documents }}
-      session: ${{ steps.select.outputs.session }}
-      installed: ${{ steps.select.outputs.installed }}
-      runtime: ${{ steps.select.outputs.runtime }}
       rust: ${{ steps.select.outputs.rust }}
-      examples: ${{ steps.select.outputs.examples }}
       platforms: ${{ steps.select.outputs.platforms }}
-      test_suites: ${{ steps.select.outputs.test_suites }}
-      test_matrix: ${{ steps.select.outputs.test_matrix }}
-      runtime_targets: ${{ steps.select.outputs.runtime_targets }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,7 +46,7 @@ jobs:
             python .github/scripts/ci_selection.py --full
           fi
       - name: Reject incomplete committed bundles before starting expensive checks
-        if: steps.select.outputs.installed == 'true' || steps.select.outputs.examples == 'true'
+        if: steps.select.outputs.rust == 'true'
         run: python scripts/reasoning/build_runtime.py --check-bundles
 
   record:
@@ -82,12 +69,42 @@ jobs:
             exit 1
           fi
 
-      - name: Install the package the way a user gets it
-        run: pip install .
-      - name: Install the test runner the CI contracts exercise
+      - name: Install what the CI contracts read
         run: python -m pip install -r .github/requirements-test.txt
-      - name: Check skill/release contracts and CI selection
-        run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection tests.test_ci_execution tests.test_ci_sharding tests.test_ci_audit -v
+      - name: Check skill/release contracts, CI selection and the native plumbing
+        run: >-
+          python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
+          tests.test_ci_audit tests.test_native_distribution tests.test_native_release_assets
+          tests.test_native_launcher tests.test_hook_delivery -v
+
+      # The record is read by the native kpop of this tree. A reader main built from the same
+      # native/ sources is reused, so only a change under native/ pays for the build. Only a
+      # push to main saves one: pull requests read main's, and keep the cache budget free.
+      - name: Reuse the native reader built from these sources
+        id: reader
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/kpopper-record-reader
+          key: record-reader-${{ runner.os }}-${{ hashFiles('native/**') }}
+      - name: Build the native reader from this tree
+        if: steps.reader.outputs.cache-hit != 'true'
+        # Inside native/, so that its rust-toolchain.toml selects the compiler.
+        working-directory: native
+        env:
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: |
+          cargo build --locked --bin kpop
+          mkdir -p ~/.cache/kpopper-record-reader
+          cp target/debug/kpop ~/.cache/kpopper-record-reader/kpop
+      - name: Keep main's native reader for the pull requests that follow
+        if: github.event_name == 'push' && steps.reader.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/kpopper-record-reader
+          key: ${{ steps.reader.outputs.cache-primary-key }}
+      - name: Put the native reader on PATH
+        run: echo "$HOME/.cache/kpopper-record-reader" >> "$GITHUB_PATH"
 
       - name: The record holds together
         run: kpop --frozen check
@@ -109,9 +126,6 @@ jobs:
         # command that refreshes it in the log.
         run: kpop --frozen remeasure --run
 
-      - name: Install the optional HTML application runtime
-        run: pip install ".[html]"
-
       - name: The experimental hub renders, and says what it rendered
         run: kpop --frozen experimental hub --verify
 
@@ -119,140 +133,6 @@ jobs:
         # Rendering rewrites .kpopper/view.yaml. If that leaves a diff, the record
         # moved and the view it renders to was never regenerated alongside it.
         run: git diff --exit-code
-
-  check:
-    name: check (${{ matrix.python }}, ${{ matrix.group }}/${{ matrix.splits }})
-    # Keep the existing cap until completed parallel runs establish a new bound.
-    timeout-minutes: 90
-    needs: [changes, record]
-    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 12
-      matrix: ${{ fromJSON(needs.changes.outputs.test_matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Install the package the way a user gets it
-        run: pip install ".[html]"
-      - name: Install the test runner and schema validator
-        run: python -m pip install -r .github/requirements-test.txt
-      - name: Record the files the tests open
-        run: python .github/scripts/ci_audit.py start
-      - name: The reader and the page keep their contract
-        env:
-          TEST_SUITES: ${{ needs.changes.outputs.test_suites }}
-        run: >-
-          python .github/scripts/ci_execution.py --suites "$TEST_SUITES"
-          --splits ${{ matrix.splits }} --group ${{ matrix.group }} --workers ${{ matrix.workers }}
-      - name: Keep test outcomes and per-test timings
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-tests-${{ matrix.python }}-${{ matrix.group }}
-          path: test-results/
-          if-no-files-found: ignore
-
-      - name: The scoped-query example works through the installed writer and CLI
-        if: needs.changes.outputs.python == 'true' && matrix.group == 1
-        run: python examples/scoped-query/exercise.py
-      - name: The tests read only what their lane declares
-        if: ${{ !cancelled() }}
-        run: >-
-          python .github/scripts/ci_audit.py finish
-          --lane ${{ needs.changes.outputs.python == 'true' && 'python' || 'documents' }}
-
-  examples:
-    name: research example (${{ matrix.python }})
-    timeout-minutes: 15
-    needs: [changes, record]
-    if: needs.changes.outputs.examples == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.9", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Install the package with its committed reasoning runtime
-        run: python -m pip install .
-      - name: Record the files the example opens
-        run: python .github/scripts/ci_audit.py start
-      - name: Check the research exercise, captured output and CLI projection
-        run: python .github/scripts/check_research_example.py
-      - name: The example reads only what its lane declares
-        if: ${{ !cancelled() }}
-        run: python .github/scripts/ci_audit.py finish --lane examples
-      - name: The example leaves the source tree unchanged
-        run: git diff --exit-code
-
-  document-ui:
-    timeout-minutes: 15
-    needs: [changes, record]
-    if: needs.changes.outputs.documents == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: tests/document-support/package-lock.json
-      - name: Install the document runtime
-        run: pip install ".[html]"
-      - name: Record the files the DOM suite opens
-        run: python .github/scripts/ci_audit.py start
-      - name: Install the pinned DOM test dependency
-        run: npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
-      - name: Check offline evidence, copy choices and export recovery
-        run: npm run test:documents
-      - name: The DOM suite reads only what its lane declares
-        if: ${{ !cancelled() }}
-        run: python .github/scripts/ci_audit.py finish --lane documents
-      - name: Test setup leaves the source tree unchanged
-        run: git diff --exit-code
-
-  session:
-    needs: [changes, record]
-    if: needs.changes.outputs.session == 'true'
-    uses: ./.github/workflows/session.yml
-    with:
-      audit: true
-      # A pull request checks the two platforms nobody here develops on. Darwin
-      # bills at ten times the Linux rate per minute, and the branch it would
-      # check is the one its author runs on a Darwin machine all day; the push
-      # that lands the branch checks it before anything is released from main.
-      platforms: >-
-        ${{ github.event_name == 'pull_request'
-            && '["ubuntu-latest", "windows-latest"]'
-            || '["ubuntu-latest", "macos-latest", "windows-latest"]' }}
-
-  # The targets of reasoning-runtime.yml, called directly so that a pull request can leave
-  # out Intel macOS. That workflow and reasoning-target.yml are recorded in the GMP
-  # corresponding-source archive, so selection lives here rather than in them.
-  reasoning-runtime:
-    name: reasoning-runtime (${{ matrix.target }})
-    needs: [changes, record]
-    if: needs.changes.outputs.installed == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.changes.outputs.runtime_targets) }}
-    uses: ./.github/workflows/reasoning-target.yml
-    with:
-      runner: ${{ matrix.runner }}
-      target: ${{ matrix.target }}
-      python-versions: ${{ matrix.pythons }}
-      rebuild: ${{ needs.changes.outputs.runtime == 'true' }}
 
   native-cli:
     needs: [changes, record]
@@ -264,7 +144,7 @@ jobs:
 
   ci-required:
     timeout-minutes: 10
-    needs: [changes, record, check, examples, document-ui, session, reasoning-runtime, native-cli]
+    needs: [changes, record, native-cli]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -276,14 +156,3 @@ jobs:
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
         run: python .github/scripts/ci_selection.py --required
-      - name: Download per-shard execution manifests
-        if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          pattern: python-tests-*
-          path: test-results
-      - name: Require each selected test exactly once per interpreter
-        if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true'
-        env:
-          TEST_MATRIX: ${{ needs.changes.outputs.test_matrix }}
-        run: python .github/scripts/ci_execution.py --verify-results test-results --matrix "$TEST_MATRIX"

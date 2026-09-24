@@ -43,7 +43,7 @@ The expanded six-paper view adds the surrounding constraints:
   </a>
 </p>
 
-[Phone layout](../../assets/stories/dark-matter-record-mobile.png) · [Complete GROUNDING.yaml](GROUNDING.yaml) · [Prepared inputs](inputs.yaml)
+[Phone layout](../../assets/stories/dark-matter-record-mobile.png) · [Complete GROUNDING.yaml](GROUNDING.yaml) · [Prepared inputs](entries.tsv)
 
 The overview and close-up are drawn from this record. Their mini-map represents
 its actual YAML lines; the visible excerpt selects the connections worth reading.
@@ -214,20 +214,22 @@ and the four judgments reached by `research.framework`.
 
 ## Run the shared-record example
 
-From the repository root, with Python dependencies and the local reasoning core
-ready for the density calculation:
+From the repository root, with a native `kpop` on PATH and the local reasoning
+core ready for the density calculation:
 
 ```sh
-python3 scripts/kpopper session status
-python3 examples/dark-matter/run.py
+kpop session status
+sh examples/dark-matter/run.sh
 ```
 
 This replay deliberately seeds a legacy-format YAML record, matching the checked-in
 example and its CLI output. It does not exercise the 1.7 default for newly created
 history-backed records. If the calculation core is not ready, follow the
 [legacy expression setup](../../skills/kpopper/EXPRESSIONS.md#reader-compatibility).
-The script replays [inputs.yaml](inputs.yaml) using three overlapping CLI writers,
-then records the calculation and linked judgments in dependency order. It verifies
+The script replays [entries.tsv](entries.tsv) — one line per source, reading and
+judgment, each carrying the exact fields the CLI writes — using three overlapping
+CLI writers, then records the calculation and linked judgments in dependency
+order. It verifies
 that all readings survive, every judgment snapshots its exact premises, and the
 cosmology judgment retains the correct rational result and formula.
 
@@ -244,20 +246,10 @@ unchanged. This asks for review; it does not refute dark matter.
 To keep a demonstration in a new directory:
 
 ```sh
-python3 examples/dark-matter/run.py --output /tmp/kpopper-dark-matter-demo
-python3 scripts/kpopper pull synthesis.dark_matter /tmp/kpopper-dark-matter-demo/GROUNDING.yaml
-python3 scripts/kpopper affects research.framework /tmp/kpopper-dark-matter-demo/GROUNDING.yaml
+sh examples/dark-matter/run.sh --output /tmp/kpopper-dark-matter-demo
+kpop pull synthesis.dark_matter /tmp/kpopper-dark-matter-demo/GROUNDING.yaml
+kpop affects research.framework /tmp/kpopper-dark-matter-demo/GROUNDING.yaml
 ```
-
-## Continue the research
-
-For a runnable continuation using the current reasoning and history interfaces,
-see [The collection changes; the answer stays five](advanced/README.md).
-It selects the five astronomical papers with an explicit finite query, adds the
-existing LZ paper as a nonmatch, and verifies that the numeric result stays equal
-while the computational basis changes. A retained Snapshot recovers the previous
-scope and result; unrecorded particle identities remain unknown. This separate
-`core/v1` fixture leaves the legacy worked record and its walkthrough intact.
 
 Give research agents the same accessible record and the source links. Ask each to
 read the relevant existing entries before adding, keep source versions and exact

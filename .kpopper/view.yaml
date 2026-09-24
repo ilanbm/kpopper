@@ -82,7 +82,10 @@ tabs:
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
-    serves: [s.2026_09_23_crates_io, s.2026_09_23_session_hook, s.2026_09_23_one_line_review,
+    serves: [s.2026_09_23_native_ci_speed, s.2026_09_23_snapshot_named_reviewed,
+             s.2026_09_23_python_exit,
+             s.2026_09_23_crates_io,
+             s.2026_09_23_session_hook, s.2026_09_23_one_line_review,
              s.2026_09_23_readme_section_names,
              s.2026_09_23_readme_get_started, s.2026_09_23_pending_dry_run,
              s.2026_09_23_missing_runtime_at_start, s.2026_09_23_unsaved_baseline,

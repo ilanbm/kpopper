@@ -1,5 +1,4 @@
-"""Native launchers bind commands to the active package, without Python fallback."""
-import importlib.util
+"""The launchers bind every command to the native runtime of the active package."""
 import json
 import os
 from pathlib import Path
@@ -9,24 +8,6 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("native_launcher", ROOT / "scripts/native_launcher.py")
-N = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(N)
-
-
-class PlatformSelection(unittest.TestCase):
-    def test_supported_targets_and_unsupported_architecture(self):
-        self.assertEqual(N.target_name("Darwin", "arm64"), "darwin-arm64")
-        self.assertEqual(N.target_name("Darwin", "x86_64"), "darwin-x86_64")
-        self.assertEqual(N.target_name("Linux", "aarch64"), "linux-aarch64")
-        self.assertEqual(N.target_name("Windows", "AMD64"), "windows-x86_64")
-        with self.assertRaisesRegex(ValueError, "unsupported native platform"):
-            N.target_name("Windows", "arm64")
-
-    def test_missing_runtime_is_explicit(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(ValueError, "not installed"):
-                N.executable(directory, "linux-x86_64")
 
 
 @unittest.skipIf(os.name == "nt", "POSIX shell launcher contract")
@@ -152,6 +133,18 @@ class NativeShellLaunchers(unittest.TestCase):
         self.assertEqual(openers, 3)
         self.assertFalse(self.binary.exists())
         self.assertFalse(downloaded.exists())
+        self.assertFalse(self.python_called.exists())
+
+    def test_a_runtime_choice_other_than_rust_is_refused_before_any_dispatch(self):
+        for path, args in (("scripts/hook.sh", ("ground_hook.py", "claude", "start")),
+                           ("scripts/session_gate.sh", ("--context", "UserPromptSubmit"))):
+            for choice in ("python", "java"):
+                with self.subTest(path=path, runtime=choice):
+                    result = subprocess.run(["sh", str(self.plugin / path), *args], input="{}",
+                                            text=True, capture_output=True, timeout=10, cwd=self.root,
+                                            env=dict(self.env, KPOPPER_RUNTIME=choice))
+                    self.assertEqual((result.returncode, result.stdout), (0, ""))
+                    self.assertEqual(result.stderr, "kpopper: KPOPPER_RUNTIME must be rust\n")
         self.assertFalse(self.python_called.exists())
 
     def test_an_unsupported_platform_reaches_the_session_without_an_install_offer(self):
