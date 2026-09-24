@@ -405,6 +405,7 @@ pub fn core_consumer_refusal(failure: &crate::Error) -> bool {
 pub fn failure(command: &str, options: &Options, error: &crate::Error) -> (String, i32) {
     if unreadable_record(error)
         || core_consumer_refusal(error)
+        || error.0.starts_with("core_profile_option_unsupported:")
         || error
             .0
             .contains("is not an entry or a prefix in this record.")

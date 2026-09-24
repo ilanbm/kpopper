@@ -387,6 +387,51 @@ fn a_core_record_refuses_the_opener_options_with_the_error_alone() {
 }
 
 #[test]
+fn core_option_refusals_use_exit_one_and_unprefixed_diagnostics() {
+    let space = Space::new(Some(include_str!("fixtures/core-page/GROUNDING.yaml")));
+    let root = space.root();
+    for (args, message) in [
+        (
+            vec!["pull", "--history", "d.safe"],
+            "core_profile_option_unsupported: --history; core pull already includes captured history",
+        ),
+        (
+            vec!["open", "--chars", "2000"],
+            "core_profile_option_unsupported: --chars",
+        ),
+        (
+            vec!["open", "--budget", "5"],
+            "core_profile_option_unsupported: --budget",
+        ),
+        (
+            vec!["open", "--host", "codex"],
+            "core_profile_option_unsupported: --host",
+        ),
+    ] {
+        let plain = kpop(&root, &args);
+        assert_eq!(
+            plain.status.code(),
+            Some(1),
+            "{args:?}: {}",
+            text(&plain.stderr)
+        );
+        assert!(plain.stdout.is_empty());
+        assert_eq!(text(&plain.stderr), format!("{message}\n"));
+        let output = kpop(&root, &[&args[..], &["--json"]].concat());
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        assert!(output.stderr.is_empty());
+        assert_eq!(
+            serde_json::from_slice::<J>(&output.stdout).unwrap(),
+            if args[0] == "open" {
+                json!({"error": message})
+            } else {
+                wrapped(args[0], &plain)
+            }
+        );
+    }
+}
+
+#[test]
 fn open_reports_a_record_path_that_is_no_readable_file() {
     let space = Space::new(None);
     let root = space.root();

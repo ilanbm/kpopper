@@ -1474,6 +1474,18 @@ sources:
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-PUBLIC-READERS-RESULT.md"
     read: "2026-09-19"
     at: "Task 01a0b961-13a4-7033-afc7-e5bb48720e14; actual CLI and final Python fixture conformance"
+  s.native_reader_consistency:
+    name: "Native command consistency regressions"
+    file: "native/tests/ordinary_identity.rs"
+    read: "2026-09-24"
+    at: "same_embeds_the_public_record_check_with_an_unserved_question;
+         native/tests/public_json.rs::core_option_refusals_use_exit_one_and_unprefixed_diagnostics;
+         native/tests/public_checked_session.rs::unknown_core_session_revision_tells_the_reader_to_reopen"
+    of: "The same migration summary uses the public record check without optional page coverage.
+         Core-option reader refusals exit 1 without a command prefix in text and JSON. A missing
+         retained core revision says unknown core session revision; reopen. The session regression
+         creates its record through add in an empty Git repository and confirms the retained valid
+         revision still reads."
   s.native_scenario_watch:
     name: "Native captured scenarios and pure history watch conformance"
     from: s.2026_09_19_native_temporal_authoring
