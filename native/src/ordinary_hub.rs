@@ -22,6 +22,8 @@ use std::{
 use crate::public_ordinary_readers::{HubData, Projection};
 include!("ordinary_hub_page_inputs.rs");
 include!("ordinary_hub_page_projection.rs");
+include!("ordinary_hub_page_text.rs");
+include!("ordinary_hub_page_notes.rs");
 fn decode_brief(raw: &[u8]) -> Result<V> {
     Ok(crate::history_yaml::decode_source_value(raw)?.typed())
 }
@@ -47,15 +49,15 @@ pub struct Page {
     pub page_values: Map,
 }
 
-fn esc(value: &str, attribute: bool) -> String {
+fn esc(value: &str, _attribute: bool) -> String {
     let mut out = String::with_capacity(value.len());
     for c in value.chars() {
         match c {
             '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
-            '"' if attribute => out.push_str("&quot;"),
-            '\'' if attribute => out.push_str("&#x27;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#x27;"),
             _ => out.push(c),
         }
     }
@@ -351,6 +353,7 @@ fn build_document(
         .map(|id| (id.clone(), hub.flags.get(id).cloned().unwrap_or_default()))
         .collect::<BTreeMap<_, _>>();
     let group_schemes = groups(&brief, &ids, &judgments, &states);
+    let (default_scheme, group_order) = group_order(brief_content)?;
     let labels = brief
         .get("labels")
         .and_then(|v| map(v).ok())
@@ -371,7 +374,48 @@ fn build_document(
     } else {
         "ltr"
     };
-    let words = words(language, dir);
+    let mut words = words(language, dir);
+    let chrome: J = serde_json::from_str(include_str!("../shared/page/chrome.json"))?;
+    words
+        .as_object_mut()
+        .unwrap()
+        .extend(chrome[language].as_object().unwrap().clone());
+    let mut h1 = heading(&meta, &brief, &words);
+    let hypotheses = map(capture.hypotheses())?;
+    let hypothesis_count = hypotheses
+        .values()
+        .filter(|hyp| {
+            map(hyp).is_ok_and(|h| h.get("kind").and_then(|v| text(v).ok()) != Some("contribution"))
+        })
+        .count();
+    if hypothesis_count > 0 {
+        let waiting = words[if hypothesis_count == 1 {
+            "hypothesis_one"
+        } else {
+            "hypotheses"
+        }]
+        .as_str()
+        .unwrap()
+        .replace("{n}", &hypothesis_count.to_string());
+        let disputed = if projection.disputed.is_empty() {
+            String::new()
+        } else {
+            words["contested"]
+                .as_str()
+                .unwrap()
+                .replace("{n}", &projection.disputed.len().to_string())
+        };
+        h1.push_str(&format!(
+            "<p class=\"meta\" dir=\"{dir}\">{waiting}{disputed}{}</p>",
+            words["base_only"].as_str().unwrap()
+        ));
+    }
+    for line in &hub.reader_lines {
+        h1.push_str(&format!(
+            "<p class=\"meta\" dir=\"auto\" lang=\"en\">{}</p>",
+            esc(line, false)
+        ));
+    }
     let mut used = BTreeMap::<String, Vec<String>>::new();
     for id in &judgments {
         for d in deps(body(nodes, id)?, dep_field) {
@@ -390,7 +434,7 @@ fn build_document(
                 "v", "rule", "from", "at", "of", "read", "quoted", "url", "file", "asked",
                 "measure",
             ] {
-                if let Some(v) = b.get(k).filter(|v| truth(v)) {
+                if let Some(v) = b.get(k).filter(|v| !matches!(v, V::Null)) {
                     e.insert(k.into(), json_value(v)?);
                 }
             }
@@ -420,19 +464,10 @@ fn build_document(
             entries.insert(id.clone(), J::Object(e));
         }
     }
-    let render = RenderContext {
-        judgments: &judgments,
-        nodes,
-        labels: &labels,
-        dependency_field: dep_field,
-        record_root: root_of(entry),
-        page_path,
-        states: &states,
-        groups: &group_schemes,
-        language,
-    };
     let mut failures = vec![];
     let mut notes = vec![];
+    let mut surface_notes = vec![];
+    let mut arrangement_notes = vec![];
     let mut panels = vec![];
     let PageProjection {
         mut selected_all,
@@ -441,6 +476,7 @@ fn build_document(
         page_values,
         arrangement_owns,
         arrangement_facts,
+        picked_by_tab,
         hub,
     } = page_projection(
         &brief,
@@ -452,6 +488,85 @@ fn build_document(
         dep_field,
         &mut projection,
     )?;
+    // Page predicates are decided only after the pre-render counts exist. Every
+    // surface (including selectors and spill) must use that final reading.
+    let mut states = ids
+        .iter()
+        .map(|id| (id.clone(), BTreeSet::new()))
+        .collect::<BTreeMap<_, _>>();
+    for (id, body) in &projection.base.judgments {
+        states.insert(
+            id.clone(),
+            crate::ordinary_counts::reader_flags(&projection.base.reader, body, false)?
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+        );
+    }
+    let mut counted_nodes = nodes.clone();
+    for (id, value) in &page_values {
+        if let Some(V::Map(node)) = counted_nodes.get_mut(id)
+            && let Some(V::Map(body)) = node.get_mut("body")
+        {
+            body.insert("v".into(), value.clone());
+        }
+    }
+    for (id, value) in &page_values {
+        if !matches!(value, V::Null)
+            && let Some(J::Object(entry)) = entries.get_mut(id)
+        {
+            entry.insert("v".into(), json_value(value)?);
+        }
+    }
+    let nodes = &counted_nodes;
+    let source_values = source_container_values(capture.source(), nodes);
+    let movements = judgments
+        .iter()
+        .map(|id| {
+            Ok((
+                id.clone(),
+                projection
+                    .base
+                    .moved(id)?
+                    .into_iter()
+                    .filter(|(_, _, _, state)| *state == "moved")
+                    .map(|(id, old, now, _)| (id, old, now))
+                    .collect::<Vec<_>>(),
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let anchored = std::cell::Cell::new((0usize, 0usize));
+    let render = RenderContext {
+        judgments: &judgments,
+        nodes,
+        labels: &labels,
+        dependency_field: dep_field,
+        record_root: root_of(entry),
+        page_path,
+        states: &states,
+        groups: &group_schemes,
+        default_scheme: &default_scheme,
+        group_order: &group_order,
+        source_values: &source_values,
+        movements: &movements,
+        component_page: !group_schemes.is_empty()
+            || tabs.iter().flat_map(|t| &t.sections).any(|s| {
+                matches!(
+                    s.kind.as_str(),
+                    "grouped"
+                        | "fronts"
+                        | "headline"
+                        | "timeline"
+                        | "alerts"
+                        | "cards"
+                        | "axis"
+                        | "links"
+                )
+            }),
+        language,
+        words: &words,
+        anchored: &anchored,
+    };
     let current_shape = BTreeMap::from([
         (
             "entries",
@@ -497,6 +612,7 @@ fn build_document(
             }
         }
     }
+    let page_predicate = regex::Regex::new(r"\bpage\.[A-Za-z_]+\b").unwrap();
     for (index, arrangement) in hub.arrangements.iter().enumerate() {
         let unearned = arrangement
             .sources
@@ -518,34 +634,57 @@ fn build_document(
         }
         if arrangement.fired {
             failures.push(format!(
-                "{}: wrong_if holds ({}) - the arrangement fired",
-                arrangement.id, arrangement.predicate
+                "{}: wrong_if holds ({}) - {}",
+                arrangement.id,
+                arrangement.predicate,
+                if page_predicate.is_match(&arrangement.predicate) {
+                    "decided by the page"
+                } else {
+                    "the arrangement fired"
+                }
             ));
         }
     }
     if !brief.is_empty() && hub.arrangements.is_empty() && !recorded_by.is_empty() {
-        notes.push("no arrangement decision is recorded, so the brief is held against none".into());
+        arrangement_notes.push("no arrangement decision is recorded, so the brief is held against none - an arrangement is a judgment resting on the session sources a tab serves, with a sign over a count: add v.<slug> rests_on=[s.<...>, page.unserved] verdict=... wrong_if='page.unserved > 0'".into());
     }
     for (index, tab) in tabs.iter().enumerate() {
         if !tab.bare
             && !earned_by_tab[index].is_empty()
+            && !hub.arrangements.is_empty()
             && !arrangement_owns.iter().any(|owned| owned.contains(&index))
         {
-            notes.push(format!(
-                "tab '{}' is an arrangement no decision records",
-                tab.title
+            arrangement_notes.push(format!(
+                "tab '{}' is an arrangement no decision records - add v.<slug> rests_on=[{}, page.unserved] verdict=... wrong_if='page.unserved > 0'",
+                tab.title, earned_by_tab[index].iter().cloned().collect::<Vec<_>>().join(", ")
             ));
+        }
+    }
+    for (index, arrangement) in hub.arrangements.iter().enumerate() {
+        if !arrangement.fired {
+            let mut owned = arrangement_owns[index]
+                .iter()
+                .map(|i| &tabs[*i])
+                .collect::<Vec<_>>();
+            owned.sort_by_key(|tab| tab_title(tab));
+            let mut moved_notes = vec![];
+            for tab in owned {
+                let moved = shape_moves(tab, &current_shape);
+                if !moved.is_empty() {
+                    moved_notes.push(format!(
+                        "tab '{}': shape moved ({}) - muted, {}'s sign has not appeared",
+                        tab_title(tab),
+                        moved.join("; "),
+                        arrangement.id
+                    ));
+                }
+            }
+            arrangement_notes.splice(0..0, moved_notes);
         }
     }
     for (tab_index, tab) in tabs.iter().enumerate() {
         let mut panel = String::new();
-        panel.push_str(&heading(
-            &meta,
-            &brief,
-            &words,
-            ids.len() - judgments.len(),
-            judgments.len(),
-        ));
+        panel.push_str(&h1);
         if tab.bare {
             if !tab.intent.is_empty() {
                 panel.push_str(&format!("<p class=\"purpose\" dir=\"auto\">Everything in this tab was chosen for one purpose — <b dir=\"auto\">{}</b></p>",esc(&tab.intent,false)));
@@ -554,12 +693,6 @@ fn build_document(
             }
         } else {
             panel.push_str(&format!("<p class=\"purpose\" dir=\"auto\">This tab is for one occasion — <b dir=\"auto\">{}</b></p><p class=\"sub\">The Record tab has all {} entries and judgments, arranged by nothing.</p>",esc(if tab.occasion.is_empty(){&tab.title}else{&tab.occasion},false),ids.len()));
-        }
-        for line in &hub.reader_lines {
-            panel.push_str(&format!(
-                "<p class=\"meta\" dir=\"auto\" lang=\"en\">{}</p>",
-                linked_text(line, &ids, &labels, nodes, true)
-            ));
         }
         let mut tab_drift = Vec::new();
         for (arrangement_index, arrangement) in hub.arrangements.iter().enumerate() {
@@ -622,16 +755,7 @@ fn build_document(
             }
         }
         if !tab.shape.is_empty() {
-            let moved = tab
-                .shape
-                .iter()
-                .filter_map(|(key, old)| {
-                    current_shape
-                        .get(key.as_str())
-                        .filter(|now| textish(old) != now.to_string())
-                        .map(|now| format!("{key}: {} -> {now}", textish(old)))
-                })
-                .collect::<Vec<_>>();
+            let moved = shape_moves(tab, &current_shape);
             if !moved.is_empty() {
                 let message = format!(
                     "{} recorded a different shape: {}",
@@ -683,6 +807,15 @@ fn build_document(
             } else {
                 sec.kind.as_str()
             };
+            if kind == "table" && sec.text.is_empty() {
+                push_note(
+                    &mut surface_notes,
+                    format!("a dump with a heading: {title}"),
+                );
+            }
+            if sec.why_.is_empty() {
+                push_note(&mut surface_notes, format!("section without why: {title}"));
+            }
             if !matches!(
                 kind,
                 "table"
@@ -814,20 +947,49 @@ fn build_document(
             p.push_str(&render_set(&render, &spill, "alerts", "")?);
         }
     }
-    let record = render_record(&render, &ids)?;
+    let record = render_record(&render, &ids, &meta)?;
+    for tab in &tabs {
+        if tab.serves.is_empty() {
+            push_note(
+                &mut surface_notes,
+                format!("tab without serves: {}", tab_title(tab)),
+            );
+        }
+    }
+    surface_notes.extend(reasoning_notes(&render)?);
+    if !brief.is_empty() {
+        surface_notes.extend(entry_notes(&render, &ids));
+        surface_notes.append(&mut notes);
+        let born = judgments
+            .iter()
+            .filter_map(|id| {
+                body(nodes, id)
+                    .ok()?
+                    .get("born")
+                    .and_then(|v| parse_date(&textish(v)))
+            })
+            .max();
+        surface_notes.extend(coverage_notes(
+            &tabs,
+            &ids,
+            nodes,
+            &recorded_by,
+            &picked_by_tab,
+            &earned_by_tab,
+            &page_values,
+            born,
+        ));
+        surface_notes.extend(arrangement_notes);
+    }
+    notes = surface_notes;
     let tree = render_tree(&ids, &judgments, nodes, dep_field, &labels)?;
     let title = brief
         .get("title")
         .map(textish)
         .filter(|s| !s.is_empty())
         .or_else(|| Some(named(&V::Map(meta.clone()))).filter(|s| !s.is_empty()))
-        .unwrap_or_else(|| {
-            if language == "he" {
-                "מה ידוע כאן".into()
-            } else {
-                "What is known here".into()
-            }
-        });
+        .or_else(|| field(&meta, &["scope"]).map(textish))
+        .unwrap_or_else(|| words["tab_record"].as_str().unwrap().into());
     let mut out = format!(
         "<!doctype html><html lang=\"{language}\" dir=\"{dir}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>\n{}\n{}\n</style></head><body><div class=\"wrap\" dir=\"{dir}\"><div class=\"tabs\" role=\"tablist\">",
         esc(&title.chars().take(60).collect::<String>(), false),
@@ -860,8 +1022,48 @@ fn build_document(
             if i == 0 { "" } else { " hidden" }
         ));
     }
-    out.push_str(&format!("<section id=\"panel-record\"{}>{}{record}</section><section id=\"panel-tree\" hidden>{}<div class=\"treewrap\">{tree}</div></section>",if tabs.is_empty(){""}else{" hidden"},heading(&meta,&brief,&words,ids.len()-judgments.len(),judgments.len()),esc(&title,false)));
-    out.push_str("<footer>Hover or click any reference to see where it came from. This page is generated from the record.</footer></div><script>window.__T=");
+    let mut record_head = h1.clone();
+    if let Some(scope) = field(&meta, &["scope"]) {
+        record_head.push_str(&format!(
+            "<p class=\"scope\" dir=\"auto\">{}</p>",
+            esc(textish(scope).trim(), false)
+        ));
+    }
+    let mut counts = words["counts"]
+        .as_str()
+        .unwrap()
+        .replace("{e}", &current_shape["entries"].to_string())
+        .replace("{j}", &judgments.len().to_string());
+    if current_shape["flagged"] > 0 {
+        counts.push_str(
+            &words["need_person"]
+                .as_str()
+                .unwrap()
+                .replace("{n}", &current_shape["flagged"].to_string()),
+        );
+    }
+    if let Some(updated) = field(&meta, &["updated"]) {
+        counts.push_str(
+            &words["updated"]
+                .as_str()
+                .unwrap()
+                .replace("{d}", &esc(&textish(updated), false)),
+        );
+    }
+    record_head.push_str(&format!(
+        "<p class=\"meta\" dir=\"{dir}\">{counts}</p>{}",
+        record_nav(&render, &ids, &meta)
+    ));
+    out.push_str(&format!("<section id=\"panel-record\"{}>{record_head}{record}</section><section id=\"panel-tree\" hidden>{h1}<p class=\"purpose\" dir=\"{dir}\">{}</p><div class=\"treewrap\">{tree}</div><p class=\"sub\" dir=\"{dir}\" style=\"margin-top:8px\">{}</p></section>",if tabs.is_empty(){""}else{" hidden"},words["tree_lede"].as_str().unwrap(),words["tree_legend"].as_str().unwrap()));
+    out.push_str(&page_footer(
+        &render,
+        &brief,
+        &tabs,
+        &words,
+        &panels,
+        &mut failures,
+    )?);
+    out.push_str("</div><script>window.__T=");
     out.push_str(&js_safe(&words)?);
     out.push_str(";window.__E=");
     out.push_str(&js_safe(&J::Object(entries))?);
@@ -940,16 +1142,19 @@ fn linked_text(
     out.push_str(&esc(&value[at..], false));
     out
 }
-fn heading(meta: &Map, _brief: &Map, words: &J, e: usize, j: usize) -> String {
+fn heading(meta: &Map, brief: &Map, words: &J) -> String {
     let title = Some(named(&V::Map(meta.clone())))
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| words["untitled"].as_str().unwrap().into());
-    format!(
-        "<h1 dir=\"auto\">{}</h1><p class=\"meta\">{} entries and {} judgments</p>",
-        esc(&title, false),
-        e,
-        j
-    )
+        .or_else(|| field(brief, &["title"]).map(|v| textish(v).trim().to_owned()));
+    if let Some(title) = title {
+        format!("<h1 dir=\"auto\">{}</h1>", esc(&title, false))
+    } else {
+        format!(
+            "<h1 dir=\"{}\">{}</h1>",
+            words["dir"].as_str().unwrap(),
+            words["untitled"].as_str().unwrap()
+        )
+    }
 }
 struct RenderContext<'a> {
     judgments: &'a BTreeSet<String>,
@@ -960,7 +1165,14 @@ struct RenderContext<'a> {
     page_path: &'a Path,
     states: &'a BTreeMap<String, BTreeSet<String>>,
     groups: &'a Groups,
+    default_scheme: &'a str,
+    group_order: &'a [String],
+    source_values: &'a BTreeMap<String, String>,
+    movements: &'a BTreeMap<String, Vec<(String, V, V)>>,
+    component_page: bool,
     language: &'a str,
+    words: &'a J,
+    anchored: &'a std::cell::Cell<(usize, usize)>,
 }
 /// What a card says about a judgment that needs a person, in the Python page's words:
 /// its states, the most urgent first, then what is unverified about it.
@@ -1041,13 +1253,12 @@ fn render_set(
     let judgment_ids = ids.intersection(jud).cloned().collect::<Vec<_>>();
     let entries = ids.difference(jud).cloned().collect::<Vec<_>>();
     if !judgment_ids.is_empty() {
-        o.push_str(if kind == "alerts" {
-            "<div class=\"alerts\">"
-        } else {
-            "<div class=\"cards\">"
-        });
+        if kind == "alerts" {
+            o.push_str("<div class=\"alerts\">");
+        }
         for id in &judgment_ids {
             let b = body(nodes, id)?;
+            let movements = context.movements.get(id).map(Vec::as_slice).unwrap_or(&[]);
             let verdict = field(b, &["verdict", "title"])
                 .map(textish)
                 .unwrap_or_else(|| id.clone());
@@ -1061,22 +1272,47 @@ fn render_set(
                 } else {
                     "warn"
                 };
-                let status = if context.states[id].is_empty() {
-                    "holds".into()
-                } else {
-                    context.states[id]
-                        .iter()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
+                let status = state_line(&context.states[id], b, context.language)
+                    .unwrap_or_else(|| "holds".into());
+                let (verdict, _) = judgment_prose(
+                    context,
+                    &verdict,
+                    &deps(b, context.dependency_field),
+                    movements,
+                );
                 let group = deps(b, context.dependency_field)
                     .into_iter()
                     .flat_map(|dependency| groups_of(&dependency, by, context.groups, nodes))
                     .next();
-                o.push_str(&format!("<div class=\"al\"><span class=\"ico {tone}\">{}</span><span class=\"at\"><span class=\"fx\" data-id=\"{}\">{}</span><div class=\"aw\">{}</div></span><span class=\"tag {tone}\">judgment</span>{}</div>",if tone=="stop"{"!"}else if tone=="warn"{"△"}else{"✓"},esc(id,true),esc(&verdict,false),esc(&status,false),group.map(|g|format!("<span class=\"grp\"><i class=\"group-dot\"></i>{}</span>",esc(&g,false))).unwrap_or_default()));
+                o.push_str(&format!("<div class=\"al\"><span class=\"ico {tone}\">{}</span><span class=\"at\"><span class=\"fx\" data-id=\"{}\">{}</span><div class=\"aw\">{}</div></span><span class=\"tag {tone}\">judgment</span>{}</div>",if tone=="stop"{"!"}else if tone=="warn"{"△"}else{"✓"},esc(id,true),verdict,esc(&status,false),group.map(|g|format!("<span class=\"grp\"><i class=\"group-dot\"></i>{}</span>",esc(&g,false))).unwrap_or_default()));
             } else {
-                let rest = deps(b, context.dependency_field).len();
+                let dependencies = deps(b, context.dependency_field);
+                let (verdict, mut found) =
+                    judgment_prose(context, &verdict, &dependencies, movements);
+                let (because, hits) = judgment_prose(
+                    context,
+                    &clipped_reasoning(&reasoning(b)),
+                    &dependencies,
+                    movements,
+                );
+                found.extend(hits);
+                let (reopened, hits) = judgment_prose(
+                    context,
+                    &field(b, &["reopened_by"]).map(textish).unwrap_or_default(),
+                    &dependencies,
+                    movements,
+                );
+                found.extend(hits);
+                let live = dependencies
+                    .iter()
+                    .filter(|id| nodes.contains_key(*id))
+                    .count();
+                let (a, t) = context.anchored.get();
+                context.anchored.set((a + found.len(), t + live));
+                let rest = dependencies
+                    .iter()
+                    .filter(|id| nodes.contains_key(*id) && !found.contains(*id))
+                    .count();
                 let state = state_line(&context.states[id], b, context.language)
                     .map(|state| {
                         format!(
@@ -1085,10 +1321,57 @@ fn render_set(
                         )
                     })
                     .unwrap_or_default();
-                o.push_str(&format!("<div class=\"card\" data-judgment=\"{}\" data-review=\"{}\"><div class=\"cardtop\"><span class=\"judgment-label\">judgment</span></div><div class=\"vd fx\" data-id=\"{}\">{}</div>{state}{}</div>",esc(id,true),if context.states[id].contains("moved"){"moved"}else{"current"},esc(id,true),esc(&verdict,false),if rest>0{format!("<div class=\"rest\">rests on {rest} more — hover the line above</div>")}else{String::new()}));
+                let because = if because.is_empty() {
+                    String::new()
+                } else {
+                    format!("<div class=\"bc\" dir=\"auto\">{because}</div>")
+                };
+                let reopened = if reopened.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<div class=\"rb\" dir=\"auto\"><span class=\"lbl\">reopened by</span>{reopened}</div>"
+                    )
+                };
+                let moved_class = if movements.is_empty() { "" } else { " moved" };
+                let moved_note = moved_note(context, movements);
+                let card_groups = context
+                    .group_order
+                    .iter()
+                    .filter(|g| {
+                        context
+                            .groups
+                            .get(context.default_scheme)
+                            .and_then(|scheme| scheme.get(*g))
+                            .is_some_and(|members| members.contains(id))
+                    })
+                    .collect::<Vec<_>>();
+                let hue = card_groups
+                    .first()
+                    .and_then(|g| context.group_order.iter().position(|x| x == *g))
+                    .map(|i| format!(" style=\"--group:var(--g{})\"", i % 8))
+                    .unwrap_or_default();
+                let kicker = if context.group_order.len() > 1 && !card_groups.is_empty() {
+                    format!(
+                        "<span class=\"grp\">{}</span>",
+                        esc(
+                            &card_groups
+                                .into_iter()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(" · "),
+                            false
+                        )
+                    )
+                } else {
+                    String::new()
+                };
+                o.push_str(&format!("<div class=\"card{moved_class}\"{hue} data-judgment=\"{}\" data-review=\"{}\"><div class=\"cardtop\"><span class=\"judgment-label\">judgment</span>{kicker}</div><div class=\"vd fx\" data-id=\"{}\" dir=\"auto\">{verdict}</div>{because}{state}{reopened}{moved_note}{}</div>",esc(id,true),if context.states[id].contains("moved"){"moved"}else{"current"},esc(id,true),if rest>0{format!("<div class=\"rest\">rests on {rest} more &mdash; hover the line above</div>")}else{String::new()}));
             }
         }
-        o.push_str("</div>");
+        if kind == "alerts" {
+            o.push_str("</div>");
+        }
     }
     if entries.is_empty() {
         return Ok(o);
@@ -1183,44 +1466,38 @@ fn render_set(
         o.push_str("</div>");
         return Ok(o);
     }
-    {
-        o.push_str("<table><tbody>");
-        for id in entries {
-            let b = body(nodes, &id)?;
-            let val = field(b, &["v", "quoted", "rule"])
-                .map(textish)
-                .unwrap_or_default();
-            let name = label(&id, b, labels);
-            let cell = format!(
-                "<span class=\"fx\" data-id=\"{}\">{}</span>",
-                esc(&id, true),
-                esc(&val, false)
-            );
-            let name = if let Some(h) = href(b, context.record_root, context.page_path) {
-                format!("<a href=\"{}\">{}</a>", esc(&h, true), esc(&name, false))
-            } else {
-                esc(&name, false)
-            };
-            o.push_str(&format!(
-                "<tr><th>{name}</th><td class=\"v\" dir=\"auto\">{cell}</td></tr>"
-            ));
-        }
-        o.push_str("</tbody></table>");
+    o.push_str("<table>");
+    for id in entries {
+        let b = body(nodes, &id)?;
+        let cell = table_value(context, &id, b);
+        o.push_str(&format!("<tr><td class=\"kl\" dir=\"auto\">{}</td><td class=\"v\" dir=\"auto\"><span class=\"fx\" data-id=\"{}\">{cell}</span></td></tr>",esc(&label(&id,b,labels),false),esc(&id,true)));
     }
+    o.push_str("</table>");
     Ok(o)
 }
-fn render_record(context: &RenderContext<'_>, ids: &BTreeSet<String>) -> Result<String> {
+fn render_record(
+    context: &RenderContext<'_>,
+    ids: &BTreeSet<String>,
+    meta: &Map,
+) -> Result<String> {
     let jud = context.judgments;
     let mut o = String::new();
     if !jud.is_empty() {
         o.push_str(&format!(
-            "<h2>Judgments <span class=\"n\">{}</span></h2>",
+            "<h2>{} <span class=\"n\">{}</span></h2>",
+            context.words["judgments"].as_str().unwrap(),
             jud.len()
         ));
         o.push_str(&render_set(context, jud, "cards", "")?);
     }
-    let entries = ids.difference(jud).cloned().collect();
-    o.push_str(&render_set(context, &entries, "table", "")?);
+    for (prefix, entries) in record_groups(ids, jud) {
+        let (hover, word) = prefix_heading(&prefix, meta);
+        o.push_str(&format!(
+            "<h2 id=\"g-{}\"{hover}>{word}</h2>",
+            esc(&prefix, true)
+        ));
+        o.push_str(&render_set(context, &entries, "table", "")?);
+    }
     Ok(o)
 }
 fn render_tree(
