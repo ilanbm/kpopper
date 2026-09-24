@@ -1411,6 +1411,18 @@ sources:
     at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
          and history-hypothesis-retained.json"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_normalized_session:
+    name: "Normalized checked-session replay"
+    file: "native/tests/normalized_session.rs"
+    read: "2026-09-24"
+    at: "Public session/context CLI; ordinary_normalized_session graph validation and
+         public_checked_session input capture"
+    of: "Normalized JSON snapshots use the checked reader without conversion into a project record.
+         Replay validates graph structure and assessment field mappings, recomputes findings, binds
+         revision to the input path and bytes, and retains the normalized option in hook follow-ups.
+         Changed input refuses old revisions; read, context, search and private proposals leave
+         source bytes unchanged. Local CLI and MCP replay were exercised against the final Python
+         contract."
   s.native_ordinary_authoring:
     name: "Ordinary native reader and immutable authoring conformance"
     from: s.2026_09_19_native_ordinary_authoring

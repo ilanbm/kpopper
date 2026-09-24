@@ -2371,3 +2371,5 @@ mod tests {
         }
     }
 }
+
+include!("ordinary_normalized_session.rs");

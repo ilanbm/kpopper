@@ -60,6 +60,7 @@ pub fn hook_opening(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result
     let options = Options {
         operation: Operation::HookOpen,
         input: Some(record),
+        normalized: false,
         no_settings: true,
         global_scope: false,
         rebuild: false,
