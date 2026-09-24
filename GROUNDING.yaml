@@ -1194,6 +1194,17 @@ sources:
             python-final, re-read surviving subjects in native sources, and close readings whose
             subject was the removed implementation."
     read: "2026-09-24"
+  s.2026_09_24_runtime_rebuild:
+    name: "The session that restored native validation for rebuilt reasoning runtimes"
+    asked: "Paraphrased continuation request: replace deleted Python checks with native validation
+            of a fresh runtime candidate and an executed GMP replacement probe; regenerate the
+            corresponding-source archive; select the rebuild lane in CI; validate candidate-only and
+            full workflows on all five targets; answer q.runtime_rebuild_unchecked."
+    of: "On 2026-09-24, native/tests/reasoning_runtime.rs exercised the candidate archive and a GMP
+         6.3.0 replacement library compiled with the unique probe constructor; local make check and
+         all eight runtime tests passed. The compiler and runtime build commands were unchanged.
+         Candidate-only and full five-target GitHub runs remain to be verified."
+    read: "2026-09-24"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -4116,6 +4127,23 @@ open:
                                     native run. What takes the rebuild validation, and when is the
                                     archive regenerated so the two agree?"
                          from: s.2026_09_23_python_exit
+                         answered:
+                           by: s.2026_09_24_runtime_rebuild
+                           of: "2026-09-24"
+                           because: "Fresh candidates are validated by
+                                     native/tests/reasoning_runtime.rs: its pinned scalar,
+                                     composition and query corpus runs against the just-built
+                                     archive, and its GMP probe substitutes the separately rebuilt
+                                     probe library into the extracted runtime cache, invokes the
+                                     candidate binary under the bounded runner, checks the
+                                     constructor marker on stderr and compares the decoded response.
+                                     check.yml selects the runtime job for Lean, runtime
+                                     recipe/archive, manifest and native consumer inputs. The
+                                     matching-source archive is regenerated with build_runtime.py
+                                     source_bundle in the same change and --check-bundles verifies
+                                     byte correspondence. Local build and probe passed;
+                                     candidate-only and full GitHub validation on all five targets
+                                     are still pending."
   q.same_day_rereading: "where does a re-reading go when the session changed the file a premise was
                          read from, on the day it was read? set refuses it into the base as two
                          writers, and the hypothesis beside it is a contested reading the dry run

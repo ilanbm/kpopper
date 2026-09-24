@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.select.outputs.rust }}
+      runtime: ${{ steps.select.outputs.runtime }}
       platforms: ${{ steps.select.outputs.platforms }}
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +47,7 @@ jobs:
             python .github/scripts/ci_selection.py --full
           fi
       - name: Reject incomplete committed bundles before starting expensive checks
-        if: steps.select.outputs.rust == 'true'
+        if: steps.select.outputs.rust == 'true' || steps.select.outputs.runtime == 'true'
         run: python scripts/reasoning/build_runtime.py --check-bundles
 
   record:
@@ -142,9 +143,16 @@ jobs:
       target: ${{ needs.changes.outputs.platforms == 'all' && 'all' || 'without-darwin-x86_64' }}
       audit: true
 
+  reasoning-runtime:
+    needs: [changes, record]
+    if: needs.changes.outputs.runtime == 'true'
+    uses: ./.github/workflows/reasoning-runtime.yml
+    with:
+      rebuild: true
+
   ci-required:
     timeout-minutes: 10
-    needs: [changes, record, native-cli]
+    needs: [changes, record, native-cli, reasoning-runtime]
     if: always()
     runs-on: ubuntu-latest
     steps:

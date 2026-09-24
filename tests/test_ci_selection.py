@@ -52,6 +52,12 @@ class Selection(unittest.TestCase):
         self.assertEqual(lanes(changes), {"rust"})
         self.assertEqual(CI.platforms(changes), "pull-request")
 
+    def test_reasoning_runtime_inputs_select_the_runtime_lane(self):
+        for path in ("scripts/reasoning/lean/Main.lean", "scripts/reasoning/build_runtime.py",
+                     "native/tests/reasoning_runtime.rs"):
+            with self.subTest(path=path):
+                self.assertIn("runtime", lanes([path]))
+
     def test_documentation_record_and_plugin_manifest_edits_run_no_lane(self):
         # The record job still checks all of these on every pull request.
         changes = ["README.md", "assets/README.md", "assets/brand-guide.md", ".kpopper/view.yaml",
@@ -253,7 +259,7 @@ class WorkflowCoverage(unittest.TestCase):
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
         steps = self.jobs()["changes"]["steps"]
         gate = next(step for step in steps if "--check-bundles" in step.get("run", ""))
-        self.assertEqual(gate["if"], "steps.select.outputs.rust == 'true'")
+        self.assertEqual(gate["if"], "steps.select.outputs.rust == 'true' || steps.select.outputs.runtime == 'true'")
 
 
 # Each runner of the native matrix, as its RUNNER_OS/RUNNER_ARCH name it.

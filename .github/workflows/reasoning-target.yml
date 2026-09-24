@@ -9,9 +9,6 @@ on:
       target:
         type: string
         required: true
-      python-versions:
-        type: string
-        required: true
       rebuild:
         type: boolean
         required: true
@@ -21,10 +18,6 @@ on:
 
 permissions:
   contents: read
-
-# These tests retain the Python reference contract.
-env:
-  KPOPPER_RUNTIME: python
 
 jobs:
   build:
@@ -82,36 +75,15 @@ jobs:
         with:
           path: ${{ runner.temp }}/reasoning-dependencies
           key: ${{ steps.dependencies.outputs.cache-primary-key }}
-      - name: Check archive boundaries
-        run: python -m unittest tests.test_reasoning_distribution -v
-      - name: Execute the freshly built archive against the source scalar corpus
-        run: python tests/test_reasoning_distribution.py --archive scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime
-      - name: Execute the freshly built archive against composition conformance
-        shell: python
-        run: |
-          import os, pathlib, subprocess, sys
-          sys.path.insert(0, str(pathlib.Path.cwd()))
-          from scripts.reasoning.runtime import Runtime
-          archive = pathlib.Path('scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime').resolve()
-          native = Runtime(archive)
-          env = dict(os.environ,
-                     KPOPPER_REASONING_TEST_BINARY=str(native.binary),
-                     KPOPPER_REQUIRE_REASONING_TESTS='1')
-          subprocess.run([sys.executable, '-m', 'unittest',
-                          'tests.test_reasoning_composition_kernel',
-                          'tests.test_reasoning_composition_review'],
-                         env=env, check=True)
-      - name: Install the core source-reader dependency for query acceptance
-        run: python -m pip install PyYAML
-      - name: Execute the freshly built archive against query conformance
-        shell: python
-        run: |
-          import os, pathlib, subprocess, sys
-          archive = pathlib.Path('scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime').resolve()
-          env = dict(os.environ, KPOPPER_QUERY_ARCHIVE=str(archive))
-          subprocess.run([sys.executable, '-m', 'unittest',
-                          'tests.test_reasoning_query_runtime', '-v'],
-                         env=env, check=True)
+      - name: Exercise the freshly built runtime and execute the replacement GMP
+        working-directory: native
+        env:
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_TEST_DEBUG: "0"
+          KPOPPER_REQUIRE_GMP_REPLACEMENT_PROBE: "1"
+          KPOPPER_GMP_REPLACEMENT_LIBRARY: ${{ runner.temp }}/replacement/${{ inputs.target }}.library
+        run: cargo test --locked --test reasoning_runtime
       - name: Upload immutable target candidate
         uses: actions/upload-artifact@v4
         with:
@@ -135,82 +107,34 @@ jobs:
           if-no-files-found: error
 
   installed:
-    # Cold channels run independently; the plugin lane also runs the native suites.
     timeout-minutes: 45
     needs: build
-    # Only this target waits for its own replacement library. Other platforms
-    # proceed as soon as their matching build finishes or is intentionally skipped.
-    if: >-
-      inputs.validate-installed && !cancelled() &&
-      (needs.build.result == 'success' ||
-       (needs.build.result == 'skipped' && !inputs.rebuild))
+    # Validate the exact candidate and replacement library produced for this target.
+    if: inputs.validate-installed && needs.build.result == 'success'
     strategy:
       fail-fast: false
-      matrix:
-        python: ${{ fromJSON(inputs.python-versions) }}
-        distribution: [wheel, sdist, plugin]
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      # Test the committed package data. Fresh candidate artifacts must first be
-      # reviewed and copied into source; downloads cannot substitute their bytes.
-      - name: Check completeness and integrity of committed runtime bundles
-        run: python scripts/reasoning/build_runtime.py --check-bundles
       - uses: actions/download-artifact@v4
-        if: needs.build.result == 'success'
+        with:
+          name: reasoning-${{ inputs.target }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@v4
         with:
           name: gmp-replacement-${{ inputs.target }}
           path: ${{ runner.temp }}/replacement
-      - name: Build the ordinary portable wheel and source distribution
-        run: |
-          python -m pip install build
-          python -m build
-      - name: Install each distribution and execute with cold caches and no compiler PATH
-        shell: python
+      - name: Install the matching candidate archive
+        shell: bash
         env:
-          KPOPPER_INSTALL_CHANNEL: ${{ matrix.distribution }}
-          KPOPPER_TEST_REPLACEMENT_ROOT: ${{ needs.build.result == 'success' && format('{0}/replacement', runner.temp) || '' }}
-        run: |
-          import os, pathlib, shutil, subprocess, sys, tempfile, zipfile
-          root = pathlib.Path.cwd()
-          work = pathlib.Path(tempfile.mkdtemp(prefix='reasoning-install-'))
-          kind = os.environ['KPOPPER_INSTALL_CHANNEL']
-          if kind not in ('wheel', 'sdist', 'plugin'):
-              raise ValueError('unknown installed distribution channel: ' + kind)
-          artifact = next((root/'dist').glob('*.whl' if kind == 'wheel' else '*.tar.gz'))
-          env = work/kind
-          subprocess.run([sys.executable, '-m', 'venv', str(env)], check=True)
-          python = env/('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
-          subprocess.run([str(python), '-m', 'pip', 'install', str(artifact)], check=True)
-          distribution_args, composition_args = [], []
-          if kind == 'plugin':
-              # Extract a real plugin with its own modules and committed native assets.
-              plugin_stage = work/'plugin-stage'
-              shutil.copytree(root, plugin_stage, ignore=shutil.ignore_patterns('.git', '.lake', 'dist', '__pycache__'))
-              archive = shutil.make_archive(str(work/'plugin'), 'zip', plugin_stage)
-              plugin = work/'plugin-extracted'
-              with zipfile.ZipFile(archive) as zf:
-                  zf.extractall(plugin)
-              distribution_args = [str(plugin)]
-              composition_args = ['--plugin-root', str(plugin)]
-          subprocess.run([sys.executable, 'tests/test_reasoning_distribution.py', '--installed-python', str(python),
-                          *distribution_args], check=True)
-          subprocess.run([sys.executable, 'tests/test_reasoning_composition_acceptance.py',
-                          '--installed-python', str(python), *composition_args], check=True)
-          if kind != 'plugin':
-              sys.exit(0)
-          # The core-only installed acceptance above has already run. The broader
-          # suite also exercises Hub and document consumers, so opt into their
-          # runtime now, once per Python/target, using the same installed artifact.
-          subprocess.run([str(python), '-m', 'pip', 'install',
-                          str(artifact) + '[html]', 'jsonschema'], check=True)
-          suite_env = dict(os.environ, XDG_CACHE_HOME=str(work/'native-suite-cache'),
-                           KPOPPER_REQUIRE_REASONING_TESTS='1', KPOPPER_REQUIRE_CORE_TESTS='1')
-          binary = subprocess.check_output([str(python), '-c', 'from kpopper.reasoning.runtime import Runtime; print(Runtime().binary)'],
-                                           env=suite_env, text=True).strip()
-          suite_env['KPOPPER_REASONING_TEST_BINARY'] = binary
-          subprocess.run([str(python), '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_reasoning*.py'],
-                         cwd=root, env=suite_env, check=True)
+          TARGET: ${{ inputs.target }}
+        run: cp "$RUNNER_TEMP/candidate/$TARGET.kpopper-runtime" "scripts/reasoning/native/$TARGET.kpopper-runtime"
+      - name: Exercise the downloaded candidate and execute its replacement GMP
+        working-directory: native
+        env:
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+          CARGO_PROFILE_TEST_DEBUG: "0"
+          KPOPPER_REQUIRE_GMP_REPLACEMENT_PROBE: "1"
+          KPOPPER_GMP_REPLACEMENT_LIBRARY: ${{ runner.temp }}/replacement/${{ inputs.target }}.library
+        run: cargo test --locked --test reasoning_runtime

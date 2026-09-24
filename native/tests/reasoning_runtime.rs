@@ -2,6 +2,8 @@ use kpop_native::reasoning_runtime::{OperationalBounds, Runtime, target_name};
 use std::{
     fs,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::Duration,
 };
 fn archive() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -64,6 +66,50 @@ fn modified_runtime_members_are_refused_and_replaceable_libraries_disclosed() {
             .0
             .starts_with("runtime member checksum changed:")
     );
+}
+
+#[test]
+fn rebuilt_replacement_gmp_is_loaded_by_the_candidate_runtime() {
+    if std::env::var_os("KPOPPER_REQUIRE_GMP_REPLACEMENT_PROBE").is_none() {
+        return;
+    }
+    let replacement = PathBuf::from(std::env::var_os("KPOPPER_GMP_REPLACEMENT_LIBRARY").unwrap());
+    let temp = tempfile::tempdir().unwrap();
+    let original = Runtime::open(&archive(), temp.path(), OperationalBounds::default()).unwrap();
+    let library = original.manifest["libraries"][0].as_str().unwrap();
+    fs::copy(&replacement, original.root.join(library)).unwrap();
+    let changed = Runtime::open(&archive(), temp.path(), OperationalBounds::default()).unwrap();
+    assert_eq!(
+        changed.implementation["modified_libraries"],
+        serde_json::json!([library])
+    );
+    let data: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/reasoning-runtime.json")).unwrap();
+    let case = &data["cases"][0];
+    let mut input = kpop_native::reasoning_transport::encode_request(&case["request"])
+        .unwrap()
+        .into_bytes();
+    input.push(b'\n');
+    let mut command = Command::new(&changed.binary);
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = kpop_native::reasoning_runtime::run_command_capture(
+        &mut command,
+        input,
+        Duration::from_secs(30),
+        64 * 1024 * 1024,
+    )
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("KPOPPER_GMP_REPLACEMENT_PROBE"));
+    let actual = kpop_native::reasoning_transport::decode_response(&output.stdout).unwrap();
+    assert_eq!(actual, case["output"]);
 }
 #[cfg(unix)]
 #[test]

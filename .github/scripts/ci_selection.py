@@ -54,6 +54,16 @@ LANES = {
         # The ordinary Lean program its tests load is compiled from the source beside the crate.
         # The hooks its tests compare with run from the pinned v0.10.0 reference.
         rust_sources=("native",)),
+    # A fresh Lean/GMP runtime candidate must be rebuilt and exercised on every
+    # supported target when its sources, archive recipe, or native consumer changes.
+    "runtime": Lane((
+        "native/Cargo.toml", "native/Cargo.lock", "native/rust-toolchain.toml",
+        "native/src/reasoning_runtime.rs", "native/src/reasoning_transport.rs",
+        "native/tests/reasoning_runtime.rs", "native/tests/fixtures/reasoning-runtime.json",
+        "scripts/reasoning/lean/*", "scripts/reasoning/native/*",
+        "scripts/reasoning/third_party/*", "scripts/reasoning/build_runtime.py",
+        ".github/workflows/reasoning-runtime.yml", ".github/workflows/reasoning-target.yml",
+    ), enforced=False),
 }
 LANE_NAMES = tuple(LANES)
 
@@ -95,7 +105,7 @@ PLATFORM_INPUTS = (
 ) + CI_MACHINERY
 INTEL_MACOS = "darwin-x86_64"
 
-JOB_LANES = {"native-cli": ("rust",)}
+JOB_LANES = {"native-cli": ("rust",), "reasoning-runtime": ("runtime",)}
 
 
 def matches(path, patterns):

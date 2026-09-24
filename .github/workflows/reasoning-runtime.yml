@@ -39,15 +39,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {runner: ubuntu-24.04, target: linux-x86_64, pythons: '["3.9", "3.13"]'}
-          - {runner: ubuntu-24.04-arm, target: linux-aarch64, pythons: '["3.9", "3.13"]'}
-          - {runner: macos-15, target: darwin-arm64, pythons: '["3.13"]'}
-          - {runner: macos-15-intel, target: darwin-x86_64, pythons: '["3.9", "3.13"]'}
-          - {runner: windows-2022, target: windows-x86_64, pythons: '["3.9", "3.13"]'}
+          - {runner: ubuntu-24.04, target: linux-x86_64}
+          - {runner: ubuntu-24.04-arm, target: linux-aarch64}
+          - {runner: macos-15, target: darwin-arm64}
+          - {runner: macos-15-intel, target: darwin-x86_64}
+          - {runner: windows-2022, target: windows-x86_64}
     uses: ./.github/workflows/reasoning-target.yml
     with:
       runner: ${{ matrix.runner }}
       target: ${{ matrix.target }}
-      python-versions: ${{ matrix.pythons }}
       rebuild: ${{ inputs.rebuild || github.event_name == 'workflow_dispatch' }}
       validate-installed: ${{ github.event_name != 'workflow_dispatch' || !inputs.candidate-only }}
