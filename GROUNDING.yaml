@@ -1502,6 +1502,16 @@ sources:
          retained core revision says unknown core session revision; reopen. The session regression
          creates its record through add in an empty Git repository and confirms the retained valid
          revision still reads."
+  s.native_reasoning_rebuild:
+    name: "Native reasoning candidate validation after Python removal"
+    file: "tests/test_native_distribution.py"
+    read: "2026-09-24"
+    at: "ReasoningWorkflow; native/tests/reasoning_runtime.rs; native/tests/reasoning_evaluate.rs"
+    of: "Reasoning candidates are checked by the native scalar, composition and query suites. A
+         separately modified GMP library must execute its probe while preserving the evaluator binary
+         and computation result. Candidate-only skips committed-bundle acceptance; other runs accept
+         native distributions once across the platform matrix. Local macOS arm64 candidate build and
+         conformance passed; cross-platform execution requires CI."
   s.native_scenario_watch:
     name: "Native captured scenarios and pure history watch conformance"
     from: s.2026_09_19_native_temporal_authoring

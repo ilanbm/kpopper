@@ -522,5 +522,82 @@ class NativeDistribution(unittest.TestCase):
         self.assertEqual((protected / "bin/kpop").read_text(), "user file")
 
 
+
+
+class ReasoningWorkflow(unittest.TestCase):
+    def test_reasoning_validation_never_names_a_deleted_local_entry_point(self):
+        import re
+        for name in ("reasoning-runtime.yml", "reasoning-target.yml"):
+            source = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+            paths = re.findall(r"(?:python(?:3)?\s+)(tests/[\w/.-]+\.py)", source)
+            modules = re.findall(r"\btests\.(test_[a-z_]+)\b", source)
+            for path in paths + ["tests/" + module + ".py" for module in modules]:
+                self.assertTrue((ROOT / path).is_file(), f"{name} runs missing {path}")
+            for module in re.findall(r"from (scripts\.[\w.]+) import", source):
+                self.assertTrue((ROOT / (module.replace('.', '/') + '.py')).is_file(),
+                                f"{name} imports missing {module}")
+
+    def test_reasoning_rebuild_accepts_native_candidates_and_keeps_replacement_probe(self):
+        import yaml
+        target = yaml.safe_load((ROOT / '.github/workflows/reasoning-target.yml').read_text())
+        runs = '\n'.join(step.get('run', '') for step in target['jobs']['build']['steps'])
+        self.assertIn('--test reasoning_runtime', runs)
+        self.assertIn('--test reasoning_evaluate', runs)
+        self.assertIn('modified_gmp_library_is_loaded_and_disclosed', runs)
+        selected = [step for step in target['jobs']['build']['steps'] if 'cargo test' in step.get('run', '')]
+        self.assertTrue(all('KPOP_REASONING_ARCHIVE' in step['env'] for step in selected))
+        self.assertTrue(any('KPOP_REASONING_REPLACEMENT_LIBRARY' in step['env'] for step in selected))
+        workflow = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())
+        self.assertEqual(workflow['jobs']['installed']['uses'], './.github/workflows/native-rust.yml')
+        self.assertEqual(workflow['jobs']['installed']['with']['validation'], 'distribution')
+        self.assertEqual(workflow['jobs']['installed']['with']['target'], 'all')
+        self.assertIn('verdict', workflow['jobs'])
+
+    def test_candidate_only_skips_committed_bundle_and_installed_checks(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())
+        def selected(expression, values):
+            expression = expression.replace('!cancelled()', 'True')
+            for name, value in sorted(values.items(), key=lambda item: -len(item[0])):
+                expression = expression.replace(name, repr(value))
+            expression = expression.replace('&&', ' and ').replace('||', ' or ')
+            expression = expression.replace('!inputs.candidate-only', 'not inputs.candidate-only')
+            # Only a fixed workflow boolean expression reaches this test evaluator.
+            expression = expression.replace('!True', 'not True').replace('!False', 'not False')
+            return eval(expression, {'__builtins__': {}}, {})
+        preflight = workflow['jobs']['preflight']['steps'][-1]
+        for event, candidate, rebuild in [('workflow_dispatch', True, False),
+                                           ('workflow_dispatch', False, False),
+                                           ('workflow_call', False, False),
+                                           ('workflow_call', False, True)]:
+            values = {'github.event_name': event, 'inputs.candidate-only': candidate,
+                      'inputs.rebuild': rebuild, 'needs.preflight.result': 'success',
+                      'needs.target.result': 'success' if rebuild or event == 'workflow_dispatch' else 'skipped'}
+            with self.subTest(event=event, candidate=candidate, rebuild=rebuild):
+                self.assertEqual(selected(preflight['if'], values), not candidate)
+                self.assertEqual(selected(workflow['jobs']['target']['if'], values),
+                                 rebuild or event == 'workflow_dispatch')
+                self.assertEqual(selected(workflow['jobs']['installed']['if'], values), not candidate)
+
+    @unittest.skipUnless(shutil.which("bash"), "requires the workflow's bash shell")
+    def test_required_verdict_rejects_failed_cancelled_and_unexpectedly_skipped_jobs(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())
+        script = workflow['jobs']['verdict']['steps'][0]['run']
+        for rebuild, candidate_only in ((False, False), (True, False), (True, True)):
+            expected = dict(PREFLIGHT_RESULT='success',
+                            TARGET_RESULT='success' if rebuild else 'skipped',
+                            INSTALLED_RESULT='skipped' if candidate_only else 'success')
+            env = dict(os.environ, REBUILD=str(rebuild).lower(),
+                       CANDIDATE_ONLY=str(candidate_only).lower(), **expected)
+            with self.subTest(rebuild=rebuild, candidate_only=candidate_only):
+                self.assertEqual(subprocess.run(['bash', '-e', '-c', script], env=env).returncode, 0)
+                for key in expected:
+                    for wrong in {'success', 'skipped', 'failure', 'cancelled'} - {expected[key]}:
+                        self.assertNotEqual(subprocess.run(['bash', '-e', '-c', script],
+                                            env=dict(env, **{key: wrong})).returncode, 0,
+                                            (key, wrong))
+
+
 if __name__ == "__main__":
     unittest.main()
