@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.1 — 2026-09-24
+
+- Restore native shell hook delivery coverage (#235) — patch
+- Show kpopper icon in plugin directory (#234) — patch
+- Run the native tests in one nextest pool (#231) — patch
+
+Decisions recorded: d.native_tests_one_pool
+
 ## 0.11.0 — 2026-09-24
 
 - Say where the reader is, everywhere it is described (#232) — patch
