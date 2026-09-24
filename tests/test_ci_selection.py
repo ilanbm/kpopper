@@ -313,16 +313,17 @@ class WorkflowCoverage(unittest.TestCase):
 
     def test_main_checks_are_not_cancelled_by_a_later_main_commit(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())
-        self.assertIn("github.sha", workflow["concurrency"]["group"])
-        self.assertIn("github.run_id", workflow["concurrency"]["group"])
+        self.assertEqual(
+            workflow["concurrency"]["group"],
+            "check-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || github.event_name == 'workflow_dispatch' && github.run_id || 'shared' }}",
+        )
         self.assertEqual(workflow["concurrency"]["cancel-in-progress"],
                          "${{ github.event_name == 'pull_request' }}")
         native = yaml.safe_load((ROOT / ".github/workflows/native-rust.yml").read_text())
-        self.assertIn("github.workflow", native["concurrency"]["group"])
-        self.assertIn("inputs.target", native["concurrency"]["group"])
-        self.assertIn("github.run_id", native["concurrency"]["group"])
-        self.assertIn("github.sha", native["concurrency"]["group"])
-        self.assertIn("inputs.validation", native["concurrency"]["group"])
+        self.assertEqual(
+            native["concurrency"]["group"],
+            "native-rust-${{ github.workflow }}-${{ github.ref }}-${{ inputs.validation || 'full' }}-${{ inputs.target || 'all' }}-${{ github.event_name == 'push' && github.sha || github.event_name == 'workflow_dispatch' && github.run_id || inputs.validation == 'distribution' && github.sha || 'checks' }}",
+        )
         self.assertEqual(native["concurrency"]["cancel-in-progress"],
                          "${{ github.event_name == 'pull_request' }}")
         check_call = self.jobs()["native-cli"]["with"]
@@ -330,6 +331,33 @@ class WorkflowCoverage(unittest.TestCase):
         publish_call = publish["jobs"]["build"]["with"]
         self.assertNotIn("validation", check_call)
         self.assertEqual(publish_call["validation"], "distribution")
+
+        def check_group(event, ref, sha, run_id):
+            suffix = sha if event == "push" else run_id if event == "workflow_dispatch" else "shared"
+            return f"check-{ref}-{suffix}"
+
+        def native_group(caller, ref, event, validation, target, sha, run_id):
+            suffix = (sha if event == "push" else run_id if event == "workflow_dispatch"
+                      else sha if validation == "distribution" else "checks")
+            return f"native-rust-{caller}-{ref}-{validation or 'full'}-{target or 'all'}-{suffix}"
+
+        main_check = check_group("push", "refs/heads/main", "commit-a", "run-a")
+        newer_main_check = check_group("push", "refs/heads/main", "commit-b", "run-b")
+        pr_check = check_group("pull_request", "refs/pull/5/merge", "head-a", "run-pr-a")
+        newer_pr_check = check_group("pull_request", "refs/pull/5/merge", "head-b", "run-pr-b")
+        main_native = native_group("kpopper check", "refs/heads/main", "push", None, "all", "commit-a", "run-a")
+        main_publish = native_group("publish", "refs/heads/main", "push", "distribution", "all", "commit-a", "run-pub")
+        manual_check = check_group("workflow_dispatch", "refs/heads/main", "sha", "run-manual")
+        manual_native = native_group("native Rust platform acceptance", "refs/heads/main", "workflow_dispatch", "full", "all", "sha", "run-native")
+        self.assertNotEqual(main_check, newer_main_check)
+        self.assertEqual(pr_check, newer_pr_check)
+        self.assertNotEqual(main_native, main_publish)
+        self.assertNotEqual(manual_check, manual_native)
+        self.assertNotEqual(manual_check, main_check)
+        self.assertEqual(
+            len({main_check, newer_main_check, pr_check, main_native, main_publish, manual_check, manual_native}),
+            7,
+        )
 
     def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
