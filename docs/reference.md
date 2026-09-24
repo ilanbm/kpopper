@@ -234,6 +234,8 @@ kpop consolidate --dry-run   # Check the proposed combination without applying i
 kpop consolidate            # Fold eligible hypotheses through the guarded writer
 kpop consolidate --refute NAME "Reason for refutation"
 kpop consolidate --from BRANCH_OR_REF --dry-run
+kpop consolidate --resolve --dry-run # Preview a stopped Git record merge
+kpop consolidate --resolve           # Write a checked resolution; no staging or commit
 ```
 
 The dry run reports changed premises, fired falsifiers, structural gaps, contested IDs and
@@ -251,6 +253,10 @@ changes to current main. Refs come from local Git objects; the command does not 
 The callable `union_of(base, hypotheses)` also accepts an in-memory hypothesis for a read-only
 what-if. That is a building block for previewing a captured working-copy delta on main. The opt-in `watch` runner uses this core for asynchronous worktree-versus-main previews.
 The existing background ingestion path continues to process explicit reports for one record.
+
+For a stopped Git merge, `consolidate --resolve` combines independent record changes and
+refuses competing claims. It validates the staged candidate before writing only the record.
+See [supported layouts and limits](coding-and-ci.md#resolve-a-stopped-git-merge-locally).
 
 See the [record](../skills/record/SKILL.md) and [consolidate](../skills/consolidate/SKILL.md) skills for the full write and consolidation discipline.
 

@@ -7,6 +7,11 @@ illustrates this with a shared search cache and private results, followed by a d
 promise that outlasts file retention. [Run both examples](../examples/merge-assumptions/README.md)
 to see passing branch tests, clean Git merges and failed recorded conditions together.
 
+Advanced mode is [experimental](advanced-mode-merging.md). These checks validate a
+combined record; they do not resolve Git's textual conflicts. Parallel PRs can still
+conflict on `GROUNDING.yaml` after one merges, and updating a PR can start its checks again.
+The open design note explains this limitation and the alternatives under consideration.
+
 ## Check the proposed merge result
 
 Keep `GROUNDING.yaml` and any referenced record files available in the checkout. For a
@@ -63,7 +68,7 @@ Neither command folds hypotheses or rewrites conclusions in this configuration.
 The repository's own [check workflow](../.github/workflows/check.yml) always runs measurement
 recipes and page verification, and selects test families from the changed paths. Its
 `ci-required` job checks that every selected family succeeded. See the
-[contribution guide](../CONTRIBUTING.md#the-loop) for selection and main-branch coverage.
+[contribution guide](../CONTRIBUTING.md#make-and-submit-a-change) for selection and main-branch coverage.
 Those steps are specific to this repository; the two-command example above is the basic
 integration for another project.
 
@@ -85,6 +90,49 @@ semantic merge algorithm. Record dates and the writer's replacement rules matter
 missing from the other branch is not automatically a deletion request, and similarity
 between IDs is a review prompt, not proof that they denote the same subject. Check the
 actual merged tree in CI as well.
+
+## Resolve a stopped Git merge locally
+
+When an ordinary Git merge has stopped on the record, first resolve and stage any other
+conflicted paths. Then inspect and apply the record resolution:
+
+```sh
+kpop consolidate --resolve --dry-run
+kpop consolidate --resolve
+# Review the result, then use git add and finish the existing Git merge.
+```
+
+An optional record path selects a different in-tree entry. This is an explicit local
+command, not an installed hook, merge driver or hosted service. It never fetches, stages,
+commits, pushes, changes the configured project mode or folds pending findings. Check
+`kpop consolidate --help` before using it with an older installation.
+
+For ordinary records, it compares complete entries against Git's stage-1 common base.
+Independent additions, edits and deletions are combined while selected source blocks,
+comments and line endings remain intact. Two different changes to the same entry,
+delete/edit, or competing metadata changes require an explicit decision. It does not
+combine fields inside a claim or choose a newer-looking date. For supported active-history
+records, it rebuilds from the complete staged history only when both input views are known
+generated views and the history reducer reports no contested subject. Immutable objects
+and manifests remain untouched; unknown hand edits require explicit reconciliation.
+
+The candidate is checked in a private copy of the staged tree with frozen `check` and
+`consolidate --dry-run`. Nothing is written if those checks fail. On success, only the
+working-tree record is replaced; the index still requires `git add` after review. This
+checks recorded knowledge, not code behavior: it runs no measurement recipes, hooks,
+project scripts or tests. Run the relevant validation on the final merge as usual.
+
+This first resolver is deliberately bounded. It requires a normal two-parent merge with
+Git's `AUTO_MERGE` snapshot and three regular-file index stages for the record. It refuses
+manual edits made to the conflict file after that snapshot, add/add or delete/edit of the
+whole record, pointer records, unsupported history formats, symbolic links or submodules
+in the staged snapshot, and an alternate Git index. Ordinary entries need block collections
+with plain keys. Snapshot capture is bounded to 100,000 index entries, 256 MiB of blob
+output and 256 MiB of materialized files. Concurrent changes to the index, merge heads or record cause refusal before the
+write. These limits are reported, never silently bypassed.
+
+The [broader merge question](advanced-mode-merging.md) remains open: resolving a conflict
+still creates work for the user, and a subsequent commit may trigger CI again.
 
 ## Connect recorded premises to the code
 
