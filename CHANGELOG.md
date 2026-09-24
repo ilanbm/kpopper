@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.1 — 2026-09-24
+
+- Fix crates.io trusted publishing trigger (#254) — patch
+- Give Intel macOS release acceptance enough time (#253) — patch
+
 ## 0.12.0 — 2026-09-24
 
 - Clarify guided plugin installation (#249) — patch

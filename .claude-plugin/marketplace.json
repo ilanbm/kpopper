@@ -9,7 +9,7 @@
       "name": "kpopper",
       "source": "./",
       "description": "Make your agents' reasoning explicit, persistent, and deterministically checkable. Connect decisions to evidence and assumptions, and see what needs another look when a recorded premise changes.",
-      "version": "0.12.0"
+      "version": "0.12.1"
     }
   ]
 }
