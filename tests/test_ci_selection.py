@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -253,6 +254,185 @@ class WorkflowCoverage(unittest.TestCase):
         steps = self.jobs()["changes"]["steps"]
         gate = next(step for step in steps if "--check-bundles" in step.get("run", ""))
         self.assertEqual(gate["if"], "steps.select.outputs.rust == 'true'")
+
+
+# Each runner of the native matrix, as its RUNNER_OS/RUNNER_ARCH name it.
+RUNNER_PLATFORMS = {"ubuntu-24.04": "Linux/X64", "ubuntu-24.04-arm": "Linux/ARM64", "macos-14": "macOS/ARM64",
+                    "macos-15-intel": "macOS/X64", "windows-2022": "Windows/X64"}
+# The attributes that keep a fenced block of a doc comment Rust code for rustdoc.
+RUSTDOC_ATTRIBUTES = {"rust", "ignore", "no_run", "should_panic", "compile_fail", "test_harness", "standalone_crate"}
+
+
+class NativeTestPool(unittest.TestCase):
+    """The native tests run in one nextest pool: pinned, checked, never retried, and all that cargo lists."""
+
+    def jobs(self):
+        return yaml.safe_load((ROOT / ".github/workflows/native-rust.yml").read_text())["jobs"]
+
+    def only(self, steps, predicate):
+        found = [index for index, step in enumerate(steps) if predicate(step)]
+        self.assertEqual(len(found), 1, found)
+        return found[0]
+
+    def commands(self, run):
+        """The cargo commands of each validation in the test step's case statement."""
+        commands, mode = {}, None
+        for line in (line.strip() for line in run.splitlines()):
+            label = re.fullmatch(r"([\w-]+|\*)\)", line)
+            if label:
+                mode = label.group(1)
+                commands[mode] = []
+            elif line == ";;":
+                mode = None
+            elif mode and line.startswith("cargo "):
+                commands[mode].append(shlex.split(line))
+        return commands
+
+    def test_tests_job_installs_nextest_at_a_pinned_version_checked_by_sha256(self):
+        jobs = self.jobs()
+        steps = jobs["tests"]["steps"]
+        install = self.only(steps, lambda step: "cargo-nextest-" in step.get("run", ""))
+        tests = self.only(steps, lambda step: step.get("id") == "native-tests")
+        self.assertLess(install, tests)
+        # Skipped for a distribution, as the tests are.
+        self.assertEqual(steps[install]["if"], "inputs.validation != 'distribution'")
+        self.assertEqual(steps[install]["if"], steps[tests]["if"])
+        script = steps[install]["run"]
+        [version] = re.findall(r"^\s*version=(\d+\.\d+\.\d+)$", script, re.M)
+        pinned = {}
+        for platforms, asset, digest in re.findall(r"^\s*([\w/ |]+)\) asset=(\S+) sha256=(\S+) ;;$", script, re.M):
+            for platform in platforms.split("|"):
+                pinned[platform.strip()] = (asset, digest)
+        include = jobs["tests"]["strategy"]["matrix"]["include"]
+        rows = max((json.loads(text) for text in include.split("'")[1::2] if text.startswith("[")), key=len)
+        self.assertEqual({RUNNER_PLATFORMS[row["runner"]] for row in rows}, set(pinned))
+        for platform, (asset, digest) in pinned.items():
+            with self.subTest(platform=platform):
+                self.assertRegex(asset, r"^cargo-nextest-" + re.escape(version) + r"-[\w-]+\.tar\.gz$")
+                self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        self.assertIn("/releases/download/cargo-nextest-$version/$asset", script)
+        # The archive is refused unless it has the pinned sha256, before anything is extracted.
+        extract = script.index("tar -x")
+        for check in ("sha256sum", "shasum -a 256", '!= "$sha256"'):
+            with self.subTest(check=check):
+                self.assertLess(script.index(check), extract)
+        self.assertIn('>> "$GITHUB_PATH"', script)
+
+    def test_every_validation_tests_through_nextest_and_full_runs_the_whole_suite(self):
+        steps = self.jobs()["tests"]["steps"]
+        commands = self.commands(steps[self.only(steps, lambda step: step.get("id") == "native-tests")]["run"])
+        self.assertEqual(set(commands), {"full", "hooks", "final-fixes", "*"})
+        for mode in ("full", "hooks", "final-fixes"):
+            self.assertTrue(commands[mode], mode)
+            for command in commands[mode]:
+                with self.subTest(mode=mode, command=command):
+                    self.assertEqual(command[:3], ["cargo", "nextest", "run"])
+                    self.assertIn("--locked", command)
+                    self.assertIn("--no-fail-fast", command)
+                    self.assertEqual(command[command.index("--profile") + 1], "ci")
+        # One pool of every test: no target selection and no filter.
+        [full] = commands["full"]
+        self.assertEqual(sorted(full[3:]), sorted(["--locked", "--no-fail-fast", "--profile", "ci"]))
+        # A retry could turn a failure green, and the command line or the environment would override the profile.
+        workflow = (ROOT / ".github/workflows/native-rust.yml").read_text()
+        self.assertNotIn("--retries", workflow)
+        self.assertNotIn("NEXTEST_RETRIES", workflow)
+
+    @unittest.skipIf(importlib.util.find_spec("tomllib") is None, "tomllib reads TOML from Python 3.11")
+    def test_ci_profile_never_retries_and_stops_a_hang_well_inside_the_job(self):
+        import tomllib  # The record job runs Python 3.13.
+        config = tomllib.loads((ROOT / "native/.config/nextest.toml").read_text(encoding="utf-8"))
+        profile = config["profile"]["ci"]
+        self.assertEqual(profile["retries"], 0)
+        self.assertIs(profile["fail-fast"], False)
+
+        def retries(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key == "retries":
+                        yield item
+                    yield from retries(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from retries(item)
+
+        # Any profile's retries or a per-test override's would reach this profile as well.
+        self.assertEqual([value for value in retries(config) if value != 0], [])
+        timeout = profile["slow-timeout"]
+        period = re.fullmatch(r"(\d+)s", timeout["period"])
+        self.assertTrue(period, timeout["period"])
+        self.assertEqual(timeout.get("on-timeout", "fail"), "fail")
+        # A hung test fails under its own name, and the job has time left to finish the rest.
+        job = self.jobs()["tests"]["timeout-minutes"] * 60
+        self.assertLess(int(period.group(1)) * timeout["terminate-after"], job / 2)
+        self.assertEqual(profile["junit"]["path"], "junit.xml")
+
+    def test_run_keeps_its_junit_report_and_a_listing_check_follows_it(self):
+        steps = self.jobs()["tests"]["steps"]
+        tests = self.only(steps, lambda step: step.get("id") == "native-tests")
+        report = self.only(steps, lambda step: "native/target/nextest/ci/junit.xml" in step.get("run", ""))
+        evidence = self.only(steps, lambda step: (step.get("with") or {}).get("name")
+                             == "native-test-evidence-${{ matrix.target }}")
+        self.assertLess(tests, report)
+        self.assertLess(report, evidence)
+        self.assertEqual(steps[report]["if"], "${{ !cancelled() }}")
+        self.assertIn('"$RUNNER_TEMP/native-evidence/', steps[report]["run"])
+        listing = self.only(steps, lambda step: "ci/nextest_listing.py" in step.get("run", ""))
+        self.assertLess(tests, listing)
+        self.assertEqual(steps[listing]["working-directory"], steps[tests]["working-directory"])
+        self.assertEqual(steps[listing]["if"], "env.KPOPPER_CI_VALIDATION == 'full'")
+        # The listings read the build the full run made: its cargo arguments, without nextest's own.
+        [full] = self.commands(steps[tests]["run"])["full"]
+        build = full[3:]
+        at = build.index("--profile")
+        profile = build[at + 1]
+        del build[at:at + 2]
+        build.remove("--no-fail-fast")
+        self.assertEqual(shlex.split(steps[listing]["run"]), ["python", "ci/nextest_listing.py", *build])
+        script = (ROOT / "native/ci/nextest_listing.py").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r'^PROFILE = "([\w-]+)"$', script, re.M), [profile])
+
+    def test_only_the_tests_job_uses_nextest_and_the_oracle_comparison_stays_on_cargo_test(self):
+        jobs = self.jobs()
+        for name, job in jobs.items():
+            with self.subTest(job=name):
+                self.assertEqual("nextest" in json.dumps(job), name == "tests")
+        steps = jobs["tests"]["steps"]
+        oracle = steps[self.only(steps, lambda step: "-- --ignored" in step.get("run", ""))]["run"]
+        self.assertIn("cargo test ", oracle)
+        self.assertNotIn("nextest", oracle)
+
+    def test_native_sources_hold_no_doc_test_that_nextest_would_skip(self):
+        def runs(info):
+            """Whether rustdoc runs a fenced block with this info string as a doc-test."""
+            tokens = {token for token in re.split(r"[\s,{}]+", info) if token}
+            other = {token for token in tokens if token not in RUSTDOC_ATTRIBUTES
+                     and not re.fullmatch(r"edition\d+|ignore-[\w-]+|E\d{4}", token)}
+            if other and "rust" not in tokens:
+                return False  # text, or another language
+            return not tokens & {"ignore", "no_run"}
+
+        found = []
+        for source in sorted((ROOT / "native/src").rglob("*.rs")):
+            fence = None
+            for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+                doc = re.match(r"\s*//[/!](?!/)(.*)", line)
+                if not doc:
+                    fence = None
+                    continue
+                marker = re.match(r"\s{0,4}(`{3,}|~{3,})(.*)", doc.group(1))
+                if fence:
+                    if (marker and marker.group(1)[0] == fence[0] and len(marker.group(1)) >= len(fence)
+                            and not marker.group(2).strip()):
+                        fence = None
+                elif marker:
+                    fence = marker.group(1)
+                    if runs(marker.group(2)):
+                        found.append("%s:%d" % (source.relative_to(ROOT).as_posix(), number))
+        steps = self.jobs()["tests"]["steps"]
+        if found and not any(re.search(r"cargo test\b.*--doc", step.get("run", "")) for step in steps):
+            self.fail("nextest skips doc-tests, so the workflow must also run `cargo test --doc`: "
+                      + ", ".join(found))
 
 
 if __name__ == "__main__":
