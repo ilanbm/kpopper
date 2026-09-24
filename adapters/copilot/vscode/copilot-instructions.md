@@ -51,11 +51,11 @@ confidence or refreshes `seen`. Remote publication needs explicit project author
 
 If the hook supplied no opening or first-use context, run:
 
-    <plugin>/bin/kpop open
+    <plugin>/scripts/bin/kpop open
 
 and read that instead of the file whole. Before finishing work that has a record, run:
 
-    <plugin>/bin/kpop check
+    <plugin>/scripts/bin/kpop check
 
 and fix or declare (`blocked_on`) whatever it reports, rather than leaving the record
 worse than you found it.

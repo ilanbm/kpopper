@@ -17,12 +17,11 @@ class NativeShellLaunchers(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.plugin = self.root / "plugin with spaces"
-        (self.plugin / "scripts").mkdir(parents=True)
-        (self.plugin / "bin").mkdir()
+        (self.plugin / "scripts/bin").mkdir(parents=True)
         for name in ("native_runtime.sh", "hook.sh", "session_open.sh", "session_gate.sh", "ingestion_hook.sh"):
             shutil.copy2(ROOT / "scripts" / name, self.plugin / "scripts" / name)
         for name in ("kpop", "kpopper"):
-            shutil.copy2(ROOT / "bin" / name, self.plugin / "bin" / name)
+            shutil.copy2(ROOT / "scripts/bin" / name, self.plugin / "scripts/bin" / name)
         tools = self.tools = self.root / "path tools"
         tools.mkdir()
         self.write_executable(tools / "uname", '#!/bin/sh\ncase "$1" in -s) echo Darwin;; -m) echo arm64;; esac\n')
@@ -36,6 +35,7 @@ class NativeShellLaunchers(unittest.TestCase):
         self.env = dict(os.environ, PATH=str(tools) + os.pathsep + "/usr/bin:/bin",
                         PYTHON_CALLED=str(self.python_called))
         self.env.pop("KPOPPER_RUNTIME", None)
+        self.env.pop("CLAUDE_ENV_FILE", None)
 
     def write_executable(self, path, text):
         path.write_text(text)
@@ -49,15 +49,43 @@ class NativeShellLaunchers(unittest.TestCase):
 
     def test_both_public_names_keep_arguments_and_stdin(self):
         for name in ("kpop", "kpopper"):
-            result = self.invoke("bin/" + name, ("add", "p.value", "v=space and $literal"))
+            result = self.invoke("scripts/bin/" + name, ("add", "p.value", "v=space and $literal"))
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout, '<add>\n<p.value>\n<v=space and $literal>\n'
                              '{"session_id":"test","cwd":"/example"}')
         self.assertFalse(self.python_called.exists())
 
     def test_cli_arguments_cannot_select_the_private_resolver_mode(self):
-        result = self.invoke("bin/kpop", ("--path",))
+        result = self.invoke("scripts/bin/kpop", ("--path",))
         self.assertTrue(result.stdout.startswith("<--path>\n"), result.stdout)
+
+    def test_the_claude_opener_puts_the_package_commands_at_the_end_of_path(self):
+        # The line is shell source, so a quote in the package's path must survive it.
+        plugin = self.root / "it's a plugin"
+        shutil.copytree(self.plugin, plugin)
+        environment = self.root / "session env.sh"
+        for _ in range(2):  # a resumed or compacted session opens again
+            result = subprocess.run(["sh", str(plugin / "scripts/session_open.sh"), "--host", "claude"],
+                                    input="{}", text=True, capture_output=True, timeout=10, cwd=self.root,
+                                    env=dict(self.env, CLAUDE_ENV_FILE=str(environment)))
+            self.assertEqual((result.returncode, result.stderr), (0, ""))
+            self.assertEqual(result.stdout, "<session-start>\n<--host>\n<claude>\n{}")
+        self.assertEqual(len(environment.read_text().splitlines()), 1)
+        probe = subprocess.run(["sh", "-c", '. "$1"; command -v kpop; command -v kpopper; kpopper add p.value',
+                                "probe", str(environment)], input="stdin", text=True, capture_output=True,
+                               timeout=10, cwd=self.root, env=self.env)
+        self.assertEqual(probe.returncode, 0, probe.stderr)
+        # A kpop already on PATH keeps its place in front of the package's.
+        self.assertEqual(probe.stdout, "%s\n%s\n<add>\n<p.value>\nstdin" % (
+            self.tools / "kpop", plugin / "scripts/bin/kpopper"))
+        self.assertFalse(self.python_called.exists())
+
+    def test_an_unwritable_session_environment_leaves_the_opening_alone(self):
+        result = subprocess.run(["sh", str(self.plugin / "scripts/session_open.sh"), "--host", "claude"],
+                                input="{}", text=True, capture_output=True, timeout=10, cwd=self.root,
+                                env=dict(self.env, CLAUDE_ENV_FILE=str(self.root / "missing/env.sh")))
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, "<session-start>\n<--host>\n<claude>\n{}")
 
     def test_all_hook_routes_use_native_commands(self):
         for script, args, expected in [
@@ -81,7 +109,7 @@ class NativeShellLaunchers(unittest.TestCase):
         for path, args in (("scripts/session_gate.sh", ("--host", "claude", "--context", "UserPromptSubmit")),
                            ("scripts/hook.sh", ("watch_hook.py", "claude", "wait"))):
             self.assertEqual(self.invoke(path, args, code=2).returncode, 0)
-        self.assertEqual(self.invoke("bin/kpop", ("check",), code=2).returncode, 2)
+        self.assertEqual(self.invoke("scripts/bin/kpop", ("check",), code=2).returncode, 2)
 
     def test_missing_runtime_is_nonblocking_for_hooks_and_fails_cli(self):
         self.binary.unlink()
@@ -90,7 +118,7 @@ class NativeShellLaunchers(unittest.TestCase):
             result = self.invoke("scripts/" + script, args)
             self.assertEqual((result.returncode, result.stdout), (0, ""))
             self.assertIn("not installed", result.stderr)
-        self.assertEqual(self.invoke("bin/kpop").returncode, 1)
+        self.assertEqual(self.invoke("scripts/bin/kpop").returncode, 1)
         stopped = self.invoke("scripts/session_gate.sh")
         self.assertEqual((stopped.returncode, stopped.stdout, stopped.stderr), (0, '', ''))
         self.assertFalse(self.python_called.exists())
@@ -157,6 +185,13 @@ class NativeShellLaunchers(unittest.TestCase):
         grounded = self.invoke("scripts/hook.sh", ("ground_hook.py", "claude", "start"))
         self.assertEqual((grounded.returncode, grounded.stdout), (0, ""))
         self.assertIn("unsupported native platform", grounded.stderr)
+
+
+class PluginPackage(unittest.TestCase):
+    def test_the_package_root_holds_no_bin_directory(self):
+        # claude.ai refuses to sync a plugin whose root holds bin/: Claude Code adds that
+        # directory to PATH, and the hosted approval surface does not show it.
+        self.assertFalse((ROOT / "bin").exists())
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ existing external shared record; importing selected permitted observations into 
 project store is explicit and non-destructive. See [project modes](../../docs/project-modes.md).
 
 1. Locate the workspace and existing followup configuration with `kpop followups status`.
-   Use the command from the current plugin when needed: `<plugin-root>/bin/kpop`.
+   Use the command from the current plugin when needed: `<plugin-root>/scripts/bin/kpop`.
    The plugin root is two directories above this skill folder. Keep its pinned record and
    canonical task destination. Use an existing destination from user context or its verified
    suggestion; a private fallback is available. If no useful knowledge record exists yet,

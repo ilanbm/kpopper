@@ -26,10 +26,10 @@ available to a local Claude Code session must not be assumed to exist there.
 2. Confirm the installed plugin's native runtime runs inside the task environment:
    `sh "<plugin root>/scripts/install_native.sh"` installs it into that plugin copy
    ([Install the native runtime](../../docs/plugin-runtime.md#install-the-native-runtime)),
-   and `"<plugin root>/bin/kpop" --version` runs it. Use the installed plugin path, not a
-   path copied from a different client's cache. The shared hooks run that copy's
-   runtime, so run the installer inside Cowork's VM, where it picks the VM's platform;
-   a runtime installed on the host Mac does not supply it.
+   and `"<plugin root>/scripts/bin/kpop" --version` runs it. Use the installed plugin
+   path, not a path copied from a different client's cache. The shared hooks run that
+   copy's runtime, so run the installer inside Cowork's VM, where it picks the VM's
+   platform; a runtime installed on the host Mac does not supply it.
 3. In a disposable project, save one sourced fact and a judgment, reopen the task,
    then change the fact and run `check` to confirm the judgment is flagged.
 4. Confirm the saved `GROUNDING.yaml` and its `.kpopper/` companions persist in the

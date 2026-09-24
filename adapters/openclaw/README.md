@@ -82,7 +82,7 @@ absolute path visible to that agent:
 ```text
 Use the installed kpopper skills for this project.
 Project directory: /absolute/path/to/project
-kpopper command: /absolute/path/to/kpopper/bin/kpop
+kpopper command: /absolute/path/to/kpopper/scripts/bin/kpop
 Read /absolute/path/to/kpopper/adapters/_shared/method-summary.md for the method.
 At the start of work, run the command with --workspace /absolute/path/to/project open.
 Use pull for the relevant subject before relying on recorded facts, and check
@@ -107,8 +107,8 @@ available there and use that environment's paths.
 From the machine where the commands will run:
 
 ```sh
-"$KPOPPER_REPO/bin/kpop" --workspace /absolute/path/to/project open
-"$KPOPPER_REPO/bin/kpop" --workspace /absolute/path/to/project check
+"$KPOPPER_REPO/scripts/bin/kpop" --workspace /absolute/path/to/project open
+"$KPOPPER_REPO/scripts/bin/kpop" --workspace /absolute/path/to/project check
 ```
 
 **Copy and paste the following text to your agent:**

@@ -83,8 +83,8 @@ Start a new trusted Copilot CLI session in the project. If no opening arrives, a
 to run the following explicitly:
 
 ```sh
-/absolute/path/to/kpopper/bin/kpop open
-/absolute/path/to/kpopper/bin/kpop check
+/absolute/path/to/kpopper/scripts/bin/kpop open
+/absolute/path/to/kpopper/scripts/bin/kpop check
 ```
 
 This route does not install async ingestion, watch, grounding, edit or follow-up
@@ -168,7 +168,7 @@ generated configuration into a cloud job.
 Copy or merge these workflow files into the repository's `.github/workflows/`:
 
 - [`cloud-agent/copilot-setup-steps.yml`](cloud-agent/copilot-setup-steps.yml) installs
-  the checkout's native runtime, so the agent can run `"$KPOPPER_ROOT/bin/kpop"`, and
+  the checkout's native runtime, so the agent can run `"$KPOPPER_ROOT/scripts/bin/kpop"`, and
   opens an existing root record in the setup logs.
 - [`cloud-agent/provenance-check.yml`](cloud-agent/provenance-check.yml) installs the
   same runtime and checks a root record on pull requests. It is a CI result; merge

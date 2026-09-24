@@ -57,7 +57,7 @@ class Selection(unittest.TestCase):
         changes = ["README.md", "assets/README.md", "assets/brand-guide.md", ".kpopper/view.yaml",
                    "CHANGELOG.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "skills/ground/SKILL.md",
                    "GROUNDING.yaml", ".kpopper/measure.yaml", "package.json", "hooks/hooks.json",
-                   "bin/kpop", ".claude-plugin/plugin.json", "native/README.md",
+                   "scripts/bin/kpop", ".claude-plugin/plugin.json", "native/README.md",
                    ".github/pull_request_template.md", ".github/ISSUE_TEMPLATE/bug_report.yml"]
         for path in changes:
             with self.subTest(path=path):
