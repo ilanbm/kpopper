@@ -10,6 +10,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import release
+import publish_source
 
 ROOT = release.ROOT
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
@@ -114,11 +115,11 @@ def select(event, event_name):
     return result
 
 
-def checked_run(run, jobs, pr, workflow_id):
+def checked_run(run, jobs, pr, workflow, run_id):
     """A pending publication gate may be red; all actual candidate checks must be green."""
     head = pr["head"]["sha"]
-    if (run["workflow_id"] != workflow_id or run["head_repository"]["full_name"] != repository() or
-            run["status"] != "completed" or run["event"] not in ("pull_request", "workflow_dispatch")):
+    publish_source.validate_run(run, workflow, repository(), run_id, head)
+    if run["event"] not in ("pull_request", "workflow_dispatch"):
         raise SystemExit("not a completed candidate check run in this repository")
     # Dispatch runs use the release branch so the API head and all artifact identities agree.
     if run["head_sha"] != head or run["head_branch"] != pr["head"]["ref"]:
@@ -151,7 +152,7 @@ def publication_plan(number, run_id):
     run = api(f"repos/{repository()}/actions/runs/{int(run_id)}")
     pages = json.loads(release.sh("gh", "api", "--paginate", "--slurp",
                                 f"repos/{repository()}/actions/runs/{int(run_id)}/jobs?filter=latest&per_page=100"))
-    gate = checked_run(run, [job for page in pages for job in page["jobs"]], pr, workflow["id"])
+    gate = checked_run(run, [job for page in pages for job in page["jobs"]], pr, workflow, run_id)
     return {"version": version_at(pr["head"]["sha"]), "source": pr["head"]["sha"],
             "base": pr["base"]["sha"], "run_id": str(run["id"]), "gate_job": str(gate)}
 

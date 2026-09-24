@@ -129,7 +129,9 @@ class RunBoundary(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
         self.pr = {"head": {"sha": "a" * 40, "ref": "release/1.1.0"}}
-        self.run = {"id": 123, "workflow_id": 7, "head_repository": {"full_name": "owner/repo"},
+        self.workflow = {"id": 7, "path": ".github/workflows/check.yml"}
+        self.run = {"id": 123, "workflow_id": 7, "path": ".github/workflows/check.yml",
+                    "repository": {"full_name": "owner/repo"}, "head_repository": {"full_name": "owner/repo"},
                     "status": "completed", "event": "pull_request", "head_sha": "a" * 40,
                     "head_branch": "release/1.1.0"}
         self.jobs = [{"id": i, "name": name, "conclusion": "success"} for i, name in enumerate(
@@ -137,22 +139,24 @@ class RunBoundary(unittest.TestCase):
         self.jobs[-1]["conclusion"] = "failure"
 
     def test_only_pending_publication_gate_may_be_red(self):
-        self.assertEqual(C.checked_run(self.run, self.jobs, self.pr, 7), 5)
+        self.assertEqual(C.checked_run(self.run, self.jobs, self.pr, self.workflow, 123), 5)
         self.jobs[1]["conclusion"] = "failure"
         with self.assertRaises(SystemExit):
-            C.checked_run(self.run, self.jobs, self.pr, 7)
+            C.checked_run(self.run, self.jobs, self.pr, self.workflow, 123)
 
     def test_stale_foreign_running_and_wrong_workflow_runs_are_refused(self):
         for field, value in (("head_sha", "b" * 40), ("workflow_id", 9), ("status", "in_progress"),
+                             ("id", 124), ("path", ".github/workflows/other.yml"),
+                             ("repository", {"full_name": "attacker/repo"}),
                              ("event", "push"), ("head_repository", {"full_name": "attacker/repo"})):
             with self.subTest(field=field), self.assertRaises(SystemExit):
-                C.checked_run({**self.run, field: value}, self.jobs, self.pr, 7)
+                C.checked_run({**self.run, field: value}, self.jobs, self.pr, self.workflow, 123)
 
     def test_missing_gate_or_failed_native_job_cannot_be_masked(self):
         with self.assertRaises(SystemExit):
-            C.checked_run(self.run, self.jobs[:-1], self.pr, 7)
+            C.checked_run(self.run, self.jobs[:-1], self.pr, self.workflow, 123)
         with self.assertRaises(SystemExit):
-            C.checked_run(self.run, self.jobs + [{"name": "native-cli / tests", "conclusion": "cancelled"}], self.pr, 7)
+            C.checked_run(self.run, self.jobs + [{"name": "native-cli / tests", "conclusion": "cancelled"}], self.pr, self.workflow, 123)
 
     def test_release_baseline_ignores_drafts_and_the_candidate_itself(self):
         pages = [[{"tag_name": tag, "draft": draft, "prerelease": False} for tag, draft in

@@ -1,5 +1,8 @@
 """Release coverage is run once, and only its successful artifacts may be published."""
 import importlib.util
+import io
+import os
+from contextlib import redirect_stdout
 import json
 import pathlib
 import re
@@ -14,6 +17,77 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("ci_selection", ROOT / ".github/scripts/ci_selection.py")
 CI = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(CI)
+
+spec = importlib.util.spec_from_file_location("publish_source", ROOT / ".github/scripts/publish_source.py")
+SOURCE = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(SOURCE)
+
+
+class PublicationSource(unittest.TestCase):
+    commit = "a" * 40
+    repository = "ilanbm/kpopper"
+
+    def setUp(self):
+        self.workflow = {"id": 123, "path": ".github/workflows/check.yml"}
+        self.run = {"id": 456, "event": "push", "status": "completed", "conclusion": "success",
+                    "head_branch": "main", "head_sha": self.commit, "workflow_id": 123,
+                    "path": ".github/workflows/check.yml",
+                    "repository": {"full_name": self.repository},
+                    "head_repository": {"full_name": self.repository}}
+
+    def validate(self):
+        return SOURCE.validate(self.run, self.workflow, self.repository, "456", self.commit)
+
+    def test_successful_main_push_resolves_exact_source(self):
+        self.assertEqual(self.validate(), {"commit": self.commit, "run_id": "456"})
+        with patch.dict(self.run, {"path": ".github/workflows/check.yml@refs/heads/main"}):
+            self.assertEqual(self.validate(), {"commit": self.commit, "run_id": "456"})
+
+    def test_untrusted_failed_incomplete_or_mismatched_runs_are_rejected(self):
+        for key, bad in (("id", 789), ("event", "pull_request"), ("event", "workflow_dispatch"),
+                         ("status", "in_progress"), ("conclusion", "failure"),
+                         ("conclusion", "cancelled"), ("conclusion", None),
+                         ("head_branch", "feature"), ("head_sha", "b" * 40),
+                         ("workflow_id", 789), ("path", ".github/workflows/other.yml"),
+                         ("repository", {"full_name": "other/kpopper"}),
+                         ("head_repository", {"full_name": "other/kpopper"}),
+                         ("head_repository", None)):
+            with self.subTest(key=key, bad=bad), patch.dict(self.run, {key: bad}):
+                with self.assertRaises(SystemExit):
+                    self.validate()
+        for key in self.run:
+            missing = {name: value for name, value in self.run.items() if name != key}
+            with self.subTest(missing=key), patch.object(self, "run", missing):
+                with self.assertRaises(SystemExit):
+                    self.validate()
+        for workflow in ({}, {"id": 123, "path": ".github/workflows/other.yml"}):
+            with patch.object(self, "workflow", workflow), self.assertRaises(SystemExit):
+                self.validate()
+
+    def test_cli_confirms_inputs_with_github_before_emitting_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "output"
+            env = {"GITHUB_REPOSITORY": self.repository, "GITHUB_OUTPUT": str(output)}
+            with patch.dict(os.environ, env), patch.object(SOURCE, "api", side_effect=[self.workflow, self.run]) as api, \
+                    redirect_stdout(io.StringIO()):
+                self.assertEqual(SOURCE.main(["--run-id", "456", "--commit", self.commit]), 0)
+            self.assertEqual([call.args[0] for call in api.call_args_list], [
+                "repos/ilanbm/kpopper/actions/workflows/check.yml", "repos/ilanbm/kpopper/actions/runs/456"])
+            self.assertEqual(output.read_text(), f"commit={self.commit}\nrun_id=456\n")
+            output.unlink()
+            with patch.dict(os.environ, env), patch.dict(self.run, {"conclusion": "failure"}), \
+                    patch.object(SOURCE, "api", side_effect=[self.workflow, self.run]), \
+                    self.assertRaises(SystemExit):
+                SOURCE.main(["--run-id", "456", "--commit", self.commit])
+            self.assertFalse(output.exists())
+
+    def test_malformed_dispatch_inputs_never_reach_github(self):
+        for run_id, commit in (("1/../../other", self.commit), ("0", self.commit),
+                               ("456", "main"), ("456", self.commit + "\nrun_id=789")):
+            with self.subTest(run_id=run_id, commit=commit), patch.object(SOURCE, "api") as api, \
+                    patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+                SOURCE.main(["--run-id", run_id, "--commit", commit])
+            api.assert_not_called()
 
 
 class ReleaseSelection(unittest.TestCase):
@@ -138,6 +212,7 @@ class PublishBoundary(unittest.TestCase):
         self.assertNotIn("build", jobs)
         self.assertEqual(jobs["plan"]["if"], "github.ref == 'refs/heads/main'")
         self.assertEqual(jobs["publish"]["needs"], "plan")
+        self.assertIn("github.event_name == 'workflow_dispatch'", jobs["crate-publish"]["if"])
         plan = next(step for step in jobs["plan"]["steps"] if step.get("id") == "plan")
         self.assertIn("release_candidate.py --plan", plan["run"])
 
@@ -178,6 +253,16 @@ class PublishBoundary(unittest.TestCase):
         self.assertEqual({row["target"] for row in rows}, {
             "linux-x86_64", "linux-aarch64", "darwin-arm64", "darwin-x86_64", "windows-x86_64"})
         self.assertNotIn("inputs.publish &&", workflow["jobs"]["tests"]["strategy"]["matrix"]["include"])
+
+    def test_intel_timeout_and_manual_routing_survive_candidate_distribution_override(self):
+        workflow = self.workflow("native-rust.yml")
+        self.assertIn("darwin-x86_64", workflow["on"]["workflow_dispatch"]["inputs"]["target"]["options"])
+        self.assertEqual(workflow["jobs"]["release"]["timeout-minutes"],
+                         "${{ matrix.target == 'darwin-x86_64' && 60 || 45 }}")
+        for job in ("tests", "release"):
+            expression = workflow["jobs"][job]["strategy"]["matrix"]["include"]
+            rows = json.loads(re.search(r"inputs.target == 'darwin-x86_64'\s*&& '([^']+)'", expression).group(1))
+            self.assertEqual([row["target"] for row in rows], ["darwin-x86_64"])
 
     def test_new_main_push_does_not_cancel_a_release_being_checked(self):
         workflow = self.workflow("check.yml")

@@ -80,7 +80,7 @@ RECORD_JOB = (
     "tests/test_native_launcher.py", "tests/test_hook_delivery.py", ".github/requirements-test.txt",
     ".github/scripts/release.py", ".github/scripts/publish_release.py",
     ".github/scripts/publish_crate.py", ".github/scripts/native_assets.py",
-    ".github/scripts/release_candidate.py", "tests/test_release_candidate.py",
+    ".github/scripts/release_candidate.py", ".github/scripts/publish_source.py", "tests/test_release_candidate.py",
 )
 
 # Exercise CI selection and auditing on Linux. Their routing logic is platform-independent;

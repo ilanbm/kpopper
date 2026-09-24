@@ -1306,6 +1306,10 @@ sources:
     read: "2026-09-24"
     at: "Originally read 2026-09-18 at ac61f7f; Historical file availability verified at
          python-final on 2026-09-24"
+  s.crates_workflow_run_failure:
+    name: "crates.io authentication failure for release 0.12.0"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/36055556588/job/107821819310"
+    read: "2026-09-24"
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -2419,6 +2423,14 @@ known:
     from: run.versions_core_cost_settled
     at: "one update 2.690s, 5,797 parsed of 137,645; render after settle 2.757s"
     of: "2026-09-16"
+  m.crates_workflow_run_rejected:
+    name: "crates.io rejects the workflow_run publishing identity"
+    v: "The 0.12.0 publish run reached crates.io authentication with a verified package, but
+        crates.io rejected workflow_run with HTTP 400 before cargo publish. The error names push,
+        release and workflow_dispatch as supported triggers."
+    from: s.crates_workflow_run_failure
+    at: "authentication step, 2026-09-24T20:33:46Z"
+    fidelity: paraphrase
   m.door.future_dated_readings_accepted:
     v: "1 of 1"
     name: "Readings dated after the day of writing that set accepted - a reading as of 2026-12-01
