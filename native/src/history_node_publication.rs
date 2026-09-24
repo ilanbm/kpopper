@@ -540,6 +540,9 @@ pub(crate) fn selected(entry: &Path) -> Result<bool> {
     Ok(true)
 }
 pub(crate) fn evidence_path(path: &str) -> Result<()> {
+    if crate::history_source_ancestry::path_id(path).is_some() {
+        return Ok(());
+    }
     let name = path
         .strip_prefix("evidence/reports/")
         .and_then(|p| p.strip_suffix(".txt"))
@@ -1018,12 +1021,17 @@ fn prepare_inner(
 fn verify_history(root: &Path, all: &BTreeMap<String, Manifest>) -> Result<()> {
     verify_history_with(root, all, &BTreeMap::new(), None).map(|_| ())
 }
+struct Verified {
+    versions: BTreeMap<String, BTreeMap<String, C::Version>>,
+    source_clocks: crate::history_source_ancestry::Graph,
+}
 fn verify_history_with(
     root: &Path,
     all: &BTreeMap<String, Manifest>,
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
     current_view: Option<&[u8]>,
-) -> Result<BTreeMap<String, BTreeMap<String, C::Version>>> {
+) -> Result<Verified> {
+    let mut source_clocks = crate::history_source_ancestry::Graph::default();
     let mut evidence = BTreeMap::new();
     for m in all.values() {
         for (path, hash) in &m.evidence {
@@ -1042,6 +1050,9 @@ fn verify_history_with(
         evidence_bytes = evidence_bytes.saturating_add(raw.len());
         require(evidence_bytes <= MAX_BYTES, "node_publication_limit")?;
         require(sha256(&raw) == *hash, "node_publication_evidence_changed")?;
+        if path.starts_with(crate::history_source_ancestry::PREFIX) {
+            source_clocks.insert(path, &raw)?;
+        }
     }
     let mut verified = BTreeMap::new();
     let mut expected = BTreeMap::<String, BTreeMap<String, String>>::new();
@@ -1152,7 +1163,10 @@ fn verify_history_with(
             }
         }
     }
-    Ok(verified)
+    Ok(Verified {
+        versions: verified,
+        source_clocks,
+    })
 }
 fn revalidate(root: &Path, journal: &Journal) -> Result<()> {
     for file in &journal.evidence {
@@ -1475,6 +1489,7 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
 /// One full byte-verified publication. Decoded states are reused by semantic capture.
 #[derive(Clone, Debug)]
 pub struct Snapshot {
+    pub source_clocks: crate::history_source_ancestry::Graph,
     pub authority: crate::value::TypedValue,
     pub revision: String,
     pub current: Option<Vec<u8>>,
@@ -1494,7 +1509,7 @@ pub struct Transaction {
 fn snapshot(
     root: &Path,
     current: Option<Vec<u8>>,
-    versions: BTreeMap<String, BTreeMap<String, C::Version>>,
+    verified: Verified,
     all: &BTreeMap<String, Manifest>,
 ) -> Result<Snapshot> {
     let raw = read(root, ".kpopper/history.yaml")?
@@ -1509,10 +1524,11 @@ fn snapshot(
             .collect::<BTreeMap<_, _>>(),
     ))?);
     Ok(Snapshot {
+        source_clocks: verified.source_clocks,
         authority,
         revision,
         current,
-        versions,
+        versions: verified.versions,
         operations: all
             .values()
             .flat_map(|m| {

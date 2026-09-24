@@ -186,8 +186,22 @@ Source bundles are bounded to 16 and their aggregate raw input, including target
 Different authority markers, incompatible templates, stale targets and corrupt imports refuse.
 Physical hypotheses currently make export and branch union refuse rather than omit their bytes.
 
-Public Git branch admission, independently authenticated source-clock ancestry, authority generation
-changes and physical named-hypothesis compatibility remain unfinished.
+Source-clock order can be admitted separately through `history_source_ancestry::Proof::capture`
+and `history_node_clocks::prepare`, followed by the ordinary node publisher. Capture requires exact
+full Git commit IDs and verifies each retained raw commit against its SHA-1 or SHA-256 identity.
+Only positive parent paths from those bytes establish ancestry; refs, replacements, recording time
+and publication parents supply none. Commit bytes are retained under their own identity and reused
+by export, branch union and recovery without contacting Git. This proves content ancestry, not the
+truth of a source claim or who authored it.
+
+A proof publication changes the accepted projection and receipt components without adding a claim.
+Prior receipts remain exact, and temporal reduction uses only proofs available in each operation's
+causal closure. Absent proof leaves commit clocks unordered. Capture permits at most 256 commits and
+4 MiB of visited bytes; the verified graph is bounded to 4,096 commits and each reduction to four
+million traversal steps. Exhaustion refuses instead of reporting unrelated source clocks.
+
+Public Git branch admission, authority generation changes and physical named-hypothesis
+compatibility remain unfinished.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
 It preserves the exact new-format bytes and audits the entire committed closure. It

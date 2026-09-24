@@ -16,7 +16,7 @@ use std::{path::Path, process::Command, time::Duration};
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
-fn git(root: &Path, args: &[&str], maximum: usize) -> Result<Vec<u8>> {
+pub(crate) fn git(root: &Path, args: &[&str], maximum: usize) -> Result<Vec<u8>> {
     let mut cmd = Command::new("git");
     cmd.args([
         "--no-pager",

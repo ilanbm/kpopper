@@ -112,6 +112,7 @@ pub struct Capture {
     pub(crate) snapshot: P::Snapshot,
     pub(crate) history: History,
     pub(crate) state: V,
+    pub(crate) clocks: crate::history_source_ancestry::Graph,
     pub(crate) temporal: Option<V>,
     document: V,
     baseline: V,
@@ -174,7 +175,13 @@ impl Capture {
             }
         }
         let history = History::from_objects(objects)?;
-        let state = history.reduce(None, None)?;
+        let clocks = snapshot.source_clocks.select(
+            snapshot
+                .transactions
+                .values()
+                .flat_map(|tx| tx.evidence.keys()),
+        );
+        let state = clocks.with_ancestry(|ancestry| history.reduce(None, Some(ancestry)))?;
         crate::history_node_writer::verify_receipts(&snapshot)?;
         let meta = map_mut(
             map_mut(&mut document)?
@@ -220,6 +227,7 @@ impl Capture {
             snapshot,
             history,
             state,
+            clocks,
             document,
             baseline,
             semantic_events,
@@ -278,7 +286,9 @@ impl Capture {
             objects.push((V::Map(compact), observation));
         }
         let history = History::from_objects(objects)?;
-        let state = history.reduce(Some(map(&map(&self.state)?["rules"])?), None)?;
+        let state = self.clocks.with_ancestry(|ancestry| {
+            history.reduce(Some(map(&map(&self.state)?["rules"])?), Some(ancestry))
+        })?;
         let document = crate::history_authoring::destination(&render(
             template,
             history.objects(),
@@ -287,6 +297,27 @@ impl Capture {
         )?)?;
         Ok(Self {
             history,
+            state,
+            document,
+            ..self.clone()
+        })
+    }
+    pub(crate) fn with_clocks(
+        &self,
+        clocks: crate::history_source_ancestry::Graph,
+    ) -> Result<Self> {
+        let state = clocks.with_ancestry(|ancestry| {
+            self.history
+                .reduce(Some(map(&map(&self.state)?["rules"])?), Some(ancestry))
+        })?;
+        let document = crate::history_authoring::destination(&render(
+            &self.document,
+            self.history.objects(),
+            &state,
+            true,
+        )?)?;
+        Ok(Self {
+            clocks,
             state,
             document,
             ..self.clone()
@@ -485,6 +516,7 @@ mod tests {
                 .unwrap()
                 .remove("history");
             let node = Capture::from_snapshot(P::Snapshot {
+                source_clocks: Default::default(),
                 authority: V::Null,
                 revision: String::new(),
                 current: Some(Y::encode_document(&doc).unwrap()),

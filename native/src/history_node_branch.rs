@@ -54,6 +54,7 @@ fn merge_snapshot(target: &mut P::Snapshot, source: &P::Snapshot) -> Result<()> 
         target.authority == source.authority,
         "node_branch_authority",
     )?;
+    target.source_clocks.merge(&source.source_clocks)?;
     for (op, tx) in &source.transactions {
         require(
             target

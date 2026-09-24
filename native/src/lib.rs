@@ -59,6 +59,8 @@ mod history_migration_source;
 pub mod history_native_declaration;
 pub mod history_node_branch;
 pub mod history_node_capture;
+pub mod history_source_ancestry;
+pub mod history_node_clocks;
 mod history_node_edits;
 mod history_node_frame;
 pub mod history_node_writer;

@@ -46,14 +46,20 @@ impl Source for NodeSource<'_> {
         }
         Ok(false)
     }
-    fn reduce(&self, objects: &Map) -> Result<V> {
-        // Source revision/commit clocks need separately authenticated source ancestry.
-        // Neither a JSONL encoding predecessor nor a publication parent supplies it.
-        self.capture.history.reduce_subset(
-            objects,
-            Some(map(&map(self.capture.state())?["rules"])?),
-            None,
-        )
+    fn reduce(&self, objects: &Map, operations: &BTreeSet<String>) -> Result<V> {
+        // A later proof cannot change a previous observation's source-clock world.
+        let graph = self.capture.snapshot.source_clocks.select(
+            operations
+                .iter()
+                .flat_map(|op| self.capture.snapshot.transactions[op].evidence.keys()),
+        );
+        graph.with_ancestry(|ancestry| {
+            self.capture.history.reduce_subset(
+                objects,
+                Some(map(&map(self.capture.state())?["rules"])?),
+                Some(ancestry),
+            )
+        })
     }
     fn template(&self, operations: &BTreeSet<String>) -> Result<V> {
         let parents = operations
@@ -104,4 +110,102 @@ pub(crate) fn capture(capture: &Capture) -> Result<Option<V>> {
         capture,
         introduced,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        history_node_codec as C, history_node_observation::ObservationNode,
+        history_node_publication as P,
+    };
+    use serde_json::json;
+    #[test]
+    fn source_clock_proofs_are_limited_to_each_temporal_operation_closure() {
+        let (graph, a, b, proof_path) = crate::history_source_ancestry::tests::graph();
+        let v = |j: serde_json::Value| V::from_json(&j).unwrap();
+        let mut versions = BTreeMap::new();
+        let mut operations = BTreeMap::new();
+        for (op, clock, n) in [("left", a, 1), ("right", b, 2)] {
+            let mut object = v(
+                json!({"schema_version":2,"id_scheme":"typed-history/v2","kind":"reading","subject":"p.clock",
+                "op":op,"on":"2026-09-24","by":"fixture","body":{"v":n,"from":"source.repository"},"at":{"commit":clock},"saw":[],"pins":{},
+                "authored":{"collection":"known","profile":"ordinary-reader/v1","fields":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"}}}),
+            );
+            let id = crate::identity::typed_object_identity(&object).unwrap();
+            crate::history_view::map_mut(&mut object)
+                .unwrap()
+                .insert("id".into(), V::Text(id.clone()));
+            let obs = ObservationNode::root(&id, &BTreeSet::new()).unwrap();
+            let event = C::Event::create(
+                "p.clock",
+                op,
+                vec![],
+                None,
+                Some(crate::history_node_capture::payload(&object, &obs).unwrap()),
+            )
+            .unwrap();
+            operations.insert(event.id().into(), op.into());
+            versions.insert(event.id().into(), event.reconstruct(None).unwrap());
+        }
+        let doc = v(
+            json!({"meta":{},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"known":{}}),
+        );
+        let mut snapshot = P::Snapshot {
+            authority: V::Null,
+            revision: String::new(),
+            current: Some(crate::history_yaml::encode_document(&doc).unwrap()),
+            versions: BTreeMap::from([("p.clock".into(), versions)]),
+            operations,
+            transactions: BTreeMap::new(),
+            source_clocks: Default::default(),
+        };
+        let mut capture = Capture::from_snapshot(snapshot.clone()).unwrap();
+        snapshot.source_clocks = graph;
+        snapshot.transactions.insert(
+            "late-proof".into(),
+            P::Transaction {
+                digest: String::new(),
+                parents: vec![],
+                context: None,
+                evidence: BTreeMap::from([(proof_path, "verified elsewhere".into())]),
+            },
+        );
+        for op in ["left", "right"] {
+            snapshot.transactions.insert(
+                op.into(),
+                P::Transaction {
+                    digest: String::new(),
+                    parents: vec![],
+                    context: None,
+                    evidence: BTreeMap::new(),
+                },
+            );
+        }
+        capture.snapshot = snapshot;
+        let source = NodeSource {
+            capture: &capture,
+            introduced: BTreeMap::new(),
+        };
+        let old = source
+            .reduce(
+                capture.history.objects(),
+                &BTreeSet::from(["left".into(), "right".into()]),
+            )
+            .unwrap();
+        let new = source
+            .reduce(
+                capture.history.objects(),
+                &BTreeSet::from(["left".into(), "right".into(), "late-proof".into()]),
+            )
+            .unwrap();
+        assert!(string_is(
+            &map(&map(&map(&old).unwrap()["subjects"]).unwrap()["p.clock"]).unwrap()["acceptance"],
+            "contested"
+        ));
+        assert!(string_is(
+            &map(&map(&map(&new).unwrap()["subjects"]).unwrap()["p.clock"]).unwrap()["acceptance"],
+            "accepted"
+        ));
+    }
 }

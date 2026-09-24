@@ -41,7 +41,7 @@ pub(crate) trait Source {
     fn objects(&self) -> &Map;
     fn receipt(&self, operation: &str) -> Result<V>;
     fn active(&self, operation: &str) -> Result<bool>;
-    fn reduce(&self, objects: &Map) -> Result<V>;
+    fn reduce(&self, objects: &Map, operations: &BTreeSet<String>) -> Result<V>;
     fn template(&self, operations: &BTreeSet<String>) -> Result<V>;
 }
 struct Legacy<'a> {
@@ -76,7 +76,7 @@ impl Source for Legacy<'_> {
             if v.iter().any(|v|string_is(v,A::TEMPORAL_APPLICABILITY))),
         )
     }
-    fn reduce(&self, objects: &Map) -> Result<V> {
+    fn reduce(&self, objects: &Map, _operations: &BTreeSet<String>) -> Result<V> {
         W::selected_state(self.captured, objects, &self.captured.object_bytes)
     }
     fn template(&self, operations: &BTreeSet<String>) -> Result<V> {
@@ -147,7 +147,9 @@ impl Causal<'_> {
                     .ok_or_else(|| error("incomplete_commit"))
             })
             .collect::<Result<Map>>()?;
-        let state = self.source.reduce(&objects)?;
+        let state = self
+            .source
+            .reduce(&objects, &self.operations(operation, after)?)?;
         Ok(map(&map(&state)?["subjects"])?
             .iter()
             .filter_map(|(subject, state)| {

@@ -100,7 +100,8 @@ pub(crate) fn context(value: &V) -> Result<&Map> {
     )?;
     require(
         string_is(&c["format"], FORMAT)
-            || string_is(&c["format"], crate::history_node_branch::FORMAT),
+            || string_is(&c["format"], crate::history_node_branch::FORMAT)
+            || string_is(&c["format"], crate::history_node_clocks::FORMAT),
         "node_transaction_format",
     )?;
     Ok(c)
@@ -176,9 +177,26 @@ pub fn receipt(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
 
 pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<()> {
     for (op, tx) in &snapshot.transactions {
+        if tx
+            .evidence
+            .keys()
+            .any(|path| path.starts_with(crate::history_source_ancestry::PREFIX))
+        {
+            let context = tx
+                .context
+                .as_ref()
+                .ok_or_else(|| error("source_ancestry_admission"))?;
+            require(
+                crate::history_node_clocks::is_clocks(context)?
+                    || crate::history_node_branch::is_union(context)?,
+                "source_ancestry_admission",
+            )?;
+        }
         if tx.context.is_some() {
             let restored = receipt(snapshot, op)?;
-            let expected = if crate::history_node_branch::is_union(tx.context.as_ref().unwrap())? {
+            let expected = if crate::history_node_branch::is_union(tx.context.as_ref().unwrap())?
+                || crate::history_node_clocks::is_clocks(tx.context.as_ref().unwrap())?
+            {
                 crate::history_node_branch::evidence(tx.context.as_ref().unwrap())?
             } else {
                 intent(&restored)?
@@ -426,10 +444,10 @@ impl<'a> Build<'a> {
         nodes.apply(&changes)
     }
 }
-struct Materialized {
-    after: Vec<u8>,
-    frames: BTreeMap<String, Vec<u8>>,
-    context: V,
+pub(crate) struct Materialized {
+    pub(crate) after: Vec<u8>,
+    pub(crate) frames: BTreeMap<String, Vec<u8>>,
+    pub(crate) context: V,
 }
 /// Recover the operation request without changing the original receipt's hash domain.
 pub(crate) fn action(receipt: &V) -> Result<V> {
@@ -665,6 +683,23 @@ fn materialize(
         }
     }
     build.evidence(&mut nodes, receipt.after(), "after")?;
+    finish(
+        build,
+        receipt,
+        document,
+        &options.operation,
+        FORMAT,
+        encoded_options,
+    )
+}
+fn finish(
+    build: Build<'_>,
+    receipt: Receipt,
+    document: V,
+    operation: &str,
+    format: &str,
+    encoded_options: V,
+) -> Result<Materialized> {
     let mut doc = document;
     let meta = map_mut(
         map_mut(&mut doc)?
@@ -679,9 +714,9 @@ fn materialize(
             ("tails".into(), V::Map(build.tails)),
         ])),
     );
-    let after = P::bind_view(&Y::encode_document(&doc)?, &options.operation)?;
+    let after = P::bind_view(&Y::encode_document(&doc)?, operation)?;
     let context = V::Map(Map::from([
-        ("format".into(), s(FORMAT)),
+        ("format".into(), s(format)),
         ("options".into(), encoded_options),
         ("header".into(), receipt.header().clone()),
         ("before".into(), receipt.before().context().clone()),
@@ -692,6 +727,50 @@ fn materialize(
         frames: build.frames,
         context,
     })
+}
+
+/// Evidence-only transition, with exact before/after components and no new claim.
+pub(crate) fn clock_transition(
+    capture: &Capture,
+    candidate: &Capture,
+    operation: &str,
+    evidence: &BTreeMap<String, Vec<u8>>,
+) -> Result<Materialized> {
+    let before_doc = A::destination(capture.document())?;
+    let after_doc = A::destination(candidate.document())?;
+    let capabilities = crate::reasoning_fields::capabilities(&before_doc, None)?;
+    let profile = text(field(map(&capabilities)?, "profile")?)?;
+    let receipt = Receipt::pack(&crate::history_transaction::semantic_receipt(
+        profile,
+        &capabilities,
+        &A::obj([("document", before_doc)]),
+        &A::obj([("document", after_doc.clone())]),
+    )?)?;
+    let mut build = Build::new(capture, operation)?;
+    let mut nodes = components(
+        &capture.snapshot,
+        &capture.snapshot.transactions.keys().cloned().collect(),
+        None,
+    )?;
+    build.evidence(&mut nodes, receipt.before(), "before")?;
+    build.evidence(&mut nodes, receipt.after(), "after")?;
+    let options = A::obj([(
+        "evidence",
+        V::Map(
+            evidence
+                .iter()
+                .map(|(p, raw)| (p.clone(), s(&crate::identity::sha256(raw))))
+                .collect(),
+        ),
+    )]);
+    finish(
+        build,
+        receipt,
+        after_doc,
+        operation,
+        crate::history_node_clocks::FORMAT,
+        options,
+    )
 }
 
 pub fn prepare(
@@ -807,6 +886,13 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
     if prepared
         .context()?
         .as_ref()
+        .is_some_and(|c| crate::history_node_clocks::is_clocks(c).unwrap_or(false))
+    {
+        return crate::history_node_clocks::verify(root, prepared);
+    }
+    if prepared
+        .context()?
+        .as_ref()
         .is_some_and(|c| crate::history_node_branch::is_union(c).unwrap_or(false))
     {
         return crate::history_node_branch::verify(root, prepared);
@@ -865,9 +951,10 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         .transactions
         .iter()
         .filter(|(_, tx)| {
-            tx.context
-                .as_ref()
-                .is_some_and(|c| !crate::history_node_branch::is_union(c).unwrap_or(false))
+            tx.context.as_ref().is_some_and(|c| {
+                !crate::history_node_branch::is_union(c).unwrap_or(false)
+                    && !crate::history_node_clocks::is_clocks(c).unwrap_or(false)
+            })
         })
         .map(|(op, _)| receipt(&capture.snapshot, op))
         .collect::<Result<Vec<_>>>()?;
