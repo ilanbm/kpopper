@@ -30,17 +30,31 @@ static FLOW: &str = r#"("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^,}\n]+)"#;
 
 /// Use the public record check for both migration admission and its report.
 /// Optional page coverage belongs to the Hub, not the record's declared count.
-fn record_check(source: &V, hypotheses: &Map, runtime: Option<&Runtime>) -> Result<String> {
+fn record_check(
+    source: &V,
+    hypotheses: &Map,
+    runtime: Option<&Runtime>,
+    entry: &Path,
+    workspace: &Path,
+    inventory: &mut Inventory,
+) -> Result<String> {
     use crate::ordinary_value::{Map as OrdinaryMap, Value};
     let hypotheses = hypotheses
         .iter()
         .map(|(name, value)| (name.clone(), Value::from_typed(value)))
         .collect();
+    let source = Value::from_typed(source);
+    let notes = crate::source_references::notes(
+        &source,
+        workspace,
+        entry.parent().unwrap_or(workspace),
+        inventory,
+    )?;
     crate::ordinary_views::Projection::new(
-        &Value::from_typed(source),
+        &source,
         &hypotheses,
         &OrdinaryMap::new(),
-        vec![],
+        notes,
         runtime,
     )?
     .check(None)
@@ -478,7 +492,14 @@ pub(super) fn run(
             has_brief.then(|| side.brief.projected()).as_ref(),
             &sources,
         );
-        let before_check = record_check(&source, hypotheses, runtime)?;
+        let before_check = record_check(
+            &source,
+            hypotheses,
+            runtime,
+            entry,
+            &route.project().root,
+            &mut inventory,
+        )?;
         let mut aliases = BTreeMap::new();
         let mut notes = vec![];
         let base_survivor = source_body(&document.source, survivor)
@@ -657,12 +678,19 @@ pub(super) fn run(
             }
         }
         let (after_source, after_hypotheses) = rebuild(&document.members, hypotheses, &texts)?;
-        let after_check = record_check(&after_source.projected(), &after_hypotheses, runtime)
-            .map_err(|e| {
-                error(&format!(
-                    "refused - the migration broke the record and was undone: {e}"
-                ))
-            })?;
+        let after_check = record_check(
+            &after_source.projected(),
+            &after_hypotheses,
+            runtime,
+            entry,
+            &route.project().root,
+            &mut inventory,
+        )
+        .map_err(|e| {
+            error(&format!(
+                "refused - the migration broke the record and was undone: {e}"
+            ))
+        })?;
         let live_after = raw_of(&after_source.projected())?
             .keys()
             .cloned()
