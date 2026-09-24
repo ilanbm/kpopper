@@ -53,7 +53,8 @@ fn repo_relative_pin_path(
     if !dot_relative {
         return Ok(Some(path.to_string_lossy().into_owned()));
     }
-    let resolved_path = absolute(&record_root.join(path))?;
+    let base = crate::project_modes::resolved(record_root)?;
+    let resolved_path = absolute(&base.join(path))?;
     let target = crate::project_modes::resolved(&resolved_path)?;
     if !target.starts_with(project_root) {
         return Ok(None);
@@ -238,13 +239,14 @@ pub(crate) fn notes(
                             break;
                         }
                         PinnedFileStatus::Unresolved
-                            if !revision.contains(['/', '\\'])
+                            if field == "file"
+                                && !revision.contains(['/', '\\'])
                                 && repository_path.contains('/') =>
                         {
                             missing_pin = Some(candidate);
                         }
                         PinnedFileStatus::Unresolved
-                            if revision.contains('/') && repository_path.contains('/') =>
+                            if field == "from" || !is_line_suffix(pinned_path) =>
                         {
                             ambiguous_pin = Some((revision, candidate));
                         }

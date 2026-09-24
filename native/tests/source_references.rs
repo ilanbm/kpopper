@@ -183,7 +183,8 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
     let missing_colon_path =
         text(f.check("sources:\n  s.missing_colon: {file: 'sources/missing:part.py'}\n"));
     assert!(
-        missing_colon_path.contains("NOTE s.missing_colon: file sources/missing:part.py is absent"),
+        missing_colon_path.contains("NOTE s.missing_colon: no local file matches")
+            && missing_colon_path.contains("Git does not know revision sources/missing"),
         "{missing_colon_path}"
     );
     assert!(
@@ -308,6 +309,42 @@ fn dot_relative_pins_resolve_from_the_primary_record_directory() {
     assert!(!out.contains("NOTE s.parent:"), "{out}");
 }
 
+#[cfg(unix)]
+#[test]
+fn dot_relative_pins_resolve_when_the_record_path_uses_a_symlink() {
+    let f = Fixture::new();
+    f.git(&["checkout", "-b", "symlinked-record-pins"]);
+    fs::create_dir(f.root.path().join("documentation")).unwrap();
+    fs::write(f.root.path().join("documentation/source.txt"), "source").unwrap();
+    f.git(&["add", "documentation/source.txt"]);
+    f.git(&[
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-qm",
+        "Add source behind symlinked record path",
+    ]);
+    f.git(&["tag", "symlinked-record-pins"]);
+    fs::remove_file(f.root.path().join("documentation/source.txt")).unwrap();
+    std::os::unix::fs::symlink(
+        f.root.path().join("documentation"),
+        f.root.path().join("docs"),
+    )
+    .unwrap();
+    fs::write(
+        f.root.path().join("documentation/GROUNDING.yaml"),
+        "sources:\n  s.dot: {file: 'symlinked-record-pins:./source.txt'}\n",
+    )
+    .unwrap();
+    let record = f.root.path().join("docs/GROUNDING.yaml");
+    let mut command = f.command(f.root.path());
+    command.arg(record);
+    let out = text(command.output().unwrap());
+    assert!(!out.contains("NOTE s.dot:"), "{out}");
+}
+
 #[test]
 fn tree_lookup_finds_a_pinned_file_without_its_blob_object() {
     let f = Fixture::new();
@@ -345,13 +382,23 @@ fn slash_revisions_are_pinned_when_the_git_ref_resolves() {
 #[test]
 fn a_pin_does_not_hide_an_unknown_revision_or_a_missing_blob() {
     let f = Fixture::new();
-    let out = text(f.check("sources:\n  s.ref: {file: 'no-such-ref:sources/original.txt'}\n  s.slash_ref: {file: 'feature/unknown:sources/original.txt'}\n  s.blob: {file: 'source-final:sources/missing.txt'}\n  s.tree: {file: 'source-final:sources'}\n  s.line: {file: 'source-final:sources/missing.txt:42'}\n"));
+    let out = text(f.check("sources:\n  s.ref: {file: 'no-such-ref:sources/original.txt'}\n  s.slash_ref: {file: 'feature/unknown:sources/original.txt'}\n  s.root_ref: {file: 'v9.9:README.md'}\n  s.blob: {file: 'source-final:sources/missing.txt'}\n  s.tree: {file: 'source-final:sources'}\n  s.line: {file: 'source-final:sources/missing.txt:42'}\nknown:\n  p.doi: {v: 1, from: 'doi:10.1145/3368089.3409747'}\n"));
     for id in ["s.ref", "s.blob", "s.tree", "s.line"] {
         assert!(out.contains(&format!("NOTE {id}: pinned file")), "{out}");
     }
     assert!(
         out.contains("NOTE s.slash_ref: no local file matches")
             && out.contains("Git does not know revision feature/unknown"),
+        "{out}"
+    );
+    assert!(
+        out.contains("NOTE s.root_ref: no local file matches")
+            && out.contains("Git does not know revision v9.9"),
+        "{out}"
+    );
+    assert!(
+        out.contains("NOTE p.doi: no local file matches")
+            && out.contains("Git does not know revision doi"),
         "{out}"
     );
     assert!(out.contains("git show"), "{out}");
