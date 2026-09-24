@@ -680,6 +680,16 @@ pub fn run(
         options.profile.as_deref(),
     )?
     .try_typed()?;
+    let file_notes = if command == "check" {
+        crate::source_references::notes(
+            capture.ordinary_document(),
+            &location.workspace,
+            paths[0].parent().unwrap_or(&location.workspace),
+            &mut inventory,
+        )?
+    } else {
+        vec![]
+    };
     if !string_is(&map(&capabilities)?["profile"], "core/v1") {
         capture.require_ordinary_reader()?;
         let context = capture.ordinary_context();
@@ -688,6 +698,7 @@ pub fn run(
             &crate::ordinary_value::map(&ordinary_context)?["conflicts"],
         )?;
         let mut knowledge = capture.reader_lines()?;
+        knowledge.extend(file_notes.iter().cloned());
         if mode == ReadMode::Live {
             let drafts = private_draft_count(&paths, &cwd, &mut inventory)?;
             if drafts > 0 {
@@ -825,7 +836,15 @@ pub fn run(
         }
         "pull" => C::pull(&context, &seeds)?,
         "affects" => C::affects(&context, &seeds)?,
-        "check" => C::record_check(&context, has_brief(&paths, &mut inventory)?)?,
+        "check" => {
+            let mut output = C::record_check(&context, has_brief(&paths, &mut inventory)?)?;
+            let prefix = file_notes
+                .iter()
+                .map(|note| format!("NOTE {note}\n"))
+                .collect::<String>();
+            output.text.insert_str(0, &prefix);
+            output
+        }
         _ => return Err(error("unknown read command")),
     };
     capture.verify()?;
