@@ -192,3 +192,102 @@ fn leading_hyphens_parser_errors_and_migration_diagnostics_match_python() {
         );
     }
 }
+
+#[test]
+fn mixed_scalar_keys_refuse_migration_once_without_changing_source() {
+    let resources = tempfile::tempdir().unwrap();
+    let target = kpop_native::reasoning_runtime::target_name().unwrap();
+    let program = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var_os("HOME").unwrap())
+                .join(".cache/kpopper/lean")
+                .join(&target)
+                .join(env!("KPOP_ORDINARY_SOURCE_SHA256"))
+        });
+    let ordinary = resources.path().join("ordinary").join(&target);
+    fs::create_dir_all(&ordinary).unwrap();
+    for name in [
+        "build.json",
+        if cfg!(windows) {
+            "epistemic-core.exe"
+        } else {
+            "epistemic-core"
+        },
+    ] {
+        fs::copy(program.join(name), ordinary.join(name)).unwrap();
+    }
+    let reasoning = resources.path().join("reasoning");
+    fs::create_dir(&reasoning).unwrap();
+    let archive = format!("{target}.kpopper-runtime");
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(&archive),
+        reasoning.join(archive),
+    )
+    .unwrap();
+    for fields in [
+        "v: 3, 2: 5",
+        "2: 5, v: 3",
+        "v: 3, true: 5",
+        "v: 3, 2.5: 5",
+        "v: 3, null: 5",
+        "v: 3, 2026-01-02: 5",
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let record = format!(
+            "known:\n  p.z: {{v: 2}}\n  p.a: {{{fields}}}\njudgments:\n  d.x: {{rests_on: [p.z], wrong_if: p.z > 40, seen: {{p.z: 2}}, verdict: Fine}}\n  d.y: {{rests_on: [p.z], wrong_if: p.z < 0, seen: {{p.z: 2}}, verdict: Fine}}\n"
+        );
+        let path = root.path().join("GROUNDING.yaml");
+        fs::write(&path, &record).unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .args([
+                "expressions",
+                "migrate",
+                "--record",
+                "GROUNDING.yaml",
+                "--apply",
+            ])
+            .current_dir(root.path())
+            .env("KPOPPER_NATIVE_RESOURCES", resources.path())
+            .env("KPOPPER_NATIVE_CACHE", root.path().join("native-cache"))
+            .env("KPOPPER_SESSION_DISABLE", "1")
+            .env("XDG_STATE_HOME", root.path().join("state"))
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(result["applied"], false);
+        let errors = result["problems"].as_array().unwrap();
+        assert_eq!(errors.len(), 4, "{fields}: {result}");
+        for error in &errors[..2] {
+            assert!(
+                error
+                    .as_str()
+                    .unwrap()
+                    .contains("not supported between instances")
+            );
+        }
+        for error in &errors[2..] {
+            assert!(
+                error
+                    .as_str()
+                    .unwrap()
+                    .contains("migration changes condition result")
+            );
+        }
+        assert!(
+            !output
+                .stdout
+                .windows(b"ordinary_json_key_order".len())
+                .any(|x| x == b"ordinary_json_key_order")
+        );
+        assert_eq!(fs::read_to_string(path).unwrap(), record);
+    }
+}
