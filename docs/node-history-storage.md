@@ -12,6 +12,12 @@ To make a separate node-history copy, run:
 kpop history migrate --node-history --to /path/to/new-copy
 ```
 
+The copy includes a scoped `.gitattributes` policy (`-text`) for the record, history,
+and retained evidence, preserving exact bytes through Git even with `core.autocrlf`.
+Portable exports reconstruct the same policy; existing repository settings are not changed.
+When setting up a marked record manually, install these byte-preserving rules before the
+first Git commit. Newline conversion of a hash-bound file is an integrity change.
+
 The destination must be absent. The command builds and verifies a sibling temporary
 copy, rechecks the source, then publishes with a no-overwrite rename. It does not switch
 the original record to the new format. A copy of an active legacy history retains the

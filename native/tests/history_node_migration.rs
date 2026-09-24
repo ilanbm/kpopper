@@ -12,7 +12,12 @@ use kpop_native::{
     value::TypedValue as V,
 };
 use serde_json::Value;
-use std::{collections::BTreeMap, fs, path::Path, process::Command};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Component, Path},
+    process::Command,
+};
 
 fn fixture() -> Value {
     serde_json::from_str(include_str!("fixtures/history-authoring.json")).unwrap()
@@ -33,10 +38,16 @@ fn files(root: &Path) -> BTreeMap<String, Vec<u8>> {
             if path.is_dir() {
                 visit(root, &path, out);
             } else {
-                out.insert(
-                    path.strip_prefix(root).unwrap().to_str().unwrap().into(),
-                    fs::read(path).unwrap(),
-                );
+                let relative = path.strip_prefix(root).unwrap();
+                let portable = relative
+                    .components()
+                    .map(|part| match part {
+                        Component::Normal(name) => name.to_str().expect("fixture path is UTF-8"),
+                        _ => panic!("unexpected inventory path: {}", relative.display()),
+                    })
+                    .collect::<Vec<_>>()
+                    .join("/");
+                out.insert(portable, fs::read(path).unwrap());
             }
         }
     }

@@ -14,6 +14,7 @@ fn map(v: &V) -> &BTreeMap<String, V> {
 }
 fn setup() -> tempfile::TempDir {
     let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join(".gitattributes"), P::GIT_ATTRIBUTES).unwrap();
     fs::create_dir(root.path().join(".kpopper")).unwrap();
     fs::write(root.path().join(".kpopper/history.yaml"), "version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
     fs::write(
@@ -57,6 +58,8 @@ fn git(root: &std::path::Path, args: &[&str]) -> String {
             "user.email=fixture@example.test",
             "-c",
             "commit.gpgSign=false",
+            "-c",
+            "core.autocrlf=true",
         ])
         .args(args)
         .output()
@@ -70,6 +73,101 @@ fn commit(root: &std::path::Path) -> String {
     git(root, &["commit", "-m", "Fixture"]);
     git(root, &["rev-parse", "HEAD"])
 }
+#[test]
+fn portable_node_bytes_survive_git_checkout_with_autocrlf() {
+    let root = setup();
+    write(root.path(), "seed", &add());
+    write(root.path(), "change", &set(2));
+    let evidence_path = "evidence/reports/line-endings.txt";
+    let evidence = b"first line\r\nsecond line\n";
+    let view = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+    let prepared = P::prepare_with_evidence(
+        root.path(),
+        "report",
+        P::bind_view(&view, "report").unwrap(),
+        BTreeMap::new(),
+        None,
+        BTreeMap::from([(evidence_path.into(), evidence.to_vec())]),
+    )
+    .unwrap();
+    P::publish(root.path(), &prepared, |_| Ok(()), |_| Ok(())).unwrap();
+
+    let portable = P::export(root.path()).unwrap();
+    let copy = portable.reconstruct().unwrap();
+    assert_eq!(
+        fs::read(copy.path().join(".gitattributes")).unwrap(),
+        P::GIT_ATTRIBUTES.as_bytes()
+    );
+    let mut protected = vec!["GROUNDING.yaml".to_owned(), evidence_path.to_owned()];
+    for dir in [".kpopper/history", ".kpopper/history-commits"] {
+        let entries: Vec<_> = fs::read_dir(copy.path().join(dir))
+            .unwrap()
+            .map(|entry| format!("{dir}/{}", entry.unwrap().file_name().to_string_lossy()))
+            .collect();
+        assert!(!entries.is_empty(), "{dir}");
+        protected.extend(entries);
+    }
+    let expected: BTreeMap<_, _> = protected
+        .iter()
+        .map(|path| (path.clone(), fs::read(copy.path().join(path)).unwrap()))
+        .collect();
+    assert_eq!(expected[evidence_path].as_slice(), evidence);
+
+    git(copy.path(), &["init"]);
+    git(copy.path(), &["commit", "--allow-empty", "-m", "Base"]);
+    git(copy.path(), &["branch", "-M", "baseline"]);
+    git(copy.path(), &["switch", "-c", "node"]);
+    git(copy.path(), &["add", "-f", "."]);
+    git(copy.path(), &["commit", "-m", "Node history"]);
+    git(copy.path(), &["switch", "baseline"]);
+    git(copy.path(), &["switch", "node"]);
+
+    for (path, bytes) in expected {
+        assert_eq!(fs::read(copy.path().join(&path)).unwrap(), bytes, "{path}");
+    }
+    assert_eq!(
+        P::export(copy.path()).unwrap().encode().unwrap(),
+        portable.encode().unwrap()
+    );
+    assert!(git(copy.path(), &["status", "--porcelain"]).is_empty());
+}
+#[test]
+fn portable_git_policy_is_derived_and_cannot_import_arbitrary_filters() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let root = setup();
+    write(root.path(), "seed", &add());
+    let original = P::export(root.path()).unwrap();
+    let resign = |mut value: serde_json::Value| {
+        value["digest"] = json!("");
+        let unsigned: P::Bundle = serde_json::from_value(value.clone()).unwrap();
+        value["digest"] = json!(kpop_native::identity::sha256(
+            &serde_json::to_vec(&unsigned).unwrap()
+        ));
+        serde_json::from_value::<P::Bundle>(value).unwrap()
+    };
+    let mut malicious = serde_json::to_value(&original).unwrap();
+    malicious["files"][".gitattributes"] = json!(STANDARD.encode(b"* filter=untrusted\n"));
+    assert_eq!(
+        resign(malicious).reconstruct().unwrap_err().0,
+        "node_publication_bundle_attributes"
+    );
+
+    let mut older = serde_json::to_value(&original).unwrap();
+    older["files"]
+        .as_object_mut()
+        .unwrap()
+        .remove(".gitattributes");
+    let copy = resign(older).reconstruct().unwrap();
+    assert_eq!(
+        fs::read(copy.path().join(".gitattributes")).unwrap(),
+        P::GIT_ATTRIBUTES.as_bytes()
+    );
+    assert_eq!(
+        Capture::read(copy.path()).unwrap().revision(),
+        Capture::read(root.path()).unwrap().revision()
+    );
+}
+
 fn observations() -> (
     tempfile::TempDir,
     tempfile::TempDir,

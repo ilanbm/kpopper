@@ -16,6 +16,11 @@ const FORMAT: &str = "node-publication-experiment/v1";
 const JOURNAL: &str = ".kpopper/.history-node-publication.json";
 const VIEW: &str = "GROUNDING.yaml";
 const MAX_BYTES: usize = 64 * 1024 * 1024;
+/// Exact-byte Git transport policy for an isolated node-history copy. It does not
+/// disable textual diffs; it prevents newline conversion of hash-bound content.
+pub const GIT_ATTRIBUTES: &str = "# Node history and retained evidence bind exact bytes.\n/GROUNDING.yaml -text\n/.kpopper/** -text\n/evidence/** -text\n/.kpopper-history-migration/** -text\n";
+const ATTRIBUTES_PATH: &str = ".gitattributes";
+
 fn bad(code: &str) -> Error {
     Error(code.into())
 }
@@ -603,6 +608,15 @@ pub(crate) fn evidence_path(path: &str) -> Result<()> {
         return crate::history_branch::portable_path(path);
     }
     if path.starts_with(".kpopper-history-migration/") {
+        require(
+            !path.split('/').any(|part| {
+                let name = part.trim_end_matches(['.', ' ']);
+                part.contains(':')
+                    || name.eq_ignore_ascii_case(".git")
+                    || name.eq_ignore_ascii_case(".gitattributes")
+            }),
+            "node_publication_evidence_git_control",
+        )?;
         return crate::history_branch::portable_path(path);
     }
 
@@ -1819,6 +1833,7 @@ impl Bundle {
                 && name.strip_suffix(".json").is_some_and(|s| token(s).is_ok());
             require(
                 path == VIEW
+                    || path == ATTRIBUTES_PATH
                     || path == ".kpopper/history.yaml"
                     || stream_path
                     || manifest_path
@@ -1826,16 +1841,26 @@ impl Bundle {
                 "node_publication_bundle_path",
             )?;
             let bytes = unbytes(&Some(raw.clone()))?.unwrap();
+            require(
+                path != ATTRIBUTES_PATH || bytes == GIT_ATTRIBUTES.as_bytes(),
+                "node_publication_bundle_attributes",
+            )?;
             total += bytes.len();
             require(total <= MAX_BYTES, "node_publication_limit")?;
             F::publish_immutable(root.path(), path, &bytes)?;
         }
         capture(root.path())?;
         // Reject files that are structurally allowed but do not belong to the verified export.
-        require(
-            export(root.path())?.files == self.files,
-            "node_publication_bundle_extra",
-        )?;
+        let mut expected = export(root.path())?.files;
+        if !self.files.contains_key(ATTRIBUTES_PATH) {
+            // Older bundles had no transport policy; retain their exact envelope while
+            // protecting the newly reconstructed copy against checkout conversion.
+            expected.remove(ATTRIBUTES_PATH);
+        }
+        require(expected == self.files, "node_publication_bundle_extra")?;
+        if !self.files.contains_key(ATTRIBUTES_PATH) {
+            F::publish_immutable(root.path(), ATTRIBUTES_PATH, GIT_ATTRIBUTES.as_bytes())?;
+        }
         Ok(root)
     }
 }
@@ -1860,8 +1885,13 @@ pub fn export(root: &Path) -> Result<Bundle> {
             }
         }
     }
-    let mut files = BTreeMap::new();
-    let mut total = 0;
+    // Repository settings are outside the record envelope. Export a fixed, scoped
+    // byte-preserving policy rather than importing arbitrary Git filters/configuration.
+    let mut files = BTreeMap::from([(
+        ATTRIBUTES_PATH.into(),
+        STANDARD.encode(GIT_ATTRIBUTES.as_bytes()),
+    )]);
+    let mut total = GIT_ATTRIBUTES.len();
     for path in paths {
         let raw = read(root, &path)?.ok_or_else(|| bad("node_publication_bundle_missing"))?;
         total += raw.len();
@@ -1876,4 +1906,26 @@ pub fn export(root: &Path) -> Result<Bundle> {
     bundle.digest = bundle.identity()?;
     bundle.encode()?;
     Ok(bundle)
+}
+
+#[cfg(test)]
+mod transport_policy_tests {
+    use super::*;
+    #[test]
+    fn retained_migration_evidence_cannot_override_git_transport() {
+        for path in [
+            ".kpopper-history-migration/.gitattributes",
+            ".kpopper-history-migration/sub/.GITATTRIBUTES. ",
+            ".kpopper-history-migration/.git/config",
+            ".kpopper-history-migration/.GIT/config",
+            ".kpopper-history-migration/backup.txt:stream",
+        ] {
+            assert_eq!(
+                evidence_path(path).unwrap_err().0,
+                "node_publication_evidence_git_control",
+                "{path}"
+            );
+        }
+        evidence_path(".kpopper-history-migration/backup/record.yaml").unwrap();
+    }
 }

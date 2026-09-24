@@ -1192,6 +1192,14 @@ fn check_constructed(root: &Path, capture: &Capture, prepared: &P::Prepared) -> 
     decode_options(prepared.operation(), &c["options"])?;
     require(archive(root)? == c["archive"], "concurrent_archive_edit")?;
     require(
+        !prepared
+            .evidence()?
+            .keys()
+            .any(|p| p.starts_with(crate::history_source_ancestry::PREFIX)),
+        "source_ancestry_admission",
+    )?;
+
+    require(
         !prepared.evidence()?.keys().any(|p| active_evidence_path(p)),
         "node_active_evidence_kind",
     )?;

@@ -506,6 +506,10 @@ impl Plan {
         )?;
         let mut files = BTreeMap::new();
         files.insert(ENTRY.into(), rendered);
+        files.insert(
+            ".gitattributes".into(),
+            P::GIT_ATTRIBUTES.as_bytes().to_vec(),
+        );
         files.insert(".kpopper/history.yaml".into(), authority_raw);
         files.insert(
             format!(".kpopper/history-commits/{operation}.json"),

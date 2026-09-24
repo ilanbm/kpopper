@@ -1,6 +1,7 @@
 //! Copy-only conversion of a checked legacy history into node-local storage.
 //! The original directory is never used as a publication target.
 use crate::{
+    Result,
     history_contract::*,
     history_node_archive::Archive,
     history_node_capture as N, history_node_codec as C,
@@ -15,9 +16,8 @@ use crate::{
     identity::sha256,
     require,
     value::TypedValue as V,
-    Result,
 };
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -456,6 +456,10 @@ impl Plan {
             manifest,
         );
         files.insert("GROUNDING.yaml".into(), after);
+        files.insert(
+            ".gitattributes".into(),
+            P::GIT_ATTRIBUTES.as_bytes().to_vec(),
+        );
         let summary = V::Map(Map::from([
             (
                 "operations".into(),

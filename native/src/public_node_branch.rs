@@ -406,6 +406,8 @@ mod tests {
                 "user.email=fixture@example.test",
                 "-c",
                 "commit.gpgSign=false",
+                "-c",
+                "core.autocrlf=true",
             ])
             .args(args)
             .output()
@@ -432,6 +434,7 @@ mod tests {
     }
     fn fixture() -> (tempfile::TempDir, Options) {
         let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join(".gitattributes"), P::GIT_ATTRIBUTES).unwrap();
         std::fs::create_dir(root.path().join(".kpopper")).unwrap();
         std::fs::write(root.path().join(".kpopper/history.yaml"),"version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
         std::fs::write(root.path().join("GROUNDING.yaml"),"meta: {purpose: Fixture}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {}\n").unwrap();
