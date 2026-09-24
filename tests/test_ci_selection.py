@@ -314,13 +314,17 @@ class WorkflowCoverage(unittest.TestCase):
     def test_main_checks_are_not_cancelled_by_a_later_main_commit(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())
         self.assertIn("github.sha", workflow["concurrency"]["group"])
+        self.assertIn("github.run_id", workflow["concurrency"]["group"])
         self.assertEqual(workflow["concurrency"]["cancel-in-progress"],
                          "${{ github.event_name == 'pull_request' }}")
         native = yaml.safe_load((ROOT / ".github/workflows/native-rust.yml").read_text())
+        self.assertIn("github.workflow", native["concurrency"]["group"])
+        self.assertIn("inputs.target", native["concurrency"]["group"])
+        self.assertIn("github.run_id", native["concurrency"]["group"])
         self.assertIn("github.sha", native["concurrency"]["group"])
         self.assertIn("inputs.validation", native["concurrency"]["group"])
         self.assertEqual(native["concurrency"]["cancel-in-progress"],
-                         "${{ github.event_name != 'push' }}")
+                         "${{ github.event_name == 'pull_request' }}")
         check_call = self.jobs()["native-cli"]["with"]
         publish = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text())
         publish_call = publish["jobs"]["build"]["with"]

@@ -39,8 +39,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-rust-${{ github.ref }}-${{ inputs.validation || 'full' }}-${{ (inputs.validation == 'distribution' || github.event_name == 'push') && github.sha || 'checks' }}
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  group: native-rust-${{ github.workflow }}-${{ github.ref }}-${{ inputs.validation || 'full' }}-${{ inputs.target || 'all' }}-${{ github.event_name == 'push' && github.sha || github.event_name == 'workflow_dispatch' && github.run_id || inputs.validation == 'distribution' && github.sha || 'checks' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   tests:
