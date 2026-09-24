@@ -94,6 +94,11 @@ def _eval_github_expression(expression, context):
 
 
 def _render_group(template, context):
+    template = re.sub(
+        r"\$\{\{(.*?)\}\}",
+        lambda match: "${{" + re.sub(r"\[\s*'([^']*)'\s*\]", r".\1", match.group(1)) + "}}",
+        template,
+    )
     for expression in re.findall(r"\$\{\{(.*?)\}\}", template):
         normalized = re.sub(r"\[\s*'([^']*)'\s*\]", r".\1", expression)
         unquoted = re.sub(r"'[^']*'", "", normalized)
@@ -464,6 +469,10 @@ class WorkflowCoverage(unittest.TestCase):
             with self.subTest(misspelled=misspelled):
                 with self.assertRaisesRegex(AssertionError, "unknown or unsupported"):
                     _render_group("test-${{ 'valid' || " + misspelled + " }}", test_context)
+        self.assertEqual(
+            _render_group("scope-${{ inputs['target'] }}", test_context),
+            "scope-all",
+        )
 
     def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
