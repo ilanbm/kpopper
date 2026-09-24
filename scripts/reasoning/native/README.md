@@ -98,17 +98,22 @@ uses Server 2022 as its tested baseline; older Windows support is not inferred.
 An archive is not verified merely because its manifest names a platform.
 The candidate CI must pass on that platform before integration/publication.
 
-The separate `reasoning-runtime` workflow builds candidates, audits proof and
-linkage behavior, and checks execution with cold caches and no compiler on
-the effective runtime PATH. The workflow uploads candidates and does
-not publish releases. The release completeness gate must require all five
-verified archives and matching runtime source identity before publishing.
+The `reasoning-runtime` workflow builds candidates, audits proof and linkage
+behavior, and runs the native scalar, composition and query corpus against each
+fresh archive. Its GMP replacement probe loads a separately built library into
+the candidate cache, confirms the probe marker, and checks a large-integer
+arithmetic result. Full validation also checks the uploaded archive's SHA-256
+sidecar after download; candidate-only mode skips that artifact round trip. No
+job validates execution with a cold runtime cache or with the compiler removed
+from PATH. The workflow uploads candidates and does not publish releases. The
+release completeness gate must require all five verified archives and matching
+runtime source identity before publishing.
 
 Adding KP3 sources and manifest support does not itself establish cross-platform
-or installed validation. Until all five archives are rebuilt from the current
-source identity and the candidate/install jobs pass on their named targets, they
-remain candidates and publication is not ready. Do not infer platform support
-from a manifest, a local native run, or previously verified KP2 archives.
+validation. Until all five archives are rebuilt from the current source identity
+and the candidate tests pass on their named targets, they remain candidates and
+publication is not ready. Do not infer platform support from a manifest, a local
+native run, or previously verified KP2 archives.
 
 Runner label reference: <https://docs.github.com/en/actions/reference/runners/github-hosted-runners>.
 Pinned toolchain assets: <https://github.com/leanprover/lean4/releases/tag/v4.33.1>.
@@ -116,6 +121,6 @@ GMP source: <https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz>.
 
 CI validates committed bundle integrity before provisioning the platform matrix.
 Each target waits only for its matching build; verified GMP dependencies can be
-reused without skipping runtime or installed replacement checks. See
+reused without skipping the native runtime or replacement probe. See
 [CI selection and execution](../../../docs/ci.md) for the cache contract, test
 suites and the explicit `candidate-only` workflow dispatch used to refresh bundles.

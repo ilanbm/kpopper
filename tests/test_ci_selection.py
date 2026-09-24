@@ -316,6 +316,10 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertIn("github.sha", workflow["concurrency"]["group"])
         self.assertEqual(workflow["concurrency"]["cancel-in-progress"],
                          "${{ github.event_name == 'pull_request' }}")
+        native = yaml.safe_load((ROOT / ".github/workflows/native-rust.yml").read_text())
+        self.assertIn("github.sha", native["concurrency"]["group"])
+        self.assertEqual(native["concurrency"]["cancel-in-progress"],
+                         "${{ github.event_name != 'push' }}")
 
     def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/reasoning-runtime.yml").read_text())
