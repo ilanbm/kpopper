@@ -240,6 +240,14 @@ pub fn assess(
             ..Default::default()
         },
     )?;
+    assess_snapshots(before, after, runtime)
+}
+
+pub(crate) fn assess_snapshots(
+    before: Snapshot,
+    after: Snapshot,
+    runtime: Option<&Runtime>,
+) -> Result<Assessment> {
     let before = CapturedAssessment::from_snapshot(
         before,
         None,

@@ -472,9 +472,10 @@ pub(crate) fn read(path: &Path) -> Result<Option<Vec<u8>>> {
         .take((MAX_TRANSACTION_BYTES + 1) as u64)
         .read_to_end(&mut bytes)?;
     require(bytes.len() <= MAX_TRANSACTION_BYTES, "history_limit")?;
+    crate::history_io_metrics::read(bytes.len());
     Ok(Some(bytes))
 }
-fn sync(path: &Path) -> Result<()> {
+pub(crate) fn sync(path: &Path) -> Result<()> {
     #[cfg(windows)]
     {
         // Rust's ordinary File::open omits FILE_FLAG_BACKUP_SEMANTICS and
@@ -514,6 +515,7 @@ pub(crate) fn replace(path: &Path, bytes: Option<&[u8]>) -> Result<()> {
             .set_permissions(fs::Permissions::from_mode(m.permissions().mode() & 0o7777))?;
     }
     temporary.write_all(bytes)?;
+    crate::history_io_metrics::write(bytes.len());
     temporary.as_file().sync_all()?;
     temporary
         .persist(path)
@@ -528,6 +530,7 @@ pub fn publish_immutable(root: &Path, relative: &str, bytes: &[u8]) -> Result<()
         .prefix(".history-")
         .tempfile_in(parent)?;
     temporary.write_all(bytes)?;
+    crate::history_io_metrics::write(bytes.len());
     temporary.as_file().sync_all()?;
     match fs::hard_link(temporary.path(), &path) {
         Ok(()) => {}

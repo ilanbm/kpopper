@@ -237,6 +237,59 @@ fn run_routed(
     let entry = &route.paths()[0];
     let _lock =
         F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
+    if crate::history_node_publication::selected(entry)? {
+        let mut action = obj([
+            (
+                "kind",
+                s(if matches!(request.action, I::Action::Same { .. }) {
+                    "same"
+                } else {
+                    "distinct"
+                }),
+            ),
+            ("a", s(&request.a)),
+            ("b", s(&request.b)),
+        ]);
+        match &request.action {
+            I::Action::Same { keep } => {
+                crate::history_view::map_mut(&mut action)?
+                    .insert("keep".into(), keep.as_deref().map(s).unwrap_or(V::Null));
+            }
+            I::Action::Distinct { because } => {
+                require(
+                    !because.contains('\n'),
+                    "the why is one line: a second line would be a line of the record",
+                )?;
+                crate::history_view::map_mut(&mut action)?.insert("because".into(), s(because));
+            }
+        }
+        if let Some(day) = &request.as_of {
+            crate::history_view::map_mut(&mut action)?.insert("as_of".into(), s(day));
+        }
+        let (result, _) = crate::public_node_history::write_with_runtime(
+            &route,
+            &original,
+            &action,
+            probe,
+            runtime_override,
+        )?;
+        if map(&result)?
+            .get("state")
+            .is_some_and(|v| string_is(v, "committed"))
+        {
+            return Ok(format!(
+                "history committed: {} ({} {}, {})\n",
+                text(field(map(&result)?, "operation")?)?,
+                text(&map(&action)?["kind"])?,
+                request.a,
+                request.b
+            ));
+        }
+        return Ok(format!(
+            "{}\n",
+            crate::public_core_readers::json_value(&result)?
+        ));
+    }
     if crate::legacy_authoring::local_route(entry, &route)?
         == crate::legacy_authoring::AuthorityRoute::Legacy
     {

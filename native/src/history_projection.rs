@@ -163,10 +163,22 @@ pub fn validate_projection(value: &V) -> Result<()> {
         &["dispositions", "origin", "requires", "temporal"],
     )?;
     require(
-        is_int(&m["projection_version"], "1"),
+        is_int(&m["projection_version"], "1") || is_int(&m["projection_version"], "2"),
         "unsupported_projection",
     )?;
-    A::bind_authority(&m["authority"], &m["baseline"])?;
+    if is_int(&m["projection_version"], "2") {
+        crate::history_node_publication::validate_authority(&m["authority"])?;
+        A::validate_baseline(&m["baseline"])?;
+        let authority = map(&m["authority"])?;
+        let baseline = map(&m["baseline"])?;
+        require(
+            authority["record_id"] == baseline["record_id"]
+                && authority["generation"] == baseline["authority_generation"],
+            "authority_mismatch",
+        )?;
+    } else {
+        A::bind_authority(&m["authority"], &m["baseline"])?;
+    }
     if let Some(r) = m.get("requires") {
         A::validate_history_requires(r)?;
     }

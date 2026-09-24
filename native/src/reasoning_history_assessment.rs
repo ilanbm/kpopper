@@ -856,7 +856,8 @@ fn history_summary(v: &V) -> Result<()> {
     }
     require(
         string_is(&m["authority_status"], "active")
-            && crate::source_clock::python_equal(&m["projection_version"], &val(json!(1))?),
+            && (crate::source_clock::python_equal(&m["projection_version"], &val(json!(1))?)
+                || crate::source_clock::python_equal(&m["projection_version"], &val(json!(2))?)),
         "invalid active history",
     )?;
     let a = schema(

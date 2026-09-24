@@ -55,13 +55,24 @@ pub(crate) fn validate_projection(projection: &Map) -> Result<()> {
                 "assessment",
                 "claims",
             ],
-            &[],
+            &["recipe"],
         )?;
         token(&o["operation"])?;
         let recorded = string_is(&o["evidence_kind"], "recorded_receipt");
+        let compact = string_is(&o["evidence_kind"], "retained_compact_recipe");
+        require(
+            o.contains_key("recipe") == compact,
+            "invalid_temporal_projection",
+        )?;
+        if compact {
+            crate::history_node_temporal_recipe::validate_side(&o["recipe"])?;
+        }
+
         require(
             text(&o["phase"]).is_ok_and(|v| ["before", "after"].contains(&v))
-                && (recorded || string_is(&o["evidence_kind"], "reconstructed_committed_world"))
+                && (recorded
+                    || compact
+                    || string_is(&o["evidence_kind"], "reconstructed_committed_world"))
                 && matches!(o["snapshot"], V::Text(_))
                 && (if recorded {
                     matches!(o["assessment"], V::Map(_))

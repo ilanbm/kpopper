@@ -153,8 +153,7 @@ fn draft_for_selection(
     document: &V,
     candidate: bool,
 ) -> Result<Option<V>> {
-    let id = text(field(map(action)?, "id")?)?;
-    let mut selected = selection(document, id, candidate)?;
+    let mut selected = action_selection(document, action, candidate)?;
     let controls = V::Map(
         map(document)?
             .iter()
@@ -186,9 +185,71 @@ fn draft_for_selection(
     Ok(None)
 }
 
+/// Recovery rechecks the same selection boundary without creating a new draft.
+pub(crate) fn selection_is_private(action: &V, document: &V, candidate: bool) -> Result<bool> {
+    let selected = action_selection(document, action, candidate)?;
+    let controls = V::Map(
+        map(document)?
+            .iter()
+            .filter(|(k, _)| {
+                ["meta", "privacy", "visibility", "private", "shareability"].contains(&k.as_str())
+            })
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
+    );
+    Ok(private_marker(&controls) || private_marker(action) || private_marker(&selected))
+}
+fn action_selection(document: &V, action: &V, candidate: bool) -> Result<V> {
+    let a = map(action)?;
+    if let Some(id) = a.get("id") {
+        return selection(document, text(id)?, candidate);
+    }
+    require(
+        a.get("kind")
+            .is_some_and(|v| ["same", "distinct"].iter().any(|k| string_is(v, k))),
+        "invalid_privacy_selection",
+    )?;
+    let ids = crate::history_view::list(field(a, "ids")?)?;
+    require(
+        ids.len() == 2 && ids[0] != ids[1],
+        "invalid_privacy_selection",
+    )?;
+    Ok(obj([(
+        "selections",
+        V::List(
+            ids.iter()
+                .map(|id| selection(document, text(id)?, candidate))
+                .collect::<Result<_>>()?,
+        ),
+    )]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn identity_selection_checks_both_roots_and_survives_retirement() {
+        let document = obj([(
+            "known",
+            obj([
+                ("p.a", obj([("v", n("1"))])),
+                ("p.b", obj([("v", n("1")), ("private", V::Bool(true))])),
+            ]),
+        )]);
+        for ids in [["p.a", "p.b"], ["p.b", "p.a"], ["retired", "p.b"]] {
+            let action = obj([
+                ("kind", s("distinct")),
+                ("ids", V::List(ids.into_iter().map(s).collect())),
+            ]);
+            assert!(selection_is_private(&action, &document, false).unwrap());
+            assert!(selection_is_private(&action, &document, true).unwrap());
+        }
+        let action = obj([
+            ("kind", s("same")),
+            ("ids", V::List(vec![s("p.a"), s("retired")])),
+        ]);
+        assert!(!selection_is_private(&action, &document, true).unwrap());
+    }
     #[test]
     fn an_unresolved_candidate_does_not_hide_unrelated_private_content() {
         let doc = V::from_json(&serde_json::json!({

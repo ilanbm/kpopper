@@ -11,12 +11,12 @@ use crate::{
     require,
     value::{Integer, TypedValue as V},
 };
-use std::{path::Path, process::Command, time::Duration};
+use std::{collections::BTreeSet, path::Path, process::Command, time::Duration};
 
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
-fn git(root: &Path, args: &[&str], maximum: usize) -> Result<Vec<u8>> {
+pub(crate) fn git(root: &Path, args: &[&str], maximum: usize) -> Result<Vec<u8>> {
     let mut cmd = Command::new("git");
     cmd.args([
         "--no-pager",
@@ -155,7 +155,11 @@ impl Reader<'_> {
     }
 }
 
-pub fn capture(repo: &Path, reference: &str, entry: &str, as_of: Option<V>) -> Result<Observation> {
+fn pinned(
+    repo: &Path,
+    reference: &str,
+    entry: &str,
+) -> Result<(std::path::PathBuf, String, String)> {
     require(
         !reference.is_empty() && !reference.contains('\0'),
         "invalid_branch_ref",
@@ -182,6 +186,11 @@ pub fn capture(repo: &Path, reference: &str, entry: &str, as_of: Option<V>) -> R
         ["sha1", "sha256"].contains(&algorithm.as_str()),
         "unsupported_git_object_format",
     )?;
+    Ok((root, oid, algorithm))
+}
+
+pub fn capture(repo: &Path, reference: &str, entry: &str, as_of: Option<V>) -> Result<Observation> {
+    let (root, oid, algorithm) = pinned(repo, reference, entry)?;
     let mut r = Reader {
         root: &root,
         oid,
@@ -299,6 +308,87 @@ pub fn capture(repo: &Path, reference: &str, entry: &str, as_of: Option<V>) -> R
         envelope,
         files: r.files,
     })
+}
+
+/// Freeze a node-history record at one Git commit without consulting its working tree.
+pub fn capture_node(
+    repo: &Path,
+    reference: &str,
+    entry: &str,
+) -> Result<crate::history_node_branch_source::Observation> {
+    use crate::history_node_publication as P;
+    let (root, oid, algorithm) = pinned(repo, reference, entry)?;
+    require(
+        B::parts(entry)?.1 == "GROUNDING.yaml",
+        "node_history_entry_unsupported",
+    )?;
+    let mut r = Reader {
+        root: &root,
+        oid,
+        algorithm,
+        inventory: Map::new(),
+        files: Files::new(),
+        total: 0,
+    };
+    for path in [
+        entry.to_owned(),
+        B::joined(entry, ".kpopper/history.yaml")?,
+        B::joined(entry, ".kpopper/history")?,
+        B::joined(entry, ".kpopper/history-commits")?,
+    ] {
+        let listing = r
+            .listing(&path)?
+            .into_iter()
+            .filter(|(p, _)| !p.rsplit('/').next().unwrap_or_default().starts_with('.'))
+            .collect();
+        r.include(listing)?;
+    }
+    // Mapped physical originals remain exact evidence. Unmapped active layers are
+    // rejected by the bundle's semantic authority guard, never omitted.
+    let physical = r
+        .listing(&B::joined(entry, ".kpopper/hypotheses")?)?
+        .into_iter()
+        .filter(|(path, _)| path.ends_with(".yaml") || path.ends_with(".yml"))
+        .collect();
+    r.include(physical)?;
+    for path in r.inventory.keys().cloned().collect::<Vec<_>>() {
+        r.read(&path)?;
+    }
+    let commit_prefix = format!("{}/", B::joined(entry, ".kpopper/history-commits")?);
+    let mut needed = BTreeSet::new();
+    for (path, raw) in &r.files {
+        if path.starts_with(&commit_prefix) {
+            let manifest: serde_json::Value = serde_json::from_slice(raw)?;
+            let Some(evidence) = manifest.get("evidence") else {
+                continue;
+            };
+            let evidence = evidence
+                .as_object()
+                .ok_or_else(|| error("invalid_branch_source"))?;
+            for relative in evidence.keys() {
+                P::evidence_path(relative)?;
+                needed.insert(B::joined(entry, relative)?);
+            }
+        }
+    }
+    for path in needed {
+        r.read(&path)?;
+    }
+    let prefix = B::parts(entry)?.0;
+    let files = r
+        .files
+        .into_iter()
+        .map(|(p, raw)| {
+            let relative = if prefix.is_empty() {
+                p
+            } else {
+                p.strip_prefix(&format!("{prefix}/")).unwrap().into()
+            };
+            (relative, raw)
+        })
+        .collect();
+    let bundle = P::Bundle::from_files(files)?;
+    crate::history_node_branch_source::Observation::from_git(bundle, &r.oid, entry, &r.algorithm)
 }
 
 #[cfg(test)]
