@@ -114,6 +114,8 @@ struct Journal {
     after_view: String,
     appends: Vec<Append>,
     retained: Vec<Touch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    guard: Option<serde_json::Value>,
     digest: String,
 }
 impl Journal {
@@ -194,6 +196,19 @@ pub struct Prepared {
     journal: Journal,
 }
 impl Prepared {
+    pub(crate) fn with_guard(mut self, guard: &crate::value::TypedValue) -> Result<Self> {
+        self.journal.guard = Some(guard.to_tagged()?);
+        self.journal.digest = self.journal.identity()?;
+        self.journal.validate()?;
+        Ok(self)
+    }
+    pub(crate) fn guard(&self) -> Result<Option<crate::value::TypedValue>> {
+        self.journal
+            .guard
+            .as_ref()
+            .map(crate::value::TypedValue::from_tagged)
+            .transpose()
+    }
     pub fn context(&self) -> Result<Option<crate::value::TypedValue>> {
         self.journal
             .manifest
@@ -374,8 +389,12 @@ fn authority(root: &Path) -> Result<String> {
     let raw = read(root, ".kpopper/history.yaml")?
         .ok_or_else(|| bad("node_publication_authority_required"))?;
     let value = crate::history_yaml::decode_document(&raw)?;
+    validate_authority(&value)?;
+    Ok(sha256(&raw))
+}
+pub fn validate_authority(value: &crate::value::TypedValue) -> Result<()> {
     let value = crate::history_contract::schema(
-        &value,
+        value,
         &[
             "version",
             "profile",
@@ -399,7 +418,28 @@ fn authority(root: &Path) -> Result<String> {
         crate::history_contract::is_int(&value["generation"], "1"),
         "node_publication_authority_required",
     )?;
-    Ok(sha256(&raw))
+    Ok(())
+}
+/// Detect the marked layout without extending admission of any legacy writer.
+pub(crate) fn selected(entry: &Path) -> Result<bool> {
+    let root = entry.parent().ok_or_else(|| bad("invalid_path"))?;
+    let Some(raw) = read(root, ".kpopper/history.yaml")? else {
+        return Ok(false);
+    };
+    let marker = crate::history_yaml::decode_document(&raw)?;
+    let fields = crate::history_contract::map(&marker)?;
+    if !fields
+        .get("profile")
+        .is_some_and(|v| crate::history_contract::string_is(v, C::FORMAT))
+    {
+        return Ok(false);
+    }
+    validate_authority(&marker)?;
+    require(
+        entry.file_name().is_some_and(|n| n == VIEW),
+        "node_history_entry_unsupported",
+    )?;
+    Ok(true)
 }
 fn inventory(root: &Path) -> Result<BTreeMap<String, Manifest>> {
     let authority_sha256 = authority(root)?;
@@ -590,6 +630,7 @@ pub fn prepare_with_context(
         after_view: STANDARD.encode(after_view),
         appends,
         retained,
+        guard: None,
         digest: String::new(),
     };
     journal.digest = journal.identity()?;
@@ -965,6 +1006,8 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
 /// One full byte-verified publication. Decoded states are reused by semantic capture.
 #[derive(Clone, Debug)]
 pub struct Snapshot {
+    pub authority: crate::value::TypedValue,
+    pub revision: String,
     pub current: Option<Vec<u8>>,
     pub versions: BTreeMap<String, BTreeMap<String, C::Version>>,
     pub operations: BTreeMap<String, String>,
@@ -973,16 +1016,31 @@ pub struct Snapshot {
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
+    pub digest: String,
     pub parents: Vec<String>,
     pub context: Option<crate::value::TypedValue>,
 }
 
 fn snapshot(
+    root: &Path,
     current: Option<Vec<u8>>,
     versions: BTreeMap<String, BTreeMap<String, C::Version>>,
     all: &BTreeMap<String, Manifest>,
 ) -> Result<Snapshot> {
+    let raw = read(root, ".kpopper/history.yaml")?
+        .ok_or_else(|| bad("node_publication_authority_required"))?;
+    let authority = crate::history_yaml::decode_document(&raw)?;
+    validate_authority(&authority)?;
+    let revision = sha256(&serde_json::to_vec(&(
+        sha256(&raw),
+        digest(&current),
+        all.iter()
+            .map(|(id, m)| (id, &m.digest))
+            .collect::<BTreeMap<_, _>>(),
+    ))?);
     Ok(Snapshot {
+        authority,
+        revision,
         current,
         versions,
         operations: all
@@ -999,6 +1057,7 @@ fn snapshot(
                 Ok((
                     id.clone(),
                     Transaction {
+                        digest: m.digest.clone(),
                         parents: m.parents.keys().cloned().collect(),
                         context: m
                             .context
@@ -1058,8 +1117,8 @@ impl Prepared {
         after_all.insert(self.operation().into(), j.manifest.clone());
         let after_versions = verify_history_with(root, &after_all, &after_overlay, Some(&after))?;
         Ok((
-            snapshot(before, before_versions, &before_all)?,
-            snapshot(Some(after), after_versions, &after_all)?,
+            snapshot(root, before, before_versions, &before_all)?,
+            snapshot(root, Some(after), after_versions, &after_all)?,
         ))
     }
 }
@@ -1081,7 +1140,7 @@ pub fn capture_snapshot(root: &Path) -> Result<Snapshot> {
             "node_publication_view_mismatch",
         )?;
     }
-    snapshot(current, versions, &all)
+    snapshot(root, current, versions, &all)
 }
 
 /// Portable exact bytes for source-free reconstruction. Export remains a full-closure audit.

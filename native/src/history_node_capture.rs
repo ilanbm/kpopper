@@ -112,6 +112,18 @@ impl Capture {
     pub fn read(root: &Path) -> Result<Self> {
         Self::from_snapshot(P::capture_snapshot(root)?)
     }
+    pub fn revision(&self) -> &str {
+        &self.snapshot.revision
+    }
+    pub fn entry_bytes(&self) -> &[u8] {
+        self.snapshot.current.as_deref().unwrap()
+    }
+    pub fn verify_current(&self, root: &Path) -> Result<()> {
+        require(
+            P::capture_snapshot(root)?.revision == self.snapshot.revision,
+            "snapshot_changed",
+        )
+    }
     pub(crate) fn from_snapshot(snapshot: P::Snapshot) -> Result<Self> {
         let raw = snapshot
             .current
@@ -387,6 +399,8 @@ mod tests {
                 .unwrap()
                 .remove("history");
             let node = Capture::from_snapshot(P::Snapshot {
+                authority: V::Null,
+                revision: String::new(),
                 current: Some(Y::encode_document(&doc).unwrap()),
                 versions,
                 operations,

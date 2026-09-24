@@ -186,6 +186,22 @@ fn draft_for_selection(
     Ok(None)
 }
 
+/// Recovery rechecks the same selection boundary without creating a new draft.
+pub(crate) fn selection_is_private(action: &V, document: &V, candidate: bool) -> Result<bool> {
+    let id = text(field(map(action)?, "id")?)?;
+    let selected = selection(document, id, candidate)?;
+    let controls = V::Map(
+        map(document)?
+            .iter()
+            .filter(|(k, _)| {
+                ["meta", "privacy", "visibility", "private", "shareability"].contains(&k.as_str())
+            })
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
+    );
+    Ok(private_marker(&controls) || private_marker(action) || private_marker(&selected))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

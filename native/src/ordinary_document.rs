@@ -21,6 +21,7 @@ pub(crate) struct Document {
     pub origins: BTreeMap<String, BTreeMap<String, PathBuf>>,
     pub members: Vec<PathBuf>,
     pub history: Option<crate::history_capture::Capture>,
+    pub node_history: Option<(PathBuf, crate::history_node_capture::Capture)>,
     pub history_projection: Option<CV>,
     pub history_view: Option<CV>,
     pub overlay: Option<crate::source_overlay::Overlay<V>>,
@@ -186,7 +187,14 @@ fn marker(path: &Path, inventory: &mut Inventory) -> Result<Option<V>> {
     let raw = inventory.read(&path)?;
     require(raw.len() <= 1024 * 1024, "history_limit")?;
     let marker = Y::decode_document(&raw)?;
-    crate::history_authority::validate_authority(&marker)?;
+    if C::map(&marker)?
+        .get("profile")
+        .is_some_and(|v| C::string_is(v, crate::history_node_codec::FORMAT))
+    {
+        crate::history_node_publication::validate_authority(&marker)?;
+    } else {
+        crate::history_authority::validate_authority(&marker)?;
+    }
     Ok(Some(V::from_typed(&marker)))
 }
 fn physical(directory: &Path, inventory: &mut Inventory) -> Result<V> {
@@ -314,11 +322,58 @@ pub(crate) fn load(
         origins: BTreeMap::new(),
         members: discovered,
         history: None,
+        node_history: None,
         history_projection: None,
         history_view: None,
         overlay: None,
     };
-    if has_history {
+    let node_marker = if has_history {
+        marker(first, inventory)?.is_some_and(|m| {
+            map(&m)
+                .ok()
+                .and_then(|m| m.get("profile"))
+                .is_some_and(|v| string_is(v, crate::history_node_codec::FORMAT))
+        })
+    } else {
+        false
+    };
+    if node_marker {
+        require(
+            first.file_name().is_some_and(|n| n == "GROUNDING.yaml"),
+            "node_history_entry_unsupported",
+        )?;
+        let root = first.parent().unwrap();
+        let capture = crate::history_node_capture::Capture::read(root)?;
+        let adapted = crate::history_node_projection::capture(&capture)?;
+        let retained = crate::history_sources::capture(root, "GROUNDING.yaml", adapted.document())?;
+        for (path, raw) in retained.files() {
+            inventory.exists(&root.join(path))?;
+            inventory.retain(&root.join(path), raw.clone())?;
+        }
+        inventory.retain(first, capture.entry_bytes().to_vec())?;
+        document.source = S::from_typed(adapted.document());
+        document.origins = crate::reasoning_fields::collections(adapted.document())?
+            .into_iter()
+            .map(|(section, members)| {
+                (
+                    section,
+                    members
+                        .into_keys()
+                        .map(|id| (id, first.to_owned()))
+                        .collect(),
+                )
+            })
+            .collect();
+        document.history_projection = Some(adapted.projection().clone());
+        document.history_view = Some(CV::Map(C::Map::from([
+            ("status".into(), CV::Text("current".into())),
+            (
+                "baseline_digest".into(),
+                CV::Text(C::map(adapted.projection())?["baseline"].digest()?),
+            ),
+        ])));
+        document.node_history = Some((root.to_owned(), capture));
+    } else if has_history {
         let store = crate::history_store::Store::new(first)?;
         let capture = store.capture()?;
         let current = capture.document == Y::decode_document(&store.render(&capture)?)?;
@@ -470,6 +525,10 @@ pub(crate) fn load(
         }
     }
     document.hypotheses = physical(&hypdir, inventory)?;
+    require(
+        document.node_history.is_none() || map(&document.hypotheses)?.is_empty(),
+        "node_history_hypotheses_unsupported",
+    )?;
     if let Some(capture) = &document.history {
         let typed_doc = document.source.strict_typed()?;
         let doc = V::from_typed(&typed_doc);
@@ -541,6 +600,10 @@ pub(crate) fn load(
 
 impl Document {
     pub(crate) fn try_finite(self) -> Result<crate::source_document::Document> {
+        require(
+            self.node_history.is_none(),
+            "node_history_writer_unsupported",
+        )?;
         // Canonical consumers discard overlay display metadata, but must still
         // refuse an overlay snapshot outside their finite value domain.
         self.overlay

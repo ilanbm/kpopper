@@ -554,6 +554,21 @@ mod tests {
             );
         }
         let capture = Capture::read(root.path()).unwrap();
+        let projected = crate::history_node_projection::capture(&capture).unwrap();
+        let source = crate::source_capture::capture_source_with_runtime(
+            &[root.path().join("GROUNDING.yaml")],
+            root.path(),
+            crate::source_capture::ReadMode::Frozen,
+            Some(s("2026-09-24")),
+            Some(&runtime),
+        )
+        .unwrap();
+        source.verify().unwrap();
+        let projected_doc = projected.document();
+        assert_eq!(
+            map(&map(projected_doc).unwrap()["readings"]).unwrap()["p.a"],
+            map(&map(capture.document()).unwrap()["readings"]).unwrap()["p.a"]
+        );
         assert_eq!(capture.object_count(), 7);
         let state = map(&map(capture.state()).unwrap()["subjects"]).unwrap();
         let head = text(&map(&state["d.b"]).unwrap()["head"]).unwrap();

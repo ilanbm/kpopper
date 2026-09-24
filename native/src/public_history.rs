@@ -83,6 +83,18 @@ pub(crate) fn fresh_id(prefix: &str) -> Result<String> {
 }
 
 fn status(entry: &Path) -> Result<Value> {
+    if crate::history_node_publication::selected(entry)? {
+        let root = entry.parent().ok_or_else(|| error("invalid_path"))?;
+        let capture = crate::history_node_capture::Capture::read(root)?;
+        let subjects = map(&map(capture.state())?["subjects"])? .iter().map(|(name, value)| {
+            let value=map(value)?;
+            Ok((name.clone(), json!({"acceptance":value["acceptance"].to_json()?, "heads":value["heads"].to_json()?})))
+        }).collect::<Result<serde_json::Map<String,Value>>>()?;
+        capture.verify_current(root)?;
+        return Ok(
+            json!({"state":"captured","record":entry,"authority":capture.snapshot.authority.to_json()?,"commits":capture.snapshot.transactions.len(),"objects":capture.object_count(),"subjects":subjects}),
+        );
+    }
     let capture = history_capture::capture(entry, None, None)?;
     let subjects = map(&map(&capture.state)?["subjects"])?
         .iter()
@@ -149,6 +161,10 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let paths = project_modes::write_paths(&original, &cwd)?;
     require(paths.len() == 1, "choose one logical record entry")?;
     let entry = &paths[0];
+    require(
+        !crate::history_node_publication::selected(entry)? || operation == "status",
+        "node_history_operation_unsupported",
+    )?;
     let result = match operation {
         "adopt" => {
             let revision = options

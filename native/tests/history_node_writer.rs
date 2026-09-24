@@ -370,3 +370,97 @@ fn lazy_creation_tail_cannot_hide_a_disconnected_same_operation_root() {
         .is_err()
     );
 }
+
+#[test]
+fn public_cli_writes_and_reads_a_marked_record_and_refuses_unsupported_writes() {
+    let root = setup();
+    let run = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(root.path())
+            .args(args)
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .output()
+            .unwrap()
+    };
+    for args in [
+        vec!["add", "p.a", "v=1"],
+        vec!["set", "p.a", "2"],
+        vec!["open"],
+        vec!["pull", "p.a"],
+    ] {
+        let out = run(&args);
+        assert!(
+            out.status.success(),
+            "{args:?}: {} {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let before = P::export(root.path()).unwrap().encode().unwrap();
+    let out = run(&["add", "p.b", "v=3", "--hypothesis", "proposal"]);
+    assert!(!out.status.success());
+    assert_eq!(P::export(root.path()).unwrap().encode().unwrap(), before);
+}
+
+#[test]
+fn core_cli_add_set_review_preserves_history_in_open_check_and_pull() {
+    let root = setup();
+    let doc = value(
+        json!({"meta":{"purpose":"Fixture","reasoning":{"version":2,"profile":"core/v1","requires":["arithmetic/v1"]}},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"readings":{},"judgments":{}}),
+    );
+    fs::write(
+        root.path().join("GROUNDING.yaml"),
+        Y::encode_document(&doc).unwrap(),
+    )
+    .unwrap();
+    let resources = tempfile::tempdir().unwrap();
+    fs::create_dir(resources.path().join("reasoning")).unwrap();
+    let archive = format!(
+        "{}.kpopper-runtime",
+        kpop_native::reasoning_runtime::target_name().unwrap()
+    );
+    fs::copy(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(&archive),
+        resources.path().join("reasoning").join(archive),
+    )
+    .unwrap();
+    let run = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(root.path())
+            .args(args)
+            .env("KPOPPER_NATIVE_RESOURCES", resources.path())
+            .env("KPOPPER_NATIVE_CACHE", resources.path().join("cache"))
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .output()
+            .unwrap()
+    };
+    for args in [
+        vec!["add", "p.a", "v=1", "--in", "readings"],
+        vec![
+            "add",
+            "d.b",
+            "verdict=ready",
+            "rests_on=[p.a]",
+            "wrong_if={expr: 'p.a > 3'}",
+            "--in",
+            "judgments",
+        ],
+        vec!["set", "p.a", "2"],
+        vec!["review", "d.b"],
+        vec!["open"],
+        vec!["check"],
+        vec!["pull", "d.b"],
+        vec!["history", "status"],
+    ] {
+        let out = run(&args);
+        assert!(
+            out.status.success(),
+            "{args:?}: {} {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    assert_eq!(Capture::read(root.path()).unwrap().object_count(), 7);
+}

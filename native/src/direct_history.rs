@@ -20,7 +20,7 @@ use crate::{
 };
 use std::path::{Path, PathBuf};
 
-fn routing(route: &WriteRoute, original: &[PathBuf]) -> Result<V> {
+pub(crate) fn routing(route: &WriteRoute, original: &[PathBuf]) -> Result<V> {
     let paths = |paths: &[PathBuf]| -> Result<V> {
         Ok(V::List(
             paths
@@ -70,7 +70,7 @@ fn decode(raw: &[u8]) -> Result<(PreparedMutation, V)> {
     )?;
     Ok((mutation, fields["routing"].clone()))
 }
-fn options(prefix: &str, by: V) -> Result<A::Options> {
+pub(crate) fn options(prefix: &str, by: V) -> Result<A::Options> {
     let now = chrono::Utc::now();
     let day = chrono::Local::now().date_naive();
     Ok(A::Options {
@@ -331,7 +331,7 @@ pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<(V, String)
 /// Read against the document the write was prepared from, with the hypothesis
 /// groups beside it when the write goes into one. The note is advisory: it never
 /// changes the write, and whatever keeps it from being read leaves none.
-fn nearest_existing(document: &V, groups: &Map, action: &V, runtime: Option<&Runtime>) -> String {
+pub(crate) fn nearest_existing(document: &V, groups: &Map, action: &V, runtime: Option<&Runtime>) -> String {
     let note = || -> Result<String> {
         let mut world = crate::history_authoring_reader::AuthoringReader::new(document, runtime)?;
         let (action, _) = world.normalize(action)?;
@@ -359,6 +359,9 @@ fn write_with_probe(
         F::read(&F::target(&store.root, &journal(&store))?)?.is_none(),
         "recovery_required",
     )?;
+    if crate::history_node_publication::selected(&store.entry)? {
+        return crate::public_node_history::write(&route, original, action, probe);
+    }
     let captured = store.capture()?;
     let write_options = options("write", V::Null)?;
     let hypothesis = a
@@ -579,6 +582,10 @@ fn recover_inner(
     }
     let store = Store::new(&route.paths()[0])?;
     let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
+    if crate::history_node_publication::selected(&store.entry)? {
+        require(expected.is_none(), "node_history_report_recovery_unsupported")?;
+        return crate::public_node_history::recover(&route, original, before, runtime_override);
+    }
     if let Some(raw) = F::read(&F::target(&store.root, &store.layout.journal)?)? {
         require(expected.is_none(), "history report recovery journal mismatch")?;
         let mutation = PreparedMutation::from_bytes(&raw)?;

@@ -1,8 +1,10 @@
-# Node-local history storage primitives
+# Experimental node-local history storage
 
-The native library contains experimental primitives for a future node-local history
-format. Public commands still use the existing history format. These modules do not
-activate or migrate a record, and the format is not a supported interchange contract.
+The native library contains an experimental node-local history format. Existing records
+and automatic creation retain the existing history format. Explicitly marked disposable
+records support public add/set/review, ordinary and core reads, status and recovery.
+These modules do not activate or migrate a record, and the format is not a supported
+interchange contract.
 
 `history_node_codec` encodes independently hashed JSONL events with typed mapping
 patches, explicit initial/change/merge relationships, a bound encoding predecessor,
@@ -61,8 +63,15 @@ as legacy authoring before receipt materialization or file-image preparation. It
 write files or grant admission to publish. The legacy path separately constructs its
 original receipts and transaction images, preserving its replay contract.
 
+`history_node_projection` builds a version-2 computational projection after full closure
+validation. It expands observations only for selected heads, proposals, open acts, reviews
+and their recursively pinned claims. Original semantic IDs and review evidence survive
+the public source-capture boundary. The source reader brackets the node revision as well
+as its ordinary source inventory; a pending journal or changed closure refuses the read.
+Legacy mutation consumers reject the node capture instead of treating it as ordinary YAML.
+
 `history_node_publication` exercises append publication behind an explicit version-3
-`node-history/v1` experimental authority marker. Existing readers refuse this marker.
+`node-history/v1` experimental authority marker. Legacy storage writers refuse this marker.
 The marker must already exist in a disposable fixture; no activation command is exposed.
 The current view binds its operation through `meta.node_publication`. Lazy originals
 live in `meta.node_history.originals`; a node stream appears only when those originals
@@ -93,9 +102,14 @@ version-2 current binding. Tail frames must form a single chain from the origina
 share its creation operation. The first later change retains that exact chain in the
 node stream, including all original semantic identities.
 
-This adapter is experimental library functionality. Public routing, policy/privacy guards,
-other operation families and activation are not integrated yet.
-Unpartitioned evidence refuses before publication.
+Public authoring uses this adapter for a single marked `GROUNDING.yaml` in Simple mode.
+It preserves privacy selection, source/archive checks, optimistic snapshot checks and
+locked project routing. A transient journal guard retains the original route and policy;
+it is excluded from permanent transaction manifests. Public recovery rechecks that guard,
+privacy and semantic replay before following the durable commit decision. Forced rollback
+is refused; an uncommitted transaction rolls back and a committed transaction finishes.
+Pending overlays, hypotheses, other operation families and activation remain unsupported.
+Unpartitioned evidence and unsupported writes refuse before publication.
 A successful low-level byte publication alone still does not establish semantic admission.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
@@ -103,9 +117,8 @@ It preserves the exact new-format bytes and audits the entire committed closure.
 is not a legacy migration archive and does not preserve original legacy YAML lexemes
 unless the caller retains that evidence separately.
 
-The primitives retain full-closure verification. No scoped fast-read integrity policy
-is enabled. Further integration must replace eager `saw` expansion and repeated receipt
-materialization in public publication before authoring can use this layout. The semantic
-provider retains the existing object and reduction-work bounds; it does not establish
+The format retains full-closure verification. No scoped fast-read integrity policy
+is enabled. The semantic provider retains the existing object and reduction-work bounds;
+the integrated core path does not establish
 10k full-writer support. In particular, passing
 codec growth tests does not establish the throughput or memory cost of the full writer.
