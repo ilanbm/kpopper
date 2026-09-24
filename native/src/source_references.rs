@@ -7,6 +7,8 @@ use crate::{
 };
 use std::{collections::BTreeSet, path::Path};
 
+const PIN_PROBE_OUTPUT_LIMIT: usize = 8 * 1024;
+
 fn is_line_suffix(suffix: &str) -> bool {
     let (first, last) = suffix.split_once('-').unwrap_or((suffix, ""));
     !first.is_empty()
@@ -46,7 +48,7 @@ fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStat
     let commit = match crate::pending_state::git(
         root,
         &["rev-parse", "--verify", "--end-of-options", &reference],
-        1024,
+        PIN_PROBE_OUTPUT_LIMIT,
         true,
     ) {
         Ok(Some(commit)) => commit,
@@ -60,7 +62,12 @@ fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStat
     }
     // The resolved object ID keeps authored option-like revisions out of cat-file's arguments.
     let object = format!("{commit}:{path}");
-    match crate::pending_state::git(root, &["cat-file", "-t", &object], 1024, true) {
+    match crate::pending_state::git(
+        root,
+        &["cat-file", "-t", &object],
+        PIN_PROBE_OUTPUT_LIMIT,
+        true,
+    ) {
         Ok(Some(kind)) if kind == b"blob\n" => PinnedFileStatus::Available,
         Ok(_) => PinnedFileStatus::Missing,
         Err(_) => PinnedFileStatus::Unavailable,
@@ -152,6 +159,7 @@ pub(crate) fn notes(
             }
 
             let mut missing_pin: Option<&str> = None;
+            let mut ambiguous_pin: Option<(&str, &str)> = None;
             let mut unavailable_pin: Option<PinnedFileStatus> = None;
             let mut pin_available = false;
             if !Path::new(locator).is_absolute() {
@@ -181,6 +189,11 @@ pub(crate) fn notes(
                         {
                             missing_pin = Some(candidate);
                         }
+                        PinnedFileStatus::Unresolved
+                            if revision.contains('/') && pinned_path.contains('/') =>
+                        {
+                            ambiguous_pin = Some((revision, candidate));
+                        }
                         PinnedFileStatus::Unresolved => {}
                     }
                 }
@@ -201,6 +214,12 @@ pub(crate) fn notes(
             }
             if let Some(candidate) = missing_pin {
                 notes.push(format!("{id}: pinned file {locator} is unavailable in this repository; verify the revision and path with git show {candidate}, or re-read the source"));
+                continue;
+            }
+            if let Some((revision, candidate)) = ambiguous_pin {
+                notes.push(format!(
+                    "{id}: no local file matches {locator}, and Git does not know revision {revision}; if this is a pin, verify it with git show {candidate}, or re-read the source"
+                ));
                 continue;
             }
             notes.push(format!("{id}: file {locator} is absent from this repository; re-read the surviving source, or pin the historical file as revision:path (open it with git show revision:path)"));

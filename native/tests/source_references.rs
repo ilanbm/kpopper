@@ -267,10 +267,15 @@ fn slash_revisions_are_pinned_when_the_git_ref_resolves() {
 #[test]
 fn a_pin_does_not_hide_an_unknown_revision_or_a_missing_blob() {
     let f = Fixture::new();
-    let out = text(f.check("sources:\n  s.ref: {file: 'no-such-ref:sources/original.txt'}\n  s.blob: {file: 'source-final:sources/missing.txt'}\n  s.tree: {file: 'source-final:sources'}\n  s.line: {file: 'source-final:sources/missing.txt:42'}\n"));
+    let out = text(f.check("sources:\n  s.ref: {file: 'no-such-ref:sources/original.txt'}\n  s.slash_ref: {file: 'feature/unknown:sources/original.txt'}\n  s.blob: {file: 'source-final:sources/missing.txt'}\n  s.tree: {file: 'source-final:sources'}\n  s.line: {file: 'source-final:sources/missing.txt:42'}\n"));
     for id in ["s.ref", "s.blob", "s.tree", "s.line"] {
         assert!(out.contains(&format!("NOTE {id}: pinned file")), "{out}");
     }
+    assert!(
+        out.contains("NOTE s.slash_ref: no local file matches")
+            && out.contains("Git does not know revision feature/unknown"),
+        "{out}"
+    );
     assert!(out.contains("git show"), "{out}");
     assert!(
         out.contains("git show source-final:sources/missing.txt, or re-read"),
@@ -280,6 +285,22 @@ fn a_pin_does_not_hide_an_unknown_revision_or_a_missing_blob() {
         !out.contains("git show source-final:sources/missing.txt:42"),
         "{out}"
     );
+}
+
+#[test]
+fn long_missing_pinned_paths_remain_missing_not_probe_failures() {
+    let f = Fixture::new();
+    let mut components = (0..10)
+        .map(|index| format!("{index:02}{}", "x".repeat(98)))
+        .collect::<Vec<_>>();
+    components.push("missing.txt".into());
+    let path = components.join("/");
+    let locator = format!("source-final:{path}");
+    assert!(locator.len() > 1024);
+    let record = format!("sources:\n  s.long: {{file: '{locator}'}}\n");
+    let out = text(f.check(&record));
+    assert!(out.contains("NOTE s.long: pinned file"), "{out}");
+    assert!(!out.contains("probe was unavailable"), "{out}");
 }
 
 #[cfg(unix)]
@@ -297,7 +318,7 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
     let git = bin.join("git");
     fs::write(
         &git,
-        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = cat-file ]; then printf '%2048s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
+        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = cat-file ]; then printf '%16384s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
     )
     .unwrap();
     fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
@@ -345,7 +366,7 @@ fn failed_revision_probes_are_advisory_without_claiming_a_pin_or_absent_file() {
     let git = bin.join("git");
     fs::write(
         &git,
-        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = --verify ]; then printf '%2048s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
+        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = --verify ]; then printf '%16384s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
     )
     .unwrap();
     fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
