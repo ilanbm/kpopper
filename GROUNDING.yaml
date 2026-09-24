@@ -1277,6 +1277,17 @@ sources:
          errors, and bounds retries for transient Windows sharing violations without allowing delete
          sharing or replacing identity checks. Windows regression tests cover transient and
          persistent DELETE handles; actual Windows CI remains the platform acceptance gate."
+  s.2026_09_25_source_reference_contract_review:
+    name: "Reread of review-cited historical source functions"
+    asked: "Paraphrased review follow-up: verify source-read dates against the functions the
+            recorded claims cite, inspect each missing Python-final function and its current native
+            counterpart, and preserve the source revision distinction."
+    of: "On 2026-09-25, reread followup_install.inspect_host/finish,
+         operations.load/derive/findings, history_hypotheses._finish/verify_prepared, watch.compare,
+         remeasure._measure_core, and followups Store.finish/resolve/restore at python-final.
+         Compared versions.py lines 488-492 at b639cdb and python-final and confirmed identical blob
+         identity."
+    read: "2026-09-25"
   s.2026_09_25_source_reference_review:
     name: "Source-reference provenance review and historical Python recount"
     asked: "Correct PR #236 source-read dates and keep historical revision identity distinct from

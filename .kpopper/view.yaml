@@ -54,6 +54,7 @@ tabs:
   - title: Now
     occasion: "you are picking up this project and need what is still open, and what the sessions before you were asked for"
     serves: [s.2026_09_25_source_reference_review,
+             s.2026_09_25_source_reference_contract_review,
              s.native_default_release, s.2026_09_19_native_live_bootstrap_continuation,
              s.2026_09_19_native_temporal_continuation,
              s.2026_09_19_native_temporal_authoring,
