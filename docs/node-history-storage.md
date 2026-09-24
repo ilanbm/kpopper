@@ -25,11 +25,35 @@ unrelated snapshot identifiers remain literal. This representation does not auth
 reusing a computation in a different world; semantic admission must still validate all
 inputs, clocks, runtime provenance and capabilities.
 
+`history_node_receipt` partitions supported receipts into node pieces and record context.
+Document entries, assessment nodes, baseline heads and open acts leave the record context;
+full selection is reconstructed from exact sorted assessment membership. Original receipt
+digests are checked after typed reconstruction. Unsupported nested reports, physical
+hypothesis evidence, nonempty hypothesis documents, and unpartitioned temporal evidence
+refuse. This is a decomposition API, not a persistence layout: writers must persist only
+changed pieces and derive historical selection from the transaction and node histories.
+Storing every partition on each write would still reproduce the graph.
+
 `history_node_observation` stores exact observation sets as sparse deltas over named
 encoding bases. It supports unordered DAG loading and a visitor that applies and undoes
 deltas while holding one expanded set across branches. It validates cardinality and
 observation digests. The original semantic ID is supplied by the caller; verifying the
-legacy object identity and integrating acceptance reduction remain caller obligations.
+legacy object identity remains a separate semantic boundary.
+
+`history_node_semantics::History` restores one exact observation set at a time, verifies
+the original object identity and every cross-object reference, then retains the object
+without its expanded `saw`. A sparse interval index supplies direct membership to the
+existing acceptance reducer. It does not infer transitive observation. Legacy byte-based
+reduction keeps its original source-order behavior; the compact provider uses canonical
+typed order and does not substitute for retaining original imported YAML bytes.
+
+`history_node_capture::Capture` consumes the complete byte-verified publication snapshot,
+reuses its decoded versions, checks semantic operation bindings, and verifies the visible
+current bodies against the reduced history. Pin lookup takes an original semantic ID;
+storage-event lookup is separate. Pure `prepare_claims` uses the same add/set/review logic
+as legacy authoring before receipt materialization or file-image preparation. It does not
+write files or grant admission to publish. The legacy path separately constructs its
+original receipts and transaction images, preserving its replay contract.
 
 `history_node_publication` exercises append publication behind an explicit version-3
 `node-history/v1` experimental authority marker. Existing readers refuse this marker.
@@ -55,5 +79,7 @@ unless the caller retains that evidence separately.
 
 The primitives retain full-closure verification. No scoped fast-read integrity policy
 is enabled. Further integration must replace eager `saw` expansion and repeated receipt
-parsing before the public authoring path can use this layout. In particular, passing
+materialization in public publication before authoring can use this layout. The semantic
+provider retains the existing object and reduction-work bounds; it does not establish
+10k full-writer support. In particular, passing
 codec growth tests does not establish the throughput or memory cost of the full writer.

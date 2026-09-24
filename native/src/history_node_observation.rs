@@ -260,12 +260,30 @@ impl ObservationChain {
         Ok(saw)
     }
 
-    /// Visit each state once in base-tree order, applying and undoing sparse deltas. Only
-    /// one expanded set is retained, including forks. Complete digest validation still
-    /// hashes each declared set; it is proportional to logical observation evidence.
+    /// Visit each state once, retaining one exact expanded set across forks.
     pub fn visit<F>(&self, mut visitor: F) -> Result<()>
     where
         F: FnMut(&ObservationNode, &BTreeSet<String>) -> Result<()>,
+    {
+        self.visit_states(|node, saw, enter| {
+            if enter {
+                visitor(node, saw)?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Sparse transition notifications after the corresponding exact state is validated.
+    pub fn visit_sparse<F>(&self, mut visitor: F) -> Result<()>
+    where
+        F: FnMut(&ObservationNode, bool) -> Result<()>,
+    {
+        self.visit_states(|node, _, enter| visitor(node, enter))
+    }
+
+    pub(crate) fn visit_states<F>(&self, mut visitor: F) -> Result<()>
+    where
+        F: FnMut(&ObservationNode, &BTreeSet<String>, bool) -> Result<()>,
     {
         let mut children = BTreeMap::<Option<&str>, Vec<&str>>::new();
         for node in self.nodes.values() {
@@ -286,6 +304,7 @@ impl ObservationChain {
         while let Some((id, exit)) = pending.pop() {
             let node = &self.nodes[id];
             if exit {
+                visitor(node, &saw, false)?;
                 for added in &node.added {
                     require(saw.remove(added), "node_observation_undo")?;
                 }
@@ -303,7 +322,7 @@ impl ObservationChain {
                     saw.len() == node.cardinality && saw_digest(&saw) == node.saw_digest,
                     "node_observation_state",
                 )?;
-                visitor(node, &saw)?;
+                visitor(node, &saw, true)?;
                 visited += 1;
                 pending.push((id, true));
                 for child in children.get(&Some(id)).into_iter().flatten().rev() {

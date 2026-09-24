@@ -201,9 +201,17 @@ pub struct Version {
     subject: String,
     result: String,
     frame_sha256: String,
+    operation: String,
+    parents: Vec<String>,
     state: State,
 }
 impl Version {
+    pub fn operation(&self) -> &str {
+        &self.operation
+    }
+    pub fn parents(&self) -> &[String] {
+        &self.parents
+    }
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -410,6 +418,8 @@ impl Event {
             subject: self.subject.clone(),
             result: self.result.clone(),
             frame_sha256: sha256(&self.encode()?),
+            operation: self.operation.clone(),
+            parents: self.parents.clone(),
             state,
         })
     }

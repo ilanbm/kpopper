@@ -546,14 +546,15 @@ pub fn prepare(
     Ok(Prepared { journal })
 }
 fn verify_history(root: &Path, all: &BTreeMap<String, Manifest>) -> Result<()> {
-    verify_history_with(root, all, &BTreeMap::new(), None)
+    verify_history_with(root, all, &BTreeMap::new(), None).map(|_| ())
 }
 fn verify_history_with(
     root: &Path,
     all: &BTreeMap<String, Manifest>,
     overlay: &BTreeMap<String, Option<Vec<u8>>>,
     current_view: Option<&[u8]>,
-) -> Result<()> {
+) -> Result<BTreeMap<String, BTreeMap<String, C::Version>>> {
+    let mut verified = BTreeMap::new();
     let mut expected = BTreeMap::<String, BTreeMap<String, String>>::new();
     for m in all.values() {
         for t in &m.touched {
@@ -607,6 +608,10 @@ fn verify_history_with(
                 events.len() == 1 && events.get(origin.id()) == Some(&sha256(&origin.encode()?)),
                 "node_publication_missing_stream",
             )?;
+            verified.insert(
+                subject.clone(),
+                BTreeMap::from([(origin.id().into(), origin.reconstruct(None)?)]),
+            );
             continue;
         }
         require(
@@ -628,6 +633,7 @@ fn verify_history_with(
                 "node_publication_frame_hash",
             )?;
         }
+        verified.insert(subject.clone(), versions);
     }
     let directory = F::target(root, ".kpopper/history")?;
     if directory.exists() {
@@ -647,7 +653,7 @@ fn verify_history_with(
             }
         }
     }
-    Ok(())
+    Ok(verified)
 }
 fn revalidate(root: &Path, journal: &Journal) -> Result<()> {
     let all = inventory(root)?;
@@ -877,11 +883,21 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
     })
 }
 /// Verify the whole committed closure before returning current bytes. Pending publication refuses.
+/// One full byte-verified publication. Decoded states are reused by semantic capture.
+#[derive(Clone, Debug)]
+pub struct Snapshot {
+    pub current: Option<Vec<u8>>,
+    pub versions: BTreeMap<String, BTreeMap<String, C::Version>>,
+    pub operations: BTreeMap<String, String>,
+}
 pub fn capture(root: &Path) -> Result<Option<Vec<u8>>> {
+    Ok(capture_snapshot(root)?.current)
+}
+pub fn capture_snapshot(root: &Path) -> Result<Snapshot> {
     let _lock = F::DirectoryGuard::acquire(root, false)?;
     guard(root)?;
     let all = inventory(root)?;
-    verify_history(root, &all)?;
+    let versions = verify_history_with(root, &all, &BTreeMap::new(), None)?;
     let current = read(root, VIEW)?;
     if !all.is_empty() {
         let tips = frontier(&all);
@@ -892,7 +908,19 @@ pub fn capture(root: &Path) -> Result<Option<Vec<u8>>> {
             "node_publication_view_mismatch",
         )?;
     }
-    Ok(current)
+    let operations = all
+        .values()
+        .flat_map(|m| {
+            m.touched
+                .iter()
+                .map(|t| (t.event.clone(), m.operation.clone()))
+        })
+        .collect();
+    Ok(Snapshot {
+        current,
+        versions,
+        operations,
+    })
 }
 
 /// Portable exact bytes for source-free reconstruction. Export remains a full-closure audit.
