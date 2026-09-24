@@ -160,8 +160,10 @@ fn live_sources_symbolic_references_prose_urls_and_patterns_are_not_missing_file
 fn line_number_citations_and_relative_colon_names_are_not_pins() {
     let f = Fixture::new();
     fs::write(f.root.path().join("sources/part:name.py"), "source").unwrap();
+    fs::create_dir(f.root.path().join("logs")).unwrap();
+    fs::write(f.root.path().join("logs/run:1"), "source").unwrap();
     let out = text(f.check(
-        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.column: {file: 'sources/original.txt:42:7'}\n  s.pinned_column: {file: 'source-final:sources/original.txt:42:7'}\n  s.colon: {file: 'sources/part:name.py'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
+        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.column: {file: 'sources/original.txt:42:7'}\n  s.pinned_column: {file: 'source-final:sources/original.txt:42:7'}\n  s.colon: {file: 'sources/part:name.py'}\n  s.digit_colon: {file: 'logs/run:1'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
     ));
     assert!(!out.contains("pinned file"), "{out}");
     for id in [
@@ -170,6 +172,7 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
         "s.column",
         "s.pinned_column",
         "s.colon",
+        "s.digit_colon",
         "p.line",
     ] {
         assert!(!out.contains(&format!("NOTE {id}:")), "{out}");
@@ -198,6 +201,27 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
         "{trailing_colon}"
     );
     assert!(!trailing_colon.contains("pinned file"), "{trailing_colon}");
+}
+#[test]
+fn numeric_pinned_paths_are_not_stripped_as_line_numbers() {
+    let f = Fixture::new();
+    f.git(&["checkout", "-b", "numeric-paths"]);
+    fs::write(f.root.path().join("2024"), "source").unwrap();
+    f.git(&["add", "2024"]);
+    f.git(&[
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-qm",
+        "Add numeric path",
+    ]);
+    let out = text(f.check(
+        "sources:\n  s.numeric: {file: 'numeric-paths:2024'}\n  s.missing: {file: 'numeric-paths:2042'}\n",
+    ));
+    assert!(!out.contains("NOTE s.numeric:"), "{out}");
+    assert!(out.contains("NOTE s.missing: pinned file"), "{out}");
 }
 #[test]
 fn absolute_paths_are_checked_only_inside_this_repository() {
@@ -284,16 +308,16 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
     fs::write(f.root.path().join("GROUNDING.yaml"), record).unwrap();
     let output = command.output().unwrap();
     let out = text(output);
-    assert!(out.contains("NOTE s.pinned: pinned file"), "{out}");
-    assert!(out.contains("NOTE s.slash_pin: pinned file"), "{out}");
     assert!(
-        out.contains("git show source-final:sources/original.txt"),
+        out.contains("NOTE s.pinned: could not check pinned file"),
         "{out}"
     );
     assert!(
-        out.contains("git show feature/source-reference:sources/original.txt"),
+        out.contains("NOTE s.slash_pin: could not check pinned file"),
         "{out}"
     );
+    assert!(!out.contains("NOTE s.pinned: pinned file"), "{out}");
+    assert!(!out.contains("NOTE s.slash_pin: pinned file"), "{out}");
     assert!(out.contains("0 problems"), "{out}");
 }
 #[cfg(unix)]
