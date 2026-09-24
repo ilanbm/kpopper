@@ -78,7 +78,9 @@ def _eval_github_expression(expression, context):
             elif atom.startswith("'") and atom.endswith("'"):
                 value = atom[1:-1]
             else:
-                value = context.get(atom)
+                if atom not in context:
+                    raise AssertionError(f"unknown GitHub concurrency expression name: {atom}")
+                value = context[atom]
             if not truthy(value):
                 and_result = value
                 break
@@ -423,7 +425,9 @@ class WorkflowCoverage(unittest.TestCase):
         newer_pr_native = native_group("kpopper check", "pull_request", "refs/pull/5/merge", "head-b", "run-pr-b", target="all")
         same_pr_native = native_group("kpopper check", "pull_request", "refs/pull/5/merge", "head-c", "run-pr-c", target="all")
         manual_check = check_group("workflow_dispatch", "refs/heads/main", "sha", "run-manual")
+        manual_check_again = check_group("workflow_dispatch", "refs/heads/main", "sha", "run-manual-2")
         manual_native = native_group("native Rust platform acceptance", "workflow_dispatch", "refs/heads/main", "sha", "run-native")
+        manual_native_again = native_group("native Rust platform acceptance", "refs/heads/main", "workflow_dispatch", "full", "all", "sha", "run-native-2")
         self.assertNotEqual(main_check, newer_main_check)
         self.assertEqual(pr_check, newer_pr_check)
         self.assertNotEqual(pr_check, other_pr_check)
@@ -433,10 +437,13 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual(newer_pr_native, same_pr_native)
         self.assertNotEqual(manual_check, manual_native)
         self.assertNotEqual(manual_check, main_check)
+        self.assertNotEqual(manual_check, manual_check_again)
+        self.assertNotEqual(manual_native, manual_native_again)
         self.assertEqual(
             len({main_check, newer_main_check, pr_check, other_pr_check, main_native, main_publish,
-                 pr_native, newer_pr_native, manual_check, manual_native}),
-            10,
+                 pr_native, newer_pr_native, manual_check, manual_check_again,
+                 manual_native, manual_native_again}),
+            12,
         )
 
     def test_called_runtime_runs_have_unique_non_cancelling_groups(self):
