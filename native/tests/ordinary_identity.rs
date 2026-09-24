@@ -171,13 +171,19 @@ fn ordinary_identity_in_an_advanced_project_matches_the_same_python_images() {
 
 #[test]
 fn same_embeds_the_public_record_check_with_an_unserved_question() {
-    for add_question in [false, true] {
+    for (add_question, missing_source) in
+        [(false, false), (true, false), (false, true), (true, true)]
+    {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/page");
         for entry in fs::read_dir(fixture).unwrap() {
             let entry = entry.unwrap();
             fs::copy(entry.path(), root.join(entry.file_name())).unwrap();
+        }
+        if !missing_source {
+            fs::create_dir(root.join("boiler")).unwrap();
+            fs::write(root.join("boiler/service-2025.pdf"), "fixture source").unwrap();
         }
         advanced_project(root);
         for args in [
@@ -234,8 +240,9 @@ fn same_embeds_the_public_record_check_with_an_unserved_question() {
         assert_eq!(
             summary,
             format!(
-                "3 judgments, {} entries, 0 problems, 2 declared",
-                if add_question { 14 } else { 13 }
+                "3 judgments, {} entries, 0 problems, {} declared",
+                if add_question { 14 } else { 13 },
+                2 + usize::from(missing_source)
             )
         );
         let same_text = String::from_utf8(same.stdout).unwrap();

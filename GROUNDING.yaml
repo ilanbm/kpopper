@@ -1354,6 +1354,17 @@ sources:
          history_branch_git local capture; history-branch.json 49 Python cases with 30 accepted
          envelopes and Git SHA1/SHA256 tests"
     read: "2026-09-19"
+  s.native_check_diagnostic_parity:
+    name: "Ordinary check notes and migration refusal parity"
+    file: "native/tests/check_notes.rs"
+    read: "2026-09-24"
+    at: "native/tests/public_expression_regressions.rs also covers mixed scalar keys and unchanged
+         source bytes"
+    of: "check reports live identities named by also and malformed prefix legends without turning
+         those notes into failures. The dependency-field exception and valid retired identities stay
+         quiet. Expression migration retains the public mixed-key refusal without duplicate
+         serialization diagnostics; integer, boolean, float, null and date keys remain refused
+         without changing source files."
   s.native_checked_token_budgets:
     name: "Native checked-reader reference token budgets"
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-checked-f269506-tests.log"
@@ -1405,6 +1416,15 @@ sources:
     at: "Exact Python fixture comparisons, immutable replay and storage recovery regressions;
          source-aware merge module and current local/UTC date checks"
     read: "2026-09-19"
+  s.native_identity_source_notes:
+    name: "Identity summaries retain source-file notes"
+    file: "native/tests/ordinary_identity.rs"
+    read: "2026-09-24"
+    at: same_embeds_the_public_record_check_with_an_unserved_question
+    of: "The same command and standalone check agree on declared-note counts with present or missing
+         source files, both with and without an unserved question. Identity preparation includes
+         source-reference observations in its existing inventory for before and after projections.
+         Missing source files remain advisory and do not become a migration refusal."
   s.native_live_capture:
     from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Native pending and committed target capture evidence"
