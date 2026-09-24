@@ -65,7 +65,8 @@ fn unpack(subject: &str, version: &C::Version) -> Result<(V, ObservationNode)> {
     let value = version
         .state()
         .ok_or_else(|| error("node_semantic_absent_unsupported"))?;
-    let p = schema(value, &["collection", "body", "context"], &[])?;
+    let decoded = crate::history_node_frame::decode(value)?;
+    let p = schema(&decoded.semantic, &["collection", "body", "context"], &[])?;
     let context = schema(&p["context"], &["format", "header", "observation"], &[])?;
     require(
         string_is(&context["format"], FORMAT),
@@ -126,6 +127,15 @@ impl Capture {
                         == Some(version.operation()),
                     "node_semantic_operation",
                 )?;
+                let payload = crate::history_node_frame::decode(
+                    version
+                        .state()
+                        .ok_or_else(|| error("node_semantic_absent_unsupported"))?,
+                )?;
+                crate::history_node_frame::validate_evidence(version, versions, &payload)?;
+                if !payload.is_semantic {
+                    continue;
+                }
                 let (object, observation) = unpack(subject, version)?;
                 require(
                     semantic_events
@@ -138,6 +148,7 @@ impl Capture {
         }
         let history = History::from_objects(objects)?;
         let state = history.reduce(None, None)?;
+        crate::history_node_writer::verify_receipts(&snapshot)?;
         let meta = map_mut(
             map_mut(&mut document)?
                 .get_mut("meta")
@@ -197,6 +208,11 @@ impl Capture {
         options: &crate::history_authoring::Options,
         runtime: Option<&crate::reasoning_runtime::Runtime>,
     ) -> Result<(Vec<V>, V)> {
+        self.check_expected(action)?;
+        let plan = crate::history_authoring_core::prepare(self, action, options, runtime)?;
+        Ok((plan.objects, plan.document))
+    }
+    pub(crate) fn check_expected(&self, action: &V) -> Result<()> {
         if let Some(expected) = map(action)?.get("expected_record_sha256") {
             let expected = text(expected)?;
             require(
@@ -213,8 +229,7 @@ impl Capture {
                 "record changed since the caller read it",
             )?;
         }
-        let plan = crate::history_authoring_core::prepare(self, action, options, runtime)?;
-        Ok((plan.objects, plan.document))
+        Ok(())
     }
 }
 impl Input for Capture {
@@ -375,6 +390,7 @@ mod tests {
                 current: Some(Y::encode_document(&doc).unwrap()),
                 versions,
                 operations,
+                transactions: BTreeMap::new(),
             })
             .unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
             let action = V::from_tagged(&case["action"]).unwrap();

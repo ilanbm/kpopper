@@ -70,6 +70,8 @@ struct Manifest {
     touched: Vec<Touch>,
     before_view: Option<String>,
     after_view: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    context: Option<serde_json::Value>,
     digest: String,
 }
 impl Manifest {
@@ -192,6 +194,14 @@ pub struct Prepared {
     journal: Journal,
 }
 impl Prepared {
+    pub fn context(&self) -> Result<Option<crate::value::TypedValue>> {
+        self.journal
+            .manifest
+            .context
+            .as_ref()
+            .map(crate::value::TypedValue::from_tagged)
+            .transpose()
+    }
     pub fn operation(&self) -> &str {
         &self.journal.manifest.operation
     }
@@ -449,6 +459,17 @@ pub fn prepare(
     after_view: Vec<u8>,
     frames: BTreeMap<String, Vec<u8>>,
 ) -> Result<Prepared> {
+    prepare_with_context(root, operation, after_view, frames, None)
+}
+
+/// Context contains transaction-local intent and receipt side recipes, never node inventories.
+pub fn prepare_with_context(
+    root: &Path,
+    operation: &str,
+    after_view: Vec<u8>,
+    frames: BTreeMap<String, Vec<u8>>,
+    context: Option<&crate::value::TypedValue>,
+) -> Result<Prepared> {
     let _lock = F::DirectoryGuard::acquire(root, false)?;
     guard(root)?;
     token(operation)?;
@@ -511,6 +532,9 @@ pub fn prepare(
         touched,
         before_view: digest(&before),
         after_view: sha256(&after_view),
+        context: context
+            .map(crate::value::TypedValue::to_tagged)
+            .transpose()?,
         digest: String::new(),
     };
     manifest.digest = manifest.identity()?;
@@ -889,6 +913,100 @@ pub struct Snapshot {
     pub current: Option<Vec<u8>>,
     pub versions: BTreeMap<String, BTreeMap<String, C::Version>>,
     pub operations: BTreeMap<String, String>,
+    pub transactions: BTreeMap<String, Transaction>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Transaction {
+    pub parents: Vec<String>,
+    pub context: Option<crate::value::TypedValue>,
+}
+
+fn snapshot(
+    current: Option<Vec<u8>>,
+    versions: BTreeMap<String, BTreeMap<String, C::Version>>,
+    all: &BTreeMap<String, Manifest>,
+) -> Result<Snapshot> {
+    Ok(Snapshot {
+        current,
+        versions,
+        operations: all
+            .values()
+            .flat_map(|m| {
+                m.touched
+                    .iter()
+                    .map(|t| (t.event.clone(), m.operation.clone()))
+            })
+            .collect(),
+        transactions: all
+            .iter()
+            .map(|(id, m)| {
+                Ok((
+                    id.clone(),
+                    Transaction {
+                        parents: m.parents.keys().cloned().collect(),
+                        context: m
+                            .context
+                            .as_ref()
+                            .map(crate::value::TypedValue::from_tagged)
+                            .transpose()?,
+                    },
+                ))
+            })
+            .collect::<Result<_>>()?,
+    })
+}
+
+impl Prepared {
+    /// Recreate both exact worlds under the publisher/recovery lock. Pending appends and
+    /// a committed manifest are overlaid, so semantic replay never reads a mixed world.
+    pub(crate) fn snapshots(&self, root: &Path) -> Result<(Snapshot, Snapshot)> {
+        let j = &self.journal;
+        j.validate()?;
+        require(
+            authority(root)? == j.manifest.authority_sha256,
+            "node_publication_authority_changed",
+        )?;
+        let mut before_all = inventory(root)?;
+        if let Some(committed) = before_all.remove(self.operation()) {
+            require(
+                committed == j.manifest,
+                "node_publication_operation_collision",
+            )?;
+        }
+        require(
+            frontier(&before_all) == j.manifest.parents,
+            "node_publication_stale_frontier",
+        )?;
+        let mut before_overlay = BTreeMap::new();
+        let mut after_overlay = BTreeMap::new();
+        for append in &j.appends {
+            let (_, current, frames) = append_state(root, append)?;
+            let mut prefix = current.unwrap_or_default();
+            prefix.truncate(append.offset as usize);
+            before_overlay.insert(
+                stream(&append.subject)?,
+                append.prefix_sha256.as_ref().map(|_| prefix.clone()),
+            );
+            prefix.extend(frames);
+            after_overlay.insert(stream(&append.subject)?, Some(prefix));
+        }
+        let before = self.before_view()?;
+        let after = self.after_view()?;
+        let before_versions = verify_history_with(
+            root,
+            &before_all,
+            &before_overlay,
+            Some(before.as_deref().unwrap_or_default()),
+        )?;
+        let mut after_all = before_all.clone();
+        after_all.insert(self.operation().into(), j.manifest.clone());
+        let after_versions = verify_history_with(root, &after_all, &after_overlay, Some(&after))?;
+        Ok((
+            snapshot(before, before_versions, &before_all)?,
+            snapshot(Some(after), after_versions, &after_all)?,
+        ))
+    }
 }
 pub fn capture(root: &Path) -> Result<Option<Vec<u8>>> {
     Ok(capture_snapshot(root)?.current)
@@ -908,19 +1026,7 @@ pub fn capture_snapshot(root: &Path) -> Result<Snapshot> {
             "node_publication_view_mismatch",
         )?;
     }
-    let operations = all
-        .values()
-        .flat_map(|m| {
-            m.touched
-                .iter()
-                .map(|t| (t.event.clone(), m.operation.clone()))
-        })
-        .collect();
-    Ok(Snapshot {
-        current,
-        versions,
-        operations,
-    })
+    snapshot(current, versions, &all)
 }
 
 /// Portable exact bytes for source-free reconstruction. Export remains a full-closure audit.

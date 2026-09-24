@@ -50,6 +50,22 @@ pub struct ObservationNode {
 }
 
 impl ObservationNode {
+    /// Encode an exact observation against an already verified semantic predecessor.
+    pub fn between(
+        id: impl Into<String>,
+        base: &str,
+        previous: &BTreeSet<String>,
+        saw: &BTreeSet<String>,
+    ) -> Result<Self> {
+        Self::delta(
+            id,
+            base,
+            saw.difference(previous).cloned().collect(),
+            previous.difference(saw).cloned().collect(),
+            saw.len(),
+            saw_digest(saw),
+        )
+    }
     pub fn root(id: impl Into<String>, saw: &BTreeSet<String>) -> Result<Self> {
         let id = id.into();
         let node = Self {

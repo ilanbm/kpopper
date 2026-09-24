@@ -75,8 +75,24 @@ The durable manifest is the commit decision. Recovery without that manifest roll
 only exact journal-owned tails; recovery with it finishes forward. Unknown tails,
 changed authority, changed inventory and unrelated committed corruption refuse recovery.
 The verifier receives the exact prepared operation, views and touched frames, and its
-execution is bracketed by revalidation. The semantic admission adapter remains to be
-integrated. A successful byte-level publication is not a claim of knowledge acceptance.
+execution is bracketed by revalidation. Exact before/after snapshots can also be restored
+under the lock during retry and recovery, including partially appended streams.
+
+`history_node_writer` connects add/set/review preparation to that publication boundary.
+It stores changed receipt components alongside node events and compact side contexts in
+the transaction. Evidence-only events have an explicit versioned kind and must preserve
+their parent's semantic payload; they never create duplicate claims. Receipt restoration
+uses the transaction's causal closure and validates the original digest. Admission replays
+the retained intent against the exact before snapshot, then compares the resulting current
+bytes, frames and context. Recovery uses the same verifier before changing any bytes.
+Archive and optimistic current-snapshot guards are checked during preparation and replay.
+New ordinary claims retain their receipt components with their lazy current binding;
+adding an unrelated claim does not create a history file for an unchanged node.
+
+This adapter is experimental library functionality. Public routing, policy/privacy guards,
+strict-root creation, other operation families and activation are not integrated yet.
+Unsupported strict-root writes and unpartitioned evidence refuse before publication.
+A successful low-level byte publication alone still does not establish semantic admission.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
 It preserves the exact new-format bytes and audits the entire committed closure. It
