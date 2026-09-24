@@ -21,13 +21,13 @@ new letter and deciding what to ask the bank is the agent's job.
 
 ## Run the checks
 
-From the repository root, with the package's Python dependencies installed:
+From the repository root, with an installed `kpop` on PATH:
 
 ```sh
-python3 scripts/kpopper check examples/offer-review/before/GROUNDING.yaml
-python3 scripts/kpopper check examples/offer-review/after/GROUNDING.yaml
-python3 scripts/kpopper open --chars 4000 examples/offer-review/after/GROUNDING.yaml
-python3 scripts/kpopper pull plan.application_deadline examples/offer-review/after/GROUNDING.yaml
+kpop check examples/offer-review/before/GROUNDING.yaml
+kpop check examples/offer-review/after/GROUNDING.yaml
+kpop open --chars 4000 examples/offer-review/after/GROUNDING.yaml
+kpop pull plan.application_deadline examples/offer-review/after/GROUNDING.yaml
 ```
 
 Both checks exit successfully. The second reports `MOVED plan.application_deadline`:

@@ -1,10 +1,9 @@
 # Packaged core runtime
 
 `<target>.kpopper-runtime` is ZIP-formatted generated package data for the explicit, default-off
-experimental `core/v1` profile. A normal pip or plugin installation uses it
-offline: no compiler, network download, or checked-session setup is needed. The
-Python wrapper is portable; native computation requires a matching verified
-archive. The domain-specific suffix keeps hosts that reject ZIP files nested in
+experimental `core/v1` profile. An ordinary installation uses it offline: no
+compiler, network download, or checked-session setup is needed. Native
+computation requires a matching verified archive. The domain-specific suffix keeps hosts that reject ZIP files nested in
 plugin downloads from mistaking this runtime payload for another plugin package.
 
 The data-only executable has three closed transports. KP2/KR2 retains the scalar
@@ -85,7 +84,7 @@ different compiler/SDK hosts.
 
 One `gmp-source-and-build.tar.gz` beside the target archives supplies GMP's
 exact corresponding source and build instructions for all targets. It must
-ship in every wheel, sdist and plugin carrying the binary archives. The
+ship in every distribution carrying the binary archives. The
 shared library may be replaced with an ABI-compatible modification; the
 runtime identifies replacement without disabling it. See the included
 `THIRD_PARTY_NOTICES.txt` and LGPLv3/GPLv3 texts.
@@ -100,12 +99,8 @@ An archive is not verified merely because its manifest names a platform.
 The candidate CI must pass on that platform before integration/publication.
 
 The separate `reasoning-runtime` workflow builds candidates, audits proof and
-linkage behavior, and checks wheel/sdist/plugin execution with cold caches
-and no compiler on the effective runtime PATH. Python3.13 runs on all five
-native targets; Python3.9 runs on both Linux CPUs, Intel macOS and Windows.
-`setup-python` does not supply a Darwin arm64 Python3.9 artifact, so that
-interpreter/CPU combination is not claimed as executed. The package's base
-Python requirement remains >=3.9. The workflow uploads candidates and does
+linkage behavior, and checks execution with cold caches and no compiler on
+the effective runtime PATH. The workflow uploads candidates and does
 not publish releases. The release completeness gate must require all five
 verified archives and matching runtime source identity before publishing.
 

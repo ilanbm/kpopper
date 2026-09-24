@@ -10,7 +10,7 @@ to see passing branch tests, clean Git merges and failed recorded conditions tog
 ## Check the proposed merge result
 
 Keep `GROUNDING.yaml` and any referenced record files available in the checkout. For a
-separate project using the published package, a GitHub Actions workflow can start with:
+separate project using the released command, a GitHub Actions workflow can start with:
 
 ```yaml
 name: reasoning-check
@@ -28,15 +28,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: python -m pip install kpopper==1.2.0
+      - name: Install kpopper
+        run: |
+          curl -fsSL -o install.sh \
+            https://github.com/ilanbm/kpopper/releases/download/v0.10.0/install.sh
+          sh install.sh --version 0.10.0 --prefix "$HOME/.local"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: kpop check
       - run: kpop consolidate --dry-run
 ```
 
-Choose the package version deliberately when updating this workflow. The ordinary
+The installer downloads the archive matching the runner's platform and verifies its
+SHA-256; nothing is built on the runner. Choose the version deliberately when updating
+this workflow, and pin it so a new release cannot change a check's meaning without a
+commit. The ordinary
 `pull_request` checkout uses
 [GitHub's proposed merge result](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#how-the-merge-branch-affects-your-workflow);
 keep that behavior when the purpose is to test the combined record. A push check also checks the resulting `main`

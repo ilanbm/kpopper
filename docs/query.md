@@ -93,30 +93,20 @@ step, depth, digit and typed-value bounds. KP2/KR2 and KP3/KR3 retain their
 existing bytes and semantics. Manifest version 3 advertises the complete
 protocol and module sets.
 
-The registry in `scripts/reasoning/modules.py` is closed compiled code. A module
-prepares a detached bounded request, validates its native response and finalizes
-the evidence basis. `QueryModule` and `scripts/reasoning/query.py` demonstrate the
-interface; the Lean kernel owns row evaluation. Consumers render common typed
+The module registry is closed compiled code inside the command. A module
+prepares a detached bounded request, validates the runtime's response and finalizes
+the evidence basis; the Lean kernel owns row evaluation. Consumers render common typed
 values, witnesses and findings without query-specific branches.
 
-The scoped adapter hooks are:
-
-```python
-QueryModule.prepare(capture, authored_operation, *, request_id, root_witness,
-                    declared_capabilities, limits)
-QueryModule.validate(prepared)
-QueryModule.decode_response(response, prepared)
-QueryModule.finalize_basis(prepared, response)
-```
-
-`capture` is a bounded `Snapshot.capture_query_scope` result. `prepared` binds the
-normalized operation, native request, required modules, potential witnesses and
-basis template. `validate` rechecks that detached envelope; `decode_response`
-checks the already decoded KR4 result against it. `finalize_basis` incorporates
-verified scan counts. Arithmetic/composition retain their older preparation
-signature; this is a reviewed source extension point, not a dynamic plugin API.
-A new scoped module also needs explicit evaluator dispatch and transport/schema
-registration. It cannot expand its own captured authority.
+A scoped module's four steps are preparation, validation of that detached
+envelope, decoding of the already decoded KR4 result against it, and a basis
+finalized with verified scan counts. Preparation reads a bounded capture of the
+query scope and binds the normalized operation, the runtime request, required
+modules, potential witnesses and the basis template. Arithmetic and composition
+retain their older preparation shape; this is a reviewed source extension point,
+not a dynamic plugin API. A new scoped module also needs explicit evaluator
+dispatch and transport/schema registration. It cannot expand its own captured
+authority.
 
 For an additive module, register a new versioned capability and its protocol,
 resources, basis recipe, preparation and response validation. Supply independent
@@ -124,16 +114,16 @@ semantic cases, malformed-input tests, scope invalidation tests and installed
 conformance. Changing an existing module's meaning requires a versioned core
 compatibility decision. Records cannot register callbacks or load module code.
 
-From a source checkout with its dependencies installed:
+From a source checkout, the query, extension-contract, runtime and consumer
+cases run with the rest of the suite:
 
 ```sh
-python -m unittest tests.test_reasoning_query_ir tests.test_reasoning_extension_contract
-python -m unittest tests.test_reasoning_query_runtime tests.test_reasoning_query_consumers
+cd native && cargo test --locked
 ```
 
-The native suite runs the committed host archive and fails if it is unavailable
+The suite runs the committed host archive and fails if it is unavailable
 or stale. The [runtime guide](../scripts/reasoning/native/README.md) covers builds,
-axiom audits and wheel/sdist/plugin acceptance. Query conformance is executable
+axiom audits and runtime acceptance. Query conformance is executable
 evidence; no theorem of complete query correctness is claimed. See
 [core assurance](reasoning-core.md#runtime-licensing-and-assurance) for the exact
 proved fragment and remaining trusted components.

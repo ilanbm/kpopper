@@ -27,7 +27,7 @@ Add to it in the shape it already uses.
 **Ask it what moved; do not read it whole.** Reading the record whole costs its full size on
 every session, and almost none of it moved since the last one.
 
-**One command opens the session:** `provenance.py open`. It prints the record's own head —
+**One command opens the session:** `kpop open`. It prints the record's own head —
 what this project is, where the record actually lives if this file is a pointer — and then
 only what needs a person: ranked, cut to a budget, and honest about how many it left out.
 On a clean record that is a few lines. The plugin runs this by itself at session start; if

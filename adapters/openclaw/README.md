@@ -1,7 +1,7 @@
 # kpopper for OpenClaw
 
 The verification below predates the application rename and the native runtime: it
-ran the Python CLI, and the native install steps here have not had a live host run.
+ran the earlier implementation, and the native install steps here have not had a live host run.
 The current bundle has eight canonical skills plus the `page` and `document`
 compatibility aliases; the application skills are now `hub` and `annotated-doc`.
 
@@ -147,8 +147,8 @@ give the exact pass criteria and distinguish command tests from conversation tes
 On 2026-09-16, OpenClaw 2026.9.4 on macOS arm64 with Node 24.16.0 linked the
 repository in isolated state. Its CLI reported all eight skills eligible and
 model-visible. Plugin inspection reported the bundle's declared `skills` and
-`hooks`, with no registered hook names. A separately installed kpopper 1.6.0 Python
-runtime was used for the record smoke check.
+`hooks`, with no registered hook names. A separately installed kpopper 1.6.0
+release was used for the record smoke check.
 
 On 2026-09-17, the `claude-cli/claude-fable-5-1` route completed source/fact creation,
 an executable judgment, fresh-session recall of random confirmation codes in two
@@ -161,15 +161,15 @@ record. This tests workspace selection, not a filesystem isolation boundary.
 The test needed operator approvals and the file-based write route after denied
 shell commands. OpenClaw state was separate, while the Claude backend used an
 existing login and could see its native kpopper skills/hooks. Warnings from that
-native profile's Python hooks were observed; they are not evidence that OpenClaw
-executed the bundle's hooks. The explicit virtualenv CLI completed the checks.
+native profile's own hooks were observed; they are not evidence that OpenClaw
+executed the bundle's hooks. The separately installed CLI completed the checks.
 No messaging channel, sandbox, default embedded provider, scheduling or other OS
 was validated. See the [CLI backend contract](https://docs.openclaw.ai/gateway/cli-backends).
 
 ### Follow-up without a native kpopper installation supplying context
 
-A separate checkout of the merged package and a fresh Python environment were
-installed in new OpenClaw state. A test-only launcher replaced the backend's
+A separate checkout of the merged tree and a fresh runtime install were
+used in new OpenClaw state. A test-only launcher replaced the backend's
 `--setting-sources user` with an empty setting-source list and disabled auto memory
 for that process. It preserved OpenClaw's explicit plugin, transport and permission
 arguments, and retained the existing subscription login. Managed policy and global

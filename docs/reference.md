@@ -393,8 +393,9 @@ See [the user flow](documents.md) and run `kpop experimental annotated-doc guide
 | Agent integration | [hooks](../hooks/hooks.json), [adapters](../adapters/README.md) |
 
 The GitHub release carries one archive per platform, and crates.io the sources to build the
-same command. Agent plugins add the method and host-specific hooks. The npm package provides
-the Node browser checker alone. One version spans every distribution manifest.
+same command. Agent plugins add the method and host-specific hooks. The npm package `kpopper`
+provides the Node browser checker alone and keeps its own 1.x version line; the release
+archives, the crate and the plugin manifests share one version.
 
 Every command reads the whole record, so a file's parsed form is kept under
 `$XDG_STATE_HOME/kpopper/cache`, or `~/.local/state/kpopper/cache`, one private entry per

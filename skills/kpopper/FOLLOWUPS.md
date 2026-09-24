@@ -202,7 +202,7 @@ the main checkout, enumerate sibling worktree graphs, or merge their findings. T
 identity is shared across related worktrees, while its record path remains pinned.
 
 The scheduled host starts or resumes an agent session, whose prompt instructs it to perform
-ready authorized work. The Python coordinator selects and claims work; it does not execute
+ready authorized work. The coordinator selects and claims work; it does not execute
 task instructions or spawn an independent session per followup. An external executor is
 preserved as an owner, not automatically awakened. A blocked or undecided item is reported
 for the user instead of being treated as completed.

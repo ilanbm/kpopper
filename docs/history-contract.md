@@ -46,7 +46,7 @@ objects. It never returns a valid-looking partial subset. This bounded in-memory
 helper admits at most 20,000 objects; a larger closure requires another explicitly
 bounded interface rather than silent truncation. Individual objects are bounded
 to 1 MiB. Values are limited to 128 levels and 100,000 traversal occurrences
-before hashing/copying, including repeated references in a supplied Python DAG.
+before hashing/copying, including repeated references in a supplied object graph.
 `encode_document` and `decode_document` retain typed YAML values and refuse
 duplicate mapping keys and YAML aliases. The encoder emits no aliases. Existing
 prototype objects may retain sorted repeated references without changing their

@@ -79,11 +79,7 @@ Context reads are opt-in; ordinary search never expands automatically. Continue 
 
 ## Optional local E5
 
-Install the optional runtime in the same Python environment as checked sessions:
-
-```sh
-python -m pip install 'kpopper[session,retrieval]'
-```
+The encoder ships with the command; ranking needs only the two model files below.
 
 Obtain these two files from the [pinned Xenova multilingual-e5-small revision](https://huggingface.co/Xenova/multilingual-e5-small/tree/761b726dd34fb83930e26aab4e9ac3899aa1fa78):
 
