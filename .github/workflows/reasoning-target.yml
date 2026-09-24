@@ -66,7 +66,9 @@ jobs:
           --source-bundle scripts/reasoning/native/gmp-source-and-build.tar.gz
           --replacement-library '${{ runner.temp }}/replacement/${{ inputs.target }}.library'
       - name: Save successfully built dependencies before running integration checks
-        if: steps.dependencies.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.dependencies.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/reasoning-dependencies
@@ -88,12 +90,6 @@ jobs:
             scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime
             scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime.sha256
           if-no-files-found: error
-      - name: Upload the separately modified test library
-        uses: actions/upload-artifact@v4
-        with:
-          name: gmp-replacement-${{ inputs.target }}
-          path: ${{ runner.temp }}/replacement/${{ inputs.target }}.library
-          if-no-files-found: error
       - name: Upload the shared corresponding-source archive
         if: inputs.target == 'linux-x86_64'
         uses: actions/upload-artifact@v4
@@ -107,7 +103,7 @@ jobs:
     needs: build
     # Validate the exact candidate and replacement library produced for this target.
     if: inputs.validate-candidate && needs.build.result == 'success'
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-python@v5
         with:

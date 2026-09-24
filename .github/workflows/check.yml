@@ -10,10 +10,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch makes the older run irrelevant.
 concurrency:
-  group: check-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull requests supersede older runs; main keeps one run per commit so a later
+  # documentation push cannot cancel the run that covers a runtime change.
+  group: check-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'shared' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:

@@ -58,7 +58,9 @@ Lean version, runner image and relevant build environment. Production and modifi
 replacement GMP have separate receipts. A prefix is reused only if its complete
 file/link inventory matches; missing or corrupt receipts rebuild. The cache has no
 partial-key fallback. Runtime compilation, proof/link audits, archive conformance
-and installed replacement-library tests still execute. A cold cache therefore
+and replacement-library probe still execute. Dependency caches save only on main pushes or
+manual dispatches against main; a manual main dispatch can refresh a new runner-image key.
+A cold cache therefore
 retains the original GMP `make check` work; warm-run savings must be measured
 separately from cold-run timings.
 
@@ -101,7 +103,9 @@ committed-bundle preflight and artifact round-trip check. Full validation keeps 
 integrity gate and checks that the downloaded archive matches its build sidecar.
 The candidate tests run the native scalar, composition and query
 corpus, then replace the extracted GMP with a separately built probe library and
-check both its load marker and a large-integer arithmetic result. Changes to either
+check both its load marker and a large-integer arithmetic result. The full-mode sidecar
+check verifies the downloaded artifact round trip; it does not execute the candidate again.
+Changes to either
 runtime workflow or the builder must regenerate
 `scripts/reasoning/native/gmp-source-and-build.tar.gz`, which carries their exact
 source and build instructions.

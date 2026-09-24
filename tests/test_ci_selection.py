@@ -294,8 +294,9 @@ class WorkflowCoverage(unittest.TestCase):
         build = workflow["build"]
         save = next(step for step in build["steps"]
                     if step.get("name") == "Save successfully built dependencies before running integration checks")
-        self.assertEqual(save["if"],
-                         "steps.dependencies.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'")
+        self.assertIn("github.ref == 'refs/heads/main'", save["if"])
+        self.assertIn("github.event_name == 'workflow_dispatch'", save["if"])
+        self.assertIn("github.event_name == 'push'", save["if"])
 
     def test_reasoning_target_always_builds_and_full_mode_checks_the_artifact_round_trip(self):
         jobs = self.jobs("reasoning-target.yml")
@@ -303,6 +304,16 @@ class WorkflowCoverage(unittest.TestCase):
         check = next(step for step in jobs["candidate-validation"]["steps"]
                      if step.get("name") == "Verify the downloaded candidate archive and sidecar")
         self.assertIn("hashlib.sha256", check["run"])
+        self.assertEqual(jobs["candidate-validation"]["runs-on"], "ubuntu-latest")
+        uploaded = [step.get("with", {}).get("name") for step in jobs["build"]["steps"]
+                    if "upload-artifact" in step.get("uses", "")]
+        self.assertNotIn("gmp-replacement-${{ inputs.target }}", uploaded)
+
+    def test_main_checks_are_not_cancelled_by_a_later_main_commit(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())
+        self.assertIn("github.sha", workflow["concurrency"]["group"])
+        self.assertEqual(workflow["concurrency"]["cancel-in-progress"],
+                         "${{ github.event_name == 'pull_request' }}")
 
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
         steps = self.jobs()["changes"]["steps"]
