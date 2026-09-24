@@ -36,6 +36,65 @@ d.contradiction_by_id_and_day:
     p.supersede_doors: 1
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-16'
+- rests_on:
+  - s.2026_09_04_minted_permission
+  - s.2026_09_03_hypotheses
+  - s.2026_09_15_verdict_conflicts_decided
+  - s.2026_09_15_branch_verdict_conflicts
+  - d.base_shared_forks_on_contradiction
+  - d.write_path_returns_reach
+  - p.supersede_doors
+  - m.door.opposed_verdicts_named_reversed
+  - m.door.grounds_changes_named
+  - m.door.future_dated_readings_refused
+  verdict: 'a contradiction is told by the id, the day and the base''s own readings: the same id with
+    a value read no later than the base''s own reading, or with a different verdict, or with the same
+    verdict on other grounds, is refused into the base and named a hypothesis; a newer reading supersedes
+    and one dated after today is refused; a standing judgment is superseded only when its wrong_if holds
+    on what the base holds; across the branch line a reading from another source with another value waits
+    for a person to name the source; the same premises under different ids are different subjects'
+  because: 'set is the update path - the world moving - so a differing value alone cannot be the contradiction;
+    what the record can tell apart is time, and the day is its clock: a reading newer than the base''s
+    supersedes, one of the same day or older that disagrees is two writers. A day ahead of today would
+    outrank every reading of today, so it is refused - {{m.door.future_dated_readings_refused}} places
+    a reading is dated. A judgment has no clock and a session''s word admits nothing, so a standing judgment
+    is replaced only when its own condition holds - on what the base holds, since a reading that arrives
+    together with the verdict has not been accepted yet - and every other rewrite waits beside the record
+    for a person to take by name. The same verdict on other grounds is a decision written again and goes
+    the same way, since the grounds are what the verdict answers to; {{m.door.grounds_changes_named}}
+    such changes are named where both doors were blind. Across the branch line two sources for one id
+    that disagree are two instruments, and no day orders instruments, so a person names which the id follows.
+    The two-branch test of issues #98 and #99 named none of its opposed verdicts; {{m.door.opposed_verdicts_named_reversed}}
+    are named now. The same premises under different ids stay different subjects until someone says otherwise.
+    One function decides all of it; {{p.supersede_doors}} is the count that would show a second one creeping
+    in.'
+  wrong_if: p.supersede_doors > 1
+  seen:
+    s.2026_09_04_minted_permission: read 2026-09-04
+    s.2026_09_03_hypotheses: read 2026-09-03
+    s.2026_09_15_verdict_conflicts_decided: read 2026-09-15
+    s.2026_09_15_branch_verdict_conflicts: 'The session that replayed the two-branch verdict conflict
+      of issues #98 and #99 on this tree and probed four cases the issues did not try. Its reading: readings
+      pass the day rule, a judgment in one tree is replaced only when its own falsifier fires, but the
+      fold - local hypothesis or another branch - lays any verdict over a standing judgment by hand and
+      calls it clean, so the write that add refuses in one tree passes across the branch line; the in-place
+      supersede keeps nothing of what it replaced; a judgment''s grounds are invisible to both doors;
+      a future-dated reading enters. The rule it shaped, not yet decided: the base''s condition evaluated
+      on the base, an unfired flip contested and folded only by name, every replacement traced beside
+      the record, and a source''s own clock in place of the day.'
+    d.base_shared_forks_on_contradiction: a consistent addition goes straight to the shared record from
+      any session or branch; a write that contradicts the record opens a named hypothesis, and whatever
+      later rests on the contradiction goes there - a session is never the unit
+    d.write_path_returns_reach: the record changes from the command line through set, add and review;
+      each edits the file in place, writes seen itself, and answers with the reach - what rests on the
+      write, what is MOVED now, which predicate fired; set can replace from and at together with a value
+      using --source and --at, without reviewing dependent judgments
+    p.supersede_doors: 1
+    m.door.opposed_verdicts_named_reversed: 2
+    m.door.grounds_changes_named: 2
+    m.door.future_dated_readings_refused: 3
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
 d.fold_passes_the_one_door:
 - rests_on:
   - s.2026_09_04_minted_permission
@@ -523,3 +582,157 @@ d.shape_move_read_by_its_sign:
     p.coverage_thresholds: 0
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-23'
+d.crate_carries_shared_copies:
+- name: The published crate carries its own copies of the files it shares
+  verdict: 'native/ builds on its own: the files the crate embeds or fingerprints from scripts/ are copied
+    into native/shared/, and the licence into native/LICENSE. scripts/ stays the place to edit them; a
+    stale copy stops a native build in the repository and fails the release tests. A crate built from
+    crates.io declares the adapter fingerprint of the same version built from the repository.'
+  because: crates.io receives native/ alone, while the plugin and the Python reader read these files from
+    scripts/ by path, so the originals cannot move. Cargo publishes a rewritten manifest and keeps the
+    original as Cargo.toml.orig; the build hashes that original, so receipts and the runtime declaration
+    name one program whichever channel built it.
+  rests_on:
+  - d.crates_io_every_release
+  reopened_by: A crate built from crates.io refuses the verified resources of the release with the same
+    version, or declares a different adapter than that release's executable.
+  from: s.2026_09_23_crates_io
+  seen:
+    d.crates_io_every_release: Each release's crate is published to crates.io as kpopper, from the commit
+      its GitHub release was made from and only once that release is out. An owner publishes the first
+      version, which claims the name; the release workflow publishes every later one through trusted publishing.
+      Only bytes equal to the package the release build verified are uploaded, and a version crates.io
+      already serves must be those bytes.
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.dry_run_is_check_on_the_union:
+- rests_on:
+  - s.2026_09_04_consolidate
+  - d.consolidation_is_a_test
+  - d.hypotheses_read_beside_the_base
+  - p.union_tests
+  verdict: 'the dry run is the reader''s own check, run on the base with the hypotheses laid over it by
+    id, said as what the fold would change: what arrives, what it replaces and what rests on that, what
+    the union moves or breaks, what is contested'
+  because: A second evaluator for hypotheses would drift from the first; what a hypothesis's judgment
+    needs is exactly what check asks of any judgment, asked of the record as it would stand after the
+    fold. So the union is checked as a base is, and only what check did not already say about the base
+    alone is the union's doing - a record already red stays red on its own account. A premise that moved
+    under a judgment blocks the fold and leaves the run green, since a move flags a judgment for a person
+    and fails no build; a contested id, a falsifier that holds and a hole make it red. {{p.union_tests}}
+    is the count of places the union is tested.
+  wrong_if: p.union_tests > 1
+  seen:
+    s.2026_09_04_consolidate: read 2026-09-04
+    d.consolidation_is_a_test: 'consolidating hypotheses into the base tests whether the writers worked
+      on the same world: premises re-checked, falsifiers evaluated, contradictions stopped - as a dry
+      run at any moment, and as a step on every pull request'
+    d.hypotheses_read_beside_the_base: every command reads the hypotheses beside the record over the base
+      - pull shows what each proposes, check and open say where two disagree, the opener counts what waits
+      with each one's age and reach - and evaluates the base alone; the union is tested by consolidation,
+      and the page draws the base
+    p.union_tests: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.one_reference_resolver:
+- rests_on:
+  - d.reasoning_in_record
+  - p.reference_resolvers
+  verdict: a reference resolves the same way on every surface - the value where the entry holds one, its
+    name where it holds only a rule, the verdict for a judgment - and one function does it
+  because: The card, the section text, the hover, pull and open each show a reasoning, and four renderings
+    of one sentence would drift the day one of them learned a new case. So one function resolves, every
+    surface calls it, and the count of such functions - {{p.reference_resolvers}} today - is what would
+    show a second one creeping in.
+  wrong_if: p.reference_resolvers > 1
+  seen:
+    d.reasoning_in_record: reasoning is the because of the judgment it belongs to, in the record; the
+      page's connective text lives in the brief; both resolve references at build and both carry seen
+    p.reference_resolvers: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.same_asks_the_one_door:
+- rests_on:
+  - s.2026_09_04_sameness
+  - d.contradiction_by_id_and_day
+  - d.sameness_is_judged
+  - p.supersede_doors
+  verdict: 'same is a migration through the record''s own write path: the retired id is rewritten everywhere
+    it is named - dependencies, snapshots, predicates, rules, references in text, the brief - the survivor
+    takes the newer reading with its place and date, and where the two readings disagree with nothing
+    to order them the migration is refused through the one door every same-id write goes through; check
+    runs after, and a problem it did not have undoes the whole of it'
+  because: 'Two ids for one subject are two readings of it, and the record already has one rule for two
+    readings under one id: the newer supersedes, the same day or undated is two writers. Asking {{p.supersede_doors}}
+    door rather than writing a second keeps the migration from becoming a way to overwrite a value that
+    add and set would refuse. The rewrite is by whole token across every file the record is, structural
+    where a judgment named both ids and would otherwise rest on the survivor twice; the survivor carries
+    also: with the retired id, so a write under the old id is refused and pointed at it. Check after the
+    write is what makes a migration safe to run without reading the diff: a reference the rewrite missed
+    fails there, and the files come back as they were.'
+  wrong_if: p.supersede_doors > 1
+  seen:
+    s.2026_09_04_sameness: read 2026-09-04
+    d.contradiction_by_id_and_day: 'a contradiction is told by the id and the day: the same id with a
+      value read no later than the base''s own reading, or with a different verdict, is refused into the
+      base and named a hypothesis; a newer reading supersedes, a standing judgment is superseded only
+      when its wrong_if holds or the request that asked for the change is named; the same premises under
+      different ids are different subjects'
+    d.sameness_is_judged: 'the tool never decides that two entries are the same: it shows the nearest
+      existing entries when one is written and candidates when hypotheses consolidate; the writer or the
+      merger decides, and the decision is recorded - same_as as a migration that leaves the build green,
+      distinct_from as an edge that retires the pair'
+    p.supersede_doors: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.tree_reads_as_a_hypothesis:
+- rests_on:
+  - s.2026_09_04_remeasure
+  - d.dry_run_is_check_on_the_union
+  - d.contradiction_by_id_and_day
+  - d.moved_is_a_flag
+  - p.union_tests
+  verdict: 'the tree''s readings that differ from the record are laid over it as one more hypothesis -
+    named after the commit, never folded - with the hypotheses beside the record and through the same
+    dry run, so the pull request decides nothing check would not: a falsifier that holds on the measured
+    value is red, a reading the door refuses is contested, an older reading that moved is green and says
+    what refreshes it, and a value enters the record only by a person''s or a session''s write'
+  because: '{{d.dry_run_is_check_on_the_union}} already tests the record as it would stand under a claim,
+    and a measurement is a claim about the tree with a date: laying it over the base asks the one question
+    that exists and adds no evaluator - {{p.union_tests}} stays the count. The door decides the reading
+    like any other, by {{d.contradiction_by_id_and_day}}: one older than the tree''s is superseded and
+    the judgments over it move, which {{d.moved_is_a_flag}} keeps a flag and not a failure; one of the
+    same day that disagrees is two writers, and here the second writer is the author of the pull request,
+    who corrects the number in it. The runner writes nothing: a value with nobody''s reading behind it
+    is not a reading, and a commit nobody reviewed is not the record.'
+  wrong_if: p.union_tests > 1
+  seen:
+    s.2026_09_04_remeasure: read 2026-09-04
+    d.dry_run_is_check_on_the_union: 'the dry run is the reader''s own check, run on the base with the
+      hypotheses laid over it by id, said as what the fold would change: what arrives, what it replaces
+      and what rests on that, what the union moves or breaks, what is contested'
+    d.contradiction_by_id_and_day: 'a contradiction is told by the id and the day: the same id with a
+      value read no later than the base''s own reading, or with a different verdict, is refused into the
+      base and named a hypothesis; a newer reading supersedes, a standing judgment is superseded only
+      when its wrong_if holds or the request that asked for the change is named; the same premises under
+      different ids are different subjects'
+    d.moved_is_a_flag: a dependency that moved since the snapshot flags the judgment for a person; only
+      a predicate that holds fails the build
+    p.union_tests: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.one_tree_two_channels:
+- rests_on:
+  - skill.two_shapes
+  - p.script_copies
+  verdict: the command line and the plugin ship the same files - packaging maps the script directory rather
+    than copying it
+  because: 'Two installable copies of the same reader is this method''s own worst mistake, shipped: they
+    drift in silence, and every reader afterwards has to know which of them answered. Mapping the directory
+    costs one line and cannot drift.'
+  wrong_if: p.script_copies > 1
+  seen:
+    skill.two_shapes: Two parallel records is the most expensive mistake available here
+    p.script_copies: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
