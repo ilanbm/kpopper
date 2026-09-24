@@ -1749,6 +1749,15 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.grok_bot_setup:
+    name: "Grok Bot installation proposal and verification limits"
+    file: "adapters/grok-bot/README.md"
+    read: "2026-09-24"
+    of: "Cloud-computer installation and explicit project instructions, with a private skill
+         pointing to canonical files. Official Grok Bot computer and skills documentation reviewed on
+         2026-09-24. No live Grok Bot installation, skill-use or fresh-conversation validation has
+         been performed for this guide; Grok Build compatibility does not establish Grok Bot plugin
+         or hook support."
   doc.history_source_clock_order:
     name: "Source clock grouping and retained mapping order"
     from: s.2026_09_19_native_transactions

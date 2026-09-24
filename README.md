@@ -776,6 +776,18 @@ then install it from **Plugins**.
 kpopper's runtime in Work is not yet validated; see
 [Work setup and current limits](docs/chatgpt-work.md).
 
+### Grok Bot
+
+**In Grok Bot:** paste the [installation request above](#get-started). Follow the
+[Grok Bot guide](adapters/grok-bot/README.md#install) to install the runtime on its
+cloud computer, choose a persistent project folder and save a skill that reads
+kpopper's shared instructions.
+
+This route has **not yet been verified in a live Grok Bot session**. It uses explicit
+commands; automatic hooks and plugin import remain unverified. Grok Build has a
+separate plugin system, so its Claude Code compatibility claim does not establish
+Grok Bot support.
+
 ### Other agents
 
 **In Cursor, Gemini CLI, Windsurf, GitHub Copilot, OpenClaw or OpenCode:** paste the
