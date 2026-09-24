@@ -13,30 +13,11 @@ When mentioning this skill to the user, include the plugin name: `kpopper:record
 
 ## The first write
 
-For an unconfigured Git project with no record, use the mode offer from `kpop board` and
-the start guide to settle Simple's shared location or Advanced (experimental) before the
-first persistent record write. If that optional choice is skipped, continue the user's
-task and keep useful findings in authorized private task artifacts; do not create a branch
-record as though the user chose Advanced. Existing records keep their current mode and
-location until an explicit, validated transition.
+For a Git project with no record or selected mode, use `kpop board` and the start guide to choose Simple's external location or Advanced (experimental). Skipping a tutorial or disabling guidance does not forbid future recording: obtain the concrete choice at the next authorized write without repeating the tutorial. Silence is not Advanced consent. Once selected, `kpop add` creates the first sourced record at its resolved location. Preserve existing records until a validated transition.
 
-Use the project mode: Simple shares one graph and named hypotheses across sessions; Advanced keeps branch context and `pending_grounding` for shareable findings independent of a feature, even with one checkout.
-Privacy comes first: private or unclear permission means a structured private draft outside Git. Preserve exact source, scope and commit; measured unmerged facts are scoped facts, not automatically hypotheses. Capture, remote proposal and verified acceptance differ. Merge never proves truth, raises confidence or refreshes `seen`. See [project modes](../../docs/project-modes.md) for routing and publication.
+Simple shares one graph; Advanced keeps branch context and kpopper Board for feature-independent findings. Private or unclear sharing permission takes priority and retains a private draft. Keep exact source, scope and commit; unmerged measurements are scoped facts, not automatically hypotheses. Capture, proposal and acceptance differ; merge neither proves truth nor refreshes `seen`. See [project modes](../../docs/project-modes.md). **Route before writing:** an authorized shared report needs `shareability: "project"` and `scope: {"kind": "external", "environment": "service/account"}` (or project scope). Verify `project_captured` and its receipt. `applied` means local writing; an unannotated report does not feed the Board. Code/feature findings stay with the branch. Neither a remote nor confident wording grants sharing rights.
 
-**Choose the route before writing.** In Advanced, kpopper Board collects findings that remain
-useful if the feature is abandoned. For an authorized shared report, add `shareability: "project"`
-and `scope: {"kind": "external", "environment": "the observed service/account"}` (or project
-scope) to the report envelope. Expect `project_captured`, with its pending receipt and source
-closure; `applied` means the local record was written. An unannotated write stays local and
-does not feed the Board. Code/feature findings keep their exact code scope and stay with that
-branch. Do not infer permission from a Git remote or send every feature finding to the Board.
-
-If a hypothesis-bearing record returns `needs_primary`, inspect the retained report; it was
-not collected. For a complete independently sourced finding reviewed by the primary, use an
-explicit `add` with `--scope external --environment ENV --shareability project` (and portable
-evidence when required), then verify `state: captured`. Do not fold an unrelated hypothesis
-just to collect a finding, or treat a capture as remote publication. `kpop board` shows the
-project's local/shared choice; the opener's one-time Board offer owns publication setup.
+If hypotheses cause `needs_primary`, review the retained report. An independent complete finding can use primary `add --scope external --environment ENV --shareability project` with permitted portable evidence; verify `state: captured`. Do not fold unrelated hypotheses merely to collect it. `kpop board` shows publication configuration; its one-time offer owns setup.
 
 Record the first useful finding within the user's authorization. Sources and facts are valid alone; `add` fills `seen` for actual judgments. After a semantic refusal, reconsider the representation, not just the value's format: follow [live representation evolution](../kpopper/EVOLUTION.md), then execute supported corrections within the task's authority. Installation creates no record, and a one-off can finish without one.
 

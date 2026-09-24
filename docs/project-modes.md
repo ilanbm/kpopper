@@ -224,6 +224,13 @@ name immutable revisions: for example `pending withdraw REVISION --reason "Reaso
 With permission, capture starts a nonblocking publication attempt. Active session openings
 retry with bounded backoff. A stopped host is not a running service; background queues do
 not install a schedule or wake a computer.
+The opener completes its record reads before starting publication. Concurrent captures are
+retained in the ledger; publishers wait for the active local publisher and process arrivals
+in bounded batches. A busy/queued or started attempt is not evidence of remote publication.
+Transient failures retry on later active sessions after backoff, capped at five minutes;
+they do not permanently exhaust automatic retries. `board` reports waiting, retry-due,
+paused and attention states. Explicit pauses and uncertain remote-write reconciliation are
+preserved. Acceptance checks still inspect previously proposed contributions after merges.
 
 The publisher keeps one cumulative PR. It checks the remote head before updating it and
 stops for an unexpected writer instead of overwriting their work. Network uncertainty

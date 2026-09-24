@@ -89,26 +89,38 @@ done
 exec "$KPOP_TEST_GIT" "$@"
 "#,
         );
-        f.script("gh", r#"#!/bin/sh
-[ "$1" = api ] && [ "$2" = --hostname ] && [ "$3" = github.invalid ] || exit 2
-printf '%s\n' "$5" >> "$KPOP_TEST_CALLS"
-case "$5" in
-GET)
-  case "$6" in
-  repos/fixture/repo) printf '%s\n' '{"full_name":"fixture/repo","default_branch":"main","permissions":{"push":true}}' ;;
-  repos/fixture/repo/git/ref/heads/main)
-    target=$("$KPOP_TEST_GIT" -C "$KPOP_TEST_REMOTE" rev-parse refs/heads/main) || exit
-    printf '{"ref":"refs/heads/main","object":{"sha":"%s"}}\n' "$target"
-    ;;
-  *) printf '[]\n' ;;
-  esac ;;
-POST)
-  cat > "$KPOP_TEST_BODY"
-  head=$("$KPOP_TEST_GIT" -C "$KPOP_TEST_REMOTE" rev-parse refs/heads/pending_grounding) || exit
-  printf '{"number":1,"state":"open","html_url":"fixture://pr/1","head":{"sha":"%s"},"body":""}\n' "$head"
-  ;;
-*) exit 2 ;;
-esac
+        f.script("gh", r#"#!/usr/bin/env python3
+import json,os,pathlib,subprocess,sys,time
+a=sys.argv[1:]
+assert a[:3]==['api','--hostname','github.invalid'], a
+method=a[a.index('--method')+1]; endpoint=a[5]
+base=pathlib.Path(os.environ['KPOP_TEST_CALLS']).parent
+with open(os.environ['KPOP_TEST_CALLS'],'a') as log:log.write(method+'\n')
+if (base/'offline').exists():sys.exit(1)
+state=base/'provider.json'
+rows=json.loads(state.read_text()) if state.exists() else []
+def head(branch):return subprocess.check_output([os.environ['KPOP_TEST_GIT'],'-C',os.environ['KPOP_TEST_REMOTE'],'rev-parse','refs/heads/'+branch],text=True).strip()
+if method=='GET':
+    if endpoint=='repos/fixture/repo':result={'full_name':'fixture/repo','default_branch':'main','permissions':{'push':True}}
+    elif endpoint=='repos/fixture/repo/git/ref/heads/main':result={'ref':'refs/heads/main','object':{'sha':head('main')}}
+    else:
+        for row in rows:
+            if row['state']=='open':row['head']['sha']=head('pending_grounding')
+        result=rows
+elif method in ('POST','PATCH'):
+    body=json.load(sys.stdin)
+    if method=='POST': pathlib.Path(os.environ['KPOP_TEST_BODY']).write_text(json.dumps(body))
+    if method=='POST':
+        if (base/'slow').exists(): time.sleep(2)
+        result={'number':len(rows)+1,'state':'open','html_url':'fixture://pr/'+str(len(rows)+1),
+                'head':{'sha':head('pending_grounding'),'ref':'pending_grounding','repo':{'full_name':'fixture/repo'}},
+                'base':{'ref':'main','repo':{'full_name':'fixture/repo'}},'body':body['body']}
+        rows.append(result)
+    else:
+        result=rows[0];result['body']=body['body'];result['head']['sha']=head('pending_grounding')
+    state.write_text(json.dumps(rows))
+else:raise AssertionError(a)
+print(json.dumps(result))
 "#);
         f
     }
@@ -203,7 +215,15 @@ esac
             .unwrap()
             .write_all(json!({"cwd": self.root}).to_string().as_bytes())
             .unwrap();
-        success(child.wait_with_output().unwrap());
+        let output = success(child.wait_with_output().unwrap());
+        assert!(
+            !output.contains("could not be opened") && !output.contains("view unavailable"),
+            "{output}"
+        );
+        assert!(
+            output.contains("1 entries, 0 judgments"),
+            "{output}"
+        );
     }
     fn proposed(&self) {
         let deadline = Instant::now() + Duration::from_secs(15);
@@ -216,7 +236,7 @@ esac
                         .as_object()
                         .unwrap()
                         .values()
-                        .any(|v| v == "proposed")
+                        .all(|v| v == "proposed")
                 {
                     break;
                 }
@@ -354,7 +374,7 @@ fn capture_replay_and_session_opening_respect_backoff_and_revocation() {
     let captured = f.capture();
     let path = f.root.join(".git/kpopper/project/publication.json");
     let mut state: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    for (failures, retry_at) in [(0, 4_000_000_000u64), (5, 0)] {
+    for (failures, retry_at) in [(0, 4_000_000_000u64), (5, 4_000_000_000u64)] {
         state["paused"] = json!(false);
         state["failures"] = json!(failures);
         state["retry_at"] = json!(retry_at);
@@ -376,4 +396,70 @@ fn capture_replay_and_session_opening_respect_backoff_and_revocation() {
     );
     f.start(false);
     assert!(!f.bin.join("calls").exists());
+}
+
+#[test]
+fn session_read_finishes_before_publishing_and_idle_acceptance_checks_remain_available() {
+    let f = Fixture::new();
+    f.grant();
+    f.capture();
+    f.proposed();
+    for _ in 0..3 {
+        f.start(false);
+        f.proposed();
+    }
+}
+
+#[test]
+fn automatic_retry_recovers_after_five_transient_failures() {
+    let f = Fixture::new();
+    f.grant();
+    f.cli(&["pending", "pause"]);
+    f.capture();
+    let path = f.root.join(".git/kpopper/project/publication.json");
+    let mut state: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    state["paused"] = json!(false);
+    state["failures"] = json!(5);
+    state["retry_at"] = json!(0);
+    fs::write(&path, serde_json::to_vec(&state).unwrap()).unwrap();
+    assert_eq!(f.cli(&["board"])["retry_state"], "retry_due");
+    assert_eq!(f.capture()["publication_attempt"]["started"], true);
+    f.proposed();
+    assert_eq!(f.cli(&["pending", "status"])["failures"], 0);
+}
+
+#[test]
+fn another_capture_during_publication_is_drained_without_a_new_session() {
+    let f = Fixture::new();
+    f.grant();
+    fs::write(f.bin.join("slow"), "").unwrap();
+    f.capture();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !f.bin.join("body.json").exists() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let second = f.cli(&[
+        "add",
+        "vendor.second",
+        "v=20",
+        "from=Approved fixture bulletin",
+        "--scope",
+        "external",
+        "--environment",
+        "fixture vendor",
+        "--shareability",
+        "project",
+        "--event-id",
+        "second",
+    ]);
+    assert_eq!(second["state"], "captured");
+    f.proposed();
+    let record = f.git(&[
+        "--git-dir",
+        f.remote.to_str().unwrap(),
+        "show",
+        "pending_grounding:GROUNDING.yaml",
+    ]);
+    assert!(record.contains("vendor.second"));
 }

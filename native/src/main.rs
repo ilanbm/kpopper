@@ -249,6 +249,18 @@ fn stdin_bytes() -> Result<Vec<u8>> {
     require(raw.len() <= MAX_BYTES, "byte_limit")?;
     Ok(raw)
 }
+fn retry_session_snapshot<T>(mut read: impl FnMut() -> Result<T>) -> Result<T> {
+    for attempt in 0..4 {
+        match read() {
+            Err(error) if error.0 == "snapshot_changed" && attempt < 3 => {
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            result => return result,
+        }
+    }
+    unreachable!()
+}
+
 fn session(options: &kpop_native::public_session::StartOptions) -> Result<String> {
     let raw = stdin_bytes()?;
     let mut payload = if raw.iter().all(u8::is_ascii_whitespace) {
@@ -302,15 +314,8 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
     let mut opening_failed = false;
-    if !feasibility && mode == kpop_native::source_capture::ReadMode::Live {
-        // Retry only already-authorized publication. Opening remains useful
-        // offline and frozen reads never start a background publisher.
-        if let Ok(project) = kpop_native::project_modes::Project::open(&root) {
-            kpop_native::pending_publication::trigger_after_capture(&project);
-        }
-    }
-    let first_use = location.as_ref().filter(|_| mode == kpop_native::source_capture::ReadMode::Live).map(|location| {
-        kpop_native::onboarding::context_with_host(location, options.host.as_deref())
+    let first_use = location.as_ref().map(|location| {
+        kpop_native::onboarding::context_with_mode(location, options.host.as_deref(), mode)
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
     });
     if location.as_ref().is_some_and(|l| l.status == "unavailable") {
@@ -320,7 +325,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let result = Store::open(&root)?;
         output.push(format!("Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}", result["commits"], serde_json::to_string(&result["document"]["readings"])?));
     } else if let Some(location) = location.as_ref().filter(|l| l.status != "missing") {
-        match kpop_native::session_admin::hook_opening(&root, mode) {
+        match retry_session_snapshot(|| kpop_native::session_admin::hook_opening(&root, mode)) {
             Ok(Some(text)) => {
                 output.push(text.trim_end().into());
                 if let Some(host) = options.host.as_deref() {
@@ -338,13 +343,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     from_hook: true,
                     ..Default::default()
                 };
-                match kpop_native::public_readers::run_auto(
+                match retry_session_snapshot(|| kpop_native::public_readers::run_auto(
                     "open",
                     &options,
                     &root,
                     mode,
                     kpop_native::public_readers::Reply::View,
-                ) {
+                )) {
                     Ok(opening) => {
                         if !opening.text.is_empty() {
                             output.push(opening.text.trim_end().into());
@@ -389,12 +394,18 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         // A baseline that cannot be saved leaves the opening intact; prompt
         // diagnostics then stay silent for this session. A failed opening has
         // already put its diagnostic on stderr, so none is added for the baseline.
-        match kpop_native::public_session::start_mark(&root, &payload, mode) {
+        match retry_session_snapshot(|| kpop_native::public_session::start_mark(&root, &payload, mode)) {
             Err(error) if !opening_failed => {
                 eprintln!("kpop: session baseline was not saved: {error}")
             }
             _ => (),
         }
+    }
+    // Finish every checked read and baseline before a child may change the
+    // publication observations those reads pin.
+    if !feasibility && mode == kpop_native::source_capture::ReadMode::Live
+        && let Ok(project) = kpop_native::project_modes::Project::open(&root) {
+        kpop_native::pending_publication::trigger_after_capture(&project);
     }
     Ok(output.join("\n"))
 }

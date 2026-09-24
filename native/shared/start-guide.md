@@ -24,6 +24,8 @@ an existing project because Advanced is now experimental.
 
 At the first suitable moment in meaningful user work, if `mode_offer` is true, show the
 existing Simple/Advanced README illustration with an enlargement link and two mode choices.
+If `illustration` is null, run `kpop board illustration` to export the exact image bundled
+with this runtime and use its returned local path. Do not substitute an older release URL.
 Use the user's language. Explain the following before accepting the choice:
 
 > **How should this Git project keep its knowledge?**
@@ -66,6 +68,9 @@ independent work; setup is not a prerequisite for the requested task. Never offe
 during urgent work or in a background task. Choices are shared by the repository's worktrees;
 a saved choice is not announced again. Mapping remains available on request without another
 onboarding questionnaire.
+A dismissed tutorial or disabled guidance does not permanently prevent recording. If no
+mode has been selected when the next authorized record write is needed, obtain just the
+concrete mode/location choice then. Do not repeat the tutorial or infer Advanced consent.
 When `mode_selected` is true and neither offer is due, respond only to the user's actual
 task. Do not mention the saved mode, record path or Board, or announce that setup is being
 skipped, unless the user asks about them.
@@ -103,6 +108,10 @@ local choices and pause state. A user can connect later through `board inspect` 
 connect`. Use the existing illustration once during this setup; do not show it a second time
 or generate another diagram. On a text-only host, provide its link. Respect source sharing
 rights and the scope of record-writing authorization throughout.
+Transient network failures retain findings and back off between later active sessions;
+they do not permanently exhaust automatic retries. The Board status exposes the retry state.
+Busy publishers process the durable queue with bounded waiting/batches; a started child
+or a queued contribution is not a verified publication. Pauses remain explicit.
 
 ## The first offer for Simple projects
 

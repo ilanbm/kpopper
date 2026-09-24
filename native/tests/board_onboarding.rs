@@ -91,8 +91,14 @@ impl Fixture {
         .unwrap()
     }
     fn opener(&self) -> String {
-        let mut c = self
-            .command_at(&self.root)
+        self.opener_mode(false)
+    }
+    fn opener_mode(&self, frozen: bool) -> String {
+        let mut command = self.command_at(&self.root);
+        if frozen {
+            command.env("KPOPPER_READ_MODE", "frozen");
+        }
+        let mut c = command
             .args(["session-start", "--host", "codex"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -147,6 +153,7 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
     );
     assert!(!f.root.join(".git/kpopper/project/project.json").exists());
     assert!(f.opener().contains("kpopper Board"));
+    f.cli(&["config", "--mode", "advanced", "--json"]);
     assert_eq!(f.cli(&["board", "local"])["choice"], "local");
     assert!(!f.opener().contains("KPOPPER_BOARD_OFFER"));
     let sibling = f._temp.path().join("sibling");
@@ -185,14 +192,18 @@ fn shown_is_not_authority_and_suppresses_repeated_offers() {
 fn fresh_simple_selection_pins_one_external_home_without_creating_an_empty_record() {
     let f = Fixture::new();
     fs::remove_file(f.root.join("GROUNDING.yaml")).unwrap();
-    // Test a genuinely new repository, with no committed record either.
-    f.git(&["rm", "--cached", "GROUNDING.yaml"]);
+    // Test a genuinely new repository, with no record in any reachable commit.
+    fs::remove_dir_all(f.root.join(".git")).unwrap();
+    f.git(&["init", "-q", "-b", "main"]);
+    f.git(&["config", "user.name", "Fixture"]);
+    f.git(&["config", "user.email", "fixture@example.test"]);
     f.git(&[
         "-c",
         "commit.gpgsign=false",
         "commit",
+        "--allow-empty",
         "-qm",
-        "remove fixture record",
+        "empty project",
     ]);
     let destination = f.private.join("GROUNDING.yaml");
     let result = f.cli(&[
@@ -469,11 +480,12 @@ fn discovery_does_not_echo_credentials_embedded_in_remote_urls() {
 fn a_later_local_choice_invalidates_an_earlier_connection_offer() {
     let f = Fixture::new();
     f.provider(true);
+    f.cli(&["config", "--mode", "advanced", "--json"]);
     let inspected = f.cli(&["board", "inspect", "--remote", "origin"]);
-    assert_eq!(inspected["generation"], 0);
+    assert_eq!(inspected["generation"], 1);
     let local = f.cli(&["board", "local"]);
-    assert_eq!(local["generation"], 1);
-    assert_eq!(f.cli(&["board", "local"])["generation"], 1);
+    assert_eq!(local["generation"], 2);
+    assert_eq!(f.cli(&["board", "local"])["generation"], 2);
     let before = fs::read(f.private.join("calls")).unwrap();
     let result = f
         .command_at(&f.root)
@@ -487,7 +499,7 @@ fn a_later_local_choice_invalidates_an_earlier_connection_offer() {
             "--target",
             "main",
             "--generation",
-            "0",
+            "1",
             "--grant",
         ])
         .output()
@@ -495,4 +507,98 @@ fn a_later_local_choice_invalidates_an_earlier_connection_offer() {
     assert!(!result.status.success());
     assert_eq!(fs::read(f.private.join("calls")).unwrap(), before);
     assert_eq!(f.cli(&["board"])["choice"], "local");
+}
+
+#[test]
+fn board_local_requires_an_explicit_mode_and_leaves_the_mode_offer_available() {
+    let f = Fixture::new();
+    assert!(
+        !f.command_at(&f.root)
+            .args(["board", "local"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert_eq!(f.cli(&["board"])["mode_offer"], true);
+    assert!(!f.root.join(".git/kpopper/project/project.json").exists());
+}
+
+#[test]
+fn simple_setup_does_not_hide_a_record_on_an_unopened_branch() {
+    let f = Fixture::new();
+    f.git(&["branch", "record-branch"]);
+    f.git(&["rm", "GROUNDING.yaml"]);
+    f.git(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-qm",
+        "no current record",
+    ]);
+    let destination = f.private.join("GROUNDING.yaml");
+    let output = f
+        .command_at(&f.root)
+        .args([
+            "config",
+            "--mode",
+            "simple",
+            "--record",
+            destination.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let diagnostic = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(diagnostic.contains("record history exists"), "{diagnostic}");
+    assert!(!f.root.join(".git/kpopper/project/project.json").exists());
+}
+
+#[test]
+fn frozen_unavailable_and_first_write_guidance_are_not_suppressed_by_onboarding() {
+    let f = Fixture::new();
+    fs::remove_file(f.root.join("GROUNDING.yaml")).unwrap();
+    f.cli(&["board", "shown", "--mode"]);
+    assert!(f.opener().contains("next needed"));
+    f.cli(&["config", "--mode", "advanced", "--json"]);
+    assert!(f.opener().contains("first write creates"));
+    fs::remove_file(f.root.join(".git/kpopper/project/project.json")).unwrap();
+    fs::write(
+        f.root.join(".git/kpopper-record"),
+        f.private.join("missing/GROUNDING.yaml").to_str().unwrap(),
+    )
+    .unwrap();
+    let frozen = f.opener_mode(true);
+    assert!(
+        frozen.contains("record unavailable") && frozen.contains("Do not create a replacement"),
+        "{frozen}"
+    );
+    assert!(!frozen.contains("KPOPPER_MODE_OFFER"));
+}
+
+#[test]
+fn submodule_has_no_unsafe_default_location_and_runtime_exports_its_own_image() {
+    let f = Fixture::new();
+    let module = Fixture::new();
+    f.git(&[
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        module.root.to_str().unwrap(),
+        "vendor/lib",
+    ]);
+    let status: Value = serde_json::from_str(&success(
+        f.command_at(&f.root.join("vendor/lib"))
+            .arg("board")
+            .output()
+            .unwrap(),
+    ))
+    .unwrap();
+    assert!(status["simple_record_suggestion"].is_null());
+    let image = f.cli(&["board", "illustration"]);
+    assert_eq!(image["source"], "bundled");
+    let bytes = fs::read(image["illustration"].as_str().unwrap()).unwrap();
+    assert_eq!(bytes, include_bytes!("../shared/board.png"));
 }

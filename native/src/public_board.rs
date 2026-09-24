@@ -17,6 +17,8 @@ pub struct Options {
 pub enum Command {
     /// Inspect local Board configuration without contacting a remote.
     Status,
+    /// Export this runtime's bundled onboarding illustration for the host to display.
+    Illustration,
     /// Inspect repository access and its target branch without granting permission.
     Inspect {
         #[arg(long)]
@@ -71,19 +73,31 @@ fn preference(project: &Project) -> Result<Value> {
     )?;
     Ok(value)
 }
-fn illustration() -> String {
+fn illustration() -> Option<String> {
     if let Ok(exe) = std::env::current_exe() {
         for dir in exe.ancestors().skip(1).take(6) {
             let image = dir.join("assets/diagrams/two-working-modes.png");
             if image.is_file() {
-                return image.to_string_lossy().into_owned();
+                return Some(image.to_string_lossy().into_owned());
             }
         }
     }
-    format!(
-        "https://raw.githubusercontent.com/ilanbm/kpopper/v{}/assets/diagrams/two-working-modes.png",
-        env!("CARGO_PKG_VERSION")
-    )
+    None
+}
+fn export_illustration() -> Result<Value> {
+    use std::io::Write;
+    let bytes = include_bytes!("../shared/board.png");
+    let digest = crate::identity::sha256(bytes);
+    let dir = onboarding::state_dir()?.join("illustrations");
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{digest}.png"));
+    if std::fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
+        let mut file = tempfile::NamedTempFile::new_in(&dir)?;
+        file.write_all(bytes)?;
+        file.persist(&path)
+            .map_err(|e| Error(e.error.to_string()))?;
+    }
+    Ok(json!({"illustration":path.canonicalize()?,"sha256":digest,"source":"bundled"}))
 }
 
 pub fn status(workspace: &Path) -> Result<Value> {
@@ -95,6 +109,27 @@ pub fn status(workspace: &Path) -> Result<Value> {
     let guidance = onboarding::guidance()?;
     let mode_offer = advanced && !mode_selected && saved["mode_shown"] != true && guidance;
     let cached = pending_control::load_state(&project.state.join("publication.json"))?.to_json()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| Error("clock unavailable".into()))?
+        .as_secs_f64();
+    let retry_state = if cached["paused"] == true {
+        "paused"
+    } else if cached["receipts"]
+        .as_array()
+        .and_then(|r| r.last())
+        .is_some_and(|r| r["event"] == "attention")
+    {
+        "needs_attention"
+    } else if cached["failures"].as_u64().unwrap_or(0) > 0 {
+        if now < cached["retry_at"].as_f64().unwrap_or(0.0) {
+            "waiting_to_retry"
+        } else {
+            "retry_due"
+        }
+    } else {
+        "ready"
+    };
     let publication = &config["publication"];
     let granted = publication["standing_permission"] == true;
     let chosen = if granted {
@@ -121,13 +156,17 @@ pub fn status(workspace: &Path) -> Result<Value> {
         "record":project.record(None)?,"simple_record_suggestion":simple_record_suggestion(&project),
         "standing_permission":granted,"publication":publication,"remotes":remotes,
         "paused":cached["paused"],"pr":cached["pr"],"failures":cached["failures"],"retry_at":cached["retry_at"],
-        "illustration":illustration(),"state_path":project.state.join("board.json"),
+        "retry_state":retry_state,
+        "illustration":illustration(),"illustration_command":["board","illustration"],"state_path":project.state.join("board.json"),
         "reading_scope":"Pending findings are read across local worktrees without merging; remote publication is a separate review proposal."}),
     )
 }
 
 fn simple_record_suggestion(project: &Project) -> Option<PathBuf> {
     let common = project.common.as_ref()?;
+    if common.file_name()? != ".git" {
+        return None;
+    }
     let primary = common.parent()?;
     let name = primary.file_name()?.to_str()?;
     // A sibling of the primary checkout is stable across ephemeral worktrees.
@@ -165,6 +204,10 @@ fn inspect(project: &Project, remote: Option<&str>, target: Option<&str>) -> Res
 
 fn remember(project: &Project, local: bool) -> Result<()> {
     require(project.is_git(), "Board choices belong to a Git project")?;
+    require(
+        !local || project.config_path.is_file(),
+        "choose Simple or Advanced explicitly before setting Board publication; board local does not select a mode",
+    )?;
     let policy = project.lock()?;
     let previous = preference(project)?;
     let mut config = policy.config().to_json()?;
@@ -197,6 +240,7 @@ pub fn run(options: &Options, workspace: &Path) -> Result<Value> {
     let project = Project::open(workspace)?;
     match &options.command {
         None | Some(Command::Status) => status(workspace),
+        Some(Command::Illustration) => export_illustration(),
         Some(Command::Inspect { remote, target }) => {
             inspect(&project, remote.as_deref(), target.as_deref())
         }
@@ -277,6 +321,14 @@ pub fn opening(state: &Value) -> Result<Option<String>> {
         )));
     }
     if state["offer"] != true {
+        if state["standing_permission"] == true && state["retry_state"] != "ready" {
+            return Ok(Some(format!(
+                "KPOPPER_BOARD_STATUS {}\nFindings remain durable locally. Transient failures retry on later active sessions after the bounded delay; pending retry requests an earlier attempt. Respect a deliberate pause. Mention this status only when it affects the requested work or needs a decision, not as a repeated setup offer.",
+                serde_json::to_string(
+                    &json!({"state":state["retry_state"],"retry_at":state["retry_at"],"failures":state["failures"],"pr":state["pr"]})
+                )?
+            )));
+        }
         return Ok(None);
     }
     Ok(Some(format!(

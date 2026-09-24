@@ -1363,10 +1363,9 @@ fn run_bound(
         );
         return match captured {
             Ok(output) => output.ok_or_else(|| error("advanced report capture unavailable")),
-            Err(error) if !matches!(error.0.as_str(),
-                "multi-file and pointer records require primary review"
-                    | "a record with hypothesis context requires primary review") => Err(error),
-            Err(error) => {
+            Err(advanced::CaptureFailure::Error(error)) => Err(error),
+            Err(advanced::CaptureFailure::NeedsPrimary(reason)) => {
+                let error = crate::Error(reason.into());
                 let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
                 // A retained journal may already describe a durable capture.
                 // Leave its recovery path intact instead of claiming no write.
