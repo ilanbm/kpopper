@@ -12,8 +12,10 @@ directories.
 | `rust` | The command on each platform: compilation, its tests, the release build and installed acceptance | `native/`, the plugin's shell plumbing and host wrappers, the packaging tools, the installers, the runtime resources and the Lean sources |
 | `runtime` | Rebuild the Lean/GMP reasoning runtime and exercise the fresh archive plus a replacement GMP library | Lean sources, runtime recipe and corresponding-source archive, native runtime integration test |
 
-The declarations are checked, not trusted. On Linux, `.github/scripts/ci_audit.py` watches
-every file the audited lanes open, through fanotify, which costs no measurable time. It maps
+The audited lanes' declarations are checked, not trusted. On Linux,
+`.github/scripts/ci_audit.py` watches every file those lanes open, through fanotify, which costs
+no measurable time. The `runtime` lane is not fanotify-audited yet; its inputs are selected by
+the declared source and recipe paths. The audit maps
 installed copies and bytecode back to the tracked source and fails the job if a lane read a
 file, or listed a directory, that its declaration leaves out. A new dependency changes a file
 the lane already reads, so the lane runs on that pull request and the audit reports the new

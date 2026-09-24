@@ -3,9 +3,6 @@ name: reasoning-runtime
 on:
   workflow_call:
     inputs:
-      rebuild:
-        type: boolean
-        required: true
       target-scope:
         type: string
         default: all
@@ -17,7 +14,7 @@ on:
         options: [all, pull-request]
         default: all
       candidate-only:
-        description: "Build replacement candidates before committing updated bundles; omit installed validation."
+        description: "Build and validate candidates; skip committed-bundle preflight and downloaded-artifact validation."
         type: boolean
         default: false
 
@@ -54,6 +51,5 @@ jobs:
     with:
       runner: ${{ matrix.runner }}
       target: ${{ matrix.target }}
-      target-scope: ${{ inputs.target-scope }}
-      rebuild: ${{ inputs.rebuild || github.event_name == 'workflow_dispatch' }}
+      rebuild: true
       validate-candidate: ${{ github.event_name != 'workflow_dispatch' || !inputs.candidate-only }}

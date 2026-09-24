@@ -148,7 +148,6 @@ jobs:
     if: needs.changes.outputs.runtime == 'true'
     uses: ./.github/workflows/reasoning-runtime.yml
     with:
-      rebuild: true
       target-scope: ${{ needs.changes.outputs.platforms }}
 
   ci-required:

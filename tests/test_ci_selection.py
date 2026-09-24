@@ -245,6 +245,25 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms"})
         self.assertEqual({lane for lanes in CI.JOB_LANES.values() for lane in lanes}, ALL)
 
+    def test_reusable_workflow_calls_match_declared_inputs(self):
+        workflow_dir = ROOT / ".github/workflows"
+        for caller_path in sorted(workflow_dir.glob("*.yml")):
+            caller = yaml.safe_load(caller_path.read_text())
+            for job_name, job in caller.get("jobs", {}).items():
+                target = job.get("uses", "")
+                if not target.startswith("./.github/workflows/"):
+                    continue
+                callee_path = ROOT / target.removeprefix("./")
+                callee = yaml.safe_load(callee_path.read_text())
+                triggers = callee.get("on", callee.get(True, {}))
+                declared = triggers.get("workflow_call", {}).get("inputs", {})
+                supplied = job.get("with", {})
+                with self.subTest(caller=caller_path.name, job=job_name):
+                    self.assertLessEqual(set(supplied), set(declared))
+                    required = {name for name, spec in declared.items()
+                                if spec.get("required") is True and "default" not in spec}
+                    self.assertLessEqual(required, set(supplied))
+
     def test_native_pull_request_subset_is_the_full_matrix_without_intel_macos(self):
         workflow = (ROOT / ".github/workflows/native-rust.yml").read_text()
         literals = [json.loads(part) for part in workflow.split("'") if part.startswith('[{"runner"')]
