@@ -713,72 +713,93 @@ mod tests {
             assert!(!manifest.contains(absent));
         }
     }
-    #[test]
-    fn node_report_recovers_each_publication_boundary() {
-        for phase in [
-            "prepared",
-            "journal",
-            "append",
-            "evidence",
-            "committed",
-            "view",
-        ] {
-            let (root, runtime) = fixture();
-            let bytes = serde_json::to_vec(&report()).unwrap();
-            let error = run_with_probe(
-                &options(root.path()),
+    fn node_report_recovers_at(phase: &str) {
+        let (root, runtime) = fixture();
+        let bytes = serde_json::to_vec(&report()).unwrap();
+        let error = run_with_probe(
+            &options(root.path()),
+            root.path(),
+            Some(&bytes),
+            Some(&runtime),
+            &mut |at| {
+                if at == phase {
+                    Err(error("crash"))
+                } else {
+                    Ok(())
+                }
+            },
+        )
+        .unwrap_err();
+        assert!(error.0.contains("crash"), "{phase}: {}", error.0);
+        if ["journal", "committed"].contains(&phase) {
+            let result = crate::direct_history::recover_with_runtime(
+                &[root.path().join("GROUNDING.yaml")],
                 root.path(),
-                Some(&bytes),
+                false,
                 Some(&runtime),
-                &mut |at| {
-                    if at == phase {
-                        Err(error("crash"))
-                    } else {
-                        Ok(())
-                    }
-                },
-            )
-            .unwrap_err();
-            assert!(error.0.contains("crash"), "{phase}: {}", error.0);
-            if ["journal", "committed"].contains(&phase) {
-                let result = crate::direct_history::recover_with_runtime(
-                    &[root.path().join("GROUNDING.yaml")],
-                    root.path(),
-                    false,
-                    Some(&runtime),
-                )
-                .unwrap();
-                assert_eq!(
-                    map(&result).unwrap()["state"],
-                    s(if phase == "committed" {
-                        "committed"
-                    } else {
-                        "rolled_back"
-                    })
-                );
-            }
-            let output = run_with_probe(
-                &options(root.path()),
-                root.path(),
-                Some(&bytes),
-                Some(&runtime),
-                &mut |_| Ok(()),
             )
             .unwrap();
-            assert_eq!(output.code, 0, "{phase}: {}", output.text);
-            let receipt: J = serde_json::from_str(&output.text).unwrap();
-            assert_eq!(receipt["recovered"], true);
-            assert_eq!(receipt["newly_fired_judgments"], json!(["d.x"]));
             assert_eq!(
-                Capture::read(root.path())
-                    .unwrap()
-                    .document()
-                    .to_json()
-                    .unwrap()["known"]["p.x"]["v"],
-                2
+                map(&result).unwrap()["state"],
+                s(if phase == "committed" {
+                    "committed"
+                } else {
+                    "rolled_back"
+                })
             );
         }
+        let output = run_with_probe(
+            &options(root.path()),
+            root.path(),
+            Some(&bytes),
+            Some(&runtime),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        assert_eq!(output.code, 0, "{phase}: {}", output.text);
+        let receipt: J = serde_json::from_str(&output.text).unwrap();
+        assert_eq!(receipt["recovered"], true);
+        assert_eq!(receipt["newly_fired_judgments"], json!(["d.x"]));
+        assert_eq!(
+            Capture::read(root.path())
+                .unwrap()
+                .document()
+                .to_json()
+                .unwrap()["known"]["p.x"]["v"],
+            2
+        );
     }
+
+    #[test]
+    fn node_report_recovers_after_prepared() {
+        node_report_recovers_at("prepared");
+    }
+
+    #[test]
+    fn node_report_recovers_after_journal() {
+        node_report_recovers_at("journal");
+    }
+
+    #[test]
+    fn node_report_recovers_after_append() {
+        node_report_recovers_at("append");
+    }
+
+    #[test]
+    fn node_report_recovers_after_evidence() {
+        node_report_recovers_at("evidence");
+    }
+
+    #[test]
+    fn node_report_recovers_after_committed() {
+        node_report_recovers_at("committed");
+    }
+
+    #[test]
+    fn node_report_recovers_after_view() {
+        node_report_recovers_at("view");
+    }
+
     #[test]
     fn node_report_rechecks_source_and_prepared_graph_before_recovery() {
         for change in ["source", "graph", "envelope"] {
