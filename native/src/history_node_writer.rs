@@ -19,6 +19,7 @@ use crate::{
     require,
     value::TypedValue as V,
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -140,8 +141,6 @@ fn encode_options(o: &A::Options) -> Result<V> {
         !o.recorded_at.is_empty() && !o.recording_day.is_empty(),
         "missing_recording_time",
     )?;
-    // The marker currently has no strict-root rule. Refuse before any byte is prepared.
-    require(!o.strict, "node_strict_roots_unsupported")?;
     Ok(V::Map(Map::from([
         ("recorded_at".into(), s(&o.recorded_at)),
         ("recording_day".into(), s(&o.recording_day)),
@@ -199,6 +198,7 @@ struct Build<'a> {
     operation: &'a str,
     original_document: V,
     originals: Map,
+    tails: Map,
     bases: BTreeMap<String, C::Version>,
     frames: BTreeMap<String, Vec<u8>>,
     fresh: BTreeSet<String>,
@@ -224,6 +224,18 @@ impl<'a> Build<'a> {
             .transpose()?
             .cloned()
             .unwrap_or_default();
+        let tails = map(&doc)?
+            .get("meta")
+            .map(map)
+            .transpose()?
+            .and_then(|m| m.get("node_history"))
+            .map(map)
+            .transpose()?
+            .and_then(|m| m.get("tails"))
+            .map(map)
+            .transpose()?
+            .cloned()
+            .unwrap_or_default();
         let mut bases = BTreeMap::new();
         for (subject, versions) in &capture.snapshot.versions {
             if let Some(tip) = Frame::tip(versions)? {
@@ -234,6 +246,7 @@ impl<'a> Build<'a> {
             operation,
             original_document: doc,
             originals,
+            tails,
             bases,
             frames: BTreeMap::new(),
             fresh: BTreeSet::new(),
@@ -255,17 +268,19 @@ impl<'a> Build<'a> {
         Ok(())
     }
     fn append(&mut self, subject: &str, payload: V) -> Result<()> {
-        if let Some(binding) = self.originals.remove(subject) {
+        let fresh = self.fresh.contains(subject);
+        if !fresh && let Some(binding) = self.originals.remove(subject) {
             let original = Original::decode(&binding)?;
-            let event = if self.fresh.remove(subject) {
-                original.restore(map(node_value(&self.bases[subject])?)?["body"].clone())?
-            } else {
-                original.from_document(&self.original_document)?
-            };
-            self.frames
-                .entry(subject.into())
-                .or_default()
-                .extend(event.encode()?);
+            let event = original.from_document(&self.original_document)?;
+            let frames = self.frames.entry(subject.into()).or_default();
+            frames.extend(event.encode()?);
+            if let Some(tail) = self.tails.remove(subject) {
+                frames.extend(
+                    STANDARD
+                        .decode(text(&tail)?)
+                        .map_err(|_| error("node_publication_base64"))?,
+                );
+            }
         }
         let base = self.bases.get(subject);
         let event = C::Event::create(
@@ -276,10 +291,25 @@ impl<'a> Build<'a> {
             Some(payload),
         )?;
         let next = event.reconstruct(base)?;
-        self.frames
-            .entry(subject.into())
-            .or_default()
-            .extend(event.encode()?);
+        if fresh {
+            let mut tail = self
+                .tails
+                .get(subject)
+                .map(|v| {
+                    STANDARD
+                        .decode(text(v)?)
+                        .map_err(|_| error("node_publication_base64"))
+                })
+                .transpose()?
+                .unwrap_or_default();
+            tail.extend(event.encode()?);
+            self.tails.insert(subject.into(), s(&STANDARD.encode(tail)));
+        } else {
+            self.frames
+                .entry(subject.into())
+                .or_default()
+                .extend(event.encode()?);
+        }
         self.bases.insert(subject.into(), next);
         Ok(())
     }
@@ -296,7 +326,8 @@ impl<'a> Build<'a> {
                 .get(&change.subject)
                 .ok_or_else(|| error("node_evidence_missing_subject"))?;
             let payload = Frame::decode(node_value(base)?)?;
-            let fresh = self.fresh.contains(&change.subject);
+            let fresh =
+                self.fresh.contains(&change.subject) && !self.tails.contains_key(&change.subject);
             let value = Frame::encode(
                 &payload.semantic,
                 if fresh { "semantic" } else { "evidence" },
@@ -379,8 +410,9 @@ fn materialize(
     meta.insert(
         "node_history".into(),
         V::Map(Map::from([
-            ("version".into(), V::from_json(&serde_json::json!(1))?),
+            ("version".into(), V::from_json(&serde_json::json!(2))?),
             ("originals".into(), V::Map(build.originals)),
+            ("tails".into(), V::Map(build.tails)),
         ])),
     );
     let after = P::bind_view(&Y::encode_document(&doc)?, &options.operation)?;
@@ -505,7 +537,7 @@ mod tests {
                 recorded_at: "2026-09-24T12:00:00+00:00".into(),
                 recording_day: "2026-09-24".into(),
                 by: s("writer"),
-                strict: false,
+                strict: true,
                 paths: crate::history_paths::Scheme::Hashed,
                 receipt_version: None,
             };
@@ -522,7 +554,7 @@ mod tests {
             );
         }
         let capture = Capture::read(root.path()).unwrap();
-        assert_eq!(capture.object_count(), 5);
+        assert_eq!(capture.object_count(), 7);
         let state = map(&map(capture.state()).unwrap()["subjects"]).unwrap();
         let head = text(&map(&state["d.b"]).unwrap()["head"]).unwrap();
         let judgment = capture.object("d.b", head).unwrap();

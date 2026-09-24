@@ -165,9 +165,9 @@ impl Journal {
             .map(|raw| current_origins(raw))
             .transpose()?
             .unwrap_or_default();
-        for (subject, event) in current_origins(&after)? {
+        for ((subject, id), event) in current_origins(&after)? {
             if before_origins
-                .get(&subject)
+                .get(&(subject.clone(), id))
                 .is_some_and(|old| old.id() == event.id())
             {
                 continue;
@@ -281,7 +281,7 @@ fn verify_view(all: &BTreeMap<String, Manifest>, raw: &[u8]) -> Result<()> {
         "node_publication_view_mismatch",
     )
 }
-fn current_origins(raw: &[u8]) -> Result<BTreeMap<String, C::Event>> {
+fn current_origins(raw: &[u8]) -> Result<BTreeMap<(String, String), C::Event>> {
     // Empty/legacy-shaped documents carry no lazy originals. A declared namespace is strict.
     let document = crate::history_yaml::decode_document(raw)?;
     let mut result = BTreeMap::new();
@@ -297,19 +297,64 @@ fn current_origins(raw: &[u8]) -> Result<BTreeMap<String, C::Event>> {
     else {
         return Ok(result);
     };
-    let history =
-        crate::history_contract::schema(history, &["version", "originals"], &["versions"])?;
+    let history = crate::history_contract::schema(history, &["version", "originals"], &["tails"])?;
     require(
-        crate::history_contract::is_int(&history["version"], "1"),
+        crate::history_contract::is_int(&history["version"], "1")
+            || crate::history_contract::is_int(&history["version"], "2"),
         "node_publication_current_format",
     )?;
-    for (subject, binding) in crate::history_contract::map(&history["originals"])? {
+    let empty = BTreeMap::new();
+    let tails = history
+        .get("tails")
+        .map(crate::history_contract::map)
+        .transpose()?
+        .unwrap_or(&empty);
+    require(
+        tails.is_empty() || crate::history_contract::is_int(&history["version"], "2"),
+        "node_publication_current_format",
+    )?;
+    let originals = crate::history_contract::map(&history["originals"])?;
+    require(
+        tails.keys().all(|s| originals.contains_key(s)),
+        "node_publication_current_tail",
+    )?;
+    for (subject, binding) in originals {
         let binding = crate::history_node_current::Original::decode(binding)?;
         require(
             binding.subject() == subject,
             "node_publication_current_subject",
         )?;
-        result.insert(subject.clone(), binding.from_document(&document)?);
+        let initial = binding.from_document(&document)?;
+        let mut previous = initial.id().to_owned();
+        let initial_version = initial.reconstruct(None)?;
+        let mut stream = initial.encode()?;
+        result.insert((subject.clone(), initial.id().into()), initial);
+        if let Some(tail) = tails.get(subject) {
+            let tail = unbytes(&Some(crate::history_contract::text(tail)?.into()))?.unwrap();
+            require(!tail.is_empty(), "node_publication_current_tail")?;
+            for frame in tail.split_inclusive(|b| *b == b'\n') {
+                let event = C::Event::decode(frame, subject)?;
+                require(
+                    event.parents() == [previous.clone()],
+                    "node_publication_current_tail_parent",
+                )?;
+                previous = event.id().into();
+                require(
+                    result
+                        .insert((subject.clone(), event.id().into()), event)
+                        .is_none(),
+                    "node_publication_duplicate_event",
+                )?;
+            }
+            stream.extend(tail);
+        }
+        let versions = C::decode_stream(&stream, subject)?;
+        require(
+            versions
+                .values()
+                .all(|v| v.operation() == initial_version.operation()),
+            "node_publication_current_tail_operation",
+        )?;
     }
     Ok(result)
 }
@@ -511,7 +556,7 @@ pub fn prepare_with_context(
         }
         appends.push(append);
     }
-    for (subject, event) in current_origins(&after_view)? {
+    for ((subject, _), event) in current_origins(&after_view)? {
         let touch = Touch {
             subject,
             event: event.id().into(),
@@ -605,7 +650,7 @@ fn verify_history_with(
         current_origins(view)?
     };
     let known = known_touches(all)?;
-    for (subject, event) in &origins {
+    for ((subject, _), event) in &origins {
         require(
             known.get(event.id())
                 == Some(&Touch {
@@ -625,21 +670,31 @@ fn verify_history_with(
             None => read(root, &path)?,
         };
         if raw.is_none() {
-            let origin = origins
-                .get(subject)
-                .ok_or_else(|| bad("node_publication_missing_stream"))?;
+            let mut bytes = Vec::new();
+            let mut count = 0;
+            for ((s, id), event) in &origins {
+                if s != subject {
+                    continue;
+                }
+                let raw = event.encode()?;
+                require(
+                    events.get(id) == Some(&sha256(&raw)),
+                    "node_publication_missing_stream",
+                )?;
+                bytes.extend(raw);
+                count += 1;
+            }
             require(
-                events.len() == 1 && events.get(origin.id()) == Some(&sha256(&origin.encode()?)),
+                count > 0 && count == events.len(),
                 "node_publication_missing_stream",
             )?;
-            verified.insert(
-                subject.clone(),
-                BTreeMap::from([(origin.id().into(), origin.reconstruct(None)?)]),
-            );
+            total_bytes += bytes.len();
+            require(total_bytes <= MAX_BYTES, "node_publication_limit")?;
+            verified.insert(subject.clone(), C::decode_stream(&bytes, subject)?);
             continue;
         }
         require(
-            !origins.contains_key(subject),
+            !origins.keys().any(|(s, _)| s == subject),
             "node_publication_duplicate_current",
         )?;
         paths.insert(C::subject_path(subject)?);

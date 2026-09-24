@@ -279,3 +279,94 @@ fn growing_catalog_has_no_history_files_and_edits_only_materialize_the_changed_n
     assert_eq!(files, vec![C::subject_path("p.0").unwrap()]);
     Capture::read(root.path()).unwrap();
 }
+
+#[test]
+fn strict_creation_retains_acceptance_in_current_until_the_first_later_change() {
+    for phase in [
+        P::Phase::Journal,
+        P::Phase::Append(0),
+        P::Phase::Commit,
+        P::Phase::View,
+    ] {
+        let root = setup();
+        let mut opts = options("strict-add");
+        opts.strict = true;
+        let p = W::prepare(root.path(), &add(), &opts, None).unwrap();
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        assert_eq!(Capture::read(root.path()).unwrap().object_count(), 2);
+        let stream = root
+            .path()
+            .join(".kpopper/history")
+            .join(C::subject_path("p.a").unwrap());
+        assert!(!stream.exists());
+        let receipt = W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap();
+        opts.operation = "strict-set".into();
+        let p = W::prepare(root.path(), &set(2), &opts, None).unwrap();
+        assert!(
+            W::publish(root.path(), &p, None, |at| if at == phase {
+                Err(kpop_native::Error("crash".into()))
+            } else {
+                Ok(())
+            })
+            .is_err()
+        );
+        W::recover(root.path(), None).unwrap();
+        if matches!(phase, P::Phase::Journal | P::Phase::Append(0)) {
+            assert!(!stream.exists());
+        }
+        W::publish(root.path(), &p, None, |_| Ok(())).unwrap();
+        assert!(stream.exists());
+        assert_eq!(Capture::read(root.path()).unwrap().object_count(), 4);
+        assert_eq!(
+            W::receipt(&P::capture_snapshot(root.path()).unwrap(), "strict-add").unwrap(),
+            receipt
+        );
+    }
+}
+
+#[test]
+fn lazy_creation_tail_cannot_hide_a_disconnected_same_operation_root() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let root = setup();
+    let mut opts = options("strict-add");
+    opts.strict = true;
+    let p = W::prepare(root.path(), &add(), &opts, None).unwrap();
+    let mut doc = Y::decode_document(&p.after_view().unwrap()).unwrap();
+    let V::Map(doc_map) = &mut doc else { panic!() };
+    let V::Map(meta) = doc_map.get_mut("meta").unwrap() else {
+        panic!()
+    };
+    let V::Map(history) = meta.get_mut("node_history").unwrap() else {
+        panic!()
+    };
+    let V::Map(tails) = history.get_mut("tails").unwrap() else {
+        panic!()
+    };
+    let V::Text(tail) = tails.get_mut("p.a").unwrap() else {
+        panic!()
+    };
+    let mut raw = STANDARD.decode(&*tail).unwrap();
+    raw.extend(
+        C::Event::create(
+            "p.a",
+            "strict-add",
+            vec![],
+            None,
+            Some(value(json!({"extra":1}))),
+        )
+        .unwrap()
+        .encode()
+        .unwrap(),
+    );
+    *tail = STANDARD.encode(raw);
+    assert!(
+        P::prepare_with_context(
+            root.path(),
+            "strict-add",
+            Y::encode_document(&doc).unwrap(),
+            p.frames().unwrap(),
+            p.context().unwrap().as_ref()
+        )
+        .is_err()
+    );
+}

@@ -86,12 +86,16 @@ uses the transaction's causal closure and validates the original digest. Admissi
 the retained intent against the exact before snapshot, then compares the resulting current
 bytes, frames and context. Recovery uses the same verifier before changing any bytes.
 Archive and optimistic current-snapshot guards are checked during preparation and replay.
-New ordinary claims retain their receipt components with their lazy current binding;
+New claims retain their receipt components with their lazy current binding;
 adding an unrelated claim does not create a history file for an unchanged node.
+Strict creation keeps the claim, its explicit acceptance and receipt evidence in the
+version-2 current binding. Tail frames must form a single chain from the original and
+share its creation operation. The first later change retains that exact chain in the
+node stream, including all original semantic identities.
 
 This adapter is experimental library functionality. Public routing, policy/privacy guards,
-strict-root creation, other operation families and activation are not integrated yet.
-Unsupported strict-root writes and unpartitioned evidence refuse before publication.
+other operation families and activation are not integrated yet.
+Unpartitioned evidence refuses before publication.
 A successful low-level byte publication alone still does not establish semantic admission.
 
 A complete export can reconstruct an isolated temporary copy without source paths.
