@@ -297,6 +297,13 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual(save["if"],
                          "steps.dependencies.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'")
 
+    def test_reasoning_target_always_builds_and_full_mode_checks_the_artifact_round_trip(self):
+        jobs = self.jobs("reasoning-target.yml")
+        self.assertNotIn("if", jobs["build"])
+        check = next(step for step in jobs["candidate-validation"]["steps"]
+                     if step.get("name") == "Verify the downloaded candidate archive and sidecar")
+        self.assertIn("hashlib.sha256", check["run"])
+
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
         steps = self.jobs()["changes"]["steps"]
         gate = next(step for step in steps if "--check-bundles" in step.get("run", ""))
