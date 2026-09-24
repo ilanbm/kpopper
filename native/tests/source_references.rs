@@ -159,11 +159,8 @@ fn live_sources_symbolic_references_prose_urls_and_patterns_are_not_missing_file
 #[test]
 fn line_number_citations_and_relative_colon_names_are_not_pins() {
     let f = Fixture::new();
-    fs::write(f.root.path().join("sources/part:name.py"), "source").unwrap();
-    fs::create_dir(f.root.path().join("logs")).unwrap();
-    fs::write(f.root.path().join("logs/run:1"), "source").unwrap();
     let out = text(f.check(
-        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.column: {file: 'sources/original.txt:42:7'}\n  s.pinned_column: {file: 'source-final:sources/original.txt:42:7'}\n  s.colon: {file: 'sources/part:name.py'}\n  s.digit_colon: {file: 'logs/run:1'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
+        "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.column: {file: 'sources/original.txt:42:7'}\n  s.pinned_column: {file: 'source-final:sources/original.txt:42:7'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
     ));
     assert!(!out.contains("pinned file"), "{out}");
     for id in [
@@ -171,8 +168,6 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
         "s.range",
         "s.column",
         "s.pinned_column",
-        "s.colon",
-        "s.digit_colon",
         "p.line",
     ] {
         assert!(!out.contains(&format!("NOTE {id}:")), "{out}");
@@ -202,14 +197,44 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
     );
     assert!(!trailing_colon.contains("pinned file"), "{trailing_colon}");
 }
+
+#[cfg(unix)]
+#[test]
+fn colon_paths_are_supported_for_local_and_pinned_sources() {
+    let f = Fixture::new();
+    fs::write(f.root.path().join("sources/part:name.py"), "source").unwrap();
+    fs::create_dir(f.root.path().join("logs")).unwrap();
+    fs::write(f.root.path().join("logs/run:1"), "source").unwrap();
+    let local = text(f.check(
+        "sources:\n  s.colon: {file: 'sources/part:name.py'}\n  s.digit_colon: {file: 'logs/run:1'}\n",
+    ));
+    assert!(!local.contains("NOTE s.colon:"), "{local}");
+    assert!(!local.contains("NOTE s.digit_colon:"), "{local}");
+
+    f.git(&["checkout", "-b", "colon-pins"]);
+    f.git(&["add", "logs/run:1"]);
+    f.git(&[
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-qm",
+        "Record colon path",
+    ]);
+    f.git(&["tag", "colon-pins"]);
+    fs::remove_file(f.root.path().join("logs/run:1")).unwrap();
+    let pinned = text(f.check(
+        "sources:\n  s.colon_pin: {file: 'colon-pins:logs/run:1'}\n",
+    ));
+    assert!(!pinned.contains("NOTE s.colon_pin:"), "{pinned}");
+}
 #[test]
 fn numeric_pinned_paths_are_not_stripped_as_line_numbers() {
     let f = Fixture::new();
     f.git(&["checkout", "-b", "numeric-paths"]);
     fs::write(f.root.path().join("2024"), "source").unwrap();
-    fs::create_dir(f.root.path().join("logs")).unwrap();
-    fs::write(f.root.path().join("logs/run:1"), "source").unwrap();
-    f.git(&["add", "2024", "logs/run:1"]);
+    f.git(&["add", "2024"]);
     f.git(&[
         "-c",
         "user.name=Fixture",
@@ -221,13 +246,11 @@ fn numeric_pinned_paths_are_not_stripped_as_line_numbers() {
     ]);
     f.git(&["tag", "numeric-paths"]);
     fs::remove_file(f.root.path().join("2024")).unwrap();
-    fs::remove_file(f.root.path().join("logs/run:1")).unwrap();
     let out = text(f.check(
-        "sources:\n  s.numeric: {file: 'numeric-paths:2024'}\n  s.numeric_line: {file: 'numeric-paths:2024:5'}\n  s.colon: {file: 'numeric-paths:logs/run:1'}\n  s.missing: {file: 'numeric-paths:2042'}\n",
+        "sources:\n  s.numeric: {file: 'numeric-paths:2024'}\n  s.numeric_line: {file: 'numeric-paths:2024:5'}\n  s.missing: {file: 'numeric-paths:2042'}\n",
     ));
     assert!(!out.contains("NOTE s.numeric:"), "{out}");
     assert!(!out.contains("NOTE s.numeric_line:"), "{out}");
-    assert!(!out.contains("NOTE s.colon:"), "{out}");
     assert!(out.contains("NOTE s.missing: pinned file"), "{out}");
 }
 #[test]
@@ -253,6 +276,61 @@ fn pinned_sources_remain_openable_after_the_working_file_is_deleted() {
         "{out}"
     );
     f.git(&["show", "source-final:sources/original.txt"]);
+}
+
+#[test]
+fn dot_relative_pins_resolve_from_the_primary_record_directory() {
+    let f = Fixture::new();
+    f.git(&["checkout", "-b", "nested-pins"]);
+    fs::create_dir(f.root.path().join("nested")).unwrap();
+    fs::write(f.root.path().join("nested/source.txt"), "nested").unwrap();
+    fs::write(f.root.path().join("sibling.txt"), "parent").unwrap();
+    f.git(&["add", "nested/source.txt", "sibling.txt"]);
+    f.git(&[
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-qm",
+        "Add nested pinned sources",
+    ]);
+    f.git(&["tag", "nested-pins"]);
+    fs::remove_file(f.root.path().join("nested/source.txt")).unwrap();
+    fs::remove_file(f.root.path().join("sibling.txt")).unwrap();
+    fs::write(
+        f.root.path().join("nested/GROUNDING.yaml"),
+        "sources:\n  s.dot: {file: 'nested-pins:./source.txt'}\n  s.parent: {file: 'nested-pins:../sibling.txt'}\n",
+    )
+    .unwrap();
+    let out = text(f.command(&f.root.path().join("nested")).output().unwrap());
+    assert!(!out.contains("NOTE s.dot:"), "{out}");
+    assert!(!out.contains("NOTE s.parent:"), "{out}");
+}
+
+#[test]
+fn tree_lookup_finds_a_pinned_file_without_its_blob_object() {
+    let f = Fixture::new();
+    let output = Command::new("git")
+        .args(["rev-parse", "source-final:sources/original.txt"])
+        .current_dir(f.root.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let object = String::from_utf8(output.stdout).unwrap();
+    let object = object.trim();
+    let object_path = f
+        .root
+        .path()
+        .join(".git/objects")
+        .join(&object[..2])
+        .join(&object[2..]);
+    assert!(object_path.is_file(), "{}", object_path.display());
+    fs::remove_file(object_path).unwrap();
+    let out = text(f.check(
+        "sources:\n  s.blobless: {file: 'source-final:sources/original.txt'}\n",
+    ));
+    assert!(!out.contains("NOTE s.blobless:"), "{out}");
 }
 #[test]
 fn slash_revisions_are_pinned_when_the_git_ref_resolves() {
@@ -318,7 +396,7 @@ fn pinned_git_probe_io_failures_are_advisory_notes() {
     let git = bin.join("git");
     fs::write(
         &git,
-        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = cat-file ]; then printf '%16384s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
+        "#!/bin/sh\nfor arg in \"$@\"; do\n  if [ \"$arg\" = ls-tree ]; then printf '%16384s' ''; exit 0; fi\ndone\nexec \"$KPOPPER_TEST_GIT\" \"$@\"\n",
     )
     .unwrap();
     fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();

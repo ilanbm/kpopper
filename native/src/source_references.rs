@@ -40,6 +40,54 @@ enum PinnedFileStatus {
     Unavailable,
 }
 
+fn repo_relative_pin_path(
+    project_root: &Path,
+    record_root: &Path,
+    path: &str,
+) -> Result<Option<String>> {
+    let path = Path::new(path);
+    let dot_relative = matches!(
+        path.components().next(),
+        Some(std::path::Component::CurDir | std::path::Component::ParentDir)
+    );
+    if !dot_relative {
+        return Ok(Some(path.to_string_lossy().into_owned()));
+    }
+    let resolved_path = absolute(&record_root.join(path))?;
+    let target = crate::project_modes::resolved(&resolved_path)?;
+    if !target.starts_with(project_root) {
+        return Ok(None);
+    }
+    Ok(resolved_path
+        .strip_prefix(project_root)
+        .ok()
+        .map(|relative| relative.to_string_lossy().into_owned()))
+}
+
+fn tree_blob_status(output: &[u8], path: &str) -> PinnedFileStatus {
+    for entry in output.split(|byte| *byte == 0).filter(|entry| !entry.is_empty()) {
+        let Some(separator) = entry.iter().position(|byte| *byte == b'\t') else {
+            return PinnedFileStatus::Unavailable;
+        };
+        let metadata = entry[..separator].split(|byte| byte.is_ascii_whitespace());
+        let kind = metadata
+            .skip(1)
+            .next()
+            .filter(|field| !field.is_empty());
+        let Some(kind) = kind else {
+            return PinnedFileStatus::Unavailable;
+        };
+        if &entry[separator + 1..] == path.as_bytes() {
+            return if kind == b"blob" {
+                PinnedFileStatus::Available
+            } else {
+                PinnedFileStatus::Missing
+            };
+        }
+    }
+    PinnedFileStatus::Missing
+}
+
 fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStatus {
     if revision.is_empty() || path.is_empty() || revision.contains('\0') || path.contains('\0') {
         return PinnedFileStatus::Unresolved;
@@ -60,16 +108,17 @@ fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStat
     if ![40, 64].contains(&commit.len()) || !commit.bytes().all(|c| c.is_ascii_hexdigit()) {
         return PinnedFileStatus::Unresolved;
     }
-    // The resolved object ID keeps authored option-like revisions out of cat-file's arguments.
-    let object = format!("{commit}:{path}");
+    // The resolved object ID keeps authored option-like revisions out of Git's arguments.
+    // ls-tree reads tree metadata without requiring the blob, which matters in blobless clones.
+    let pathspec = format!(":(literal){path}");
     match crate::pending_state::git(
         root,
-        &["cat-file", "-t", &object],
+        &["ls-tree", "--full-tree", "-z", &commit, "--", &pathspec],
         PIN_PROBE_OUTPUT_LIMIT,
         true,
     ) {
-        Ok(Some(kind)) if kind == b"blob\n" => PinnedFileStatus::Available,
-        Ok(_) => PinnedFileStatus::Missing,
+        Ok(Some(output)) => tree_blob_status(&output, path),
+        Ok(None) => PinnedFileStatus::Missing,
         Err(_) => PinnedFileStatus::Unavailable,
     }
 }
@@ -170,9 +219,14 @@ pub(crate) fn notes(
                     if revision.is_empty() || pinned_path.is_empty() {
                         continue;
                     }
+                    let Some(repository_path) =
+                        repo_relative_pin_path(&project.root, record_root, pinned_path)?
+                    else {
+                        continue;
+                    };
                     // Resolved refs may contain slashes; retain the older slash-free
                     // revision:path heuristic when Git confirms no revision exists.
-                    match pinned_file_status(&project.root, revision, pinned_path) {
+                    match pinned_file_status(&project.root, revision, &repository_path) {
                         PinnedFileStatus::Available => {
                             pin_available = true;
                             break;
@@ -185,12 +239,12 @@ pub(crate) fn notes(
                         }
                         PinnedFileStatus::Unresolved
                             if !revision.contains(['/', '\\'])
-                                && pinned_path.contains('/') =>
+                                && repository_path.contains('/') =>
                         {
                             missing_pin = Some(candidate);
                         }
                         PinnedFileStatus::Unresolved
-                            if revision.contains('/') && pinned_path.contains('/') =>
+                            if revision.contains('/') && repository_path.contains('/') =>
                         {
                             ambiguous_pin = Some((revision, candidate));
                         }
