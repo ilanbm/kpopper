@@ -189,6 +189,19 @@ class RunBoundary(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "moved"):
                 C.select({"inputs": {"release_pr": "5"}}, "workflow_dispatch")
 
+    def test_manual_diagnostic_cannot_greenlight_a_version_pr_without_publication(self):
+        for branch in ("release/1.1.0", "feature-with-version-change"):
+            with self.subTest(branch=branch), \
+                 patch.dict(os.environ, GITHUB_SHA="a" * 40, GITHUB_REF="refs/heads/" + branch), \
+                 patch.object(C, "version_at", side_effect=["1.1.0", "1.0.0"]):
+                with self.assertRaisesRegex(SystemExit, "release_pr"):
+                    C.select({"inputs": {}}, "workflow_dispatch")
+
+    def test_manual_diagnostics_without_a_version_change_still_work(self):
+        with patch.dict(os.environ, GITHUB_SHA="a" * 40, GITHUB_REF="refs/heads/main"), \
+             patch.object(C, "version_at", return_value="1.0.0"):
+            self.assertEqual(C.select({"inputs": {}}, "workflow_dispatch")["release"], "false")
+
     def test_missing_downloads_or_wrong_tag_cannot_open_merge_gate(self):
         info = {"draft": False, "prerelease": False, "assets": []}
         with patch.object(C, "api", return_value=info), patch.object(C, "git", return_value="a" * 40):

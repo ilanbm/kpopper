@@ -99,7 +99,8 @@ After publication, anonymous download URLs are checked and only the small `ci-re
 job is rerun. Merge the release PR once that gate succeeds. Native is available first;
 merging exposes the corresponding plugin. A squash merge may change the commit ID, but it
 must preserve the entire tested tree; the release tag remains on the original candidate.
-Nothing merges automatically.
+Nothing merges automatically. Manual checks on a version-changing branch must supply
+`release_pr` and pass the same publication gate; a diagnostic dispatch cannot bypass it.
 
 The existing main ruleset must require `ci-required` **and require branches to be up to
 date before merging**. Publication refuses if this prerequisite is absent. This prevents a

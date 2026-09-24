@@ -100,6 +100,12 @@ def select(event, event_name):
         result["promotion"] = str(version_at(head) != version_at(head + "^")).lower()
         return result
     number = event.get("inputs", {}).get("release_pr")
+    if event_name == "workflow_dispatch" and not number:
+        # A diagnostic run contributes the same required check context. It must
+        # not turn a version PR green while bypassing its publication gate.
+        if (os.environ.get("GITHUB_REF", "").startswith("refs/heads/release/") or
+                version_at(head) != version_at("refs/remotes/origin/main")):
+            raise SystemExit("version-changing manual checks require release_pr and the publication gate")
     if event_name == "pull_request":
         pr = event["pull_request"]
         if version_at(pr["head"]["sha"]) == version_at(pr["base"]["sha"]):
