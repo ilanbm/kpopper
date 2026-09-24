@@ -523,3 +523,44 @@ d.shape_move_read_by_its_sign:
     p.coverage_thresholds: 0
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-23'
+d.ci_selects_families:
+- name: Select PR checks by declared input families and require selected work to succeed
+  from: s.2026_09_17_selective_ci
+  rests_on:
+  - p.ci_native_build_inputs
+  verdict: Keep record and cheap contracts unconditional; select expensive families conservatively from
+    the full PR diff, cancel superseded runs, and retain broad consumer checks on main.
+  because: Skills and prose do not require native compilation. Packaging needs evidence about the installed
+    committed payload, while changed native inputs need compilation and replacement-library integration.
+    Unknown paths select all checks; the aggregate gate refuses an unexpected skip so selecting less cannot
+    silently convert missing work into success.
+  reopened_by: A changed input affects a skipped family; a selected job is skipped or fails while ci-required
+    passes; or main no longer exercises all consumer families.
+  seen:
+    p.ci_native_build_inputs: Native sources, builder, bundled runtime, native loader and replacement
+      probes, notices, and native-workflow changes select native builds; unknown paths select all checks.
+      Selector-only changes use mandatory contracts. Packaging metadata alone tests consumers and installation
+      without recompiling native source.
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'
+d.native_release_beside_tests:
+- name: The native release is built and accepted beside its tests, and on Linux alone for a pull request
+  verdict: Each target builds, accepts, packages and uploads its native release in a job of its own that
+    runs beside its tests, and a verdict job fails when either job fails or is skipped where the validation
+    needs it. A pull request that changes no platform input builds and accepts the release on linux-x86_64
+    only; main, publication and a pull request that changes a platform input keep all five targets.
+  because: The release waited behind the slowest test run of its own job, 8 to 19 minutes per target at
+    the median. In 94 pull request runs from 2026-09-22 to 2026-09-23, no release or acceptance step failed
+    on another platform for a change that touched no platform input. Once split, the release job is shorter
+    than the tests on every target, so checking it on the other platforms in a pull request costs machines
+    rather than minutes.
+  rests_on:
+  - s.2026_09_23_native_ci_speed
+  reopened_by: A native job fails or is skipped while ci-required passes; publication uploads bytes that
+    were not built and accepted in the same job; or on main a release or acceptance step fails on a platform
+    other than Linux after a change that touched no platform input.
+  from: s.2026_09_23_native_ci_speed
+  seen:
+    s.2026_09_23_native_ci_speed: read 2026-09-23
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-24'

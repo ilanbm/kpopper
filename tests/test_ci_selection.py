@@ -46,11 +46,11 @@ class Claims(unittest.TestCase):
 
 
 class Selection(unittest.TestCase):
-    def test_rust_change_runs_the_rust_lane_without_intel_macos(self):
+    def test_rust_change_runs_the_rust_lane_on_linux(self):
         changes = ["native/src/ordinary_checked_session.rs", "native/src/public_ordinary_readers.rs",
                    "native/src/source_capture.rs", "native/tests/ordinary_checked_session.rs"]
         self.assertEqual(lanes(changes), {"rust"})
-        self.assertEqual(CI.platforms(changes), "pull-request")
+        self.assertEqual(CI.platforms(changes), "linux-x86_64")
 
     def test_documentation_record_and_plugin_manifest_edits_run_no_lane(self):
         # The record job still checks all of these on every pull request.
@@ -123,19 +123,17 @@ class Selection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(lanes([("A", path)]), ALL)
 
-    def test_platform_inputs_take_every_target_and_code_changes_leave_intel_macos_to_main(self):
-        for path in ("native/Cargo.lock", "native/build.rs", "install.ps1",
-                     ".github/workflows/native-rust.yml",
-                     "scripts/reasoning/native/darwin-x86_64.kpopper-runtime"):
+    def test_shared_platform_inputs_take_every_target_and_ordinary_code_uses_linux(self):
+        for path in ("native/Cargo.lock", "native/build.rs", ".github/workflows/native-rust.yml"):
             with self.subTest(path=path):
                 self.assertEqual(CI.platforms([path]), "all")
         for path in ("native/src/main.rs", "native/tests/cli.rs", "README.md"):
             with self.subTest(path=path):
-                self.assertEqual(CI.platforms([path]), "pull-request")
+                self.assertEqual(CI.platforms([path]), "linux-x86_64")
 
-    def test_main_runs_every_lane_on_every_platform(self):
-        self.assertEqual(lanes(["README.md"], push=True), ALL)
-        self.assertEqual(CI.platforms(["README.md"], push=True), "all")
+    def test_release_main_runs_every_lane_on_every_platform(self):
+        self.assertEqual(lanes(["README.md"], push=True, release=True), ALL)
+        self.assertEqual(CI.platforms(["README.md"], push=True, release=True), "all")
 
     def test_empty_diff_manual_run_and_missing_history_run_everything(self):
         self.assertEqual(lanes([]), ALL)
@@ -191,7 +189,7 @@ class RequiredResults(unittest.TestCase):
         scope = CI.platforms(changes)
         return {"changes": {"result": "success", "outputs": {
                     **{k: str(v).lower() for k, v in selected.items()},
-                    "platforms": scope}},
+                    "platforms": scope, "release": "false"}},
                 "record": {"result": "success"},
                 **{job: {"result": "success" if any(selected[lane] for lane in lanes) else "skipped"}
                    for job, lanes in CI.JOB_LANES.items()}}
@@ -217,15 +215,19 @@ class RequiredResults(unittest.TestCase):
         needs = self.results(["README.md"])
         needs["changes"]["result"] = "failure"
         self.assertTrue(CI.required_failures(needs))
-        for output in list(CI.LANE_NAMES) + ["platforms"]:
+        for output in list(CI.LANE_NAMES) + ["platforms", "release"]:
             with self.subTest(output=output):
                 needs = self.results(["native/src/main.rs"])
                 del needs["changes"]["outputs"][output]
                 self.assertTrue(CI.required_failures(needs))
 
-    def test_main_cannot_run_the_pull_request_platform_subset(self):
-        needs = self.results(["native/src/main.rs"], pull_request=False)
+    def test_release_cannot_run_the_pull_request_platform_subset(self):
+        needs = self.results(["native/src/main.rs"])
+        needs["changes"]["outputs"]["release"] = "true"
         self.assertTrue(CI.required_failures(needs, pull_request=False))
+        needs["changes"]["outputs"]["platforms"] = "all"
+        self.assertEqual(CI.required_failures(needs, pull_request=False), [])
+        self.assertTrue(CI.required_failures(needs, pull_request=True))
 
 
 class WorkflowCoverage(unittest.TestCase):
@@ -236,19 +238,15 @@ class WorkflowCoverage(unittest.TestCase):
         jobs = self.jobs()
         self.assertEqual(set(jobs["ci-required"]["needs"]), set(jobs) - {"ci-required"})
         self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms"})
+        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms", "release"})
         self.assertEqual({lane for lanes in CI.JOB_LANES.values() for lane in lanes}, ALL)
 
-    def test_native_pull_request_subset_is_the_full_matrix_without_intel_macos(self):
-        workflow = (ROOT / ".github/workflows/native-rust.yml").read_text()
-        literals = [json.loads(part) for part in workflow.split("'") if part.startswith('[{"runner"')]
-        full = max(literals, key=len)
-        subset = next(rows for rows in literals if len(rows) == len(full) - 1)
-        self.assertEqual(subset, [row for row in full if row["target"] != CI.INTEL_MACOS])
+    def test_native_targets_follow_the_selector_and_start_without_waiting_for_record(self):
         job = self.jobs()["native-cli"]
+        self.assertEqual(job["needs"], "changes")
         self.assertEqual(job["if"], "needs.changes.outputs.rust == 'true'")
-        self.assertIn("without-darwin-x86_64", job["with"]["target"])
-        self.assertIn("needs.changes.outputs.platforms == 'all'", job["with"]["target"])
+        self.assertEqual(job["with"]["target"], "${{ needs.changes.outputs.platforms }}")
+        self.assertEqual(job["with"]["publish"], "${{ needs.changes.outputs.release == 'true' }}")
 
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
         steps = self.jobs()["changes"]["steps"]

@@ -4,10 +4,12 @@ Every lane declares the tracked files its checks read, and the directories whose
 list. A pull request runs the lanes whose inputs it changes. The declarations are not trusted
 on their own: on Linux, `ci_audit.py` records every file an audited lane opens and fails the
 pull request that makes it read something undeclared, which is also the pull request whose
-changes the lane already runs for. Every push to main runs every lane on every platform.
+changes the lane already runs for. Pull requests default to Linux; the release commit runs
+every platform once. Ordinary main pushes retain the record and contract checks alone.
 """
 import argparse
 import fnmatch
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -71,7 +73,7 @@ UNREAD = (
 # Run by the record job alone, on every pull request; no lane reads them.
 RECORD_JOB = (
     "tests/__init__.py", "tests/test_skills.py", "tests/test_release.py",
-    "tests/test_ci_selection.py", "tests/test_ci_audit.py", "tests/test_native_release_assets.py",
+    "tests/test_ci_selection.py", "tests/test_ci_release_flow.py", "tests/test_ci_audit.py", "tests/test_native_release_assets.py",
     "tests/test_native_launcher.py", "tests/test_hook_delivery.py", ".github/requirements-test.txt",
     ".github/scripts/release.py", ".github/scripts/publish_release.py",
     ".github/scripts/publish_crate.py", ".github/scripts/native_assets.py",
@@ -82,8 +84,8 @@ CI_MACHINERY = (
     ".github/workflows/check.yml", ".github/scripts/ci_selection.py", ".github/scripts/ci_audit.py",
 )
 
-# A pull request normally leaves out the Intel macOS target, the slowest leg of the platform
-# matrix; main keeps it. A change to what decides platform behaviour takes every target.
+# Shared toolchains and packaging affect every target. Named platform inputs add their
+# affected targets to Linux. A version-only manifest edit is not a toolchain change.
 PLATFORM_INPUTS = (
     "native/Cargo.toml", "native/Cargo.lock", "native/build.rs", "native/rust-toolchain.toml",
     "native/ci/*", ".github/workflows/native-rust.yml", "install.sh", "install.ps1",
@@ -93,7 +95,11 @@ PLATFORM_INPUTS = (
     "scripts/reasoning/third_party/*", ".github/workflows/reasoning-runtime.yml",
     ".github/workflows/reasoning-target.yml", ".claude-plugin/*", ".codex-plugin/*",
 ) + CI_MACHINERY
-INTEL_MACOS = "darwin-x86_64"
+PLATFORM_SCOPES = ("linux-x86_64", "linux-windows", "linux-macos", "all")
+
+_release_spec = importlib.util.spec_from_file_location("release", Path(__file__).with_name("release.py"))
+_release = importlib.util.module_from_spec(_release_spec)
+_release_spec.loader.exec_module(_release)
 
 JOB_LANES = {"native-cli": ("rust",)}
 
@@ -246,25 +252,81 @@ def normalized(changes):
     return [change if isinstance(change, tuple) else ("M", change) for change in changes]
 
 
-def select(changes, full=False, push=False, base_dirs=None, head_dirs=None):
+def select(changes, full=False, push=False, base_dirs=None, head_dirs=None, release=False):
     changes = normalized(changes)
-    if full or not changes:
+    if full or release or not changes:
         chosen = set(LANE_NAMES)
+    elif push:
+        chosen = set()
     else:
         chosen = set()
         for status, path in changes:
             chosen |= lanes_for(status, path, base_dirs, head_dirs)
-    if push:
-        # Main checks every consumer.
-        chosen |= set(LANE_NAMES)
     return {lane: lane in chosen for lane in LANE_NAMES}
 
 
-def platforms(changes, full=False, push=False):
+def source_at(revision, path, cwd=None):
+    return subprocess.check_output(["git", "show", f"{revision}:{path}"], cwd=cwd,
+                                   stderr=subprocess.PIPE).decode("utf-8")
+
+
+def version_only(path, base, head, cwd=None):
+    if not base or path not in _release.VERSION_FILES:
+        return False
+    try:
+        before, after = (source_at(ref, path, cwd) for ref in (base, head))
+        pattern, _ = _release.VERSION_FILES[path]
+        return bool(pattern.search(before) and pattern.search(after)
+                    and _release.with_version({path: before}, "0.0.0")
+                    == _release.with_version({path: after}, "0.0.0"))
+    except (OSError, subprocess.CalledProcessError, UnicodeError):
+        return False
+
+
+def platforms(changes, full=False, push=False, release=False, base="", head="HEAD", cwd=None):
     changes = normalized(changes)
-    if full or push or not changes or any(matches(path, PLATFORM_INPUTS) for _, path in changes):
+    if full or release or not changes:
         return "all"
-    return "pull-request"
+    if push:
+        return "linux-x86_64"
+    windows = macos = False
+    for status, path in changes:
+        if (not matches(path, UNREAD + RECORD_JOB + CI_MACHINERY)
+                and not any(lane_reads(lane, path) for lane in LANES.values())):
+            return "all"
+        if status == "M" and version_only(path, base, head, cwd):
+            continue
+        if path.endswith(".ps1") or "windows" in path.lower():
+            windows = True
+        elif "darwin" in path.lower() or "macos" in path.lower():
+            macos = True
+        elif matches(path, PLATFORM_INPUTS):
+            return "all"
+        # Changes inside an existing conditional block matter too, not only edits to cfg.
+        # Read both revisions so deleting platform-specific code retains its coverage.
+        if base and path.endswith(".rs"):
+            for ref in (base, head):
+                try:
+                    source = source_at(ref, path, cwd)
+                except subprocess.CalledProcessError:
+                    if status in ("A", "D"):
+                        continue
+                    return "all"
+                except (OSError, UnicodeError):
+                    return "all"
+                if re.search(r"\b(?:unix|target_arch|target_family)\b|std::os::unix", source):
+                    return "all"
+                windows |= bool(re.search(r"\bwindows\b|std::os::windows", source))
+                macos |= bool(re.search(r'\b(?:macos|darwin)\b', source))
+                if "target_os" in source and not (windows or macos):
+                    return "all"
+    if windows and macos:
+        return "all"
+    if windows:
+        return "linux-windows"
+    if macos:
+        return "linux-macos"
+    return "linux-x86_64"
 
 
 def tree_directories(revision, cwd=None):
@@ -305,8 +367,13 @@ def required_failures(needs, pull_request=True):
             failures.append("missing or invalid selection: " + lane)
     selected = {lane: outputs.get(lane) == "true" for lane in LANE_NAMES}
     scope = outputs.get("platforms")
-    if scope not in ("all", "pull-request") or (scope != "all" and not pull_request):
+    if scope not in PLATFORM_SCOPES:
         failures.append("missing or invalid platform scope")
+    release = outputs.get("release")
+    if release not in ("true", "false"):
+        failures.append("missing or invalid release selection")
+    if release == "true" and (pull_request or scope != "all" or not all(selected.values())):
+        failures.append("release requires every lane and platform on main")
     for job, lanes in JOB_LANES.items():
         expected = "success" if any(selected[lane] for lane in lanes) else "skipped"
         actual = needs.get(job, {}).get("result")
@@ -321,8 +388,11 @@ def main():
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--push", action="store_true")
     parser.add_argument("--full", action="store_true")
+    parser.add_argument("--release", action="store_true")
     parser.add_argument("--required", action="store_true")
     args = parser.parse_args()
+    if args.release and not args.push:
+        parser.error("--release requires --push")
     if args.required:
         failures = required_failures(json.loads(os.environ["CI_NEEDS"]),
                                      os.environ.get("GITHUB_EVENT_NAME") == "pull_request")
@@ -331,22 +401,30 @@ def main():
         return 1 if failures else 0
     changes, base_dirs, head_dirs = ([], None, None) if args.full else \
         changed_files(args.base, args.head, merge_base=not args.push)
-    selected = select(changes, full=args.full, push=args.push, base_dirs=base_dirs, head_dirs=head_dirs)
-    scope = platforms(changes, full=args.full, push=args.push)
-    print(json.dumps({"changes": changes, "selected": selected, "platforms": scope}, indent=2))
+    selected = select(changes, full=args.full, push=args.push, release=args.release,
+                      base_dirs=base_dirs, head_dirs=head_dirs)
+    # Platform comparisons use the same merge base as the lane selection.
+    base = args.base
+    if base and not args.push:
+        try:
+            base = subprocess.check_output(["git", "merge-base", base, args.head], stderr=subprocess.PIPE).decode().strip()
+        except (OSError, subprocess.CalledProcessError):
+            base = ""
+    scope = platforms(changes, full=args.full, push=args.push, release=args.release, base=base, head=args.head)
+    print(json.dumps({"changes": changes, "selected": selected, "platforms": scope, "release": args.release}, indent=2))
     if os.environ.get("GITHUB_OUTPUT"):
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
             for lane, enabled in selected.items():
                 stream.write("%s=%s\n" % (lane, str(enabled).lower()))
             stream.write("platforms=" + scope + "\n")
+            stream.write("release=" + str(args.release).lower() + "\n")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
             stream.write("| CI lane | Selected |\n|---|---|\n")
             for lane, enabled in selected.items():
                 stream.write("| %s | %s |\n" % (lane, "yes" if enabled else "no"))
             stream.write("\nRecord, skill/release contracts and CI selection tests always run.\n")
-            stream.write("\nPlatforms: " + ("every target" if scope == "all" else
-                                             "every target except " + INTEL_MACOS) + ".\n")
+            stream.write("\nPlatforms: " + scope + ".\n")
     return 0
 
 

@@ -1,17 +1,29 @@
 name: publish
 
-# Native releases are built and installed before the publishing job receives write access,
-# and the same commit's crate then goes to crates.io. The legacy PyPI/npm lines are not
-# republished or downgraded by this workflow.
+# Publish only the packages from successful main-push checks of the release commit.
+# This workflow never rebuilds them. The legacy PyPI/npm lines remain untouched.
 on:
-  push:
+  workflow_run:
+    workflows: [kpopper check]
+    types: [completed]
     branches: [main]
 
 permissions:
   contents: read
+  actions: read
+
+# Rerunning a completed check may request publication again; serialize by source commit.
+concurrency:
+  group: publish-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
 
 jobs:
   plan:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.plan.outputs.publish }}
@@ -19,6 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -35,24 +48,18 @@ jobs:
               output.write('publish=' + str(plan['publish']).lower() + '\n')
               output.write('version=' + plan['version'] + '\n')
 
-  build:
-    needs: plan
-    if: needs.plan.outputs.publish == 'true'
-    uses: ./.github/workflows/native-rust.yml
-    with:
-      validation: distribution
-      target: all
-
   publish:
-    needs: [plan, build]
+    needs: plan
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -60,6 +67,8 @@ jobs:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
           pattern: native-distribution-*
           path: ${{ runner.temp }}/native-artifacts
       - name: Verify and publish the native release
@@ -73,7 +82,7 @@ jobs:
   # that release is out: the bytes the build job verified, which it checked to build from their
   # own files and to be the program the release ships. This job holds no registry identity.
   crate:
-    needs: [plan, build, publish]
+    needs: [plan, publish]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -82,12 +91,15 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
       # A version crates.io already serves must be these bytes; one it lacks is published next.
@@ -115,15 +127,19 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     env:
       VERSION: ${{ needs.plan.outputs.version }}
       CRATE: kpopper-${{ needs.plan.outputs.version }}.crate
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
       - id: toolchain
@@ -194,12 +210,15 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.13'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
           name: verified-crate
           path: ${{ runner.temp }}/verified-crate
       - name: crates.io serves the verified bytes
