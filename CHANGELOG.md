@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.12.0 — 2026-09-24
+
+- Clarify guided plugin installation (#249) — patch
+- Add kpopper Board setup and reliable background publication (#248) — minor
+- Add local record conflict resolution and mark Advanced mode experimental (#247) — minor
+- Restore native document interaction checks in CI (#246) — patch
+- Restore native reasoning candidate validation (#245) — patch
+- Restore normalized checked-session replay (#243) — patch
+- Move the plugin's commands to scripts/bin so Cowork can sync the marketplace (#237) — minor
+- Restore Hub notes, Record layout and readable output (#239) — patch
+- Restore ordinary check notes and migration refusal parity (#242) — patch
+- docs: add Grok Bot installation guide (#244) — patch
+- Run full platform CI once per release (#240) — patch
+- Fix native check summaries and reader diagnostics (#238) — patch
+- Report unavailable source files and preserve historical citations (#236) — minor
+- Restore native shell hook delivery coverage (#235) — patch
+- Show kpopper icon in plugin directory (#234) — patch
+- Run the native tests in one nextest pool (#231) — patch
+
+Decisions recorded: d.native_tests_one_pool, d.plugin_commands_live_in_scripts_bin, d.source_file_availability_is_a_note
+
 ## 0.11.0 — 2026-09-24
 
 - Say where the reader is, everywhere it is described (#232) — patch
