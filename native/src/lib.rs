@@ -42,6 +42,8 @@ pub mod history_group_activation;
 pub mod history_hypotheses;
 pub mod ingestion_target;
 pub mod history_hypothesis_authoring;
+mod history_hypothesis_core;
+mod history_node_hypothesis;
 pub mod history_hypothesis_import;
 pub mod history_hypothesis_import_prepare;
 pub mod history_identity;

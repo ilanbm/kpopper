@@ -238,6 +238,28 @@ fn privacy_guard(
     source: Option<&str>,
     action: &V,
 ) -> Result<()> {
+    if let Some((name, retained)) = private_selection(context, names, source)? {
+        let mut intent = action.clone();
+        map_mut(&mut intent)?.insert("hypothesis".into(), s(&name));
+        let receipt = Privacy::draft(
+            route.project(),
+            &intent,
+            &retained,
+            "private hypothesis or source permission; original retained without publication",
+        )?;
+        return Err(error(&format!(
+            "private draft retained at {}; original hypothesis retained",
+            text(field(map(&receipt)?, "path")?)?
+        )));
+    }
+    Ok(())
+}
+
+pub(crate) fn private_selection(
+    context: &HA::Context,
+    names: &[String],
+    source: Option<&str>,
+) -> Result<Option<(String, V)>> {
     let combined = HA::layer(&context.base, &context.groups, names)?;
     let original_entries = crate::reasoning_snapshot::entries(&context.base)?;
     for name in names {
@@ -282,21 +304,10 @@ fn privacy_guard(
             ("original_record_closure", original),
         ]);
         if Privacy::private_marker(group) || Privacy::private_marker(&retained) {
-            let mut intent = action.clone();
-            map_mut(&mut intent)?.insert("hypothesis".into(), s(name));
-            let receipt = Privacy::draft(
-                route.project(),
-                &intent,
-                &retained,
-                "private hypothesis or source permission; original retained without publication",
-            )?;
-            return Err(error(&format!(
-                "private draft retained at {}; original hypothesis retained",
-                text(field(map(&receipt)?, "path")?)?
-            )));
+            return Ok(Some((name.clone(), retained)));
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 /// A supplied ordinary proposal; previewing it never reads or writes source files.
@@ -466,6 +477,9 @@ fn run_with_runtime(
         F::read(&F::target(&store.root, &journal)?)?.is_none(),
         "recovery_required",
     )?;
+    if crate::history_node_publication::selected(&store.entry)? {
+        return node_run(options, &route, &original, runtime_override, probe);
+    }
     let captured = store.capture()?;
     let by = options.source.as_deref().map(s).unwrap_or(V::Null);
     let write_options = authoring_options(
@@ -547,6 +561,157 @@ fn run_with_runtime(
         return preview_output(&names, &assessment);
     }
     direct_history::publish_prepared(&store, &mutation, &route, &original, runtime, probe)?;
+    Ok(format!(
+        "{}: {}\n",
+        if options.refute.is_some() {
+            "refuted"
+        } else {
+            "folded"
+        },
+        names.join(", ")
+    ))
+}
+
+fn node_run(
+    options: &Options,
+    route: &WriteRoute,
+    original: &[PathBuf],
+    runtime_override: Option<&Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<String> {
+    use crate::{
+        history_node_capture::Capture, history_node_publication as P, history_node_writer as W,
+        public_node_history as Public,
+    };
+    Public::scope(route)?;
+    let root = route.paths()[0].parent().unwrap();
+    crate::history_node_hypothesis::sources(root)?;
+    let captured = Capture::read(root)?;
+    let context = crate::history_node_hypothesis::context(&captured)?;
+    let requested = options
+        .refute
+        .as_ref()
+        .map(|name| vec![name.clone()])
+        .unwrap_or_else(|| options.names.clone());
+    let names = selected_names(&context, &requested)?;
+    if names.is_empty() {
+        route.verify()?;
+        return Ok("unchanged: \n".into());
+    }
+    let source = crate::source_capture::capture_source(
+        route.paths(),
+        &route.project().root,
+        crate::source_capture::ReadMode::Frozen,
+        None,
+    )?;
+    let write_options = authoring_options(
+        if options.refute.is_some() {
+            "hypothesis-refute"
+        } else {
+            "hypothesis-fold"
+        },
+        options.source.as_deref().map(s).unwrap_or(V::Null),
+    )?;
+    let action = obj([
+        (
+            "kind",
+            s(if options.refute.is_some() {
+                "refute"
+            } else {
+                "fold"
+            }),
+        ),
+        ("names", crate::history_authoring::strings(names.clone())),
+        (
+            "because",
+            s(options.why.as_deref().unwrap_or(if options.dry_run {
+                "consolidation preview"
+            } else {
+                "explicit consolidation"
+            })),
+        ),
+        (
+            "take",
+            crate::history_authoring::strings(options.take.clone()),
+        ),
+        ("drops", drops(&options.drops)?),
+    ]);
+    let request = obj([("kind", s("hypothesis")), ("action", action)]);
+    if !options.dry_run {
+        privacy_guard(route, &context, &names, options.source.as_deref(), &request)?;
+    }
+    let loaded;
+    let runtime = if let Some(runtime) = runtime_override {
+        Some(runtime)
+    } else {
+        loaded = public_workspace::core_runtime()?;
+        loaded.as_ref()
+    };
+    let prepared = W::prepare(root, &request, &write_options, runtime)?
+        .with_guard(&Public::guard(route, original)?)?;
+    let (_, after, _, objects) = Public::candidate(root, &prepared)?;
+    if options.dry_run {
+        let assessment = crate::history_node_hypothesis::assess(
+            &captured,
+            &after,
+            write_options
+                .recorded_at
+                .get(..10)
+                .ok_or_else(|| error("missing_recording_time"))?,
+            runtime,
+        )?;
+        source.verify()?;
+        route.verify()?;
+        return preview_output(&names, &assessment);
+    }
+    require(
+        !Privacy::private_marker(&objects),
+        "private_proposal_requires_draft",
+    )?;
+    P::publish(
+        root,
+        &prepared,
+        |p| {
+            Public::verify_guard(route, original, p)?;
+            source.verify()?;
+            W::verify(root, p, runtime)?;
+            Public::candidate(root, p)?;
+            source.verify()?;
+            route.verify()
+        },
+        |phase| {
+            route.verify()?;
+            W::verify_sources(root, &prepared)?;
+            probe(match phase {
+                P::Phase::Journal => "journal",
+                P::Phase::Append(_) => "append",
+                P::Phase::Commit => "committed",
+                P::Phase::View => "view",
+            })?;
+            W::verify_sources(root, &prepared)?;
+            route.verify()
+        },
+    )?;
+    let ids = names
+        .iter()
+        .map(|name| {
+            crate::reasoning_snapshot::entries(&map(&map(&context.groups)?[name])?["doc"])
+                .map(|e| e.into_keys().collect::<Vec<_>>())
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+    crate::session_activity::published(
+        root,
+        &[crate::history_transaction::FileImage {
+            path: "GROUNDING.yaml".into(),
+            role: "record".into(),
+            before: prepared.before_view()?,
+            after: Some(prepared.after_view()?),
+        }],
+        Some(&ids),
+    );
     Ok(format!(
         "{}: {}\n",
         if options.refute.is_some() {
@@ -775,3 +940,145 @@ mod tests {
 #[cfg(test)]
 #[path = "ordinary_consolidation_tests.rs"]
 mod ordinary_tests;
+
+#[cfg(test)]
+mod node_tests {
+    use super::*;
+    use crate::{
+        history_node_capture::Capture, history_node_publication as P, history_node_writer as W,
+        history_yaml as Y,
+    };
+    use serde_json::json;
+    fn v(value: serde_json::Value) -> V {
+        V::from_json(&value).unwrap()
+    }
+    fn fixture(private: bool) -> (tempfile::TempDir, tempfile::TempDir, Runtime) {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join(".kpopper")).unwrap();
+        std::fs::write(root.path().join(".kpopper/history.yaml"),"version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
+        let doc = v(
+            json!({"meta":{"purpose":"Fixture","reasoning":{"version":2,"profile":"core/v1","requires":["arithmetic/v1"]}},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"known":{}}),
+        );
+        std::fs::write(
+            root.path().join("GROUNDING.yaml"),
+            Y::encode_document(&doc).unwrap(),
+        )
+        .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(format!(
+                "{}.kpopper-runtime",
+                crate::reasoning_runtime::target_name().unwrap()
+            ));
+        let runtime = Runtime::open(
+            &archive,
+            cache.path(),
+            crate::reasoning_runtime::OperationalBounds::default(),
+        )
+        .unwrap();
+        let mut body = json!({"v":2});
+        if private {
+            body["private"] = json!(true);
+        }
+        let action = v(
+            json!({"kind":"hypothesis","name":"alpha","action":{"kind":"add","id":"p.new","body":body}}),
+        );
+        let p = W::prepare(
+            root.path(),
+            &action,
+            &authoring_options("proposal", V::Null).unwrap(),
+            Some(&runtime),
+        )
+        .unwrap();
+        W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+        (root, cache, runtime)
+    }
+    #[test]
+    fn public_named_fold_recovers_each_durable_decision() {
+        for phase in ["journal", "committed"] {
+            let (root, _cache, runtime) = fixture(false);
+            let options = Options {
+                names: vec!["alpha".into()],
+                ..Default::default()
+            };
+            assert!(
+                run_with_runtime(
+                    &options,
+                    root.path(),
+                    Some(&runtime),
+                    &mut |at| if at == phase {
+                        Err(error("crash"))
+                    } else {
+                        Ok(())
+                    }
+                )
+                .is_err()
+            );
+            let original = vec![root.path().join("GROUNDING.yaml")];
+            let route = WriteRoute::capture(&original, root.path()).unwrap();
+            let result =
+                crate::public_node_history::recover(&route, &original, false, Some(&runtime))
+                    .unwrap();
+            assert!(string_is(
+                &map(&result).unwrap()["state"],
+                if phase == "journal" {
+                    "rolled_back"
+                } else {
+                    "committed"
+                }
+            ));
+            let c = Capture::read(root.path()).unwrap();
+            assert_eq!(
+                crate::reasoning_snapshot::entries(c.document())
+                    .unwrap()
+                    .contains_key("p.new"),
+                phase == "committed"
+            );
+        }
+    }
+    #[test]
+    fn recovery_refuses_private_named_fold_even_when_only_accept_acts_are_written() {
+        let (root, _cache, runtime) = fixture(true);
+        let original = vec![root.path().join("GROUNDING.yaml")];
+        let route = WriteRoute::capture(&original, root.path()).unwrap();
+        let request = v(
+            json!({"kind":"hypothesis","action":{"kind":"fold","names":["alpha"],"because":"test"}}),
+        );
+        let p = W::prepare(
+            root.path(),
+            &request,
+            &authoring_options("fold", V::Null).unwrap(),
+            Some(&runtime),
+        )
+        .unwrap()
+        .with_guard(&crate::public_node_history::guard(&route, &original).unwrap())
+        .unwrap();
+        assert!(
+            P::publish(
+                root.path(),
+                &p,
+                |p| W::verify(root.path(), p, Some(&runtime)),
+                |phase| if phase == P::Phase::Commit {
+                    Err(error("crash"))
+                } else {
+                    Ok(())
+                }
+            )
+            .is_err()
+        );
+        let before = std::fs::read(&original[0]).unwrap();
+        assert!(
+            crate::public_node_history::recover(&route, &original, false, Some(&runtime))
+                .unwrap_err()
+                .0
+                .contains("private")
+        );
+        assert_eq!(std::fs::read(&original[0]).unwrap(), before);
+        assert!(
+            root.path()
+                .join(".kpopper/.history-node-publication.json")
+                .exists()
+        );
+    }
+}

@@ -146,20 +146,11 @@ pub(crate) fn guards(store: &Store, capture: &Capture, options: &Options) -> Res
     require(!options.recorded_at.is_empty(), "missing_recording_time")?;
     Ok(())
 }
+#[cfg(test)]
 pub(crate) fn head<'a>(capture: &'a Capture, subject: &str) -> Result<&'a V> {
-    let state = map(&map(&capture.state)?["subjects"])?
-        .get(subject)
-        .ok_or_else(|| error("unresolved_history_subject"))?;
-    let state = map(state)?;
-    require(
-        string_is(&state["acceptance"], "accepted") && state.contains_key("head"),
-        "unresolved_history_subject",
-    )?;
-    capture
-        .objects
-        .get(text(&state["head"])?)
-        .ok_or_else(|| error("incomplete_closure"))
+    crate::history_authoring_core::Input::head(capture, subject)
 }
+
 pub(crate) fn evidence(doc: &V, world: &mut World<'_>, audit: Option<&ReplayAudit>) -> Result<V> {
     let report = if let Some(audit) = audit {
         audit.assessment(world)?

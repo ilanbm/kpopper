@@ -11,7 +11,7 @@ use crate::{
     value::TypedValue as V,
 };
 use std::path::{Path, PathBuf};
-fn scope(route: &WriteRoute) -> Result<()> {
+pub(crate) fn scope(route: &WriteRoute) -> Result<()> {
     require(
         route.paths().len() == 1
             && !route.pending_required()?
@@ -24,20 +24,24 @@ fn scope(route: &WriteRoute) -> Result<()> {
     )?;
     route.verify()
 }
-fn guard(route: &WriteRoute, original: &[PathBuf]) -> Result<V> {
+pub(crate) fn guard(route: &WriteRoute, original: &[PathBuf]) -> Result<V> {
     Ok(obj([
         ("kind", s("public-node-history/v1")),
         ("routing", crate::direct_history::routing(route, original)?),
     ]))
 }
-fn verify_guard(route: &WriteRoute, original: &[PathBuf], prepared: &P::Prepared) -> Result<()> {
+pub(crate) fn verify_guard(
+    route: &WriteRoute,
+    original: &[PathBuf],
+    prepared: &P::Prepared,
+) -> Result<()> {
     scope(route)?;
     require(
         prepared.guard()?.as_ref() == Some(&guard(route, original)?),
         "node_history_route_changed",
     )
 }
-fn candidate(root: &Path, prepared: &P::Prepared) -> Result<(Capture, Capture, V, V)> {
+pub(crate) fn candidate(root: &Path, prepared: &P::Prepared) -> Result<(Capture, Capture, V, V)> {
     let (before, after) = prepared.snapshots(root)?;
     let before = Capture::from_snapshot(before)?;
     let after = Capture::from_snapshot(after)?;
@@ -46,6 +50,8 @@ fn candidate(root: &Path, prepared: &P::Prepared) -> Result<(Capture, Capture, V
     let after_receipt = map(&map(&receipt)?["after"])?;
     let key = if after_receipt.contains_key("identity_authoring") {
         "identity_authoring"
+    } else if after_receipt.contains_key("hypothesis_authoring") {
+        "hypothesis_authoring"
     } else {
         "authoring"
     };
@@ -96,6 +102,12 @@ pub(crate) fn write(
     write_with_runtime(route, original, action, probe, None)
 }
 fn privacy_action(action: &V) -> Result<V> {
+    if map(action)?
+        .get("kind")
+        .is_some_and(|v| string_is(v, "hypothesis"))
+    {
+        return privacy_action(field(map(action)?, "action")?);
+    }
     let a = map(action)?;
     if ["same", "distinct"]
         .iter()
@@ -111,6 +123,41 @@ fn privacy_action(action: &V) -> Result<V> {
         Ok(action.clone())
     }
 }
+// Identity can change either root in every named world. Named edits select their
+// own layer; checking only current would miss private dependencies of proposals.
+fn named_selection_private(capture: &Capture, selection: &V, candidate: bool) -> Result<bool> {
+    let a = map(selection)?;
+    let identity = a
+        .get("kind")
+        .is_some_and(|v| ["same", "distinct"].iter().any(|k| string_is(v, k)));
+    let name = a
+        .get("hypothesis")
+        .filter(|v| **v != V::Null)
+        .map(text)
+        .transpose()?;
+    if !identity && name.is_none() {
+        return Ok(false);
+    }
+    let context = crate::history_node_hypothesis::context(capture)?;
+    for (group_name, group) in map(&context.groups)? {
+        if !identity && name != Some(group_name.as_str()) {
+            continue;
+        }
+        if crate::recording_privacy::private_marker(field(map(group)?, "head")?) {
+            return Ok(true);
+        }
+        let world = crate::history_hypothesis_authoring::layer(
+            &context.base,
+            &context.groups,
+            std::slice::from_ref(group_name),
+        )?;
+        if Privacy::selection_is_private(selection, &world, candidate)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 pub(crate) fn write_with_runtime(
     route: &WriteRoute,
     original: &[PathBuf],
@@ -132,12 +179,6 @@ pub(crate) fn write_with_runtime(
             String::new(),
         ));
     }
-    require(
-        !map(action)?
-            .get("hypothesis")
-            .is_some_and(crate::history_view::truth),
-        "node_history_hypotheses_unsupported",
-    )?;
     // Preserve the source inventory and all imported-pointer checks before authoring.
     let source = crate::source_capture::capture_source(
         route.paths(),
@@ -149,6 +190,17 @@ pub(crate) fn write_with_runtime(
     if let Some(draft) = Privacy::selected_draft(route.project(), &selection, before.document())? {
         return Ok((draft, String::new()));
     }
+    if named_selection_private(&before, &selection, false)? {
+        return Ok((
+            Privacy::draft(
+                route.project(),
+                action,
+                &obj([]),
+                "private named hypothesis closure",
+            )?,
+            String::new(),
+        ));
+    }
     let loaded;
     let runtime = if let Some(runtime) = runtime_override {
         Some(runtime)
@@ -156,9 +208,18 @@ pub(crate) fn write_with_runtime(
         loaded = crate::public_workspace::runtime_for_document(before.document())?;
         loaded.as_ref()
     };
+    let request = if let Some(name) = map(action)?.get("hypothesis").filter(|v| **v != V::Null) {
+        obj([
+            ("kind", s("hypothesis")),
+            ("name", name.clone()),
+            ("action", action.clone()),
+        ])
+    } else {
+        action.clone()
+    };
     let prepared = W::prepare(
         root,
-        action,
+        &request,
         &crate::direct_history::options("write", V::Null)?,
         runtime,
     )?
@@ -167,7 +228,7 @@ pub(crate) fn write_with_runtime(
     if let Some(draft) = Privacy::candidate_draft(route.project(), &selection, after.document())? {
         return Ok((draft, String::new()));
     }
-    if Privacy::private_marker(&objects) {
+    if named_selection_private(&after, &selection, true)? || Privacy::private_marker(&objects) {
         return Ok((
             Privacy::draft(
                 route.project(),
@@ -251,14 +312,43 @@ pub(crate) fn recover(
     let state = P::recover(root, |p| {
         verify_guard(route, original, p)?;
         let (before, after, action, objects) = candidate(root, p)?;
-        let selection = privacy_action(&action)?;
+        let folded = if string_is(field(map(&action)?, "kind")?, "hypothesis") {
+            map(field(map(&action)?, "action")?)?
+                .get("kind")
+                .is_some_and(|v| ["fold", "refute"].iter().any(|k| string_is(v, k)))
+        } else {
+            false
+        };
+        if folded {
+            let context = crate::history_node_hypothesis::context(&before)?;
+            let names = list(field(map(field(map(&action)?, "action")?)?, "names")?)?
+                .iter()
+                .map(|v| text(v).map(str::to_owned))
+                .collect::<Result<Vec<_>>>()?;
+            let receipt = W::receipt(&after.snapshot, p.operation())?;
+            let source = field(W::intent(&receipt)?, "by")?;
+            let source = if *source == V::Null {
+                None
+            } else {
+                Some(text(source)?)
+            };
+            require(
+                crate::public_consolidation::private_selection(&context, &names, source)?.is_none(),
+                "private_proposal_requires_draft",
+            )?;
+        } else {
+            let selection = privacy_action(&action)?;
+            require(
+                !Privacy::selection_is_private(&selection, before.document(), false)?
+                    && !Privacy::selection_is_private(&selection, after.document(), true)?
+                    && !named_selection_private(&before, &selection, false)?
+                    && !named_selection_private(&after, &selection, true)?
+                    && !private_targets(&before, &action)?,
+                "private_proposal_requires_draft",
+            )?;
+        }
         require(
-            !Privacy::selection_is_private(&selection, before.document(), false)?
-                && !Privacy::selection_is_private(&selection, after.document(), true)?,
-            "private_proposal_requires_draft",
-        )?;
-        require(
-            !Privacy::private_marker(&objects) && !private_targets(&before, &action)?,
+            !Privacy::private_marker(&objects),
             "private_proposal_requires_draft",
         )?;
         let loaded;

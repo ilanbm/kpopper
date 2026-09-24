@@ -469,6 +469,40 @@ fn core_cli_add_set_review_preserves_history_in_open_check_and_pull() {
         );
     }
     assert_eq!(Capture::read(root.path()).unwrap().object_count(), 16);
+    for args in [
+        vec![
+            "add",
+            "p.named",
+            "v=2",
+            "--in",
+            "readings",
+            "--hypothesis",
+            "alpha",
+        ],
+        vec!["set", "p.named", "3", "--hypothesis", "alpha"],
+        vec![
+            "add",
+            "p.named_alias",
+            "v=3",
+            "--in",
+            "readings",
+            "--hypothesis",
+            "alpha",
+        ],
+        vec!["same", "p.named", "p.named_alias", "--keep", "p.named"],
+        vec!["open"],
+        vec!["check"],
+    ] {
+        let out = run(&args);
+        assert!(
+            out.status.success(),
+            "{args:?}: {} {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let c = Capture::read(root.path()).unwrap();
+    assert!(!map(&map(c.document())["readings"]).contains_key("p.named"));
 }
 
 #[test]
@@ -927,4 +961,347 @@ fn public_identity_private_second_root_keeps_full_intent_in_private_draft() {
     assert_eq!(map(&map(&draft)["action"])["a"], value(json!("p.a")));
     assert_eq!(map(&map(&draft)["action"])["b"], value(json!("p.b")));
     assert_eq!(map(&map(&draft)["action"])["keep"], value(json!("p.a")));
+}
+
+fn named_setup() -> tempfile::TempDir {
+    let root = setup();
+    let doc = value(
+        json!({"meta":{"purpose":"Fixture","reasoning":{"version":2,"profile":"core/v1","requires":["arithmetic/v1"]}},"schema":{"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},"known":{},"judgments":{}}),
+    );
+    fs::write(
+        root.path().join("GROUNDING.yaml"),
+        Y::encode_document(&doc).unwrap(),
+    )
+    .unwrap();
+    root
+}
+fn named_runtime() -> (tempfile::TempDir, kpop_native::reasoning_runtime::Runtime) {
+    use kpop_native::reasoning_runtime::{OperationalBounds, Runtime};
+    let cache = tempfile::tempdir().unwrap();
+    let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scripts/reasoning/native")
+        .join(format!(
+            "{}.kpopper-runtime",
+            kpop_native::reasoning_runtime::target_name().unwrap()
+        ));
+    let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
+    (cache, runtime)
+}
+fn hypothesis(action: serde_json::Value, name: Option<&str>) -> V {
+    let mut action = json!({"kind":"hypothesis", "action": action});
+    if let Some(name) = name {
+        action["name"] = json!(name);
+    }
+    value(action)
+}
+#[test]
+fn named_hypotheses_edit_review_fold_refute_and_source_free_receipts() {
+    let root = named_setup();
+    let (_cache, runtime) = named_runtime();
+    let write = |root: &std::path::Path, op: &str, action: &V| {
+        let p = W::prepare(root, action, &options(op), Some(&runtime))
+            .unwrap_or_else(|e| panic!("{op}: {e}"));
+        W::publish(root, &p, Some(&runtime), |_| Ok(())).unwrap();
+        p
+    };
+    write(
+        root.path(),
+        "base",
+        &value(json!({"kind":"add","id":"p.a","body":{"v":1,"of":"2026-09-23"}})),
+    );
+    let original = fs::read(root.path().join("GROUNDING.yaml")).unwrap();
+    write(
+        root.path(),
+        "h-set",
+        &hypothesis(json!({"kind":"set","id":"p.a","value":2}), Some("alpha")),
+    );
+    let c = Capture::read(root.path()).unwrap();
+    assert_eq!(
+        map(&map(&map(c.document())["known"])["p.a"])["v"],
+        value(json!(1))
+    );
+    assert_ne!(
+        fs::read(root.path().join("GROUNDING.yaml")).unwrap(),
+        original
+    );
+    write(
+        root.path(),
+        "h-add",
+        &hypothesis(
+            json!({"kind":"add","id":"d.b","into":"judgments","body":{"claim":"bounded","rests_on":["p.a"],"wrong_if":{"expr":"p.a > 5"}}}),
+            Some("alpha"),
+        ),
+    );
+    write(
+        root.path(),
+        "h-review",
+        &hypothesis(json!({"kind":"review","id":"d.b"}), Some("alpha")),
+    );
+    let c = Capture::read(root.path()).unwrap();
+    assert!(!map(&map(c.document())["judgments"]).contains_key("d.b"));
+    let state = map(&map(c.state())["subjects"]);
+    let V::List(proposals) = &map(&state["p.a"])["proposals"] else {
+        panic!()
+    };
+    let V::Text(pin) = &proposals[0] else {
+        panic!()
+    };
+    let claim = c.object("p.a", pin).unwrap();
+    let folded = write(
+        root.path(),
+        "h-fold",
+        &hypothesis(
+            json!({"kind":"fold","names":["alpha"],"because":"tested"}),
+            None,
+        ),
+    );
+    W::publish(root.path(), &folded, Some(&runtime), |_| {
+        panic!("retry wrote")
+    })
+    .unwrap();
+    let c = Capture::read(root.path()).unwrap();
+    assert_eq!(
+        map(&map(&map(c.document())["known"])["p.a"])["v"],
+        value(json!(2))
+    );
+    assert_eq!(c.object("p.a", pin).unwrap(), claim);
+    write(
+        root.path(),
+        "h-new",
+        &hypothesis(json!({"kind":"set","id":"p.a","value":4}), Some("beta")),
+    );
+    write(
+        root.path(),
+        "h-refute",
+        &hypothesis(
+            json!({"kind":"refute","names":["beta"],"because":"not supported"}),
+            None,
+        ),
+    );
+    let c = Capture::read(root.path()).unwrap();
+    assert_eq!(
+        map(&map(&map(c.document())["known"])["p.a"])["v"],
+        value(json!(2))
+    );
+    let snapshot = P::capture_snapshot(root.path()).unwrap();
+    let receipts = ["h-set", "h-add", "h-review", "h-fold", "h-new", "h-refute"]
+        .map(|op| (op, W::receipt(&snapshot, op).unwrap()));
+    let export = P::export(root.path()).unwrap();
+    let copy = export.reconstruct().unwrap();
+    drop(root);
+    let snapshot = P::capture_snapshot(copy.path()).unwrap();
+    for (op, receipt) in receipts {
+        assert_eq!(W::receipt(&snapshot, op).unwrap(), receipt);
+    }
+    assert_eq!(
+        Capture::read(copy.path())
+            .unwrap()
+            .object("p.a", pin)
+            .unwrap(),
+        claim
+    );
+}
+
+#[test]
+fn named_hypothesis_crashes_and_physical_authority_are_fail_closed() {
+    for phase in [
+        P::Phase::Journal,
+        P::Phase::Append(0),
+        P::Phase::Commit,
+        P::Phase::View,
+    ] {
+        let root = named_setup();
+        let (_cache, runtime) = named_runtime();
+        let base = W::prepare(root.path(), &add(), &options("base"), Some(&runtime)).unwrap();
+        W::publish(root.path(), &base, Some(&runtime), |_| Ok(())).unwrap();
+        let action = hypothesis(json!({"kind":"set","id":"p.a","value":2}), Some("alpha"));
+        let p = W::prepare(root.path(), &action, &options("h-set"), Some(&runtime)).unwrap();
+        assert!(
+            W::publish(root.path(), &p, Some(&runtime), |at| if at == phase {
+                Err(kpop_native::Error("crash".into()))
+            } else {
+                Ok(())
+            })
+            .is_err()
+        );
+        W::recover(root.path(), Some(&runtime)).unwrap();
+        W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+        let c = Capture::read(root.path()).unwrap();
+        assert_eq!(
+            map(&map(&map(c.document())["known"])["p.a"])["v"],
+            value(json!(1))
+        );
+        fs::create_dir(root.path().join(".kpopper/hypotheses")).unwrap();
+        fs::write(
+            root.path().join(".kpopper/hypotheses/alpha.yaml"),
+            "known: {}\n",
+        )
+        .unwrap();
+        assert!(
+            W::prepare(root.path(), &action, &options("h-next"), Some(&runtime))
+                .unwrap_err()
+                .0
+                .contains("physical")
+        );
+    }
+}
+
+#[test]
+fn public_named_consolidation_dry_run_fold_and_refute() {
+    let root = named_setup();
+    let (_cache, runtime) = named_runtime();
+    let action = hypothesis(
+        json!({"kind":"add","id":"p.new","body":{"v":2}}),
+        Some("alpha"),
+    );
+    let p = W::prepare(root.path(), &action, &options("proposal"), Some(&runtime)).unwrap();
+    W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    let resources = tempfile::tempdir().unwrap();
+    fs::create_dir(resources.path().join("reasoning")).unwrap();
+    let archive = format!(
+        "{}.kpopper-runtime",
+        kpop_native::reasoning_runtime::target_name().unwrap()
+    );
+    fs::copy(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(&archive),
+        resources.path().join("reasoning").join(archive),
+    )
+    .unwrap();
+    let run = |args: &[&str]| {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(root.path())
+            .args(args)
+            .env("KPOPPER_NATIVE_RESOURCES", resources.path())
+            .env("KPOPPER_NATIVE_CACHE", resources.path().join("cache"))
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {} {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let before = P::export(root.path()).unwrap().encode().unwrap();
+    assert!(run(&["consolidate", "alpha", "--dry-run"]).contains("candidate"));
+    assert_eq!(P::export(root.path()).unwrap().encode().unwrap(), before);
+    assert!(run(&["consolidate", "alpha"]).contains("folded: alpha"));
+    assert_eq!(
+        map(&map(&map(Capture::read(root.path()).unwrap().document())["known"])["p.new"])["v"],
+        value(json!(2))
+    );
+    run(&["add", "p.refuted", "v=3", "--hypothesis", "beta"]);
+    assert!(
+        run(&["consolidate", "--refute", "beta", "insufficient evidence"])
+            .contains("refuted: beta")
+    );
+    assert!(
+        !map(&map(Capture::read(root.path()).unwrap().document())["known"])
+            .contains_key("p.refuted")
+    );
+}
+
+#[test]
+fn named_fold_assesses_untouched_judgments_and_sources_at_each_phase() {
+    let root = named_setup();
+    let (_cache, runtime) = named_runtime();
+    let write = |op: &str, action: &V| {
+        let p = W::prepare(root.path(), action, &options(op), Some(&runtime)).unwrap();
+        W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    };
+    write(
+        "base",
+        &value(json!({"kind":"add","id":"p.a","body":{"v":0,"of":"2026-09-23"}})),
+    );
+    write(
+        "guard",
+        &value(
+            json!({"kind":"add","id":"d.guard","into":"judgments","body":{"verdict":"safe","rests_on":["p.a"],"wrong_if":{"expr":"p.a > 1"}}}),
+        ),
+    );
+    let edit = hypothesis(json!({"kind":"set","id":"p.a","value":2}), Some("alpha"));
+    let p = W::prepare(root.path(), &edit, &options("h-edit"), Some(&runtime)).unwrap();
+    let physical = root.path().join(".kpopper/hypotheses/alpha.yaml");
+    assert!(
+        W::publish(root.path(), &p, Some(&runtime), |phase| {
+            if phase == P::Phase::Journal {
+                fs::create_dir(physical.parent().unwrap()).unwrap();
+                fs::write(&physical, "broken: [\n").unwrap();
+            }
+            Ok(())
+        })
+        .unwrap_err()
+        .0
+        .contains("physical")
+    );
+    assert!(
+        W::recover(root.path(), Some(&runtime))
+            .unwrap_err()
+            .0
+            .contains("physical")
+    );
+    fs::remove_file(physical).unwrap();
+    assert_eq!(
+        W::recover(root.path(), Some(&runtime)).unwrap(),
+        "rolled_back"
+    );
+    W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    let before = P::export(root.path()).unwrap().encode().unwrap();
+    let fold = hypothesis(
+        json!({"kind":"fold","names":["alpha"],"because":"attempt"}),
+        None,
+    );
+    assert!(
+        W::prepare(root.path(), &fold, &options("h-fold"), Some(&runtime))
+            .unwrap_err()
+            .0
+            .contains("hypothesis_candidate_not_clean")
+    );
+    assert_eq!(P::export(root.path()).unwrap().encode().unwrap(), before);
+}
+
+#[test]
+fn public_identity_and_named_edit_inspect_private_named_worlds() {
+    let root = named_setup();
+    let (_cache, runtime) = named_runtime();
+    for (op, action) in [
+        ("a", value(json!({"kind":"add","id":"p.a","body":{"v":1}}))),
+        ("b", value(json!({"kind":"add","id":"p.b","body":{"v":1}}))),
+        (
+            "private-b",
+            hypothesis(
+                json!({"kind":"add","id":"p.b","body":{"v":1,"private":true}}),
+                Some("alpha"),
+            ),
+        ),
+    ] {
+        let p = W::prepare(root.path(), &action, &options(op), Some(&runtime)).unwrap();
+        W::publish(root.path(), &p, Some(&runtime), |_| Ok(())).unwrap();
+    }
+    let before = P::export(root.path()).unwrap().encode().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["same", "p.a", "p.b", "--keep", "p.a"],
+        vec!["set", "p.b", "2", "--hypothesis", "alpha"],
+    ] {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(root.path())
+            .args(&args)
+            .env("KPOPPER_PRIVATE_HOME", private.path())
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {} {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(String::from_utf8_lossy(&out.stdout).contains("private"));
+        assert_eq!(P::export(root.path()).unwrap().encode().unwrap(), before);
+    }
 }

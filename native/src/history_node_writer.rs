@@ -216,6 +216,8 @@ fn decode_options(operation: &str, value: &V) -> Result<A::Options> {
         None
     } else if is_int(&o["receipt_version"], "1") {
         Some(1)
+    } else if is_int(&o["receipt_version"], "2") {
+        Some(2)
     } else if is_int(&o["receipt_version"], "7") {
         Some(7)
     } else if is_int(&o["receipt_version"], "5") {
@@ -401,6 +403,9 @@ struct Materialized {
 }
 /// Recover the operation request without changing the original receipt's hash domain.
 pub(crate) fn action(receipt: &V) -> Result<V> {
+    if let Some(intent) = map(&map(receipt)?["before"])?.get("hypothesis_authoring") {
+        return crate::history_node_hypothesis::action(map(intent)?);
+    }
     let intent = intent(receipt)?;
     if intent
         .get("kind")
@@ -438,7 +443,7 @@ pub(crate) fn action(receipt: &V) -> Result<V> {
 }
 pub(crate) fn intent(receipt: &V) -> Result<&Map> {
     let before = map(&map(receipt)?["before"])?;
-    let keys = ["authoring", "identity_authoring"]
+    let keys = ["authoring", "identity_authoring", "hypothesis_authoring"]
         .into_iter()
         .filter(|k| before.contains_key(*k))
         .collect::<Vec<_>>();
@@ -457,7 +462,7 @@ fn materialize(
     capture.check_expected(action)?;
     let kind = text(field(map(action)?, "kind")?)?;
     let mut effective_options = options.clone();
-    if kind == "batch" {
+    if ["batch", "hypothesis"].contains(&kind) {
         effective_options.strict = true;
     }
     let options = &effective_options;
@@ -471,6 +476,8 @@ fn materialize(
             capture, &projected, &plan, options, runtime, audit, archive,
         )?;
         (plan.objects, projected.document().clone(), receipt)
+    } else if kind == "hypothesis" {
+        crate::history_node_hypothesis::prepare(capture, action, options, runtime, audit, archive)?
     } else if kind == "proposal" {
         let a = schema(action, &["kind", "id", "body", "into", "because"], &[])?;
         let proposal = A::Proposal {
@@ -639,6 +646,12 @@ pub fn prepare(
     {
         crate::history_node_identity::sources(root)?;
     }
+    if map(action)?
+        .get("kind")
+        .is_some_and(|v| string_is(v, "hypothesis"))
+    {
+        crate::history_node_hypothesis::sources(root)?;
+    }
     let capture = Capture::read(root)?;
     let result = materialize(&capture, action, options, runtime, None, &archive(root)?)?;
     let prepared = P::prepare_with_context(
@@ -669,6 +682,9 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
         .is_some_and(|v| ["same", "distinct"].iter().any(|k| string_is(v, k)))
     {
         crate::history_node_identity::sources(root)?;
+    }
+    if map(&map(&recorded)?["before"])?.contains_key("hypothesis_authoring") {
+        crate::history_node_hypothesis::sources(root)?;
     }
     let current_archive = archive(root)?;
     require(
@@ -722,6 +738,9 @@ pub(crate) fn verify_sources(root: &Path, prepared: &P::Prepared) -> Result<()> 
         .ok_or_else(|| error("node_transaction_missing_context"))?;
     let c = context(&c)?;
     let before = map(field(map(&c["before"])?, "literal")?)?;
+    if before.contains_key("hypothesis_authoring") {
+        crate::history_node_hypothesis::sources(root)?;
+    }
     if before.contains_key("identity_authoring") {
         crate::history_node_identity::sources(root)?;
     }

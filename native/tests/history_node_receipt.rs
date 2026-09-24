@@ -53,6 +53,57 @@ fn reconstructs_exact_original_core_receipt_digests_and_typed_documents() {
     assert!(count >= 10, "only {count} receipts");
 }
 
+#[test]
+fn reconstructs_original_named_hypothesis_and_fold_fixture_receipts() {
+    let mut count = 0;
+    for raw in [
+        include_str!("fixtures/history-hypothesis.json"),
+        include_str!("fixtures/history-hypothesis-retained.json"),
+        include_str!("fixtures/history-hypothesis-candidate.json"),
+    ] {
+        let data: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for case in data["cases"].as_array().unwrap() {
+            let Some(receipt) = case.get("receipt") else {
+                continue;
+            };
+            let receipt = V::from_tagged(receipt).unwrap();
+            if case["name"] == "unrelated-physical" {
+                assert!(Receipt::pack(&receipt).is_err());
+                continue;
+            }
+            let packed =
+                Receipt::pack(&receipt).unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
+            assert_eq!(packed.restore().unwrap(), receipt, "{}", case["name"]);
+            count += 1;
+        }
+    }
+    assert!(count >= 20, "only {count} hypothesis receipts");
+}
+
+#[test]
+fn named_fold_receipt_accepts_dependency_reason_drops() {
+    let source = receipt(1);
+    let mut before = map(&source)["before"].clone();
+    let mut after = map(&source)["after"].clone();
+    let fold = V::from_json(&json!({
+        "kind":"fold",
+        "names":["trial"],
+        "because":"explicit fold decision",
+        "take":["trial"],
+        "drops":{"p.00000":"kept by trial"},
+        "assessment_version":1
+    }))
+    .unwrap();
+    map_mut(&mut before).remove("authoring");
+    map_mut(&mut after).remove("authoring");
+    map_mut(&mut before).insert("hypothesis_authoring".into(), fold.clone());
+    map_mut(&mut after).insert("hypothesis_authoring".into(), fold);
+    let source =
+        T::semantic_receipt("core/v1", &map(&source)["capabilities"], &before, &after).unwrap();
+    let packed = Receipt::pack(&source).unwrap();
+    assert_eq!(packed.restore().unwrap(), source);
+}
+
 fn receipt(size: usize) -> V {
     let mut doc = serde_json::Map::new();
     let mut nodes = serde_json::Map::new();
@@ -247,6 +298,160 @@ fn node_deletion_stale_before_images_and_branch_preparation_are_exact() {
         .collect::<Vec<_>>();
     branch.apply(&reverse).unwrap();
     assert_eq!(branch.values(), base.values());
+}
+
+#[test]
+fn named_hypothesis_bodies_are_node_local_and_restore_exactly() {
+    let source = receipt(2);
+    let mut before = map(&source)["before"].clone();
+    let mut after = map(&source)["after"].clone();
+    for side in [&mut before, &mut after] {
+        let report = map_mut(map_mut(side).get_mut("assessment").unwrap());
+        report.insert(
+            "scope".into(),
+            V::from_json(&json!({"context":{"conflicts":{}},"hypotheses":{}})).unwrap(),
+        );
+        let scope = map_mut(report.get_mut("scope").unwrap());
+        let doc_a = V::from_json(&json!({
+            "known":{"p.00000":{"v":10}},
+            "readings":{"p.00001":{"v":11}},
+            "open":{"p.list":["typed",3]}
+        }))
+        .unwrap();
+        let doc_b = V::from_json(&json!({"known":{"p.00000":{"v":20}}})).unwrap();
+        scope.insert("hypotheses".into(), V::from_json(&json!({
+            "first":{"kind":"named-history-hypothesis/v1","status":"inspected","document":doc_a.to_json().unwrap()},
+            "second":{"kind":"named-history-hypothesis/v1","status":"inspected","document":doc_b.to_json().unwrap()}
+        })).unwrap());
+        map_mut(scope.get_mut("context").unwrap()).insert(
+            "conflicts".into(),
+            V::from_json(&json!({"p.00000":[["first",{"v":10}],["second",{"v":20}]]})).unwrap(),
+        );
+    }
+    let source =
+        T::semantic_receipt("core/v1", &map(&source)["capabilities"], &before, &after).unwrap();
+    let packed = Receipt::pack(&source).unwrap();
+    assert_eq!(packed.restore().unwrap(), source);
+    let literal = &map(packed.after().context())["literal"];
+    let assessment = &map(literal)["assessment"];
+    let scope = &map(assessment)["scope"];
+    assert!(map(&map(scope)["hypotheses"]).values().all(|h| {
+        map(h)["document"].to_json().unwrap()["known"]
+            .as_object()
+            .unwrap()
+            .is_empty()
+    }));
+    let node = map(packed.after().nodes().get("p.00000").unwrap());
+    assert_eq!(map(&node["hypotheses"]).len(), 2);
+    assert!(node.contains_key("conflicts"));
+    let list_piece = map(packed.after().nodes().get("p.list").unwrap());
+    assert_eq!(
+        map(&map(&list_piece["hypotheses"])["first"])["open"],
+        V::from_json(&json!(["typed", 3])).unwrap()
+    );
+
+    let mut retained = Nodes::new();
+    retained
+        .apply(&retained.prepare(packed.before()).unwrap())
+        .unwrap();
+    let mut next = map(&source)["after"].clone();
+    let report = map_mut(map_mut(&mut next).get_mut("assessment").unwrap());
+    let scope = map_mut(report.get_mut("scope").unwrap());
+    for name in ["first", "second"] {
+        let h = map_mut(
+            map_mut(scope.get_mut("hypotheses").unwrap())
+                .get_mut(name)
+                .unwrap(),
+        );
+        let doc = map_mut(h.get_mut("document").unwrap());
+        if let Some(known) = doc.get_mut("known") {
+            map_mut(known).remove("p.00000");
+        }
+    }
+    let next = T::semantic_receipt(
+        "core/v1",
+        &map(&source)["capabilities"],
+        &map(&source)["before"],
+        &next,
+    )
+    .unwrap();
+    let packed_next = Receipt::pack(&next).unwrap();
+    let changes = retained.prepare(packed_next.after()).unwrap();
+    assert!(changes.iter().any(|change| change.subject == "p.00000"));
+    retained.apply(&changes).unwrap();
+    assert!(!map(retained.values().get("p.00000").unwrap()).contains_key("hypotheses"));
+    assert_eq!(
+        retained
+            .side(packed_next.after().context())
+            .unwrap()
+            .restore()
+            .unwrap(),
+        map(&next)["after"]
+    );
+
+    // A side with the component inactive must leave the retained prior node piece intact.
+    let frozen = retained.values().clone();
+    let mut inactive = map(&next)["after"].clone();
+    let report = map_mut(map_mut(&mut inactive).get_mut("assessment").unwrap());
+    let scope = map_mut(report.get_mut("scope").unwrap());
+    scope.remove("hypotheses");
+    let inactive = T::semantic_receipt(
+        "core/v1",
+        &map(&next)["capabilities"],
+        &map(&next)["before"],
+        &inactive,
+    )
+    .unwrap();
+    let inactive = Receipt::pack(&inactive).unwrap();
+    assert!(retained.prepare(inactive.after()).unwrap().is_empty());
+    assert_eq!(retained.values(), &frozen);
+
+    let mut tampered = packed.after().nodes().clone();
+    map_mut(
+        map_mut(tampered.get_mut("p.00000").unwrap())
+            .get_mut("hypotheses")
+            .unwrap(),
+    )
+    .remove("first");
+    let tampered = Side::from_parts(packed.after().context().clone(), tampered).unwrap();
+    assert!(
+        Receipt::from_parts(packed.header().clone(), packed.before().clone(), tampered).is_err()
+    );
+    let mut tampered = packed.after().context().clone();
+    let report = map_mut(
+        map_mut(map_mut(&mut tampered).get_mut("literal").unwrap())
+            .get_mut("assessment")
+            .unwrap(),
+    );
+    let group = map_mut(
+        map_mut(report.get_mut("scope").unwrap())
+            .get_mut("hypotheses")
+            .unwrap(),
+    );
+    map_mut(group.get_mut("second").unwrap()).insert(
+        "document".into(),
+        V::from_json(&json!({"unknown":{}})).unwrap(),
+    );
+    assert!(Side::from_parts(tampered, packed.after().nodes().clone()).is_err());
+    let mut tampered = packed.after().context().clone();
+    let report = map_mut(
+        map_mut(map_mut(&mut tampered).get_mut("literal").unwrap())
+            .get_mut("assessment")
+            .unwrap(),
+    );
+    let group = map_mut(
+        map_mut(report.get_mut("scope").unwrap())
+            .get_mut("hypotheses")
+            .unwrap(),
+    );
+    let document = map_mut(
+        map_mut(group.get_mut("first").unwrap())
+            .get_mut("document")
+            .unwrap(),
+    );
+    map_mut(document.get_mut("open").unwrap())
+        .insert("p.list".into(), V::from_json(&json!(["typed", 3])).unwrap());
+    assert!(Side::from_parts(tampered, packed.after().nodes().clone()).is_err());
 }
 
 #[test]

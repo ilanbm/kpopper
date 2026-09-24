@@ -40,6 +40,16 @@ fn s(value: &str) -> V {
 fn empty() -> V {
     V::Map(Map::new())
 }
+/// Assessment scope documents are projections, not ordinary record documents: every
+/// nonreserved map is a collection, including collections whose bodies are lists.
+fn scoped_document_collections(document: &V) -> Result<Map> {
+    let document = map(document)?;
+    document
+        .iter()
+        .filter(|(name, _)| !["meta", "schema", "record", "also"].contains(&name.as_str()))
+        .map(|(name, value)| Ok((name.clone(), V::Map(map(value)?.clone()))))
+        .collect()
+}
 fn authoring(value: &V, hypothesis: bool) -> Result<()> {
     let allowed = if hypothesis {
         &[
@@ -55,6 +65,11 @@ fn authoring(value: &V, hypothesis: bool) -> Result<()> {
             "physical",
             "recorded_at",
             "objects",
+            "names",
+            "because",
+            "take",
+            "drops",
+            "assessment_version",
         ][..]
     } else {
         &[
@@ -84,6 +99,44 @@ fn authoring(value: &V, hypothesis: bool) -> Result<()> {
         ][..]
     };
     let a = schema(value, &[], allowed)?;
+    if hypothesis {
+        if let Some(kind) = a.get("kind") {
+            require(
+                ["edit", "fold", "refute"]
+                    .iter()
+                    .any(|k| string_is(kind, k)),
+                "node_receipt_action_unsupported",
+            )?;
+        }
+        if let Some(names) = a.get("names") {
+            for name in list(names)? {
+                text(name)?;
+            }
+        }
+        if let Some(name) = a.get("name") {
+            text(name)?;
+        }
+        if let Some(value) = a.get("because") {
+            text(value)?;
+        }
+        if let Some(take) = a.get("take") {
+            for name in list(take)? {
+                text(name)?;
+            }
+        }
+        if let Some(drops) = a.get("drops") {
+            for (id, reason) in map(drops)? {
+                text(&s(id))?;
+                text(reason)?;
+            }
+        }
+        if let Some(version) = a.get("assessment_version") {
+            require(
+                is_int(version, "0") || is_int(version, "1"),
+                "node_receipt_action_unsupported",
+            )?;
+        }
+    }
     if let Some(actions) = a.get("actions") {
         require(
             a.get("kind").is_some_and(|v| string_is(v, "batch")),
@@ -279,21 +332,15 @@ fn assessment(value: &V) -> Result<()> {
         if let Some(hypotheses) = scope.get("hypotheses") {
             for value in map(hypotheses)?.values() {
                 let h = schema(value, &["kind", "status", "document"], &[])?;
-                require(
-                    map(&h["document"])?.is_empty(),
-                    "node_receipt_scope_unsupported",
-                )?;
+                map(&h["document"])?;
                 text(&h["kind"])?;
                 text(&h["status"])?;
             }
         }
         if let Some(context) = scope.get("context") {
-            require(
-                map(context)?
-                    .get("conflicts")
-                    .is_none_or(|v| !crate::history_view::truth(v)),
-                "node_receipt_scope_unsupported",
-            )?;
+            if let Some(conflicts) = map(context)?.get("conflicts") {
+                map(conflicts)?;
+            }
         }
     }
     Ok(())
@@ -390,6 +437,24 @@ fn components(context: &V) -> Result<BTreeSet<&'static str>> {
     }
     if side.contains_key("assessment") {
         result.insert("assessment");
+        if let Some(report) = side.get("assessment") {
+            if let Some(scope) = map(report).ok().and_then(|m| m.get("scope")) {
+                if map(scope)
+                    .ok()
+                    .is_some_and(|m| m.contains_key("hypotheses"))
+                {
+                    result.insert("hypotheses");
+                }
+                if map(scope)
+                    .ok()
+                    .and_then(|m| m.get("context"))
+                    .and_then(|v| map(v).ok())
+                    .is_some_and(|m| m.contains_key("conflicts"))
+                {
+                    result.insert("conflicts");
+                }
+            }
+        }
     }
     if let Some(baseline) = baseline(&mut literal)? {
         for field in ["heads", "open_acts"] {
@@ -399,6 +464,34 @@ fn components(context: &V) -> Result<BTreeSet<&'static str>> {
         }
     }
     Ok(result)
+}
+fn scoped_hypothesis_context(literal: &V) -> bool {
+    map(literal)
+        .ok()
+        .and_then(|m| m.get("assessment"))
+        .and_then(|r| map(r).ok())
+        .and_then(|r| r.get("scope"))
+        .and_then(|s| map(s).ok())
+        .is_some_and(|s| {
+            s.get("hypotheses")
+                .and_then(|hs| map(hs).ok())
+                .is_some_and(|hs| {
+                    hs.values().any(|h| {
+                        map(h)
+                            .ok()
+                            .and_then(|h| h.get("document"))
+                            .and_then(|d| scoped_document_collections(d).ok())
+                            .is_some_and(|cs| {
+                                cs.values().any(|m| map(m).is_ok_and(|m| !m.is_empty()))
+                            })
+                    })
+                })
+                || s.get("context")
+                    .and_then(|c| map(c).ok())
+                    .and_then(|c| c.get("conflicts"))
+                    .and_then(|c| map(c).ok())
+                    .is_some_and(|c| !c.is_empty())
+        })
 }
 impl Nodes {
     pub fn new() -> Self {
@@ -411,7 +504,15 @@ impl Nodes {
             let node = schema(
                 node,
                 &[],
-                &["document", "assessment", "heads", "open_acts", "proposal"],
+                &[
+                    "document",
+                    "assessment",
+                    "heads",
+                    "open_acts",
+                    "proposal",
+                    "hypotheses",
+                    "conflicts",
+                ],
             )?;
             require(!node.is_empty(), "node_receipt_empty_piece")?;
         }
@@ -525,6 +626,7 @@ impl Side {
             }
         }
         let mut literal = side.clone();
+        let scoped_hypotheses = scoped_hypothesis_context(&literal);
         let mut nodes = Map::new();
         let proposal = map_mut(&mut literal)?
             .remove("proposal")
@@ -575,6 +677,45 @@ impl Side {
         if let Some(assessment) = map_mut(&mut literal)?.get_mut("assessment") {
             self::assessment(assessment)?;
             let report = map_mut(assessment)?;
+            if let Some(scope) = report.get_mut("scope") {
+                let scope = map_mut(scope)?;
+                if let Some(hypotheses) = scope.get_mut("hypotheses") {
+                    for (name, h) in map_mut(hypotheses)? {
+                        let h = map_mut(h)?;
+                        let document = h
+                            .get_mut("document")
+                            .ok_or_else(|| error("node_receipt_scope_unsupported"))?;
+                        let mut shell = document.clone();
+                        for (collection, members) in scoped_document_collections(document)? {
+                            let members = map(&members)?.clone();
+                            for (subject, body) in members {
+                                let worlds = map_mut(
+                                    piece(&mut nodes, &subject)?
+                                        .entry("hypotheses".into())
+                                        .or_insert_with(empty),
+                                )?;
+                                let world =
+                                    map_mut(worlds.entry(name.clone()).or_insert_with(empty))?;
+                                require(
+                                    world.insert(collection.clone(), body).is_none(),
+                                    "node_receipt_duplicate",
+                                )?;
+                            }
+                            map_mut(&mut shell)?.insert(collection, empty());
+                        }
+                        *document = shell;
+                    }
+                }
+                if let Some(context) = scope.get_mut("context") {
+                    if let Some(conflicts) = map_mut(context)?.get_mut("conflicts") {
+                        let entries = map(conflicts)?.clone();
+                        for (subject, variants) in entries {
+                            piece(&mut nodes, &subject)?.insert("conflicts".into(), variants);
+                        }
+                        *conflicts = empty();
+                    }
+                }
+            }
             let subjects = map(field(report, "nodes")?)?.clone();
             let snapshot = text(field(report, "snapshot_id")?)?.to_owned();
             declarations.extend(subjects.keys().map(|id| vec![id.clone()]));
@@ -594,7 +735,9 @@ impl Side {
         let mut context = V::Map(Map::from([
             (
                 "format".into(),
-                s(if proposal.is_some() {
+                s(if scoped_hypotheses {
+                    "node-receipt-side/v3"
+                } else if proposal.is_some() {
                     "node-receipt-side/v2"
                 } else {
                     "node-receipt-side/v1"
@@ -628,15 +771,20 @@ impl Side {
             &["format", "literal", "selection_from_nodes"],
             &["proposal"],
         )?;
+        let has_scoped_parts = self.nodes.values().any(|node| {
+            map(node)
+                .ok()
+                .is_some_and(|m| m.contains_key("hypotheses") || m.contains_key("conflicts"))
+        });
+        let expected = if has_scoped_parts {
+            "node-receipt-side/v3"
+        } else if context.contains_key("proposal") {
+            "node-receipt-side/v2"
+        } else {
+            "node-receipt-side/v1"
+        };
         require(
-            string_is(
-                &context["format"],
-                if context.contains_key("proposal") {
-                    "node-receipt-side/v2"
-                } else {
-                    "node-receipt-side/v1"
-                },
-            ),
+            string_is(&context["format"], expected),
             "node_receipt_format",
         )?;
         let V::Bool(selection) = context["selection_from_nodes"] else {
@@ -682,6 +830,25 @@ impl Side {
                 map(field(map(report)?, "nodes")?)?.is_empty(),
                 "node_receipt_embedded_assessment",
             )?;
+            if let Some(scope) = map(report)?.get("scope") {
+                if let Some(hypotheses) = map(scope)?.get("hypotheses") {
+                    for h in map(hypotheses)?.values() {
+                        for members in scoped_document_collections(&map(h)?["document"])?.values() {
+                            require(map(members)?.is_empty(), "node_receipt_embedded_hypothesis")?;
+                        }
+                    }
+                }
+                if let Some(conflicts) = map(scope)?
+                    .get("context")
+                    .and_then(|c| map(c).ok())
+                    .and_then(|c| c.get("conflicts"))
+                {
+                    require(
+                        map(conflicts)?.is_empty(),
+                        "node_receipt_embedded_conflicts",
+                    )?;
+                }
+            }
         }
         require(self.nodes.len() <= MAX_OBJECTS, "node_receipt_limit")?;
         let mut selected = Vec::new();
@@ -690,7 +857,15 @@ impl Side {
             let node = schema(
                 node,
                 &[],
-                &["document", "assessment", "heads", "open_acts", "proposal"],
+                &[
+                    "document",
+                    "assessment",
+                    "heads",
+                    "open_acts",
+                    "proposal",
+                    "hypotheses",
+                    "conflicts",
+                ],
             )?;
             require(!node.is_empty(), "node_receipt_empty_piece")?;
             if let Some(value) = node.get("proposal") {
@@ -713,6 +888,71 @@ impl Side {
                 )?;
                 require(
                     entries.insert(subject.clone(), pair[1].clone()).is_none(),
+                    "node_receipt_duplicate",
+                )?;
+            }
+            if let Some(worlds) = node.get("hypotheses") {
+                let worlds = map(worlds)?;
+                let report = map_mut(
+                    map_mut(&mut literal)?
+                        .get_mut("assessment")
+                        .ok_or_else(|| error("node_receipt_assessment"))?,
+                )?;
+                let scope = map_mut(
+                    report
+                        .get_mut("scope")
+                        .ok_or_else(|| error("node_receipt_scope_unsupported"))?,
+                )?;
+                let declarations = map_mut(
+                    scope
+                        .get_mut("hypotheses")
+                        .ok_or_else(|| error("node_receipt_scope_unsupported"))?,
+                )?;
+                for (name, pieces) in worlds {
+                    let h = declarations
+                        .get_mut(name)
+                        .ok_or_else(|| error("node_receipt_hypothesis_missing"))?;
+                    let document = map_mut(
+                        map_mut(h)?
+                            .get_mut("document")
+                            .ok_or_else(|| error("node_receipt_scope_unsupported"))?,
+                    )?;
+                    for (collection, body) in map(pieces)? {
+                        let entries = document
+                            .get_mut(collection)
+                            .ok_or_else(|| error("node_receipt_hypothesis_collection_missing"))?;
+                        require(
+                            map_mut(entries)?
+                                .insert(subject.clone(), body.clone())
+                                .is_none(),
+                            "node_receipt_duplicate",
+                        )?;
+                    }
+                }
+            }
+            if let Some(conflicts) = node.get("conflicts") {
+                let report = map_mut(
+                    map_mut(&mut literal)?
+                        .get_mut("assessment")
+                        .ok_or_else(|| error("node_receipt_assessment"))?,
+                )?;
+                let scope = map_mut(
+                    report
+                        .get_mut("scope")
+                        .ok_or_else(|| error("node_receipt_scope_unsupported"))?,
+                )?;
+                let context = map_mut(
+                    scope
+                        .get_mut("context")
+                        .ok_or_else(|| error("node_receipt_scope_unsupported"))?,
+                )?;
+                let entries = map_mut(
+                    context
+                        .get_mut("conflicts")
+                        .ok_or_else(|| error("node_receipt_scope_unsupported"))?,
+                )?;
+                require(
+                    entries.insert(subject.clone(), conflicts.clone()).is_none(),
                     "node_receipt_duplicate",
                 )?;
             }

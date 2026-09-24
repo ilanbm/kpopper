@@ -115,10 +115,6 @@ pub(crate) fn prepare(
     let projected = crate::history_node_projection::capture(capture)?;
     let (groups, index) =
         crate::history_hypotheses::layers(projected.projection(), capture.document())?;
-    require(
-        map(&groups)?.is_empty(),
-        "node_identity_named_hypotheses_unsupported",
-    )?;
     let context = HA::Context {
         base: capture.document().clone(),
         groups,
