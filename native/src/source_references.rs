@@ -7,31 +7,124 @@ use crate::{
 };
 use std::{collections::BTreeSet, path::Path};
 
-fn pinned_file_exists(root: &Path, revision: &str, path: &str) -> Result<bool> {
+const PIN_PROBE_OUTPUT_LIMIT: usize = 8 * 1024;
+
+fn is_line_suffix(suffix: &str) -> bool {
+    let (first, last) = suffix.split_once('-').unwrap_or((suffix, ""));
+    !first.is_empty()
+        && first.bytes().all(|byte| byte.is_ascii_digit())
+        && (last.is_empty() || last.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+fn locator_candidates(locator: &str) -> Vec<&str> {
+    let mut candidates = vec![locator];
+    while candidates.len() < 9 {
+        let path = *candidates.last().expect("full locator is first");
+        let Some((prefix, suffix)) = path.rsplit_once(':') else {
+            break;
+        };
+        if !is_line_suffix(suffix) {
+            break;
+        }
+        candidates.push(prefix);
+    }
+    candidates
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PinnedFileStatus {
+    Available,
+    Missing,
+    RevisionUnavailable,
+    Unresolved,
+    Unavailable,
+}
+
+fn repo_relative_pin_path(
+    project_root: &Path,
+    record_root: &Path,
+    path: &str,
+) -> Result<Option<String>> {
+    let path = Path::new(path);
+    let dot_relative = matches!(
+        path.components().next(),
+        Some(std::path::Component::CurDir | std::path::Component::ParentDir)
+    );
+    if !dot_relative {
+        return Ok(Some(path.to_string_lossy().into_owned()));
+    }
+    let base = crate::project_modes::resolved(record_root)?;
+    let resolved_path = absolute(&base.join(path))?;
+    let target = crate::project_modes::resolved(&resolved_path)?;
+    if !target.starts_with(project_root) {
+        return Ok(None);
+    }
+    Ok(resolved_path.strip_prefix(project_root).ok().map(|relative| {
+        relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/")
+    }))
+}
+
+fn tree_blob_status(output: &[u8], path: &str) -> PinnedFileStatus {
+    for entry in output.split(|byte| *byte == 0).filter(|entry| !entry.is_empty()) {
+        let Some(separator) = entry.iter().position(|byte| *byte == b'\t') else {
+            return PinnedFileStatus::Unavailable;
+        };
+        let metadata = entry[..separator].split(|byte| byte.is_ascii_whitespace());
+        let kind = metadata
+            .skip(1)
+            .next()
+            .filter(|field| !field.is_empty());
+        let Some(kind) = kind else {
+            return PinnedFileStatus::Unavailable;
+        };
+        if &entry[separator + 1..] == path.as_bytes() {
+            return if kind == b"blob" {
+                PinnedFileStatus::Available
+            } else {
+                PinnedFileStatus::Missing
+            };
+        }
+    }
+    PinnedFileStatus::Missing
+}
+
+fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStatus {
     if revision.is_empty() || path.is_empty() || revision.contains('\0') || path.contains('\0') {
-        return Ok(false);
+        return PinnedFileStatus::Unresolved;
     }
     let reference = format!("{revision}^{{commit}}");
-    let Some(commit) = crate::pending_state::git(
+    let commit = match crate::pending_state::git(
         root,
         &["rev-parse", "--verify", "--end-of-options", &reference],
-        1024,
+        PIN_PROBE_OUTPUT_LIMIT,
         true,
-    )?
-    else {
-        return Ok(false);
+    ) {
+        Ok(Some(commit)) => commit,
+        Ok(None) => return PinnedFileStatus::Unresolved,
+        Err(_) => return PinnedFileStatus::RevisionUnavailable,
     };
     let commit = String::from_utf8_lossy(&commit);
     let commit = commit.trim();
     if ![40, 64].contains(&commit.len()) || !commit.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Ok(false);
+        return PinnedFileStatus::Unresolved;
     }
-    // The resolved object ID keeps authored option-like revisions out of cat-file's arguments.
-    let object = format!("{commit}:{path}");
-    Ok(
-        crate::pending_state::git(root, &["cat-file", "-t", &object], 1024, true)?
-            .is_some_and(|kind| kind == b"blob\n"),
-    )
+    // The resolved object ID keeps authored option-like revisions out of Git's arguments.
+    // ls-tree reads tree metadata without requiring the blob, which matters in blobless clones.
+    let pathspec = format!(":(literal){path}");
+    match crate::pending_state::git(
+        root,
+        &["ls-tree", "--full-tree", "-z", &commit, "--", &pathspec],
+        PIN_PROBE_OUTPUT_LIMIT,
+        true,
+    ) {
+        Ok(Some(output)) => tree_blob_status(&output, path),
+        Ok(None) => PinnedFileStatus::Missing,
+        Err(_) => PinnedFileStatus::Unavailable,
+    }
 }
 
 pub(crate) fn notes(
@@ -58,7 +151,8 @@ pub(crate) fn notes(
             let Some(raw) = fields.get(field).and_then(|v| text(v).ok()) else {
                 continue;
             };
-            let raw = raw.trim();
+            let locator = raw.trim();
+            let raw = locator;
             // from can be an entry ID or prose. Slashes, pins and common file extensions
             // identify path tokens; file makes an unfamiliar root filename explicit.
             let file_extension = Path::new(raw)
@@ -93,25 +187,101 @@ pub(crate) fn notes(
             {
                 continue;
             }
-            let path = Path::new(raw);
-            if !path.is_absolute()
-                && let Some((revision, path)) = raw.split_once(':')
-            {
-                if !pinned_file_exists(&project.root, revision, path)? {
-                    notes.push(format!("{id}: pinned file {raw} is unavailable in this repository; verify the revision and path with git show {raw}, or re-read the source"));
+            // Try the full locator and each line/column-trimmed form. Check every
+            // local candidate before Git so existing citations never depend on Git.
+            let candidates = locator_candidates(locator);
+            let mut inside_candidates = Vec::new();
+            let mut local_exists = false;
+            for candidate in &candidates {
+                let path = absolute(&record_root.join(Path::new(candidate)))?;
+                let resolved = crate::project_modes::resolved(&path)?;
+                if !resolved.starts_with(&project.root) {
+                    continue;
                 }
+                inside_candidates.push(*candidate);
+                if inventory.exists(&path)? {
+                    local_exists = true;
+                    break;
+                }
+            }
+            if local_exists {
                 continue;
             }
-            // Match the hub's existing file links: relative to the primary record,
-            // while Git's revision:path locator stays relative to the repository.
-            let path = absolute(&record_root.join(path))?;
-            let resolved = crate::project_modes::resolved(&path)?;
-            if !resolved.starts_with(&project.root) {
+            if inside_candidates.is_empty() {
                 continue;
             }
-            if !inventory.exists(&path)? {
-                notes.push(format!("{id}: file {raw} is absent from this repository; re-read the surviving source, or pin the historical file as revision:path (open it with git show revision:path)"));
+
+            let mut missing_pin: Option<&str> = None;
+            let mut ambiguous_pin: Option<(&str, &str)> = None;
+            let mut unavailable_pin: Option<PinnedFileStatus> = None;
+            let mut pin_available = false;
+            if !Path::new(locator).is_absolute() {
+                for candidate in &candidates {
+                    let Some((revision, pinned_path)) = candidate.split_once(':') else {
+                        continue;
+                    };
+                    if revision.is_empty() || pinned_path.is_empty() {
+                        continue;
+                    }
+                    let Some(repository_path) =
+                        repo_relative_pin_path(&project.root, record_root, pinned_path)?
+                    else {
+                        continue;
+                    };
+                    // Resolved refs may contain slashes; retain the older slash-free
+                    // revision:path heuristic when Git confirms no revision exists.
+                    match pinned_file_status(&project.root, revision, &repository_path) {
+                        PinnedFileStatus::Available => {
+                            pin_available = true;
+                            break;
+                        }
+                        PinnedFileStatus::Missing => missing_pin = Some(candidate),
+                        status @ (PinnedFileStatus::RevisionUnavailable
+                        | PinnedFileStatus::Unavailable) => {
+                            unavailable_pin = Some(status);
+                            break;
+                        }
+                        PinnedFileStatus::Unresolved
+                            if field == "file"
+                                && !revision.contains(['/', '\\'])
+                                && repository_path.contains('/') =>
+                        {
+                            missing_pin = Some(candidate);
+                        }
+                        PinnedFileStatus::Unresolved
+                            if field == "from" || !is_line_suffix(pinned_path) =>
+                        {
+                            ambiguous_pin = Some((revision, candidate));
+                        }
+                        PinnedFileStatus::Unresolved => {}
+                    }
+                }
             }
+            if pin_available {
+                continue;
+            }
+            if let Some(status) = unavailable_pin {
+                let reason = match status {
+                    PinnedFileStatus::RevisionUnavailable => "revision",
+                    PinnedFileStatus::Unavailable => "object",
+                    _ => unreachable!("only unavailable probe states are stored"),
+                };
+                notes.push(format!(
+                    "{id}: could not check locator {locator} because Git's {reason} probe was unavailable; retry the check or re-read the source"
+                ));
+                continue;
+            }
+            if let Some(candidate) = missing_pin {
+                notes.push(format!("{id}: pinned file {locator} is unavailable in this repository; verify the revision and path with git show {candidate}, or re-read the source"));
+                continue;
+            }
+            if let Some((revision, candidate)) = ambiguous_pin {
+                notes.push(format!(
+                    "{id}: no local file matches {locator}, and Git does not know revision {revision}; if this is a pin, verify it with git show {candidate}, or re-read the source"
+                ));
+                continue;
+            }
+            notes.push(format!("{id}: file {locator} is absent from this repository; re-read the surviving source, or pin the historical file as revision:path (open it with git show revision:path)"));
         }
     }
     Ok(notes)
