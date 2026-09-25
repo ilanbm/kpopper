@@ -130,6 +130,7 @@ fn read_day(body: &V, raw: &Map) -> Option<String> {
 /// on the field roles of the record it is laid over nor contests the branch's other
 /// readings. Only collections are kept; the branch's `schema:` and `meta:` stay the
 /// branch's.
+#[allow(dead_code)] // Also compiled into the finite adapter, which uses the explicit-base entrypoint.
 pub(crate) fn branch_differences(document: &V, base: &World<'_>) -> Result<V> {
     branch_differences_from(document, base, None)
 }

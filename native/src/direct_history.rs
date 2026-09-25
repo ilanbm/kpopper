@@ -253,6 +253,13 @@ fn act_with_probe(
     action: &V,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<V> {
+    act_with_actor(original, cwd, action, V::Null, probe)
+}
+pub fn act_as(original: &[PathBuf], cwd: &Path, action: &V, actor: Option<&str>) -> Result<V> {
+    require(actor.is_none_or(|a| !a.trim().is_empty() && a.len() <= 200), "--by must be non-empty recorded actor text, at most 200 bytes")?;
+    act_with_actor(original, cwd, action, actor.map(s).unwrap_or(V::Null), &mut |_| Ok(()))
+}
+fn act_with_actor(original: &[PathBuf], cwd: &Path, action: &V, by: V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<V> {
     let a = schema(action, &["kind", "id", "of", "over", "because"], &[])?;
     require(
         ["accept", "refute", "correct", "propose", "retire"].contains(&text(&a["kind"])?),
@@ -267,7 +274,7 @@ fn act_with_probe(
         "recovery_required",
     )?;
     if crate::history_node_publication::selected(&store.entry)? {
-        let (result, _) = crate::public_node_history::write(&route, original, action, probe)?;
+        let (result, _) = crate::public_node_history::write_as(&route, original, action, probe, by)?;
         if !map(&result)?
             .get("state")
             .is_some_and(|v| string_is(v, "committed"))
@@ -306,7 +313,7 @@ fn act_with_probe(
         &store,
         &captured,
         action,
-        &options("act", V::Null)?,
+        &options("act", by)?,
         runtime.as_ref(),
     )?;
     let authored = V::List(

@@ -160,7 +160,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
             "pins",
             "integrity",
         ],
-        &["dispositions", "origin", "requires", "temporal"],
+        &["dispositions", "origin", "requires", "temporal", "review_profile"],
     )?;
     require(
         is_int(&m["projection_version"], "1") || is_int(&m["projection_version"], "2"),
@@ -178,6 +178,9 @@ pub fn validate_projection(value: &V) -> Result<()> {
         )?;
     } else {
         A::bind_authority(&m["authority"], &m["baseline"])?;
+    }
+    if let Some(profile) = m.get("review_profile") {
+        require(string_is(profile, crate::history_review::PROFILE), "unsupported_review_profile")?;
     }
     if let Some(r) = m.get("requires") {
         A::validate_history_requires(r)?;
@@ -303,6 +306,9 @@ pub fn validate_projection(value: &V) -> Result<()> {
         dispositions.keys().all(|s| subjects.contains_key(s)),
         "invalid_dispositions",
     )?;
+    if m.contains_key("review_profile") {
+        require(dispositions.keys().eq(subjects.keys()), "incomplete_review_evidence")?;
+    }
     for (name, disposition) in dispositions {
         let d = schema(
             disposition,
@@ -313,7 +319,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
                 "reviews",
                 "implied",
             ],
-            &["source_state", "resolutions"],
+            &["source_state", "review"],
         )?;
         if let Some(origin) = m.get("origin") {
             let source = &map(&map(origin)?["subjects"])?[name];
@@ -373,27 +379,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
             review_ids.windows(2).all(|w| w[0] < w[1]),
             "invalid_references",
         )?;
-        if let Some(resolutions) = d.get("resolutions") {
-            let mut previous: Option<String> = None;
-            for resolution in list(resolutions, "invalid_resolution_scope")? {
-                validate_object(resolution)?;
-                scheme_ok(resolution)?;
-                let r = map(resolution)?;
-                require(string_is(&r["subject"], name) && string_is(&r["kind"], "act"), "invalid_resolution_scope")?;
-                let b = map(&r["body"])?;
-                let target = text(&b["of"])?;
-                let head = map(pins.get(target).ok_or_else(|| error("missing_pin_witness"))?)?;
-                let claim = head.get("object").ok_or_else(|| error("missing_pin_witness"))?;
-                require(string_is(&b["act"], "accept")
-                    && string_is(&map(claim)?["kind"], "judgment")
-                    && list(&map(&subjects[name])?["heads"], "invalid_references")?.contains(&b["of"])
-                    && list(&map(&subjects[name])?["open_acts"], "invalid_references")?.contains(&r["id"])
-                    && !list(&b["over"], "invalid_references")?.is_empty(), "invalid_resolution_scope")?;
-                let id = text(&r["id"])?;
-                require(previous.as_deref().is_none_or(|p| p < id), "invalid_resolution_scope")?;
-                previous = Some(id.into());
-            }
-        }
+        crate::history_review::validate_summary(m, name, d, pins, map(&subjects[name])?)?;
         for finding in list(&d["implied"], "invalid_dispositions")? {
             let f = schema(
                 finding,

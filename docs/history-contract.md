@@ -255,6 +255,38 @@ mutation, not routing or policy permission; recovery infers no routing permissio
 
 ## Integrated write scope
 
+### Reviewing a changed judgment
+
+History keeps acceptance separate from review. Replacing a judgment's verdict or
+grounds records the new version, but does not establish that its conclusion follows.
+For versions with recorded authors, the captured assessment reserves the replacement
+and judgments that rely on it until a different recorded actor reviews that exact
+version and its current inputs. A review must have observed the accepting transition;
+a review of an earlier version or earlier inputs does not cover a later one.
+Metadata-only edits and arrangements do not create this review requirement.
+
+Public writes record the current agent session in the existing object `by` field
+when available. A direct command-line author or reviewer can name that provenance:
+
+```sh
+kpop review d.release --by ilan
+```
+
+Actor names are recorded provenance, not authenticated identities. Existing objects
+whose author is unknown keep `by: null`. An unacknowledged replacement with missing
+actor evidence appears as `review_provenance_missing`; an exact explicit review
+acknowledges it without certifying independence or backfilling an author. Ordinary
+records without active history retain their existing day-stamped review behavior.
+
+`pull ID --history` exposes retained versions and transition reasons from the verified
+captured history. Historical display is separate from computational pins, and clipped
+results explicitly report omitted versions. Increasing `--chars` expands the display.
+Reading history does not create history events or store a second rendered record.
+
+Review reservations are derived from immutable claims and acts after acceptance
+reduction. They do not rewrite old objects, change the storage format, or change
+the temporal computation evidence retained in existing receipts.
+
 For existing unactivated records, ordinary `provenance.apply` direct writes stage
 candidate record, replacement-archive and supported view changes before building
 one prepared mutation. They recheck routing, policy, reader-resolved membership

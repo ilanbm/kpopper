@@ -93,3 +93,27 @@ fn store_adaptation_uses_committed_headers_pins_and_original_review_snapshots() 
         }
     }
 }
+
+#[test]
+fn a_declared_review_profile_cannot_silently_omit_judgment_review_evidence() {
+    let data: serde_json::Value=serde_json::from_str(include_str!("fixtures/history-projection.json")).unwrap();
+    let mut tested=false;
+    for c in data["stores"].as_array().unwrap() {
+        let Some(raw)=c.get("output").and_then(|o|o.get("projection")) else {continue};
+        let mut projection=V::from_tagged(raw).unwrap();
+        let V::Map(p)=&mut projection else {continue};
+        let has_judgment=match &p["pins"] {
+            V::Map(pins)=>pins.values().any(|w| matches!(w,V::Map(w) if matches!(w.get("object"),Some(V::Map(o)) if o.get("kind")==Some(&V::Text("judgment".into()))))),
+            _=>false,
+        };
+        if !has_judgment {continue}
+        p.insert("review_profile".into(),V::Text("lineage-review/v1".into()));
+        let error=validate_projection(&projection).unwrap_err();
+        assert_eq!(error.0,"incomplete_review_evidence");
+        let V::Map(p)=&mut projection else {unreachable!()};
+        p.remove("dispositions");
+        assert_eq!(validate_projection(&projection).unwrap_err().0,"incomplete_review_evidence");
+        tested=true;break;
+    }
+    assert!(tested,"fixture must contain a captured judgment");
+}

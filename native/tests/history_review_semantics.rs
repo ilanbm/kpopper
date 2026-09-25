@@ -284,11 +284,91 @@ fn review_findings_are_transient_and_readers_do_not_grow_history() {
         let before = persistent(&root);
         for bytes in before.values() {
             let text = String::from_utf8_lossy(bytes);
-            assert!(!text.contains("\"resolutions\"") && !text.contains("\nresolutions:"), "transient resolution evidence entered permanent storage");
+            assert!(!text.contains("\"resolutions\"") && !text.contains("\nresolutions:") && !text.contains("lineage-review/v1") && !text.contains("review_profile"), "transient resolution evidence entered permanent storage");
         }
         for args in [vec!["open"], vec!["pull", "d.done"], vec!["check"]] {
             ok(&root, Some("fixture-author"), &args);
         }
         assert_eq!(persistent(&root), before, "reading modified stored history");
+    }
+}
+
+#[test]
+fn reaccept_and_metadata_correction_do_not_launder_an_unreviewed_replacement() {
+    for node in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = seed(temp.path(), node, Some("fixture-author"));
+        reverse(&root, Some("fixture-author"));
+        let status: serde_json::Value = serde_json::from_str(&ok(&root, None, &["history", "status"])).unwrap();
+        let head = status["subjects"]["d.done"]["heads"][0].as_str().unwrap();
+        ok(&root, Some("fixture-author"), &["history", "accept", "--subject", "d.done", "--of", head, "--because", "accept the same claim again"]);
+        let readopted = ok(&root, None, &["open"]);
+        assert!(readopted.contains("unreviewed"), "same-head reaccept laundered the pending review: {readopted}");
+        ok(&root, Some("fixture-author"), &["correct", "d.done", "name=delivery status", "--why", "display label only"]);
+        let corrected = ok(&root, None, &["open"]);
+        assert!(corrected.contains("unreviewed"), "metadata correction laundered the pending review: {corrected}");
+    }
+}
+
+#[test]
+fn explicit_history_dispositions_record_the_named_actor() {
+    for node in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = seed(temp.path(), node, None);
+        let status: serde_json::Value = serde_json::from_str(&ok(&root, None, &["history", "status"])).unwrap();
+        let head = status["subjects"]["d.done"]["heads"][0].as_str().unwrap();
+        ok(&root, None, &["history", "accept", "--subject", "d.done", "--of", head, "--because", "named acceptance", "--by", "alice"]);
+        let history: serde_json::Value = serde_json::from_str(&ok(&root, None, &["pull", "d.done", "--history", "--json", "--chars", "50000"])).unwrap();
+        let history: serde_json::Value = serde_json::from_str(history["output"].as_str().unwrap()).unwrap();
+        assert!(history["historical_section"]["versions"].as_array().unwrap().iter().any(|v| v["body"]["because"] == "named acceptance" && v["by"] == "alice"), "{history}");
+    }
+}
+
+#[test]
+fn metadata_edits_keep_a_completed_review_and_real_corrections_need_a_new_one() {
+    for node in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = seed(temp.path(), node, Some("fixture-author"));
+        reverse(&root, Some("fixture-author"));
+        ok(&root, Some("fixture-author"), &["review", "d.done", "--by", "independent-reviewer"]);
+        ok(&root, Some("fixture-author"), &["correct", "d.done", "title=delivery status", "--why", "label only"]);
+        let tidy=ok(&root,None,&["open"]);
+        assert!(!tidy.contains("unreviewed"), "metadata edit discarded a completed review: {tidy}");
+        ok(&root, Some("fixture-author"), &["correct", "d.done", "verdict=all wave requirements complete", "--why", "changed conclusion"]);
+        let changed=ok(&root,None,&["open"]);
+        assert!(changed.contains("unreviewed"), "correct bypassed a changed conclusion: {changed}");
+    }
+}
+#[test]
+fn retiring_and_recreating_a_subject_does_not_reset_its_review_lineage() {
+    for node in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = seed(temp.path(), node, Some("fixture-author"));
+        reverse(&root, Some("fixture-author"));
+        let status:serde_json::Value=serde_json::from_str(&ok(&root,None,&["history","status"])).unwrap();
+        let head=status["subjects"]["d.done"]["heads"][0].as_str().unwrap();
+        ok(&root,Some("fixture-author"),&["history","retire","--subject","d.done","--of",head,"--because","withdraw"]);
+        let refused=run(&root,Some("fixture-author"),&["add","d.done","verdict=all requirements complete","because=one brief","rests_on=[p.runs]","wrong_if={expr: 'p.runs < 1'}"]);
+        assert!(!refused.status.success(), "retired identity silently became a fresh subject");
+        ok(&root,Some("fixture-author"),&["history","accept","--subject","d.done","--of",head,"--because","restore the retired judgment"]);
+        let fresh=ok(&root,None,&["open"]);
+        assert!(fresh.contains("unreviewed"),"retire then reaccept laundered the conclusion: {fresh}");
+    }
+}
+#[test]
+fn restoring_an_old_version_needs_review_of_the_new_return_episode() {
+    for node in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = seed(temp.path(), node, Some("fixture-author"));
+        let first:serde_json::Value=serde_json::from_str(&ok(&root,None,&["history","status"])).unwrap();
+        let original=first["subjects"]["d.done"]["heads"][0].as_str().unwrap();
+        ok(&root,Some("fixture-author"),&["set","p.runs","1","--as-of","2026-09-02","--why","one brief"]);
+        ok(&root,Some("fixture-reviewer"),&["review","d.done"]);
+        ok(&root,Some("fixture-author"),&["add","d.done","verdict=demonstrated","because=one brief","rests_on=[p.runs]","wrong_if={expr: 'p.runs < 1'}"]);
+        let second:serde_json::Value=serde_json::from_str(&ok(&root,None,&["history","status"])).unwrap();
+        let current=second["subjects"]["d.done"]["heads"][0].as_str().unwrap();
+        ok(&root,Some("fixture-author"),&["history","accept","--subject","d.done","--of",original,"--over",current,"--because","return to the old position"]);
+        let returned=ok(&root,None,&["open"]);
+        assert!(returned.contains("unreviewed"),"a review from the first stay covered a later return: {returned}");
     }
 }

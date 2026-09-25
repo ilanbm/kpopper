@@ -113,12 +113,8 @@ fn private_targets(capture: &Capture, action: &V) -> Result<bool> {
     }
     Ok(false)
 }
-pub(crate) fn write(
-    route: &WriteRoute,
-    original: &[PathBuf],
-    action: &V,
-    probe: &mut dyn FnMut(&str) -> Result<()>,
-) -> Result<(V, String)> {
+#[cfg(test)]
+pub(crate) fn write(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<(V, String)> {
     write_with_runtime(route, original, action, probe, None)
 }
 fn privacy_action(action: &V) -> Result<V> {
