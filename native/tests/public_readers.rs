@@ -61,6 +61,10 @@ fn a_compact_copy_preserves_an_unacknowledged_ordinary_reversal() {
             assert!(after.status.success());
             assert!(!String::from_utf8_lossy(&after.stdout).contains("review_provenance_missing"), "{}", String::from_utf8_lossy(&after.stdout));
         }
+        for bytes in image(&copy).values() {
+            let bytes = String::from_utf8_lossy(bytes);
+            assert!(!bytes.contains("lineage-review/v1") && !bytes.contains("legacy_origins"), "derived review evidence was stored by migration or review");
+        }
     }
 }
 

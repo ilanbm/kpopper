@@ -172,6 +172,27 @@ fn an_unavailable_merge_base_record_is_not_treated_as_an_empty_record() {
 }
 
 #[test]
+fn a_branch_without_recorded_snapshots_still_checks_the_proposed_reading() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    git(root, &["init", "-q", "-b", "main"]);
+    let base = "known:\n  p.limit: {v: 10, of: 2026-09-10}\njudgments:\n  d.limit: {verdict: acceptable, rests_on: [p.limit], wrong_if: p.limit > 10}\n";
+    fs::write(root.join("GROUNDING.yaml"), base).unwrap();
+    commit(root, "record without a snapshot field");
+    git(root, &["checkout", "-q", "-b", "source"]);
+    fs::write(root.join("GROUNDING.yaml"), base.replace("v: 10, of: 2026-09-10", "v: 11, of: 2026-09-12")).unwrap();
+    commit(root, "new reading breaks the condition");
+    git(root, &["checkout", "-q", "main"]);
+    let output = public_consolidation::dispatch(&Options {
+        from_refs: vec!["source".into()], dry_run: true, ..Default::default()
+    }, root);
+    assert_eq!(output.code, 1);
+    assert!(output.stderr.is_empty(), "{}", output.stderr);
+    assert!(output.stdout.contains("FALSIFIED d.limit"), "{}", output.stdout);
+    assert_eq!(fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(), base);
+}
+
+#[test]
 fn ordinary_branch_preview_refuses_missing_merge_base() {
     let (_temp, root) = branched(&[]);
     git(&root, &["checkout", "--orphan", "unrelated"]);

@@ -147,7 +147,7 @@ pub(crate) fn branch_differences_from(
         .flat_map(|members| members.iter().map(|(id, body)| (id.clone(), body.clone())))
         .collect::<Map>();
     let reader = &base.reader;
-    let snapshot_field = text(&reader.fields["snapshot"])?;
+    let snapshot_field = text(&reader.fields["snapshot"]).unwrap_or("seen");
     let basis_doc = comparison_base
         .and_then(|value| map(value).ok().and_then(|m| m.get("doc")))
         .or(comparison_base);
