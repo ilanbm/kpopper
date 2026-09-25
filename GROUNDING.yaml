@@ -1881,6 +1881,13 @@ sources:
          2026-09-24. No live Grok Bot installation, skill-use or fresh-conversation validation has
          been performed for this guide; Grok Build compatibility does not establish Grok Bot plugin
          or hook support."
+  doc.history_review_contract_2a608958:
+    name: "\"Causal review and branch comparison contract at 2a608958\""
+    file: "\"docs/history-contract.md\""
+    at: "\"Reviewing a changed judgment; native/tests/history_review_semantics.rs;
+         native/tests/public_branch_consolidation.rs\""
+    read: "\"2026-09-25\""
+    scope: {kind: code, commit: "2a6089584cd883705828c4dc193d9441a3856704"}
   doc.history_source_clock_order:
     name: "Source clock grouping and retained mapping order"
     from: s.2026_09_19_native_transactions
@@ -5532,6 +5539,40 @@ judgments:
                                        retain exact logical identities through versioned hashed
                                        physical paths; older raw paths remain readable. Identity
                                        changes and brief references publish under one reader guard."
+  d.history_review_follows_lineage:
+    name: "\"Review follows the recorded decision through edits and branch folds\""
+    rests_on: [d.compact_history_preserves_evidence, d.replacement_leaves_a_trail, d.review_names_what_it_reads, doc.history_review_contract_2a608958]
+    verdict: "\"Active history derives review reservations from causal decision episodes, separately
+              from acceptance. Metadata edits and repeated acceptance cannot erase them; a return
+              needs a new review. Ordinary branch folds compare authored changes with the unique
+              common ancestor.\""
+    because: "\"Keeping retained claims and acts as evidence preserves old grounds without storing
+              another rendered history. A known writer or accepting actor remains excluded from
+              reviewing their own replacement even when the other identity is missing. Exact review
+              checks its observed current inputs; recorded actors establish provenance, not
+              authentication. A copied ordinary reversal retains its unresolved notice without
+              inventing pre-import acts.\""
+    reopened_by: "\"A public replacement, metadata edit, reacceptance, return or copied reversal
+                  loses its pending review; a known origin clears itself; a branch restores an
+                  inherited reading as new evidence; or deriving review state alters stored history
+                  or old receipt replay.\""
+    seen:
+      d.compact_history_preserves_evidence: "Opt-in history copies store subject-local action deltas
+                                             and retain exact legacy originals in a lossless archive.
+                                             Compact storage keeps semantic identities, direct
+                                             observations and source mapping order; it does not turn
+                                             presence into acceptance."
+      d.replacement_leaves_a_trail: "every replacement of a judgment - by add once the standing
+                                     one's condition fired, or by the fold - keeps one line on the
+                                     judgment saying what ended the decision it replaced and the day,
+                                     and the replaced body whole beside the record; a dependency
+                                     dropped is named with its reason, and a write that returns to a
+                                     kept version is told so"
+      d.review_names_what_it_reads: "review takes a judgment's id or a section's title; an
+                                     arrangement's review also rewrites the shape of the one tab, or
+                                     of the tab serving a session source it rests on; nothing
+                                     refreshes a snapshot by itself"
+      doc.history_review_contract_2a608958: "read \"2026-09-25\""
   d.home_beside_the_entry:
     verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
               file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,
