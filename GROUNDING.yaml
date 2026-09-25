@@ -1264,6 +1264,16 @@ sources:
             python-final, re-read surviving subjects in native sources, and close readings whose
             subject was the removed implementation."
     read: "2026-09-24"
+  s.2026_09_25_candidate_crate_metadata:
+    name: "Read candidate metadata without executing candidate publisher code"
+    read: "2026-09-25"
+    url: "https://github.com/ilanbm/kpopper/blob/c91dadad54fe478cee2943591836cc8cee4e164b/.github/scripts/publish_crate.py"
+    of: "The native-before-plugin workflow checked out publisher code from trusted main at version
+         0.12.0, then asked its crate verifier to validate candidate version 0.13.0. The verifier
+         read its own source tree and refused before registry access. Plan and served verification
+         must read version and package metadata from the verified candidate checkout while continuing
+         to execute trusted main code. The separate registry identity job and byte comparisons remain
+         unchanged."
   s.2026_09_25_windows_proposal_publication:
     name: "Repair concurrent Windows proposal publication after release CI exposed sharing failures"
     read: "2026-09-25"

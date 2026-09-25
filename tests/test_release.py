@@ -498,6 +498,32 @@ class TheCrate(unittest.TestCase):
                 C.main(["--plan"])
         fetch.assert_not_called()
 
+    def test_trusted_crate_reader_uses_candidate_version_for_plan_and_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            candidate = pathlib.Path(directory) / "candidate"
+            for name, value in R.with_version(R.read_texts(), "9.9.9").items():
+                path = candidate / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(value, encoding="utf-8")
+            # Candidate Python is never imported or executed by the trusted reader.
+            script = candidate / ".github/scripts/release.py"
+            script.parent.mkdir(parents=True)
+            script.write_text("raise AssertionError('untrusted candidate code executed')\n")
+            crate = pathlib.Path(directory) / "kpopper-9.9.9.crate"
+            crate.write_bytes(b"verified crate")
+            args = ["--source-directory", str(candidate), "--version", "9.9.9"]
+            with patch.object(C, "decide", return_value=("publish", "verified")) as decide, \
+                 patch.object(C, "served", return_value="a" * 64) as served, \
+                 patch.object(C, "output"), redirect_stdout(io.StringIO()):
+                self.assertEqual(C.main(["--plan", "--crate", str(crate), *args]), 0)
+                self.assertEqual(C.main(["--served", str(crate), *args]), 0)
+                decide.assert_called_once_with("9.9.9", crate)
+                served.assert_called_once_with("9.9.9", crate)
+            with patch.object(C, "fetch") as fetch, self.assertRaisesRegex(SystemExit, "tree carries 9.9.9"):
+                C.main(["--plan", "--crate", str(crate), "--source-directory", str(candidate),
+                        "--version", "9.9.8"])
+            fetch.assert_not_called()
+
     def test_one_job_holds_the_registry_identity_and_uploads_only_verified_bytes(self):
         import yaml
         workflows = ROOT / ".github" / "workflows"
@@ -505,6 +531,15 @@ class TheCrate(unittest.TestCase):
         identity = [name for name, job in jobs.items() if (job.get("permissions") or {}).get("id-token")]
         self.assertEqual(identity, ["crate-publish"])
         crate, publish, served = jobs["crate"], jobs["crate-publish"], jobs["crate-served"]
+        for job in (crate, served):
+            checkouts = [step["with"] for step in job["steps"]
+                         if step.get("uses", "").startswith("actions/checkout@")]
+            self.assertEqual([(item["path"], item["ref"]) for item in checkouts], [
+                ("trusted", "${{ github.sha }}"), ("candidate", "${{ needs.plan.outputs.source }}")])
+            command = next(step["run"] for step in job["steps"]
+                           if "publish_crate.py" in step.get("run", ""))
+            self.assertIn("python trusted/.github/scripts/publish_crate.py", command)
+            self.assertIn('--source-directory "$GITHUB_WORKSPACE/candidate"', command)
         # The crate goes after its GitHub release, from bytes the build job verified.
         self.assertTrue({"plan", "publish"} <= set(crate["needs"]))
         plan = " ".join(step.get("run", "") for step in crate["steps"])
