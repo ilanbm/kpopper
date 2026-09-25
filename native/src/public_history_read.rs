@@ -3,6 +3,32 @@ use crate::{Result, history_contract::*};
 use serde_json::{Value as J, json};
 use std::collections::{BTreeMap, BTreeSet};
 
+fn explanation_for_action(
+    action: &crate::value::TypedValue,
+    subject: &str,
+) -> Result<Option<crate::value::TypedValue>> {
+    let action = map(action)?;
+    if string_is(&action["kind"], "batch") {
+        let mut combined = Map::new();
+        for child in crate::history_view::list(&action["actions"])? {
+            if let Some(found) = explanation_for_action(child, subject)? {
+                combined.extend(map(&found)?.clone());
+            }
+        }
+        return Ok((!combined.is_empty()).then_some(crate::value::TypedValue::Map(combined)));
+    }
+    if action.get("id").and_then(|v| text(v).ok()) != Some(subject) {
+        return Ok(None);
+    }
+    let mut selected = Map::new();
+    for key in ["drops", "because", "why", "reason"] {
+        if let Some(value) = action.get(key) {
+            selected.insert(key.into(), value.clone());
+        }
+    }
+    Ok((!selected.is_empty()).then_some(crate::value::TypedValue::Map(selected)))
+}
+
 fn compact_object(value: &crate::value::TypedValue) -> Result<J> {
     // `saw` is cumulative ancestry; displaying it at every revision inflates a compact
     // chain quadratically. The capture has already verified it and supplies event edges.
@@ -26,10 +52,68 @@ fn legacy_event_parents(
     Ok(parents)
 }
 
+fn legacy_explanations(
+    capture: &crate::history_capture::Capture,
+    prefixes: &[String],
+) -> Result<BTreeMap<String, BTreeMap<String, crate::value::TypedValue>>> {
+    let mut out = BTreeMap::new();
+    for (op, raw) in &capture.commits {
+        let commit = crate::history_yaml::decode_document(raw)?;
+        let receipt = map(&map(&commit)?["receipt"])?;
+        let Some(authoring) = receipt
+            .get("before")
+            .and_then(|v| map(v).ok())
+            .and_then(|v| v.get("authoring"))
+            .and_then(|v| map(v).ok())
+        else {
+            continue;
+        };
+        let Some(action) = authoring.get("action") else {
+            continue;
+        };
+        let mut per_subject = BTreeMap::new();
+        collect_action_explanations(action, prefixes, &mut per_subject)?;
+        if !per_subject.is_empty() {
+            out.insert(op.clone(), per_subject);
+        }
+    }
+    Ok(out)
+}
+
+fn collect_action_explanations(
+    action: &crate::value::TypedValue,
+    prefixes: &[String],
+    output: &mut BTreeMap<String, crate::value::TypedValue>,
+) -> Result<()> {
+    let action = map(action)?;
+    if string_is(&action["kind"], "batch") {
+        for child in crate::history_view::list(&action["actions"])? {
+            collect_action_explanations(child, prefixes, output)?;
+        }
+        return Ok(());
+    }
+    let Some(subject) = action.get("id").and_then(|v| text(v).ok()) else {
+        return Ok(());
+    };
+    if !prefixes
+        .iter()
+        .any(|p| subject == p || subject.starts_with(&format!("{p}.")))
+    {
+        return Ok(());
+    }
+    if let Some(explanation) =
+        explanation_for_action(&crate::value::TypedValue::Map(action.clone()), subject)?
+    {
+        output.insert(subject.to_owned(), explanation);
+    }
+    Ok(())
+}
+
 fn legacy_rows(
     capture: &crate::history_capture::Capture,
     prefixes: &[String],
     parents: &BTreeMap<String, Vec<String>>,
+    explanations: &BTreeMap<String, BTreeMap<String, crate::value::TypedValue>>,
 ) -> Result<Vec<J>> {
     let mut rows = Vec::new();
     for object in capture.objects.values() {
@@ -48,11 +132,60 @@ fn legacy_rows(
             .to_owned();
         let parent_ids = parents.get(&op).cloned().unwrap_or_default();
         let mut row = compact_object(object)?;
+        if let Some(explanation) = explanations
+            .get(&op)
+            .and_then(|subjects| subjects.get(subject))
+        {
+            let mut fields = map(explanation)?.clone();
+            fields.retain(|key, _| ["drops", "because", "why", "reason"].contains(&key.as_str()));
+            row.as_object_mut()
+                .ok_or_else(|| error("invalid_schema"))?
+                .insert(
+                    "transition_explanation".into(),
+                    crate::public_core_readers::json_value(&crate::value::TypedValue::Map(fields))?,
+                );
+        }
         let fields = row.as_object_mut().ok_or_else(|| error("invalid_schema"))?;
         fields.insert("operation_id".into(), json!(op));
         fields.insert("storage_event_id".into(), json!(op));
         fields.insert("parents".into(), json!(parent_ids));
         rows.push(row);
+    }
+    Ok(rows)
+}
+
+fn node_rows(
+    capture: &crate::history_node_capture::Capture,
+    prefixes: &[String],
+) -> Result<Vec<J>> {
+    let mut rows = capture
+        .historical_versions(prefixes)?
+        .iter()
+        .map(crate::public_core_readers::json_value)
+        .collect::<Result<Vec<_>>>()?;
+    for row in &mut rows {
+        let operation = row.get("operation_id").and_then(J::as_str).unwrap_or("");
+        let subject = row.get("subject").and_then(J::as_str).unwrap_or("");
+        let Some(context) = capture
+            .snapshot
+            .transactions
+            .get(operation)
+            .and_then(|tx| tx.context.as_ref())
+        else {
+            continue;
+        };
+        if !crate::history_node_transaction::is_context(context) {
+            continue;
+        }
+        let action = crate::history_node_transaction::validate(context)?;
+        if let Some(explanation) = explanation_for_action(&action["action"], subject)? {
+            row.as_object_mut()
+                .ok_or_else(|| error("invalid_schema"))?
+                .insert(
+                    "transition_explanation".into(),
+                    crate::public_core_readers::json_value(&explanation)?,
+                );
+        }
     }
     Ok(rows)
 }
@@ -168,8 +301,19 @@ fn human_row(row: &J) -> Result<String> {
         .filter(|(_, v)| !v.is_null())
         .map(|(key, v)| format!("; {key}={v}"))
         .collect::<String>();
+    let drops = row
+        .get("transition_explanation")
+        .and_then(|value| value.get("drops"))
+        .and_then(J::as_object)
+        .map(|drops| {
+            drops
+                .iter()
+                .map(|(id, why)| format!("; dropped {id}: {why}"))
+                .collect::<String>()
+        })
+        .unwrap_or_default();
     Ok(format!(
-        "{subject} · {kind} · version {id}{event}{by}{on}{why} · {body}"
+        "{subject} · {kind} · version {id}{event}{by}{on}{why}{drops} · {body}"
     ))
 }
 
@@ -206,16 +350,16 @@ pub(crate) fn render(
     }
     let (rows, event_parents) = if let Some(capture) = node {
         (
-            capture
-                .historical_versions(prefixes)?
-                .iter()
-                .map(crate::public_core_readers::json_value)
-                .collect::<Result<Vec<_>>>()?,
+            node_rows(capture, prefixes)?,
             capture.historical_event_parents(),
         )
     } else if let Some(capture) = legacy {
         let parents = legacy_event_parents(capture)?;
-        (legacy_rows(capture, prefixes, &parents)?, parents)
+        let explanations = legacy_explanations(capture, prefixes)?;
+        (
+            legacy_rows(capture, prefixes, &parents, &explanations)?,
+            parents,
+        )
     } else {
         (vec![], BTreeMap::new())
     };

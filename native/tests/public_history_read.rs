@@ -77,6 +77,27 @@ fn write(root: &Path, op: &str, action: serde_json::Value) {
     W::publish(root, &prepared, None, |_| Ok(())).unwrap();
 }
 
+fn cli_with_runtime(root: &Path, args: &[&str]) -> std::process::Output {
+    let resources = root.join(".history-test-runtime");
+    let target = kpop_native::reasoning_runtime::target_name().unwrap();
+    fs::create_dir_all(resources.join("reasoning")).unwrap();
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(format!("{target}.kpopper-runtime")),
+        resources.join("reasoning").join(format!("{target}.zip")),
+    )
+    .unwrap();
+    Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root)
+        .args(args)
+        .env("KPOPPER_NATIVE_RESOURCES", resources)
+        .env("KPOPPER_NATIVE_CACHE", root.join(".history-test-cache"))
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap()
+}
+
 #[test]
 fn pull_history_reads_retained_node_bodies_and_clips_without_writing() {
     let tmp = tempfile::tempdir().unwrap();
@@ -398,4 +419,63 @@ fn judgment_history_keeps_reversal_request_reason_and_dependency_changes() {
         capture.object("d.b", id).unwrap();
     }
     assert_eq!(before, tree(root));
+}
+
+#[test]
+fn public_drop_reason_survives_active_legacy_and_node_history() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.x: {v: 1, of: 2026-09-20}, p.y: {v: 2, of: 2026-09-20}}\njudgments:\n  d.j: {verdict: ready, rests_on: [p.x], wrong_if: {expr: 'p.x < 3'}}\n").unwrap();
+    for (name, extra) in [("legacy", vec![]), ("node", vec!["--node-history"])] {
+        let target = tmp.path().join(name);
+        let mut args = vec!["history", "migrate"];
+        args.extend(extra.iter().copied());
+        args.extend(["--to", target.to_str().unwrap()]);
+        let migrated = cli_with_runtime(&source, &args);
+        assert!(
+            migrated.status.success(),
+            "{}",
+            String::from_utf8_lossy(&migrated.stderr)
+        );
+        let authority = fs::read_to_string(target.join(".kpopper/history.yaml")).unwrap();
+        assert!(
+            authority.contains(if name == "node" {
+                "node-history/v1"
+            } else {
+                "history/v1"
+            }),
+            "{authority}"
+        );
+        let drop = "distinctive original --drop explanation";
+        let today = chrono::Local::now().date_naive().to_string();
+        let added = cli_with_runtime(
+            &target,
+            &[
+                "add",
+                "d.j",
+                "verdict=hold",
+                "rests_on=[p.y]",
+                "wrong_if={expr: 'p.y > 3'}",
+                "--as-of",
+                &today,
+                "--drop",
+                &format!("p.x: {drop}"),
+            ],
+        );
+        assert!(
+            added.status.success(),
+            "stdout={} stderr={}",
+            String::from_utf8_lossy(&added.stdout),
+            String::from_utf8_lossy(&added.stderr)
+        );
+        let pulled = cli_with_runtime(&target, &["--frozen", "pull", "d.j", "--history"]);
+        assert!(
+            pulled.status.success(),
+            "{}",
+            String::from_utf8_lossy(&pulled.stderr)
+        );
+        let text = String::from_utf8_lossy(&pulled.stdout);
+        assert!(text.contains(drop), "{name}: {text}");
+    }
 }
