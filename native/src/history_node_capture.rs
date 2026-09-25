@@ -142,9 +142,15 @@ pub struct Capture {
     pub(crate) semantic_events: BTreeMap<String, String>,
 }
 impl Capture {
-    /// Exact reconstructed retained versions, for explicit historical display only.
-    /// This walks the verified captured object set and never changes semantic pins.
+    /// Compact retained objects and verified storage-event bindings for display only.
+    /// This never expands accumulated `saw` ancestry or changes semantic pins.
     pub(crate) fn historical_versions(&self, prefixes: &[String]) -> Result<Vec<V>> {
+        let event_versions = self
+            .snapshot
+            .versions
+            .values()
+            .flat_map(|versions| versions.values().map(|version| (version.id(), version)))
+            .collect::<BTreeMap<_, _>>();
         let mut rows = Vec::new();
         for (id, object) in self.history.objects() {
             let fields = map(object)?;
@@ -157,44 +163,31 @@ impl Capture {
                 continue;
             }
             let event_id = self.storage_event(id)?;
-            let version = self
-                .snapshot
-                .versions
-                .values()
-                .find_map(|versions| versions.get(event_id))
+            let version = event_versions
+                .get(event_id)
+                .copied()
                 .ok_or_else(|| error("missing_object"))?;
-            let mut row = fields.clone();
+            let mut row = fields
+                .iter()
+                .filter(|(key, _)| key.as_str() != "saw")
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<Map>();
+            // `saw` accumulates ancestors on every revision. It is already verified
+            // capture input, but expanding or echoing it makes display quadratic.
             row.insert("version_id".into(), V::Text(version.id().into()));
             row.insert("operation_id".into(), V::Text(version.operation().into()));
             row.insert(
                 "parents".into(),
                 V::List(version.parents().iter().cloned().map(V::Text).collect()),
             );
-            rows.push((version, V::Map(row)));
+            rows.push((
+                version.id().to_owned(),
+                text(field(fields, "id")?)?.to_owned(),
+                V::Map(row),
+            ));
         }
-        // Parent-before-child topological order; unrelated roots are stable by ID.
-        rows.sort_by_key(|(version, _)| version.id().to_owned());
-        let mut emitted = BTreeSet::new();
-        let mut ordered = Vec::new();
-        while !rows.is_empty() {
-            let ready = rows.iter().position(|(v, _)| {
-                v.parents().iter().all(|p| {
-                    emitted.contains(p)
-                        || !self
-                            .snapshot
-                            .versions
-                            .values()
-                            .any(|set| set.contains_key(p))
-                })
-            });
-            let Some(index) = ready else {
-                return Err(error("node_history_causal_cycle"));
-            };
-            let (version, row) = rows.remove(index);
-            emitted.insert(version.id().to_owned());
-            ordered.push(row);
-        }
-        Ok(ordered)
+        rows.sort_by_key(|(event, object, _)| (event.clone(), object.clone()));
+        Ok(rows.into_iter().map(|(_, _, row)| row).collect())
     }
     pub fn read(root: &Path) -> Result<Self> {
         Self::from_snapshot(P::capture_snapshot(root)?)

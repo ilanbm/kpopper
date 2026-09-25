@@ -51,6 +51,27 @@ fn core_runtime() -> (tempfile::TempDir, kpop_native::reasoning_runtime::Runtime
     let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
     (cache, runtime)
 }
+fn tree(root: &Path) -> std::collections::BTreeMap<String, String> {
+    fn walk(root: &Path, dir: &Path, out: &mut std::collections::BTreeMap<String, String>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(root, &path, out);
+            } else {
+                out.insert(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    kpop_native::identity::sha256(&fs::read(path).unwrap()),
+                );
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    walk(root, root, &mut out);
+    out
+}
 fn write(root: &Path, op: &str, action: serde_json::Value) {
     let prepared = W::prepare(root, &v(action), &opts(op), None).unwrap();
     W::publish(root, &prepared, None, |_| Ok(())).unwrap();
@@ -70,7 +91,7 @@ fn pull_history_reads_retained_node_bodies_and_clips_without_writing() {
     );
     write(root, "set-b", json!({"kind":"set","id":"p.a","value":2}));
     write(root, "set-a", json!({"kind":"set","id":"p.a","value":1}));
-    let before = kpop_native::identity::sha256(&fs::read(root.join("GROUNDING.yaml")).unwrap());
+    let before = tree(root);
     let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(["--frozen", "pull", "p.a", "--history"])
@@ -87,10 +108,11 @@ fn pull_history_reads_retained_node_bodies_and_clips_without_writing() {
     assert!(text.contains("HISTORICAL SECTION"), "{text}");
     assert!(text.contains("first"), "{text}");
     assert!(text.contains("\"v\":2"), "{text}");
-    assert_eq!(
-        before,
-        kpop_native::identity::sha256(&fs::read(root.join("GROUNDING.yaml")).unwrap())
+    assert!(
+        !text.contains("\"saw\":"),
+        "cumulative ancestry leaked into display: {text}"
     );
+    assert_eq!(before, tree(root));
     let bounded = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(["--frozen", "pull", "p.a", "--history", "--chars", "1"])
@@ -158,7 +180,7 @@ fn core_pull_reads_active_history_v1_and_json_budget_reports_omissions() {
     );
     let authority = fs::read_to_string(copy.join(".kpopper/history.yaml")).unwrap();
     assert!(authority.contains("history/v1"), "{authority}");
-    let before = kpop_native::identity::sha256(&fs::read(copy.join("GROUNDING.yaml")).unwrap());
+    let before = tree(&copy);
     let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&copy)
         .args(["--frozen", "pull", "p.a", "--history"])
@@ -199,10 +221,65 @@ fn core_pull_reads_active_history_v1_and_json_budget_reports_omissions() {
         wrapped["output"].as_str().unwrap_or("").contains("omitted"),
         "{wrapped}"
     );
-    assert_eq!(
-        before,
-        kpop_native::identity::sha256(&fs::read(copy.join("GROUNDING.yaml")).unwrap())
+    let missing = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&copy)
+        .args(["--json", "--frozen", "pull", "p.missing", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(!missing.status.success());
+    let refused: serde_json::Value = serde_json::from_slice(&missing.stdout).unwrap();
+    assert!(
+        !refused["output"]
+            .as_str()
+            .unwrap_or("")
+            .contains("HISTORICAL SECTION"),
+        "{refused}"
     );
+    assert_eq!(before, tree(&copy));
+}
+
+#[test]
+fn ordinary_pull_reads_active_history_v1() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source");
+    let copy = tmp.path().join("copy");
+    fs::create_dir(&source).unwrap();
+    fs::write(
+        source.join("GROUNDING.yaml"),
+        "meta: {purpose: Fixture}\nknown:\n  p.a: {v: 1, note: 'ordinary retained body'}\n",
+    )
+    .unwrap();
+    let migrated = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&source)
+        .args(["history", "migrate", "--to", copy.to_str().unwrap()])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        migrated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&migrated.stderr)
+    );
+    let before = tree(&copy);
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&copy)
+        .args(["--frozen", "pull", "p.a", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("HISTORICAL SECTION"), "{text}");
+    assert!(text.contains("ordinary retained body"), "{text}");
+    assert_eq!(before, tree(&copy));
 }
 
 #[test]
@@ -265,7 +342,7 @@ fn judgment_history_keeps_reversal_request_reason_and_dependency_changes() {
         W::publish(root, &prepared, Some(&runtime), |_| Ok(())).unwrap();
         initial.operation = accept_op.into();
     }
-    let before = kpop_native::identity::sha256(&fs::read(root.join("GROUNDING.yaml")).unwrap());
+    let before = tree(root);
     let read = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(["--frozen", "pull", "d.b", "--history"])
@@ -289,8 +366,5 @@ fn judgment_history_keeps_reversal_request_reason_and_dependency_changes() {
     ] {
         assert!(text.contains(expected), "missing {expected}: {text}");
     }
-    assert_eq!(
-        before,
-        kpop_native::identity::sha256(&fs::read(root.join("GROUNDING.yaml")).unwrap())
-    );
+    assert_eq!(before, tree(root));
 }

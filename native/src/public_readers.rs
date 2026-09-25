@@ -753,10 +753,12 @@ pub fn run(
                 if options.history {
                     let mut output = projection.pull(&seeds, options.budget.unwrap_or(40))?;
                     output.push('\n');
-                    if let Some(node_history) = capture.node_history_capture() {
+                    if capture.node_history_capture().is_some()
+                        || capture.history_capture().is_some()
+                    {
                         output.push_str(&crate::public_history_read::render(
-                            Some(node_history),
-                            None,
+                            capture.node_history_capture(),
+                            capture.history_capture(),
                             &seeds,
                             options
                                 .chars
@@ -846,7 +848,7 @@ pub fn run(
         }
         "pull" => {
             let mut output = C::pull(&context, &seeds)?;
-            if options.history {
+            if options.history && output.code == 0 {
                 let history = crate::public_history_read::render(
                     capture.node_history_capture(),
                     capture.history_capture(),
