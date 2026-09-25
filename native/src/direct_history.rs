@@ -70,6 +70,9 @@ fn decode(raw: &[u8]) -> Result<(PreparedMutation, V)> {
     )?;
     Ok((mutation, fields["routing"].clone()))
 }
+pub(crate) fn actor() -> V {
+    crate::public_amend::session().map(|id| s(&format!("session:{id}"))).unwrap_or(V::Null)
+}
 pub(crate) fn options(prefix: &str, by: V) -> Result<A::Options> {
     let now = chrono::Utc::now();
     let day = chrono::Local::now().date_naive();
@@ -77,7 +80,7 @@ pub(crate) fn options(prefix: &str, by: V) -> Result<A::Options> {
         operation: fresh_id(prefix)?,
         recorded_at: now.to_rfc3339(),
         recording_day: day.to_string(),
-        by,
+        by: if by == V::Null { actor() } else { by },
         strict: true,
         paths: Scheme::Hashed,
         receipt_version: None,
@@ -250,6 +253,13 @@ fn act_with_probe(
     action: &V,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<V> {
+    act_with_actor(original, cwd, action, V::Null, probe)
+}
+pub fn act_as(original: &[PathBuf], cwd: &Path, action: &V, actor: Option<&str>) -> Result<V> {
+    require(actor.is_none_or(|a| !a.trim().is_empty() && a.len() <= 200), "--by must be non-empty recorded actor text, at most 200 bytes")?;
+    act_with_actor(original, cwd, action, actor.map(s).unwrap_or(V::Null), &mut |_| Ok(()))
+}
+fn act_with_actor(original: &[PathBuf], cwd: &Path, action: &V, by: V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<V> {
     let a = schema(action, &["kind", "id", "of", "over", "because"], &[])?;
     require(
         ["accept", "refute", "correct", "propose", "retire"].contains(&text(&a["kind"])?),
@@ -264,7 +274,7 @@ fn act_with_probe(
         "recovery_required",
     )?;
     if crate::history_node_publication::selected(&store.entry)? {
-        let (result, _) = crate::public_node_history::write(&route, original, action, probe)?;
+        let (result, _) = crate::public_node_history::write_as(&route, original, action, probe, by)?;
         if !map(&result)?
             .get("state")
             .is_some_and(|v| string_is(v, "committed"))
@@ -303,7 +313,7 @@ fn act_with_probe(
         &store,
         &captured,
         action,
-        &options("act", V::Null)?,
+        &options("act", by)?,
         runtime.as_ref(),
     )?;
     let authored = V::List(
@@ -360,6 +370,12 @@ fn write_with_probe(
     action: &V,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<(V, String)> {
+    write_with_actor(original, cwd, action, V::Null, probe)
+}
+pub fn write_as(original: &[PathBuf], cwd: &Path, action: &V, actor: Option<&str>) -> Result<(V, String)> {
+    write_with_actor(original, cwd, action, actor.map(s).unwrap_or(V::Null), &mut |_| Ok(()))
+}
+fn write_with_actor(original: &[PathBuf], cwd: &Path, action: &V, by: V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<(V, String)> {
     let a = map(action)?;
     let kind = text(field(a, "kind")?)?;
     require(
@@ -375,10 +391,10 @@ fn write_with_probe(
         "recovery_required",
     )?;
     if crate::history_node_publication::selected(&store.entry)? {
-        return crate::public_node_history::write(&route, original, action, probe);
+        return crate::public_node_history::write_as(&route, original, action, probe, by);
     }
     let captured = store.capture()?;
-    let write_options = options("write", V::Null)?;
+    let write_options = options("write", by)?;
     let hypothesis = a
         .get("hypothesis")
         .filter(|v| **v != V::Null)

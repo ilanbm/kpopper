@@ -1,5 +1,5 @@
 use serde_json::Value as J;
-use std::{fs, path::Path, process::Command};
+use std::{collections::BTreeMap, fs, path::Path, process::Command};
 fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
@@ -11,7 +11,199 @@ fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
         .output()
         .unwrap()
 }
+fn image(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    fn visit(root: &Path, at: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
+        for entry in fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                visit(root, &path, out);
+            } else {
+                out.insert(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                    fs::read(path).unwrap(),
+                );
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    visit(root, root, &mut out);
+    out
+}
 const ORDINARY: &str = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.load: {v: 61, from: s.note}\n  s.note: {name: source}\njudgments:\n  d.work:\n    verdict: continue\n    rests_on: [p.load]\n    seen: {p.load: 44}\n    wrong_if: p.load > 80\n";
+
+#[test]
+fn a_compact_copy_preserves_an_unacknowledged_ordinary_reversal() {
+    for acknowledged in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        let private = temp.path().join("private");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("GROUNDING.yaml"), "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.runs: {v: 0, of: 2026-09-01}\njudgments:\n  d.done:\n    verdict: not demonstrated\n    because: no brief\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n").unwrap();
+        for args in [
+            vec!["set", "p.runs", "1", "--as-of", "2026-09-02"],
+            vec!["add", "d.done", "verdict=done", "because=one brief", "rests_on=[p.runs]", "wrong_if=p.runs < 1"],
+        ] { assert!(cli(&source, &args, &private).status.success()); }
+        if acknowledged { assert!(cli(&source, &["review", "d.done"], &private).status.success()); }
+        let copy = temp.path().join("copy");
+        assert!(cli(&source, &["history", "migrate", "--node-history", "--to", copy.to_str().unwrap()], &private).status.success());
+        let before = image(&copy);
+        let opened = cli(&copy, &["open"], &private);
+        assert!(opened.status.success(), "{}", String::from_utf8_lossy(&opened.stderr));
+        assert_eq!(String::from_utf8_lossy(&opened.stdout).contains("review_provenance_missing"), !acknowledged, "{}", String::from_utf8_lossy(&opened.stdout));
+        assert_eq!(image(&copy), before, "reading the imported notice wrote history");
+        if !acknowledged {
+            let reviewed = cli(&copy, &["review", "d.done"], &private);
+            assert!(reviewed.status.success(), "{}", String::from_utf8_lossy(&reviewed.stderr));
+            let after = cli(&copy, &["open"], &private);
+            assert!(after.status.success());
+            assert!(!String::from_utf8_lossy(&after.stdout).contains("review_provenance_missing"), "{}", String::from_utf8_lossy(&after.stdout));
+        }
+        for bytes in image(&copy).values() {
+            let bytes = String::from_utf8_lossy(bytes);
+            assert!(!bytes.contains("lineage-review/v1") && !bytes.contains("legacy_origins"), "derived review evidence was stored by migration or review");
+        }
+    }
+}
+
+#[test]
+fn ordinary_views_show_captured_history_review_qualifiers_without_mutating_reads() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(
+        source.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.runs: {v: 0, of: 2026-09-01}\njudgments:\n  d.done:\n    verdict: not demonstrated\n    because: no brief arrived\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n  d.other:\n    verdict: other\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n",
+    )
+    .unwrap();
+    let copy = temp.path().join("copy");
+    assert!(
+        cli(
+            &source,
+            &["history", "migrate", "--to", copy.to_str().unwrap()],
+            &temp.path().join("private"),
+        )
+        .status
+        .success()
+    );
+    let private = temp.path().join("private");
+    let changed = cli(
+        &copy,
+        &[
+            "set",
+            "p.runs",
+            "1",
+            "--as-of",
+            "2026-09-02",
+            "--by",
+            "author",
+        ],
+        &private,
+    );
+    assert!(
+        changed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&changed.stderr)
+    );
+    let added = cli(
+        &copy,
+        &[
+            "add",
+            "d.done",
+            "verdict=done",
+            "because=one brief",
+            "rests_on=[p.runs]",
+            "wrong_if=p.runs < 1",
+            "--by",
+            "author",
+        ],
+        &private,
+    );
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+
+    let open = cli(&copy, &["open"], &private);
+    let open_text = String::from_utf8(open.stdout).unwrap();
+    assert!(
+        open_text.contains("d.done: unreviewed change of judgment"),
+        "{open_text}"
+    );
+    assert!(open_text.contains("d.other: wrong_if holds"), "{open_text}");
+    let before_reads = image(&copy);
+    let check = cli(&copy, &["check"], &private);
+    let check_text = String::from_utf8(check.stdout).unwrap();
+    assert!(
+        check_text.contains("NOTE d.done: unreviewed change of judgment"),
+        "{check_text}"
+    );
+    let pull = cli(&copy, &["pull", "d.done"], &private);
+    let pull_text = String::from_utf8(pull.stdout).unwrap();
+    assert!(
+        pull_text.contains("review: unreviewed change of judgment"),
+        "{pull_text}"
+    );
+    assert_eq!(
+        image(&copy),
+        before_reads,
+        "ordinary reads changed captured storage"
+    );
+
+    let self_review = cli(&copy, &["review", "d.done", "--by", "author"], &private);
+    assert!(
+        self_review.status.success(),
+        "{}",
+        String::from_utf8_lossy(&self_review.stderr)
+    );
+    let after_self = cli(&copy, &["open"], &private);
+    let after_self = String::from_utf8(after_self.stdout).unwrap();
+    assert!(
+        after_self.contains("d.done: unreviewed change of judgment"),
+        "{after_self}"
+    );
+
+    let other_review = cli(&copy, &["review", "d.done", "--by", "reviewer"], &private);
+    assert!(
+        other_review.status.success(),
+        "{}",
+        String::from_utf8_lossy(&other_review.stderr)
+    );
+    let after_other = cli(&copy, &["open"], &private);
+    let after_other = String::from_utf8(after_other.stdout).unwrap();
+    assert!(
+        !after_other.contains("d.done: unreviewed change of judgment"),
+        "{after_other}"
+    );
+    assert!(
+        after_other.contains("d.other: wrong_if holds"),
+        "{after_other}"
+    );
+    let after_other_check = cli(&copy, &["check"], &private);
+    let after_other_check = String::from_utf8(after_other_check.stdout).unwrap();
+    assert!(!after_other_check.contains("NOTE d.done: unreviewed change of judgment"));
+    assert!(
+        after_other_check.contains("d.other: wrong_if holds"),
+        "{after_other_check}"
+    );
+
+    let legacy = temp.path().join("legacy");
+    fs::create_dir(&legacy).unwrap();
+    fs::write(
+        legacy.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 1}}\njudgments: {d.done: {verdict: done, rests_on: [p.runs], wrong_if: p.runs < 0}}\n",
+    )
+    .unwrap();
+    let legacy_open = cli(&legacy, &["open"], &private);
+    let legacy_open = String::from_utf8(legacy_open.stdout).unwrap();
+    assert!(
+        !legacy_open.contains("unreviewed change of judgment"),
+        "{legacy_open}"
+    );
+}
 
 #[test]
 fn recursive_aliases_fail_closed_in_core_and_custom_collections() {
@@ -404,11 +596,13 @@ fn actual_core_cli_opens_exact_history_without_checking_the_optional_brief() {
     let text = String::from_utf8_lossy(&check.stdout);
     assert!(!text.contains("FAIL page selectors"));
     assert!(text.starts_with("NOTE page layout not checked; use kpop experimental hub --verify\n"));
-    let unsupported = cli(&root, &["pull", "p", "--history"], &root.join("private"));
-    assert!(!unsupported.status.success());
+    let historical = cli(&root, &["pull", "p", "--history"], &root.join("private"));
     assert!(
-        String::from_utf8_lossy(&unsupported.stderr).contains("core_profile_option_unsupported")
+        historical.status.success(),
+        "{}",
+        String::from_utf8_lossy(&historical.stderr)
     );
+    assert!(String::from_utf8_lossy(&historical.stdout).contains("HISTORICAL SECTION"));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
         record
@@ -1117,8 +1311,15 @@ fn actual_ordinary_pull_history_reads_the_retained_versions() {
             "     request: s.note\n",
             "     no longer rested on p.old: superseded\n",
             "  2. until 2026-09-19 - a person restored it (the same decision as version 1)\n",
-        ).replacen("kept in .kpopper/replaced.yaml",
-            &format!("kept in {}", Path::new(".kpopper").join("replaced.yaml").display()), 1)
+        )
+        .replacen(
+            "kept in .kpopper/replaced.yaml",
+            &format!(
+                "kept in {}",
+                Path::new(".kpopper").join("replaced.yaml").display()
+            ),
+            1
+        )
     );
 }
 
@@ -1913,14 +2114,6 @@ fn a_branch_record_whose_fields_tie_is_consolidated_over_this_one() {
     // cannot say which field is its dependency field.
     commit_record(root, &format!("{known}{b}{z}"), "branch");
     git(root, &["branch", "other"]);
-    let commit = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(["rev-parse", "other"])
-        .output()
-        .unwrap()
-        .stdout;
-    let commit = String::from_utf8(commit).unwrap();
     let base = format!("{known}{z}");
     commit_record(root, &base, "base");
 
@@ -1944,34 +2137,19 @@ fn a_branch_record_whose_fields_tie_is_consolidated_over_this_one() {
         );
     }
 
-    // Once this record rests a second judgment on its own field, the tie is the branch's
-    // alone: over this record its roles read, and what it adds is tested and folded.
+    // This destination judgment resolves the branch's role ambiguity. The branch did not
+    // author d.b after the fork, so its inherited entry is not restored after the deletion.
     let current = format!("{known}{z}{c}");
     commit_record(root, &current, "second judgment");
-    let report = "the base with other laid over it\n  other\n\narrived (1): what the fold would add\n  d.b:  - from other\nupdates (0): what the base holds that a hypothesis replaces, and what rests on each\nreversed (0): a verdict, or other grounds, laid over a standing judgment - by its own condition, by a person's name, or waiting for one\nmoved / falsified (0): what the union moves or breaks\ncontested (0)\ncandidates (0): pairs for a person to judge as the same subject or distinct\nnew subjects (0): prefixes the base does not hold\n\nclean: other may fold - consolidate other\n";
-    // The second line names the branch's commit, the day it was made and its age.
-    let told = |output: std::process::Output| {
-        assert!(output.stderr.is_empty());
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let mut lines = stdout.split('\n').collect::<Vec<_>>();
-        assert!(
-            lines[1].starts_with("  other (born ")
-                && lines[1].ends_with(&format!(
-                    "): what other committed ({}), read as a hypothesis",
-                    &commit[..7]
-                )),
-            "{stdout}"
-        );
-        lines[1] = "  other";
-        lines.join("\n")
-    };
     let output = cli(
         root,
         &["consolidate", "--dry-run", "--from", "other"],
         private,
     );
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(told(output), report);
+    let preview = String::from_utf8(output.stdout).unwrap();
+    assert!(preview.contains("arrived (0)"), "{preview}");
+    assert!(preview.contains("nothing to write"), "{preview}");
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
         current
@@ -1979,16 +2157,38 @@ fn a_branch_record_whose_fields_tie_is_consolidated_over_this_one() {
 
     let output = cli(root, &["consolidate", "--from", "other"], private);
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(
-        told(output),
-        format!(
-            "{report}\ncarry d.b from other into judgments, before d.z\nfolded other: 1 entry and 0 judgments - 1 added, 0 replaced\nfiles to commit: GROUNDING.yaml\n  nothing to delete for other: another branch keeps its own record\nnext: git add GROUNDING.yaml && git commit\n  then merge other as you would - its record is folded here, and the merge carries only its code\n\nthe record needs a person on 0 judgments - check says the rest\n"
-        )
-    );
+    let folded = String::from_utf8(output.stdout).unwrap();
+    assert!(folded.contains("nothing to write"), "{folded}");
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
-        format!("{known}{b}{z}{c}")
+        current
     );
+}
+
+#[test]
+fn a_source_role_tie_resolved_by_the_destination_still_folds_an_authored_entry() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let private = root.join("private");
+    git(root, &["init", "-q", "-b", "main"]);
+    let known = "known:\n  local.one: {v: 1}\n  local.two: {v: 2}\njudgments:\n";
+    let z = "  d.z: {verdict: z, rests_on: [local.one], seen: {local.one: 1}, wrong_if: local.one > 5}\n";
+    let b = "  d.b: {verdict: b, depends: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    let c = "  d.c: {verdict: c, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
+    commit_record(root, &format!("{known}{z}"), "common record");
+    git(root, &["checkout", "-q", "-b", "source"]);
+    commit_record(root, &format!("{known}{b}{z}"), "source adds entry with tied roles");
+    git(root, &["checkout", "-q", "main"]);
+    let tied = cli(root, &["consolidate", "--dry-run", "--from", "source"], &private);
+    assert!(!tied.status.success());
+    commit_record(root, &format!("{known}{z}{c}"), "destination resolves roles");
+    for args in [vec!["consolidate", "--dry-run", "--from", "source"], vec!["consolidate", "--from", "source"]] {
+        let output = cli(root, &args, &private);
+        assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(String::from_utf8_lossy(&output.stdout).contains("arrived (1)"));
+    }
+    let after = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    assert!(after.contains(b) && after.contains(c), "{after}");
 }
 
 #[test]

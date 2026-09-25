@@ -304,6 +304,34 @@ fn ordinary(
         )?;
         let source_document = crate::history_yaml::decode_ordinary_source_value(raw.as_bytes())?;
         let source_value = source_document.projected();
+        // Compare authored branch changes with its one Git merge base against the
+        // destination head. Missing or criss-cross ancestry has no safe delta.
+        let destination = crate::public_readers::branch_read::git(
+            &root,
+            &["rev-parse", "--verify", "HEAD"],
+            false,
+        )?
+        .ok_or_else(|| error("branch_git_unavailable"))?;
+        let destination = std::str::from_utf8(&destination)
+            .map_err(|_| error("invalid_branch_ref"))?
+            .trim()
+            .to_owned();
+        let merge_bases = crate::public_readers::branch_read::git(
+            &root,
+            &["merge-base", "--all", &oid, &destination],
+            true,
+        )?
+        .ok_or_else(|| error("refused - source and destination have no common Git merge base"))?;
+        let merge_bases = std::str::from_utf8(&merge_bases)
+            .map_err(|_| error("invalid_branch_ref"))?
+            .lines()
+            .collect::<Vec<_>>();
+        require(
+            merge_bases.len() == 1,
+            "refused - source and destination do not have one unique Git merge base",
+        )?;
+        let ancestor =
+            crate::source_target::comparison_layer(&root, &relative, merge_bases[0], runtime)?;
         let source_map = map(&source_value)?;
         let source_record = V::Map(
             ["meta", "hypothesis"]
@@ -316,6 +344,8 @@ fn ordinary(
             document: data["doc"].clone(),
             ordered: ordered.document.clone(),
             source_record: source_record.clone(),
+            whole_document: None,
+            comparison_base: Some(ancestor),
             head: V::Map(Map::from([
                 (
                     "claim".into(),
@@ -360,6 +390,8 @@ fn ordinary(
                     .clone(),
                 head: item["head"].clone(),
                 source_record: source_record.clone(),
+                whole_document: None,
+                comparison_base: None,
                 source: crate::history_yaml::OrdinaryValue::from_typed(&item["doc"]),
                 text: raw.into(),
                 differences_only: false,

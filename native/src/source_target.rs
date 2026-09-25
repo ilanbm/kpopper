@@ -248,6 +248,34 @@ pub(crate) fn records_layer(
             .map_err(|_| error("target_replay_failed"))?
     })
 }
+
+/// A missing record is an empty merge base only when its owned evidence is also
+/// absent. A broken pointer or a missing view of retained history must still fail.
+pub(crate) fn comparison_layer(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<V> {
+    let captured = committed(root, entry, revision)?;
+    if captured.reader.tree.contains_key(&captured.entry) {
+        let (layer, _) = records_layer(root, entry, revision, runtime)?;
+        return Ok(obj([("doc", map(&layer)?["doc"].clone())]));
+    }
+    let mut layouts = vec![captured.layout];
+    let entry_path = Path::new(&captured.entry);
+    if matches!(entry_path.file_name().and_then(|n| n.to_str()), Some("GROUNDING.yaml" | "PROVENANCE.yaml")) {
+        let alternate = if entry_path.file_name().unwrap() == "GROUNDING.yaml" { "PROVENANCE.yaml" } else { "GROUNDING.yaml" };
+        layouts.push(crate::history_transaction::Layout::for_entry(name(&entry_path.with_file_name(alternate))?)?);
+    }
+    for layout in layouts {
+        let owned = [&layout.hypotheses, &layout.view, &layout.replaced, &layout.authority,
+            &layout.objects, &layout.commits, &layout.cancellations, &layout.retained, &layout.journal];
+        require(!captured.reader.tree.keys().any(|path| owned.iter().any(|base|
+            path == *base || path.starts_with(&format!("{base}/")))), "target_record_unavailable")?;
+    }
+    Ok(obj([("doc", V::Map(Map::new()))]))
+}
 struct Materialized {
     _temp: tempfile::TempDir,
     captured: crate::source_capture::OrdinaryCapture,

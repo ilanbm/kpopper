@@ -336,6 +336,7 @@ pub struct Projection<'a> {
     unread_failures: Vec<String>,
     pub(crate) disputed: BTreeMap<String, Vec<(String, V)>>,
     pub(crate) knowledge: Vec<String>,
+    history_review: Option<BTreeMap<String, String>>,
 }
 
 /// Stable data needed by the session stop gate.  This deliberately excludes
@@ -426,7 +427,18 @@ impl<'a> Projection<'a> {
             unread_failures,
             disputed,
             knowledge,
+            history_review: None,
         })
+    }
+
+    pub(crate) fn with_history_review(
+        mut self,
+        projection: Option<&crate::value::TypedValue>,
+    ) -> Result<Self> {
+        self.history_review = projection
+            .map(crate::reasoning_history_assessment::review_notes)
+            .transpose()?;
+        Ok(self)
     }
     fn every(&self) -> BTreeSet<String> {
         self.base
@@ -1830,6 +1842,7 @@ impl Projection<'_> {
             // A replaced verdict is a question for a person until someone reviews it; an
             // arrangement is replaced by its own occasion and is not asked about.
             if !R::arrangement(reader, body)
+                && self.history_review.is_none()
                 && let Some(day) = R::reversal_pending(body)
             {
                 items.push((
@@ -1839,6 +1852,9 @@ impl Projection<'_> {
                         "reversed on {day} - the verdict under this id changed; review it once read, or pull {id} --history"
                     ),
                 ));
+            }
+            if let Some(note) = self.history_review.as_ref().and_then(|notes| notes.get(id)) {
+                items.push((78, id.clone(), note.clone()));
             }
         }
         // A question answer closed needs a person again once its answer moves.
@@ -2038,6 +2054,13 @@ impl Projection<'_> {
         let (held, judgments, _, _) = self.held_counts();
         let mut fail = vec![];
         let mut note = self.knowledge.clone();
+        if let Some(review) = &self.history_review {
+            note.extend(
+                review
+                    .iter()
+                    .map(|(id, qualifier)| format!("{id}: {qualifier}")),
+            );
+        }
         let mut moved = vec![];
 
         // Keep manual edits under the same structured-expression admission rules as
@@ -2257,7 +2280,10 @@ impl Projection<'_> {
             }
             // An arrangement written again is re-decided: its trail records a renewal, not a
             // reversal for a person to review.
-            if !arrangement && let Some(day) = R::reversal_pending(body) {
+            if !arrangement
+                && self.history_review.is_none()
+                && let Some(day) = R::reversal_pending(body)
+            {
                 note.push(format!(
                     "{id}: reversed on {day} - the verdict under this id changed; review it once read, or pull {id} --history"
                 ));
@@ -2494,6 +2520,13 @@ impl Projection<'_> {
             }
             if self.disputed.contains_key(&id) {
                 lines.push(self.dispute(&id));
+            }
+            if let Some(note) = self
+                .history_review
+                .as_ref()
+                .and_then(|notes| notes.get(&id))
+            {
+                lines.push(cut(&format!("    review: {note}"), 110));
             }
         }
         let keep = if budget < 0 {

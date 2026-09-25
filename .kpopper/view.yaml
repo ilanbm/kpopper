@@ -61,6 +61,7 @@ tabs:
              s.2026_09_19_native_snapshot_continuation,
              s.2026_09_19_native_identity_continuation,
              s.2026_09_25_source_reference_review_followup,
+             s.2026_09_25_source_reference_windows_ci,
              s.2026_09_19_native_hypothesis_edit_continuation]
     sections:
       - title: Native prelaunch release

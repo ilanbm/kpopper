@@ -1276,6 +1276,28 @@ sources:
          Git pins from line-number and colon paths and degrades Git probe failures to advisory
          notes."
     read: "2026-09-25"
+  s.2026_09_25_candidate_crate_metadata:
+    name: "Read candidate metadata without executing candidate publisher code"
+    read: "2026-09-25"
+    url: "https://github.com/ilanbm/kpopper/blob/c91dadad54fe478cee2943591836cc8cee4e164b/.github/scripts/publish_crate.py"
+    of: "The native-before-plugin workflow checked out publisher code from trusted main at version
+         0.12.0, then asked its crate verifier to validate candidate version 0.13.0. The verifier
+         read its own source tree and refused before registry access. Plan and served verification
+         must read version and package metadata from the verified candidate checkout while continuing
+         to execute trusted main code. The separate registry identity job and byte comparisons remain
+         unchanged."
+  s.2026_09_25_source_reference_windows_ci:
+    name: "Windows Git tree path normalization"
+    asked: "Paraphrased continuation request: diagnose and fix PR 259 Windows CI failure in
+            dot-relative pinned sources; do not merge."
+    fidelity: paraphrase
+    read: "2026-09-25"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/36075151577/job/107884636324"
+    of: "On 2026-09-25 Windows CI ran 1145 native tests: 1144 passed, 1 failed, 58 skipped.
+         dot_relative_pins_resolve_from_the_primary_record_directory reported
+         nested-pins:./source.txt unavailable. The Git tree path was converted from platform-native
+         path components; normalize components with forward slashes for Git. The targeted and full
+         source-reference suite passed locally after the fix; Windows CI confirmation is pending."
   s.2026_09_25_windows_proposal_publication:
     name: "Repair concurrent Windows proposal publication after release CI exposed sharing failures"
     read: "2026-09-25"
@@ -1920,6 +1942,13 @@ sources:
          2026-09-24. No live Grok Bot installation, skill-use or fresh-conversation validation has
          been performed for this guide; Grok Build compatibility does not establish Grok Bot plugin
          or hook support."
+  doc.history_review_contract_2a608958:
+    name: "Causal review and branch comparison contract at 2a608958"
+    file: "docs/history-contract.md"
+    at: "Reviewing a changed judgment; native/tests/history_review_semantics.rs;
+         native/tests/public_branch_consolidation.rs"
+    read: "2026-09-25"
+    scope: {kind: code, commit: "2a6089584cd883705828c4dc193d9441a3856704"}
   doc.history_source_clock_order:
     name: "Source clock grouping and retained mapping order"
     from: s.2026_09_19_native_transactions
@@ -5590,6 +5619,40 @@ judgments:
                                        retain exact logical identities through versioned hashed
                                        physical paths; older raw paths remain readable. Identity
                                        changes and brief references publish under one reader guard."
+  d.history_review_follows_lineage:
+    name: "\"Review follows the recorded decision through edits and branch folds\""
+    rests_on: [d.compact_history_preserves_evidence, d.replacement_leaves_a_trail, d.review_names_what_it_reads, doc.history_review_contract_2a608958]
+    verdict: "\"Active history derives review reservations from causal decision episodes, separately
+              from acceptance. Metadata edits and repeated acceptance cannot erase them; a return
+              needs a new review. Ordinary branch folds compare authored changes with the unique
+              common ancestor.\""
+    because: "\"Keeping retained claims and acts as evidence preserves old grounds without storing
+              another rendered history. A known writer or accepting actor remains excluded from
+              reviewing their own replacement even when the other identity is missing. Exact review
+              checks its observed current inputs; recorded actors establish provenance, not
+              authentication. A copied ordinary reversal retains its unresolved notice without
+              inventing pre-import acts.\""
+    reopened_by: "\"A public replacement, metadata edit, reacceptance, return or copied reversal
+                  loses its pending review; a known origin clears itself; a branch restores an
+                  inherited reading as new evidence; or deriving review state alters stored history
+                  or old receipt replay.\""
+    seen:
+      d.compact_history_preserves_evidence: "Opt-in history copies store subject-local action deltas
+                                             and retain exact legacy originals in a lossless archive.
+                                             Compact storage keeps semantic identities, direct
+                                             observations and source mapping order; it does not turn
+                                             presence into acceptance."
+      d.replacement_leaves_a_trail: "every replacement of a judgment - by add once the standing
+                                     one's condition fired, or by the fold - keeps one line on the
+                                     judgment saying what ended the decision it replaced and the day,
+                                     and the replaced body whole beside the record; a dependency
+                                     dropped is named with its reason, and a write that returns to a
+                                     kept version is told so"
+      d.review_names_what_it_reads: "review takes a judgment's id or a section's title; an
+                                     arrangement's review also rewrites the shape of the one tab, or
+                                     of the tab serving a session source it rests on; nothing
+                                     refreshes a snapshot by itself"
+      doc.history_review_contract_2a608958: "read 2026-09-25"
   d.home_beside_the_entry:
     verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
               file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,

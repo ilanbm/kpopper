@@ -33,6 +33,9 @@ pub struct Options {
     pub at: Option<String>,
     #[arg(long)]
     pub why: Option<String>,
+    /// Recorded author or reviewer; defaults to the current agent session when present.
+    #[arg(long = "by")]
+    pub actor: Option<String>,
     /// Replace a stored scalar by an equal-valued rule, preserving its identity and history.
     #[arg(long)]
     pub reframe: bool,
@@ -320,8 +323,13 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>, Option<Sour
     }
     Ok((a, paths, source_body))
 }
+fn entry_is_legacy_or_pending(route: &WriteRoute) -> Result<bool> {
+    Ok(route.pending_required()? || (route.paths()[0].exists()
+        && crate::legacy_authoring::authority_route(&route.paths()[0])? == crate::legacy_authoring::AuthorityRoute::Legacy))
+}
 pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     let cwd = cwd.canonicalize()?;
+    require(options.actor.as_ref().is_none_or(|a| !a.trim().is_empty() && a.len() <= 200), "--by must be non-empty recorded actor text, at most 200 bytes")?;
     let (action, files, source_body) = action(kind, options)?;
     let implicit = files.is_empty();
     let original = if implicit {
@@ -331,6 +339,9 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     };
     let route = WriteRoute::capture(&original, &cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
+    if options.actor.is_some() && entry_is_legacy_or_pending(&route)? {
+        return Err(error("--by requires a direct active-history record; legacy records retain their existing review rule"));
+    }
     if options.reframe || options.expected_record_sha256.is_some() {
         let entry = &route.paths()[0];
         require(entry.exists() && crate::legacy_authoring::authority_route(entry)?
@@ -392,7 +403,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     if entry.exists() {
         drop(_lock);
         drop(route);
-        let (result, notice) = crate::direct_history::write(&original, &cwd, &action)?;
+        let (result, notice) = crate::direct_history::write_as(&original, &cwd, &action, options.actor.as_deref())?;
         if string_is(&map(&result)?["state"], "private draft") {
             return Ok(format!(
                 "{}\n",
@@ -438,7 +449,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             recorded_at: now.to_rfc3339(),
             recording_day: chrono::Local::now().date_naive().to_string(),
             record_id: fresh_id("record")?,
-            by: V::Null,
+            by: options.actor.as_deref().map(s).unwrap_or_else(crate::direct_history::actor),
         },
         runtime.as_ref(),
     )?;

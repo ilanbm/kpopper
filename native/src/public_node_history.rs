@@ -113,12 +113,8 @@ fn private_targets(capture: &Capture, action: &V) -> Result<bool> {
     }
     Ok(false)
 }
-pub(crate) fn write(
-    route: &WriteRoute,
-    original: &[PathBuf],
-    action: &V,
-    probe: &mut dyn FnMut(&str) -> Result<()>,
-) -> Result<(V, String)> {
+#[cfg(test)]
+pub(crate) fn write(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<(V, String)> {
     write_with_runtime(route, original, action, probe, None)
 }
 fn privacy_action(action: &V) -> Result<V> {
@@ -185,6 +181,12 @@ pub(crate) fn write_with_runtime(
     probe: &mut dyn FnMut(&str) -> Result<()>,
     runtime_override: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<(V, String)> {
+    write_inner(route, original, action, probe, runtime_override, V::Null)
+}
+pub(crate) fn write_as(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, by: V) -> Result<(V, String)> {
+    write_inner(route, original, action, probe, None, by)
+}
+fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, runtime_override: Option<&crate::reasoning_runtime::Runtime>, by: V) -> Result<(V, String)> {
     scope(route)?;
     let root = route.paths()[0].parent().unwrap();
     let before = Capture::read(root)?;
@@ -240,7 +242,7 @@ pub(crate) fn write_with_runtime(
     let prepared = W::prepare(
         root,
         &request,
-        &crate::direct_history::options("write", V::Null)?,
+        &crate::direct_history::options("write", by)?,
         runtime,
     )?
     .with_guard(&guard(route, original)?)?;
@@ -381,27 +383,10 @@ pub(crate) fn recover(
                 .iter()
                 .map(|v| text(v).map(str::to_owned))
                 .collect::<Result<Vec<_>>>()?;
-            let receipt;
-            let tx_context = p.context()?;
-            let source = if let Some(context) = tx_context
-                .as_ref()
-                .filter(|c| crate::history_node_transaction::is_context(c))
-            {
-                field(
-                    map(&crate::history_node_transaction::validate(context)?["options"])?,
-                    "by",
-                )?
-            } else {
-                receipt = W::receipt(&after.snapshot, p.operation())?;
-                field(W::intent(&receipt)?, "by")?
-            };
-            let source = if *source == V::Null {
-                None
-            } else {
-                Some(text(source)?)
-            };
+            // A fold cannot use --as (it belongs only to refutations). Its by
+            // field records the actor, never an additional source dependency.
             require(
-                crate::public_consolidation::private_selection(&context, &names, source)?.is_none(),
+                crate::public_consolidation::private_selection(&context, &names, None)?.is_none(),
                 "private_proposal_requires_draft",
             )?;
         } else {

@@ -40,6 +40,7 @@ struct Hypothesis {
     head: V,
     raw: Map,
     ids: BTreeSet<String>,
+    comparison_base: Option<V>,
 }
 include!("ordinary_consolidation_engine.rs");
 fn captured_projection<'a>(
@@ -93,6 +94,7 @@ fn read_hypotheses(
                 head: get(h, "head").clone(),
                 raw: body,
                 ids,
+                comparison_base: None,
             },
         );
     }
@@ -179,6 +181,7 @@ pub(super) fn preview(
                 doc: doc.clone(),
                 head: get(h, "head").clone(),
                 ids: raw.keys().cloned().collect(),
+                comparison_base: None,
                 raw,
             },
         );
@@ -200,6 +203,7 @@ pub(super) fn preview(
                 doc: proposal.document.clone(),
                 head: proposal.head.clone(),
                 ids: raw.keys().cloned().collect(),
+                comparison_base: None,
                 raw,
             },
         );

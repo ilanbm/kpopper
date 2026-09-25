@@ -232,7 +232,7 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
                 "kind":operation, "id":options.subject, "of":options.target,
                 "over":options.over, "because":options.because,
             }))?;
-            json_value(&crate::direct_history::act(&original, &cwd, &action)?)?
+            json_value(&crate::direct_history::act_as(&original, &cwd, &action, options.by.as_deref())?)?
         }
         "reconcile" if options.record_proposals => {
             let because = options

@@ -12,6 +12,14 @@ use std::{
 
 const FORMAT: &str = "node-semantic-object/v1";
 
+#[derive(Clone, Debug)]
+pub(crate) struct ReplacedArchive {
+    pub(crate) source: &'static str,
+    pub(crate) path: String,
+    pub(crate) member_sha256: String,
+    pub(crate) bytes: Vec<u8>,
+}
+
 /// Compact immutable payload. The original object hash is checked when its exact saw is restored.
 pub fn payload(object: &V, observation: &ObservationNode) -> Result<V> {
     validate_object(object)?;
@@ -142,6 +150,104 @@ pub struct Capture {
     pub(crate) semantic_events: BTreeMap<String, String>,
 }
 impl Capture {
+    /// Compact retained objects and verified storage-event bindings for display only.
+    /// This never expands accumulated `saw` ancestry or changes semantic pins.
+    pub(crate) fn historical_versions(&self, prefixes: &[String]) -> Result<Vec<V>> {
+        let event_versions = self
+            .snapshot
+            .versions
+            .values()
+            .flat_map(|versions| versions.values().map(|version| (version.id(), version)))
+            .collect::<BTreeMap<_, _>>();
+        let mut rows = Vec::new();
+        for (id, object) in self.history.objects() {
+            let fields = map(object)?;
+            let subject = text(field(fields, "subject")?)?;
+            if !prefixes.is_empty()
+                && !prefixes
+                    .iter()
+                    .any(|p| subject == p || subject.starts_with(&format!("{p}.")))
+            {
+                continue;
+            }
+            let event_id = self.storage_event(id)?;
+            let version = event_versions
+                .get(event_id)
+                .copied()
+                .ok_or_else(|| error("missing_object"))?;
+            let mut row = fields
+                .iter()
+                .filter(|(key, _)| key.as_str() != "saw")
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect::<Map>();
+            // `saw` accumulates ancestors on every revision. It is already verified
+            // capture input, but expanding or echoing it makes display quadratic.
+            row.insert("storage_event_id".into(), V::Text(version.id().into()));
+            row.insert("operation_id".into(), V::Text(version.operation().into()));
+            row.insert(
+                "parents".into(),
+                V::List(version.parents().iter().cloned().map(V::Text).collect()),
+            );
+            rows.push((
+                version.id().to_owned(),
+                text(field(fields, "id")?)?.to_owned(),
+                V::Map(row),
+            ));
+        }
+        rows.sort_by_key(|(event, object, _)| (event.clone(), object.clone()));
+        Ok(rows.into_iter().map(|(_, _, row)| row).collect())
+    }
+    /// Complete verified event ancestry, including storage events with no selected row.
+    pub(crate) fn historical_event_parents(&self) -> BTreeMap<String, Vec<String>> {
+        self.snapshot
+            .versions
+            .values()
+            .flat_map(|versions| versions.values())
+            .map(|version| (version.id().to_owned(), version.parents().to_vec()))
+            .collect()
+    }
+    /// Exact replacement evidence retained in a verified copy archive, never a new act.
+    pub(crate) fn archived_replaced_yaml(&self) -> Result<Option<ReplacedArchive>> {
+        let mut found: Option<ReplacedArchive> = None;
+        for transaction in self.snapshot.transactions.values() {
+            let Some(context) = transaction.context.as_ref() else { continue };
+            let context = map(context)?;
+            let (paths, source) = if context.get("format")
+                .is_some_and(|v| string_is(v, crate::history_node_bootstrap::FORMAT)) {
+                let options = map(field(context, "options")?)?;
+                (vec![text(field(options, "archive")?)?], "verified_bootstrap_archive")
+            } else if context.get("format")
+                .is_some_and(|v| string_is(v, crate::history_node_legacy::CHECKPOINT)) {
+                (transaction.evidence.keys().filter(|p| p.starts_with(crate::history_node_legacy::PREFIX)
+                    && p.ends_with(".zip")).map(String::as_str).collect(), "verified_legacy_archive")
+            } else { continue };
+            for path in paths {
+                let raw = self.snapshot.raw_evidence.get(path)
+                    .ok_or_else(|| error("history_archive_missing"))?;
+                require(transaction.evidence.get(path)
+                    .is_some_and(|hash| hash == &crate::identity::sha256(raw.as_slice())),
+                    "history_archive_hash")?;
+                let archive = crate::history_node_archive::Archive::decode(raw)?;
+                let Some(replaced) = archive.files().get(".kpopper/replaced.yaml") else { continue };
+                if source == "verified_legacy_archive"
+                    && !legacy_import_binds_replaced(&archive, replaced)
+                {
+                    continue;
+                }
+                if let Some(previous) = &found {
+                    require(previous.bytes == *replaced, "history_archive_ambiguous")?;
+                } else {
+                    found = Some(ReplacedArchive {
+                        source,
+                        path: ".kpopper/replaced.yaml".into(),
+                        member_sha256: crate::identity::sha256(replaced),
+                        bytes: replaced.clone(),
+                    });
+                }
+            }
+        }
+        Ok(found)
+    }
     pub fn read(root: &Path) -> Result<Self> {
         Self::from_snapshot(P::capture_snapshot(root)?)
     }
@@ -437,6 +543,48 @@ impl Capture {
         }
         Ok(())
     }
+}
+
+fn legacy_import_binds_replaced(
+    archive: &crate::history_node_archive::Archive,
+    replaced: &[u8],
+) -> bool {
+    let Some(entry) = archive.files().get("GROUNDING.yaml") else {
+        return false;
+    };
+    let Ok(document) = crate::history_yaml::decode_document(entry) else {
+        return false;
+    };
+    let Ok(document) = map(&document) else {
+        return false;
+    };
+    let Some(meta) = document.get("meta") else {
+        return false;
+    };
+    let Ok(meta) = map(meta) else {
+        return false;
+    };
+    let Some(import) = meta.get("history_import") else {
+        return false;
+    };
+    let Ok(import) = map(import) else {
+        return false;
+    };
+    let Some(members) = import.get("members") else {
+        return false;
+    };
+    let Ok(members) = crate::history_view::list(members) else {
+        return false;
+    };
+    let replaced_hash = crate::identity::sha256(replaced);
+    members.iter().any(|member| {
+        let Ok(member) = map(member) else { return false };
+        member.get("role").is_some_and(|role| string_is(role, "replaced"))
+            && member.get("path").is_some_and(|path| string_is(path, ".kpopper/replaced.yaml"))
+            && member
+                .get("sha256")
+                .is_some_and(|hash| string_is(hash, replaced_hash.as_str()))
+    })
 }
 impl Input for Capture {
     fn document(&self) -> Result<V> {
