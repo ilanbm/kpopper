@@ -404,11 +404,13 @@ fn actual_core_cli_opens_exact_history_without_checking_the_optional_brief() {
     let text = String::from_utf8_lossy(&check.stdout);
     assert!(!text.contains("FAIL page selectors"));
     assert!(text.starts_with("NOTE page layout not checked; use kpop experimental hub --verify\n"));
-    let unsupported = cli(&root, &["pull", "p", "--history"], &root.join("private"));
-    assert!(!unsupported.status.success());
+    let historical = cli(&root, &["pull", "p", "--history"], &root.join("private"));
     assert!(
-        String::from_utf8_lossy(&unsupported.stderr).contains("core_profile_option_unsupported")
+        historical.status.success(),
+        "{}",
+        String::from_utf8_lossy(&historical.stderr)
     );
+    assert!(String::from_utf8_lossy(&historical.stdout).contains("HISTORICAL SECTION"));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
         record
@@ -1117,8 +1119,15 @@ fn actual_ordinary_pull_history_reads_the_retained_versions() {
             "     request: s.note\n",
             "     no longer rested on p.old: superseded\n",
             "  2. until 2026-09-19 - a person restored it (the same decision as version 1)\n",
-        ).replacen("kept in .kpopper/replaced.yaml",
-            &format!("kept in {}", Path::new(".kpopper").join("replaced.yaml").display()), 1)
+        )
+        .replacen(
+            "kept in .kpopper/replaced.yaml",
+            &format!(
+                "kept in {}",
+                Path::new(".kpopper").join("replaced.yaml").display()
+            ),
+            1
+        )
     );
 }
 

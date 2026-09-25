@@ -392,10 +392,6 @@ fn core_option_refusals_use_exit_one_and_unprefixed_diagnostics() {
     let root = space.root();
     for (args, message) in [
         (
-            vec!["pull", "--history", "d.safe"],
-            "core_profile_option_unsupported: --history; core pull already includes captured history",
-        ),
-        (
             vec!["open", "--chars", "2000"],
             "core_profile_option_unsupported: --chars",
         ),

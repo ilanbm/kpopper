@@ -236,6 +236,7 @@ pub fn require(condition: bool, code: &str) -> Result<()> {
 
 pub mod core_page;
 pub mod public_core_readers;
+mod public_history_read;
 pub mod public_ordinary_readers;
 pub mod public_readers;
 pub mod public_remeasure;

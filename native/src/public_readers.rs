@@ -751,20 +751,33 @@ pub fn run(
             }
             "pull" => {
                 if options.history {
-                    let (history, path) = replaced(&paths, &mut inventory)?;
                     let mut output = projection.pull(&seeds, options.budget.unwrap_or(40))?;
                     output.push('\n');
-                    let ordinary_history = history
-                        .as_ref()
-                        .map(crate::ordinary_value::Value::from_typed);
-                    let retained = projection.history(ordinary_history.as_ref(), &path, &seeds)?;
-                    if retained.is_empty() {
-                        output.push_str(&format!(
-                            "no replaced version is kept for {}\n",
-                            seeds.join(", ")
-                        ));
+                    if let Some(node_history) = capture.node_history_capture() {
+                        output.push_str(&crate::public_history_read::render(
+                            Some(node_history),
+                            None,
+                            &seeds,
+                            options
+                                .chars
+                                .or(options.budget.map(|b| b.saturating_mul(256))),
+                            as_json,
+                        )?);
                     } else {
-                        output.push_str(&retained);
+                        let (history, path) = replaced(&paths, &mut inventory)?;
+                        let ordinary_history = history
+                            .as_ref()
+                            .map(crate::ordinary_value::Value::from_typed);
+                        let retained =
+                            projection.history(ordinary_history.as_ref(), &path, &seeds)?;
+                        if retained.is_empty() {
+                            output.push_str(&format!(
+                                "no replaced version is kept for {}\n",
+                                seeds.join(", ")
+                            ));
+                        } else {
+                            output.push_str(&retained);
+                        }
                     }
                     output
                 } else {
@@ -789,8 +802,8 @@ pub fn run(
         });
     }
     let unsupported = [
-        ("--chars", options.chars.is_some()),
-        ("--budget", options.budget.is_some()),
+        ("--chars", options.chars.is_some() && !options.history),
+        ("--budget", options.budget.is_some() && !options.history),
         ("--host", options.host.is_some() && !options.from_hook),
     ]
     .into_iter()
@@ -803,10 +816,6 @@ pub fn run(
             "core_profile_option_unsupported: {}",
             unsupported.join(", ")
         ),
-    )?;
-    crate::require(
-        !options.history,
-        "core_profile_option_unsupported: --history; core pull already includes captured history",
     )?;
     let context = CapturedAssessment::from_snapshot(
         capture.snapshot()?.clone(),
@@ -835,7 +844,29 @@ pub fn run(
                 code: 0,
             }
         }
-        "pull" => C::pull(&context, &seeds)?,
+        "pull" => {
+            let mut output = C::pull(&context, &seeds)?;
+            if options.history {
+                let history = crate::public_history_read::render(
+                    capture.node_history_capture(),
+                    capture.history_capture(),
+                    &seeds,
+                    options
+                        .chars
+                        .or(options.budget.map(|b| b.saturating_mul(256))),
+                    as_json,
+                )?;
+                if as_json {
+                    let mut payload: J = serde_json::from_str(output.text.trim())?;
+                    let historical: J = serde_json::from_str(history.trim())?;
+                    payload["historical_section"] = historical["historical_section"].clone();
+                    output.text = serde_json::to_string_pretty(&payload)? + "\n";
+                } else {
+                    output.text.push_str(&history);
+                }
+            }
+            output
+        }
         "affects" => C::affects(&context, &seeds)?,
         "check" => {
             let mut output = C::record_check(&context, has_brief(&paths, &mut inventory)?)?;
