@@ -849,8 +849,11 @@ fn history_summary(v: &V) -> Result<()> {
             "identity_schemes",
             "integrity",
         ],
-        &["capabilities"],
+        &["capabilities", "review_profile"],
     )?;
+    if let Some(profile) = m.get("review_profile") {
+        require(string_is(profile, crate::history_review::PROFILE), "unsupported_review_profile")?;
+    }
     if let Some(capabilities) = m.get("capabilities") {
         crate::history_authority::validate_history_requires(capabilities)?;
     }
@@ -1518,6 +1521,9 @@ fn summary(projection: Option<&V>) -> Result<V> {
             V::List(vec![s(crate::history_authority::TEMPORAL_APPLICABILITY)]),
         );
     }
+    if let Some(profile) = p.get("review_profile") {
+        crate::history_view::map_mut(&mut result)?.insert("review_profile".into(), profile.clone());
+    }
     Ok(result)
 }
 pub fn from_v2(snapshot: &Snapshot, report: &V, display_selection: Option<&[String]>) -> Result<V> {
@@ -1633,4 +1639,40 @@ pub fn assess(
         empty()
     };
     from_v2_temporal(snapshot, &base, display, Some(&evidence))
+}
+
+/// Review-only qualifications for legacy-expression displays. This reuses the
+/// captured support graph and does not reinterpret their predicates or snapshots.
+pub(crate) fn review_notes(projection: &V) -> Result<BTreeMap<String, String>> {
+    history_projection::validate_projection(projection)?;
+    let p=map(projection)?;
+    let g=graph(p)?;
+    let mut budget=H::SupportBudget::default();
+    let mut result=BTreeMap::new();
+    for (subject,value) in map(&p["subjects"])? {
+        let value=map(value)?;
+        if !string_is(&value["acceptance"],"accepted") {continue}
+        let heads=names(&value["heads"])?;
+        let roots=heads.iter().map(|id|format!("{subject}@{id}")).collect::<Vec<_>>();
+        let support=H::reduce_support_graph(&roots,&g,&empty(),H::MAX_VISITS,&mut budget)?;
+        let mut pending=BTreeSet::new();
+        for reservation in list(&map(&support)?["reservations"])? {
+            let r=map(reservation)?;
+            if string_is(&r["state"],"unreviewed") {
+                pending.insert(text(&r["subject"])?.to_owned());
+            }
+        }
+        if !pending.is_empty() {
+            let why=if pending.contains(subject) {
+                format!("unreviewed change of judgment - a different recorded actor must review it; pull {subject} --history")
+            } else {
+                format!("rests on unreviewed {} - review that judgment first",pending.into_iter().collect::<Vec<_>>().join(", "))
+            };
+            result.insert(subject.clone(),why);
+        } else if heads.iter().map(|id|crate::history_review::state(p,subject,id)).collect::<Result<Vec<_>>>()?
+            .contains(&crate::history_review::ReviewState::ProvenanceMissing) {
+            result.insert(subject.clone(),format!("review_provenance_missing - the earlier actor was not recorded; review the exact current judgment, or pull {subject} --history"));
+        }
+    }
+    Ok(result)
 }

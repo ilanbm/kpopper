@@ -343,6 +343,7 @@
           "type": "object",
           "properties": {
             "authority_status": {"const": "active"},
+            "review_profile": {"const": "lineage-review/v1"},
             "projection_version": {"const": 1},
             "authority": {
               "type": "object",
