@@ -206,13 +206,14 @@ fn a_branch_without_recorded_snapshots_still_checks_the_proposed_reading() {
     fs::write(root.join("GROUNDING.yaml"), base.replace("v: 10, of: 2026-09-10", "v: 11, of: 2026-09-12")).unwrap();
     commit(root, "new reading breaks the condition");
     git(root, &["checkout", "-q", "main"]);
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
     let output = public_consolidation::dispatch(&Options {
         from_refs: vec!["source".into()], dry_run: true, ..Default::default()
     }, root);
     assert_eq!(output.code, 1);
     assert!(output.stderr.is_empty(), "{}", output.stderr);
     assert!(output.stdout.contains("FALSIFIED d.limit"), "{}", output.stdout);
-    assert_eq!(fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(), base);
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
 }
 
 #[test]
