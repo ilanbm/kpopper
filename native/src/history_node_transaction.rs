@@ -266,6 +266,16 @@ pub(crate) fn with_temporal_supplement(mut context: V, receipt: &V) -> Result<V>
 }
 
 fn legacy_template(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
+    if snapshot
+        .transactions
+        .get(operation)
+        .and_then(|tx| tx.context.as_ref())
+        .is_some_and(|context| {
+            crate::history_node_legacy::kind(context, crate::history_node_legacy::FORMAT)
+        })
+    {
+        return crate::history_node_legacy::view_template(snapshot, operation);
+    }
     let receipt = crate::history_node_writer::receipt(snapshot, operation)?;
     template(field(map(field(map(&receipt)?, "after")?)?, "document")?)
 }
@@ -313,6 +323,15 @@ fn reconstruct(snapshot: &P::Snapshot, operation: &str, cache: &BTreeMap<String,
     }
     Ok(base)
 }
+/// Compare implicit and declared roles only after both are checked against the
+/// same verified world. Rendering keeps profile/role conflicts as errors and
+/// document_template preserves all non-collection metadata.
+pub(crate) fn template_in_world(value: &V, objects: &Map, state: &V) -> Result<V> {
+    template(&crate::history_node_capture::render(
+        value, objects, state, true,
+    )?)
+}
+
 pub(crate) fn after_template(snapshot: &P::Snapshot, operation: &str) -> Result<V> {
     reconstruct(snapshot, operation, &BTreeMap::new())
 }
@@ -476,3 +495,7 @@ mod tests {
         assert_eq!(apply(Some(&before), &change, 0).unwrap(), Some(after));
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/history_node_mixed_templates.rs"]
+mod mixed_legacy_temporal_tests;

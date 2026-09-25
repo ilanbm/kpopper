@@ -468,11 +468,28 @@ impl Capture {
                 .iter()
                 .filter(|(op, _)| !parents.contains(op))
             {
+                let matches = |candidate: &V| -> Result<bool> {
+                    if candidate == &expected {
+                        return Ok(true);
+                    }
+                    if !union {
+                        return Ok(false);
+                    }
+                    Ok(crate::history_node_transaction::template_in_world(
+                        candidate,
+                        history.objects(),
+                        &state,
+                    )? == crate::history_node_transaction::template_in_world(
+                        &expected,
+                        history.objects(),
+                        &state,
+                    )?)
+                };
                 if let Some(template) = templates.get(op) {
-                    require(*template == expected, "node_template_view_mismatch")?;
+                    require(matches(template)?, "node_template_view_mismatch")?;
                 } else if union {
                     let template = crate::history_node_transaction::after_template(&snapshot, op)?;
-                    require(template == expected, "divergent_templates")?;
+                    require(matches(&template)?, "divergent_templates")?;
                 }
             }
         }
