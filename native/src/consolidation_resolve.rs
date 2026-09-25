@@ -1,6 +1,8 @@
 //! Resolve one conflicted record against the staged merge, without staging or committing it.
 #[path = "consolidation_resolve_text.rs"]
 mod text_merge;
+#[path = "consolidation_node_resolve.rs"]
+mod node_merge;
 use super::{CommandOutput, Options};
 use crate::{
     Result,
@@ -279,7 +281,30 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
     }
     let scratch_entry = scratch.join(&relative);
     fs::create_dir_all(scratch_entry.parent().unwrap())?;
-    let candidate = match crate::legacy_authoring::authority_route(&scratch_entry)? {
+    // Validation belongs to this captured tree, not a project that happens to
+    // contain TMPDIR. Preserve any captured local policy; otherwise name this
+    // exact record in a private simple project and stop Git discovery here.
+    F::publish_immutable(&scratch, ".git", b"gitdir: .kpopper-resolve-no-repository\n")?;
+    let policy = F::target(&scratch, ".kpopper/project.json")?;
+    if !policy.exists() {
+        fs::create_dir_all(policy.parent().unwrap())?;
+        F::publish_immutable(&scratch, ".kpopper/project.json", &serde_json::to_vec(
+            &serde_json::json!({"version":1, "mode":"simple", "generation":0,
+                "record":relative, "publication":null})
+        )?)?;
+    }
+    // Compact node history is resolved from both pinned merge commits; its staged
+    // conflict text is never parsed as a record.
+    let node = if crate::history_node_publication::selected(&scratch_entry)? {
+        Some(node_merge::prepare(
+            &root, &relative, &head, &other, &items, &files, &conflicts,
+        )?)
+    } else {
+        None
+    };
+    let candidate = match (&node, crate::legacy_authoring::authority_route(&scratch_entry)) {
+        (Some(node), _) => node.view.clone(),
+        (None, route) => match route? {
         crate::legacy_authoring::AuthorityRoute::Legacy => {
             text_merge::merge(sides[0], sides[1], sides[2])?
         }
@@ -309,8 +334,15 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
             }
             rebuilt.unwrap()
         }
+        },
     };
     fs::write(&scratch_entry, &candidate)?;
+    if let Some(node) = &node {
+        for (path, raw) in &node.files {
+            F::publish_immutable(&scratch, path, raw)?;
+        }
+        node.verify_candidate(&scratch)?;
+    }
     let options_read = crate::public_readers::Options {
         subjects: vec![relative.clone()],
         ..Default::default()
@@ -360,6 +392,9 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
         &head,
         &other,
     )?;
+    if let Some(node) = &node {
+        node.verify_worktree(&root)?;
+    }
     let verb = if options.dry_run {
         "preview"
     } else {
@@ -382,9 +417,18 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
             &head,
             &other,
         )?;
+        if let Some(node) = &node {
+            node.verify_worktree(&root)?;
+            node.publish(&root)?;
+        }
         F::replace(&entry, Some(&candidate))?;
         drop(handle);
     }
+    let add = std::iter::once(relative.as_str())
+        .chain(node.iter().flat_map(|n| n.paths()))
+        .map(|p| format!("{p:?}"))
+        .collect::<Vec<_>>()
+        .join(" ");
     Ok(CommandOutput {
         stdout: format!(
             "{verb}: {relative}\nCandidate record check:\n{record_report}\n{}\nThe candidate and its hypotheses passed against the staged tree. No recipes or code tests were run.\n{}\n",
@@ -393,7 +437,7 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
                 "No files or Git index entries changed.".into()
             } else {
                 format!(
-                    "Review the resolved record, then git add -- {relative:?} and finish your Git merge. The index, commits and remote were not changed."
+                    "Review the resolved record, then git add -- {add} and finish your Git merge. The index, commits and remote were not changed."
                 )
             }
         ),

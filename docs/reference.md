@@ -255,7 +255,8 @@ what-if. That is a building block for previewing a captured working-copy delta o
 The existing background ingestion path continues to process explicit reports for one record.
 
 For a stopped Git merge, `consolidate --resolve` combines independent record changes and
-refuses competing claims. It validates the staged candidate before writing only the record.
+refuses competing claims. It validates the staged candidate before replacing the record.
+Compact history also adds an immutable union manifest; stage both paths named by the command.
 See [supported layouts and limits](coding-and-ci.md#resolve-a-stopped-git-merge-locally).
 
 See the [record](../skills/record/SKILL.md) and [consolidate](../skills/consolidate/SKILL.md) skills for the full write and consolidation discipline.

@@ -115,10 +115,15 @@ combine fields inside a claim or choose a newer-looking date. For supported acti
 records, it rebuilds from the complete staged history only when both input views are known
 generated views and the history reducer reports no contested subject. Immutable objects
 and manifests remain untouched; unknown hand edits require explicit reconciliation.
+For compact history, both committed sides, including their lazy originals, are verified.
+The staged history must match their union. Resolution adds one immutable union manifest
+and replaces the view without accepting or changing a claim.
 
 The candidate is checked in a private copy of the staged tree with frozen `check` and
-`consolidate --dry-run`. Nothing is written if those checks fail. On success, only the
-working-tree record is replaced; the index still requires `git add` after review. This
+`consolidate --dry-run`. Nothing is written if those checks fail. On success, the
+working-tree record is replaced; compact history also gains its union manifest. The
+command prints every path to stage with `git add` after review. Stage all of them so the
+committed view retains its complete authority. The Git index is left unchanged. This
 checks recorded knowledge, not code behavior: it runs no measurement recipes, hooks,
 project scripts or tests. Run the relevant validation on the final merge as usual.
 
@@ -130,6 +135,12 @@ in the staged snapshot, and an alternate Git index. Ordinary entries need block 
 with plain keys. Snapshot capture is bounded to 100,000 index entries, 256 MiB of blob
 output and 256 MiB of materialized files. Concurrent changes to the index, merge heads or record cause refusal before the
 write. These limits are reported, never silently bypassed.
+
+Compact resolution requires the staged streams to contain the complete union without
+new join events. It refuses contested subjects, untracked or changed history, and stream
+merges it cannot represent. If interrupted after writing the union manifest but before
+replacing the view, rerun the same command while the Git merge and staged files remain
+unchanged; it reuses the identical manifest. It does not write a separate knowledge act.
 
 The [broader merge question](advanced-mode-merging.md) remains open: resolving a conflict
 still creates work for the user, and a subsequent commit may trigger CI again.
