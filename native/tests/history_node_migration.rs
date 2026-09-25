@@ -588,6 +588,30 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    let chained_history = cli(&node, &["pull", "d.done", "--history"]);
+    assert!(chained_history.status.success());
+    let chained_history_text = String::from_utf8_lossy(&chained_history.stdout);
+    assert!(
+        chained_history_text.contains("LEGACY ARCHIVE EVIDENCE"),
+        "chained copy omitted separately labeled archive evidence: {chained_history_text}"
+    );
+    assert!(
+        chained_history_text.contains("no brief"),
+        "chained copy omitted the old reason: {chained_history_text}"
+    );
+    let chained_json = cli(
+        &node,
+        &["--json", "pull", "d.done", "--history"],
+    );
+    assert!(chained_json.status.success());
+    let wrapper: serde_json::Value = serde_json::from_slice(&chained_json.stdout).unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(wrapper["output"].as_str().unwrap()).unwrap();
+    let archived = &payload["historical_section"]["legacy_archive_evidence"][0];
+    assert_eq!(archived["source"], "verified_legacy_archive");
+    assert_eq!(archived["archive_member"], ".kpopper/replaced.yaml");
+    assert_eq!(archived["entry"]["because"], "no brief");
+    assert!(archived.get("id").is_none(), "archive evidence gained a semantic id: {archived}");
     for args in [
         vec!["set", "p.runs", "3", "--why", "another observed run"],
         vec!["review", "d.done", "--by", "reviewer"],
