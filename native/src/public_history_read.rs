@@ -151,7 +151,34 @@ fn legacy_rows(
         fields.insert("parents".into(), json!(parent_ids));
         rows.push(row);
     }
+    mark_current_heads(&mut rows, &capture.state)?;
     Ok(rows)
+}
+
+fn mark_current_heads(rows: &mut [J], state: &crate::value::TypedValue) -> Result<()> {
+    let subjects = map(field(map(state)?, "subjects")?)?;
+    for row in rows {
+        let Some(subject) = row.get("subject").and_then(J::as_str) else {
+            continue;
+        };
+        let Some(id) = row.get("id").and_then(J::as_str) else {
+            continue;
+        };
+        let Some(head) = subjects
+            .get(subject)
+            .and_then(|state| map(state).ok())
+            .and_then(|state| state.get("head"))
+            .and_then(|id| text(id).ok())
+        else {
+            continue;
+        };
+        if id == head {
+            row.as_object_mut()
+                .ok_or_else(|| error("invalid_schema"))?
+                .insert("current_head".into(), J::Bool(true));
+        }
+    }
+    Ok(())
 }
 
 fn node_rows(
@@ -187,6 +214,7 @@ fn node_rows(
                 );
         }
     }
+    mark_current_heads(&mut rows, capture.state())?;
     Ok(rows)
 }
 
@@ -277,6 +305,12 @@ fn human_row(row: &J) -> Result<String> {
         .and_then(J::as_str)
         .map(|id| format!(" (storage event {id})"))
         .unwrap_or_default();
+    let current = row
+        .get("current_head")
+        .and_then(J::as_bool)
+        .filter(|current| *current)
+        .map(|_| " [current head]")
+        .unwrap_or("");
     let by = row
         .get("by")
         .filter(|v| !v.is_null())
@@ -313,8 +347,41 @@ fn human_row(row: &J) -> Result<String> {
         })
         .unwrap_or_default();
     Ok(format!(
-        "{subject} · {kind} · version {id}{event}{by}{on}{why}{drops} · {body}"
+        "{subject} · {kind} · version {id}{event}{current}{by}{on}{why}{drops} · {body}"
     ))
+}
+
+fn clip_recent_and_heads(rows: &[J], requested: usize) -> (Vec<J>, usize) {
+    let mut keep = vec![false; rows.len()];
+    let mut used = 0usize;
+    // Current heads are required context even when later review acts fill the causal tail.
+    for index in (0..rows.len())
+        .rev()
+        .filter(|i| rows[*i]["current_head"] == true)
+    {
+        let size = serde_json::to_vec(&rows[index]).map_or(usize::MAX, |row| row.len() + 1);
+        if used.saturating_add(size) <= requested {
+            keep[index] = true;
+            used += size;
+        }
+    }
+    for index in (0..rows.len()).rev() {
+        if keep[index] {
+            continue;
+        }
+        let size = serde_json::to_vec(&rows[index]).map_or(usize::MAX, |row| row.len() + 1);
+        if used.saturating_add(size) <= requested {
+            keep[index] = true;
+            used += size;
+        }
+    }
+    let kept = rows
+        .iter()
+        .zip(keep)
+        .filter_map(|(row, selected)| selected.then(|| row.clone()))
+        .collect::<Vec<_>>();
+    let omitted = rows.len() - kept.len();
+    (kept, omitted)
 }
 
 #[cfg(test)]
@@ -335,6 +402,43 @@ mod tests {
         let ordered = causal_order(rows, parents).unwrap();
         assert_eq!(ordered[0]["id"], "claim-1");
         assert_eq!(ordered[1]["id"], "claim-3");
+    }
+
+    #[test]
+    fn clipping_keeps_newest_rows_in_causal_order() {
+        let rows = (0..20)
+            .map(|i| json!({"id":format!("v{i}"), "body":{"value":i}}))
+            .collect::<Vec<_>>();
+        let budget = serde_json::to_vec(&rows[10]).unwrap().len() * 5;
+        let (kept, omitted) = clip_recent_and_heads(&rows, budget);
+        assert!(omitted > 0);
+        assert_eq!(kept.last().unwrap()["id"], "v19");
+        assert!(kept.first().unwrap()["id"].as_str().unwrap() > "v0");
+        assert!(
+            kept.windows(2)
+                .all(|w| w[0]["id"].as_str() < w[1]["id"].as_str())
+        );
+    }
+
+    #[test]
+    fn clipping_preserves_current_head_after_later_review_acts() {
+        let mut rows = vec![json!({"id":"head","current_head":true,"kind":"judgment"})];
+        rows.extend((0..30).map(|i| json!({"id":format!("review-{i}"),"kind":"act"})));
+        let newest_sizes = rows[26..]
+            .iter()
+            .map(|row| serde_json::to_vec(row).unwrap().len() + 1)
+            .sum::<usize>();
+        let budget = serde_json::to_vec(&rows[0]).unwrap().len() + 1 + newest_sizes;
+        let (kept, omitted) = clip_recent_and_heads(&rows, budget);
+        assert!(omitted > 0);
+        assert_eq!(kept.first().unwrap()["id"], "head");
+        assert_eq!(kept.last().unwrap()["id"], "review-29");
+        assert_eq!(
+            kept.iter()
+                .filter(|row| row["current_head"] == true)
+                .count(),
+            1
+        );
     }
 }
 
@@ -365,17 +469,8 @@ pub(crate) fn render(
     };
     let rows = causal_order(rows, event_parents)?;
     let requested = chars.unwrap_or(12000).max(1) as usize;
-    let mut kept = Vec::new();
-    let mut used = 0usize;
-    for row in &rows {
-        let size = serde_json::to_string(row)?.len() + 1;
-        if used.saturating_add(size) > requested {
-            break;
-        }
-        used += size;
-        kept.push(row.clone());
-    }
-    let omitted = rows.len() - kept.len();
+    // Keep current heads and the latest causal rows; selected rows render oldest to newest.
+    let (kept, omitted) = clip_recent_and_heads(&rows, requested);
     if as_json {
         Ok(serde_json::to_string_pretty(
             &json!({"schema_version":1,"historical_section":{"source":"captured_committed_history","ordering":"verified_storage_parent_order","fresh_observation":false,"complete":omitted==0,"versions":kept,"omitted_versions":omitted,"expand_with":"increase --chars or --budget"}}),

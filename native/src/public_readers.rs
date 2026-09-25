@@ -752,12 +752,11 @@ pub fn run(
             }
             "pull" => {
                 if options.history {
-                    let mut output = projection.pull(&seeds, options.budget.unwrap_or(40))?;
-                    output.push('\n');
-                    if capture.node_history_capture().is_some()
-                        || capture.history_capture().is_some()
-                    {
-                        output.push_str(&crate::public_history_read::render(
+                    let base = projection.pull(&seeds, options.budget.unwrap_or(40))?;
+                    let captured_history = capture.node_history_capture().is_some()
+                        || capture.history_capture().is_some();
+                    let history_text = if captured_history {
+                        crate::public_history_read::render(
                             capture.node_history_capture(),
                             capture.history_capture(),
                             &seeds,
@@ -765,7 +764,7 @@ pub fn run(
                                 .chars
                                 .or(options.budget.map(|b| b.saturating_mul(256))),
                             as_json,
-                        )?);
+                        )?
                     } else {
                         let (history, path) = replaced(&paths, &mut inventory)?;
                         let ordinary_history = history
@@ -774,15 +773,29 @@ pub fn run(
                         let retained =
                             projection.history(ordinary_history.as_ref(), &path, &seeds)?;
                         if retained.is_empty() {
-                            output.push_str(&format!(
-                                "no replaced version is kept for {}\n",
-                                seeds.join(", ")
-                            ));
+                            format!("no replaced version is kept for {}\n", seeds.join(", "))
                         } else {
-                            output.push_str(&retained);
+                            retained
                         }
+                    };
+                    if as_json && captured_history {
+                        let historical_section = if history_text.trim().is_empty() {
+                            json!({"source":"captured_committed_history","complete":true,"versions":[],"omitted_versions":0})
+                        } else if let Ok(payload) = serde_json::from_str::<J>(&history_text) {
+                            payload
+                                .get("historical_section")
+                                .cloned()
+                                .unwrap_or(payload)
+                        } else {
+                            json!({"source":"replaced_yaml","text":history_text})
+                        };
+                        serde_json::to_string_pretty(&json!({
+                            "output": base.trim_end(),
+                            "historical_section": historical_section
+                        }))? + "\n"
+                    } else {
+                        format!("{base}\n{history_text}")
                     }
-                    output
                 } else {
                     projection.pull(&seeds, options.budget.unwrap_or(40))?
                 }
@@ -805,8 +818,15 @@ pub fn run(
         });
     }
     let unsupported = [
-        ("--chars", options.chars.is_some() && !options.history),
-        ("--budget", options.budget.is_some() && !options.history),
+        ("--history", options.history && command != "pull"),
+        (
+            "--chars",
+            options.chars.is_some() && !(options.history && command == "pull"),
+        ),
+        (
+            "--budget",
+            options.budget.is_some() && !(options.history && command == "pull"),
+        ),
         ("--host", options.host.is_some() && !options.from_hook),
     ]
     .into_iter()

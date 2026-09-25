@@ -181,6 +181,115 @@ fn pull_history_reads_retained_node_bodies_and_clips_without_writing() {
 }
 
 #[test]
+fn default_history_clip_keeps_the_newest_causal_versions() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(root.join(".kpopper/history.yaml"), "version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
+    let note = "retained body ".repeat(32);
+    fs::write(root.join("GROUNDING.yaml"), "meta: {purpose: Fixture}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {}\n").unwrap();
+    write(
+        root,
+        "add-a",
+        json!({"kind":"add","id":"p.a","body":{"v":0,"note":note}}),
+    );
+    for value in 1..=24 {
+        let day = value + 1;
+        let op = format!("set-{value}");
+        let mut options = opts(&op);
+        options.recording_day = format!("2026-09-{day:02}");
+        options.recorded_at = format!("2026-09-{day:02}T12:00:00+00:00");
+        let action = v(json!({"kind":"set","id":"p.a","value":value}));
+        let prepared = W::prepare(root, &action, &options, None).unwrap();
+        W::publish(root, &prepared, None, |_| Ok(())).unwrap();
+    }
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root)
+        .args(["--frozen", "pull", "p.a", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    let history = text.split_once("HISTORICAL SECTION").unwrap().1;
+    assert!(
+        history.contains("\"v\":24"),
+        "newest version omitted: {history}"
+    );
+    assert!(
+        history.contains("PARTIAL:"),
+        "expected honest older omissions: {history}"
+    );
+}
+
+#[test]
+fn default_clip_keeps_the_current_judgment_after_many_later_reviews() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(root.join(".kpopper/history.yaml"), "version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
+    fs::write(root.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nreadings: {}\njudgments: {}\n").unwrap();
+    let (_cache, runtime) = core_runtime();
+    let mut initial = opts("review-base");
+    initial.recording_day = "2026-01-01".into();
+    initial.recorded_at = "2026-01-01T12:00:00+00:00".into();
+    let action = v(json!({"kind":"batch","actions":[
+        {"kind":"add","id":"p.a","body":{"v":1},"into":"readings"},
+        {"kind":"add","id":"d.j","body":{"verdict":"ready","rests_on":["p.a"],"wrong_if":{"expr":"p.a > 100"}},"into":"judgments"}
+    ]}));
+    let prepared = W::prepare(root, &action, &initial, Some(&runtime)).unwrap();
+    W::publish(root, &prepared, Some(&runtime), |_| Ok(())).unwrap();
+    let base = chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+    for n in 1..=55 {
+        let date = base + chrono::Days::new(n);
+        let mut options = opts(&format!("review-{n}"));
+        options.strict = true;
+        options.recording_day = date.to_string();
+        options.recorded_at = format!("{date}T12:00:00+00:00");
+        let action = v(json!({"kind":"review","id":"d.j","why":format!("review-{n}")}));
+        let prepared = W::prepare(root, &action, &options, Some(&runtime)).unwrap();
+        W::publish(root, &prepared, Some(&runtime), |_| Ok(())).unwrap();
+    }
+    let capture = kpop_native::history_node_capture::Capture::read(root).unwrap();
+    let subject = map(map(capture.state()).get("subjects").unwrap())
+        .get("d.j")
+        .unwrap();
+    let head = typed_text(map(subject).get("head").unwrap());
+    capture.object("d.j", head).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root)
+        .args(["--frozen", "pull", "d.j", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    let history = text.split_once("HISTORICAL SECTION").unwrap().1;
+    assert!(
+        history.contains(&format!("version {head} (storage event")),
+        "current judgment head clipped: {history}"
+    );
+    assert!(
+        history.contains("PARTIAL:"),
+        "expected later review history omissions: {history}"
+    );
+    assert!(
+        history.contains("review-55"),
+        "latest review acts should remain visible: {history}"
+    );
+}
+
+#[test]
 fn core_pull_reads_active_history_v1_and_json_budget_reports_omissions() {
     let tmp = tempfile::tempdir().unwrap();
     let source = tmp.path().join("source");
@@ -300,6 +409,33 @@ fn ordinary_pull_reads_active_history_v1() {
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(text.contains("HISTORICAL SECTION"), "{text}");
     assert!(text.contains("ordinary retained body"), "{text}");
+    let structured = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&copy)
+        .args(["--json", "--frozen", "pull", "p.a", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        structured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&structured.stderr)
+    );
+    let wrapper: serde_json::Value = serde_json::from_slice(&structured.stdout).unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(wrapper["output"].as_str().unwrap()).unwrap();
+    assert!(payload["output"].is_string(), "{payload}");
+    assert_eq!(
+        payload["historical_section"]["source"],
+        "captured_committed_history"
+    );
+    assert!(
+        !payload["output"]
+            .as_str()
+            .unwrap()
+            .contains("HISTORICAL SECTION"),
+        "{payload}"
+    );
     assert_eq!(before, tree(&copy));
 }
 

@@ -392,6 +392,18 @@ fn core_option_refusals_use_exit_one_and_unprefixed_diagnostics() {
     let root = space.root();
     for (args, message) in [
         (
+            vec!["open", "--history", "--chars", "2000"],
+            "core_profile_option_unsupported: --history, --chars",
+        ),
+        (
+            vec!["check", "--history", "--budget", "1"],
+            "core_profile_option_unsupported: --history, --budget",
+        ),
+        (
+            vec!["affects", "d.work", "--history", "--chars", "5"],
+            "core_profile_option_unsupported: --history, --chars",
+        ),
+        (
             vec!["open", "--chars", "2000"],
             "core_profile_option_unsupported: --chars",
         ),
