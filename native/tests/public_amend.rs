@@ -185,7 +185,8 @@ fn born(root: &Path) {
     ] {
         success(run(root, &args));
     }
-    assert!(record(root).contains("  history:"), "{}", record(root));
+    let document = kpop_native::history_yaml::decode_document(record(root).as_bytes()).unwrap().to_json().unwrap();
+    assert!(document["meta"].get("node_history").is_some());
 }
 
 #[test]
@@ -618,12 +619,14 @@ fn history_records_mark_the_corrected_version_and_pin_the_answer() {
             "the rating settles it",
         ],
     ));
-    let pins = walk(&root.join(".kpopper"))
-        .into_iter()
-        .filter_map(|path| fs::read_to_string(path).ok())
-        .any(|body| {
-            body.contains("act: accept") && body.contains("read:") && body.contains("d.one_boiler")
-        });
+    let captured: serde_json::Value = serde_json::from_str(&success(run(&root, &["history-capture", "GROUNDING.yaml", "--json"]))).unwrap();
+    let evidence = kpop_native::value::TypedValue::from_tagged(&captured["evidence"]).unwrap().to_json().unwrap();
+    let answer = &evidence["state"]["subjects"]["d.one_boiler"]["head"];
+    let pins = evidence["objects"].as_object().unwrap().values().any(|object| {
+        object["subject"] == "q.second_boiler" && object["kind"] == "act"
+            && object["body"]["act"] == "accept"
+            && &object["body"]["read"]["d.one_boiler"] == answer
+    });
     assert!(pins, "no accept act pins the answer's version");
     let pulled = success(run(&root, &["--json", "pull", "q.second_boiler"]));
     assert!(pulled.contains("answered"), "{pulled}");
@@ -645,19 +648,4 @@ fn history_records_mark_the_corrected_version_and_pin_the_answer() {
         run(&root, &["correct", "m.boiler_age", "v=16"]),
         "already in a commit",
     );
-}
-
-fn walk(dir: &Path) -> Vec<PathBuf> {
-    let mut found = vec![];
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                found.extend(walk(&path));
-            } else {
-                found.push(path);
-            }
-        }
-    }
-    found
 }

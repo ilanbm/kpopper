@@ -65,8 +65,14 @@ fn scalar_reframe_is_guarded_and_numeric_updates_drive_the_original_boolean() {
     f.ok(&["add", "tank.level", "v=7", "--as-of", "2025-01-02"]);
     let record = f.root.path().join("GROUNDING.yaml");
     let before = fs::read(&record).unwrap();
-    let history = images(&f.root.path().join(".kpopper/history"));
+    let history = images(&f.root.path().join(".kpopper/history-commits"));
     assert!(!history.is_empty());
+    let captured = kpop_native::history_node_capture::Capture::read(f.root.path()).unwrap();
+    let state = captured.state().to_json().unwrap();
+    let originals = ["tank.at_seven", "tank.level"].map(|subject| {
+        let id = state["subjects"][subject]["head"].as_str().unwrap().to_owned();
+        (subject, id.clone(), captured.object(subject, &id).unwrap())
+    });
     for rule in ["rule={expr: 'tank.level == 8'}", "rule={expr: 'tank.level'}",
                  "rule={expr: 'missing.level == 7'}", "rule={expr: 'tank.at_seven'}",
                  "rule={expr: 'true'}"] {
@@ -83,6 +89,10 @@ fn scalar_reframe_is_guarded_and_numeric_updates_drive_the_original_boolean() {
            "--expected-record-sha256", &expected]);
     assert!(f.ok(&["pull", "tank.at_seven"]).to_lowercase().contains("true"));
     for (path, bytes) in history { assert_eq!(fs::read(path).unwrap(), bytes); }
+    let captured = kpop_native::history_node_capture::Capture::read(f.root.path()).unwrap();
+    for (subject, id, object) in originals {
+        assert_eq!(captured.object(subject, &id).unwrap(), object);
+    }
     f.ok(&["set", "tank.level", "8", "--as-of", "2025-01-03"]);
     assert!(f.ok(&["pull", "tank.at_seven"]).to_lowercase().contains("false"));
     f.ok(&["check"]);
