@@ -1,23 +1,6 @@
 meta:
   updated: 2025-01-02
   scope: Cooking-workshop plan after the client changes the format; the saved plans await review.
-sources:
-  s.original_brief:
-    name: Original onsite workshop brief
-    file: ../sources/original-brief.md
-    read: '2025-01-01'
-  s.session_plan:
-    name: Session-planning pass
-    file: ../sources/session-plan.md
-    read: '2025-01-01'
-  s.logistics_plan:
-    name: Logistics and safety pass
-    file: ../sources/logistics-plan.md
-    read: '2025-01-01'
-  s.updated_brief:
-    name: "Updated client brief: online workshop"
-    file: "../sources/updated-brief.md"
-    read: "2025-01-02"
 known:
   planning.dietary_status:
     name: "Dietary information collected"
@@ -168,3 +151,21 @@ open:
     name: "Review the remote teaching format"
     question: "Which demonstration, practice and supervision steps should change for participants
                joining from home?"
+
+sources:
+  s.original_brief:
+    name: Original onsite workshop brief
+    file: ../sources/original-brief.md
+    read: '2025-01-01'
+  s.session_plan:
+    name: Session-planning pass
+    file: ../sources/session-plan.md
+    read: '2025-01-01'
+  s.logistics_plan:
+    name: Logistics and safety pass
+    file: ../sources/logistics-plan.md
+    read: '2025-01-01'
+  s.updated_brief:
+    name: "Updated client brief: online workshop"
+    file: "../sources/updated-brief.md"
+    read: "2025-01-02"

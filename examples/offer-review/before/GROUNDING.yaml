@@ -1,13 +1,6 @@
 meta:
   scope: "Illustrative mortgage plan before a replacement offer arrives. All details are fictional."
 
-sources:
-  letter_a:
-    name: "Offer A, issued 1 March 2027"
-    file: "../sources/offer-a.md"
-    quoted: "The terms in Offer A are available until 18 March 2027, subject to the application meeting the conditions in this offer."
-    read: "2027-03-01"
-
 known:
   offer.current_id:
     v: A
@@ -27,3 +20,10 @@ judgments:
     because: "The plan uses Offer A and its written validity period; its application conditions still have to be met."
     reopened_by: "A replacement offer or written bank clarification changes the terms this plan relies on. Read the applicable offer before reusing the deadline."
     seen: {offer.current_id: A, offer.a_expiry: "2027-03-18"}
+
+sources:
+  letter_a:
+    name: "Offer A, issued 1 March 2027"
+    file: "../sources/offer-a.md"
+    quoted: "The terms in Offer A are available until 18 March 2027, subject to the application meeting the conditions in this offer."
+    read: "2027-03-01"

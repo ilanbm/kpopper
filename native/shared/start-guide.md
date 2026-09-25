@@ -155,8 +155,12 @@ Create the file with real material, not an empty template: the request that brou
 here, a source, and a supported finding or open question. Keep only roles with something to hold.
 Name each entry `<prefix>.<name>` with the prefix a word a question would use - the subject
 (`venue.`, `heat.`) or the kind (`decision.`, `session.`) - never a letter.
-For a small record with no judgments yet, use `sources`, `known` and `open` with their ordinary
-source/value/question fields; the reader accepts this starting shape without a `schema` block.
+For a small record with no judgments yet, use `known`, `open` and `sources` with their ordinary
+value/question/source fields; the reader accepts this starting shape without a `schema` block.
+When creating or arranging the record, put sections devoted to sources, sessions or conversations
+last, after knowledge, judgments and open questions. Apply this by role, whatever the section
+is called; preserve existing names and grouping. Recommend `sources` for new records.
+This is an authoring convention; update commands preserve the existing section order.
 Use `kpop add` for judgments so the tool fills their `seen` snapshots. Do not invent a conclusion,
 date, threshold or confidence to make the record look complete. Run `kpop check` before relying
 on the new entries.

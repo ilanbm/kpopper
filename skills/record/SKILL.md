@@ -23,7 +23,7 @@ Record the first useful finding within the user's authorization. Sources and fac
 
 Where no record resolves for the workspace, `kpop add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
-**Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Show the optional experimental hub only on an explicit request or standing preference.
+**Make a new record useful to its reader.** When creating or arranging a record, put sections devoted to sources, sessions or conversations last, after knowledge, judgments and open questions, whatever their names. Recommend `sources` for new records; preserve existing names and grouping. This is an authoring convention; update commands preserve the existing order. Link and briefly explain the finding when its explanation is due. Show the optional experimental hub only on an explicit request or standing preference.
 
 ## Record what the work calls for
 
