@@ -226,24 +226,31 @@ fn node_rows(
 fn legacy_archive_rows(
     archive: Option<&crate::history_node_capture::ReplacedArchive>,
     prefixes: &[String],
-    source: &str,
 ) -> Result<Vec<J>> {
     let Some(archive) = archive else {
         return Ok(vec![]);
     };
-    let document = crate::history_yaml::decode_document(&archive.bytes)?;
+    let document = crate::history_yaml::decode_source_value(&archive.bytes)?.typed();
+    // Ordinary replacement archives may be empty or contain annotations rather
+    // than version lists. Preserve that reader's interpretation after copying.
+    let Ok(document) = map(&document) else {
+        return Ok(vec![]);
+    };
     let mut rows = Vec::new();
-    for (subject, versions) in map(&document)? {
+    for (subject, versions) in document {
         if !prefixes
             .iter()
             .any(|p| subject == p || subject.starts_with(&format!("{p}.")))
         {
             continue;
         }
-        for entry in crate::history_view::list(versions)? {
+        let Ok(versions) = crate::history_view::list(versions) else {
+            continue;
+        };
+        for entry in versions {
             rows.push(json!({
                 "subject": subject,
-                "source": source,
+                "source": archive.source,
                 "archive_member": archive.path,
                 "member_sha256": archive.member_sha256,
                 "entry": crate::public_core_readers::json_value(entry)?
@@ -401,15 +408,6 @@ fn clip_history(rows: &[J], archive: &[J], requested: usize) -> (Vec<J>, usize, 
             used += size;
         }
     }
-    // Archive evidence has no semantic event identity, so budget it as its own section.
-    // Prefer the last source rows when space is tight, but do not imply causal order.
-    for index in (0..archive.len()).rev() {
-        let size = serde_json::to_vec(&archive[index]).map_or(usize::MAX, |row| row.len() + 1);
-        if used.saturating_add(size) <= requested {
-            keep_archive[index] = true;
-            used += size;
-        }
-    }
     for index in (0..rows.len()).rev() {
         if keep[index] {
             continue;
@@ -417,6 +415,15 @@ fn clip_history(rows: &[J], archive: &[J], requested: usize) -> (Vec<J>, usize, 
         let size = serde_json::to_vec(&rows[index]).map_or(usize::MAX, |row| row.len() + 1);
         if used.saturating_add(size) <= requested {
             keep[index] = true;
+            used += size;
+        }
+    }
+    // Pre-import annotations must not crowd out the actual recorded change that
+    // prompted review. They share the remaining budget, without causal ordering.
+    for index in (0..archive.len()).rev() {
+        let size = serde_json::to_vec(&archive[index]).map_or(usize::MAX, |row| row.len() + 1);
+        if used.saturating_add(size) <= requested {
+            keep_archive[index] = true;
             used += size;
         }
     }
@@ -444,6 +451,41 @@ fn clip_recent_and_heads(rows: &[J], requested: usize) -> (Vec<J>, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_archive_shapes_follow_ordinary_history_tolerance() {
+        for raw in ["", "# no replacements yet\n", "{}", "a note", "d.done: a note\n", "d.done: {verdict: old}\n", "d.done:\n"] {
+            let archive = crate::history_node_capture::ReplacedArchive {
+                source: "verified",
+                path: ".kpopper/replaced.yaml".into(),
+                member_sha256: crate::identity::sha256(raw.as_bytes()),
+                bytes: raw.as_bytes().to_vec(),
+            };
+            assert!(legacy_archive_rows(Some(&archive), &["d.done".into()]).unwrap().is_empty(), "{raw:?}");
+        }
+        let raw = b"d.note: just a note\nd.done:\n- {verdict: old}\n";
+        let archive = crate::history_node_capture::ReplacedArchive {
+            source: "verified", path: ".kpopper/replaced.yaml".into(), member_sha256: crate::identity::sha256(raw), bytes: raw.to_vec(),
+        };
+        let rows = legacy_archive_rows(Some(&archive), &["d".into()]).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["entry"]["verdict"], "old");
+    }
+
+    #[test]
+    fn legacy_archives_cannot_displace_recent_semantic_versions() {
+        let rows = vec![
+            json!({"id":"predecessor","kind":"judgment","body":{"verdict":"before"}}),
+            json!({"id":"current","current_head":true,"kind":"judgment","body":{"verdict":"after"}}),
+            json!({"id":"transition","kind":"act","body":{"because":"new evidence"}}),
+        ];
+        let archive = (0..60).map(|i| json!({"subject":"d.done","entry":{"because":format!("legacy reason {i}")}})).collect::<Vec<_>>();
+        let budget = rows.iter().map(|row| serde_json::to_vec(row).unwrap().len()+1).sum();
+        let (kept, omitted, _, archive_omitted) = clip_history(&rows, &archive, budget);
+        assert_eq!(kept, rows, "pre-import archives hid the change the review note names");
+        assert_eq!(omitted, 0);
+        assert_eq!(archive_omitted, archive.len());
+    }
 
     #[test]
     fn causal_order_keeps_order_through_rowless_event_bridge() {
@@ -537,7 +579,7 @@ pub(crate) fn render(
         (
             node_rows(capture, prefixes)?,
             capture.historical_event_parents(),
-            legacy_archive_rows(archive.as_ref(), prefixes, "verified_bootstrap_archive")?,
+            legacy_archive_rows(archive.as_ref(), prefixes)?,
         )
     } else if let Some(capture) = legacy {
         let parents = legacy_event_parents(capture)?;
@@ -545,7 +587,7 @@ pub(crate) fn render(
         (
             legacy_rows(capture, prefixes, &parents, &explanations)?,
             parents,
-            legacy_archive_rows(imported_archive, prefixes, "verified_history_import_member")?,
+            legacy_archive_rows(imported_archive, prefixes)?,
         )
     } else {
         (vec![], BTreeMap::new(), vec![])
@@ -592,11 +634,11 @@ pub(crate) fn render(
                 ));
             }
         }
-        if omitted > 0 || omitted_archive > 0 {
+        if omitted > 0 {
             out.push_str(&format!("PARTIAL: {omitted} retained versions omitted; increase --chars or --budget to expand.\n"));
-            if omitted_archive > 0 {
-                out.push_str(&format!("PARTIAL: {omitted_archive} legacy archive entries omitted; increase --chars or --budget to expand.\n"));
-            }
+        }
+        if omitted_archive > 0 {
+            out.push_str(&format!("PARTIAL: {omitted_archive} legacy archive entries omitted; increase --chars or --budget to expand.\n"));
         }
         Ok(out)
     }

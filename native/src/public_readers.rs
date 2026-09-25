@@ -274,6 +274,7 @@ fn imported_replaced_archive(
             "retained_history_mismatch",
         )?;
         found = Some(crate::history_node_capture::ReplacedArchive {
+            source: "verified_history_import_member",
             path: path.to_owned(),
             member_sha256: digest.to_owned(),
             bytes: raw.clone(),
