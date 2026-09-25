@@ -383,27 +383,10 @@ pub(crate) fn recover(
                 .iter()
                 .map(|v| text(v).map(str::to_owned))
                 .collect::<Result<Vec<_>>>()?;
-            let receipt;
-            let tx_context = p.context()?;
-            let source = if let Some(context) = tx_context
-                .as_ref()
-                .filter(|c| crate::history_node_transaction::is_context(c))
-            {
-                field(
-                    map(&crate::history_node_transaction::validate(context)?["options"])?,
-                    "by",
-                )?
-            } else {
-                receipt = W::receipt(&after.snapshot, p.operation())?;
-                field(W::intent(&receipt)?, "by")?
-            };
-            let source = if *source == V::Null {
-                None
-            } else {
-                Some(text(source)?)
-            };
+            // A fold cannot use --as (it belongs only to refutations). Its by
+            // field records the actor, never an additional source dependency.
             require(
-                crate::public_consolidation::private_selection(&context, &names, source)?.is_none(),
+                crate::public_consolidation::private_selection(&context, &names, None)?.is_none(),
                 "private_proposal_requires_draft",
             )?;
         } else {

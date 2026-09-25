@@ -96,6 +96,8 @@ pub struct Options {
 }
 
 fn validate(options: &Options) -> Result<()> {
+    require(!(options.source.is_some() && options.by.is_some()), "--as names a refutation source; --by names an actor - do not conflate them")?;
+    require(options.by.as_ref().is_none_or(|a| !a.trim().is_empty() && a.len() <= 200), "--by must name a recorded actor, at most 200 bytes")?;
     if let Some(day) = &options.as_of {
         require(
             regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$")
@@ -487,7 +489,7 @@ fn run_with_runtime(
         return node_run(options, &route, &original, runtime_override, probe);
     }
     let captured = store.capture()?;
-    let by = options.source.as_deref().map(s).unwrap_or(V::Null);
+    let by = options.source.as_deref().or(options.by.as_deref()).map(s).unwrap_or(V::Null);
     let write_options = authoring_options(
         if options.refute.is_some() {
             "hypothesis-refute"
@@ -616,7 +618,7 @@ fn node_run(
         } else {
             "hypothesis-fold"
         },
-        options.source.as_deref().map(s).unwrap_or(V::Null),
+        options.source.as_deref().or(options.by.as_deref()).map(s).unwrap_or(V::Null),
     )?;
     let action = obj([
         (
@@ -1010,19 +1012,11 @@ mod node_tests {
                 names: vec!["alpha".into()],
                 ..Default::default()
             };
-            assert!(
-                run_with_runtime(
-                    &options,
-                    root.path(),
-                    Some(&runtime),
-                    &mut |at| if at == phase {
-                        Err(error("crash"))
-                    } else {
-                        Ok(())
-                    }
-                )
-                .is_err()
-            );
+            let interrupted = run_with_runtime(
+                &options, root.path(), Some(&runtime),
+                &mut |at| if at == phase { Err(error("crash")) } else { Ok(()) }
+            ).unwrap_err();
+            assert!(interrupted.0.contains("crash"), "failed before injected {phase}: {interrupted}");
             let original = vec![root.path().join("GROUNDING.yaml")];
             let route = WriteRoute::capture(&original, root.path()).unwrap();
             let result =

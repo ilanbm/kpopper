@@ -372,3 +372,20 @@ fn restoring_an_old_version_needs_review_of_the_new_return_episode() {
         assert!(returned.contains("unreviewed"),"a review from the first stay covered a later return: {returned}");
     }
 }
+
+#[test]
+fn a_named_fold_records_its_actor_and_requires_another_reviewer() {
+    for node in [false,true] {
+        let temp=tempfile::tempdir().unwrap();
+        let root=seed(temp.path(),node,Some("fixture-author"));
+        ok(&root,Some("fixture-author"),&["set","p.runs","1","--as-of","2026-09-02"]);
+        ok(&root,Some("fixture-author"),&["add","d.done","verdict=demonstrated","because=one rendered brief","rests_on=[p.runs]","wrong_if={expr: 'p.runs < 1'}","--hypothesis","change"]);
+        ok(&root,Some("fixture-author"),&["consolidate","change"]);
+        let folded=ok(&root,None,&["open"]);
+        assert!(folded.contains("unreviewed"),"fold lost the known accepting actor: {folded}");
+        ok(&root,Some("fixture-author"),&["review","d.done"]);
+        assert!(ok(&root,None,&["open"]).contains("unreviewed"),"fold author reviewed its own replacement");
+        ok(&root,Some("fixture-reviewer"),&["review","d.done"]);
+        assert!(!ok(&root,None,&["open"]).contains("unreviewed"));
+    }
+}
