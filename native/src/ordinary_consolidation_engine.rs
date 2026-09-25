@@ -46,17 +46,18 @@ fn verdict(body: &V) -> V {
 fn shaped(body: &V, fields: &Map) -> bool {
     text(&fields["deps"]).ok().is_some_and(|field|matches!(get(body,field),V::List(a)if !a.is_empty()&&a.iter().all(|v|matches!(v,V::Text(_)))))
 }
-fn version_core(body: &V) -> V {
+fn version_core(body: &V, snapshot_field: &str) -> V {
     let Ok(m) = map(body) else {
         return body.clone();
     };
     V::Map(
         m.iter()
             .filter(|(k, _)| {
-                ![
-                    "seen", "reviewed", "born", "replaced", "ended", "day", "same_as", "dropped",
-                ]
-                .contains(&k.as_str())
+                k.as_str() != snapshot_field
+                    && ![
+                        "reviewed", "born", "replaced", "ended", "day", "same_as", "dropped",
+                    ]
+                    .contains(&k.as_str())
             })
             .map(|(k, v)| {
                 (
@@ -79,6 +80,31 @@ fn day(value: &V) -> Option<String> {
 }
 /// The day a body was read: its own `of` or `read`, else the `read` or `of` of the source
 /// it names among `raw`. None when nothing dates it.
+fn same_source_scope(left: &V, right: &V) -> bool {
+    let (Ok(left), Ok(right)) = (map(left), map(right)) else {
+        return false;
+    };
+    let temporal = [
+        "read",
+        "of",
+        "day",
+        "updated",
+        "updated_at",
+        "observed",
+        "observed_at",
+        "checked",
+        "checked_at",
+    ];
+    let core = |body: &Map| {
+        V::Map(
+            body.iter()
+                .filter(|(key, _)| !temporal.contains(&key.as_str()))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+        )
+    };
+    python_equal(&core(left), &core(right))
+}
 fn read_day(body: &V, raw: &Map) -> Option<String> {
     let m = map(body).ok()?;
     if let Some(found) = ["of", "read"]
@@ -98,8 +124,8 @@ fn read_day(body: &V, raw: &Map) -> Option<String> {
 }
 /// Another branch's committed record as the hypothesis it is laid over the base as: only
 /// what it holds differently. An id the base does not hold stays, and so does another
-/// claim under an id it does; a judgment stays when the branch decided it again - on other
-/// grounds, or an arrangement re-decided with a new born - and an entry when the branch
+/// claim under an id it does; a judgment stays when the branch changed its semantic core
+/// or explicitly refreshed its snapshot, or an arrangement was re-decided with a new born - and an entry when the branch
 /// read it on a later day. The rest is the base's own and is left out, so it neither votes
 /// on the field roles of the record it is laid over nor contests the branch's other
 /// readings. Only collections are kept; the branch's `schema:` and `meta:` stay the
@@ -120,6 +146,7 @@ pub(crate) fn branch_differences_from(
         .flat_map(|members| members.iter().map(|(id, body)| (id.clone(), body.clone())))
         .collect::<Map>();
     let reader = &base.reader;
+    let snapshot_field = text(&reader.fields["snapshot"])?;
     let basis_doc = comparison_base
         .and_then(|value| map(value).ok().and_then(|m| m.get("doc")))
         .or(comparison_base);
@@ -139,10 +166,12 @@ pub(crate) fn branch_differences_from(
         if map(old).is_ok_and(|m| m.contains_key(dep)) {
             // the same verdict on other grounds is a decision written again, and an
             // arrangement re-decided in place carries a new born; the same decision with
-            // its seen refreshed is the branch's own review, which stays with the branch
+            // an explicit refresh of the declared snapshot is the branch's own review
             return matches!((body, old), (V::Map(_), V::Map(_)))
-                && (!python_equal(&version_core(body), &version_core(old))
-                    || get(body, "seen") != get(old, "seen")
+                && (!python_equal(
+                    &version_core(body, snapshot_field),
+                    &version_core(old, snapshot_field),
+                ) || get(body, snapshot_field) != get(old, snapshot_field)
                     || get(body, "reviewed") != get(old, "reviewed")
                     || (G::arrangement(reader, old)
                         && !python_equal(get(body, "born"), get(old, "born"))));
@@ -422,7 +451,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         candidates: vec![],
     };
     let mut holders = BTreeMap::<String, Vec<usize>>::new();
-    let mut review_moved = Vec::new();
+    let mut review_checks = Vec::<(String, Map, Vec<String>, Map)>::new();
     for (i, h) in c.hyps.iter().enumerate() {
         for id in &h.ids {
             holders.entry(id.clone()).or_default().push(i);
@@ -447,6 +476,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
     c.view = Some(projection(&c.doc, &Map::new(), runtime)?);
     let world = &c.view.as_ref().unwrap().base;
     let base = &c.base.base;
+    let snapshot_field = text(&base.reader.fields["snapshot"])?;
     let meta = map(get(doc, "meta"))
         .ok()
         .map(|m| m.keys().cloned().collect::<BTreeSet<_>>())
@@ -469,36 +499,20 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
             let fork = get(&h.head, "_comparison_base");
             let fork_doc = map(fork).ok().and_then(|m| m.get("doc")).unwrap_or(fork);
             let fork_body = entries(fork_doc).ok().and_then(|all| all.get(id).cloned());
-            let source_whole = get(&h.head, "_source_document");
-            let source_doc = map(source_whole)
-                .ok()
-                .and_then(|m| m.get("doc"))
-                .or_else(|| (source_whole != &V::Null).then_some(source_whole));
-            let source_all = source_doc.and_then(|doc| entries(doc).ok());
             let is_review_of_fork = fork_body.as_ref().is_some_and(|forked| {
-                python_equal(&version_core(forked), &version_core(new))
-                    && (get(forked, "seen") != get(new, "seen")
-                        || get(forked, "reviewed") != get(new, "reviewed"))
+                python_equal(
+                    &version_core(forked, snapshot_field),
+                    &version_core(new, snapshot_field),
+                ) && (get(forked, snapshot_field) != get(new, snapshot_field)
+                    || get(forked, "reviewed") != get(new, "reviewed"))
             });
-            if is_review_of_fork && let Some(source_all) = source_all {
-                for dependency in strings(get(new, text(&base.reader.fields["deps"])?)) {
-                    let source_day = source_all
-                        .get(&dependency)
-                        .and_then(|body| read_day(body, &source_all));
-                    let destination_day = base
-                        .reader
-                        .raw
-                        .get(&dependency)
-                        .and_then(|body| read_day(body, &base.reader.raw));
-                    if source_day
-                        .zip(destination_day)
-                        .is_some_and(|(source, current)| current > source)
-                    {
-                        review_moved.push(format!(
-                            "{id}: {dependency} was re-read after the source review's basis"
-                        ));
-                    }
-                }
+            if is_review_of_fork && let Ok(snapshot) = map(get(new, snapshot_field)) {
+                review_checks.push((
+                    id.clone(),
+                    snapshot.clone(),
+                    strings(get(new, text(&base.reader.fields["deps"])?)),
+                    entries(fork_doc).unwrap_or_default(),
+                ));
             }
         }
         if same && old == new {
@@ -508,7 +522,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         if base.judgments.contains_key(id) {
             if same
                 && matches!((old, new), (V::Map(_), V::Map(_)))
-                && version_core(old) == version_core(new)
+                && version_core(old, snapshot_field) == version_core(new, snapshot_field)
                 && !(G::arrangement(&base.reader, old) && get(old, "born") != get(new, "born"))
             {
                 continue;
@@ -535,8 +549,13 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
                     .ok()
                     .and_then(|values| values.get(id).cloned());
                 let only_reviewed_forked_judgment = source_origin.as_ref().is_some_and(|origin| {
-                    python_equal(&version_core(origin), &version_core(new))
-                        && !python_equal(&version_core(old), &version_core(new))
+                    python_equal(
+                        &version_core(origin, snapshot_field),
+                        &version_core(new, snapshot_field),
+                    ) && !python_equal(
+                        &version_core(old, snapshot_field),
+                        &version_core(new, snapshot_field),
+                    )
                 });
                 if only_reviewed_forked_judgment {
                     allowed = false;
@@ -703,7 +722,35 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         .into_iter()
         .filter(|l| !before_moved.contains(l))
         .collect();
-    c.moved.extend(review_moved);
+    for (judgment, snapshot, dependencies, fork_raw) in review_checks {
+        for dependency in dependencies {
+            let current = base.reader.value(&dependency).ok();
+            let reviewed = snapshot.get(&dependency);
+            let value_matches =
+                reviewed
+                    .zip(current.as_ref())
+                    .is_some_and(|(reviewed, current)| {
+                        python_equal(reviewed, current)
+                            || text(reviewed)
+                                .ok()
+                                .is_some_and(|value| value.starts_with("read "))
+                                && fork_raw
+                                    .get(&dependency)
+                                    .zip(base.reader.raw.get(&dependency))
+                                    .is_some_and(|(fork, current)| same_source_scope(fork, current))
+                    });
+            let basis_changed = !value_matches;
+            let incoming_reading_accepted = c
+                .updates
+                .iter()
+                .any(|update| update.id == dependency && update.allowed);
+            if basis_changed && !incoming_reading_accepted {
+                c.moved.push(format!(
+                    "{judgment}: {dependency} differs from the source review's snapshot"
+                ));
+            }
+        }
+    }
     for (i, h) in c.hyps.iter().enumerate() {
         let v = get(&h.head, "wrong_if");
         let pred = if truth(v) { py(v) } else { String::new() };

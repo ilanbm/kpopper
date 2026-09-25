@@ -158,7 +158,6 @@ fn read_hypotheses(
         let mut head = h.head.clone();
         if let Some(comparison_base) = &h.comparison_base {
             map_mut(&mut head)?.insert("_comparison_base".into(), comparison_base.clone());
-            map_mut(&mut head)?.insert("_source_document".into(), h.document.clone());
         }
         // An id the branch still holds in two collections has no one body to fold.
         crate::reasoning_snapshot::entries(&doc)?;

@@ -144,11 +144,11 @@ fn ordinary_branch_preview_refuses_missing_merge_base() {
 }
 
 #[test]
-fn ordinary_branch_carries_a_fresh_review_and_marks_newer_target_inputs_moved() {
+fn ordinary_branch_uses_declared_snapshot_field_and_compares_review_values() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
-    let base = "meta: {purpose: synthetic}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.request: {name: request, read: 2026-09-15}\nknown:\n  wave.state: {v: complete, of: 2026-09-15}\n  brief.job_state: {v: failing, of: 2026-09-15}\n  brief.rendered_runs: {v: 0, of: 2026-09-15}\njudgments:\n  d.judgment:\n    request: s.request\n    rests_on: [wave.state, brief.job_state, brief.rendered_runs, s.request]\n    verdict: not demonstrated\n    wrong_if: brief.rendered_runs > 0\n    seen: {wave.state: complete, brief.job_state: failing, brief.rendered_runs: 0, s.request: read 2026-09-15}\n";
+    let base = "meta: {purpose: synthetic}\nschema: {deps: rests_on, snapshot: inspected, predicate: wrong_if}\nsources:\n  s.request: {name: request, read: 2026-09-15}\nknown:\n  wave.state: {v: complete, of: 2026-09-15}\n  brief.job_state: {v: failing, of: 2026-09-15}\n  brief.rendered_runs: {v: 0, of: 2026-09-15}\njudgments:\n  d.judgment:\n    request: s.request\n    rests_on: [wave.state, brief.job_state, brief.rendered_runs, s.request]\n    verdict: not demonstrated\n    wrong_if: brief.rendered_runs > 0\n    inspected: {wave.state: complete, brief.job_state: failing, brief.rendered_runs: 0, s.request: read 2026-09-15}\n";
     fs::write(root.join("GROUNDING.yaml"), base).unwrap();
     commit(&root, "common base");
     git(&root, &["checkout", "-q", "-b", "reviewed"]);
@@ -180,10 +180,15 @@ fn ordinary_branch_carries_a_fresh_review_and_marks_newer_target_inputs_moved() 
         fresh.stdout
     );
 
-    let newer = base.replace(
-        "brief.job_state: {v: failing, of: 2026-09-15}",
-        "brief.job_state: {v: 'still failing', of: 2026-09-17}",
-    );
+    let newer = base
+        .replace(
+            "brief.job_state: {v: failing, of: 2026-09-15}",
+            "brief.job_state: {v: 'still failing', of: 2026-09-17}",
+        )
+        .replace(
+            "s.request: {name: request, read: 2026-09-15}",
+            "s.request: {name: request, read: 2026-09-16}",
+        );
     fs::write(root.join("GROUNDING.yaml"), newer).unwrap();
     commit(&root, "destination reread after source review");
     let stale = public_consolidation::dispatch(
@@ -196,9 +201,32 @@ fn ordinary_branch_carries_a_fresh_review_and_marks_newer_target_inputs_moved() 
     );
     assert_eq!(stale.code, 0, "{}{}", stale.stdout, stale.stderr);
     assert!(
-        stale.stdout.contains("MOVED d.judgment"),
-        "{}",
+        !stale.stdout.contains("MOVED d.judgment"),
+        "a later same-value reread must not invalidate the review by date alone: {}",
         stale.stdout
+    );
+
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        base.replace(
+            "brief.job_state: {v: failing, of: 2026-09-15}",
+            "brief.job_state: {v: passing, of: 2026-09-18}",
+        ),
+    )
+    .unwrap();
+    commit(&root, "destination changes reviewed value");
+    let changed_basis = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec!["reviewed".into()],
+            dry_run: true,
+            ..Default::default()
+        },
+        &root,
+    );
+    assert!(
+        changed_basis.stdout.contains("MOVED d.judgment"),
+        "{}",
+        changed_basis.stdout
     );
 
     let changed_decision = fs::read_to_string(root.join("GROUNDING.yaml"))
