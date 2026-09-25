@@ -203,6 +203,7 @@ fn publish(
     runtime: Option<&Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<V> {
+    require(!route.is_preview(), "a preview route cannot publish")?;
     let routing = routing(route, original)?;
     let raw = history_emit::encode_document(&envelope(mutation, routing.clone())?)?;
     let relative = journal(store);
@@ -341,7 +342,11 @@ fn act_with_probe(
 /// The write's result, and the note naming the entries nearest an add, which is
 /// said before it.
 pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<(V, String)> {
-    write_with_probe(original, cwd, action, &mut |_| Ok(()))
+    write_with_probe(original, cwd, action, false, &mut |_| Ok(()))
+}
+pub(crate) fn preview(original: &[PathBuf], cwd: &Path, action: &V) -> Result<String> {
+    let (result, _) = write_with_probe(original, cwd, action, true, &mut |_| Ok(()))?;
+    Ok(text(field(map(&result)?, "output")?)?.to_owned())
 }
 /// Read against the document the write was prepared from, with the hypothesis
 /// groups beside it when the write goes into one. The note is advisory: it never
@@ -358,6 +363,7 @@ fn write_with_probe(
     original: &[PathBuf],
     cwd: &Path,
     action: &V,
+    preview: bool,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<(V, String)> {
     let a = map(action)?;
@@ -366,10 +372,10 @@ fn write_with_probe(
         ["add", "set", "review"].contains(&kind),
         "unsupported_history_action",
     )?;
-    let route = WriteRoute::capture(original, cwd)?;
+    let route = if preview { WriteRoute::observe(original, cwd)? } else { WriteRoute::capture(original, cwd)? };
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let store = Store::new(&route.paths()[0])?;
-    let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
+    let _lock = if preview { None } else { Some(F::DirectoryGuard::acquire(&store.root, true)?) };
     require(
         F::read(&F::target(&store.root, &journal(&store))?)?.is_none(),
         "recovery_required",
@@ -402,7 +408,7 @@ fn write_with_probe(
     if let Some(meta) = map_mut(&mut document)?.get_mut("meta") {
         map_mut(meta)?.remove("history");
     }
-    if let Some(draft) = Privacy::selected_draft(route.project(), action, &document)? {
+    if let Some(draft) = Privacy::selected_for_route(&route, action, &document)? {
         return Ok((draft, String::new()));
     }
     let id = text(field(a, "id")?)?;
@@ -436,7 +442,7 @@ fn write_with_probe(
         }
         map_mut(map_mut(&mut candidate)?.get_mut(collection).unwrap())?.insert(id.into(), body);
     }
-    if let Some(draft) = Privacy::candidate_draft(route.project(), action, &candidate)? {
+    if let Some(draft) = Privacy::candidate_for_route(&route, action, &candidate)? {
         return Ok((draft, String::new()));
     }
     let runtime = public_workspace::runtime_for_document(&document)?;
@@ -462,6 +468,7 @@ fn write_with_probe(
             .collect::<Result<_>>()?,
     );
     if Privacy::private_marker(&authored) {
+        require(!preview, "private historical proposal requires a private draft; preview not validated; nothing recorded")?;
         return Ok((
             Privacy::draft(
                 route.project(),
@@ -471,6 +478,12 @@ fn write_with_probe(
             )?,
             String::new(),
         ));
+    }
+    if preview {
+        verify_mutation(&store, &mutation, runtime.as_ref())?;
+        route.verify()?;
+        let output = crate::authoring_preview::render(&mutation, action, "core/v1", &[])?;
+        return Ok((obj([("state", s("preview")), ("output", s(&output))]), String::new()));
     }
     publish(&store, &mutation, &route, original, runtime.as_ref(), probe)?;
     crate::session_activity::published(

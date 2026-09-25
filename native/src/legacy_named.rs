@@ -302,7 +302,7 @@ fn prepare_mode(
         reader.candidate(&V::Map(candidate_action))?
     };
     if let Some(draft) =
-        Privacy::candidate_draft(route.project(), &V::Map(action.clone()), &candidate)?
+        Privacy::candidate_for_route(route, &V::Map(action.clone()), &candidate)?
     {
         return Ok(Preparation::Draft {
             output: format!("{}\n", crate::public_core_readers::json_value(&draft)?),

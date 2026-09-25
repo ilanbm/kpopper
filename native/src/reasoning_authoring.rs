@@ -699,6 +699,16 @@ impl<'a> World<'a> {
         let b = map(body).ok();
         let deps = text(&self.fields["deps"])?.to_owned();
         let predicate = text(&self.fields["predicate"])?.to_owned();
+        if kind == "add"
+            && b.and_then(|body| body.get(&deps))
+                .is_some_and(|value| *value != V::Null)
+            && !crate::reasoning_authoring_guards::shaped(body, &deps)
+        {
+            // The shared guards already name the malformed dependency field.
+            // Computing with it would replace that useful refusal with
+            // invalid_expression, even when the condition itself is valid.
+            return Ok(out);
+        }
         if a.get("reframe") == Some(&V::Bool(true)) && out.is_empty() {
             let rule = b.and_then(|m| m.get("rule")).ok_or_else(|| Error("reframe needs a rule".into()))?;
             let refs = L::references(&L::lower(rule)?);

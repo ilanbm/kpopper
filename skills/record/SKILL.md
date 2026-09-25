@@ -21,6 +21,8 @@ If hypotheses cause `needs_primary`, review the retained report. An independent 
 
 Record the first useful finding within the user's authorization. Sources and facts are valid alone; `add` fills `seen` for actual judgments. After a semantic refusal, reconsider the representation, not just the value's format: follow [live representation evolution](../kpopper/EVOLUTION.md), then execute supported corrections within the task's authority. Installation creates no record, and a one-off can finish without one.
 
+For uncertain syntax, append `--dry-run` to the same `add`, `set` or `review`; read the profile and diagnostics, then remove the flag to write. Never create scratch entries. [Examples and profile-specific guidance](../kpopper/EXPRESSIONS.md#preview-a-candidate) explain the next step after a refusal.
+
 Where no record resolves for the workspace, `kpop add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
 **Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Show the optional experimental hub only on an explicit request or standing preference.
@@ -115,9 +117,8 @@ that unrelated entry does. If a rendered number is not exactly one reference, it
 
 ## The sign that would make it wrong
 
-Every judgment says what would make it wrong, and the reader evaluates it where it honestly can:
-`wrong_if` is one comparison over entries the judgment rests on - `acme.seats < 150`,
-`flue.clear == false`, or supported arithmetic operands. Compound comparisons are unsupported.
+Every judgment names what would make it wrong: use `wrong_if: {expr: "..."}` over its declared premises, e.g. `acme.seats < 150` or `flue.clear == false`.
+Ordinary records support one comparison; `core/v1` also supports composed Boolean conditions. Use the grammar for the actual record.
 A predicate that cannot be evaluated says so with `blocked_on` and why; a decision taken on a
 session's prior, or on taste, names the prose sign that would re-open it in `reopened_by`. Never
 invent a threshold to make a predicate evaluable, and never write prose in a predicate field.

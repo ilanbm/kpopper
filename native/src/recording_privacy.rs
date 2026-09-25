@@ -125,13 +125,21 @@ pub fn draft(project: &Project, action: &V, document: &V, reason: &str) -> Resul
 }
 
 pub fn selected_draft(project: &Project, action: &V, document: &V) -> Result<Option<V>> {
-    draft_for_selection(project, action, document, false)
+    draft_for_selection(project, action, document, false, false)
 }
 
 /// Unannotated candidate writes retain the whole candidate on a closure failure.
 /// This keeps privacy conservative and lets authoring supply the actual diagnostic.
 pub fn candidate_draft(project: &Project, action: &V, document: &V) -> Result<Option<V>> {
-    draft_for_selection(project, action, document, true)
+    draft_for_selection(project, action, document, true, false)
+}
+
+pub(crate) fn selected_for_route(route: &project_modes::WriteRoute, action: &V, document: &V) -> Result<Option<V>> {
+    draft_for_selection(route.project(), action, document, false, route.is_preview())
+}
+
+pub(crate) fn candidate_for_route(route: &project_modes::WriteRoute, action: &V, document: &V) -> Result<Option<V>> {
+    draft_for_selection(route.project(), action, document, true, route.is_preview())
 }
 
 fn selection(document: &V, id: &str, candidate: bool) -> Result<V> {
@@ -152,6 +160,7 @@ fn draft_for_selection(
     action: &V,
     document: &V,
     candidate: bool,
+    preview: bool,
 ) -> Result<Option<V>> {
     let mut selected = action_selection(document, action, candidate)?;
     let controls = V::Map(
@@ -164,6 +173,7 @@ fn draft_for_selection(
             .collect(),
     );
     if private_marker(&controls) {
+        require(!preview, "private record requires a private draft; preview not validated; nothing recorded")?;
         map_mut(&mut selected)?.extend(map(&controls)?.clone());
         return draft(
             project,
@@ -174,6 +184,7 @@ fn draft_for_selection(
         .map(Some);
     }
     if private_marker(action) || private_marker(&selected) {
+        require(!preview, "private source requires a private draft; preview not validated; nothing recorded")?;
         return draft(
             project,
             action,

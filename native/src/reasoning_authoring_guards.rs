@@ -104,7 +104,7 @@ fn names(v: &V) -> Vec<String> {
         _ => vec![],
     }
 }
-fn shaped(body: &V, deps: &str) -> bool {
+pub(crate) fn shaped(body: &V, deps: &str) -> bool {
     map(body).ok().and_then(|m| m.get(deps)).is_some_and(
         |v| matches!(v,V::List(a) if !a.is_empty()&&a.iter().all(|v|matches!(v,V::Text(_)))),
     )

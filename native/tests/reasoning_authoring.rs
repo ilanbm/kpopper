@@ -6,6 +6,27 @@ use kpop_native::{
     value::TypedValue as V,
 };
 use serde_json::Value as J;
+
+#[test]
+fn malformed_dependencies_name_the_declared_field_before_requiring_computation() {
+    for dependency in ["rests_on", "expression_inputs"] {
+        let document = V::from_json(&serde_json::json!({
+            "schema": {"deps": dependency, "predicate": "wrong_if", "snapshot": "seen"},
+            "known": {"rooms.all_public": {"v": true}}
+        })).unwrap();
+        let action = V::from_json(&serde_json::json!({
+            "kind": "add", "id": "d.cache",
+            "body": {
+                "verdict": "Cache by query while all rooms are public",
+                (dependency): "rooms.all_public",
+                "wrong_if": {"expr": "rooms.all_public == false"}
+            }
+        })).unwrap();
+        let mut world = World::new(&document, None, None, OperationalBounds::default()).unwrap();
+        assert_eq!(world.validate(&action).unwrap(), vec![format!("{dependency} must be a list of entry ids")]);
+    }
+}
+
 fn normalize(v: &mut V) {
     match v {
         V::Map(m) => {
@@ -148,6 +169,20 @@ fn writer_values_history_normalization_and_admission_match_pinned_python() {
         serde_json::from_str(include_str!("fixtures/reasoning-authoring.json")).unwrap();
     let mut failures = vec![];
     for c in corpus["cases"].as_array().unwrap() {
+        // Preserve the historical corpus, but do not preserve its misattributed
+        // evaluator failures for malformed dependency fields. These remain
+        // refusals; only the diagnostic and its priority change.
+        if [
+            "judgment-('rests_on', [])",
+            "judgment-('rests_on', 'p.a')",
+            "judgment-('rests_on', ['p.a', None])",
+        ].contains(&c["name"].as_str().unwrap()) {
+            assert_eq!(c["op"], "validate");
+            assert_eq!(run(c, &runtime).unwrap(), V::List(vec![
+                V::Text("rests_on must be a list of entry ids".into()),
+            ]), "{}", c["name"]);
+            continue;
+        }
         match run(c, &runtime) {
             Ok(mut output) => {
                 if let Some(expected) = c.get("output") {

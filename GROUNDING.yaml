@@ -276,6 +276,11 @@ sources:
     name: "Recorded assessment API and policy contract"
     file: "docs/assessment.md"
     read: "2026-09-14"
+  doc.authoring_preview:
+    name: "Local authoring previews and their admission limits"
+    file: "docs/reference.md"
+    at: "Write and review: --dry-run"
+    read: "2026-09-23"
   doc.checked_retrieval:
     name: "Checked-session search continuation and explicit context contract"
     file: "docs/retrieval.md"
@@ -1760,6 +1765,11 @@ sources:
     name: "Contribution and developer setup guide"
     file: CONTRIBUTING.md
     read: "2026-09-16"
+  doc.dependency_field_diagnostic:
+    name: "Malformed dependency fields retain their own diagnostic"
+    file: "native/tests/public_authoring.rs"
+    at: malformed_dependency_shape_is_not_reported_as_an_expression_error
+    read: "2026-09-24"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -4058,9 +4068,9 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 24669
-    # Same-day tree correction: previously 23591; skill_bytes_largest measures
-    # skills/record/SKILL.md at 24669 bytes in 5650a64e (Board onboarding).
+    v: 24981
+    # Measured after merging main 6aabbcde with authoring previews.
+    # Parent readings: 24099 (authoring previews), 24669 (Board onboarding).
     # set 2026-09-23: measured by skill_bytes_largest at 279df6a
     # Same-day code measurement after adding guarded representation guidance.
     # set 2026-09-22: Measured from the native default skill text by skill_bytes_largest
@@ -4071,7 +4081,7 @@ known:
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
-    scope: {kind: code, environment: kpopper skill sources, commit: 5650a64ebae06fc0cfc2a6d68617865b3df5e56e, working_tree: false}
+    scope: {kind: code, environment: kpopper skill sources, commit: 98fae5e4017902c0649dba31634db5cbaf00637a, working_tree: true}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
@@ -5139,6 +5149,19 @@ judgments:
       m.ci_spend_by_trigger: "108.83 dollars on pull requests against 29.99 on pushes to main; of
                               the 199 Darwin session jobs, 151 came from pull request commits and 48
                               from pushes"
+  d.dependency_shape_precedes_computation:
+    name: "A malformed dependency field is diagnosed before computation"
+    verdict: "Core authoring preserves the dependency-list refusal before attempting computation.
+              Preview guidance does not suggest rewriting a condition when the dependency field has
+              the wrong shape."
+    rests_on: [doc.dependency_field_diagnostic]
+    because: "Evaluation cannot use a malformed dependency collection. Replacing its field-level
+              refusal with invalid_expression sends the author to repair a different field and can
+              discard a valid condition."
+    reopened_by: "A malformed dependency collection reaches computation and produces
+                  invalid_expression, or preview advice asks for a different condition when
+                  correcting only the dependency collection makes the original condition valid."
+    seen: {doc.dependency_field_diagnostic: "read 2026-09-24"}
   d.detached_worker_test_cleanup:
     name: "Wait for detached worker shutdown before deleting its test state"
     rests_on: [s.2026_09_13_worker_cleanup]
@@ -6397,6 +6420,26 @@ judgments:
       m.grounding_line_prefix_guesses: 182
       m.letter_prefix_ids: 214
       m.letter_prefix_refs_outside: 281
+  d.preview_uses_writer_admission:
+    name: "A candidate is previewed through its actual writer"
+    verdict: "Local add, set and review previews run the writer preparation without recording the
+              candidate. A later write checks current evidence again. Private retention and explicit
+              contribution routing remain outside this preview."
+    rests_on: [doc.authoring_preview, d.write_path_returns_reach]
+    because: "Trying a candidate must not create scratch claims or a second validation language. A
+              prepared candidate establishes write admission only; its sources and the sufficiency of
+              its conclusion still require judgment."
+    reopened_by: "A preview changes record, history, pending or private state; displays the accepted
+                  base in place of its proposal; accepts an unchanged candidate the ordinary write
+                  refuses; or makes users treat preparation as proof that a conclusion is true."
+    seen:
+      doc.authoring_preview: "read 2026-09-23"
+      d.write_path_returns_reach: "the record changes from the command line through set, add and
+                                   review; each edits the file in place, writes seen itself, and
+                                   answers with the reach - what rests on the write, what is MOVED
+                                   now, which predicate fired; set can replace from and at together
+                                   with a value using --source and --at, without reviewing dependent
+                                   judgments"
   d.prior_carries_its_own_falsifier:
     rests_on: [prior.confidence_needs_calibration, m.claims.local_assumed_held, d.hypothesis_is_a_judgment]
     verdict: "the prior kind carries its own falsifier: if judgments resting on priors at 0.8 or

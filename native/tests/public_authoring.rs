@@ -9,14 +9,15 @@ fn run(root: &Path, args: &[&str]) -> Output {
     command(root).args(args).output().unwrap()
 }
 fn run_unbundled(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .current_dir(root)
+    unbundled_command(root).args(args).output().unwrap()
+}
+fn unbundled_command(root: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+    command.current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
-        .env_remove("KPOPPER_NATIVE_RESOURCES")
-        .args(args)
-        .output()
-        .unwrap()
+        .env_remove("KPOPPER_NATIVE_RESOURCES");
+    command
 }
 fn command(root: &Path) -> Command {
     let resources = root.join(".test-runtime");
@@ -46,6 +47,224 @@ fn success(output: Output) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8(output.stdout).unwrap()
+}
+
+fn authoring_files(root: &Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+    fn visit(root: &Path, dir: &Path, out: &mut std::collections::BTreeMap<std::path::PathBuf, Vec<u8>>) {
+        for item in fs::read_dir(dir).unwrap() {
+            let path = item.unwrap().path();
+            if path.file_name().unwrap().to_string_lossy().starts_with(".test-") {
+                continue;
+            }
+            if path.is_dir() {
+                visit(root, &path, out);
+            } else {
+                out.insert(path.strip_prefix(root).unwrap().to_owned(), fs::read(path).unwrap());
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    visit(root, root, &mut out);
+    out
+}
+
+#[test]
+fn dry_run_first_add_validates_without_creating_a_record_or_project_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = success(run(temp.path(), &["add", "p.limit", "v=30", "--dry-run"]));
+    assert!(output.contains("core/v1"), "{output}");
+    assert!(output.contains("nothing recorded"), "{output}");
+    assert!(output.contains("p.limit"), "{output}");
+    assert!(!temp.path().join("GROUNDING.yaml").exists());
+    assert!(!temp.path().join(".kpopper").exists());
+}
+
+#[test]
+fn dry_run_judgment_uses_real_admission_and_does_not_publish_history() {
+    let temp = tempfile::tempdir().unwrap();
+    success(run(temp.path(), &["add", "p.limit", "v=30"]));
+    let before = authoring_files(temp.path());
+    let valid = ["add", "d.promise", "verdict=The promise fits", "rests_on=[p.limit]", "wrong_if={expr: 'p.limit < 7 or p.limit > 90'}"];
+    let preview = success(run(temp.path(), &[&valid[..], &["--dry-run"]].concat()));
+    assert!(preview.contains("p.limit < 7 or p.limit > 90"), "{preview}");
+    assert_eq!(authoring_files(temp.path()), before);
+    success(run(temp.path(), &valid));
+    let accepted = authoring_files(temp.path());
+    let invalid = ["add", "d.bad", "verdict=The promise fits", "rests_on=[p.limit]", "wrong_if={expr: 'p.limit < 40'}"];
+    for args in [&[&invalid[..], &["--dry-run"]].concat(), &invalid.to_vec()] {
+        let result = run(temp.path(), args);
+        assert!(!result.status.success(), "{}", String::from_utf8_lossy(&result.stdout));
+        assert_eq!(authoring_files(temp.path()), accepted);
+    }
+}
+
+#[test]
+fn dry_run_legacy_add_uses_its_own_profile_without_mutating_files() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(temp.path().join("GROUNDING.yaml"), "known:\n  p.limit: {v: 30}\n").unwrap();
+    let before = authoring_files(temp.path());
+    let output = success(run_unbundled(temp.path(), &["add", "d.promise", "verdict=The promise fits", "rests_on=[p.limit]", "wrong_if=p.limit < 7", "--dry-run"]));
+    assert!(output.contains("ordinary"), "{output}");
+    assert!(output.contains("nothing recorded"), "{output}");
+    assert_eq!(authoring_files(temp.path()), before);
+}
+
+#[test]
+fn dry_run_missing_falsifier_explains_the_next_step_without_scratch_entries() {
+    let temp = tempfile::tempdir().unwrap();
+    success(run(temp.path(), &["add", "p.limit", "v=30"]));
+    let before = authoring_files(temp.path());
+    let result = run(temp.path(), &["add", "d.promise", "verdict=The promise fits", "rests_on=[p.limit]", "--dry-run"]);
+    assert!(!result.status.success());
+    let error = String::from_utf8_lossy(&result.stderr);
+    assert!(error.contains("wrong_if"), "{error}");
+    assert!(error.contains("blocked_on"), "{error}");
+    assert!(error.contains("nothing recorded"), "{error}");
+    assert!(error.contains("core/v1"), "{error}");
+    assert_eq!(authoring_files(temp.path()), before);
+}
+
+#[test]
+fn malformed_dependency_shape_is_not_reported_as_an_expression_error() {
+    let temp = tempfile::tempdir().unwrap();
+    success(run(temp.path(), &["add", "rooms.all_public", "v=true"]));
+    let before = authoring_files(temp.path());
+    for dependency in [
+        "rests_on=rooms.all_public",
+        "rests_on=[42]",
+        "rests_on=[]",
+        "rests_on={room: rooms.all_public}",
+    ] {
+        for extra in [vec![], vec!["--dry-run"], vec!["--hypothesis", "cache", "--dry-run"]] {
+            let args = [
+                "add", "d.cache", "verdict=Cache by query while all rooms are public",
+                dependency, "wrong_if={expr: 'rooms.all_public == false'}",
+            ];
+            let result = run(temp.path(), &[&args[..], &extra].concat());
+            assert!(!result.status.success(), "{dependency}");
+            let error = String::from_utf8_lossy(&result.stderr);
+            assert!(error.contains("rests_on must be a list of entry ids"), "{error}");
+            assert!(!error.contains("invalid_expression"), "{error}");
+            assert!(!error.contains("Use wrong_if="), "{error}");
+            assert!(!error.contains("blocked_on"), "{error}");
+            assert_eq!(authoring_files(temp.path()), before);
+        }
+    }
+    // Correct only the dependency field; keep the original, meaningful condition.
+    let fixed = [
+        "add", "d.cache", "verdict=Cache by query while all rooms are public",
+        "rests_on=[rooms.all_public]", "wrong_if={expr: 'rooms.all_public == false'}",
+    ];
+    success(run(temp.path(), &[&fixed[..], &["--dry-run"]].concat()));
+    assert_eq!(authoring_files(temp.path()), before);
+    success(run(temp.path(), &fixed));
+    let record = fs::read_to_string(temp.path().join("GROUNDING.yaml")).unwrap();
+    assert!(record.contains("rooms.all_public == false"), "{record}");
+}
+
+#[test]
+fn dry_run_named_candidate_is_the_proposal_and_preserves_both_layers() {
+    for core in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        if core {
+            success(run(temp.path(), &["add", "p.limit", "v=30"]));
+        } else {
+            fs::write(temp.path().join("GROUNDING.yaml"), "known:\n  p.limit: {v: 30}\n").unwrap();
+        }
+        let before = authoring_files(temp.path());
+        let args = ["add", "p.limit", "v=10", "--hypothesis", "smaller", "--dry-run"];
+        let output = success(if core { run(temp.path(), &args) } else { run_unbundled(temp.path(), &args) });
+        assert!(output.contains("v: 10"), "{output}");
+        assert!(!output.contains("v: 30"), "{output}");
+        assert_eq!(authoring_files(temp.path()), before);
+    }
+}
+
+#[test]
+fn dry_run_private_sources_never_create_private_drafts() {
+    for core in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let private = tempfile::tempdir().unwrap();
+        if core {
+            success(run(temp.path(), &["add", "p.limit", "v=30"]));
+        } else {
+            fs::write(temp.path().join("GROUNDING.yaml"), "known:\n  p.limit: {v: 30}\n").unwrap();
+        }
+        let before = authoring_files(temp.path());
+        let result = if core { command(temp.path()) } else { unbundled_command(temp.path()) }
+            .env("KPOPPER_PRIVATE_HOME", private.path())
+            .args(["add", "p.secret", "v=secret", "private=true", "--dry-run"])
+            .output().unwrap();
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("private"), "{}", String::from_utf8_lossy(&result.stderr));
+        assert_eq!(authoring_files(temp.path()), before);
+        assert!(authoring_files(private.path()).is_empty());
+    }
+}
+
+#[test]
+fn dry_run_explicit_contribution_is_refused_before_any_capture() {
+    let temp = tempfile::tempdir().unwrap();
+    git(temp.path(), &["init", "-q", "-b", "main"]);
+    let before = authoring_files(temp.path());
+    let result = run_unbundled(temp.path(), &["add", "p.limit", "v=30", "--shareability", "project", "--scope", "project", "--dry-run"]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("explicit contribution routing"));
+    assert_eq!(authoring_files(temp.path()), before);
+}
+
+#[test]
+fn dry_run_set_review_and_json_preserve_the_record_and_write_rechecks() {
+    let temp = tempfile::tempdir().unwrap();
+    success(run(temp.path(), &["add", "p.limit", "v=30"]));
+    let judgment = ["add", "d.promise", "verdict=The promise fits", "rests_on=[p.limit]", "wrong_if={expr: 'p.limit < 7'}"];
+    success(run(temp.path(), &judgment));
+    let before = authoring_files(temp.path());
+    for args in [vec!["set", "p.limit", "35"], vec!["review", "d.promise"]] {
+        let result = success(run(temp.path(), &[&args[..], &["--dry-run", "--json"]].concat()));
+        let envelope: Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(envelope["exit_code"], 0);
+        assert!(envelope["output"].as_str().unwrap().contains("nothing recorded"));
+        assert_eq!(authoring_files(temp.path()), before);
+    }
+    let candidate = ["add", "d.second", "verdict=The promise fits", "rests_on=[p.limit]", "wrong_if={expr: 'p.limit < 7'}"];
+    success(run(temp.path(), &[&candidate[..], &["--dry-run"]].concat()));
+    success(run(temp.path(), &["set", "p.limit", "5", "--why", "New policy"]));
+    let changed = authoring_files(temp.path());
+    assert!(!run(temp.path(), &candidate).status.success());
+    assert_eq!(authoring_files(temp.path()), changed);
+}
+
+#[test]
+fn dry_run_does_not_fall_through_to_the_feasibility_writer() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::create_dir(temp.path().join(".kpopper")).unwrap();
+    fs::write(temp.path().join(".kpopper/native-feasibility.json"), "{}").unwrap();
+    let before = authoring_files(temp.path());
+    let result = run_unbundled(temp.path(), &["add", "p.limit", "v=30", "--dry-run"]);
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("nothing recorded"));
+    assert_eq!(authoring_files(temp.path()), before);
+}
+
+#[test]
+fn dry_run_invalid_syntax_names_the_record_profile_and_keeps_the_record_clean() {
+    for core in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        if core {
+            success(run(temp.path(), &["add", "p.limit", "v=30"]));
+        } else {
+            fs::write(temp.path().join("GROUNDING.yaml"), "known:\n  p.limit: {v: 30}\n").unwrap();
+        }
+        let before = authoring_files(temp.path());
+        let args = ["add", "d.bad", "verdict=The promise fits", "rests_on=[p.limit]", "wrong_if={expr: 'p.limit[0] < 7'}", "--dry-run"];
+        let result = if core { run(temp.path(), &args) } else { run_unbundled(temp.path(), &args) };
+        assert!(!result.status.success());
+        let error = String::from_utf8_lossy(&result.stderr);
+        assert!(error.starts_with(if core { "core/v1:" } else { "ordinary:" }), "{error}");
+        assert!(error.contains("nothing recorded"), "{error}");
+        assert_eq!(authoring_files(temp.path()), before);
+    }
 }
 
 fn git(root: &Path, args: &[&str]) -> Output {

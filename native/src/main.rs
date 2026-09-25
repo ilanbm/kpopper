@@ -1269,6 +1269,9 @@ fn main() {
             Ok(cwd) => cwd,
             Err(error) => emit(kind, args.json, "", &format!("{error}\n"), 1),
         };
+        if options.dry_run && cwd.join(".kpopper/native-feasibility.json").is_file() {
+            emit(kind, args.json, "", "--dry-run requires the public record writer; nothing recorded\n", 1);
+        }
         if !cwd.join(".kpopper/native-feasibility.json").is_file() {
             match kpop_native::public_authoring::run(kind, options, &cwd) {
                 Ok(output) => emit(kind, args.json, &output, "", 0),
