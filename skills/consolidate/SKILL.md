@@ -134,7 +134,7 @@ the record does. Name a recipe only where a command honestly takes the count the
 describes - a survey, a hand-scored run, a prior has none, and their honest form is the reading
 with its date.
 
-**A stopped Git merge.** Use `kpop consolidate --resolve --dry-run`, then `--resolve` to write a checked local resolution of independent entries. Resolve and stage other conflicted paths first. The command preserves supported history, refuses competing claims and manual conflict-file edits, and writes only the record: review, `git add`, then finish the existing merge. No fetch, commit, push or pending adoption is implied. Check installed `--help` and the [supported layouts and limits](../../docs/coding-and-ci.md#resolve-a-stopped-git-merge-locally); an unsupported format is not permission to take one side.
+**A stopped Git merge.** Use `kpop consolidate --resolve --dry-run`, then `--resolve` to write a checked local resolution of independent entries. Resolve and stage other conflicted paths first. The command preserves supported history and refuses competing claims or manual conflict-file edits. It leaves the resolved record unmerged for review. For compact history it stages only the generated union manifest, so aborting the merge removes that metadata too; other indexed content stays as the user staged it. Ordinary and legacy history resolution leave the index unchanged. Review the record, `git add` it, then finish the existing merge. No fetch, commit, push or pending adoption is implied. Check installed `--help` and the [supported layouts and limits](../../docs/coding-and-ci.md#resolve-a-stopped-git-merge-locally); an unsupported format is not permission to take one side.
 
 ## The commands
 

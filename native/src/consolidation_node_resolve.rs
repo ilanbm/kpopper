@@ -2,8 +2,9 @@
 //! record history pinned in its merge commit and must equal its staged view; the
 //! resolution is their existing deterministic branch union, which selects no head
 //! and records no knowledge act. The staged tree must already hold every history
-//! file of that union: only the union manifest and the rendered view are new.
-use super::{Item, blobs, git};
+//! file of that union: only the union manifest and the rendered view are new. The
+//! manifest is staged before it is written, so an abandoned merge never orphans it.
+use super::{Item, blobs, git, git_with, inventory, string};
 use crate::{
     Result,
     history_contract::{error, map, text},
@@ -33,6 +34,8 @@ pub(super) struct Resolution {
     pub(super) files: BTreeMap<String, Vec<u8>>,
     /// Every staged record-history file, relative to the checkout root.
     staged: BTreeMap<String, Vec<u8>>,
+    /// Generated files already staged with exactly their bytes by an earlier run.
+    already_staged: BTreeSet<String>,
     prefix: String,
     transactions: BTreeMap<String, String>,
 }
@@ -138,15 +141,16 @@ pub(super) fn prepare(
     };
     let (_, target) = bundle(&ours, "HEAD")?;
     let (source, _) = bundle(&theirs, "MERGE_HEAD")?;
+    // Only the pinned merge and this record's conflict stages name the operation:
+    // unrelated staging, and the generated manifest itself, never change it.
     let identity = serde_json::to_vec(&serde_json::json!({
         "kind": "consolidate-resolve/v1",
         "head": head,
         "merge_head": other,
         "entry": relative,
-        "staged": items
+        "stages": conflict
             .iter()
-            .filter(|i| i.path.starts_with(&prefix))
-            .map(|i| [i.stage.to_string(), i.path.clone(), i.oid.clone()])
+            .map(|i| [i.stage.to_string(), i.mode.clone(), i.oid.clone()])
             .collect::<Vec<_>>(),
     }))?;
     // Deterministic, so an interrupted resolution rebuilds the same union bytes.
@@ -181,6 +185,41 @@ pub(super) fn prepare(
     W::publish(target.path(), &prepared, None, |_| Ok(()))?;
     let union = P::export(target.path())?.files()?;
     let manifest = format!(".kpopper/history-commits/{operation}.json");
+    // Staging hashes these exact bytes; Git must see the written file identically,
+    // or abort and reset could not recognize it. Checked before anything is written.
+    let generated = format!("{prefix}{manifest}");
+    let exact = string(git(
+        root,
+        &["hash-object", "--no-filters", "--stdin"],
+        union[&manifest].clone(),
+        1024,
+    )?)?;
+    let as_file = string(git(
+        root,
+        &["hash-object", &format!("--path={generated}"), "--stdin"],
+        union[&manifest].clone(),
+        1024,
+    )?)?;
+    require(
+        exact == as_file,
+        &format!(
+            "resolve_history_manifest_conversion: {generated}; Git attributes would change its bytes"
+        ),
+    )?;
+    // A rerun may find this exact manifest already staged; any other bytes are not ours.
+    let mut already_staged = BTreeSet::new();
+    for item in items.iter().filter(|i| i.path == format!("{prefix}{manifest}")) {
+        require(
+            item.stage == 0
+                && item.mode == "100644"
+                && staged_blobs[&item.oid] == union[&manifest],
+            &format!(
+                "resolve_history_staged_manifest: {} is staged with bytes this resolution did not generate",
+                item.path
+            ),
+        )?;
+        already_staged.insert(item.path.clone());
+    }
     let expected = union
         .iter()
         .filter(|(p, _)| *p != VIEW && **p != manifest && owned(p))
@@ -192,7 +231,7 @@ pub(super) fn prepare(
         .filter_map(|i| {
             i.path
                 .strip_prefix(&prefix)
-                .filter(|p| owned(p))
+                .filter(|p| owned(p) && **p != manifest)
                 .map(|p| (p.to_owned(), &staged_blobs[&i.oid]))
         })
         .collect::<BTreeMap<_, _>>();
@@ -224,6 +263,7 @@ pub(super) fn prepare(
             .into_iter()
             .map(|(p, raw)| (format!("{prefix}{p}"), raw.clone()))
             .collect(),
+        already_staged,
         prefix,
         transactions: after
             .transactions
@@ -231,6 +271,50 @@ pub(super) fn prepare(
             .map(|(op, tx)| (op.clone(), tx.digest.clone()))
             .collect(),
     })
+}
+
+type Entry = (String, u8, String, String);
+fn entry(item: &Item) -> Entry {
+    (item.path.clone(), item.stage, item.mode.clone(), item.oid.clone())
+}
+
+/// Update a private alternate index beside the real one, starting from `before`,
+/// then atomically replace the real index. The caller holds the real `index.lock`
+/// throughout; this never takes, releases or bypasses it. Split index mode is
+/// written out as one complete index; Git may split it again on its next write.
+fn replace_index(
+    root: &Path,
+    index: &Path,
+    before: &[u8],
+    expected: &BTreeSet<Entry>,
+    update: impl FnOnce(&Path) -> Result<()>,
+) -> Result<()> {
+    let directory = index.parent().ok_or_else(|| error("resolve_missing_index"))?;
+    let alternate = tempfile::Builder::new()
+        .prefix(".kpopper-resolve-index-")
+        .tempfile_in(directory)?;
+    std::fs::write(alternate.path(), before)?;
+    update(alternate.path())?;
+    let listing = git_with(
+        root,
+        Some(alternate.path()),
+        &["ls-files", "--stage", "-z"],
+        vec![],
+        16 * 1024 * 1024,
+    )?;
+    let actual = inventory(&listing)?.iter().map(entry).collect::<BTreeSet<_>>();
+    require(
+        actual == *expected,
+        "resolve_index_update_mismatch: the prepared index differs beyond the generated manifest",
+    )?;
+    let prepared = F::read(alternate.path())?.ok_or_else(|| error("resolve_missing_index"))?;
+    require(
+        F::read(index)?.as_deref() == Some(before),
+        "resolve_stale_merge: the merge changed during validation; retry",
+    )?;
+    // The established atomic replacement keeps the index's permissions and syncs
+    // its directory portably. The caller still holds the real `index.lock`.
+    F::replace(index, Some(&prepared))
 }
 
 impl Resolution {
@@ -253,6 +337,12 @@ impl Resolution {
     /// Working history files still equal the staged ones. The only untracked
     /// history file allowed is this resolution's own manifest, left by an interruption.
     pub(super) fn verify_worktree(&self, root: &Path) -> Result<()> {
+        for (path, raw) in &self.files {
+            require(
+                F::read(&F::target(root, path)?)?.is_none_or(|existing| existing == *raw),
+                &format!("resolve_history_worktree_changed: {path} is not this resolution"),
+            )?;
+        }
         for (path, raw) in &self.staged {
             require(
                 F::read(&F::target(root, path)?)?.as_deref() == Some(raw.as_slice()),
@@ -299,6 +389,66 @@ impl Resolution {
             }
         }
         Ok(())
+    }
+
+    /// Stage exactly the generated manifests under the caller's real `index.lock`,
+    /// before any working file names them. Every other entry, stage and path stays
+    /// as the user staged it. Returns the resulting index entries.
+    pub(super) fn stage(
+        &self,
+        root: &Path,
+        index: &Path,
+        index_before: &[u8],
+        items: &[Item],
+    ) -> Result<BTreeSet<Entry>> {
+        let mut expected = items.iter().map(entry).collect::<BTreeSet<_>>();
+        let pending = self
+            .files
+            .iter()
+            .filter(|(path, _)| !self.already_staged.contains(*path))
+            .collect::<Vec<_>>();
+        if pending.is_empty() {
+            return Ok(expected);
+        }
+        let mut added = vec![];
+        for (path, raw) in pending {
+            // Exact bytes: no clean filters, attributes or hooks.
+            let oid = string(git_with(
+                root,
+                None,
+                &["hash-object", "-w", "--no-filters", "--stdin"],
+                raw.clone(),
+                1024,
+            )?)?;
+            crate::pending_state::verify_blob(&oid, raw)?;
+            expected.insert((path.clone(), 0, "100644".into(), oid.clone()));
+            added.push(format!("100644,{oid},{path}"));
+        }
+        replace_index(root, index, index_before, &expected, |alternate| {
+            for info in &added {
+                git_with(
+                    root,
+                    Some(alternate),
+                    &["update-index", "--no-split-index", "--add", "--cacheinfo", info],
+                    vec![],
+                    1024 * 1024,
+                )?;
+            }
+            Ok(())
+        })?;
+        Ok(expected)
+    }
+
+    /// After the manifest is written, record its file status so abort and reset can
+    /// remove it. Only the generated entries are reread; no other entry, stage or
+    /// unstaged edit is examined, and `expected` must remain exactly.
+    pub(super) fn refresh(&self, root: &Path, index: &Path, expected: &BTreeSet<Entry>) -> Result<()> {
+        let before = F::read(index)?.ok_or_else(|| error("resolve_missing_index"))?;
+        let mut args = vec!["update-index", "--no-split-index", "--"];
+        args.extend(self.files.keys().map(String::as_str));
+        replace_index(root, index, &before, expected, |alternate| {
+            git_with(root, Some(alternate), &args, vec![], 1024 * 1024).map(|_| ())
+        })
     }
 
     pub(super) fn paths(&self) -> Vec<&str> {

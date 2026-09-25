@@ -522,9 +522,11 @@ fn compact_nested_record_resolution_names_its_own_manifest() {
     let before = node.image();
     node.succeeds(&["consolidate", "--resolve", "--dry-run"]);
     assert_eq!(node.image(), before);
+    let stages = index_lines(&node.root);
     let out = node.succeeds(&["consolidate", "--resolve"]);
     assert!(out.contains("nested/GROUNDING.yaml") && out.contains("nested/.kpopper/history-commits/resolve-"), "{out}");
-    assert_eq!(node.image().1, before.1);
+    let added = only_added(&stages, &index_lines(&node.root));
+    assert!(added.ends_with(".json") && added.contains("\tnested/.kpopper/history-commits/resolve-"), "{added}");
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
     node.succeeds(&["--frozen", "check"]);
 }
@@ -546,18 +548,32 @@ fn compact_resolution_ignores_project_configuration_above_tmpdir() {
         .env_remove("KPOPPER_READ_MODE").env_remove("GIT_INDEX_FILE").output().unwrap();
     assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert_eq!(node.image(), before);
+    let stages = index_lines(&node.root);
+    let out = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&node.root).args(["consolidate", "--resolve"])
+        .env("TMPDIR", &scratch).env("KPOPPER_NATIVE_RESOURCES", &node.resources)
+        .env("KPOPPER_NATIVE_CACHE", node.root.parent().unwrap().join("cache"))
+        .env_remove("KPOPPER_READ_MODE").env_remove("GIT_INDEX_FILE").output().unwrap();
+    assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
+    assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
 }
 
 #[test]
-fn compact_branches_resolve_to_one_union_binding_without_staging() {
+fn compact_branches_resolve_to_one_union_binding_staging_only_its_manifest() {
     let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
     let (before, index) = node.image();
+    let stages = index_lines(&node.root);
     let head = ok(&node.root, &["rev-parse", "HEAD"]);
-    node.succeeds(&["consolidate", "--resolve", "--dry-run"]);
+    let preview = node.succeeds(&["consolidate", "--resolve", "--dry-run"]);
+    assert!(preview.contains("would stage only the generated union manifest"), "{preview}");
     assert_eq!(node.image(), (before.clone(), index.clone()));
     let out = node.succeeds(&["consolidate", "--resolve"]);
-    let (after, index_after) = node.image();
-    assert_eq!(index_after, index, "the index changed");
+    let (after, _) = node.image();
+    // Exactly one new stage-0 entry; the record keeps its three unmerged stages.
+    let added = only_added(&stages, &index_lines(&node.root));
+    assert!(added.starts_with("100644 ") && added.contains(" 0\t.kpopper/history-commits/resolve-"), "{added}");
+    assert_eq!(ok(&node.root, &["diff", "--name-only", "--diff-filter=U"]), "GROUNDING.yaml\n");
     assert_eq!(ok(&node.root, &["rev-parse", "HEAD"]), head);
     // Every earlier file is byte-identical except the view; one manifest is new.
     let old = before.into_iter().collect::<std::collections::BTreeMap<_, _>>();
@@ -570,14 +586,133 @@ fn compact_branches_resolve_to_one_union_binding_without_staging() {
             assert_eq!(&new[path], raw, "{path} changed");
         }
     }
-    assert!(out.contains(&format!("{:?}", added[0])) && out.contains("\"GROUNDING.yaml\""), "{out}");
+    assert!(
+        out.contains(&format!("Staged only the generated union manifest {:?}", added[0]))
+            && out.contains("git add -- \"GROUNDING.yaml\""),
+        "{out}"
+    );
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
     node.succeeds(&["--frozen", "check"]);
-    // Only the user stages and commits; afterwards ordinary writes continue.
-    ok(&node.root, &["add", "--", "GROUNDING.yaml", &added[0]]);
+    // The user stages only the record and commits; the committed tree is complete.
+    ok(&node.root, &["add", "--", "GROUNDING.yaml"]);
     ok(&node.root, &["commit", "-qm", "merged"]);
+    assert_eq!(ok(&node.root, &["status", "--porcelain"]), "");
+    let clone = node.root.parent().unwrap().join("clone");
+    ok(node.root.parent().unwrap(), &["clone", "-q", "repo", "clone"]);
+    let cloned = Node { _temp: tempfile::tempdir().unwrap(), root: clone, resources: node.resources.clone() };
+    assert_eq!(subjects(&cloned), ["p.a", "p.b", "p.base"]);
     node.succeeds(&["add", "p.c", "v=3"]);
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base", "p.c"]);
+}
+
+fn index_lines(root: &Path) -> Vec<String> {
+    ok(root, &["ls-files", "--stage"]).lines().map(str::to_owned).collect()
+}
+/// The one index line added by a resolution, after checking nothing else changed.
+fn only_added(before: &[String], after: &[String]) -> String {
+    let added = after.iter().filter(|l| !before.contains(l)).cloned().collect::<Vec<_>>();
+    assert!(before.iter().all(|l| after.contains(l)), "an existing index entry changed");
+    assert_eq!(added.len(), 1, "{added:?}");
+    added[0].clone()
+}
+fn resolution(node: &Node) -> String {
+    let preview = node.succeeds(&["consolidate", "--resolve", "--dry-run"]);
+    let start = preview.find(".kpopper/history-commits/resolve-").unwrap();
+    let end = preview[start..].find(".json").unwrap() + start + 5;
+    preview[start..end].to_owned()
+}
+
+#[test]
+fn compact_merge_abort_and_hard_reset_leave_no_orphaned_manifest() {
+    for abort in [["merge", "--abort"], ["reset", "--hard"]] {
+        let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+        let manifest = resolution(&node);
+        node.succeeds(&["consolidate", "--resolve"]);
+        assert!(node.root.join(&manifest).exists());
+        ok(&node.root, &abort);
+        assert!(!node.root.join(&manifest).exists(), "{abort:?} left {manifest}");
+        assert_eq!(ok(&node.root, &["status", "--porcelain"]), "");
+        assert_eq!(subjects(&node), ["p.a", "p.base"]);
+        node.succeeds(&["--frozen", "check"]);
+    }
+}
+
+#[test]
+fn compact_staged_manifest_without_its_file_recovers_or_aborts() {
+    for rerun in [true, false] {
+        let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+        let entry = node.root.join("GROUNDING.yaml");
+        let conflicted = fs::read(&entry).unwrap();
+        let manifest = resolution(&node);
+        node.succeeds(&["consolidate", "--resolve"]);
+        let (resolved, _) = node.image();
+        let stages = index_lines(&node.root);
+        // As if interrupted after the index update, before any working file.
+        fs::remove_file(node.root.join(&manifest)).unwrap();
+        fs::write(&entry, &conflicted).unwrap();
+        if rerun {
+            node.succeeds(&["consolidate", "--resolve"]);
+            assert_eq!(node.image().0, resolved);
+            assert_eq!(index_lines(&node.root), stages);
+        } else {
+            ok(&node.root, &["merge", "--abort"]);
+            assert_eq!(ok(&node.root, &["status", "--porcelain"]), "");
+            assert_eq!(subjects(&node), ["p.a", "p.base"]);
+        }
+    }
+}
+
+#[test]
+fn compact_resolution_keeps_user_index_entries_across_a_retry() {
+    let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+    fs::write(node.root.join("first.txt"), "user staged\n").unwrap();
+    ok(&node.root, &["add", "first.txt"]);
+    let manifest = resolution(&node);
+    let stages = index_lines(&node.root);
+    let entry = node.root.join("GROUNDING.yaml");
+    let conflicted = fs::read(&entry).unwrap();
+    node.succeeds(&["consolidate", "--resolve"]);
+    assert!(only_added(&stages, &index_lines(&node.root)).ends_with(&manifest));
+    // Interrupted before the view; the user stages something else and retries.
+    fs::write(&entry, &conflicted).unwrap();
+    fs::write(node.root.join("second.txt"), "also user staged\n").unwrap();
+    ok(&node.root, &["add", "second.txt"]);
+    let retried = index_lines(&node.root);
+    assert_eq!(resolution(&node), manifest, "unrelated staging changed the operation");
+    node.succeeds(&["consolidate", "--resolve"]);
+    assert_eq!(index_lines(&node.root), retried);
+    assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
+}
+
+#[test]
+fn compact_wrong_staged_manifest_bytes_are_refused() {
+    let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+    let manifest = resolution(&node);
+    fs::write(node.root.join(&manifest), b"{}\n").unwrap();
+    ok(&node.root, &["add", "--", &manifest]);
+    node.refused("resolve_history_staged_manifest");
+}
+
+#[test]
+fn compact_resolution_runs_no_hooks_and_keeps_split_index_entries() {
+    let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+    ok(&node.root, &["update-index", "--split-index"]);
+    let hook = node.root.join(".git/hooks/post-index-change");
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\ntouch \"$GIT_DIR/../HOOK-RAN\"\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let stages = index_lines(&node.root);
+    node.succeeds(&["consolidate", "--resolve"]);
+    assert!(!node.root.join("HOOK-RAN").exists(), "a project hook ran");
+    fs::remove_file(&hook).unwrap();
+    assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
+    ok(&node.root, &["add", "GROUNDING.yaml"]);
+    ok(&node.root, &["commit", "-qm", "merged"]);
+    assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
 }
 
 #[test]
@@ -668,8 +803,157 @@ fn compact_interrupted_resolution_rolls_forward_to_the_same_union() {
     let conflicted = fs::read(&entry).unwrap();
     node.succeeds(&["consolidate", "--resolve"]);
     let (resolved, index) = node.image();
-    // The manifest was written first; the view is still Git's conflict output.
+    // The manifest was staged and written; the view is still Git's conflict output.
     fs::write(&entry, &conflicted).unwrap();
     node.succeeds(&["consolidate", "--resolve"]);
     assert_eq!(node.image(), (resolved, index));
+}
+
+#[test]
+fn compact_resolution_runs_no_filters_and_keeps_unstaged_edits() {
+    let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+    let sentinel = node.root.parent().unwrap().join("FILTER-RAN");
+    let touch = format!("touch '{}'; cat", sentinel.display());
+    // A clean and process filter, a required driver whose name holds '=' and '.',
+    // and an attribute naming a driver with no configuration at all.
+    let mut attributes = fs::read(node.root.join(".gitattributes")).unwrap();
+    attributes.extend_from_slice(b"*.txt filter=probe\n.kpopper/** filter=odd=x.y\nevidence/** filter=missing\n");
+    fs::write(node.root.join(".gitattributes"), attributes).unwrap();
+    ok(&node.root, &["config", "filter.probe.clean", &touch]);
+    ok(&node.root, &["config", "filter.probe.process", &format!("touch '{}'; exit 1", sentinel.display())]);
+    ok(&node.root, &["config", "filter.odd=x.y.clean", &touch]);
+    ok(&node.root, &["config", "filter.odd=x.y.required", "true"]);
+    ok(&node.root, &["config", "--unset", "filter.probe.process"]);
+    fs::write(node.root.join("a.txt"), "tracked\n").unwrap();
+    ok(&node.root, &["add", "a.txt"]);
+    ok(&node.root, &["config", "filter.probe.process", &format!("touch '{}'; exit 1", sentinel.display())]);
+    fs::write(node.root.join("a.txt"), "tracked\nunstaged user edit\n").unwrap();
+    let stages = index_lines(&node.root);
+    let _ = fs::remove_file(&sentinel);
+    // A driver supplied only through environment configuration is disabled too, and
+    // the user's own environment configuration stays in force.
+    let out = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&node.root)
+        .args(["consolidate", "--resolve"])
+        .env("KPOPPER_NATIVE_RESOURCES", &node.resources)
+        .env("KPOPPER_NATIVE_CACHE", node.root.parent().unwrap().join("cache"))
+        .env("GIT_CONFIG_COUNT", "2")
+        .env("GIT_CONFIG_KEY_0", "filter.missing.clean")
+        .env("GIT_CONFIG_VALUE_0", &touch)
+        .env("GIT_CONFIG_KEY_1", "safe.directory")
+        .env("GIT_CONFIG_VALUE_1", "*")
+        .env_remove("KPOPPER_READ_MODE")
+        .env_remove("GIT_INDEX_FILE")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(!sentinel.exists(), "a project filter ran");
+    assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
+    assert_eq!(fs::read_to_string(node.root.join("a.txt")).unwrap(), "tracked\nunstaged user edit\n");
+    // With the user's filters removed, Git can abandon the merge cleanly.
+    ok(&node.root, &["config", "--remove-section", "filter.probe"]);
+    ok(&node.root, &["config", "--remove-section", "filter.odd=x.y"]);
+    let manifest = only_added(&stages, &index_lines(&node.root)).rsplit('\t').next().unwrap().to_owned();
+    // Git itself refuses to abort over an unstaged edit to a file added in the merge.
+    ok(&node.root, &["checkout", "--", "a.txt"]);
+    ok(&node.root, &["merge", "--abort"]);
+    assert!(!node.root.join(manifest).exists());
+    assert_eq!(subjects(&node), ["p.a", "p.base"]);
+}
+
+#[test]
+fn compact_resolution_in_a_linked_worktree_uses_only_that_worktree_index() {
+    let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+    ok(&node.root, &["merge", "--abort"]);
+    let linked = node.root.parent().unwrap().join("linked");
+    ok(&node.root, &["worktree", "add", "-q", "-b", "feature", linked.to_str().unwrap(), "main"]);
+    let primary_index = fs::read(node.root.join(".git/index")).unwrap();
+    let tree = Node { _temp: tempfile::tempdir().unwrap(), root: linked.clone(), resources: node.resources.clone() };
+    tree.succeeds(&["add", "p.c", "v=3"]);
+    commit(&linked);
+    assert!(!git(&linked, &["merge", "--no-commit", "other"]).status.success());
+    let index = ok(&linked, &["rev-parse", "--path-format=absolute", "--git-path", "index"]);
+    assert!(index.contains("/worktrees/"), "{index}");
+    let stages = index_lines(&linked);
+    tree.succeeds(&["consolidate", "--resolve"]);
+    let manifest = only_added(&stages, &index_lines(&linked)).rsplit('\t').next().unwrap().to_owned();
+    assert_eq!(fs::read(node.root.join(".git/index")).unwrap(), primary_index);
+    assert!(!node.root.join(&manifest).exists());
+    ok(&linked, &["merge", "--abort"]);
+    assert!(!linked.join(&manifest).exists());
+    assert_eq!(ok(&linked, &["status", "--porcelain"]), "");
+    assert!(!git(&linked, &["merge", "--no-commit", "other"]).status.success());
+    tree.succeeds(&["consolidate", "--resolve"]);
+    ok(&linked, &["add", "GROUNDING.yaml"]);
+    ok(&linked, &["commit", "-qm", "merged"]);
+    assert_eq!(subjects(&tree), ["p.a", "p.b", "p.base", "p.c"]);
+}
+
+#[test]
+fn compact_manifest_that_attributes_would_convert_is_refused_before_writing() {
+    let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+    let mut attributes = fs::read(node.root.join(".gitattributes")).unwrap();
+    attributes.extend_from_slice(b".kpopper/history-commits/*.json working-tree-encoding=UTF-16LE\n");
+    fs::write(node.root.join(".gitattributes"), attributes).unwrap();
+    node.refused("resolve_history_manifest_conversion");
+}
+
+#[test]
+fn compact_filter_suppression_outranks_inherited_parameters_and_git_context() {
+    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+    let run = |node: &Node, env: &[(&str, String)]| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+        command
+            .current_dir(&node.root)
+            .args(["consolidate", "--resolve"])
+            .env("KPOPPER_NATIVE_RESOURCES", &node.resources)
+            .env("KPOPPER_NATIVE_CACHE", node.root.parent().unwrap().join("cache"))
+            .env_remove("KPOPPER_READ_MODE")
+            .env_remove("GIT_INDEX_FILE");
+        for (name, value) in env {
+            command.env(name, value);
+        }
+        let out = command.output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    };
+    let filtered = || {
+        let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+        let mut attributes = fs::read(node.root.join(".gitattributes")).unwrap();
+        attributes.extend_from_slice(b".kpopper/** filter=probe\n");
+        fs::write(node.root.join(".gitattributes"), attributes).unwrap();
+        let sentinel = node.root.parent().unwrap().join("FILTER RAN' sentinel");
+        let program = format!("touch {}; exit 1", quote(&sentinel.display().to_string()));
+        (node, sentinel, program)
+    };
+    // Drivers inherited through Git's -c parameters, as from an alias, outrank any
+    // environment count; the resolver's own entries must still come last.
+    let (node, sentinel, program) = filtered();
+    let stages = index_lines(&node.root);
+    run(
+        &node,
+        &[
+            (
+                "GIT_CONFIG_PARAMETERS",
+                [format!("filter.probe.process={program}"), format!("filter.probe.clean={program}"), "safe.directory=*".into()]
+                    .iter().map(|parameter| quote(parameter)).collect::<Vec<_>>().join(" "),
+            ),
+            ("GIT_CONFIG_COUNT", "1".into()),
+            ("GIT_CONFIG_KEY_0", "filter.probe.smudge".into()),
+            ("GIT_CONFIG_VALUE_0", program.clone()),
+        ],
+    );
+    assert!(!sentinel.exists(), "an inherited filter ran");
+    assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
+    // An inherited Git context naming another repository cannot hide this checkout's drivers.
+    let (node, sentinel, program) = filtered();
+    ok(&node.root, &["config", "filter.probe.clean", &program]);
+    ok(&node.root, &["config", "filter.probe.process", &program]);
+    let foreign = node.root.parent().unwrap().join("foreign");
+    fs::create_dir(&foreign).unwrap();
+    ok(&foreign, &["init", "-q"]);
+    let stages = index_lines(&node.root);
+    run(&node, &[("GIT_DIR", foreign.join(".git").display().to_string())]);
+    assert!(!sentinel.exists(), "the checkout's filter ran");
+    assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
+    assert_eq!(ok(&foreign, &["ls-files"]), "");
 }

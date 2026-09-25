@@ -235,7 +235,7 @@ kpop consolidate            # Fold eligible hypotheses through the guarded write
 kpop consolidate --refute NAME "Reason for refutation"
 kpop consolidate --from BRANCH_OR_REF --dry-run
 kpop consolidate --resolve --dry-run # Preview a stopped Git record merge
-kpop consolidate --resolve           # Write a checked resolution; no staging or commit
+kpop consolidate --resolve           # Write a checked resolution; never stages the record or commits
 ```
 
 The dry run reports changed premises, fired falsifiers, structural gaps, contested IDs and
@@ -256,7 +256,9 @@ The existing background ingestion path continues to process explicit reports for
 
 For a stopped Git merge, `consolidate --resolve` combines independent record changes and
 refuses competing claims. It validates the staged candidate before replacing the record.
-Compact history also adds an immutable union manifest; stage both paths named by the command.
+Compact history also adds an immutable union manifest. The command stages only that generated
+manifest, before writing it, so aborting or resetting the merge removes it; the record stays
+unmerged and unstaged for your review.
 See [supported layouts and limits](coding-and-ci.md#resolve-a-stopped-git-merge-locally).
 
 See the [record](../skills/record/SKILL.md) and [consolidate](../skills/consolidate/SKILL.md) skills for the full write and consolidation discipline.
