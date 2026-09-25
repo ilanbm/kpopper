@@ -22,6 +22,7 @@ use std::{
 };
 
 const MAX_EVIDENCE_BYTES: usize = 64 * 1024 * 1024;
+const NODE_CONTRIBUTION: &str = "node_history_contribution_unsupported: a project contribution from compact history needs a versioned compact contribution format; nothing was captured or changed";
 
 pub(crate) enum Outcome {
     Local(V),
@@ -222,19 +223,40 @@ fn evidence(document: &V, root: Option<&Path>) -> Result<(Files, BTreeMap<PathBu
     Ok((files, observed))
 }
 
-fn load_document(
-    route: &WriteRoute,
-) -> Result<(V, Inventory, Option<crate::history_capture::Capture>)> {
+type Loaded = (
+    V,
+    Inventory,
+    Option<crate::history_capture::Capture>,
+    Option<crate::source_capture::CapturedSource>,
+);
+
+/// A compact record is read as its own writer reads it: the verified semantic
+/// view, rechecked by source bytes and history revision, never the legacy store.
+fn load_document(route: &WriteRoute) -> Result<Loaded> {
+    if crate::history_node_publication::selected(&route.paths()[0])? {
+        let source = crate::source_capture::capture_source(
+            route.paths(),
+            &route.project().root,
+            crate::source_capture::ReadMode::Frozen,
+            None,
+        )?;
+        let document = source
+            .node_history_capture()
+            .ok_or_else(|| Error("node_semantic_missing_view".into()))?
+            .document()
+            .clone();
+        return Ok((document, Inventory::default(), None, Some(source)));
+    }
     if crate::legacy_authoring::authority_route(&route.paths()[0])?
         == crate::legacy_authoring::AuthorityRoute::History
     {
         let capture = crate::history_store::Store::new(&route.paths()[0])?.capture()?;
         let document = crate::history_authoring::document(&capture)?;
-        return Ok((document, Inventory::default(), Some(capture)));
+        return Ok((document, Inventory::default(), Some(capture), None));
     }
     let mut inventory = Inventory::default();
     let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
-    Ok((document.source.projected(), inventory, document.history))
+    Ok((document.source.projected(), inventory, document.history, None))
 }
 
 pub(crate) fn route(
@@ -367,17 +389,22 @@ pub(crate) fn route(
         return Ok(Outcome::Handled(receipt));
     }
 
-    let (document, initial_inventory, history) = load_document(&route)?;
+    let (document, initial_inventory, history, node) = load_document(&route)?;
+    let unchanged = || -> Result<()> {
+        initial_inventory.verify()?;
+        node.as_ref().map(|source| source.verify()).transpose()?;
+        Ok(())
+    };
     let candidate = preliminary(&document, &action)?;
     let id = options.subject.as_str();
     let selection = selected(&candidate, id).unwrap_or_else(|_| candidate.clone());
     if let Some(draft) = Privacy::selected_draft(route.project(), &action, &candidate)? {
-        initial_inventory.verify()?;
+        unchanged()?;
         route.verify()?;
         return Ok(Outcome::Handled(draft));
     }
     if private_locator(&selection) {
-        initial_inventory.verify()?;
+        unchanged()?;
         route.verify()?;
         return Ok(Outcome::Handled(Privacy::draft(
             route.project(),
@@ -387,7 +414,7 @@ pub(crate) fn route(
         )?));
     }
     if shareability != Some("project") {
-        initial_inventory.verify()?;
+        unchanged()?;
         route.verify()?;
         return Ok(Outcome::Handled(Privacy::draft(
             route.project(),
@@ -417,6 +444,14 @@ pub(crate) fn route(
         ["add", "set"].contains(&kind),
         "a project contribution requires a complete add or set, not a review refresh",
     )?;
+    // The v3 transport binds a legacy source authority, and plain v2 would drop
+    // this record's history. Until a versioned compact format is read by every
+    // pending consumer, refuse before any ledger event or record change.
+    if node.is_some() {
+        unchanged()?;
+        route.verify()?;
+        return Err(Error(NODE_CONTRIBUTION.into()));
+    }
 
     let event_id = options
         .event_id
