@@ -239,6 +239,48 @@ fn replaced_path(paths: &[PathBuf]) -> Result<(PathBuf, String)> {
         .to_string();
     Ok((path, relative))
 }
+fn imported_replaced_archive(
+    capture: &source_capture::OrdinaryCapture,
+) -> Result<Option<crate::history_node_capture::ReplacedArchive>> {
+    let Some(history) = capture.history_capture() else {
+        return Ok(None);
+    };
+    let meta = map(&history.document)?.get("meta").map(map).transpose()?;
+    let Some(import) = meta.and_then(|meta| meta.get("history_import")) else {
+        return Ok(None);
+    };
+    let import = map(import)?;
+    let mut found = None;
+    for item in crate::history_view::list(field(import, "members")?)? {
+        let member = map(item)?;
+        if !string_is(field(member, "role")?, "replaced") {
+            continue;
+        }
+        crate::require(found.is_none(), "invalid_history_import")?;
+        let path = text(field(member, "path")?)?;
+        crate::history_authority::relative_path(path)?;
+        let digest = text(field(member, "sha256")?)?;
+        crate::require(
+            digest.len() == 64 && crate::history_paths::object_id(digest),
+            "invalid_history_import",
+        )?;
+        let file = absolute(&history.root.join(path))?;
+        let raw = capture
+            .files()
+            .get(&file)
+            .ok_or_else(|| error("missing_retained_history_file"))?;
+        crate::require(
+            crate::identity::sha256(raw) == digest,
+            "retained_history_mismatch",
+        )?;
+        found = Some(crate::history_node_capture::ReplacedArchive {
+            path: path.to_owned(),
+            member_sha256: digest.to_owned(),
+            bytes: raw.clone(),
+        });
+    }
+    Ok(found)
+}
 fn replaced(
     paths: &[PathBuf],
     inventory: &mut Inventory,
@@ -755,10 +797,12 @@ pub fn run(
                     let base = projection.pull(&seeds, options.budget.unwrap_or(40))?;
                     let captured_history = capture.node_history_capture().is_some()
                         || capture.history_capture().is_some();
+                    let imported_archive = imported_replaced_archive(&capture)?;
                     let history_text = if captured_history {
                         crate::public_history_read::render(
                             capture.node_history_capture(),
                             capture.history_capture(),
+                            imported_archive.as_ref(),
                             &seeds,
                             options
                                 .chars
@@ -870,9 +914,11 @@ pub fn run(
         "pull" => {
             let mut output = C::pull(&context, &seeds)?;
             if options.history && output.code == 0 {
+                let imported_archive = imported_replaced_archive(&capture)?;
                 let history = crate::public_history_read::render(
                     capture.node_history_capture(),
                     capture.history_capture(),
+                    imported_archive.as_ref(),
                     &seeds,
                     options
                         .chars

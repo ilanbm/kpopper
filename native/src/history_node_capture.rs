@@ -12,6 +12,13 @@ use std::{
 
 const FORMAT: &str = "node-semantic-object/v1";
 
+#[derive(Clone, Debug)]
+pub(crate) struct ReplacedArchive {
+    pub(crate) path: String,
+    pub(crate) member_sha256: String,
+    pub(crate) bytes: Vec<u8>,
+}
+
 /// Compact immutable payload. The original object hash is checked when its exact saw is restored.
 pub fn payload(object: &V, observation: &ObservationNode) -> Result<V> {
     validate_object(object)?;
@@ -200,8 +207,8 @@ impl Capture {
     }
     /// Exact replaced.yaml archived by a verified ordinary-to-node bootstrap, if present.
     /// The returned bytes remain archive evidence and have no semantic object identity.
-    pub(crate) fn archived_replaced_yaml(&self) -> Result<Option<Vec<u8>>> {
-        let mut found: Option<Vec<u8>> = None;
+    pub(crate) fn archived_replaced_yaml(&self) -> Result<Option<ReplacedArchive>> {
+        let mut found: Option<ReplacedArchive> = None;
         for transaction in self.snapshot.transactions.values() {
             let Some(context) = transaction.context.as_ref() else {
                 continue;
@@ -232,9 +239,13 @@ impl Capture {
                 continue;
             };
             if let Some(previous) = &found {
-                require(previous == replaced, "bootstrap_archive_ambiguous")?;
+                require(previous.bytes == *replaced, "bootstrap_archive_ambiguous")?;
             } else {
-                found = Some(replaced.clone());
+                found = Some(ReplacedArchive {
+                    path: ".kpopper/replaced.yaml".into(),
+                    member_sha256: crate::identity::sha256(replaced),
+                    bytes: replaced.clone(),
+                });
             }
             // Captured bootstrap contexts and archive membership were verified as a whole
             // during capture; this narrow accessor only returns the declared exact member.

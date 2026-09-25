@@ -167,7 +167,10 @@ fn mark_current_heads(rows: &mut [J], state: &crate::value::TypedValue) -> Resul
         let Some(head_state) = subjects.get(subject).and_then(|state| map(state).ok()) else {
             continue;
         };
-        let single_head = head_state.get("head").map(text).transpose()?;
+        let single_head = match head_state.get("head") {
+            Some(crate::value::TypedValue::Null) | None => None,
+            Some(head) => Some(text(head)?),
+        };
         let mut disputed_heads = false;
         if let Some(heads) = head_state.get("heads") {
             for head in crate::history_view::list(heads)? {
@@ -220,11 +223,15 @@ fn node_rows(
     Ok(rows)
 }
 
-fn legacy_archive_rows(raw: Option<&[u8]>, prefixes: &[String]) -> Result<Vec<J>> {
-    let Some(raw) = raw else {
+fn legacy_archive_rows(
+    archive: Option<&crate::history_node_capture::ReplacedArchive>,
+    prefixes: &[String],
+    source: &str,
+) -> Result<Vec<J>> {
+    let Some(archive) = archive else {
         return Ok(vec![]);
     };
-    let document = crate::history_yaml::decode_document(raw)?;
+    let document = crate::history_yaml::decode_document(&archive.bytes)?;
     let mut rows = Vec::new();
     for (subject, versions) in map(&document)? {
         if !prefixes
@@ -236,8 +243,9 @@ fn legacy_archive_rows(raw: Option<&[u8]>, prefixes: &[String]) -> Result<Vec<J>
         for entry in crate::history_view::list(versions)? {
             rows.push(json!({
                 "subject": subject,
-                "source": "verified_bootstrap_archive",
-                "archive_member": ".kpopper/replaced.yaml",
+                "source": source,
+                "archive_member": archive.path,
+                "member_sha256": archive.member_sha256,
                 "entry": crate::public_core_readers::json_value(entry)?
             }));
         }
@@ -496,21 +504,27 @@ mod tests {
             json!({"subject":"d.contested","id":"head-a"}),
             json!({"subject":"d.contested","id":"head-b"}),
             json!({"subject":"d.contested","id":"old"}),
+            json!({"subject":"d.retired","id":"retired-old"}),
         ];
         let state = crate::value::TypedValue::from_json(&json!({
-            "subjects":{"d.contested":{"heads":["head-a","head-b"],"acceptance":"contested"}}
+            "subjects":{
+                "d.contested":{"head":null,"heads":["head-a","head-b"],"acceptance":"contested"},
+                "d.retired":{"head":null,"heads":[],"acceptance":"retired"}
+            }
         }))
         .unwrap();
         mark_current_heads(&mut rows, &state).unwrap();
         assert_eq!(rows[0]["current_head"], true);
         assert_eq!(rows[1]["current_head"], true);
         assert!(rows[2].get("current_head").is_none());
+        assert!(rows[3].get("current_head").is_none());
     }
 }
 
 pub(crate) fn render(
     node: Option<&crate::history_node_capture::Capture>,
     legacy: Option<&crate::history_capture::Capture>,
+    imported_archive: Option<&crate::history_node_capture::ReplacedArchive>,
     prefixes: &[String],
     chars: Option<i64>,
     as_json: bool,
@@ -523,7 +537,7 @@ pub(crate) fn render(
         (
             node_rows(capture, prefixes)?,
             capture.historical_event_parents(),
-            legacy_archive_rows(archive.as_deref(), prefixes)?,
+            legacy_archive_rows(archive.as_ref(), prefixes, "verified_bootstrap_archive")?,
         )
     } else if let Some(capture) = legacy {
         let parents = legacy_event_parents(capture)?;
@@ -531,7 +545,7 @@ pub(crate) fn render(
         (
             legacy_rows(capture, prefixes, &parents, &explanations)?,
             parents,
-            vec![],
+            legacy_archive_rows(imported_archive, prefixes, "verified_history_import_member")?,
         )
     } else {
         (vec![], BTreeMap::new(), vec![])
@@ -554,18 +568,28 @@ pub(crate) fn render(
             out.push('\n');
         }
         if !kept_archive.is_empty() {
-            out.push_str("LEGACY ARCHIVE EVIDENCE (verified bootstrap archive .kpopper/replaced.yaml; no semantic IDs or event order)\n");
+            out.push_str("LEGACY ARCHIVE EVIDENCE (verified archived source data; no semantic IDs or event order)\n");
             for row in kept_archive {
                 let subject = row
                     .get("subject")
                     .and_then(J::as_str)
                     .unwrap_or("unknown subject");
+                let path = row
+                    .get("archive_member")
+                    .and_then(J::as_str)
+                    .unwrap_or("unknown archive member");
+                let digest = row
+                    .get("member_sha256")
+                    .and_then(J::as_str)
+                    .unwrap_or("unknown digest");
                 let entry = row
                     .get("entry")
                     .map(serde_json::to_string)
                     .transpose()?
                     .unwrap_or_default();
-                out.push_str(&format!("{subject} · archived legacy entry · {entry}\n"));
+                out.push_str(&format!(
+                    "{subject} · archived legacy entry from {path} member sha256 {digest} · {entry}\n"
+                ));
             }
         }
         if omitted > 0 || omitted_archive > 0 {

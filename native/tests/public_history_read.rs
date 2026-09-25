@@ -368,6 +368,7 @@ fn node_bootstrap_history_displays_selected_legacy_archive_evidence() {
     let archived = &payload["historical_section"]["legacy_archive_evidence"][0];
     assert_eq!(archived["source"], "verified_bootstrap_archive");
     assert_eq!(archived["archive_member"], ".kpopper/replaced.yaml");
+    assert_eq!(archived["member_sha256"].as_str().unwrap().len(), 64);
     assert_eq!(
         archived["entry"]["ended"],
         "its wrong_if holds (p.runs > 0)"
@@ -413,6 +414,71 @@ fn node_bootstrap_history_displays_selected_legacy_archive_evidence() {
         serde_json::json!([])
     );
     assert_eq!(before, tree(&node));
+}
+
+#[test]
+fn legacy_migration_history_displays_bound_replaced_member() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source");
+    let legacy = tmp.path().join("legacy");
+    fs::create_dir_all(source.join(".kpopper")).unwrap();
+    fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 0, of: 2026-09-20}}\njudgments:\n  d.done: {verdict: done, rests_on: [p.runs], seen: {p.runs: 0}, wrong_if: {expr: 'p.runs > 0'}}\n").unwrap();
+    fs::write(source.join(".kpopper/replaced.yaml"), "d.done:\n- verdict: not demonstrated\n  because: legacy import reason\n  rests_on: [p.runs]\n  seen: {p.runs: 0}\n  wrong_if: 'p.runs > 0'\n  ended: the old predicate fired\n  day: '2026-09-24'\n  dropped: {p.previous: superseded in legacy source}\nd.unselected:\n- verdict: omit me\n  ended: unselected archive value\n").unwrap();
+    let migrated = cli_with_runtime(
+        &source,
+        &["history", "migrate", "--to", legacy.to_str().unwrap()],
+    );
+    assert!(
+        migrated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&migrated.stderr)
+    );
+    let before = tree(&legacy);
+    let pulled = cli_with_runtime(&legacy, &["--frozen", "pull", "d.done", "--history"]);
+    assert!(
+        pulled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&pulled.stderr)
+    );
+    let text = String::from_utf8_lossy(&pulled.stdout);
+    assert!(text.contains("LEGACY ARCHIVE EVIDENCE"), "{text}");
+    for expected in [
+        "legacy import reason",
+        "the old predicate fired",
+        "2026-09-24",
+        "superseded in legacy source",
+    ] {
+        assert!(text.contains(expected), "missing {expected}: {text}");
+    }
+    assert!(
+        !text.contains("unselected archive value"),
+        "unselected member leaked: {text}"
+    );
+    let structured = cli_with_runtime(
+        &legacy,
+        &["--json", "--frozen", "pull", "d.done", "--history"],
+    );
+    assert!(
+        structured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&structured.stderr)
+    );
+    let wrapper: serde_json::Value = serde_json::from_slice(&structured.stdout).unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(wrapper["output"].as_str().unwrap()).unwrap();
+    let archived = &payload["historical_section"]["legacy_archive_evidence"][0];
+    assert_eq!(archived["source"], "verified_history_import_member");
+    assert_eq!(archived["archive_member"], ".kpopper/replaced.yaml");
+    assert_eq!(
+        archived["entry"]["dropped"]["p.previous"],
+        "superseded in legacy source"
+    );
+    assert_eq!(archived["member_sha256"].as_str().unwrap().len(), 64);
+    assert!(
+        archived.get("id").is_none(),
+        "archive evidence gained semantic id: {archived}"
+    );
+    assert_eq!(before, tree(&legacy));
 }
 
 #[test]
