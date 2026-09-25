@@ -560,7 +560,8 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
                 });
                 if only_reviewed_forked_judgment {
                     allowed = false;
-                    why = "the branch only reviewed its fork's judgment, while the destination has since changed it - that review cannot take the older verdict".into();
+                    why = "the branch only reviewed its fork's judgment, while the destination has since changed it - that review cannot take the older verdict; write a new proposal to reconsider the conclusion".into();
+                    c.untakeable.insert(id.clone());
                 } else {
                     let decision = G::may_supersede(
                         &base.reader,

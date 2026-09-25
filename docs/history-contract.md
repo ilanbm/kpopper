@@ -277,11 +277,20 @@ whose author is unknown keep `by: null`. An unacknowledged replacement with miss
 actor evidence appears as `review_provenance_missing`; an exact explicit review
 acknowledges it without certifying independence or backfilling an author. Ordinary
 records without active history retain their existing day-stamped review behavior.
+If either the writer or accepting actor is known, their own review remains excluded
+even when the other identity is missing. Metadata-only descendants inherit review
+state; returning to an old version starts a new episode requiring review.
 
 `pull ID --history` exposes retained versions and transition reasons from the verified
 captured history. Historical display is separate from computational pins, and clipped
 results explicitly report omitted versions. Increasing `--chars` expands the display.
 Reading history does not create history events or store a second rendered record.
+
+Ordinary branch consolidation compares the source with its unique Git merge base.
+An unchanged inherited reading is not a new observation. A source review keeps its
+original observed values; a later date alone does not invalidate an equal reading.
+Reviewing the fork's old judgment cannot replace a destination judgment that has
+since changed, including through `--take`; reconsidering it requires a new proposal.
 
 Review reservations are derived from immutable claims and acts after acceptance
 reduction. They do not rewrite old objects, change the storage format, or change

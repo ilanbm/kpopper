@@ -389,3 +389,30 @@ fn a_named_fold_records_its_actor_and_requires_another_reviewer() {
         assert!(!ok(&root,None,&["open"]).contains("unreviewed"));
     }
 }
+
+#[test]
+fn a_missing_actor_does_not_erase_the_other_known_origin() {
+    for node in [false, true] {
+        for (writer, acceptor) in [
+            (Some("fixture-writer"), None),
+            (None, Some("fixture-acceptor")),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = seed(temp.path(), node, Some("fixture-author"));
+            ok(&root, writer, &["set", "p.runs", "1", "--as-of", "2026-09-02"]);
+            ok(&root, writer, &[
+                "add", "d.done", "verdict=demonstrated", "because=one rendered brief",
+                "rests_on=[p.runs]", "wrong_if={expr: 'p.runs < 1'}", "--hypothesis", "change",
+            ]);
+            ok(&root, acceptor, &["consolidate", "change"]);
+            assert!(ok(&root, None, &["open"]).contains("review_provenance_missing"));
+            ok(&root, writer.or(acceptor), &["review", "d.done"]);
+            assert!(
+                ok(&root, None, &["open"]).contains("review_provenance_missing"),
+                "a missing actor let the known origin review itself: node={node}, writer={writer:?}, acceptor={acceptor:?}"
+            );
+            ok(&root, Some("fixture-reviewer"), &["review", "d.done"]);
+            assert!(!ok(&root, None, &["open"]).contains("review_provenance_missing"));
+        }
+    }
+}

@@ -251,6 +251,8 @@ fn ordinary_branch_uses_declared_snapshot_field_and_compares_review_values() {
         "{}",
         cannot_take_old_review.stdout
     );
+    assert!(!cannot_take_old_review.stdout.contains("--take"), "{}", cannot_take_old_review.stdout);
+    assert!(cannot_take_old_review.stdout.contains("requiring a new proposal"), "{}", cannot_take_old_review.stdout);
 }
 
 const BRANCHED: &str = "known:\n  local.one: {v: 1}\n  local.two: {v: 2, of: 2026-09-10}\n  local.three: {v: two  words}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";

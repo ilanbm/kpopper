@@ -335,11 +335,14 @@ impl<'a> Subject<'a> {
         for (claim, act) in &origins {
             let writer = &self.objects[*claim]["by"];
             let acceptor = &self.objects[*act]["by"];
-            if known_actor(writer) && known_actor(acceptor) {
-                excluded.push(writer.clone());
-                excluded.push(acceptor.clone());
-            } else {
-                provenance = false;
+            // Missing provenance cannot erase the other participant's known
+            // identity or turn their own review into independent evidence.
+            for actor in [writer, acceptor] {
+                if known_actor(actor) {
+                    excluded.push(actor.clone());
+                } else {
+                    provenance = false;
+                }
             }
         }
         let current = self.objects[head];
