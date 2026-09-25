@@ -14,13 +14,23 @@ fn compact_object(value: &crate::value::TypedValue) -> Result<J> {
     crate::public_core_readers::json_value(&crate::value::TypedValue::Map(fields))
 }
 
-fn legacy_rows(capture: &crate::history_capture::Capture, prefixes: &[String]) -> Result<Vec<J>> {
+fn legacy_event_parents(
+    capture: &crate::history_capture::Capture,
+) -> Result<BTreeMap<String, Vec<String>>> {
     let mut parents = BTreeMap::<String, Vec<String>>::new();
     for (op, raw) in &capture.commits {
         let manifest = crate::history_yaml::decode_document(raw)?;
         let parent_ids = map(&map(&manifest)?["parents"])?.keys().cloned().collect();
         parents.insert(op.clone(), parent_ids);
     }
+    Ok(parents)
+}
+
+fn legacy_rows(
+    capture: &crate::history_capture::Capture,
+    prefixes: &[String],
+    parents: &BTreeMap<String, Vec<String>>,
+) -> Result<Vec<J>> {
     let mut rows = Vec::new();
     for object in capture.objects.values() {
         let fields = map(object)?;
@@ -40,6 +50,7 @@ fn legacy_rows(capture: &crate::history_capture::Capture, prefixes: &[String]) -
         let mut row = compact_object(object)?;
         let fields = row.as_object_mut().ok_or_else(|| error("invalid_schema"))?;
         fields.insert("operation_id".into(), json!(op));
+        fields.insert("storage_event_id".into(), json!(op));
         fields.insert("parents".into(), json!(parent_ids));
         rows.push(row);
     }
@@ -49,12 +60,12 @@ fn legacy_rows(capture: &crate::history_capture::Capture, prefixes: &[String]) -
 fn identity(row: &J) -> String {
     row.get("id")
         .and_then(J::as_str)
-        .or_else(|| row.get("version_id").and_then(J::as_str))
+        .or_else(|| row.get("storage_event_id").and_then(J::as_str))
         .unwrap_or("")
         .to_owned()
 }
 fn event(row: &J) -> String {
-    row.get("version_id")
+    row.get("storage_event_id")
         .and_then(J::as_str)
         .or_else(|| row.get("operation_id").and_then(J::as_str))
         .unwrap_or_else(|| row.get("id").and_then(J::as_str).unwrap_or(""))
@@ -64,36 +75,28 @@ fn event(row: &J) -> String {
 /// Deterministic Kahn ordering over selected captured storage events. Rows produced by
 /// one event stay adjacent and stable by semantic identity; time and hash order never pick
 /// a version. Runtime is O(V log V + E log V) for selected rows and event edges.
-fn causal_order(rows: Vec<J>) -> Result<Vec<J>> {
+fn causal_order(rows: Vec<J>, mut parents: BTreeMap<String, Vec<String>>) -> Result<Vec<J>> {
     let mut by_event = BTreeMap::<String, Vec<J>>::new();
-    let mut deps = BTreeMap::<String, BTreeSet<String>>::new();
     for row in rows {
         let id = event(&row);
-        let parents = row
-            .get("parents")
-            .and_then(J::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(J::as_str)
-            .map(str::to_owned)
-            .collect::<BTreeSet<_>>();
-        deps.entry(id.clone()).or_default().extend(parents);
+        parents.entry(id.clone()).or_default();
         by_event.entry(id).or_default().push(row);
     }
     for rows in by_event.values_mut() {
         rows.sort_by_key(identity);
     }
-    let known = by_event.keys().cloned().collect::<BTreeSet<_>>();
-    for parents in deps.values_mut() {
-        parents.retain(|id| known.contains(id));
-    }
+    let known = parents.keys().cloned().collect::<BTreeSet<_>>();
+    crate::require(
+        parents.values().flatten().all(|id| known.contains(id)),
+        "incomplete_history_event_ancestry",
+    )?;
     let mut children = BTreeMap::<String, BTreeSet<String>>::new();
-    let mut indegree = deps
+    let mut indegree = parents
         .iter()
-        .map(|(id, p)| (id.clone(), p.len()))
+        .map(|(id, p)| (id.clone(), p.iter().collect::<BTreeSet<_>>().len()))
         .collect::<BTreeMap<_, _>>();
-    for (child, parents) in &deps {
-        for parent in parents {
+    for (child, event_parents) in &parents {
+        for parent in event_parents.iter().collect::<BTreeSet<_>>() {
             children
                 .entry(parent.clone())
                 .or_default()
@@ -106,7 +109,9 @@ fn causal_order(rows: Vec<J>) -> Result<Vec<J>> {
         .map(|(id, _)| id.clone())
         .collect::<BTreeSet<_>>();
     let mut ordered = Vec::with_capacity(by_event.len());
+    let mut visited = 0usize;
     while let Some(id) = ready.pop_first() {
+        visited += 1;
         ordered.extend(by_event.remove(&id).unwrap_or_default());
         for child in children.get(&id).into_iter().flatten() {
             let degree = indegree.get_mut(child).unwrap();
@@ -116,7 +121,7 @@ fn causal_order(rows: Vec<J>) -> Result<Vec<J>> {
             }
         }
     }
-    crate::require(by_event.is_empty(), "history_causal_cycle")?;
+    crate::require(visited == parents.len(), "history_causal_cycle")?;
     Ok(ordered)
 }
 
@@ -131,10 +136,14 @@ fn human_row(row: &J) -> Result<String> {
         .or_else(|| row.get("collection").and_then(J::as_str))
         .unwrap_or("entry");
     let id = row
-        .get("version_id")
+        .get("id")
         .and_then(J::as_str)
-        .or_else(|| row.get("id").and_then(J::as_str))
         .unwrap_or("unknown version");
+    let event = row
+        .get("storage_event_id")
+        .and_then(J::as_str)
+        .map(|id| format!(" (storage event {id})"))
+        .unwrap_or_default();
     let by = row
         .get("by")
         .filter(|v| !v.is_null())
@@ -160,8 +169,29 @@ fn human_row(row: &J) -> Result<String> {
         .map(|(key, v)| format!("; {key}={v}"))
         .collect::<String>();
     Ok(format!(
-        "{subject} · {kind} · version {id}{by}{on}{why} · {body}"
+        "{subject} · {kind} · version {id}{event}{by}{on}{why} · {body}"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn causal_order_keeps_order_through_rowless_event_bridge() {
+        let rows = vec![
+            json!({"id":"claim-1","storage_event_id":"event-1"}),
+            json!({"id":"claim-3","storage_event_id":"event-3"}),
+        ];
+        let parents = BTreeMap::from([
+            ("event-1".into(), vec![]),
+            ("event-2".into(), vec!["event-1".into()]),
+            ("event-3".into(), vec!["event-2".into()]),
+        ]);
+        let ordered = causal_order(rows, parents).unwrap();
+        assert_eq!(ordered[0]["id"], "claim-1");
+        assert_eq!(ordered[1]["id"], "claim-3");
+    }
 }
 
 pub(crate) fn render(
@@ -174,18 +204,22 @@ pub(crate) fn render(
     if prefixes.is_empty() {
         return Ok(String::new());
     }
-    let rows = if let Some(capture) = node {
-        capture
-            .historical_versions(prefixes)?
-            .iter()
-            .map(crate::public_core_readers::json_value)
-            .collect::<Result<Vec<_>>>()?
+    let (rows, event_parents) = if let Some(capture) = node {
+        (
+            capture
+                .historical_versions(prefixes)?
+                .iter()
+                .map(crate::public_core_readers::json_value)
+                .collect::<Result<Vec<_>>>()?,
+            capture.historical_event_parents(),
+        )
     } else if let Some(capture) = legacy {
-        legacy_rows(capture, prefixes)?
+        let parents = legacy_event_parents(capture)?;
+        (legacy_rows(capture, prefixes, &parents)?, parents)
     } else {
-        vec![]
+        (vec![], BTreeMap::new())
     };
-    let rows = causal_order(rows)?;
+    let rows = causal_order(rows, event_parents)?;
     let requested = chars.unwrap_or(12000).max(1) as usize;
     let mut kept = Vec::new();
     let mut used = 0usize;

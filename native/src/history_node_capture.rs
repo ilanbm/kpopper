@@ -174,7 +174,7 @@ impl Capture {
                 .collect::<Map>();
             // `saw` accumulates ancestors on every revision. It is already verified
             // capture input, but expanding or echoing it makes display quadratic.
-            row.insert("version_id".into(), V::Text(version.id().into()));
+            row.insert("storage_event_id".into(), V::Text(version.id().into()));
             row.insert("operation_id".into(), V::Text(version.operation().into()));
             row.insert(
                 "parents".into(),
@@ -188,6 +188,15 @@ impl Capture {
         }
         rows.sort_by_key(|(event, object, _)| (event.clone(), object.clone()));
         Ok(rows.into_iter().map(|(_, _, row)| row).collect())
+    }
+    /// Complete verified event ancestry, including storage events with no selected row.
+    pub(crate) fn historical_event_parents(&self) -> BTreeMap<String, Vec<String>> {
+        self.snapshot
+            .versions
+            .values()
+            .flat_map(|versions| versions.values())
+            .map(|version| (version.id().to_owned(), version.parents().to_vec()))
+            .collect()
     }
     pub fn read(root: &Path) -> Result<Self> {
         Self::from_snapshot(P::capture_snapshot(root)?)

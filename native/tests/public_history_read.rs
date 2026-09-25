@@ -33,7 +33,7 @@ fn map(value: &V) -> &std::collections::BTreeMap<String, V> {
     };
     value
 }
-fn text(value: &V) -> &str {
+fn typed_text(value: &V) -> &str {
     let V::Text(value) = value else {
         panic!("expected text: {value:?}")
     };
@@ -324,7 +324,7 @@ fn judgment_history_keeps_reversal_request_reason_and_dependency_changes() {
         let V::List(proposals) = judgment.get("proposals").unwrap() else {
             panic!()
         };
-        let proposal_id = text(proposals.last().unwrap());
+        let proposal_id = typed_text(proposals.last().unwrap());
         let V::Text(head) = judgment.get("head").unwrap() else {
             panic!()
         };
@@ -356,6 +356,13 @@ fn judgment_history_keeps_reversal_request_reason_and_dependency_changes() {
         String::from_utf8_lossy(&read.stderr)
     );
     let text = String::from_utf8_lossy(&read.stdout);
+    let capture = kpop_native::history_node_capture::Capture::read(root).unwrap();
+    let judgment = map(map(capture.state()).get("subjects").unwrap())
+        .get("d.b")
+        .unwrap();
+    let current_head = typed_text(map(judgment).get("head").unwrap());
+    capture.object("d.b", current_head).unwrap();
+    assert!(text.contains(&format!("version {current_head}")), "{text}");
     for expected in [
         "\"verdict\":\"ready\"",
         "\"verdict\":\"hold\"",
@@ -365,6 +372,30 @@ fn judgment_history_keeps_reversal_request_reason_and_dependency_changes() {
         "\"rests_on\":[\"p.a\"]",
     ] {
         assert!(text.contains(expected), "missing {expected}: {text}");
+    }
+    let structured = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root)
+        .args(["--json", "--frozen", "pull", "d.b", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(structured.status.success());
+    let wrapper: serde_json::Value = serde_json::from_slice(&structured.stdout).unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(wrapper["output"].as_str().unwrap()).unwrap();
+    let versions = payload["historical_section"]["versions"]
+        .as_array()
+        .unwrap();
+    let semantic = versions
+        .iter()
+        .find(|row| row["id"] == current_head)
+        .unwrap();
+    assert_ne!(semantic["id"], semantic["storage_event_id"]);
+    assert_eq!(semantic["id"], current_head);
+    for row in versions.iter().filter(|row| row["subject"] == "d.b") {
+        let id = row["id"].as_str().unwrap();
+        capture.object("d.b", id).unwrap();
     }
     assert_eq!(before, tree(root));
 }
