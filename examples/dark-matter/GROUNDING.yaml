@@ -2,35 +2,6 @@ meta:
   updated: 2026-09-19
   scope: Six-paper worked example; selected source readings and an authored synthesis,
     not a complete review or live research-agent evaluation.
-sources:
-  paper.rotation:
-    name: 'Rubin, Ford & Thonnard (1980): 21 Sc galaxies'
-    url: https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R
-    read: '2026-09-19'
-  paper.sparc:
-    name: 'Lelli, McGaugh & Schombert (2016): SPARC, 175 disk galaxies'
-    url: https://arxiv.org/abs/1606.09251v1
-    read: '2026-09-19'
-  paper.rar:
-    name: 'McGaugh, Lelli & Schombert (2016): radial acceleration relation'
-    url: https://arxiv.org/abs/1609.05917v1
-    read: '2026-09-19'
-  paper.lensing:
-    name: 'Clowe et al. (2006): Bullet Cluster weak lensing'
-    url: https://arxiv.org/abs/astro-ph/0608407v1
-    read: '2026-09-19'
-  paper.cmb:
-    name: Planck 2018 VI, cosmological parameters, corrected 2021
-    url: https://arxiv.org/abs/1807.06209v4
-    read: '2026-09-19'
-  paper.lz:
-    name: 'LZ first search, 2023 version: 60 live days'
-    url: https://arxiv.org/abs/2207.03764v4
-    read: '2026-09-19'
-  research.protocol:
-    name: Scope and assumptions of this worked literature example
-    file: README.md
-    read: '2026-09-19'
 known:
   cmb.dark_to_baryon_density:
     name: "Ratio of the abstract central physical densities"
@@ -478,3 +449,33 @@ open:
     name: "Track shared data and assumptions"
     question: "How do SPARC/RAR catalog overlap, mass-to-light choices and other common assumptions
                change the effective independence of the evidence?"
+
+sources:
+  paper.rotation:
+    name: 'Rubin, Ford & Thonnard (1980): 21 Sc galaxies'
+    url: https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R
+    read: '2026-09-19'
+  paper.sparc:
+    name: 'Lelli, McGaugh & Schombert (2016): SPARC, 175 disk galaxies'
+    url: https://arxiv.org/abs/1606.09251v1
+    read: '2026-09-19'
+  paper.rar:
+    name: 'McGaugh, Lelli & Schombert (2016): radial acceleration relation'
+    url: https://arxiv.org/abs/1609.05917v1
+    read: '2026-09-19'
+  paper.lensing:
+    name: 'Clowe et al. (2006): Bullet Cluster weak lensing'
+    url: https://arxiv.org/abs/astro-ph/0608407v1
+    read: '2026-09-19'
+  paper.cmb:
+    name: Planck 2018 VI, cosmological parameters, corrected 2021
+    url: https://arxiv.org/abs/1807.06209v4
+    read: '2026-09-19'
+  paper.lz:
+    name: 'LZ first search, 2023 version: 60 live days'
+    url: https://arxiv.org/abs/2207.03764v4
+    read: '2026-09-19'
+  research.protocol:
+    name: Scope and assumptions of this worked literature example
+    file: README.md
+    read: '2026-09-19'

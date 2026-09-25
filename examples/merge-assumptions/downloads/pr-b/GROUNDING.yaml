@@ -2,15 +2,6 @@ meta:
   updated: 2026-09-13
   scope: Fictional export service. File retention and the download promise are separate
     inputs.
-sources:
-  s.storage:
-    name: Export retention policy
-    file: storage-policy.yaml
-    read: '2025-01-01'
-  s.email:
-    name: Download email template
-    file: download-email.html
-    read: '2025-01-01'
 known:
   exports.retention_days:
     v: 30
@@ -32,3 +23,13 @@ judgments:
               available."
     wrong_if: "exports.retention_days < downloads.promised_days"
     seen: {exports.retention_days: 30, downloads.promised_days: 30}
+
+sources:
+  s.storage:
+    name: Export retention policy
+    file: storage-policy.yaml
+    read: '2025-01-01'
+  s.email:
+    name: Download email template
+    file: download-email.html
+    read: '2025-01-01'

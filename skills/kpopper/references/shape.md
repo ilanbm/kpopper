@@ -36,10 +36,6 @@ Three sections, mirroring the three things worth keeping. Grow it freely; do not
 meta:
   updated: 2026-08-31
 
-sources:      # documents, pages, people, messages, a session's prior — things nothing else produced
-  msa:      {name: "the master agreement", file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
-  pricing:  {name: "Acme's pricing page", url: "https://…/pricing", read: "2026-08-30"}
-
 known:        # taken from a source, or worked out from other entries
   acme.seat_price: {v: 42, unit: USD/mo, from: pricing, at: "Enterprise tier"}
   acme.seats:      {v: 180, from: "Dana, in the 28/08 planning call"}
@@ -58,10 +54,22 @@ judgments:    # concluded or composed — each says what would make it wrong
     wrong_if: "acme.seats < 150"
     seen:     {acme.annual: 90720, beta.annual: 84000, migration.weeks: 6,
                contract.exit: "90 days"}   # the dependency values at the moment it was written
+
+sources:      # documents, pages, people, messages, a session's prior — things nothing else produced
+  msa:      {name: "the master agreement", file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
+  pricing:  {name: "Acme's pricing page", url: "https://…/pricing", read: "2026-08-30"}
 ```
 
 These field names are a recommendation, not a requirement — a record that already uses others
 is fine. Classify each entry honestly; a role with no content yet needs no placeholder.
+
+**Put source sections last.** Keep knowledge, judgments and open questions before sections
+devoted to sources, sessions or conversations. Apply this by the section's role, whatever its
+key is called: `sources`, `sessions`, `conversations`, or a name the project already uses.
+For a new record, recommend `sources`. Preserve existing names and grouping; a section that
+mixes documents, runs and conversations moves together. This authoring convention puts the
+findings before their origins. Update commands preserve the existing section order; they do
+not infer a section's role and reorder it automatically.
 
 **`seen` is not optional and not decoration.** It is the snapshot of what every dependency held
 when the judgment was written. Without it there is no before, so nothing can be compared and
