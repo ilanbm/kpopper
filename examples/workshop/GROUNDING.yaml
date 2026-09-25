@@ -1,7 +1,4 @@
 # Arithmetic example used in the reference guide. Run commands here or copy it elsewhere.
-sources:
-  prep: {name: "Example preparation check", read: "2026-09-09"}
-
 known:
   stock.packages:  {v: 24, from: prep, at: "Completed packs", as_of: "2026-09-09"}
   workshop.guests: {v: 20, from: prep, at: "Confirmed guest count", as_of: "2026-09-09"}
@@ -13,3 +10,6 @@ judgments:
     because: "The preparation check reports 24 completed packs for 20 guests."
     wrong_if: "stock.packages < workshop.guests"
     seen: {stock.packages: 24, workshop.guests: 20}
+
+sources:
+  prep: {name: "Example preparation check", read: "2026-09-09"}

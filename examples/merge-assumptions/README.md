@@ -103,23 +103,6 @@ meta:
   updated: 2026-09-19
   scope: Fictional executable search-service design record on PR B, before private projects are
     enabled.
-sources:
-  s.search:
-    name: Search implementation before private projects are enabled
-    file: search.py
-    read: '2025-01-01'
-  s.cache:
-    name: Query-keyed cache implementation
-    file: cache.py
-    read: '2025-01-01'
-  s.cache_tests:
-    name: Public cache unit test
-    file: test_cache.py
-    read: '2025-01-01'
-  s.cache_design:
-    name: Fictional cache design pass
-    file: cache-notes.md
-    read: '2025-01-01'
 known:
   cache.goal:
     name: Why the cache was added
@@ -271,6 +254,24 @@ open:
     name: Choose a cache boundary for private results
     question: Should private results use a principal-scoped key, avoid shared caching, or re-check
       authorization on every hit?
+
+sources:
+  s.search:
+    name: Search implementation before private projects are enabled
+    file: search.py
+    read: '2025-01-01'
+  s.cache:
+    name: Query-keyed cache implementation
+    file: cache.py
+    read: '2025-01-01'
+  s.cache_tests:
+    name: Public cache unit test
+    file: test_cache.py
+    read: '2025-01-01'
+  s.cache_design:
+    name: Fictional cache design pass
+    file: cache-notes.md
+    read: '2025-01-01'
 ```
 
 </details>
@@ -346,15 +347,6 @@ meta:
   updated: 2026-09-13
   scope: Fictional export service. File retention and the download promise are separate
     inputs.
-sources:
-  s.storage:
-    name: Export retention policy
-    file: storage-policy.yaml
-    read: '2025-01-01'
-  s.email:
-    name: Download email template
-    file: download-email.html
-    read: '2025-01-01'
 known:
   exports.retention_days:
     v: 30
@@ -376,6 +368,16 @@ judgments:
               available."
     wrong_if: "exports.retention_days < downloads.promised_days"
     seen: {exports.retention_days: 30, downloads.promised_days: 30}
+
+sources:
+  s.storage:
+    name: Export retention policy
+    file: storage-policy.yaml
+    read: '2025-01-01'
+  s.email:
+    name: Download email template
+    file: download-email.html
+    read: '2025-01-01'
 ```
 
 </details>

@@ -1633,12 +1633,6 @@ copy is unchanged; the reason it was ready to publish has disappeared.
 kpopper preserves that connection:
 
 ```yaml
-sources:
-  booking:
-    name: "Venue confirmation"
-    quoted: "Your booking for Friday is confirmed."
-    read: "2026-09-09"
-
 known:
   venue.status: {v: confirmed, from: booking, as_of: "2026-09-09"}
 
@@ -1649,6 +1643,12 @@ judgments:
     because: "The announcement names the date and venue confirmed in the booking email."
     wrong_if: 'venue.status != "confirmed"'
     seen: {venue.status: confirmed}
+
+sources:
+  booking:
+    name: "Venue confirmation"
+    quoted: "Your booking for Friday is confirmed."
+    read: "2026-09-09"
 ```
 
 After the session records the cancellation, the next check reports:
