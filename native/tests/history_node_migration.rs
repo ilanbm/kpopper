@@ -429,6 +429,8 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
         String::from_utf8_lossy(&changed_judgment.stdout),
         String::from_utf8_lossy(&changed_judgment.stderr)
     );
+    let replaced_fixture = b"d.done:\n- verdict: not demonstrated\n  because: legacy import reason\n  rests_on: [p.runs]\n  seen: {p.runs: 0}\n  wrong_if: 'p.runs > 0'\n  ended: the old predicate fired\n  day: '2026-08-31'\n  dropped: {p.old: retired earlier}\n";
+    fs::write(source.join(".kpopper/replaced.yaml"), replaced_fixture).unwrap();
     let replaced = fs::read(source.join(".kpopper/replaced.yaml")).unwrap();
     let migrated = cli(
         &source,
@@ -486,14 +488,12 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
     assert_eq!(v1_before.get(retained_path).unwrap(), &sidecar_bytes);
 
     let retained_file = v1.join(retained_path);
-    let refused_destination = temp.path().join("refused-copy");
     fs::remove_file(&retained_file).unwrap();
     let missing_retained = Plan::prepare(&v1.join("GROUNDING.yaml")).err().unwrap();
     assert_eq!(
         missing_retained.0,
         "node_migration_replaced_member_unretained"
     );
-    assert!(!refused_destination.exists());
     fs::write(&retained_file, &sidecar_bytes).unwrap();
     fs::write(&retained_file, b"mismatched retained bytes").unwrap();
     let mismatched_retained = Plan::prepare(&v1.join("GROUNDING.yaml")).err().unwrap();
@@ -501,7 +501,6 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
         mismatched_retained.0,
         "node_migration_replaced_member_unretained"
     );
-    assert!(!refused_destination.exists());
     fs::write(&retained_file, &sidecar_bytes).unwrap();
 
     let plan = Plan::prepare(&v1.join("GROUNDING.yaml")).unwrap();
@@ -596,7 +595,7 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
         "chained copy omitted separately labeled archive evidence: {chained_history_text}"
     );
     assert!(
-        chained_history_text.contains("no brief"),
+        chained_history_text.contains("legacy import reason"),
         "chained copy omitted the old reason: {chained_history_text}"
     );
     let chained_json = cli(
@@ -610,7 +609,10 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
     let archived = &payload["historical_section"]["legacy_archive_evidence"][0];
     assert_eq!(archived["source"], "verified_legacy_archive");
     assert_eq!(archived["archive_member"], ".kpopper/replaced.yaml");
-    assert_eq!(archived["entry"]["because"], "no brief");
+    assert_eq!(archived["entry"]["because"], "legacy import reason");
+    assert_eq!(archived["entry"]["day"], "2026-08-31");
+    assert_eq!(archived["entry"]["ended"], "the old predicate fired");
+    assert_eq!(archived["entry"]["dropped"]["p.old"], "retired earlier");
     assert!(archived.get("id").is_none(), "archive evidence gained a semantic id: {archived}");
     for args in [
         vec!["set", "p.runs", "3", "--why", "another observed run"],
@@ -660,4 +662,61 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
             .unwrap();
     W::publish(&node, &branch_merge, None, |_| Ok(())).unwrap();
     assert!(Capture::read(&node).is_ok());
+}
+
+#[test]
+fn unbound_replaced_sidecar_in_a_legacy_copy_stays_raw_and_is_not_displayed_as_verified() {
+    let temp = tempfile::tempdir().unwrap();
+    let ordinary = temp.path().join("ordinary");
+    let v1 = temp.path().join("history-v1");
+    let node = temp.path().join("node-copy");
+    fs::create_dir(&ordinary).unwrap();
+    fs::write(
+        ordinary.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 0, of: 2026-09-01}}\njudgments:\n  d.done: {verdict: not demonstrated, rests_on: [p.runs], seen: {p.runs: 0}, wrong_if: 'p.runs > 0'}\n",
+    )
+    .unwrap();
+    let migrated = cli(
+        &ordinary,
+        &["history", "migrate", "--to", v1.to_str().unwrap()],
+    );
+    assert!(
+        migrated.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&migrated.stdout),
+        String::from_utf8_lossy(&migrated.stderr)
+    );
+
+    // The import never witnessed this file. A later malformed sidecar is preserved
+    // inside the immutable archive, but cannot become verified display evidence.
+    let unbound = b"d.done: [\n";
+    fs::write(v1.join(".kpopper/replaced.yaml"), unbound).unwrap();
+    let plan = Plan::prepare(&v1.join("GROUNDING.yaml")).unwrap();
+    let archive = plan
+        .files()
+        .iter()
+        .find(|(path, _)| path.starts_with("evidence/legacy/") && path.ends_with(".zip"))
+        .unwrap()
+        .1;
+    let archived = Archive::decode(archive).unwrap();
+    assert_eq!(archived.files().get(".kpopper/replaced.yaml"), Some(&unbound.to_vec()));
+    plan.publish(&node).unwrap();
+
+    let pulled = cli(
+        &node,
+        &["--json", "--frozen", "pull", "d.done", "--history"],
+    );
+    assert!(
+        pulled.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&pulled.stdout),
+        String::from_utf8_lossy(&pulled.stderr)
+    );
+    let wrapper: serde_json::Value = serde_json::from_slice(&pulled.stdout).unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(wrapper["output"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        payload["historical_section"]["legacy_archive_evidence"],
+        serde_json::json!([])
+    );
 }

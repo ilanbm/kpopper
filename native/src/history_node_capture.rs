@@ -229,6 +229,11 @@ impl Capture {
                     "history_archive_hash")?;
                 let archive = crate::history_node_archive::Archive::decode(raw)?;
                 let Some(replaced) = archive.files().get(".kpopper/replaced.yaml") else { continue };
+                if source == "verified_legacy_archive"
+                    && !legacy_import_binds_replaced(&archive, replaced)
+                {
+                    continue;
+                }
                 if let Some(previous) = &found {
                     require(previous.bytes == *replaced, "history_archive_ambiguous")?;
                 } else {
@@ -538,6 +543,48 @@ impl Capture {
         }
         Ok(())
     }
+}
+
+fn legacy_import_binds_replaced(
+    archive: &crate::history_node_archive::Archive,
+    replaced: &[u8],
+) -> bool {
+    let Some(entry) = archive.files().get("GROUNDING.yaml") else {
+        return false;
+    };
+    let Ok(document) = crate::history_yaml::decode_document(entry) else {
+        return false;
+    };
+    let Ok(document) = map(&document) else {
+        return false;
+    };
+    let Some(meta) = document.get("meta") else {
+        return false;
+    };
+    let Ok(meta) = map(meta) else {
+        return false;
+    };
+    let Some(import) = meta.get("history_import") else {
+        return false;
+    };
+    let Ok(import) = map(import) else {
+        return false;
+    };
+    let Some(members) = import.get("members") else {
+        return false;
+    };
+    let Ok(members) = crate::history_view::list(members) else {
+        return false;
+    };
+    let replaced_hash = crate::identity::sha256(replaced);
+    members.iter().any(|member| {
+        let Ok(member) = map(member) else { return false };
+        member.get("role").is_some_and(|role| string_is(role, "replaced"))
+            && member.get("path").is_some_and(|path| string_is(path, ".kpopper/replaced.yaml"))
+            && member
+                .get("sha256")
+                .is_some_and(|hash| string_is(hash, replaced_hash.as_str()))
+    })
 }
 impl Input for Capture {
     fn document(&self) -> Result<V> {
