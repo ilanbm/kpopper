@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1 — 2026-09-25
+
+- Read candidate metadata in trusted crate verification (#258) — patch
+
 ## 0.13.0 — 2026-09-24
 
 - Run node report recovery scenarios independently (#257) — patch
