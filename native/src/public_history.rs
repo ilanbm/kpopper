@@ -175,7 +175,8 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let entry = &paths[0];
     require(
         !crate::history_node_publication::selected(entry)?
-            || ["status", "accept", "refute", "correct", "propose", "retire"].contains(&operation)
+            || ["status", "accept", "refute", "correct", "propose", "retire", "adopt"]
+                .contains(&operation)
             || operation == "reconcile" && options.record_proposals,
         "node_history_operation_unsupported",
     )?;

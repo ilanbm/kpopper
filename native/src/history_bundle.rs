@@ -447,10 +447,18 @@ pub(crate) fn validate_artifact(manifest: &V, revision: &V, files: &Files) -> Re
 }
 
 fn locator_disclosures(captured: &Capture, origin: &Map) -> Result<()> {
-    let entry = text(&origin["source_entry"])?;
+    locator_disclosures_in(
+        &captured.objects,
+        text(&origin["source_entry"])?,
+        &origin["disclosed_locators"],
+    )
+}
+/// Every non-entry locator carried by the selected objects is explicitly disclosed,
+/// and every disclosure is used. Shared by legacy subsets and compact closures.
+pub(crate) fn locator_disclosures_in(objects: &Map, entry: &str, disclosed: &V) -> Result<()> {
     A::relative_path(entry)?;
     let mut allowed = BTreeSet::new();
-    for item in list(&origin["disclosed_locators"])? {
+    for item in list(disclosed)? {
         let item = schema(item, &["path", "sha256"], &[])?;
         let path = text(&item["path"])?;
         A::relative_path(path)?;
@@ -464,7 +472,7 @@ fn locator_disclosures(captured: &Capture, origin: &Map) -> Result<()> {
     }
     let mut used = BTreeSet::new();
     let mut pending = Vec::new();
-    for value in captured.objects.values() {
+    for value in objects.values() {
         let obj = map(value)?;
         if let Some(locator) = obj
             .get("authored")
@@ -501,6 +509,16 @@ fn locator_disclosures(captured: &Capture, origin: &Map) -> Result<()> {
     require(used == allowed, "unused_locator_disclosure")
 }
 pub(crate) fn subset_subjects(captured: &Capture, roots: &V) -> Result<BTreeSet<String>> {
+    let document = history_adapter::from_store_capture(captured)?;
+    subset_subjects_in(&captured.objects, document.document(), roots)
+}
+/// The complete subject dependency closure of `roots` over full semantic objects.
+/// `document` supplies only collection membership for collection-scope rules.
+pub(crate) fn subset_subjects_in(
+    objects: &Map,
+    document: &V,
+    roots: &V,
+) -> Result<BTreeSet<String>> {
     use std::sync::LazyLock;
     static ID: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+").unwrap());
@@ -510,9 +528,8 @@ pub(crate) fn subset_subjects(captured: &Capture, roots: &V) -> Result<BTreeSet<
         )
         .unwrap()
     });
-    let document = history_adapter::from_store_capture(captured)?;
     let mut by_subject: BTreeMap<String, Vec<&V>> = BTreeMap::new();
-    for value in captured.objects.values() {
+    for value in objects.values() {
         by_subject
             .entry(text(&map(value)?["subject"])?.into())
             .or_default()
@@ -641,7 +658,7 @@ pub(crate) fn subset_subjects(captured: &Capture, roots: &V) -> Result<BTreeSet<
                     .and_then(|m| m.get("collection"))
                     .and_then(|v| text(v).ok())
                     .ok_or_else(|| error("invalid_subset_scope"))?;
-                if let Some(members) = map(document.document())?.get(collection) {
+                if let Some(members) = map(document)?.get(collection) {
                     deps.extend(map(members)?.keys().cloned());
                 }
             }

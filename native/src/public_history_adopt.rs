@@ -154,6 +154,31 @@ fn run_with_probe(
     }
     let route = WriteRoute::capture(original, cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
+    if crate::history_node_publication::selected(&route.paths()[0])? {
+        // Compact targets import the exact closure through the node writer and its journal.
+        let ledger = Ledger::capture(route.project())?;
+        let bundle = ledger.bundles.get(revision).ok_or_else(|| {
+            error(if preview {
+                "unknown contribution revision"
+            } else {
+                "unknown_contribution"
+            })
+        })?;
+        let root = route.paths()[0]
+            .parent()
+            .ok_or_else(|| error("invalid_path"))?
+            .to_owned();
+        let head = ledger.head.clone();
+        return crate::history_node_contribution::adopt(
+            &root,
+            &bundle.value,
+            &bundle.files,
+            choices,
+            by,
+            preview,
+            &mut || verify_ledger(&route, &head),
+        );
+    }
     let store = Store::new(&route.paths()[0])?;
     let _lock = F::DirectoryGuard::acquire(&store.root, !preview)?;
     let ledger = Ledger::capture(route.project())?;
@@ -164,6 +189,13 @@ fn run_with_probe(
             "unknown_contribution"
         })
     })?;
+    require(
+        !is_int(
+            field(map(field(map(&bundle.value)?, "manifest")?)?, "version")?,
+            "4",
+        ),
+        "node contribution adoption requires a compact target record",
+    )?;
     let artifact = Artifact::from_contribution(bundle)?;
     let capture = store.capture()?;
     if preview {

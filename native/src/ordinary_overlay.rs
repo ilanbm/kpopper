@@ -46,9 +46,10 @@ struct Meaning {
     roles: Option<(BTreeSet<String>, Map)>,
 }
 impl Meaning {
-    fn new(document: &V, history: Option<&CV>) -> Result<Self> {
+    /// `source` names the compact authority of a reading that carries no projection.
+    fn new(document: &V, history: Option<&CV>, source: Option<&CV>) -> Result<Self> {
         let mut plain = document.clone();
-        let mut authority = None;
+        let mut authority = source.map(V::from_typed);
         if map(document)?
             .get("meta")
             .and_then(|v| map(v).ok())
@@ -140,6 +141,7 @@ impl Held {
         document: &V,
         comparison: &V,
         history: Option<&CV>,
+        source: Option<&CV>,
     ) -> Result<()> {
         let mut context = None;
         for (id, (collection, body)) in entries(document)? {
@@ -149,7 +151,7 @@ impl Held {
                 .or_default()
                 .push((label.into(), collection, body));
             if context.is_none() {
-                context = Some(Meaning::new(comparison, history)?);
+                context = Some(Meaning::new(comparison, history, source)?);
             }
             self.meanings
                 .entry(id.clone())
@@ -237,6 +239,7 @@ pub(crate) fn apply(
         &base,
         &base,
         document.history_projection.as_ref(),
+        None,
     )?;
     for (name, hypothesis) in map(&document.hypotheses)? {
         let hypothesis = map(hypothesis)?;
@@ -252,6 +255,7 @@ pub(crate) fn apply(
             body,
             &layered(&base, body)?,
             document.history_projection.as_ref(),
+            None,
         )?;
     }
     let mut unavailable = None;
@@ -299,7 +303,9 @@ pub(crate) fn apply(
                 for hyp in crate::ordinary_value::list(&target_map["hypotheses"])? {
                     documents.push(&map(hyp)?["doc"]);
                 }
-                ordinary_refusal = if target_map.contains_key("history") {
+                ordinary_refusal = if target_map.contains_key("history")
+                    || target_map.contains_key("node_history")
+                {
                     Some(error(HISTORY_CONSUMER))
                 } else {
                     ordinary_reads(&documents).err()
@@ -312,12 +318,20 @@ pub(crate) fn apply(
                     .and_then(|m| m.get("projection"))
                     .map(|v| v.try_typed())
                     .transpose()?;
+                // A compact target is compared by its verified authority, never a projection.
+                let node_authority = target_map
+                    .get("node_history")
+                    .and_then(|h| map(h).ok())
+                    .and_then(|m| m.get("authority"))
+                    .map(|v| v.try_typed())
+                    .transpose()?;
                 let label = format!("target:{}", text(&map(target)?["ref"])?);
                 target_held.observe(
                     &label,
                     &target_map["doc"],
                     &target_map["doc"],
                     history.as_ref(),
+                    node_authority.as_ref(),
                 )?;
                 for hyp in crate::ordinary_value::list(&target_map["hypotheses"])? {
                     let hyp = map(hyp)?;
@@ -346,6 +360,7 @@ pub(crate) fn apply(
                         &layered,
                         &layered,
                         history.as_ref(),
+                        node_authority.as_ref(),
                     )?;
                 }
                 Ok(())
@@ -378,6 +393,23 @@ pub(crate) fn apply(
         let manifest = map(&map(&bundle_value)?["manifest"])?;
         let mut body = manifest["document"].clone();
         let mut history = None;
+        let mut source = None;
+        require(
+            ["1", "2", "3", "4"]
+                .iter()
+                .any(|v| is_int(&manifest["version"], v)),
+            "unsupported_contribution_version",
+        )?;
+        if is_int(&manifest["version"], "4") {
+            let closure =
+                crate::history_node_contribution::validate(&bundle.value, &bundle.files)?;
+            body = V::from_typed(&closure.document);
+            source = Some(
+                C::map(C::field(C::map(C::field(C::map(&bundle.value)?, "manifest")?)?, "source")?)?
+                    ["authority"]
+                    .clone(),
+            );
+        }
         if is_int(&manifest["version"], "3") {
             let adapted =
                 crate::history_bundle::validate_contribution(&bundle.value, &bundle.files)?;
@@ -487,7 +519,7 @@ pub(crate) fn apply(
             ("error", V::Null),
         ]);
         map_mut(&mut document.hypotheses)?.insert(name.clone(), hyp);
-        pending.observe(&name, &body, &body, history.as_ref())?;
+        pending.observe(&name, &body, &body, history.as_ref(), source.as_ref())?;
     }
     let core = Comparison {
         conflicts: conflicts(&active, &[&local, &target_held, &pending])?,

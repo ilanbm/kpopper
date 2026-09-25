@@ -407,6 +407,62 @@ fn validate_history(document: &V, context: &V, hypotheses: &V) -> Result<()> {
             )?;
         }
     }
+    for (revision, portable) in bundles {
+        let portable_map = map(portable)?;
+        let version = map(field(portable_map, "manifest")?)?
+            .get("version")
+            .cloned()
+            .unwrap_or(V::Null);
+        require(
+            ["1", "2", "3", "4"]
+                .iter()
+                .any(|v| crate::source_clock::python_equal(&version, &V::Integer(Integer::new(v).unwrap()))),
+            "unsupported_contribution_version",
+        )?;
+        if !crate::source_clock::python_equal(&version, &V::Integer(Integer::new("4").unwrap())) {
+            continue;
+        }
+        let files = history_bytes(field(portable_map, "files")?)?;
+        let bundle = V::Map(Map::from([
+            ("revision".into(), portable_map["revision"].clone()),
+            ("manifest".into(), portable_map["manifest"].clone()),
+        ]));
+        let closure = crate::history_node_contribution::validate(&bundle, &files)?;
+        require(portable_map["revision"] == s(revision), "invalid_history")?;
+        let retired = pending
+            .get("observations")
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get("decisions"))
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get(revision))
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get("state"))
+            .is_some_and(|v| {
+                ["withdrawn", "rejected", "superseded"]
+                    .iter()
+                    .any(|name| string_is(v, name))
+            });
+        let hypothesis = hyps.get(&format!("pending-{revision}"));
+        if retired {
+            require(hypothesis.is_none(), "invalid_history")?;
+        } else {
+            let hypothesis = hypothesis
+                .and_then(|v| map(v).ok())
+                .ok_or_else(|| error("invalid_history"))?;
+            require(
+                hypothesis
+                    .get("kind")
+                    .is_some_and(|v| string_is(v, "contribution"))
+                    && digest(
+                        hypothesis
+                            .get("document")
+                            .or_else(|| hypothesis.get("doc"))
+                            .unwrap_or(&V::Null),
+                    )? == digest(&closure.document)?,
+                "invalid_history",
+            )?;
+        }
+    }
     for (name, hypothesis) in hyps {
         let hyp = code(hypothesis, "invalid_snapshot")?;
         let body = hyp

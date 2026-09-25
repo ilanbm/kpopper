@@ -257,6 +257,8 @@ struct Target {
     files: Files,
     document: V,
     history: Option<crate::history_capture::Capture>,
+    /// A compact target, read only through its verified node capture.
+    node: Option<crate::history_node_capture::Capture>,
 }
 
 struct TemporaryIndex(PathBuf);
@@ -458,6 +460,7 @@ impl<'a, P: Provider> Publisher<'a, P> {
             None,
         )?;
         let history = captured.history_capture().cloned();
+        let node = captured.node_history_capture().cloned();
         let document = if let Some(history) = &history {
             crate::history_adapter::from_store_capture(history)?
                 .document()
@@ -470,6 +473,7 @@ impl<'a, P: Provider> Publisher<'a, P> {
             files,
             document,
             history,
+            node,
         })
     }
 
@@ -502,8 +506,31 @@ impl<'a, P: Provider> Publisher<'a, P> {
                 continue;
             }
             let manifest = map(field(map(&bundle.value)?, "manifest")?)?;
+            let version = field(manifest, "version")?;
+            require(
+                ["1", "2", "3", "4"].iter().any(|v| is_int(version, v)),
+                "unsupported_contribution_version",
+            )?;
+            if let Some(node) = &target.node {
+                let mut document = target.document.clone();
+                if let Some(meta) = map_mut(&mut document)?.get_mut("meta")
+                    && let Ok(meta) = map_mut(meta)
+                {
+                    meta.remove("history");
+                }
+                if crate::pending_bundle::equivalent_node(
+                    &bundle.value,
+                    &bundle.files,
+                    node,
+                    &document,
+                    &self.evidence(target, bundle)?,
+                )? {
+                    accepted.insert(revision.clone());
+                }
+                continue;
+            }
             let mut document = target.document.clone();
-            let history = if is_int(field(manifest, "version")?, "3") {
+            let history = if is_int(version, "3") {
                 target.history.as_ref()
             } else {
                 if let Some(meta) = map_mut(&mut document)?.get_mut("meta")
@@ -929,6 +956,29 @@ impl<'a, P: Provider> Publisher<'a, P> {
         state: &V,
         revisions: &[String],
     ) -> Result<String> {
+        for revision in revisions {
+            let version = map(&ledger.bundles[revision].value)
+                .ok()
+                .and_then(|value| value.get("manifest"))
+                .and_then(|value| map(value).ok())
+                .and_then(|value| value.get("version"))
+                .cloned()
+                .unwrap_or(V::Null);
+            require(
+                ["1", "2", "3"].iter().any(|v| is_int(&version, v)),
+                if is_int(&version, "4") {
+                    "scoped node contribution requires explicit adoption choices"
+                } else {
+                    "unsupported_contribution_version"
+                },
+            )?;
+        }
+        // A compact record's view is bound to its node storage; publication never
+        // rewrites it as a document. Contributions land only by explicit adoption.
+        require(
+            target.node.is_none(),
+            "compact target publication requires explicit adoption",
+        )?;
         if target.history.is_some()
             || revisions.iter().any(|revision| {
                 map(&ledger.bundles[revision].value)

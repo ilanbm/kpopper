@@ -61,6 +61,7 @@ pub mod history_node_branch;
 pub mod history_node_branch_source;
 pub mod history_node_adoption;
 pub mod history_node_capture;
+pub(crate) mod history_node_contribution;
 pub mod history_source_ancestry;
 pub mod history_node_clocks;
 mod history_node_edits;

@@ -520,16 +520,18 @@ fn multiple_sources_require_each_overlap_and_can_readopt_retained_history() {
 }
 
 #[test]
-fn advanced_node_reads_allow_absent_pending_but_refuse_an_existing_ledger() {
+fn advanced_node_reads_overlay_an_existing_ledger_and_configured_target() {
     let (root, _) = public_fixture();
     let paths = [root.path().join("GROUNDING.yaml")];
-    kpop_native::source_capture::capture_source(
-        &paths,
-        root.path(),
-        kpop_native::source_capture::ReadMode::Live,
-        None,
-    )
-    .unwrap();
+    let live = || {
+        kpop_native::source_capture::capture_source(
+            &paths,
+            root.path(),
+            kpop_native::source_capture::ReadMode::Live,
+            None,
+        )
+    };
+    live().unwrap();
     git(
         root.path(),
         &["update-ref", "refs/kpopper/pending_grounding", "HEAD"],
@@ -537,23 +539,7 @@ fn advanced_node_reads_allow_absent_pending_but_refuse_an_existing_ledger() {
     let project = kpop_native::project_modes::Project::open(root.path()).unwrap();
     let ledger = kpop_native::pending_state::Ledger::capture(&project).unwrap();
     assert!(ledger.head.is_some() && ledger.events.is_empty());
-
-    let error = kpop_native::source_capture::capture_source(
-        &paths,
-        root.path(),
-        kpop_native::source_capture::ReadMode::Live,
-        None,
-    )
-    .err()
-    .unwrap();
-    assert_eq!(error.0, "node_history_pending_unsupported");
-    kpop_native::source_capture::capture_source(
-        &paths,
-        root.path(),
-        kpop_native::source_capture::ReadMode::Frozen,
-        None,
-    )
-    .unwrap();
+    live().unwrap().verify().unwrap();
     git(
         root.path(),
         &["update-ref", "-d", "refs/kpopper/pending_grounding"],
@@ -562,20 +548,8 @@ fn advanced_node_reads_allow_absent_pending_but_refuse_an_existing_ledger() {
     config["publication"] = json!({"remote":"origin","repository":"fixture/repo","target":"main","branch":"observations","standing_permission":false});
     fs::create_dir_all(project.config_path.parent().unwrap()).unwrap();
     fs::write(&project.config_path, serde_json::to_vec(&config).unwrap()).unwrap();
-    let error = kpop_native::source_capture::capture_source(
-        &paths,
-        root.path(),
-        kpop_native::source_capture::ReadMode::Live,
-        None,
-    )
-    .err()
-    .unwrap();
-    assert_eq!(error.0, "node_history_pending_unsupported");
-    kpop_native::source_capture::capture_source(
-        &paths,
-        root.path(),
-        kpop_native::source_capture::ReadMode::Frozen,
-        None,
-    )
-    .unwrap();
+    let captured = live().unwrap();
+    let data = captured.snapshot().unwrap().to_data().to_json().unwrap();
+    assert_eq!(data["context"]["target"]["status"], "unavailable");
+    captured.verify().unwrap();
 }

@@ -629,6 +629,7 @@ pub(crate) fn evidence_path(path: &str) -> Result<()> {
         ("evidence/migration/", ".json"),
         ("evidence/bootstrap/", ".zip"),
         ("evidence/bootstrap/", ".json"),
+        (crate::history_node_contribution::EVIDENCE, ".json"),
     ] {
         if let Some(name) = path
             .strip_prefix(prefix)

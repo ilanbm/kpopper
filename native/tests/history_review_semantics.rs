@@ -49,11 +49,32 @@ fn seed(root: &Path, node: bool, actor: Option<&str>) -> PathBuf {
     .unwrap();
     let source = root.join("source");
     fs::create_dir(&source).unwrap();
-    ok(
-        &source,
-        actor,
-        &["add", "p.runs", "v=0", "--as-of", "2026-09-01"],
-    );
+    // Exercise the retained legacy reader and its compact migrated equivalent.
+    // Public first-add now creates compact history directly.
+    let runtime = kpop_native::reasoning_runtime::Runtime::open(
+        &resources.join(&archive),
+        &root.join("test-cache"),
+        kpop_native::reasoning_runtime::OperationalBounds::default(),
+    ).unwrap();
+    let policy = kpop_native::project_modes::Project::open(&source).unwrap().config().unwrap();
+    let action = kpop_native::value::TypedValue::from_json(&serde_json::json!({
+        "kind":"add", "id":"p.runs", "body":{"v":0}, "as_of":"2026-09-01"
+    })).unwrap();
+    let entry = source.join("GROUNDING.yaml");
+    let prepared = kpop_native::history_bootstrap::prepare(
+        &entry, &action, &policy,
+        &kpop_native::history_bootstrap::BootstrapOptions {
+            operation: "first-legacy".into(),
+            recorded_at: "2026-09-01T12:00:00+00:00".into(),
+            recording_day: "2026-09-01".into(),
+            record_id: "review-fixture".into(),
+            by: actor.map(|a| kpop_native::value::TypedValue::Text(a.into()))
+                .unwrap_or(kpop_native::value::TypedValue::Null),
+        }, Some(&runtime),
+    ).unwrap();
+    kpop_native::history_bootstrap::publish(
+        &entry, &prepared, &policy, Some(&runtime), &mut |_| Ok(()),
+    ).unwrap();
     ok(
         &source,
         actor,

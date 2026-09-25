@@ -108,6 +108,10 @@ impl Graph {
         }
         require(self.edges.len() <= MAX_COMMITS, "source_ancestry_limit")
     }
+    /// The verified parents of one admitted commit, if admitted.
+    pub(crate) fn parents_of(&self, id: &str) -> Option<&Vec<String>> {
+        self.edges.get(id)
+    }
     pub(crate) fn select<'a>(&self, paths: impl Iterator<Item = &'a String>) -> Self {
         Self {
             edges: paths

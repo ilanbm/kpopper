@@ -188,6 +188,11 @@ pub(crate) fn records_ordinary(
                 let materialized = materialize(root, entry, revision, |paths, scratch, mode| {
                     capture_ordinary_layer(paths, scratch, mode, runtime)
                 })?;
+                // This adapter is consumed by the ordinary branch reader. Keep
+                // a compact record's declared computation semantics intact.
+                if materialized.captured.node_history_capture().is_some() {
+                    materialized.captured.require_ordinary_reader()?;
+                }
                 Ok(OrdinaryRecords {
                     document: materialized.captured.ordinary_document().clone(),
                     hypotheses: crate::ordinary_value::map(materialized.captured.hypotheses())?
@@ -264,15 +269,39 @@ pub(crate) fn comparison_layer(
     }
     let mut layouts = vec![captured.layout];
     let entry_path = Path::new(&captured.entry);
-    if matches!(entry_path.file_name().and_then(|n| n.to_str()), Some("GROUNDING.yaml" | "PROVENANCE.yaml")) {
-        let alternate = if entry_path.file_name().unwrap() == "GROUNDING.yaml" { "PROVENANCE.yaml" } else { "GROUNDING.yaml" };
-        layouts.push(crate::history_transaction::Layout::for_entry(name(&entry_path.with_file_name(alternate))?)?);
+    if matches!(
+        entry_path.file_name().and_then(|n| n.to_str()),
+        Some("GROUNDING.yaml" | "PROVENANCE.yaml")
+    ) {
+        let alternate = if entry_path.file_name().unwrap() == "GROUNDING.yaml" {
+            "PROVENANCE.yaml"
+        } else {
+            "GROUNDING.yaml"
+        };
+        layouts.push(crate::history_transaction::Layout::for_entry(name(
+            &entry_path.with_file_name(alternate),
+        )?)?);
     }
     for layout in layouts {
-        let owned = [&layout.hypotheses, &layout.view, &layout.replaced, &layout.authority,
-            &layout.objects, &layout.commits, &layout.cancellations, &layout.retained, &layout.journal];
-        require(!captured.reader.tree.keys().any(|path| owned.iter().any(|base|
-            path == *base || path.starts_with(&format!("{base}/")))), "target_record_unavailable")?;
+        let owned = [
+            &layout.hypotheses,
+            &layout.view,
+            &layout.replaced,
+            &layout.authority,
+            &layout.objects,
+            &layout.commits,
+            &layout.cancellations,
+            &layout.retained,
+            &layout.journal,
+        ];
+        require(
+            !captured.reader.tree.keys().any(|path| {
+                owned
+                    .iter()
+                    .any(|base| path == *base || path.starts_with(&format!("{base}/")))
+            }),
+            "target_record_unavailable",
+        )?;
     }
     Ok(obj([("doc", V::Map(Map::new()))]))
 }
@@ -290,6 +319,8 @@ struct Committed<'a> {
     entry: String,
     layout: crate::history_transaction::Layout,
     active: bool,
+    /// Kept by compact node history; read only through its verified node capture.
+    node: bool,
 }
 /// Whether the record committed at `revision` is kept by its history. An ordinary reader
 /// stops at the authority marker, so this reads nothing beyond it.
@@ -348,10 +379,19 @@ fn committed<'a>(root: &'a Path, entry: &str, revision: &str) -> Result<Committe
         }
     }
     let layout = crate::history_transaction::Layout::for_entry(&entry)?;
+    let mut node = false;
     let marker = if reader.tree.contains_key(&layout.authority) {
         let raw = reader.read(&layout.authority, 1024 * 1024)?;
         let value = Y::decode_document(&raw)?;
-        crate::history_authority::validate_authority(&value)?;
+        if map(&value)?
+            .get("profile")
+            .is_some_and(|v| string_is(v, crate::history_node_codec::FORMAT))
+        {
+            crate::history_node_publication::validate_authority(&value)?;
+            node = true;
+        } else {
+            crate::history_authority::validate_authority(&value)?;
+        }
         Some(value)
     } else {
         None
@@ -364,7 +404,45 @@ fn committed<'a>(root: &'a Path, entry: &str, revision: &str) -> Result<Committe
         entry,
         layout,
         active,
+        node,
     })
+}
+/// A compact target's verified semantic view and named layers, pinned at `revision`.
+fn node_records(root: &Path, entry: &str, revision: &str) -> Result<V> {
+    let capture = crate::history_branch_git::capture_node(root, revision, entry)?.capture()?;
+    let projected = crate::history_node_projection::capture(&capture)?;
+    let (named, _) = crate::history_hypotheses::layers(projected.projection(), capture.document())?;
+    let mut hypotheses = vec![];
+    for (name, layer) in map(&named)? {
+        let layer = map(layer)?;
+        hypotheses.push(obj([
+            ("name", s(name)),
+            (
+                "doc",
+                layer
+                    .get("doc")
+                    .or_else(|| layer.get("document"))
+                    .ok_or_else(|| error("invalid_target_hypothesis"))?
+                    .clone(),
+            ),
+            ("head", layer.get("head").cloned().unwrap_or(V::Null)),
+        ]));
+    }
+    let node_history = obj([
+        ("authority", capture.snapshot.authority.clone()),
+        ("revision", s(capture.revision())),
+    ]);
+    Ok(obj([
+        ("doc", capture.document().clone()),
+        ("hypotheses", V::List(hypotheses)),
+        (
+            "hash",
+            s(&sha256(&crate::history_emit::encode_document(
+                &node_history,
+            )?)),
+        ),
+        ("node_history", node_history),
+    ]))
 }
 fn materialize(
     root: &Path,
@@ -381,7 +459,37 @@ fn materialize(
         entry,
         layout,
         active,
+        node,
     } = committed(root, entry, revision)?;
+    if node {
+        // Replay only the pinned, verified compact closure. Feeding the physical
+        // YAML to an ordinary loader would discard its history and field semantics.
+        let observation = crate::history_branch_git::capture_node(root, revision, &entry)?;
+        let temp = observation.bundle.reconstruct()?;
+        let scratch = temp.path().canonicalize()?;
+        let captured = capture(
+            &[scratch.join("GROUNDING.yaml")],
+            &scratch,
+            ReadMode::Frozen,
+        )?;
+        let parent = Path::new(&entry).parent().unwrap_or(Path::new(""));
+        let mut files = Files::new();
+        let mut raw_names = BTreeSet::new();
+        for (relative, raw) in observation.bundle.files()? {
+            let path = safe(name(&parent.join(&relative))?)?;
+            if path != entry && !path.starts_with(&format!("{}/", layout.hypotheses)) {
+                raw_names.insert(path.clone());
+            }
+            files.insert(path, raw);
+        }
+        return Ok(Materialized {
+            _temp: temp,
+            captured,
+            files,
+            raw_names,
+            active: true,
+        });
+    }
     let maximum = if active {
         64 * 1024 * 1024
     } else {
@@ -443,12 +551,15 @@ fn materialize(
         } else {
             for key in ["record", "also"] {
                 let values = match body.get(key) {
-                    Some(v @ crate::ordinary_source::Source::Scalar(
-                        crate::ordinary_value::Scalar::Finite(V::Text(_)),
-                    )) => vec![v],
+                    Some(
+                        v @ crate::ordinary_source::Source::Scalar(
+                            crate::ordinary_value::Scalar::Finite(V::Text(_)),
+                        ),
+                    ) => vec![v],
                     Some(crate::ordinary_source::Source::List(a)) => a.iter().collect(),
-                    Some(crate::ordinary_source::Source::Map(m)) =>
-                        m.iter().map(|(_, v)| v).collect(),
+                    Some(crate::ordinary_source::Source::Map(m)) => {
+                        m.iter().map(|(_, v)| v).collect()
+                    }
                     _ => vec![],
                 };
                 for value in values {
@@ -493,6 +604,9 @@ fn records_isolated(
     revision: &str,
     runtime: Option<&Runtime>,
 ) -> Result<V> {
+    if committed(root, entry, revision)?.node {
+        return node_records(root, entry, revision);
+    }
     let Materialized {
         _temp,
         captured,
@@ -638,5 +752,297 @@ mod path_tests {
         assert!(pointer(Path::new("sub/../../escape.yaml")).is_err());
         assert!(safe("/outside.yaml").is_err());
         assert!(safe("C:\\outside.yaml").is_err());
+    }
+}
+
+#[cfg(test)]
+mod compact_layer_tests {
+    use super::*;
+    use crate::{history_authoring::Options, history_node_writer as W, history_paths::Scheme};
+    use std::fs;
+    use std::process::Command;
+
+    fn git(root: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args([
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim().into()
+    }
+    fn commit(root: &Path) -> String {
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "fixture"]);
+        git(root, &["rev-parse", "HEAD"])
+    }
+    fn fixture() -> (tempfile::TempDir, String) {
+        fixture_with_core(false)
+    }
+    fn fixture_with_core(core: bool) -> (tempfile::TempDir, String) {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        git(root, &["init", "-q", "-b", "main"]);
+        let record = root.join("nested");
+        fs::create_dir_all(record.join(".kpopper")).unwrap();
+        fs::write(record.join(".kpopper/history.yaml"), "version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
+        fs::write(record.join("GROUNDING.yaml"), "meta: {purpose: Fixture}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {}\n").unwrap();
+        let options = Options {
+            operation: "seed".into(),
+            recorded_at: "2026-09-25T12:00:00+00:00".into(),
+            recording_day: "2026-09-25".into(),
+            by: s("Fixture"),
+            strict: false,
+            paths: Scheme::Hashed,
+            receipt_version: None,
+        };
+        let action =
+            V::from_json(&serde_json::json!({"kind":"add", "id":"p.value", "body":{"v":7}}))
+                .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = if core {
+            fs::write(record.join("GROUNDING.yaml"), "meta: {reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {}\n").unwrap();
+            let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../scripts/reasoning/native")
+                .join(format!(
+                    "{}.kpopper-runtime",
+                    crate::reasoning_runtime::target_name().unwrap()
+                ));
+            Some(Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap())
+        } else {
+            None
+        };
+        let prepared = W::prepare(&record, &action, &options, runtime.as_ref()).unwrap();
+        W::publish(&record, &prepared, runtime.as_ref(), |_| Ok(())).unwrap();
+        if core {
+            let action = V::from_json(&serde_json::json!({"kind":"hypothesis", "name":"scenario", "action":{"kind":"set","id":"p.value","value":11}})).unwrap();
+            let mut options = options;
+            options.operation = "scenario".into();
+            let prepared = W::prepare(&record, &action, &options, runtime.as_ref()).unwrap();
+            W::publish(&record, &prepared, runtime.as_ref(), |_| Ok(())).unwrap();
+        }
+        let revision = commit(root);
+        (temp, revision)
+    }
+    #[test]
+    fn pinned_compact_layers_and_merge_base_keep_verified_core_semantics() {
+        let (temp, revision) = fixture();
+        let root = temp.path();
+        let entry = "nested/GROUNDING.yaml";
+        let before = git(root, &["status", "--porcelain=v1", "--untracked-files=all"]);
+        let (layer, ordered) = records_layer(root, entry, &revision, None).unwrap();
+        let doc = map(&layer).unwrap()["doc"].clone();
+        let capture = crate::history_node_capture::Capture::read(&root.join("nested")).unwrap();
+        let projected = crate::history_node_projection::capture(&capture).unwrap();
+        assert_eq!(&doc, projected.document());
+        assert!(
+            map(&map(&doc).unwrap()["meta"])
+                .unwrap()
+                .contains_key("history")
+        );
+        assert!(
+            map(&layer)
+                .unwrap()
+                .get("files")
+                .and_then(|v| map(v).ok())
+                .unwrap()
+                .contains_key(entry)
+        );
+        assert_eq!(
+            comparison_layer(root, entry, &revision, None).unwrap(),
+            obj([("doc", doc.clone())])
+        );
+        assert_eq!(
+            records_ordinary(root, entry, &revision, None)
+                .unwrap()
+                .document,
+            ordered.document
+        );
+        assert_eq!(
+            git(root, &["status", "--porcelain=v1", "--untracked-files=all"]),
+            before
+        );
+        // A different working-tree view cannot alter a pinned committed reading.
+        fs::write(root.join(entry), b"known: {p.value: {v: 99}}\n").unwrap();
+        assert_eq!(
+            comparison_layer(root, entry, &revision, None).unwrap(),
+            obj([("doc", doc)])
+        );
+    }
+    #[test]
+    fn ordinary_public_branch_read_refuses_compact_core_interpretation() {
+        let (temp, revision) = fixture_with_core(true);
+        let root = temp.path();
+        fs::remove_dir_all(root.join("nested/.kpopper")).unwrap();
+        fs::write(
+            root.join("nested/GROUNDING.yaml"),
+            "known: {p.value: {v: 8}}\n",
+        )
+        .unwrap();
+        commit(root);
+        let before = git(root, &["status", "--porcelain=v1", "--untracked-files=all"]);
+        let error = crate::public_readers::run(
+            "pull",
+            &crate::public_readers::Options {
+                subjects: vec!["p.value".into(), "nested/GROUNDING.yaml".into()],
+                from_ref: Some(revision.clone()),
+                ..Default::default()
+            },
+            root,
+            ReadMode::Frozen,
+            crate::public_readers::Reply::Text,
+            &|_| Ok(None),
+            &mut None,
+        )
+        .unwrap_err();
+        assert_eq!(error.0, crate::source_capture::CORE_CONSUMER);
+        let output = crate::public_consolidation::dispatch(
+            &crate::public_consolidation::Options {
+                from_refs: vec![revision],
+                record: Some(root.join("nested/GROUNDING.yaml")),
+                dry_run: true,
+                frozen: true,
+                ..Default::default()
+            },
+            root,
+        );
+        assert_eq!(
+            (output.code, output.stderr.as_str()),
+            (1, "unsupported_capability: use core/v1 consumer\n")
+        );
+        assert_eq!(
+            git(root, &["status", "--porcelain=v1", "--untracked-files=all"]),
+            before
+        );
+    }
+    #[test]
+    fn compact_named_layers_keep_their_document_and_provenance() {
+        let (temp, revision) = fixture_with_core(true);
+        let (layer, ordered) =
+            records_layer(temp.path(), "nested/GROUNDING.yaml", &revision, None).unwrap();
+        let hypotheses = list(&map(&layer).unwrap()["hypotheses"]).unwrap();
+        assert_eq!(hypotheses.len(), 1);
+        let hypothesis = map(&hypotheses[0]).unwrap();
+        assert_eq!(hypothesis["name"], s("scenario"));
+        assert_eq!(
+            map(&map(&hypothesis["doc"]).unwrap()["known"]).unwrap()["p.value"]
+                .to_json()
+                .unwrap()["v"],
+            11
+        );
+        let ordered_hypothesis =
+            crate::ordinary_value::map(&ordered.hypotheses["scenario"]).unwrap();
+        assert_eq!(
+            ordered_hypothesis["head"].try_typed().unwrap(),
+            hypothesis["head"]
+        );
+    }
+    #[test]
+    fn ordinary_public_pull_can_compare_a_compact_unprofiled_record() {
+        let (temp, revision) = fixture();
+        let root = temp.path();
+        fs::remove_dir_all(root.join("nested/.kpopper")).unwrap();
+        fs::write(
+            root.join("nested/GROUNDING.yaml"),
+            "known: {p.value: {v: 8}}\n",
+        )
+        .unwrap();
+        commit(root);
+        let output = crate::public_readers::run(
+            "pull",
+            &crate::public_readers::Options {
+                subjects: vec!["p.value".into(), "nested/GROUNDING.yaml".into()],
+                from_ref: Some(revision),
+                ..Default::default()
+            },
+            root,
+            ReadMode::Frozen,
+            crate::public_readers::Reply::Text,
+            &|_| Ok(None),
+            &mut None,
+        )
+        .unwrap();
+        assert_eq!(output.code, 0);
+        assert!(output.text.contains("proposes 8 -> 7"), "{}", output.text);
+    }
+    #[test]
+    fn ordinary_branch_delta_reads_a_compact_merge_base() {
+        let (temp, _) = fixture();
+        let root = temp.path();
+        git(root, &["switch", "-qc", "source"]);
+        fs::remove_dir_all(root.join("nested/.kpopper")).unwrap();
+        fs::write(
+            root.join("nested/GROUNDING.yaml"),
+            "known: {p.value: {v: 7}, p.added: {v: 9}}\n",
+        )
+        .unwrap();
+        commit(root);
+        git(root, &["switch", "-q", "main"]);
+        fs::remove_dir_all(root.join("nested/.kpopper")).unwrap();
+        fs::write(
+            root.join("nested/GROUNDING.yaml"),
+            "known: {p.value: {v: 10}, p.local: {v: 8}}\n",
+        )
+        .unwrap();
+        commit(root);
+        let before = fs::read(root.join("nested/GROUNDING.yaml")).unwrap();
+        let output = crate::public_consolidation::dispatch(
+            &crate::public_consolidation::Options {
+                from_refs: vec!["source".into()],
+                record: Some(root.join("nested/GROUNDING.yaml")),
+                dry_run: true,
+                frozen: true,
+                ..Default::default()
+            },
+            root,
+        );
+        assert_eq!(output.code, 0, "{}{}", output.stdout, output.stderr);
+        assert!(output.stdout.contains("p.added"), "{}", output.stdout);
+        assert!(
+            !output.stdout.contains("p.value: 10 -> 7"),
+            "{}",
+            output.stdout
+        );
+        assert_eq!(
+            fs::read(root.join("nested/GROUNDING.yaml")).unwrap(),
+            before
+        );
+    }
+    #[test]
+    fn compact_merge_base_without_view_is_not_an_empty_record() {
+        let (temp, _) = fixture();
+        fs::remove_file(temp.path().join("nested/GROUNDING.yaml")).unwrap();
+        let revision = commit(temp.path());
+        assert_eq!(
+            comparison_layer(temp.path(), "nested/GROUNDING.yaml", &revision, None)
+                .unwrap_err()
+                .0,
+            "target_record_unavailable"
+        );
+    }
+    #[test]
+    fn compact_comparison_rejects_a_view_that_disagrees_with_history() {
+        let (temp, _) = fixture();
+        fs::write(
+            temp.path().join("nested/GROUNDING.yaml"),
+            b"known: {p.value: {v: 99}}\n",
+        )
+        .unwrap();
+        let revision = commit(temp.path());
+        assert!(records_layer(temp.path(), "nested/GROUNDING.yaml", &revision, None).is_err());
+        assert!(comparison_layer(temp.path(), "nested/GROUNDING.yaml", &revision, None).is_err());
     }
 }

@@ -191,6 +191,47 @@ fn advanced_first_explicit_add_enters_pending_without_creating_a_record() {
     );
 }
 
+/// A core/v1 active-history record as earlier releases created it. Only fixtures
+/// build this format; new records are compact.
+fn legacy_history_record(root: &Path) {
+    use kpop_native::{
+        history_bootstrap as B,
+        reasoning_runtime::{OperationalBounds, Runtime},
+        value::TypedValue as V,
+    };
+    let entry = root.join("GROUNDING.yaml");
+    let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scripts/reasoning/native")
+        .join(format!(
+            "{}.kpopper-runtime",
+            kpop_native::reasoning_runtime::target_name().unwrap()
+        ));
+    let runtime =
+        Runtime::open(&archive, &root.join(".test-cache"), OperationalBounds::default()).unwrap();
+    let policy = kpop_native::project_modes::Project::open(root)
+        .unwrap()
+        .config()
+        .unwrap();
+    let action =
+        V::from_json(&serde_json::json!({"kind":"add","id":"p.base","body":{"v":1},"as_of":"2026-09-19"}))
+            .unwrap();
+    let mutation = B::prepare(
+        &entry,
+        &action,
+        &policy,
+        &B::BootstrapOptions {
+            operation: "first-legacy".into(),
+            recorded_at: "2026-09-19T12:00:00+00:00".into(),
+            recording_day: "2026-09-19".into(),
+            record_id: "legacy-fixture".into(),
+            by: V::Null,
+        },
+        Some(&runtime),
+    )
+    .unwrap();
+    B::publish(&entry, &mutation, &policy, Some(&runtime), &mut |_| Ok(())).unwrap();
+}
+
 #[test]
 fn advanced_history_add_captures_a_version_three_contribution() {
     use kpop_native::value::TypedValue as V;
@@ -199,7 +240,9 @@ fn advanced_history_add_captures_a_version_three_contribution() {
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
-    success(run(&root, &["add", "p.base", "v=1"]));
+    // An existing core/v1 record keeps the v3 transport; compact records use
+    // the v4 semantic closure covered by tests/compact_contributions.rs.
+    legacy_history_record(&root);
     let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
     let args = [
         "add",

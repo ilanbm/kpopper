@@ -716,6 +716,36 @@ fn public_cli_explicit_acts_preserve_their_result_and_legacy_pin_identity() {
 }
 
 #[test]
+fn many_new_subjects_remain_readable_and_portable_after_batched_creation() {
+    let root = setup();
+    for batch in 0..11 {
+        let actions = (batch * 64..((batch + 1) * 64).min(700))
+            .map(|i| json!({"kind":"add", "id":format!("p.item{i}"), "body":{"v":i}}))
+            .collect::<Vec<_>>();
+        write(root.path(), &format!("many-{batch}"), &value(json!({"kind":"batch", "actions":actions})));
+    }
+    let capture = Capture::read(root.path()).unwrap();
+    assert_eq!(map(&map(capture.state())["subjects"]).len(), 700);
+    let streams = root.path().join(".kpopper/history");
+    assert!(!streams.join(C::subject_path("p.item0").unwrap()).exists());
+    assert!(streams.join(C::subject_path("p.item699").unwrap()).exists());
+    let before = capture.state().clone();
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    assert_eq!(Capture::read(copy.path()).unwrap().state(), &before);
+    // Both an early lazy original and a later streamed original retain their
+    // original versions when subsequently changed.
+    for i in [0, 699] {
+        let subject = format!("p.item{i}");
+        let V::Text(head) = &map(&map(&map(capture.state())["subjects"])[&subject])["head"] else { panic!() };
+        let original = capture.object(&subject, head).unwrap();
+        write(copy.path(), &format!("change-{i}"), &value(json!({"kind":"set", "id":subject, "value":-1})));
+        let after = Capture::read(copy.path()).unwrap();
+        assert_eq!(after.object(&subject, head).unwrap(), original);
+        assert_eq!(map(&map(after.document())["known"])[&subject].to_json().unwrap()["v"], -1);
+    }
+}
+
+#[test]
 fn batch_is_atomic_retains_intermediate_versions_and_final_dependency_pins() {
     let root = setup();
     let action = value(json!({"kind":"batch","actions":[

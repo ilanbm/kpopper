@@ -365,7 +365,8 @@ pub fn prepare(
     )?;
     prepare_version(document, roots, scope, files, 2)
 }
-/// Validate v1 archival identity, complete v2 closures, or retained v3 history.
+/// Validate v1 archival identity, complete v2 closures, retained v3 history, or a v4
+/// compact semantic closure. Any other version is refused, never read as plain.
 pub fn validate(bundle: &V, files: &Files) -> Result<V> {
     validate_options(bundle, files, true)
 }
@@ -403,6 +404,10 @@ pub fn equivalent(
 ) -> Result<bool> {
     validate(bundle, files)?;
     let manifest = map(field(map(bundle)?, "manifest")?)?;
+    if is_int(&manifest["version"], "4") {
+        // Only a compact target can hold this closure; see `equivalent_node`.
+        return Ok(false);
+    }
     if is_int(&manifest["version"], "3") {
         let Some(target) = history else {
             return Ok(false);
@@ -650,6 +655,29 @@ pub fn equivalent(
         }))
 }
 
+/// Content-based acceptance on a compact target: v4 and v3 history contributions count
+/// only when an explicit import of that revision is recorded with every closure object.
+/// Plain bundles compare the target's current document as before.
+pub(crate) fn equivalent_node(
+    bundle: &V,
+    files: &Files,
+    target: &crate::history_node_capture::Capture,
+    document: &V,
+    evidence: &Files,
+) -> Result<bool> {
+    validate(bundle, files)?;
+    let manifest = map(field(map(bundle)?, "manifest")?)?;
+    let version = field(manifest, "version")?;
+    if is_int(version, "3") || is_int(version, "4") {
+        return crate::history_node_contribution::accepted(target, bundle, files, evidence);
+    }
+    require(
+        is_int(version, "1") || is_int(version, "2"),
+        "unsupported_contribution_version",
+    )?;
+    equivalent(bundle, files, document, evidence, None)
+}
+
 /// Reconstruct the validated historical source carried by a v3 contribution.
 pub(crate) fn contribution_history(
     bundle: &V,
@@ -680,10 +708,14 @@ fn validate_options(bundle: &V, files: &Files, supported: bool) -> Result<V> {
     let m = map(manifest)?;
     let version = field(m, "version")?;
     require(
-        ["1", "2", "3"].iter().any(|v| is_int(version, v))
+        ["1", "2", "3", "4"].iter().any(|v| is_int(version, v))
             && *field(b, "revision")? == s(&manifest.digest()?),
         "invalid_contribution_identity",
     )?;
+    if is_int(version, "4") {
+        crate::history_node_contribution::validate(bundle, files)?;
+        return Ok(field(m, "reasoning")?.clone());
+    }
     if is_int(version, "3") {
         H::validate_contribution(bundle, files)?;
         return Ok(field(m, "reasoning")?.clone());

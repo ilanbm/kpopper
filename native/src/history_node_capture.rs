@@ -417,6 +417,7 @@ impl Capture {
         let history = History::from_ordered(objects, source_orders)?;
         crate::history_node_legacy::validate(&snapshot, &history, &semantic_events)?;
         crate::history_node_bootstrap::validate(&snapshot, &history, &semantic_events)?;
+        crate::history_node_contribution::validate_imports(&snapshot, &history, &semantic_events)?;
         let clocks = snapshot.source_clocks.select(
             snapshot
                 .transactions
@@ -683,7 +684,7 @@ impl Input for Capture {
 }
 
 /// Reuse authored field and body interpretation after complete semantic closure validation.
-fn render(template: &V, objects: &Map, state: &V, adapt: bool) -> Result<V> {
+pub(crate) fn render(template: &V, objects: &Map, state: &V, adapt: bool) -> Result<V> {
     let mut doc = template.clone();
     let mut collections = crate::reasoning_fields::collections(template)?
         .keys()
