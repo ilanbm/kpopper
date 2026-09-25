@@ -196,6 +196,38 @@ Value and basis availability remain independent of recorded acceptance. Public
 combined assessment and consumer policy remain separate integration work; this
 adapter does not change the standalone core/v1 version-2 assessment envelope.
 
+## Default compact creation
+
+New records created by the public first `add` use `node-history/v1`. The marker
+reserves record identity before publication. A marker with no view, manifests or
+objects is an unborn state, not an accepted empty record. Planning uses a fixed
+empty core document in memory; the first committed manifest has no before-view
+and no parents. The normal compact publisher records the actual writer and intent.
+Named first hypotheses remain proposed, including explicitly blocked missing inputs.
+
+An interrupted first publication follows the same durable manifest decision as
+later compact writes: without a committed manifest, recovery rolls back owned tails;
+with one, recovery finishes the exact view. A conflicting user edit is preserved and
+refused. Retrying an unborn marker keeps its record identity. Existing legacy records
+remain interpretable; a new compact record is never born as legacy and then migrated.
+
+Compact publication may retain one replaceable accepted-view checkpoint at
+`.kpopper/.history-local/accepted-node-view.yaml`, beneath a `*` ignore file. This
+is private derived control state, not a historical snapshot per operation and not
+part of a portable history bundle. It retains the last accepted text even after a
+manual edit or redaction, so deliberate local data removal must account for it.
+The manifest's exact view hash and full closure authenticate any checkpoint or Git
+blob used for reconciliation. Missing, stale or modified data cannot establish an
+accepted baseline. An explicit baseline is never replaced by a fallback.
+Checkpoint write failure does not block a durable publication or strand its journal;
+reconciliation then requires another verified preimage. Reads do not create it.
+
+`history-capture` routes by storage authority. Compact captures return a
+`node-history-capture/v1` evidence value with the actual compact authority, verified
+revision, current view, state, exact semantic objects and commit digests. The outer
+result remains `status: captured` with `semantic_assessment: not_performed`: capture
+checks retained structure and identity but does not establish source truth.
+
 ## Prepared legacy publication and recovery
 
 `scripts.history_transaction.PreparedMutation` names the entry, captured

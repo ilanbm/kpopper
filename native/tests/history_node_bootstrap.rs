@@ -22,6 +22,44 @@ fn map(value: &V) -> &std::collections::BTreeMap<String, V> {
 }
 
 #[test]
+fn public_capture_reads_compact_semantic_objects_and_refuses_changed_view() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source");
+    fixture(&source, b"known: {p.a: {v: 1}}\n");
+    let destination = tmp.path().join("compact");
+    Plan::prepare(&source.join("GROUNDING.yaml"))
+        .unwrap()
+        .publish(&destination)
+        .unwrap();
+    let before = fs::read(destination.join("GROUNDING.yaml")).unwrap();
+    let run = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+            .current_dir(tmp.path())
+            .args(["--workspace", destination.to_str().unwrap(), "history-capture", "GROUNDING.yaml", "--json"])
+            .output()
+            .unwrap()
+    };
+    let result = run();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    let result: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(result["status"], "captured");
+    assert_eq!(result["semantic_assessment"], "not_performed");
+    let evidence = V::from_tagged(&result["evidence"]).unwrap();
+    assert_eq!(result["digest"], evidence.digest().unwrap());
+    let evidence = map(&evidence);
+    assert_eq!(text(&evidence["format"]), "node-history-capture/v1");
+    assert_eq!(text(&evidence["profile"]), "node-history/v1");
+    let subject = &map(&map(&evidence["state"])["subjects"])["p.a"];
+    let head = text(&map(subject)["head"]);
+    let object = &map(&evidence["objects"])[head];
+    assert_eq!(text(&map(object)["subject"]), "p.a");
+    assert_eq!(map(object)["body"], map(&map(&evidence["document"])["known"])["p.a"]);
+    assert_eq!(fs::read(destination.join("GROUNDING.yaml")).unwrap(), before);
+    fs::write(destination.join("GROUNDING.yaml"), before.iter().copied().chain(b"\nknown: {}\n".iter().copied()).collect::<Vec<_>>()).unwrap();
+    assert!(!run().status.success());
+}
+
+#[test]
 fn ordinary_copy_retains_exact_source_and_unknown_historical_pins() {
     let tmp = tempfile::tempdir().unwrap();
     let source = tmp.path().join("source");

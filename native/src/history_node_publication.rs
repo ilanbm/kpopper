@@ -1372,6 +1372,7 @@ pub fn publish(
             "node_publication_retry_view",
         )?;
         verify(prepared)?;
+        crate::history_node_checkpoint::remember(root, &prepared.after_view()?);
         return Ok(());
     }
     revalidate(root, journal)?;
@@ -1422,6 +1423,7 @@ pub fn publish(
         unbytes(&Some(journal.after_view.clone()))?.as_deref(),
     )?;
     boundary(Phase::View)?;
+    crate::history_node_checkpoint::remember(root, &prepared.after_view()?);
     for file in &journal.evidence {
         require(
             evidence_state(root, file)?.is_some(),
@@ -1570,6 +1572,9 @@ pub fn recover(root: &Path, verify: impl FnOnce(&Prepared) -> Result<()>) -> Res
         }
         verify_history_with(root, &inventory(root)?, &BTreeMap::new(), after.as_deref())?;
         F::replace(&F::target(root, VIEW)?, after.as_deref())?;
+        if let Some(after) = &after {
+            crate::history_node_checkpoint::remember(root, after);
+        }
     } else {
         target_inventory(root, &journal)?;
         for op in journal.imports.keys() {
@@ -1861,6 +1866,9 @@ impl Bundle {
         require(expected == self.files, "node_publication_bundle_extra")?;
         if !self.files.contains_key(ATTRIBUTES_PATH) {
             F::publish_immutable(root.path(), ATTRIBUTES_PATH, GIT_ATTRIBUTES.as_bytes())?;
+        }
+        if let Some(view) = read(root.path(), VIEW)? {
+            crate::history_node_checkpoint::remember(root.path(), &view);
         }
         Ok(root)
     }

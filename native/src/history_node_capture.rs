@@ -149,6 +149,57 @@ pub struct Capture {
     baseline: V,
     pub(crate) semantic_events: BTreeMap<String, String>,
 }
+
+/// Exact semantic identities and current state after complete compact-history
+/// validation. This is a read receipt, not an export of the retained raw archive.
+pub(crate) fn public_evidence(entry: &Path) -> Result<V> {
+    let root = entry.parent().ok_or_else(|| error("invalid_path"))?;
+    let captured = Capture::read(root)?;
+    require(!captured.is_unborn(), "node_record_not_born")?;
+    let objects = captured
+        .history
+        .objects()
+        .iter()
+        .map(|(id, object)| {
+            Ok((
+                id.clone(),
+                captured.object(text(&map(object)?["subject"])?, id)?,
+            ))
+        })
+        .collect::<Result<Map>>()?;
+    let text_value = |value: &str| V::Text(value.into());
+    let evidence = V::Map(Map::from([
+        ("format".into(), text_value("node-history-capture/v1")),
+        ("profile".into(), text_value(C::FORMAT)),
+        ("revision".into(), text_value(captured.revision())),
+        (
+            "entry_sha256".into(),
+            text_value(&crate::identity::sha256(captured.entry_bytes())),
+        ),
+        ("authority".into(), captured.snapshot.authority.clone()),
+        (
+            "document".into(),
+            Y::decode_document(captured.entry_bytes())?,
+        ),
+        ("baseline".into(), captured.baseline.clone()),
+        ("state".into(), captured.state.clone()),
+        ("objects".into(), V::Map(objects)),
+        (
+            "commits".into(),
+            V::Map(
+                captured
+                    .snapshot
+                    .transactions
+                    .iter()
+                    .map(|(id, transaction)| (id.clone(), text_value(&transaction.digest)))
+                    .collect(),
+            ),
+        ),
+    ]));
+    captured.verify_current(root)?;
+    Ok(evidence)
+}
+
 impl Capture {
     /// Compact retained objects and verified storage-event bindings for display only.
     /// This never expands accumulated `saw` ancestry or changes semantic pins.
@@ -255,7 +306,10 @@ impl Capture {
         &self.snapshot.revision
     }
     pub fn entry_bytes(&self) -> &[u8] {
-        self.snapshot.current.as_deref().unwrap()
+        self.snapshot.current.as_deref().unwrap_or_default()
+    }
+    pub(crate) fn is_unborn(&self) -> bool {
+        self.snapshot.current.is_none()
     }
     pub fn verify_current(&self, root: &Path) -> Result<()> {
         require(
@@ -270,11 +324,22 @@ impl Capture {
         Self::from_snapshot_inner(snapshot, true)
     }
     fn from_snapshot_inner(snapshot: P::Snapshot, union: bool) -> Result<Self> {
-        let raw = snapshot
-            .current
-            .as_deref()
-            .ok_or_else(|| error("node_semantic_missing_view"))?;
-        let mut document = Y::decode_document(raw)?;
+        let mut document = if let Some(raw) = snapshot.current.as_deref() {
+            Y::decode_document(raw)?
+        } else {
+            require(
+                snapshot.transactions.is_empty()
+                    && snapshot.versions.is_empty()
+                    && snapshot.operations.is_empty(),
+                "node_semantic_missing_view",
+            )?;
+            // A marker reserves identity, but is not yet a record. This fixed
+            // planning seed is never published as an unbound empty view.
+            crate::reasoning_authoring::declare_document(&V::Map(Map::from([(
+                "meta".into(),
+                V::Map(Map::from([("updated".into(), V::Null)])),
+            )])))?
+        };
         let mut objects = Vec::new();
         let mut source_orders = BTreeMap::new();
         let mut semantic_events = BTreeMap::new();

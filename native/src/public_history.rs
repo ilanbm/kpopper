@@ -243,14 +243,10 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             let subjects = (!options.proposal_subject.is_empty())
                 .then_some(options.proposal_subject.as_slice());
             if crate::history_node_publication::selected(entry)? {
-                let baseline = options
-                    .baseline
-                    .as_deref()
-                    .ok_or_else(|| error("node_edit_baseline_required"))?;
                 json_value(&crate::public_node_edits::run(
                     &original,
                     &cwd,
-                    baseline,
+                    options.baseline.as_deref(),
                     subjects,
                     because,
                     options.by.as_deref(),

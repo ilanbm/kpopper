@@ -435,13 +435,11 @@ struct Build<'a> {
 }
 impl<'a> Build<'a> {
     fn new(capture: &Capture, operation: &'a str) -> Result<Self> {
-        let doc = Y::decode_document(
-            capture
-                .snapshot
-                .current
-                .as_deref()
-                .ok_or_else(|| error("node_semantic_missing_view"))?,
-        )?;
+        let doc = if capture.is_unborn() {
+            capture.document().clone()
+        } else {
+            Y::decode_document(capture.entry_bytes())?
+        };
         let originals = map(&doc)?
             .get("meta")
             .map(map)

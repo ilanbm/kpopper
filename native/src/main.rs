@@ -445,8 +445,8 @@ fn run(args: Args) -> Result<Value> {
         return kpop_native::public_followups::run(options, &root);
     }
     if let Command::HistoryCapture { entry } = args.command {
-        let captured = kpop_native::history_capture::capture(&entry, None, None)?;
-        let evidence = captured.evidence();
+        let root = args.workspace.unwrap_or(std::env::current_dir()?);
+        let evidence = kpop_native::history_capture::evidence_for_entry(&root.join(entry))?;
         return Ok(
             json!({"status":"captured","semantic_assessment":"not_performed","evidence":evidence.to_tagged()?,"digest":evidence.digest()?}),
         );

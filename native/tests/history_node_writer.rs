@@ -1609,6 +1609,9 @@ fn public_cli_reconcile_requires_exact_baseline_and_records_proposals() {
             .output()
             .unwrap()
     };
+    // Without a local checkpoint or a Git preimage, an explicit baseline is
+    // still necessary. A normal successful publisher now retains the checkpoint.
+    fs::remove_file(root.path().join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap();
     let fail = run(&[
         "history",
         "reconcile",

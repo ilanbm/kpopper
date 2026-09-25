@@ -88,6 +88,8 @@ pub mod history_node_archive;
 mod history_node_legacy;
 pub mod history_node_migration;
 pub mod history_node_bootstrap;
+mod history_node_birth;
+mod history_node_checkpoint;
 mod history_node_physical;
 pub mod history_io_metrics;
 pub mod history_paths;

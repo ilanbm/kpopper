@@ -316,6 +316,18 @@ pub fn baseline(marker: &V, commits: &Files, state: &V) -> Result<V> {
     A::validate_baseline(&value)?;
     Ok(value)
 }
+/// Public semantic evidence follows the record's verified storage authority.
+/// Existing legacy captures retain their original envelope.
+pub fn evidence_for_entry(entry: &Path) -> Result<V> {
+    if crate::history_node_publication::selected(entry)? {
+        return crate::history_node_capture::public_evidence(entry);
+    }
+    let captured = capture(entry, None, None)?;
+    let evidence = captured.evidence();
+    captured.verify_current()?;
+    Ok(evidence)
+}
+
 pub fn capture(
     entry: &Path,
     rules: Option<&Map>,

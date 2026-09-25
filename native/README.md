@@ -291,8 +291,11 @@ kpop set p.hours 12 --as-of 2026-09-19
 kpop review d.schedule
 ```
 
-An implicit first `add` creates a core history record through the guarded bootstrap
-transaction. Core authoring needs the selected core runtime archive; it does not
+An implicit first `add` creates a compact node-history record, in both Simple and
+Advanced projects. There is no storage choice to make. A reserved identity without
+a first committed entry is not an empty published record; an interrupted creation
+can be retried or recovered through the same guarded publication path.
+Core authoring needs the selected core runtime archive; it does not
 require the ordinary computation program. Subsequent add/set/review operations on
 active history retain exact retry journals and immutable prior versions. Plain
 command-line numbers and `true`/`false` retain their types; other scalar text stays
@@ -301,6 +304,13 @@ text, while explicit YAML lists/maps retain their structure.
 Private writes are retained outside the project. `recover` also resumes or rolls
 back an interrupted first write. `--hypothesis NAME` supports named authoring during
 bootstrap and on active records, including recovery of its own receipts.
+The readable record and its history retain exact bytes across Git checkouts; first
+creation appends the required scoped rules to `.gitattributes`, preserving existing
+rules. A single ignored accepted-view checkpoint helps turn manual edits into
+proposals. It is authenticated against committed history, never treated as authority;
+the index or `HEAD` can supply an exact baseline after a clone or branch switch.
+An explicit `history reconcile --record-proposals --baseline FILE` always uses that
+file and never silently substitutes another baseline.
 Existing Simple-mode ordinary records support byte-preserving `add`, `set`,
 `review`, `same` and `distinct`, including pointer/shard ownership, comments,
 quoted Unicode values, private-draft refusals and interrupted-write recovery. These
