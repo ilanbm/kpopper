@@ -1882,11 +1882,11 @@ sources:
          been performed for this guide; Grok Build compatibility does not establish Grok Bot plugin
          or hook support."
   doc.history_review_contract_2a608958:
-    name: "\"Causal review and branch comparison contract at 2a608958\""
-    file: "\"docs/history-contract.md\""
-    at: "\"Reviewing a changed judgment; native/tests/history_review_semantics.rs;
-         native/tests/public_branch_consolidation.rs\""
-    read: "\"2026-09-25\""
+    name: "Causal review and branch comparison contract at 2a608958"
+    file: "docs/history-contract.md"
+    at: "Reviewing a changed judgment; native/tests/history_review_semantics.rs;
+         native/tests/public_branch_consolidation.rs"
+    read: "2026-09-25"
     scope: {kind: code, commit: "2a6089584cd883705828c4dc193d9441a3856704"}
   doc.history_source_clock_order:
     name: "Source clock grouping and retained mapping order"
@@ -5572,7 +5572,7 @@ judgments:
                                      arrangement's review also rewrites the shape of the one tab, or
                                      of the tab serving a session source it rests on; nothing
                                      refreshes a snapshot by itself"
-      doc.history_review_contract_2a608958: "read \"2026-09-25\""
+      doc.history_review_contract_2a608958: "read 2026-09-25"
   d.home_beside_the_entry:
     verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
               file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,
