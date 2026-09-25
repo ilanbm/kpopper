@@ -198,6 +198,49 @@ impl Capture {
             .map(|version| (version.id().to_owned(), version.parents().to_vec()))
             .collect()
     }
+    /// Exact replaced.yaml archived by a verified ordinary-to-node bootstrap, if present.
+    /// The returned bytes remain archive evidence and have no semantic object identity.
+    pub(crate) fn archived_replaced_yaml(&self) -> Result<Option<Vec<u8>>> {
+        let mut found: Option<Vec<u8>> = None;
+        for transaction in self.snapshot.transactions.values() {
+            let Some(context) = transaction.context.as_ref() else {
+                continue;
+            };
+            let context = map(context)?;
+            if !context
+                .get("format")
+                .is_some_and(|format| string_is(format, crate::history_node_bootstrap::FORMAT))
+            {
+                continue;
+            }
+            let options = map(field(context, "options")?)?;
+            let archive_path = text(field(options, "archive")?)?;
+            let raw = self
+                .snapshot
+                .raw_evidence
+                .get(archive_path)
+                .ok_or_else(|| error("bootstrap_archive_missing"))?;
+            require(
+                transaction
+                    .evidence
+                    .get(archive_path)
+                    .is_some_and(|digest| digest == &crate::identity::sha256(raw.as_slice())),
+                "bootstrap_archive_hash",
+            )?;
+            let archive = crate::history_node_archive::Archive::decode(raw)?;
+            let Some(replaced) = archive.files().get(".kpopper/replaced.yaml") else {
+                continue;
+            };
+            if let Some(previous) = &found {
+                require(previous == replaced, "bootstrap_archive_ambiguous")?;
+            } else {
+                found = Some(replaced.clone());
+            }
+            // Captured bootstrap contexts and archive membership were verified as a whole
+            // during capture; this narrow accessor only returns the declared exact member.
+        }
+        Ok(found)
+    }
     pub fn read(root: &Path) -> Result<Self> {
         Self::from_snapshot(P::capture_snapshot(root)?)
     }

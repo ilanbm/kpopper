@@ -164,15 +164,17 @@ fn mark_current_heads(rows: &mut [J], state: &crate::value::TypedValue) -> Resul
         let Some(id) = row.get("id").and_then(J::as_str) else {
             continue;
         };
-        let Some(head) = subjects
-            .get(subject)
-            .and_then(|state| map(state).ok())
-            .and_then(|state| state.get("head"))
-            .and_then(|id| text(id).ok())
-        else {
+        let Some(head_state) = subjects.get(subject).and_then(|state| map(state).ok()) else {
             continue;
         };
-        if id == head {
+        let single_head = head_state.get("head").map(text).transpose()?;
+        let mut disputed_heads = false;
+        if let Some(heads) = head_state.get("heads") {
+            for head in crate::history_view::list(heads)? {
+                disputed_heads |= text(head)? == id;
+            }
+        }
+        if single_head == Some(id) || disputed_heads {
             row.as_object_mut()
                 .ok_or_else(|| error("invalid_schema"))?
                 .insert("current_head".into(), J::Bool(true));
@@ -215,6 +217,31 @@ fn node_rows(
         }
     }
     mark_current_heads(&mut rows, capture.state())?;
+    Ok(rows)
+}
+
+fn legacy_archive_rows(raw: Option<&[u8]>, prefixes: &[String]) -> Result<Vec<J>> {
+    let Some(raw) = raw else {
+        return Ok(vec![]);
+    };
+    let document = crate::history_yaml::decode_document(raw)?;
+    let mut rows = Vec::new();
+    for (subject, versions) in map(&document)? {
+        if !prefixes
+            .iter()
+            .any(|p| subject == p || subject.starts_with(&format!("{p}.")))
+        {
+            continue;
+        }
+        for entry in crate::history_view::list(versions)? {
+            rows.push(json!({
+                "subject": subject,
+                "source": "verified_bootstrap_archive",
+                "archive_member": ".kpopper/replaced.yaml",
+                "entry": crate::public_core_readers::json_value(entry)?
+            }));
+        }
+    }
     Ok(rows)
 }
 
@@ -351,8 +378,9 @@ fn human_row(row: &J) -> Result<String> {
     ))
 }
 
-fn clip_recent_and_heads(rows: &[J], requested: usize) -> (Vec<J>, usize) {
+fn clip_history(rows: &[J], archive: &[J], requested: usize) -> (Vec<J>, usize, Vec<J>, usize) {
     let mut keep = vec![false; rows.len()];
+    let mut keep_archive = vec![false; archive.len()];
     let mut used = 0usize;
     // Current heads are required context even when later review acts fill the causal tail.
     for index in (0..rows.len())
@@ -362,6 +390,15 @@ fn clip_recent_and_heads(rows: &[J], requested: usize) -> (Vec<J>, usize) {
         let size = serde_json::to_vec(&rows[index]).map_or(usize::MAX, |row| row.len() + 1);
         if used.saturating_add(size) <= requested {
             keep[index] = true;
+            used += size;
+        }
+    }
+    // Archive evidence has no semantic event identity, so budget it as its own section.
+    // Prefer the last source rows when space is tight, but do not imply causal order.
+    for index in (0..archive.len()).rev() {
+        let size = serde_json::to_vec(&archive[index]).map_or(usize::MAX, |row| row.len() + 1);
+        if used.saturating_add(size) <= requested {
+            keep_archive[index] = true;
             used += size;
         }
     }
@@ -381,6 +418,18 @@ fn clip_recent_and_heads(rows: &[J], requested: usize) -> (Vec<J>, usize) {
         .filter_map(|(row, selected)| selected.then(|| row.clone()))
         .collect::<Vec<_>>();
     let omitted = rows.len() - kept.len();
+    let kept_archive = archive
+        .iter()
+        .zip(keep_archive)
+        .filter_map(|(row, selected)| selected.then(|| row.clone()))
+        .collect::<Vec<_>>();
+    let omitted_archive = archive.len() - kept_archive.len();
+    (kept, omitted, kept_archive, omitted_archive)
+}
+
+#[cfg(test)]
+fn clip_recent_and_heads(rows: &[J], requested: usize) -> (Vec<J>, usize) {
+    let (kept, omitted, _, _) = clip_history(rows, &[], requested);
     (kept, omitted)
 }
 
@@ -440,6 +489,23 @@ mod tests {
             1
         );
     }
+
+    #[test]
+    fn both_contested_current_heads_receive_priority() {
+        let mut rows = vec![
+            json!({"subject":"d.contested","id":"head-a"}),
+            json!({"subject":"d.contested","id":"head-b"}),
+            json!({"subject":"d.contested","id":"old"}),
+        ];
+        let state = crate::value::TypedValue::from_json(&json!({
+            "subjects":{"d.contested":{"heads":["head-a","head-b"],"acceptance":"contested"}}
+        }))
+        .unwrap();
+        mark_current_heads(&mut rows, &state).unwrap();
+        assert_eq!(rows[0]["current_head"], true);
+        assert_eq!(rows[1]["current_head"], true);
+        assert!(rows[2].get("current_head").is_none());
+    }
 }
 
 pub(crate) fn render(
@@ -452,10 +518,12 @@ pub(crate) fn render(
     if prefixes.is_empty() {
         return Ok(String::new());
     }
-    let (rows, event_parents) = if let Some(capture) = node {
+    let (rows, event_parents, archive_rows) = if let Some(capture) = node {
+        let archive = capture.archived_replaced_yaml()?;
         (
             node_rows(capture, prefixes)?,
             capture.historical_event_parents(),
+            legacy_archive_rows(archive.as_deref(), prefixes)?,
         )
     } else if let Some(capture) = legacy {
         let parents = legacy_event_parents(capture)?;
@@ -463,17 +531,19 @@ pub(crate) fn render(
         (
             legacy_rows(capture, prefixes, &parents, &explanations)?,
             parents,
+            vec![],
         )
     } else {
-        (vec![], BTreeMap::new())
+        (vec![], BTreeMap::new(), vec![])
     };
     let rows = causal_order(rows, event_parents)?;
     let requested = chars.unwrap_or(12000).max(1) as usize;
-    // Keep current heads and the latest causal rows; selected rows render oldest to newest.
-    let (kept, omitted) = clip_recent_and_heads(&rows, requested);
+    // Keep current heads, archived source evidence and recent causal rows within one budget.
+    let (kept, omitted, kept_archive, omitted_archive) =
+        clip_history(&rows, &archive_rows, requested);
     if as_json {
         Ok(serde_json::to_string_pretty(
-            &json!({"schema_version":1,"historical_section":{"source":"captured_committed_history","ordering":"verified_storage_parent_order","fresh_observation":false,"complete":omitted==0,"versions":kept,"omitted_versions":omitted,"expand_with":"increase --chars or --budget"}}),
+            &json!({"schema_version":1,"historical_section":{"source":"captured_committed_history","version_ordering":"verified_storage_parent_order","legacy_archive_ordering":"archive source sequence only; no causal order inferred","fresh_observation":false,"complete":omitted==0 && omitted_archive==0,"versions":kept,"omitted_versions":omitted,"legacy_archive_evidence":kept_archive,"omitted_legacy_archive_entries":omitted_archive,"expand_with":"increase --chars or --budget"}}),
         )? + "\n")
     } else {
         let mut out = String::from(
@@ -483,8 +553,26 @@ pub(crate) fn render(
             out.push_str(&human_row(&row)?);
             out.push('\n');
         }
-        if omitted > 0 {
+        if !kept_archive.is_empty() {
+            out.push_str("LEGACY ARCHIVE EVIDENCE (verified bootstrap archive .kpopper/replaced.yaml; no semantic IDs or event order)\n");
+            for row in kept_archive {
+                let subject = row
+                    .get("subject")
+                    .and_then(J::as_str)
+                    .unwrap_or("unknown subject");
+                let entry = row
+                    .get("entry")
+                    .map(serde_json::to_string)
+                    .transpose()?
+                    .unwrap_or_default();
+                out.push_str(&format!("{subject} · archived legacy entry · {entry}\n"));
+            }
+        }
+        if omitted > 0 || omitted_archive > 0 {
             out.push_str(&format!("PARTIAL: {omitted} retained versions omitted; increase --chars or --budget to expand.\n"));
+            if omitted_archive > 0 {
+                out.push_str(&format!("PARTIAL: {omitted_archive} legacy archive entries omitted; increase --chars or --budget to expand.\n"));
+            }
         }
         Ok(out)
     }

@@ -78,21 +78,39 @@ fn write(root: &Path, op: &str, action: serde_json::Value) {
 }
 
 fn cli_with_runtime(root: &Path, args: &[&str]) -> std::process::Output {
-    let resources = root.join(".history-test-runtime");
-    let target = kpop_native::reasoning_runtime::target_name().unwrap();
-    fs::create_dir_all(resources.join("reasoning")).unwrap();
-    fs::copy(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../scripts/reasoning/native")
-            .join(format!("{target}.kpopper-runtime")),
-        resources.join("reasoning").join(format!("{target}.zip")),
-    )
-    .unwrap();
+    let resources = if let Some(resources) = std::env::var_os("KPOPPER_NATIVE_RESOURCES") {
+        std::path::PathBuf::from(resources)
+    } else {
+        let resources = root.parent().unwrap_or(root).join(format!(
+            ".history-test-runtime-{}",
+            root.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("workspace")
+        ));
+        let target = kpop_native::reasoning_runtime::target_name().unwrap();
+        fs::create_dir_all(resources.join("reasoning")).unwrap();
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../scripts/reasoning/native")
+                .join(format!("{target}.kpopper-runtime")),
+            resources.join("reasoning").join(format!("{target}.zip")),
+        )
+        .unwrap();
+        resources
+    };
     Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(args)
         .env("KPOPPER_NATIVE_RESOURCES", resources)
-        .env("KPOPPER_NATIVE_CACHE", root.join(".history-test-cache"))
+        .env(
+            "KPOPPER_NATIVE_CACHE",
+            root.parent().unwrap_or(root).join(format!(
+                ".history-test-cache-{}",
+                root.file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("workspace")
+            )),
+        )
         .env_remove("KPOPPER_READ_MODE")
         .output()
         .unwrap()
@@ -287,6 +305,114 @@ fn default_clip_keeps_the_current_judgment_after_many_later_reviews() {
         history.contains("review-55"),
         "latest review acts should remain visible: {history}"
     );
+}
+
+#[test]
+fn node_bootstrap_history_displays_selected_legacy_archive_evidence() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source");
+    let node = tmp.path().join("node");
+    fs::create_dir_all(source.join(".kpopper")).unwrap();
+    fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 0, of: 2026-09-20}}\njudgments:\n  d.done: {verdict: done, rests_on: [p.runs], seen: {p.runs: 0}, wrong_if: {expr: 'p.runs > 0'}}\n").unwrap();
+    fs::write(source.join(".kpopper/replaced.yaml"), "d.done:\n- verdict: not demonstrated\n  because: no brief\n  rests_on: [p.runs]\n  seen: {p.runs: 0}\n  wrong_if: 'p.runs > 0'\n  ended: its wrong_if holds (p.runs > 0)\n  day: '2026-09-25'\n  dropped: {p.old: retired after review}\nd.hidden:\n- verdict: private historical reason\n  because: do not include unrelated subject\n  day: '2026-09-24'\n").unwrap();
+    let migrated = cli_with_runtime(
+        &source,
+        &[
+            "history",
+            "migrate",
+            "--node-history",
+            "--to",
+            node.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        migrated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&migrated.stderr)
+    );
+    let before = tree(&node);
+    let output = cli_with_runtime(&node, &["--frozen", "pull", "d.done", "--history"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("LEGACY ARCHIVE EVIDENCE"), "{text}");
+    for expected in [
+        "not demonstrated",
+        "no brief",
+        "2026-09-25",
+        "its wrong_if holds",
+        "p.old",
+        "retired after review",
+    ] {
+        assert!(text.contains(expected), "missing {expected}: {text}");
+    }
+    assert!(
+        !text.contains("do not include unrelated subject"),
+        "unselected archive data leaked: {text}"
+    );
+    let structured = cli_with_runtime(
+        &node,
+        &["--json", "--frozen", "pull", "d.done", "--history"],
+    );
+    assert!(
+        structured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&structured.stderr)
+    );
+    let wrapper: serde_json::Value = serde_json::from_slice(&structured.stdout).unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(wrapper["output"].as_str().unwrap()).unwrap();
+    let archived = &payload["historical_section"]["legacy_archive_evidence"][0];
+    assert_eq!(archived["source"], "verified_bootstrap_archive");
+    assert_eq!(archived["archive_member"], ".kpopper/replaced.yaml");
+    assert_eq!(
+        archived["entry"]["ended"],
+        "its wrong_if holds (p.runs > 0)"
+    );
+    assert_eq!(
+        archived["entry"]["dropped"]["p.old"],
+        "retired after review"
+    );
+    assert!(
+        archived.get("id").is_none(),
+        "archive evidence gained a semantic id: {archived}"
+    );
+    assert_eq!(
+        payload["historical_section"]["legacy_archive_ordering"],
+        "archive source sequence only; no causal order inferred"
+    );
+    let clipped = cli_with_runtime(
+        &node,
+        &[
+            "--json",
+            "--frozen",
+            "pull",
+            "d.done",
+            "--history",
+            "--chars",
+            "1",
+        ],
+    );
+    assert!(
+        clipped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&clipped.stderr)
+    );
+    let clipped_wrapper: serde_json::Value = serde_json::from_slice(&clipped.stdout).unwrap();
+    let clipped_payload: serde_json::Value =
+        serde_json::from_str(clipped_wrapper["output"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        clipped_payload["historical_section"]["omitted_legacy_archive_entries"],
+        1
+    );
+    assert_eq!(
+        clipped_payload["historical_section"]["legacy_archive_evidence"],
+        serde_json::json!([])
+    );
+    assert_eq!(before, tree(&node));
 }
 
 #[test]

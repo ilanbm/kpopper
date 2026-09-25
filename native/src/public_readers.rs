@@ -781,13 +781,13 @@ pub fn run(
                     if as_json && captured_history {
                         let historical_section = if history_text.trim().is_empty() {
                             json!({"source":"captured_committed_history","complete":true,"versions":[],"omitted_versions":0})
-                        } else if let Ok(payload) = serde_json::from_str::<J>(&history_text) {
-                            payload
-                                .get("historical_section")
-                                .cloned()
-                                .unwrap_or(payload)
                         } else {
-                            json!({"source":"replaced_yaml","text":history_text})
+                            let payload: J = serde_json::from_str(&history_text)?;
+                            let historical = payload
+                                .get("historical_section")
+                                .ok_or_else(|| error("history_renderer_contract"))?;
+                            crate::require(historical.is_object(), "history_renderer_contract")?;
+                            historical.clone()
                         };
                         serde_json::to_string_pretty(&json!({
                             "output": base.trim_end(),
