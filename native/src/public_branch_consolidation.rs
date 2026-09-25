@@ -330,8 +330,8 @@ fn ordinary(
             merge_bases.len() == 1,
             "refused - source and destination do not have one unique Git merge base",
         )?;
-        let (ancestor, _) =
-            crate::source_target::records_layer(&root, &relative, merge_bases[0], runtime)?;
+        let ancestor =
+            crate::source_target::comparison_layer(&root, &relative, merge_bases[0], runtime)?;
         let source_map = map(&source_value)?;
         let source_record = V::Map(
             ["meta", "hypothesis"]

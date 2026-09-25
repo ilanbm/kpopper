@@ -213,8 +213,6 @@ fn branch_fold_preserves_destination_endings_and_source_entry_bytes() {
                 let updated = "    p.price: {v: 11, of: '2026-09-23', from: 'מחירון', at: 'עמוד 2'} # מחיר €\n";
                 let added = "    p.tax: {v: 2} # source comment\n";
                 let proposal = format!("known:\n{updated}{added}").replace('\n', source_newline);
-                fs::write(root.join("GROUNDING.yaml"), &proposal).unwrap();
-                let source = commit(root);
                 let base =
                     format!("# destination\nknown:\n{old}    p.z: {{v: untouched}} # keep\n");
                 let encode = |s: &str| {
@@ -227,6 +225,10 @@ fn branch_fold_preserves_destination_endings_and_source_entry_bytes() {
                 };
                 fs::write(root.join("GROUNDING.yaml"), encode(&base)).unwrap();
                 let head = commit(root);
+                git(root, &["checkout", "-q", "-b", "source"]);
+                fs::write(root.join("GROUNDING.yaml"), &proposal).unwrap();
+                let source = commit(root);
+                git(root, &["checkout", "-q", "main"]);
                 run(root, &["consolidate", "--from", &source]);
                 let expected = base.replace(old, &format!("{updated}{added}"));
                 assert_eq!(

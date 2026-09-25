@@ -48,6 +48,8 @@ struct Hypothesis {
     /// Another branch's whole record, when only what it holds differently is laid: the
     /// permissions its unchanged entries carry are still read from it.
     whole: Option<V>,
+    /// Comparison evidence is not authored proposal metadata or a permission source.
+    comparison_base: Option<V>,
 }
 pub(crate) struct SuppliedHypothesis {
     pub name: String,
@@ -255,6 +257,7 @@ fn read_hypotheses(
                     .into(),
                 source_record: V::Map(Map::new()),
                 whole: None,
+                comparison_base: None,
             },
         );
     }
@@ -313,10 +316,6 @@ fn read_hypotheses(
             Reader::new(&merged, runtime)
                 .map_err(|failure| in_union_order(capture, &source_layer, failure))?;
         }
-        let mut head = h.head.clone();
-        if let Some(comparison_base) = &h.comparison_base {
-            map_mut(&mut head)?.insert("_comparison_base".into(), comparison_base.clone());
-        }
         // An id the branch still holds in two collections has no one body to fold.
         crate::reasoning_snapshot::entries(&doc)?;
         let raw = entries(&doc)?;
@@ -326,13 +325,14 @@ fn read_hypotheses(
                 name: h.name.clone(),
                 path: None,
                 doc,
-                head,
+                head: h.head.clone(),
                 ids: raw.keys().cloned().collect(),
                 raw,
                 source: h.source.clone(),
                 text: h.text.clone(),
                 source_record: h.source_record.clone(),
                 whole,
+                comparison_base: h.comparison_base.clone(),
             },
         );
     }
@@ -611,6 +611,7 @@ fn one_hypothesis(capture: &CapturedSource, name: &str) -> Result<Hypothesis> {
             .into(),
         source_record: V::Map(Map::new()),
         whole: None,
+        comparison_base: None,
     })
 }
 pub(super) fn run(
@@ -932,6 +933,7 @@ pub(super) fn preview(
                 text: String::new(),
                 source_record: V::Map(Map::new()),
                 whole: None,
+                comparison_base: None,
             },
         );
     }
@@ -957,6 +959,7 @@ pub(super) fn preview(
                 text: String::new(),
                 source_record: V::Map(Map::new()),
                 whole: None,
+                comparison_base: None,
             },
         );
     }

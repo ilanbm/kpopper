@@ -238,6 +238,7 @@ struct Update {
     why: String,
 }
 struct Reversal {
+    review_only: bool,
     id: String,
     hyp: usize,
     old: V,
@@ -477,7 +478,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
     c.view = Some(projection(&c.doc, &Map::new(), runtime)?);
     let world = &c.view.as_ref().unwrap().base;
     let base = &c.base.base;
-    let snapshot_field = text(&base.reader.fields["snapshot"])?;
+    let snapshot_field = text(&base.reader.fields["snapshot"]).unwrap_or("seen");
     let meta = map(get(doc, "meta"))
         .ok()
         .map(|m| m.keys().cloned().collect::<BTreeSet<_>>())
@@ -497,7 +498,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         let (old_claim, new_claim) = (claim(old), claim(new));
         let same = same_claim(&old_claim, &new_claim);
         if base.judgments.contains_key(id) {
-            let fork = get(&h.head, "_comparison_base");
+            let fork = h.comparison_base.as_ref().unwrap_or(&V::Null);
             let fork_doc = map(fork).ok().and_then(|m| m.get("doc")).unwrap_or(fork);
             let fork_body = entries(fork_doc).ok().and_then(|all| all.get(id).cloned());
             let is_review_of_fork = fork_body.as_ref().is_some_and(|forked| {
@@ -520,6 +521,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
             continue;
         }
         let (allowed, mut why);
+        let mut review_only = false;
         if base.judgments.contains_key(id) {
             if same
                 && matches!((old, new), (V::Map(_), V::Map(_)))
@@ -541,7 +543,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
                 why="the base holds a judgment under this id and the hypothesis an arrangement - an arrangement is born when it is written in place, and no name takes one over a judgment: write it as its own decision".into();
                 c.untakeable.insert(id.clone());
             } else {
-                let comparison_base = get(&h.head, "_comparison_base");
+                let comparison_base = h.comparison_base.as_ref().unwrap_or(&V::Null);
                 let source_origin = map(comparison_base)
                     .ok()
                     .and_then(|m| m.get("doc"))
@@ -559,6 +561,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
                     )
                 });
                 if only_reviewed_forked_judgment {
+                    review_only = true;
                     allowed = false;
                     why = "the branch only reviewed its fork's judgment, while the destination has since changed it - that review cannot take the older verdict; write a new proposal to reconsider the conclusion".into();
                     c.untakeable.insert(id.clone());
@@ -599,6 +602,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
                 c.untaken.push(c.reversed.len());
             }
             c.reversed.push(Reversal {
+                review_only,
                 id: id.clone(),
                 hyp: hi,
                 old: old.clone(),

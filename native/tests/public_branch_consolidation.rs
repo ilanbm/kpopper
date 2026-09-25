@@ -121,6 +121,57 @@ fn ordinary_branch_preview_ignores_values_inherited_from_the_merge_base() {
 }
 
 #[test]
+fn branches_that_created_their_records_after_the_fork_have_an_empty_record_base() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    git(root, &["init", "-q", "-b", "main"]);
+    fs::write(root.join("README"), "Before the record\n").unwrap();
+    commit(root, "common code without a record");
+    git(root, &["checkout", "-q", "-b", "source"]);
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.source: {v: 1}\n").unwrap();
+    commit(root, "source creates record");
+    git(root, &["checkout", "-q", "main"]);
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.target: {v: 2}\n").unwrap();
+    commit(root, "target creates record");
+    for dry_run in [true, false] {
+        let output = public_consolidation::dispatch(&Options {
+            from_refs: vec!["source".into()], dry_run, ..Default::default()
+        }, root);
+        assert_eq!(output.code, 0, "{}{}", output.stdout, output.stderr);
+        assert!(output.stdout.contains("arrived (1)"), "{}", output.stdout);
+    }
+    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    assert!(record.contains("p.source:") && record.contains("p.target:"), "{record}");
+}
+
+#[test]
+fn an_unavailable_merge_base_record_is_not_treated_as_an_empty_record() {
+    for (path, content) in [
+        (".kpopper/replaced.yaml", "{}\n"),
+        ("GROUNDING.yaml", "record: [missing.yaml]\n"),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        git(root, &["init", "-q", "-b", "main"]);
+        fs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
+        fs::write(root.join(path), content).unwrap();
+        commit(root, "incomplete common record evidence");
+        git(root, &["checkout", "-q", "-b", "source"]);
+        fs::write(root.join("GROUNDING.yaml"), "known:\n  p.source: {v: 1}\n").unwrap();
+        commit(root, "source writes record");
+        git(root, &["checkout", "-q", "main"]);
+        fs::write(root.join("GROUNDING.yaml"), "known:\n  p.target: {v: 2}\n").unwrap();
+        commit(root, "target writes record");
+        let before = image(root);
+        let output = public_consolidation::dispatch(&Options {
+            from_refs: vec!["source".into()], dry_run: true, ..Default::default()
+        }, root);
+        assert_eq!(output.code, 1, "{path}: {}{}", output.stdout, output.stderr);
+        assert_eq!(image(root), before);
+    }
+}
+
+#[test]
 fn ordinary_branch_preview_refuses_missing_merge_base() {
     let (_temp, root) = branched(&[]);
     git(&root, &["checkout", "--orphan", "unrelated"]);
@@ -452,6 +503,32 @@ fn a_branch_that_still_holds_an_id_twice_is_refused_before_anything_folds() {
         }
     }
     assert_eq!(image(&root), before);
+}
+
+#[test]
+fn an_unrelated_private_entry_in_the_merge_base_does_not_block_a_public_delta() {
+    let (_temp, root) = branched(&[]);
+    let base = "known:\n  p.public: {v: 1, of: 2026-09-10}\n  p.secret: {v: 42, of: 2026-09-10, privacy: private}\n";
+    fs::write(root.join("GROUNDING.yaml"), base).unwrap();
+    commit(&root, "common record with an unrelated private entry");
+    git(&root, &["checkout", "-q", "-b", "public-change"]);
+    fs::write(root.join("GROUNDING.yaml"), base.replace("p.public: {v: 1, of: 2026-09-10}", "p.public: {v: 2, of: 2026-09-12}")).unwrap();
+    commit(&root, "public reading changes");
+    git(&root, &["checkout", "-q", "main"]);
+    let private = tempfile::tempdir().unwrap();
+    for dry_run in [true, false] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+        command.current_dir(&root).args(["consolidate", "--from", "public-change"])
+            .env("KPOPPER_PRIVATE_HOME", private.path());
+        if dry_run { command.arg("--dry-run"); }
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(image(private.path()).is_empty(), "a public-only delta created a private draft");
+    }
+    let after = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    assert!(after.contains("p.public: {v: 2, of: 2026-09-12}"), "{after}");
+    assert!(after.contains("p.secret: {v: 42, of: 2026-09-10, privacy: private}"), "{after}");
+    assert!(!after.contains("_comparison_base"), "comparison evidence entered the record");
 }
 
 #[test]

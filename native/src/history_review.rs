@@ -243,8 +243,9 @@ impl<'a> Subject<'a> {
             .filter(|id| string_is(&self.objects[*id]["kind"], "judgment"))
             .collect())
     }
-    fn origins(&mut self, head: usize) -> Result<(BTreeSet<(usize, usize)>, BTreeSet<usize>)> {
+    fn origins(&mut self, head: usize) -> Result<(BTreeSet<(usize, usize)>, BTreeSet<usize>, BTreeSet<usize>)> {
         let mut origins = BTreeSet::new();
+        let mut legacy = BTreeSet::new();
         let mut chain = BTreeSet::new();
         let mut visited = BTreeSet::new();
         let mut todo = vec![(head, None)];
@@ -254,6 +255,17 @@ impl<'a> Subject<'a> {
             }
             self.charge()?;
             chain.insert(version);
+            // A compact ordinary import retains its old reversal notice, but
+            // does not invent semantic acts for the pre-import decision. Keep
+            // that notice as claim evidence until an exact review acknowledges it.
+            let object = self.objects[version];
+            let imported = object.get("authored").and_then(|v| map(v).ok())
+                .and_then(|v| v.get("locator")).and_then(|v| map(v).ok())
+                .is_some_and(|v| v.get("kind") == Some(&V::Text("ordinary_bootstrap".into()))
+                    && v.get("import").and_then(|v| map(v).ok()).and_then(|v| v.get("operation")) == object.get("op"));
+            if imported && crate::ordinary_reader::reversal_pending(&object["body"]).is_some() {
+                legacy.insert(version);
+            }
             let mut episode = Vec::new();
             for act in self.enters[version].clone() {
                 if !self.within(act, cut)? {
@@ -325,12 +337,12 @@ impl<'a> Subject<'a> {
                 }
             }
         }
-        Ok((origins, chain))
+        Ok((origins, chain, legacy))
     }
     fn summary(&mut self, head: usize, states: &Map, rules: &Map) -> Result<V> {
-        let (origins, chain) = self.origins(head)?;
+        let (origins, chain, legacy) = self.origins(head)?;
         let self_counts = rules.get("self_review_counts") == Some(&V::Bool(true));
-        let mut provenance = true;
+        let mut provenance = legacy.is_empty();
         let mut excluded = Vec::new();
         for (claim, act) in &origins {
             let writer = &self.objects[*claim]["by"];
@@ -359,7 +371,7 @@ impl<'a> Subject<'a> {
             deps.extend(gaps.keys().cloned());
         }
         let mut satisfied = Vec::new();
-        if !origins.is_empty() {
+        if !origins.is_empty() || !legacy.is_empty() {
             for review in self.reviews.clone() {
                 let r = self.objects[review];
                 let b = map(&r["body"])?;
@@ -390,6 +402,12 @@ impl<'a> Subject<'a> {
                         break;
                     }
                 }
+                for imported in &legacy {
+                    if !self.before(*imported, review)? {
+                        seen = false;
+                        break;
+                    }
+                }
                 if !seen {
                     continue;
                 }
@@ -402,7 +420,7 @@ impl<'a> Subject<'a> {
             }
         }
         satisfied.sort();
-        let status = if origins.is_empty() {
+        let status = if origins.is_empty() && legacy.is_empty() {
             "not_required"
         } else if !satisfied.is_empty() {
             "reviewed"
@@ -418,11 +436,14 @@ impl<'a> Subject<'a> {
         let origin_versions = origins
             .iter()
             .map(|(v, _)| self.ids[*v])
+            .chain(legacy.iter().map(|v| self.ids[*v]))
             .collect::<BTreeSet<_>>();
-        V::from_json(
-            &serde_json::json!({"state":status,"provenance":if provenance{"recorded"}else{"missing"},
-            "origins":origin_acts,"origin_versions":origin_versions,"satisfied_by":satisfied}),
-        )
+        let mut summary = serde_json::json!({"state":status,"provenance":if provenance{"recorded"}else{"missing"},
+            "origins":origin_acts,"origin_versions":origin_versions,"satisfied_by":satisfied});
+        if !legacy.is_empty() {
+            summary["legacy_origins"] = serde_json::json!(legacy.iter().map(|v| self.ids[*v]).collect::<BTreeSet<_>>());
+        }
+        V::from_json(&summary)
     }
 }
 
@@ -472,6 +493,11 @@ pub(crate) fn summaries(
     Ok(result)
 }
 pub(crate) fn attach(projection: &V, summaries: &Map) -> Result<V> {
+    // A record without current judgments has no review policy to project. Keep
+    // its existing capture identity and old replay bytes unchanged.
+    if summaries.is_empty() {
+        return Ok(projection.clone());
+    }
     let mut p = map(projection)?.clone();
     let mut dispositions = map(&p["dispositions"])?.clone();
     for (subject, review) in summaries {
@@ -560,7 +586,7 @@ pub(crate) fn validate_summary(
                 "origin_versions",
                 "satisfied_by",
             ],
-            &[],
+            &["legacy_origins"],
         )?;
         let state = text(&result["state"])?;
         let provenance = text(&result["provenance"])?;
@@ -576,24 +602,27 @@ pub(crate) fn validate_summary(
             "invalid_review_state",
         )?;
         let origins = ids(&result["origins"], true)?;
+        let legacy = result.get("legacy_origins").map(|v| ids(v, true)).transpose()?.unwrap_or_default();
         let versions = ids(&result["origin_versions"], true)?;
         let satisfied = ids(&result["satisfied_by"], true)?;
+        require(legacy.iter().all(|v| versions.contains(v)) && (legacy.is_empty() || provenance == "missing"), "invalid_review_state")?;
+        let has_origin = !origins.is_empty() || !legacy.is_empty();
         require(
             match state {
-                "not_required" => origins.is_empty() && versions.is_empty() && satisfied.is_empty(),
+                "not_required" => !has_origin && versions.is_empty() && satisfied.is_empty(),
                 "unreviewed" => {
-                    !origins.is_empty()
+                    has_origin
                         && !versions.is_empty()
                         && satisfied.is_empty()
                         && provenance == "recorded"
                 }
                 "provenance_missing" => {
-                    !origins.is_empty()
+                    has_origin
                         && !versions.is_empty()
                         && satisfied.is_empty()
                         && provenance == "missing"
                 }
-                "reviewed" => !origins.is_empty() && !versions.is_empty() && !satisfied.is_empty(),
+                "reviewed" => has_origin && !versions.is_empty() && !satisfied.is_empty(),
                 _ => false,
             },
             "invalid_review_state",

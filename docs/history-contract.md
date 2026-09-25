@@ -280,6 +280,9 @@ records without active history retain their existing day-stamped review behavior
 If either the writer or accepting actor is known, their own review remains excluded
 even when the other identity is missing. Metadata-only descendants inherit review
 state; returning to an old version starts a new episode requiring review.
+A pending reversal notice in an ordinary record survives a compact copied migration.
+The imported claim supplies that notice's evidence; an exact review acknowledges the
+inherited provenance gap without fabricating pre-import history acts.
 
 `pull ID --history` exposes retained versions and transition reasons from the verified
 captured history. Historical display is separate from computational pins, and clipped
@@ -291,6 +294,9 @@ An unchanged inherited reading is not a new observation. A source review keeps i
 original observed values; a later date alone does not invalidate an equal reading.
 Reviewing the fork's old judgment cannot replace a destination judgment that has
 since changed, including through `--take`; reconsidering it requires a new proposal.
+If the record and its owned evidence did not exist at that merge base, the comparison
+starts empty. Missing pointers or retained history still refuse. Comparison evidence
+is kept separately from proposal metadata and does not become a permission source.
 
 Review reservations are derived from immutable claims and acts after acceptance
 reduction. They do not rewrite old objects, change the storage format, or change

@@ -30,6 +30,7 @@ pub(super) fn findings(capture: &CapturedSource) -> Result<Vec<Hypothesis>> {
                 doc: doc.clone(),
                 head: get(h, "head").clone(),
                 ids: raw.keys().cloned().collect(),
+                comparison_base: None,
                 raw,
             },
         );
