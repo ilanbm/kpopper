@@ -416,10 +416,18 @@ kpop --workspace /absolute/workspace history status
 `history reconcile` describes differences between the rendered history and the
 editable record. `history rebuild` replaces a view only when reconciliation proves
 that no unrecorded edits would be lost. Both retain the existing immutable evidence.
+On a compact node-history record the view is bound to its manifest: `reconcile`
+reports `rebuild_safe: false` for an unaccepted edit and `rebuild` refuses it with
+`unresolved_view_edit`; neither rewrites the file.
 
 `history migrate` previews an import; `history migrate --to /abs/absent-directory`
-materializes and verifies a separate copy. It preserves source bytes and does not
-activate the source record. `--record` selects an explicit record and `--read-mode`
+materializes and verifies a separate copy in compact node history. It preserves
+source bytes and does not activate the source record. The copy has the same claims
+and acts as the established import, a canonical `GROUNDING.yaml`, and one archive
+of the exact original files and layout; the preview names a changed entry name and
+every member kept only in that archive. An active history/v1 record converts with
+its original semantic IDs. `--node-history` is accepted as an alias. `--record`
+selects an explicit record and `--read-mode`
 selects live or frozen migration capture. The default is frozen in Simple mode and
 live in Advanced mode. Use `history migrate --read-mode frozen` to select frozen
 migration input explicitly; the general reader `--frozen` flag does not override it.

@@ -1,16 +1,19 @@
-# Experimental node-local history storage
+# Compact node-local history storage
 
-Node history is an explicitly marked native format for a single `GROUNDING.yaml`. Its
+New records use compact node history automatically. It is a native format for a single
+`GROUNDING.yaml`; authors use the usual record commands without choosing a backend. Its
 authority marker is version 3 with `profile: node-history/v1`, `authority: history`, and
 `requires: [node-history/v1]`. The marker keeps legacy writers from changing a
-node-history record. Existing records and ordinary `history migrate` continue to use the
-established history format by default.
+node-history record. Existing legacy records remain readable and writable in their
+original format until explicitly migrated; reading them does not convert them.
 
-To make a separate node-history copy, run:
+To make a verified compact copy of an existing record, run:
 
 ```sh
-kpop history migrate --node-history --to /path/to/new-copy
+kpop history migrate --to /path/to/new-copy
 ```
+
+`--node-history` remains accepted as an alias for the same command.
 
 The copy includes a scoped `.gitattributes` policy (`-text`) for the record, history,
 and retained evidence, preserving exact bytes through Git even with `core.autocrlf`.
@@ -30,12 +33,29 @@ Earlier legacy transactions retain their original receipts in the archive; the
 conversion does not invent historical node-format view hashes. Inactive and cancelled
 generations remain archived evidence, separate from the active reduced state.
 
-A copy of an ordinary record archives its exact source closure and creates initial
-claims with explicit unknown historical author, operation, and pin provenance. It does
-not infer past observations from the present document. Physical hypothesis files keep
-their exact raw bytes at their original paths and enter the copy as named proposals,
-without acceptance. Ordinary-reader folding remains unsupported; the implemented fold
-boundary is `core/v1` known nodes.
+A copy of an ordinary record is one `node-history-import/v1` transaction. It creates
+the claims and acts of the established history import: current entries, replaced
+versions with accept acts, and retirements, all with explicit unknown historical
+author, operation, and pin provenance. It does not infer past observations from the
+present document. One hash-bound ZIP archive keeps every original file under its import
+member name, with the original entry name and the relative layout of members outside
+the record directory. Every read reconstructs that layout and replays the import;
+changed semantic objects, storage bindings or map fields are refused.
+
+The new entry is `GROUNDING.yaml`; the preview reports any changed entry name and
+members kept only in the archive. Referenced evidence files stay at their relative
+paths. A live read retains its snapshot as separate evidence. Physical hypothesis files
+keep their exact bytes under `.kpopper/hypotheses/` and enter the copy as named proposals,
+without acceptance, through a following physical-import transaction.
+
+Absolute original pointers stay exact in the archive. Replay relocates them only in its
+temporary copy, using the archived member mapping, and does not read their old locations.
+Git and project discovery stop at that temporary directory. An earlier deactivated
+history generation keeps its record ID and is archived as evidence; the copy takes the
+next generation. A keyed dependency map is refused because the history reader interprets
+such maps as version pins. Earlier `node-original-bootstrap/v1` copies remain readable.
+Ordinary-reader folding remains unsupported; the implemented fold boundary is `core/v1`
+known nodes.
 
 For native authored actions, a subject-local ledger groups the objects emitted by one
 action into one frame for each touched subject. Slots keep the distinct original
@@ -45,6 +65,9 @@ guarded writer serves supported Simple-mode add/set/review and explicit disposit
 on marked records. The current readable body stays in `GROUNDING.yaml` for a new
 unchanged singleton. Its original event binding and any receipt tail live in
 `meta.node_history`; the stream is created when later changes require retention.
+Lazy bindings have a bounded share of the current document's size budget. Once that
+budget is full, additional originals retain the same first event directly in their
+subject streams, keeping the current view readable without discarding history.
 Historical streams are JSONL events with explicit parent, merge, encoding base, and
 result hashes. Storage event IDs are distinct from semantic object IDs.
 
@@ -78,10 +101,11 @@ closure, including evidence hashes, and a portable export can reconstruct an iso
 source-free copy. Semantic replay remains required for authoring; a successful byte
 publication alone is not evidence that an action was admissible.
 
-The format remains experimental. Full-closure verification is retained, and no scoped
-fast-read integrity policy is enabled. Model-free storage and full-writer measurements
-are pending; no throughput, memory, 10k-writer, or launch-readiness claim follows from
-codec or copy tests.
+Full-closure verification is retained; there is no reduced-integrity fast-read mode.
+Migrated legacy archives remain part of that closure. Compact writes avoid adding full
+world snapshots to each new manifest, but this is not a throughput or memory guarantee.
+In particular, checking an archived legacy history can still dominate the time needed
+to read or change a migrated record.
 
 Pending branch-union or source-clock journals written by earlier unreleased node-history
 prototypes must be recovered with their original runtime before upgrading. This runtime

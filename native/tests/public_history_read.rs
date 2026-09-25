@@ -77,6 +77,32 @@ fn write(root: &Path, op: &str, action: serde_json::Value) {
     W::publish(root, &prepared, None, |_| Ok(())).unwrap();
 }
 
+/// Public migration creates compact history. Existing history/v1 and bootstrap
+/// copies are produced here by their retained library emitters.
+fn legacy_copy(source: &Path, destination: &Path) {
+    kpop_native::history_migration::Plan::prepare(
+        Path::new("GROUNDING.yaml"),
+        source,
+        kpop_native::history_migration::Options {
+            operation: "import-fixture".into(),
+            recorded_at: chrono::Utc::now().to_rfc3339(),
+            record_id: Some("record-fixture".into()),
+            read_mode: kpop_native::source_capture::ReadMode::Frozen,
+            route: false,
+            as_of: None,
+        },
+        None,
+    )
+    .unwrap()
+    .publish(destination)
+    .unwrap();
+}
+fn bootstrap_copy(source: &Path, destination: &Path) {
+    kpop_native::history_node_bootstrap::Plan::prepare(&source.join("GROUNDING.yaml"))
+        .unwrap()
+        .publish(destination)
+        .unwrap();
+}
 fn cli_with_runtime(root: &Path, args: &[&str]) -> std::process::Output {
     let resources = if let Some(resources) = std::env::var_os("KPOPPER_NATIVE_RESOURCES") {
         std::path::PathBuf::from(resources)
@@ -315,21 +341,7 @@ fn node_bootstrap_history_displays_selected_legacy_archive_evidence() {
     fs::create_dir_all(source.join(".kpopper")).unwrap();
     fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 0, of: 2026-09-20}}\njudgments:\n  d.done: {verdict: done, rests_on: [p.runs], seen: {p.runs: 0}, wrong_if: {expr: 'p.runs > 0'}}\n").unwrap();
     fs::write(source.join(".kpopper/replaced.yaml"), "d.done:\n- verdict: not demonstrated\n  because: no brief\n  rests_on: [p.runs]\n  seen: {p.runs: 0}\n  wrong_if: 'p.runs > 0'\n  ended: its wrong_if holds (p.runs > 0)\n  day: '2026-09-25'\n  dropped: {p.old: retired after review}\nd.hidden:\n- verdict: private historical reason\n  because: do not include unrelated subject\n  day: '2026-09-24'\n").unwrap();
-    let migrated = cli_with_runtime(
-        &source,
-        &[
-            "history",
-            "migrate",
-            "--node-history",
-            "--to",
-            node.to_str().unwrap(),
-        ],
-    );
-    assert!(
-        migrated.status.success(),
-        "{}",
-        String::from_utf8_lossy(&migrated.stderr)
-    );
+    bootstrap_copy(&source, &node);
     let before = tree(&node);
     let output = cli_with_runtime(&node, &["--frozen", "pull", "d.done", "--history"]);
     assert!(
@@ -424,15 +436,7 @@ fn legacy_migration_history_displays_bound_replaced_member() {
     fs::create_dir_all(source.join(".kpopper")).unwrap();
     fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 0, of: 2026-09-20}}\njudgments:\n  d.done: {verdict: done, rests_on: [p.runs], seen: {p.runs: 0}, wrong_if: {expr: 'p.runs > 0'}}\n").unwrap();
     fs::write(source.join(".kpopper/replaced.yaml"), "d.done:\n- verdict: not demonstrated\n  because: legacy import reason\n  rests_on: [p.runs]\n  seen: {p.runs: 0}\n  wrong_if: 'p.runs > 0'\n  ended: the old predicate fired\n  day: '2026-09-24'\n  dropped: {p.previous: superseded in legacy source}\nd.unselected:\n- verdict: omit me\n  ended: unselected archive value\n").unwrap();
-    let migrated = cli_with_runtime(
-        &source,
-        &["history", "migrate", "--to", legacy.to_str().unwrap()],
-    );
-    assert!(
-        migrated.status.success(),
-        "{}",
-        String::from_utf8_lossy(&migrated.stderr)
-    );
+    legacy_copy(&source, &legacy);
     let before = tree(&legacy);
     let pulled = cli_with_runtime(&legacy, &["--frozen", "pull", "d.done", "--history"]);
     assert!(
@@ -488,18 +492,7 @@ fn core_pull_reads_active_history_v1_and_json_budget_reports_omissions() {
     let copy = tmp.path().join("copy");
     fs::create_dir(&source).unwrap();
     fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.a: {v: 1, note: 'historic body with details'}\n").unwrap();
-    let migrated = Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .current_dir(&source)
-        .args(["history", "migrate", "--to", copy.to_str().unwrap()])
-        .env_remove("KPOPPER_NATIVE_RESOURCES")
-        .env_remove("KPOPPER_READ_MODE")
-        .output()
-        .unwrap();
-    assert!(
-        migrated.status.success(),
-        "{}",
-        String::from_utf8_lossy(&migrated.stderr)
-    );
+    legacy_copy(&source, &copy);
     let authority = fs::read_to_string(copy.join(".kpopper/history.yaml")).unwrap();
     assert!(authority.contains("history/v1"), "{authority}");
     let before = tree(&copy);
@@ -573,18 +566,7 @@ fn ordinary_pull_reads_active_history_v1() {
         "meta: {purpose: Fixture}\nknown:\n  p.a: {v: 1, note: 'ordinary retained body'}\n",
     )
     .unwrap();
-    let migrated = Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .current_dir(&source)
-        .args(["history", "migrate", "--to", copy.to_str().unwrap()])
-        .env_remove("KPOPPER_NATIVE_RESOURCES")
-        .env_remove("KPOPPER_READ_MODE")
-        .output()
-        .unwrap();
-    assert!(
-        migrated.status.success(),
-        "{}",
-        String::from_utf8_lossy(&migrated.stderr)
-    );
+    legacy_copy(&source, &copy);
     let before = tree(&copy);
     let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(&copy)
@@ -755,17 +737,21 @@ fn public_drop_reason_survives_active_legacy_and_node_history() {
     let source = tmp.path().join("source");
     fs::create_dir(&source).unwrap();
     fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.x: {v: 1, of: 2026-09-20}, p.y: {v: 2, of: 2026-09-20}}\njudgments:\n  d.j: {verdict: ready, rests_on: [p.x], wrong_if: {expr: 'p.x < 3'}}\n").unwrap();
-    for (name, extra) in [("legacy", vec![]), ("node", vec!["--node-history"])] {
+    for name in ["legacy", "node"] {
         let target = tmp.path().join(name);
-        let mut args = vec!["history", "migrate"];
-        args.extend(extra.iter().copied());
-        args.extend(["--to", target.to_str().unwrap()]);
-        let migrated = cli_with_runtime(&source, &args);
-        assert!(
-            migrated.status.success(),
-            "{}",
-            String::from_utf8_lossy(&migrated.stderr)
-        );
+        if name == "legacy" {
+            legacy_copy(&source, &target);
+        } else {
+            let migrated = cli_with_runtime(
+                &source,
+                &["history", "migrate", "--to", target.to_str().unwrap()],
+            );
+            assert!(
+                migrated.status.success(),
+                "{}",
+                String::from_utf8_lossy(&migrated.stderr)
+            );
+        }
         let authority = fs::read_to_string(target.join(".kpopper/history.yaml")).unwrap();
         assert!(
             authority.contains(if name == "node" {

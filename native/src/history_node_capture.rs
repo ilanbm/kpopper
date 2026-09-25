@@ -263,6 +263,16 @@ impl Capture {
         for transaction in self.snapshot.transactions.values() {
             let Some(context) = transaction.context.as_ref() else { continue };
             let context = map(context)?;
+            if let Some(archived) =
+                crate::history_node_import::retained_replaced(&self.snapshot, transaction)?
+            {
+                if let Some(previous) = &found {
+                    require(previous.bytes == archived.bytes, "history_archive_ambiguous")?;
+                } else {
+                    found = Some(archived);
+                }
+                continue;
+            }
             let (paths, source) = if context.get("format")
                 .is_some_and(|v| string_is(v, crate::history_node_bootstrap::FORMAT)) {
                 let options = map(field(context, "options")?)?;
@@ -417,6 +427,7 @@ impl Capture {
         let history = History::from_ordered(objects, source_orders)?;
         crate::history_node_legacy::validate(&snapshot, &history, &semantic_events)?;
         crate::history_node_bootstrap::validate(&snapshot, &history, &semantic_events)?;
+        crate::history_node_import::validate(&snapshot, &history, &semantic_events)?;
         crate::history_node_contribution::validate_imports(&snapshot, &history, &semantic_events)?;
         let clocks = snapshot.source_clocks.select(
             snapshot

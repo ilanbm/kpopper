@@ -123,6 +123,7 @@ pub(crate) fn context(value: &V) -> Result<&Map> {
             || string_is(&c["format"], crate::history_node_legacy::FORMAT)
             || string_is(&c["format"], crate::history_node_legacy::CHECKPOINT)
             || string_is(&c["format"], crate::history_node_bootstrap::FORMAT)
+            || string_is(&c["format"], crate::history_node_import::FORMAT)
             || string_is(&c["format"], crate::history_node_physical::FORMAT),
         "node_transaction_format",
     )?;
@@ -321,6 +322,7 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String,
             let restored = receipt_index(snapshot, op, &index)?;
             let expected = if [
                 crate::history_node_bootstrap::FORMAT,
+                crate::history_node_import::FORMAT,
                 crate::history_node_physical::FORMAT,
             ]
             .iter()

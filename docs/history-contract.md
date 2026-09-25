@@ -411,9 +411,17 @@ Authority transitions use the separate guarded interface below.
 baseline-bound edit descriptions, and `history rebuild` resolves a generated Git
 view without creating knowledge acts. `history migrate --record FILE --to DIR`
 publishes only into an absent copy destination after capture and replay validation.
-It preserves original entry names, supported shard/pointer layouts, hypotheses,
-original bytes and historical provenance gaps. `restore_copy` checks the complete
-candidate before restoring an exact original copy. It refuses newer history.
+New copies use compact node history (`node-history-import/v1`): the claims and acts
+of the established import, with their provenance gaps, are replayed on every read
+from one archive of the original bytes, entry name and relative shard/pointer
+layout. Hypotheses become named proposals. Absolute original pointers are kept
+exactly, reported as a non-representable inverse and relocated only inside replay.
+A deactivated earlier history keeps its record ID; its files stay archived evidence
+and the copy takes the next generation. A keyed dependency map is refused: history
+reads such a map as version pins. Existing history/v1 copies keep their format.
+`restore_copy` and `history_node_import::restore` check the complete candidate
+before restoring an exact original copy. They refuse newer history and absolute
+original layouts.
 Live cutover and rollback of an active record are separate operations.
 
 Direct history commands retain a private retry envelope binding their exact
@@ -432,16 +440,24 @@ omitted from `seen`; unblocked missing dependencies still refuse. Computational 
 assess a named document projection and separately bind history, avoiding a circular
 receipt/manifest identity. They are not the public combined assessment envelope.
 
-Version-3 portable contributions bind checksummed history closure through
-`history-closure/v1`. Existing version-1/2 identities remain unchanged. Full-history
+Version-3 portable contributions bind checksummed legacy history closure through
+`history-closure/v1`. Compact records emit version-4 scoped contributions using
+`node-contribution/v1`: selected semantic objects, their dependency closure, source
+orders, required source clocks and retained evidence. They preserve semantic IDs
+without exporting the source project's complete private history. Existing
+version-1/2/3 identities remain unchanged. Readers must support the contribution's
+version; unknown versions refuse rather than degrade to a YAML-only reading.
+
+Full-history
 export requires explicit roots covering every transferred subject and checks the
 privacy of historical bodies as well as current ones. Staged orphan objects stay
-excluded. Materialization publishes the exact authority, immutable commits and
-objects plus canonical view, retaining original artifact evidence. Publication
+excluded. Scoped contribution materialization creates a compact record with the
+contribution's identity, preserving its objects and original artifact evidence.
+It does not claim to be the original source record. Publication
 can union complete contributions into the same authority and rules; a different
 authority requires explicit adoption. Retaining an artifact does not prove it was
-accepted. Scoped single-action and report contributions use artifact version 2 inside the
-version-3 pending envelope. The transport contains whole histories of selected
+accepted. Scoped single-action and report contributions use the versioned artifact
+inside the version-3 pending envelope. The transport contains whole histories of selected
 subjects and their dependency closure. It preserves object IDs and original
 scopes, labels prepared candidates, and reports selected rather than original
 store completeness. Source completeness is an observation, not authenticated
@@ -449,7 +465,12 @@ membership proof. Retained non-entry locators require explicit path/hash disclos
 consent; `--disclose-locator PATH=SHA256` records that consent without reading the
 named file. Every overlapping target subject requires an explicit adoption choice.
 Acceptance is checked against an actual committed adoption receipt and exact
-object inventory, never against artifact retention or equal YAML alone.
+object inventory, never against artifact retention or equal YAML alone. A compact
+import publishes carried clocks and semantic objects in one guarded transaction;
+refused choices or a changed pending ledger cannot leave a clock-only write behind.
+Domain-bound subset contributions currently refuse because a subset cannot preserve
+the complete declared domain contract. A compact contribution cannot be adopted into
+a legacy target; migrate a verified copy first.
 
 Branch transport resolves a pinned local Git source and captures its exact
 objects, profiles and proposals. `preview_adoption` and

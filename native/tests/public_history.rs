@@ -42,6 +42,20 @@ fn tree(root: &Path) -> BTreeMap<String, String> {
     out
 }
 
+/// Compact views are canonical tagged YAML; edit the decoded reading, as a person's editor would.
+fn edit_reading(entry: &Path, subject: &str, value: i64) -> i64 {
+    use kpop_native::value::TypedValue as V;
+    let mut document =
+        kpop_native::history_yaml::decode_document(&fs::read(entry).unwrap()).unwrap();
+    let V::Map(fields) = &mut document else { panic!("record mapping") };
+    let V::Map(known) = fields.get_mut("known").unwrap() else { panic!("known mapping") };
+    let V::Map(body) = known.get_mut(subject).unwrap() else { panic!("reading body") };
+    let old = body["v"].to_json().unwrap().as_i64().unwrap();
+    body.insert("v".into(), V::from_json(&serde_json::json!(value)).unwrap());
+    fs::write(entry, kpop_native::history_yaml::encode_document(&document).unwrap()).unwrap();
+    old
+}
+
 #[test]
 fn public_copy_preview_publish_reconcile_and_rebuild_preserve_source_and_history() {
     let tmp = tempfile::tempdir().unwrap();
@@ -104,9 +118,7 @@ fn public_history_rejects_authored_view_edits_without_losing_them() {
         &["history", "migrate", "--to", copy.to_str().unwrap()],
     ));
     let entry = copy.join("GROUNDING.yaml");
-    let raw = fs::read_to_string(&entry).unwrap();
-    assert!(raw.contains("v: 1"));
-    fs::write(&entry, raw.replace("v: 1", "v: 7")).unwrap();
+    assert_eq!(edit_reading(&entry, "p.x", 7), 1);
     let before = tree(&copy);
     assert_eq!(
         ok(run(&copy, &["history", "reconcile"]))["rebuild_safe"],
@@ -210,11 +222,7 @@ fn explicit_acts_and_edited_view_proposals_retain_old_claims() {
         "accepted"
     );
     let entry = copy.join("GROUNDING.yaml");
-    fs::write(
-        &entry,
-        fs::read_to_string(&entry).unwrap().replace("v: 1", "v: 8"),
-    )
-    .unwrap();
+    assert_eq!(edit_reading(&entry, "p.x", 8), 1);
     let result = ok(run(
         &copy,
         &[
@@ -232,7 +240,9 @@ fn explicit_acts_and_edited_view_proposals_retain_old_claims() {
     assert_eq!(result["state"], "proposed");
     let status = ok(run(&copy, &["history", "status"]));
     assert_eq!(status["subjects"]["p.x"]["heads"][0], version);
-    assert!(fs::read_to_string(&entry).unwrap().contains("v: 1"));
+    // The accepted reading is unchanged and the view verifies again.
+    assert_eq!(edit_reading(&entry, "p.x", 1), 1);
+    assert_eq!(ok(run(&copy, &["history", "reconcile"]))["rebuild_safe"], true);
 }
 
 #[test]

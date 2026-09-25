@@ -48,7 +48,8 @@ fn a_compact_copy_preserves_an_unacknowledged_ordinary_reversal() {
         ] { assert!(cli(&source, &args, &private).status.success()); }
         if acknowledged { assert!(cli(&source, &["review", "d.done"], &private).status.success()); }
         let copy = temp.path().join("copy");
-        assert!(cli(&source, &["history", "migrate", "--node-history", "--to", copy.to_str().unwrap()], &private).status.success());
+        // The retired bootstrap copy honours the ordinary `reviewed` date; its reader must keep doing so.
+        kpop_native::history_node_bootstrap::Plan::prepare(&source.join("GROUNDING.yaml")).unwrap().publish(&copy).unwrap();
         let before = image(&copy);
         let opened = cli(&copy, &["open"], &private);
         assert!(opened.status.success(), "{}", String::from_utf8_lossy(&opened.stderr));
@@ -66,6 +67,32 @@ fn a_compact_copy_preserves_an_unacknowledged_ordinary_reversal() {
             assert!(!bytes.contains("lineage-review/v1") && !bytes.contains("legacy_origins"), "derived review evidence was stored by migration or review");
         }
     }
+}
+
+#[test]
+fn a_default_compact_copy_keeps_the_established_import_review_gap() {
+    // `history migrate` keeps the established import's semantics: a recorded
+    // replacement becomes an accept act whose actor is unknown. The ordinary
+    // `reviewed` date does not name who reviewed, so the gap stays until a
+    // recorded review, exactly as in a history/v1 import of the same source.
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source");
+    let private = temp.path().join("private");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("GROUNDING.yaml"), "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.runs: {v: 0, of: 2026-09-01}\njudgments:\n  d.done:\n    verdict: not demonstrated\n    because: no brief\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n").unwrap();
+    for args in [
+        vec!["set", "p.runs", "1", "--as-of", "2026-09-02"],
+        vec!["add", "d.done", "verdict=done", "because=one brief", "rests_on=[p.runs]", "wrong_if=p.runs < 1"],
+        vec!["review", "d.done"],
+    ] { assert!(cli(&source, &args, &private).status.success()); }
+    let copy = temp.path().join("copy");
+    assert!(cli(&source, &["history", "migrate", "--to", copy.to_str().unwrap()], &private).status.success());
+    let opened = cli(&copy, &["open"], &private);
+    assert!(opened.status.success(), "{}", String::from_utf8_lossy(&opened.stderr));
+    assert!(String::from_utf8_lossy(&opened.stdout).contains("review_provenance_missing"));
+    assert!(cli(&copy, &["review", "d.done"], &private).status.success());
+    let after = cli(&copy, &["open"], &private);
+    assert!(!String::from_utf8_lossy(&after.stdout).contains("review_provenance_missing"));
 }
 
 #[test]

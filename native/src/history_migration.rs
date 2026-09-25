@@ -337,19 +337,67 @@ pub(crate) fn empty_capture(root: &Path, entry: &str, marker: &V) -> Result<H::C
         inventory: BTreeMap::new(),
     })
 }
-impl Plan {
-    pub(crate) fn inventory(&self) -> &Inventory {
-        &self.inventory
+/// Storage-independent import semantics: the exact source captures, physical
+/// inventory and topology, and the claims and acts derived from current and
+/// replaced versions. No destination bytes are serialized here; the retained
+/// legacy emitter and the compact node emitter both start from this value.
+pub(crate) struct ImportPlan {
+    pub(crate) record: PathBuf,
+    pub(crate) entry: String,
+    pub(crate) source: CapturedSource,
+    pub(crate) observed: Option<CapturedSource>,
+    pub(crate) inventory: Inventory,
+    pub(crate) original: Snapshot,
+    pub(crate) layout: T::Layout,
+    pub(crate) record_files: Vec<PathBuf>,
+    pub(crate) previous: Option<V>,
+    pub(crate) generation: u64,
+    pub(crate) artifacts: String,
+    pub(crate) mapping: BTreeMap<PathBuf, String>,
+    pub(crate) topology: Option<V>,
+    pub(crate) inverse: Option<V>,
+    pub(crate) document: V,
+    pub(crate) capabilities: V,
+    pub(crate) profile: V,
+    pub(crate) archive_path: PathBuf,
+    pub(crate) objects: Map,
+    pub(crate) locators: Vec<V>,
+    pub(crate) problems: Vec<String>,
+    pub(crate) physical: Vec<HI::Source>,
+}
+/// A retained archive reconstructed for replay: the member name recorded at
+/// import for each path, and every member's exact original bytes.
+pub(crate) struct Replay<'a> {
+    pub(crate) names: &'a BTreeMap<PathBuf, String>,
+    pub(crate) originals: &'a BTreeMap<PathBuf, Vec<u8>>,
+}
+pub(crate) fn verify_sources(
+    source: &CapturedSource,
+    inventory: &Inventory,
+    observed: Option<&CapturedSource>,
+) -> Result<()> {
+    source.verify()?;
+    inventory.verify()?;
+    for (kind, path) in inventory.events.keys() {
+        if kind == "directory" {
+            S::no_link(path)?;
+        }
     }
-    pub(crate) fn members(&self) -> &[PathBuf] {
-        self.source.members()
+    if let Some(o) = observed {
+        o.verify()?;
     }
-    pub fn prepare(
+    Ok(())
+}
+impl ImportPlan {
+    /// `replay` rereads a retained archive instead of a live source directory.
+    pub(crate) fn extract(
         record: &Path,
         cwd: &Path,
-        options: Options,
+        options: &Options,
         runtime: Option<&Runtime>,
+        replay: Option<&Replay>,
     ) -> Result<Self> {
+        let names = replay.map(|r| r.names);
         token(&s(&options.operation))?;
         require(!options.recorded_at.is_empty(), "missing_recording_time")?;
         let paths = if options.route {
@@ -381,6 +429,18 @@ impl Plan {
             .collect::<Vec<_>>();
         let inventory = S::extend(&source, &record, &project)?;
         let source_files = &inventory.files;
+        // Locators and retained members bind the exact original bytes, including
+        // a file whose absolute pointer replay had to relocate.
+        let exact = match replay {
+            Some(r) => {
+                require(
+                    r.originals.keys().eq(source_files.keys()),
+                    "node_import_replay_members",
+                )?;
+                r.originals
+            }
+            None => source_files,
+        };
         let previous = source_files
             .get(&root.join(&layout.authority))
             .map(|raw| Y::decode_document(raw))
@@ -398,8 +458,17 @@ impl Plan {
             format!("{ARTIFACTS}/generations/{generation}")
         };
         let mut mapping = BTreeMap::new();
+        if let Some(names) = names {
+            require(
+                names.keys().eq(source_files.keys()),
+                "node_import_replay_members",
+            )?;
+        }
         for path in source_files.keys() {
-            let relative = S::portable(&record, path)?;
+            let relative = match names {
+                Some(names) => names[path].clone(),
+                None => S::portable(&record, path)?,
+            };
             A::relative_path(&relative)?;
             require(
                 relative != artifacts && !relative.starts_with(&format!("{artifacts}/")),
@@ -545,7 +614,7 @@ impl Plan {
                         collection,
                         &subject,
                         &mapping,
-                        source_files,
+                        exact,
                         &options,
                     )?;
                     map_mut(&mut location)?.extend(Map::from([
@@ -610,7 +679,7 @@ impl Plan {
                     collection,
                     &subject,
                     &mapping,
-                    source_files,
+                    exact,
                     &options,
                 )?;
                 let claim = claim(
@@ -681,7 +750,7 @@ impl Plan {
                     .get(&path)
                     .ok_or_else(|| error("missing_imported_hypothesis"))?
                     .clone(),
-                bytes: source_files
+                bytes: exact
                     .get(&path)
                     .ok_or_else(|| error("missing_imported_hypothesis"))?
                     .clone(),
@@ -690,6 +759,72 @@ impl Plan {
                 error: h.get("error").cloned(),
             });
         }
+        Ok(Self {
+            entry: entry.into(),
+            record_files,
+            record,
+            source,
+            observed,
+            inventory,
+            original,
+            layout,
+            previous,
+            generation,
+            artifacts,
+            mapping,
+            topology,
+            inverse,
+            document,
+            capabilities,
+            profile,
+            archive_path,
+            objects,
+            locators,
+            problems,
+            physical,
+        })
+    }
+}
+impl Plan {
+    pub(crate) fn inventory(&self) -> &Inventory {
+        &self.inventory
+    }
+    pub(crate) fn members(&self) -> &[PathBuf] {
+        self.source.members()
+    }
+    pub fn prepare(
+        record: &Path,
+        cwd: &Path,
+        options: Options,
+        runtime: Option<&Runtime>,
+    ) -> Result<Self> {
+        let ImportPlan {
+            record,
+            entry,
+            source,
+            observed,
+            inventory,
+            original,
+            layout,
+            record_files,
+            previous,
+            generation,
+            artifacts,
+            mapping,
+            topology,
+            inverse,
+            document,
+            capabilities,
+            profile,
+            archive_path,
+            mut objects,
+            locators,
+            problems,
+            physical,
+        } = ImportPlan::extract(record, cwd, &options, runtime, None)?;
+        let root = record.parent().unwrap();
+        let entry = entry.as_str();
+        let source_files = &inventory.files;
         let imported = HI::prepare(
             &objects,
             &physical,
@@ -1086,17 +1221,7 @@ impl Plan {
         Ok(plan)
     }
     pub fn verify_source(&self) -> Result<()> {
-        self.source.verify()?;
-        self.inventory.verify()?;
-        for (kind, path) in self.inventory.events.keys() {
-            if kind == "directory" {
-                S::no_link(path)?;
-            }
-        }
-        if let Some(o) = &self.observed {
-            o.verify()?;
-        }
-        Ok(())
+        verify_sources(&self.source, &self.inventory, self.observed.as_ref())
     }
     pub fn record(&self) -> &Path {
         &self.record
