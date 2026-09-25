@@ -59,10 +59,13 @@ fn repo_relative_pin_path(
     if !target.starts_with(project_root) {
         return Ok(None);
     }
-    Ok(resolved_path
-        .strip_prefix(project_root)
-        .ok()
-        .map(|relative| relative.to_string_lossy().into_owned()))
+    Ok(resolved_path.strip_prefix(project_root).ok().map(|relative| {
+        relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/")
+    }))
 }
 
 fn tree_blob_status(output: &[u8], path: &str) -> PinnedFileStatus {
