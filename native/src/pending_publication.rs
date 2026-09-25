@@ -56,6 +56,40 @@ fn integer(value: &V) -> Result<u64> {
     }
 }
 
+// Complete legacy bundles can repeat their own authority/commit/object bytes as
+// evidence (notably cancellation receipts). Compact records retain those exact
+// bytes in archives; placing them in the active directories mixes storage formats.
+fn legacy_owned_evidence(bundle: &pending_state::Bundle, name: &str) -> Result<bool> {
+    let manifest = map(field(map(&bundle.value)?, "manifest")?)?;
+    if !is_int(field(manifest, "version")?, "3") {
+        return Ok(false);
+    }
+    let artifact = map(field(map(field(manifest, "history")?)?, "manifest")?)?;
+    if !["1", "3"]
+        .iter()
+        .any(|v| is_int(field(artifact, "version").unwrap_or(&V::Null), v))
+    {
+        return Ok(false);
+    }
+    let member = if name == ".kpopper/history.yaml" {
+        Some("authority.yaml".into())
+    } else if let Some(name) = name.strip_prefix(".kpopper/history-commits/") {
+        Some(format!("commits/{name}"))
+    } else if let Some(name) = name.strip_prefix(".kpopper/history/") {
+        Some(format!("objects/{name}"))
+    } else if let Some(name) = name.strip_prefix(".kpopper/history-cancellations/") {
+        Some(format!("cancellations/{name}"))
+    } else {
+        None
+    };
+    Ok(member.is_some_and(|member| {
+        bundle
+            .files
+            .get(name)
+            .is_some_and(|raw| bundle.files.get(&format!("history-closure/{member}")) == Some(raw))
+    }))
+}
+
 #[derive(Debug)]
 enum Failure {
     Attention(String),
@@ -104,7 +138,9 @@ fn command(
     for (name, value) in environment {
         #[cfg(windows)]
         if *name == "GIT_INDEX_FILE" {
-            let value = value.to_str().ok_or_else(|| Error("invalid git index path".into()))?;
+            let value = value
+                .to_str()
+                .ok_or_else(|| Error("invalid git index path".into()))?;
             command.env(name, windows_index_path(value));
             continue;
         }
@@ -128,7 +164,9 @@ fn windows_index_path(path: &str) -> String {
     if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
         format!("//{}", path.replace('\\', "/"))
     } else {
-        path.strip_prefix(r"\\?\").unwrap_or(path).replace('\\', "/")
+        path.strip_prefix(r"\\?\")
+            .unwrap_or(path)
+            .replace('\\', "/")
     }
 }
 
@@ -482,15 +520,23 @@ impl<'a, P: Provider> Publisher<'a, P> {
         let record = text(field(map(&config)?, "record")?)?;
         let parent = Path::new(record).parent().unwrap_or(Path::new(""));
         let manifest = map(field(map(&bundle.value)?, "manifest")?)?;
-        Ok(map(field(manifest, "evidence")?)?
-            .keys()
-            .filter_map(|name| {
-                target
-                    .files
-                    .get(&parent.join(name).to_string_lossy().replace('\\', "/"))
-                    .map(|raw| (name.clone(), raw.clone()))
-            })
-            .collect())
+        let mut evidence = Files::new();
+        for name in map(field(manifest, "evidence")?)?.keys() {
+            let path = if target.node.is_some() && legacy_owned_evidence(bundle, name)? {
+                let revision = text(field(map(&bundle.value)?, "revision")?)?;
+                parent
+                    .join(".kpopper-contributions")
+                    .join(revision)
+                    .join("evidence")
+                    .join(name)
+            } else {
+                parent.join(name)
+            };
+            if let Some(raw) = target.files.get(&path.to_string_lossy().replace('\\', "/")) {
+                evidence.insert(name.clone(), raw.clone());
+            }
+        }
+        Ok(evidence)
     }
 
     fn accepted(&self, ledger: &Ledger, state: &V, target: &Target) -> Result<BTreeSet<String>> {
@@ -973,12 +1019,9 @@ impl<'a, P: Provider> Publisher<'a, P> {
                 },
             )?;
         }
-        // A compact record's view is bound to its node storage; publication never
-        // rewrites it as a document. Contributions land only by explicit adoption.
-        require(
-            target.node.is_none(),
-            "compact target publication requires explicit adoption",
-        )?;
+        if target.node.is_some() {
+            return self.prepare_node_history_commit(target, ledger, state, revisions);
+        }
         if target.history.is_some()
             || revisions.iter().any(|revision| {
                 map(&ledger.bundles[revision].value)
@@ -1161,6 +1204,122 @@ impl<'a, P: Provider> Publisher<'a, P> {
                 return Err(Error("replacement would change another accepted contribution; reconcile its revision explicitly".into()));
             }
         }
+        self.write_commit(&target.revision, &additions)
+    }
+
+    fn prepare_node_history_commit(
+        &self,
+        target: &Target,
+        ledger: &Ledger,
+        state: &V,
+        revisions: &[String],
+    ) -> Result<String> {
+        let config = self.project.config()?;
+        let record = text(field(map(&config)?, "record")?)?;
+        let parent = Path::new(record).parent().unwrap_or(Path::new(""));
+        let temporary = tempfile::tempdir()?;
+        for (path, raw) in &target.files {
+            let path = crate::history_transaction_fs::target(temporary.path(), path)?;
+            fs::create_dir_all(path.parent().unwrap())?;
+            fs::write(path, raw)?;
+        }
+        let root = temporary.path().join(parent);
+        let mut additions = Files::new();
+        for revision in revisions {
+            let bundle = &ledger.bundles[revision];
+            // The union primitive validates FULL v3, matching authority/rules and
+            // exact semantic membership; selective imports still need choices.
+            crate::history_node_complete_union::union_complete(
+                &root,
+                &bundle.value,
+                &bundle.files,
+                &mut || Ok(()),
+            )?;
+            let manifest = field(map(&bundle.value)?, "manifest")?;
+            let archive = parent.join(".kpopper-contributions").join(revision);
+            let mut retained = Files::from([(
+                archive
+                    .join("manifest.json")
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                serde_json::to_vec(&manifest.to_tagged()?)?,
+            )]);
+            for (name, raw) in &bundle.files {
+                retained.insert(
+                    archive
+                        .join("evidence")
+                        .join(name)
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                    raw.clone(),
+                );
+                if !name.starts_with("history-closure/") && !legacy_owned_evidence(bundle, name)? {
+                    retained.insert(
+                        parent.join(name).to_string_lossy().replace('\\', "/"),
+                        raw.clone(),
+                    );
+                }
+            }
+            for (path, raw) in retained {
+                require(
+                    additions
+                        .get(&path)
+                        .or_else(|| target.files.get(&path))
+                        .is_none_or(|old| old == &raw),
+                    &format!("immutable history or evidence collision: {path}"),
+                )?;
+                let destination = crate::history_transaction_fs::target(temporary.path(), &path)?;
+                if destination.exists() {
+                    require(
+                        fs::read(&destination)? == raw,
+                        "evidence collides with compact target",
+                    )?;
+                } else {
+                    fs::create_dir_all(destination.parent().unwrap())?;
+                    fs::write(destination, &raw)?;
+                }
+                additions.insert(path, raw);
+            }
+        }
+        // Export only record-owned bytes. Repository attributes and the replaceable
+        // local checkpoint are not part of a knowledge proposal.
+        for (relative, raw) in crate::history_node_publication::export(&root)?.files()? {
+            if relative == ".gitattributes" {
+                continue;
+            }
+            let path = parent.join(relative).to_string_lossy().replace('\\', "/");
+            require(
+                additions.get(&path).is_none_or(|existing| existing == &raw),
+                "evidence collides with compact target",
+            )?;
+            if target.files.get(&path) != Some(&raw) {
+                additions.insert(path, raw);
+            }
+        }
+        let captured = crate::source_capture::capture_source(
+            &[temporary.path().join(record)],
+            temporary.path(),
+            crate::source_capture::ReadMode::Frozen,
+            None,
+        )?;
+        let mut files = target.files.clone();
+        files.extend(additions.clone());
+        let combined = Target {
+            revision: target.revision.clone(),
+            files,
+            document: captured.strict_document()?,
+            history: None,
+            node: captured.node_history_capture().cloned(),
+        };
+        let accepted = self.accepted(ledger, state, &combined)?;
+        require(
+            revisions.iter().all(|r| accepted.contains(r)),
+            "combined history does not retain a complete contribution",
+        )?;
+        require(
+            self.accepted(ledger, state, target)?.is_subset(&accepted),
+            "history union changes an accepted contribution",
+        )?;
         self.write_commit(&target.revision, &additions)
     }
 
@@ -1536,7 +1695,10 @@ impl<'a, P: Provider> Publisher<'a, P> {
                 Ok(lock) => break lock,
                 Err(error) if error.0 == "another local publisher is active" => {
                     if Instant::now() >= deadline {
-                        return Ok(object([("outcome", s("queued")), ("verified", V::Bool(false))]));
+                        return Ok(object([
+                            ("outcome", s("queued")),
+                            ("verified", V::Bool(false)),
+                        ]));
                     }
                     std::thread::sleep(Duration::from_millis(50));
                 }
@@ -1548,11 +1710,15 @@ impl<'a, P: Provider> Publisher<'a, P> {
             let result = self.run_cycle(false, false, true)?;
             let outcome = map(&result)?.get("outcome");
             if outcome != Some(&s("proposed")) && outcome != Some(&s("idle"))
-                || before == Ledger::capture(&self.project)?.head {
+                || before == Ledger::capture(&self.project)?.head
+            {
                 return Ok(result);
             }
         }
-        Ok(object([("outcome", s("queued")), ("verified", V::Bool(false))]))
+        Ok(object([
+            ("outcome", s("queued")),
+            ("verified", V::Bool(false)),
+        ]))
     }
 
     fn run_cycle(&mut self, authorized: bool, force_retry: bool, automatic: bool) -> Result<V> {
@@ -1569,9 +1735,15 @@ impl<'a, P: Provider> Publisher<'a, P> {
         }
         if automatic {
             let config = self.project.config()?;
-            let granted = map(&config)?.get("publication").and_then(|v| map(v).ok())
-                .and_then(|v| v.get("standing_permission")) == Some(&V::Bool(true));
-            if !granted || !string_is(&map(&config)?["mode"], "advanced") || truth(map(&state)?.get("paused")) {
+            let granted = map(&config)?
+                .get("publication")
+                .and_then(|v| map(v).ok())
+                .and_then(|v| v.get("standing_permission"))
+                == Some(&V::Bool(true));
+            if !granted
+                || !string_is(&map(&config)?["mode"], "advanced")
+                || truth(map(&state)?.get("paused"))
+            {
                 return self.status(&state, &ledger, [("outcome", s("idle"))]);
             }
         }
@@ -1831,8 +2003,12 @@ pub fn publish(project: Project, authorized: bool, force_retry: bool) -> Result<
 
 pub fn publish_automatic(project: Project) -> Result<V> {
     let config = project.config()?;
-    let repository = map(&config)?.get("publication").and_then(|v| map(v).ok())
-        .and_then(|v| v.get("repository")).and_then(|v| text(v).ok()).unwrap_or("");
+    let repository = map(&config)?
+        .get("publication")
+        .and_then(|v| map(v).ok())
+        .and_then(|v| v.get("repository"))
+        .and_then(|v| text(v).ok())
+        .unwrap_or("");
     let mut provider = GitHubProvider::new(repository);
     Publisher::new(project, &mut provider).run_automatic()
 }
@@ -1855,9 +2031,11 @@ fn trigger_with_executable(
     let skipped = |reason: &str| object([("started", V::Bool(false)), ("reason", s(reason))]);
     let config = project.config()?;
     let fields = map(&config)?;
-    let granted = fields.get("publication")
+    let granted = fields
+        .get("publication")
         .and_then(|v| map(v).ok())
-        .and_then(|v| v.get("standing_permission")) == Some(&V::Bool(true));
+        .and_then(|v| v.get("standing_permission"))
+        == Some(&V::Bool(true));
     if !project.is_git() || !string_is(&fields["mode"], "advanced") || !granted {
         return Ok(skipped("no standing publication permission"));
     }
@@ -1875,9 +2053,14 @@ fn trigger_with_executable(
         return Ok(skipped("no captured contributions"));
     }
     let mut command = Command::new(executable()?);
-    command.arg("--workspace").arg(&project.root).args(["pending", "_publish"])
+    command
+        .arg("--workspace")
+        .arg(&project.root)
+        .args(["pending", "_publish"])
         .current_dir(&project.root)
-        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -1892,7 +2075,9 @@ fn trigger_with_executable(
     let mut child = command.spawn()?;
     let pid = child.id();
     // Reap in long-lived library callers; CLI exit does not wait on this thread.
-    std::thread::spawn(move || { let _ = child.wait(); });
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
     Ok(object([("started", V::Bool(true)), ("pid", n(pid.into()))]))
 }
 
@@ -1915,7 +2100,10 @@ mod index_path_tests {
     #[test]
     fn windows_git_index_paths_preserve_drive_and_unc_locations() {
         assert_eq!(windows_index_path(r"\\?\C:\work\index"), "C:/work/index");
-        assert_eq!(windows_index_path(r"\\?\UNC\server\share\index"), "//server/share/index");
+        assert_eq!(
+            windows_index_path(r"\\?\UNC\server\share\index"),
+            "//server/share/index"
+        );
         assert_eq!(windows_index_path(r"C:\work\index"), "C:/work/index");
     }
 }

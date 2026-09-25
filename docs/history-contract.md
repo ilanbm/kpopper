@@ -453,7 +453,11 @@ export requires explicit roots covering every transferred subject and checks the
 privacy of historical bodies as well as current ones. Staged orphan objects stay
 excluded. Scoped contribution materialization creates a compact record with the
 contribution's identity, preserving its objects and original artifact evidence.
-It does not claim to be the original source record. Publication
+It does not claim to be the original source record. A complete version-3 history is
+converted from its exact captured legacy bytes, preserving the original authority,
+semantic object IDs, source orders and historical observations. Its compact copy may
+add verified migration and union audit episodes; these do not replace the original ones.
+Publication
 can union complete contributions into the same authority and rules; a different
 authority requires explicit adoption. Retaining an artifact does not prove it was
 accepted. Scoped single-action and report contributions use the versioned artifact

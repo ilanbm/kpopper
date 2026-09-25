@@ -124,8 +124,18 @@ impl Source for NodeSource<'_> {
             .collect::<BTreeSet<_>>();
         let mut template = None;
         for operation in operations.difference(&parents) {
-            let next =
-                crate::history_node_transaction::after_template(&self.capture.snapshot, operation)?;
+            let snapshot = &self.capture.snapshot;
+            let legacy = snapshot.transactions[operation]
+                .context
+                .as_ref()
+                .is_some_and(|context| {
+                    crate::history_node_legacy::kind(context, crate::history_node_legacy::FORMAT)
+                });
+            let next = if legacy {
+                crate::history_node_legacy::view_template(snapshot, operation)?
+            } else {
+                crate::history_node_transaction::after_template(snapshot, operation)?
+            };
             crate::require(
                 template.as_ref().is_none_or(|old| old == &next),
                 "divergent_templates",

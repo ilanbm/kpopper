@@ -169,6 +169,12 @@ fn inventory_of(manifest: &V) -> Result<BTreeSet<String>> {
         .map(|reference| text(&map(reference)?["id"]).map(str::to_owned))
         .collect()
 }
+/// The verified original template used by legacy historical-world reconstruction.
+pub(crate) fn view_template(snapshot: &Snapshot, operation: &str) -> Result<V> {
+    let (_, manifest, _) = definition(snapshot, operation)?;
+    Ok(field(map(manifest)?, "view_template")?.clone())
+}
+
 /// Complete original legacy manifest inventory, including inherited references.
 pub(crate) fn inventory(snapshot: &Snapshot, operation: &str) -> Result<BTreeSet<String>> {
     let (_, manifest, _) = definition(snapshot, operation)?;

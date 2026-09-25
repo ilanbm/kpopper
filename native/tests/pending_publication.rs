@@ -244,9 +244,14 @@ fn git_input(root: &Path, args: &[&str], input: &[u8], index: Option<&Path>) -> 
 
 fn install_pending_bundle(root: &Path, bundle: &Value, files: &BTreeMap<String, Vec<u8>>) {
     let decoded = kpop_native::value::TypedValue::from_tagged(bundle).unwrap();
-    let ordinary = decoded.to_json().unwrap();
-    let revision = ordinary["revision"].as_str().unwrap().to_owned();
-    let manifest = kpop_native::value::TypedValue::from_json(&ordinary["manifest"]).unwrap();
+    let kpop_native::value::TypedValue::Map(value) = decoded else {
+        panic!("bundle map")
+    };
+    let kpop_native::value::TypedValue::Text(revision) = &value["revision"] else {
+        panic!("revision text")
+    };
+    let revision = revision.clone();
+    let manifest = value["manifest"].clone();
     let mut images = BTreeMap::new();
     images.insert(
         format!("contributions/{revision}/manifest.json"),
@@ -448,7 +453,16 @@ fn publish_creates_target_only_commit_and_verify_tracks_content_acceptance() {
     let target = remote_head(&provider.remote, "trunk").unwrap();
     let commit = String::from_utf8(git(
         &provider.remote,
-        &["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit-tree", tree.trim(), "-p", &target],
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit-tree",
+            tree.trim(),
+            "-p",
+            &target,
+        ],
         Some(b"accept\n"),
     ))
     .unwrap();
@@ -686,9 +700,23 @@ fn status_verify_with_only_local_terminal_decisions_needs_no_provider() {
 
 #[test]
 fn history_publication_unions_complete_same_authority_bytes() {
+    history_publication_case(false, "v3-history-union");
+}
+
+#[test]
+fn compact_publication_unions_complete_same_authority_and_verifies_after_landing() {
+    history_publication_case(true, "v3-history-union");
+}
+
+#[test]
+fn compact_publication_refuses_a_complete_foreign_authority_without_a_proposal() {
+    history_publication_case(true, "v3-other-authority");
+}
+
+fn history_publication_case(compact: bool, case_name: &str) {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/pending-equivalence-oracle.json")).unwrap();
-    let case = named(&cases, "v3-history-union");
+    let case = named(&cases, case_name);
     let source_files = decode_files(&case["files"]);
     let target_files = decode_files(&case["target_history"]);
     let temp = tempfile::tempdir().unwrap();
@@ -719,6 +747,18 @@ fn history_publication_unions_complete_same_authority_bytes() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, raw).unwrap();
     }
+    if compact {
+        let converted = temp.path().join("converted");
+        let plan = kpop_native::history_node_migration::Plan::prepare(&root.join("GROUNDING.yaml"))
+            .unwrap();
+        plan.publish(&converted).unwrap();
+        std::fs::remove_dir_all(root.join(".kpopper")).unwrap();
+        for (path, bytes) in plan.files() {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+    }
     git(&root, &["add", "."], None);
     git(&root, &["commit", "-m", "History target"], None);
     git(
@@ -733,6 +773,32 @@ fn history_publication_unions_complete_same_authority_bytes() {
     );
     git(&root, &["push", "team", "trunk"], None);
     install_pending_bundle(&root, &case["bundle"], &source_files);
+    if compact {
+        // Exercise the public full-v3 materialization boundary, which must route
+        // before generic evidence copying and keep old control bytes archived.
+        let bundle = kpop_native::value::TypedValue::from_tagged(&case["bundle"]).unwrap();
+        let kpop_native::value::TypedValue::Map(bundle_fields) = &bundle else { panic!("bundle map") };
+        let kpop_native::value::TypedValue::Text(revision) = &bundle_fields["revision"] else { panic!("revision text") };
+        let snapshot = temp.path().join("materialized-full-history");
+        let materialized = kpop_native::public_knowledge::materialize(
+            &root,
+            &kpop_native::public_knowledge::MaterializeOptions {
+                revision: revision.clone(),
+                out: snapshot.clone(),
+                reference: None,
+            },
+        ).unwrap().to_json().unwrap();
+        assert_eq!(materialized["state"], "materialized");
+        let captured = kpop_native::history_node_capture::Capture::read(&snapshot).unwrap();
+        for (name, raw) in &source_files {
+            if !name.starts_with("history-closure/objects/") { continue; }
+            let object = kpop_native::history_yaml::decode_document(raw).unwrap();
+            let kpop_native::value::TypedValue::Map(fields) = &object else { panic!("object map") };
+            let kpop_native::value::TypedValue::Text(subject) = &fields["subject"] else { panic!("subject text") };
+            let kpop_native::value::TypedValue::Text(id) = &fields["id"] else { panic!("id text") };
+            assert_eq!(captured.object(subject, id).unwrap(), object);
+        }
+    }
     let project = Project::open(&root).unwrap();
     pending_control::configure(
         &project,
@@ -749,13 +815,39 @@ fn history_publication_unions_complete_same_authority_bytes() {
         remote,
         ..Default::default()
     };
+    let local_head = git(&root, &["rev-parse", "HEAD"], None);
+    let local_index = git(&root, &["write-tree"], None);
+    let local_record = std::fs::read(root.join("GROUNDING.yaml")).unwrap();
     let result = Publisher::with_clock(project, &mut provider, || 123.5)
         .run(false, true)
         .unwrap()
         .to_json()
         .unwrap();
+    if case_name == "v3-other-authority" {
+        assert_eq!(result["outcome"], "attention", "{result}");
+        assert!(
+            result["detail"].as_str().unwrap().contains("authority"),
+            "{result}"
+        );
+        assert_eq!(provider.creates, 0);
+        assert!(remote_head(&provider.remote, "pending_grounding").is_none());
+        assert_eq!(git(&root, &["rev-parse", "HEAD"], None), local_head);
+        assert_eq!(git(&root, &["write-tree"], None), local_index);
+        assert_eq!(
+            std::fs::read(root.join("GROUNDING.yaml")).unwrap(),
+            local_record
+        );
+        return;
+    }
     assert_eq!(result["outcome"], "proposed", "{result}");
     assert_eq!(provider.creates, 1);
+    assert_eq!(git(&root, &["rev-parse", "HEAD"], None), local_head);
+    assert_eq!(git(&root, &["write-tree"], None), local_index);
+    assert_eq!(
+        std::fs::read(root.join("GROUNDING.yaml")).unwrap(),
+        local_record
+    );
+
     let proposed = remote_head(&provider.remote, "pending_grounding").unwrap();
     let tree = String::from_utf8(git(
         &provider.remote,
@@ -766,7 +858,16 @@ fn history_publication_unions_complete_same_authority_bytes() {
     let target = remote_head(&provider.remote, "trunk").unwrap();
     let commit = String::from_utf8(git(
         &provider.remote,
-        &["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit-tree", tree.trim(), "-p", &target],
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit-tree",
+            tree.trim(),
+            "-p",
+            &target,
+        ],
         Some(b"accept history\n"),
     ))
     .unwrap();
@@ -792,4 +893,40 @@ fn history_publication_unions_complete_same_authority_bytes() {
         .to_json()
         .unwrap();
     assert_eq!(proof["unresolved"], serde_json::json!([]), "{proof}");
+    if compact {
+        let landed = temp.path().join("landed");
+        git(
+            temp.path(),
+            &[
+                "clone",
+                "--branch",
+                "trunk",
+                provider.remote.to_str().unwrap(),
+                landed.to_str().unwrap(),
+            ],
+            None,
+        );
+        let captured = kpop_native::history_node_capture::Capture::read(&landed).unwrap();
+        for (name, raw) in &source_files {
+            if !name.starts_with("history-closure/objects/") {
+                continue;
+            }
+            let object = kpop_native::history_yaml::decode_document(raw).unwrap();
+            let kpop_native::value::TypedValue::Map(fields) = &object else {
+                panic!("object map")
+            };
+            let kpop_native::value::TypedValue::Text(id) = &fields["id"] else {
+                panic!("id text")
+            };
+            let kpop_native::value::TypedValue::Text(subject) = &fields["subject"] else {
+                panic!("subject text")
+            };
+            assert_eq!(captured.object(subject, id).unwrap(), object);
+        }
+        assert!(
+            String::from_utf8(std::fs::read(landed.join(".kpopper/history.yaml")).unwrap())
+                .unwrap()
+                .contains("node-history/v1")
+        );
+    }
 }

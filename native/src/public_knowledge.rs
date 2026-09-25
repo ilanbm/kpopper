@@ -255,12 +255,19 @@ fn populate(
     // Versioned history is materialized as a verified compact record; its closure files
     // are carried by that record's retained evidence, never as a legacy store layout.
     let history = is_int(version, "3") || is_int(version, "4");
+    let complete = crate::history_node_complete_union::is_complete(&bundle.value)?;
     for (name, raw) in &bundle.files {
         crate::history_branch::portable_path(name)?;
         require(
             !matches!(name.as_str(), "GROUNDING.yaml" | "snapshot.json"),
             "evidence conflicts with snapshot metadata",
         )?;
+        // Complete legacy history owns its evidence placement. In particular,
+        // original legacy control files belong in the archive, not active compact
+        // directories. Still validate reserved snapshot names before that route.
+        if complete {
+            continue;
+        }
         if history && (name.starts_with("history-closure/") || name.starts_with("node-closure/")) {
             continue;
         }
@@ -268,7 +275,9 @@ fn populate(
         fs::create_dir_all(target.parent().unwrap())?;
         fs::write(target, raw)?;
     }
-    if history {
+    if complete {
+        crate::history_node_complete_union::materialize_complete(root, &bundle.value, &bundle.files)?;
+    } else if history {
         crate::history_node_contribution::materialize(root, &bundle.value, &bundle.files)?;
     } else {
         fs::write(

@@ -668,6 +668,10 @@ pub(crate) fn equivalent_node(
     validate(bundle, files)?;
     let manifest = map(field(map(bundle)?, "manifest")?)?;
     let version = field(manifest, "version")?;
+    // Complete same-authority history is accepted by union or migrated receipts, not adoption.
+    if crate::history_node_complete_union::is_complete(bundle)? {
+        return crate::history_node_complete_union::accepted(target, bundle, files, evidence);
+    }
     if is_int(version, "3") || is_int(version, "4") {
         return crate::history_node_contribution::accepted(target, bundle, files, evidence);
     }
