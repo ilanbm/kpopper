@@ -15,6 +15,58 @@ use crate::{
 };
 use std::{collections::BTreeMap, path::Path};
 const CLOSURE: &str = "history-closure/";
+/// Archived artifact space for contribution bytes that must not be active files.
+const ARCHIVE: &str = ".kpopper-contributions/";
+
+/// Record storage, configuration, physical layers and Git control files. Locator
+/// evidence at such a path is retained in archive space and never populates it.
+/// Compared case-insensitively: a case-folding checkout resolves both spellings.
+pub(crate) fn reserved_evidence(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    let first = lower.split('/').next().unwrap_or_default();
+    first.starts_with(".kpopper")
+        || ["grounding.yaml", "provenance.yaml", "provenance.d"].contains(&first)
+        || lower
+            .split('/')
+            .any(|part| [".git", ".gitattributes", ".gitignore", ".gitmodules"].contains(&part))
+}
+/// Original members the verified legacy entry binds by exact path and digest.
+fn bound_members(source: &crate::history_capture::Capture) -> Result<BTreeMap<String, String>> {
+    let adapted = crate::history_adapter::from_store_capture(source)?;
+    let Some(imported) = map(adapted.document())?
+        .get("meta")
+        .and_then(|meta| map(meta).ok())
+        .and_then(|meta| meta.get("history_import"))
+        .filter(|imported| **imported != V::Null)
+    else {
+        return Ok(BTreeMap::new());
+    };
+    crate::history_view::list(field(map(imported)?, "members")?)?
+        .iter()
+        .map(|item| {
+            let item = map(item)?;
+            Ok((
+                text(field(item, "path")?)?.to_owned(),
+                text(field(item, "sha256")?)?.to_owned(),
+            ))
+        })
+        .collect()
+}
+/// Bound legacy migration auxiliaries may be needed to reconstruct original
+/// receipts. Core storage is supplied exclusively by the artifact inventory;
+/// a locator or metadata member can never add another commit/object or Git config.
+fn bound_auxiliary(path: &str) -> Result<bool> {
+    for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+        let layout = crate::history_transaction::Layout::for_entry(name)?;
+        if path == layout.view || path == layout.replaced
+            || path.starts_with(&format!("{}/", layout.retained))
+            || path.starts_with(&format!("{}/", layout.hypotheses))
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 #[derive(Debug)]
 struct Retained {
     revision: String,
@@ -369,6 +421,8 @@ pub(crate) fn materialize_complete(root: &Path, bundle: &V, files: &Files) -> Re
             .ok_or_else(|| error("history_bundle_membership"))?;
         originals.insert(path, raw.clone());
     }
+    let revision = text(field(map(bundle)?, "revision")?)?.to_owned();
+    let bound = bound_members(&source)?;
     let mut external = Files::new();
     for (path, raw) in files.iter().filter(|(path, _)| !path.starts_with(CLOSURE)) {
         require(
@@ -378,14 +432,29 @@ pub(crate) fn materialize_complete(root: &Path, bundle: &V, files: &Files) -> Re
         // A legacy cancellation can list its commit receipt again as evidence.
         // That exact owned source file is retained inside the migration archive;
         // copying it back beside compact manifests would activate legacy storage.
-        if !originals.contains_key(path) {
-            external.insert(path.clone(), raw.clone());
+        if originals.contains_key(path) {
+            continue;
         }
+        if reserved_evidence(path) {
+            // Locator data never becomes history, configuration or a physical layer.
+            // Only an original the verified entry binds by digest enters the source.
+            if bound_auxiliary(path)? && bound.get(path).is_some_and(|digest| *digest == sha256(raw)) {
+                originals.insert(path.clone(), raw.clone());
+            }
+            external.insert(format!("{ARCHIVE}{revision}/evidence/{path}"), raw.clone());
+            continue;
+        }
+        external.insert(path.clone(), raw.clone());
         originals.insert(path.clone(), raw.clone());
     }
     for (path, raw) in &originals {
         crate::history_transaction_fs::publish_immutable(&legacy, path, raw)?;
     }
+    let reconstructed = crate::history_store::Store::new(&legacy.join("GROUNDING.yaml"))?.capture()?;
+    require(reconstructed.commits == source.commits
+        && reconstructed.storage_bytes == source.storage_bytes
+        && reconstructed.cancellation_bytes == source.cancellation_bytes,
+        "complete_materialize_source_membership")?;
     let converted = temporary.path().join("compact");
     crate::history_node_migration::Plan::prepare(&legacy.join("GROUNDING.yaml"))?
         .publish(&converted)?;
@@ -417,6 +486,8 @@ pub(crate) fn materialize_complete(root: &Path, bundle: &V, files: &Files) -> Re
             "complete_materialize_object_mismatch",
         )?;
     }
+    require(capture.history.objects().keys().eq(source.objects.keys()),
+        "complete_materialize_object_membership: converted history holds an object outside the verified artifact")?;
     require(
         same_authority(&capture.snapshot.authority, &source.marker)?,
         "complete_union_authority_mismatch",

@@ -141,6 +141,38 @@ fn named<'a>(cases: &'a Value, name: &str) -> &'a Value {
 }
 
 fn setup() -> (tempfile::TempDir, Project, ProviderFixture, String) {
+    setup_target(TargetRecord::Plain)
+}
+
+/// What the configured target holds at the record path before publication.
+#[derive(Clone, Copy, PartialEq)]
+enum TargetRecord {
+    /// The fixture's ordinary record.
+    Plain,
+    /// No record: neither the target nor the checkout has one yet.
+    Absent,
+    /// The fixture's record already converted to compact history.
+    Compact,
+}
+
+/// A target commit with fixed dates, so independent fixtures share its identity.
+fn commit_fixed(root: &Path, message: &str) {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["commit", "-q", "-m", message])
+        .env("GIT_AUTHOR_DATE", "2026-09-25T00:00:00+00:00")
+        .env("GIT_COMMITTER_DATE", "2026-09-25T00:00:00+00:00")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn setup_target(kind: TargetRecord) -> (tempfile::TempDir, Project, ProviderFixture, String) {
     let ledgers: Value = serde_json::from_str(include_str!("fixtures/pending-state.json")).unwrap();
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("repo");
@@ -154,8 +186,44 @@ fn setup() -> (tempfile::TempDir, Project, ProviderFixture, String) {
         None,
     );
     std::fs::write(root.join("app.txt"), b"target code\n").unwrap();
-    git(&root, &["add", "GROUNDING.yaml", "app.txt"], None);
-    git(&root, &["commit", "-m", "Target"], None);
+    match kind {
+        TargetRecord::Plain => {
+            git(&root, &["add", "GROUNDING.yaml", "app.txt"], None);
+            git(&root, &["commit", "-m", "Target"], None);
+        }
+        TargetRecord::Absent => {
+            std::fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+            std::fs::create_dir_all(root.join(".kpopper")).unwrap();
+            std::fs::write(root.join(".kpopper/measure.yaml"), b"measure: {}\n").unwrap();
+            git(&root, &["add", "app.txt", ".kpopper/measure.yaml"], None);
+            commit_fixed(&root, "Target");
+        }
+        TargetRecord::Compact => {
+            let plan = kpop_native::history_node_import::Plan::prepare(
+                Path::new("GROUNDING.yaml"),
+                &root,
+                kpop_native::history_migration::Options {
+                    operation: "import-target".into(),
+                    recorded_at: "2026-09-25T00:00:00+00:00".into(),
+                    record_id: Some("record-target".into()),
+                    read_mode: kpop_native::source_capture::ReadMode::Frozen,
+                    route: false,
+                    as_of: None,
+                },
+                None,
+            )
+            .unwrap();
+            let files = plan.files().clone();
+            std::fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+            for (path, raw) in &files {
+                let path = root.join(path);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, raw).unwrap();
+            }
+            git(&root, &["add", "-A"], None);
+            commit_fixed(&root, "Target");
+        }
+    }
     git(
         temp.path(),
         &["init", "--bare", remote.to_str().unwrap()],
@@ -929,4 +997,299 @@ fn history_publication_case(compact: bool, case_name: &str) {
                 .contains("node-history/v1")
         );
     }
+}
+
+/// Land the open proposal on the target branch, as a reviewer merging it would.
+fn land(provider: &mut ProviderFixture) -> String {
+    let proposed = remote_head(&provider.remote, "pending_grounding").unwrap();
+    let tree = String::from_utf8(git(
+        &provider.remote,
+        &["rev-parse", "pending_grounding^{tree}"],
+        None,
+    ))
+    .unwrap();
+    let target = remote_head(&provider.remote, "trunk").unwrap();
+    let commit = String::from_utf8(git(
+        &provider.remote,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit-tree",
+            tree.trim(),
+            "-p",
+            &target,
+        ],
+        Some(b"accept first record\n"),
+    ))
+    .unwrap();
+    git(
+        &provider.remote,
+        &["update-ref", "refs/heads/trunk", commit.trim(), &target],
+        None,
+    );
+    git(
+        &provider.remote,
+        &[
+            "update-ref",
+            "-d",
+            "refs/heads/pending_grounding",
+            &proposed,
+        ],
+        None,
+    );
+    provider.rows[0].state = "merged".into();
+    commit.trim().to_owned()
+}
+
+#[test]
+fn first_publication_without_a_target_record_proposes_compact_history_that_lands() {
+    let (temp, project, mut provider, revision) = setup_target(TargetRecord::Absent);
+    let root = project.root.clone();
+    let local_head = git(&root, &["rev-parse", "HEAD"], None);
+    let local_index = git(&root, &["write-tree"], None);
+    let result = Publisher::with_clock(project.clone(), &mut provider, || 123.5)
+        .run(false, true)
+        .unwrap()
+        .to_json()
+        .unwrap();
+    assert_eq!(result["outcome"], "proposed", "{result}");
+    assert_eq!(result["states"][&revision], "proposed");
+    assert_eq!(provider.creates, 1);
+    // The checkout and its index are untouched; the record exists only in the proposal.
+    assert_eq!(git(&root, &["rev-parse", "HEAD"], None), local_head);
+    assert_eq!(git(&root, &["write-tree"], None), local_index);
+    assert!(!root.join("GROUNDING.yaml").exists());
+    assert!(!root.join(".kpopper/history.yaml").exists());
+
+    let show = |path: &str| {
+        git(
+            &provider.remote,
+            &["show", &format!("pending_grounding:{path}")],
+            None,
+        )
+    };
+    let marker = String::from_utf8(show(".kpopper/history.yaml")).unwrap();
+    assert!(marker.contains("node-history/v1"), "{marker}");
+    assert_eq!(show("evidence/vendor.txt"), b"The limit is 10.\n");
+    assert_eq!(show("app.txt"), b"target code\n");
+    assert_eq!(show(".kpopper/measure.yaml"), b"measure: {}\n");
+    assert!(
+        String::from_utf8(show(".gitattributes"))
+            .unwrap()
+            .contains("/GROUNDING.yaml -text")
+    );
+    // No legacy history authority, event or migration control was synthesized.
+    let listed = String::from_utf8(git(
+        &provider.remote,
+        &["ls-tree", "-r", "--name-only", "pending_grounding"],
+        None,
+    ))
+    .unwrap();
+    assert!(
+        !listed.lines().any(|path| {
+            path.starts_with(".kpopper/history-commits/") && path.ends_with(".yaml")
+                || path.starts_with(".kpopper-history-migration/")
+                || path.starts_with(".kpopper/history/") && path.ends_with(".yaml")
+        }),
+        "{listed}"
+    );
+
+    // The proposal reads as compact history with the contribution's exact meaning:
+    // profile, types, source and scope, never reinterpreted as core.
+    let proposal = temp.path().join("proposal");
+    git(
+        temp.path(),
+        &[
+            "clone",
+            "-q",
+            "--branch",
+            "pending_grounding",
+            provider.remote.to_str().unwrap(),
+            proposal.to_str().unwrap(),
+        ],
+        None,
+    );
+    let captured = kpop_native::history_node_capture::Capture::read(&proposal).unwrap();
+    let document = captured.document().to_json().unwrap();
+    assert_eq!(document["known"]["api.limit"]["v"], 10, "{document}");
+    assert_eq!(document["known"]["api.limit"]["at"], "table 1");
+    assert_eq!(document["known"]["api.limit"]["from"], "s.vendor");
+    assert_eq!(
+        document["known"]["api.limit"]["scope"],
+        serde_json::json!({"environment": "API v2", "kind": "external"})
+    );
+    assert_eq!(
+        document["sources"]["s.vendor"]["file"],
+        "evidence/vendor.txt"
+    );
+    assert_ne!(document["meta"]["reasoning"]["profile"], "core/v1");
+
+    // Landing is verified by the ordinary acceptance rule on the compact target.
+    let landed_commit = land(&mut provider);
+    let proof = Publisher::with_clock(project.clone(), &mut provider, || 123.5)
+        .verify()
+        .unwrap()
+        .to_json()
+        .unwrap();
+    assert_eq!(proof["unresolved"], serde_json::json!([]), "{proof}");
+    assert_eq!(proof["terminal"][&revision], "accepted", "{proof}");
+    assert_eq!(provider.creates, 1);
+
+    // The landed record supports ordinary compact reads and writes afterwards.
+    let landed = temp.path().join("landed");
+    git(
+        temp.path(),
+        &[
+            "clone",
+            "-q",
+            "--branch",
+            "trunk",
+            provider.remote.to_str().unwrap(),
+            landed.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert_eq!(
+        String::from_utf8(git(&landed, &["rev-parse", "HEAD"], None))
+            .unwrap()
+            .trim(),
+        landed_commit
+    );
+    let options = kpop_native::history_authoring::Options {
+        operation: "after-landing".into(),
+        recorded_at: "2026-09-25T12:00:00+00:00".into(),
+        recording_day: "2026-09-25".into(),
+        by: kpop_native::value::TypedValue::Text("writer".into()),
+        strict: false,
+        paths: kpop_native::history_paths::Scheme::Hashed,
+        receipt_version: None,
+    };
+    let action = kpop_native::value::TypedValue::from_json(&serde_json::json!({
+        "kind": "add", "id": "api.retries",
+        "body": {"v": 3, "scope": {"environment": "API v2", "kind": "external"}}
+    }))
+    .unwrap();
+    let prepared =
+        kpop_native::history_node_writer::prepare(&landed, &action, &options, None).unwrap();
+    kpop_native::history_node_writer::publish(&landed, &prepared, None, |_| Ok(())).unwrap();
+    let after = kpop_native::history_node_capture::Capture::read(&landed).unwrap();
+    let document = after.document().to_json().unwrap();
+    assert_eq!(document["known"]["api.retries"]["v"], 3, "{document}");
+    assert_eq!(document["known"]["api.limit"]["v"], 10, "{document}");
+}
+
+#[test]
+fn first_compact_publication_is_identical_when_retried_against_the_same_target() {
+    let proposal = || {
+        let (_temp, project, mut provider, _) = setup_target(TargetRecord::Absent);
+        let result = Publisher::with_clock(project, &mut provider, || 123.5)
+            .run(false, true)
+            .unwrap()
+            .to_json()
+            .unwrap();
+        assert_eq!(result["outcome"], "proposed", "{result}");
+        let target = remote_head(&provider.remote, "trunk").unwrap();
+        let tree = String::from_utf8(git(
+            &provider.remote,
+            &["rev-parse", "pending_grounding^{tree}"],
+            None,
+        ))
+        .unwrap();
+        (target, tree)
+    };
+    let first = proposal();
+    let second = proposal();
+    assert_eq!(first.0, second.0, "fixed target commits must match");
+    assert_eq!(first.1, second.1, "retried proposal bytes differ");
+}
+
+#[test]
+fn first_core_contribution_keeps_its_profile_in_a_new_compact_record() {
+    use kpop_native::{history_authority::Files, value::TypedValue as V};
+    let (temp, project, mut provider, _) = setup_target(TargetRecord::Absent);
+    let scope = V::from_json(&serde_json::json!({"kind":"project", "environment":"fixture"})).unwrap();
+    let document = V::from_json(&serde_json::json!({
+        "meta":{"reasoning":{"version":2,"profile":"core/v1","requires":["arithmetic/v1"]}},
+        "known":{"p.first":{"v":7,"scope":{"kind":"project","environment":"fixture"}}}
+    })).unwrap();
+    let bundle = kpop_native::pending_bundle::prepare(&document, &["p.first".into()], &scope, "project", &Files::new()).unwrap();
+    install_pending_bundle(&project.root, &bundle.to_tagged().unwrap(), &Files::new());
+    let result = Publisher::with_clock(project.clone(), &mut provider, || 123.5)
+        .run(false, true).unwrap().to_json().unwrap();
+    assert_eq!(result["outcome"], "proposed", "{result}");
+    let proposal = temp.path().join("core-proposal");
+    git(temp.path(), &["clone", "-q", "--branch", "pending_grounding", provider.remote.to_str().unwrap(), proposal.to_str().unwrap()], None);
+    let captured = kpop_native::history_node_capture::Capture::read(&proposal).unwrap();
+    let view = captured.document().to_json().unwrap();
+    assert_eq!(view["meta"]["reasoning"]["profile"], "core/v1");
+    assert_eq!(view["known"]["p.first"]["v"], 7);
+    land(&mut provider);
+    let proof = Publisher::with_clock(project, &mut provider, || 123.5).verify().unwrap().to_json().unwrap();
+    assert_eq!(proof["unresolved"], serde_json::json!([]), "{proof}");
+}
+
+#[test]
+fn a_plain_revision_is_named_when_the_target_already_holds_compact_history() {
+    let (_temp, project, mut provider, revision) = setup_target(TargetRecord::Compact);
+    let root = project.root.clone();
+    let local_head = git(&root, &["rev-parse", "HEAD"], None);
+    let local_index = git(&root, &["write-tree"], None);
+    let result = Publisher::with_clock(project, &mut provider, || 123.5)
+        .run(false, true)
+        .unwrap()
+        .to_json()
+        .unwrap();
+    assert_eq!(result["outcome"], "attention", "{result}");
+    let detail = result["detail"].as_str().unwrap();
+    assert!(
+        detail.contains(&revision) && detail.contains("plain contribution"),
+        "{detail}"
+    );
+    assert_eq!(provider.creates, 0);
+    assert!(remote_head(&provider.remote, "pending_grounding").is_none());
+    assert_eq!(git(&root, &["rev-parse", "HEAD"], None), local_head);
+    assert_eq!(git(&root, &["write-tree"], None), local_index);
+}
+
+#[test]
+fn first_publication_refuses_evidence_that_would_populate_record_control() {
+    let (_temp, project, mut provider, _) = setup_target(TargetRecord::Absent);
+    let root = project.root.clone();
+    let scope = serde_json::json!({"environment": "workspace", "kind": "project"});
+    let locator = ".kpopper/hypotheses/injected.yaml";
+    let document = kpop_native::value::TypedValue::from_json(&serde_json::json!({
+        "known": {"api.flag": {"v": 1, "scope": scope.clone(), "note": {"file": locator}}}
+    }))
+    .unwrap();
+    let files = BTreeMap::from([(
+        locator.to_owned(),
+        b"hypothesis: {claim: injected}\nknown:\n  api.flag: {v: 9}\n".to_vec(),
+    )]);
+    let bundle = kpop_native::pending_bundle::prepare(
+        &document,
+        &["api.flag".to_owned()],
+        &kpop_native::value::TypedValue::from_json(&scope).unwrap(),
+        "project",
+        &files,
+    )
+    .unwrap();
+    install_pending_bundle(&root, &bundle.to_tagged().unwrap(), &files);
+    let result = Publisher::with_clock(project, &mut provider, || 123.5)
+        .run(false, true)
+        .unwrap()
+        .to_json()
+        .unwrap();
+    assert_eq!(result["outcome"], "attention", "{result}");
+    assert!(
+        result["detail"]
+            .as_str()
+            .unwrap()
+            .contains("compact_publication_reserved_evidence"),
+        "{result}"
+    );
+    assert_eq!(provider.creates, 0);
+    assert!(remote_head(&provider.remote, "pending_grounding").is_none());
+    assert!(!root.join(locator).exists());
 }

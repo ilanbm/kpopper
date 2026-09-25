@@ -402,6 +402,17 @@ pub fn equivalent(
     evidence: &Files,
     history: Option<&crate::history_capture::Capture>,
 ) -> Result<bool> {
+    equivalent_with_roles(bundle, files, document, evidence, history, false)
+}
+
+fn equivalent_with_roles(
+    bundle: &V,
+    files: &Files,
+    document: &V,
+    evidence: &Files,
+    history: Option<&crate::history_capture::Capture>,
+    explicit_inferred_roles: bool,
+) -> Result<bool> {
     validate(bundle, files)?;
     let manifest = map(field(map(bundle)?, "manifest")?)?;
     if is_int(&manifest["version"], "4") {
@@ -610,12 +621,32 @@ pub fn equivalent(
             .map(|value| [("schema".into(), value.clone())].into_iter().collect())
             .unwrap_or_default(),
     );
-    let actual_schema = V::Map(
+    let mut actual_schema = V::Map(
         map(document)?
             .get("schema")
             .map(|value| [("schema".into(), value.clone())].into_iter().collect())
             .unwrap_or_default(),
     );
+    if explicit_inferred_roles {
+        // Compact rendering makes inferred field roles explicit. That declaration
+        // is equivalent only when it names the roles this contribution actually
+        // used; no other schema metadata or existing declaration may change.
+        let inferred = F::snapshot_fields(expected_document)?;
+        let expected = map(expected_document)?.get("schema").map(map).transpose()?;
+        if let Some(schema) = map_mut(&mut actual_schema)?.get_mut("schema") {
+            let schema = map_mut(schema)?;
+            for role in ["deps", "snapshot", "predicate"] {
+                if expected.is_none_or(|held| !held.contains_key(role))
+                    && schema.get(role).is_some_and(|field| inferred.get(role) == Some(field))
+                {
+                    schema.remove(role);
+                }
+            }
+            if schema.is_empty() && expected.is_none() {
+                map_mut(&mut actual_schema)?.remove("schema");
+            }
+        }
+    }
     if expected_schema.digest()? != actual_schema.digest()? {
         return Ok(false);
     }
@@ -679,7 +710,7 @@ pub(crate) fn equivalent_node(
         is_int(version, "1") || is_int(version, "2"),
         "unsupported_contribution_version",
     )?;
-    equivalent(bundle, files, document, evidence, None)
+    equivalent_with_roles(bundle, files, document, evidence, None, true)
 }
 
 /// Reconstruct the validated historical source carried by a v3 contribution.
@@ -818,6 +849,26 @@ mod tests {
             .iter()
             .map(|(p, b)| (p.clone(), STANDARD.decode(b.as_str().unwrap()).unwrap()))
             .collect()
+    }
+    #[test]
+    fn compact_equivalence_accepts_only_matching_inferred_role_declarations() {
+        let scope = obj([("kind", s("project")), ("environment", s("fixture"))]);
+        let document = obj([("known", obj([("p.value", obj([
+            ("v", n("1")), ("scope", scope.clone()),
+        ]))]))]);
+        let mut explicit = document.clone();
+        map_mut(&mut explicit).unwrap().insert("schema".into(), V::Map(F::snapshot_fields(&document).unwrap()));
+        for version in [1, 2] {
+            let bundle = prepare_version(&document, &["p.value".into()], &scope, &Files::new(), version).unwrap();
+            assert!(!equivalent(&bundle, &Files::new(), &explicit, &Files::new(), None).unwrap());
+            assert!(equivalent_with_roles(&bundle, &Files::new(), &explicit, &Files::new(), None, true).unwrap());
+            for (key, value) in [("deps", s("different_role")), ("unrelated_metadata", s("added"))] {
+                let mut changed = explicit.clone();
+                map_mut(map_mut(&mut changed).unwrap().get_mut("schema").unwrap()).unwrap()
+                    .insert(key.into(), value);
+                assert!(!equivalent_with_roles(&bundle, &Files::new(), &changed, &Files::new(), None, true).unwrap());
+            }
+        }
     }
     #[test]
     fn portable_contributions_match_complete_python_closures() {

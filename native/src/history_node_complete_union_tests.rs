@@ -306,6 +306,10 @@ fn legacy(generation: u32, steps: &[Step]) -> Files {
 }
 /// A complete artifact (version 1, or 3 with retained generations) wrapped as a v3 bundle.
 fn contribute(files: &Files) -> (V, Files) {
+    contribute_with(files, &Files::new())
+}
+/// The same, carrying the exact locator evidence the artifact's objects name.
+fn contribute_with(files: &Files, evidence: &Files) -> (V, Files) {
     let rules = default_rules();
     let captured = crate::history_bundle::capture(files, Some(&rules)).unwrap();
     let subjects = captured
@@ -382,7 +386,7 @@ fn contribute(files: &Files) -> (V, Files) {
         ("revision", s(&manifest.digest().unwrap())),
         ("manifest", manifest),
     ]);
-    crate::history_contribution_prepare::wrap(&artifact, files, &Files::new()).unwrap()
+    crate::history_contribution_prepare::wrap(&artifact, files, evidence).unwrap()
 }
 fn package(version: &str) -> (Binding, Package) {
     let contract = serde_json::to_vec(&json!({"format":"domain-contract/v1","types":{"reading":{"collection":"readings","required":true,"fields":{"v":{"type":"integer","minimum":0,"required":true}}}}})).unwrap();
@@ -1211,4 +1215,138 @@ fn paired_legacy_historical_assessment_survives_exact_full_union() {
             vec![original]
         );
     }
+}
+
+#[test]
+fn reserved_evidence_names_record_storage_and_git_control_case_insensitively() {
+    for path in [
+        ".kpopper/history-commits/x.yaml",
+        ".kpopper/history/p.x/0.yaml",
+        ".KPOPPER/hypotheses/x.yaml",
+        ".kpopper/project.json",
+        ".kpopper-history-migration/op/GROUNDING.yaml",
+        "GROUNDING.yaml",
+        "Provenance.yaml",
+        "docs/.gitattributes",
+        ".gitignore",
+    ] {
+        assert!(reserved_evidence(path), "{path}");
+    }
+    for path in [
+        "evidence/vendor.txt",
+        "evidence/reports/report.txt",
+        "docs/kpopper.txt",
+        "docs/GROUNDING.yaml.txt",
+    ] {
+        assert!(!reserved_evidence(path), "{path}");
+    }
+}
+
+/// A verified reading whose body names locator evidence at `locator`.
+fn located_reading(locator: &str) -> V {
+    let mut o = json!({"authored":{"collection":"readings","fields":{"deps":"rests_on","predicate":"wrong_if","snapshot":"seen","value":"v"},"profile":"core/v1"},
+        "body":{"scope":scope(),"v":1,"note":{"file":locator}},"by":"writer","id_scheme":"typed-history/v2","kind":"reading","on":"2026-09-17",
+        "op":"input","pins":{},"saw":[],"schema_version":2,"subject":"p.input"});
+    o["id"] = json!(crate::identity::typed_object_identity(&value(o.clone())).unwrap());
+    value(o)
+}
+
+#[test]
+fn locator_evidence_at_record_control_paths_is_archived_and_never_becomes_history() {
+    let template = fixture_commit()["view_template"].clone();
+    for (locator, raw) in [
+        // A physical layer the legacy reader would otherwise import as a named proposal.
+        (
+            ".kpopper/hypotheses/planted.yaml",
+            b"hypothesis: {claim: planted}\nreadings:\n  p.input: {v: 99}\n".to_vec(),
+        ),
+        // A replaced-version sidecar the legacy reader would otherwise retain as evidence.
+        (
+            ".kpopper/replaced.yaml",
+            b"p.input:\n- v: 0\n  ended: planted\n".to_vec(),
+        ),
+        // Project configuration.
+        (
+            ".kpopper/project.json",
+            b"{\"version\":1,\"mode\":\"advanced\"}".to_vec(),
+        ),
+    ] {
+        let object = located_reading(locator);
+        let history = legacy(1, &[step("input", 1, &[], vec![object.clone()], &template)]);
+        let evidence = Files::from([(locator.to_owned(), raw.clone())]);
+        let (bundle, files) = contribute_with(&history, &evidence);
+        let revision = text(&map(&bundle).unwrap()["revision"])
+            .unwrap()
+            .to_owned();
+        let out = tempfile::tempdir().unwrap();
+        materialize_complete(out.path(), &bundle, &files)
+            .unwrap_or_else(|e| panic!("{locator}: {e}"));
+        // Retained exactly in archive space; never an active storage or control file.
+        assert!(
+            out.path().join(locator).symlink_metadata().is_err(),
+            "{locator} became active"
+        );
+        assert_eq!(
+            std::fs::read(
+                out.path()
+                    .join(format!(".kpopper-contributions/{revision}/evidence/{locator}"))
+            )
+            .unwrap(),
+            raw,
+            "{locator}"
+        );
+        // Exact membership: only the verified reading, with its locator unchanged.
+        let capture = Capture::read(out.path()).unwrap();
+        assert_eq!(
+            capture.history.objects().keys().collect::<Vec<_>>(),
+            vec![&id_of(&object)],
+            "{locator}"
+        );
+        assert_eq!(capture.object("p.input", &id_of(&object)).unwrap(), object);
+        assert_eq!(
+            map(&subject(&capture)).unwrap()["note"],
+            value(json!({"file": locator}))
+        );
+    }
+}
+
+#[test]
+fn actual_legacy_import_bound_originals_survive_full_materialization() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("source");
+    std::fs::create_dir_all(source.join(".kpopper")).unwrap();
+    std::fs::write(source.join("GROUNDING.yaml"),
+        "known:\n  p.input: {v: 1, scope: {kind: project, environment: fixture}}\n").unwrap();
+    std::fs::write(source.join(".kpopper/replaced.yaml"),
+        "p.input:\n- {v: 0, scope: {kind: project, environment: fixture}, ended: superseded, day: 2026-09-20}\n").unwrap();
+    let original = temporary.path().join("legacy");
+    crate::history_migration::Plan::prepare(&source.join("GROUNDING.yaml"), &source,
+        crate::history_migration::Options {
+            operation: "import-originals".into(), recorded_at: AT.into(),
+            record_id: Some("bound-originals".into()), read_mode: crate::source_capture::ReadMode::Frozen,
+            route: false, as_of: None,
+        }, None).unwrap().publish(&original).unwrap();
+    let held = crate::history_store::Store::new(&original.join("GROUNDING.yaml")).unwrap().capture().unwrap();
+    let mut core = Files::from([("entry.yaml".into(), held.entry_bytes.clone()),
+        ("authority.yaml".into(), held.authority_bytes.clone())]);
+    for (operation, bytes) in &held.commits { core.insert(format!("commits/{operation}.yaml"), bytes.clone()); }
+    for (path, bytes) in &held.storage_bytes { core.insert(format!("objects/{path}"), bytes.clone()); }
+    let members = super::bound_members(&held).unwrap();
+    assert!(!members.is_empty());
+    let mut required = members.keys().cloned().collect::<BTreeSet<_>>();
+    for bytes in core.values() {
+        required.extend(crate::pending_bundle::required_files(&Y::decode_document(bytes).unwrap()).unwrap());
+    }
+    let evidence = required.into_iter().map(|path| {
+        let raw = std::fs::read(original.join(&path)).unwrap(); (path, raw)
+    }).collect();
+    let (bundle, files) = contribute_with(&core, &evidence);
+    let output = temporary.path().join("output");
+    std::fs::create_dir(&output).unwrap();
+    materialize_complete(&output, &bundle, &files).unwrap();
+    let copied = Capture::read(&output).unwrap();
+    assert_eq!(copied.history.objects().keys().collect::<Vec<_>>(), held.objects.keys().collect::<Vec<_>>());
+    for (id, object) in &held.objects { assert_eq!(copied.history.object(id).unwrap(), *object); }
+    let archived = copied.snapshot.legacy.values().next().unwrap();
+    assert_eq!(archived.captured.commits, held.commits);
 }

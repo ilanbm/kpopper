@@ -211,6 +211,14 @@ with one, recovery finishes the exact view. A conflicting user edit is preserved
 refused. Retrying an unborn marker keeps its record identity. Existing legacy records
 remain interpretable; a new compact record is never born as legacy and then migrated.
 
+The first canonical publication from pending version-1/2 contributions also creates
+compact history when the target has no record. The combined document and source evidence
+enter through the verified compact import, with their original profile, roles and types;
+historical authorship is explicitly unknown. The original contribution artifacts remain
+retained. Operation identity and time derive from the target and captured revisions so a
+retry can reproduce the same proposal. Existing records keep their supported format.
+Frozen version-1/2 `knowledge materialize` exports remain standalone snapshots.
+
 Compact publication may retain one replaceable accepted-view checkpoint at
 `.kpopper/.history-local/accepted-node-view.yaml`, beneath a `*` ignore file. This
 is private derived control state, not a historical snapshot per operation and not
@@ -475,6 +483,11 @@ refused choices or a changed pending ledger cannot leave a clock-only write behi
 Domain-bound subset contributions currently refuse because a subset cannot preserve
 the complete declared domain contract. A compact contribution cannot be adopted into
 a legacy target; migrate a verified copy first.
+
+Automatic history publication unions complete same-authority histories. Scoped version-3
+and version-4 contributions require explicit local adoption choices; an unresolved scoped
+contribution holds the publication batch. Retaining it in the pending ledger does not
+mean that it has been accepted into the target.
 
 Branch transport resolves a pinned local Git source and captures its exact
 objects, profiles and proposals. `preview_adoption` and
