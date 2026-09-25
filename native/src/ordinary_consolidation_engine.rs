@@ -105,6 +105,13 @@ fn read_day(body: &V, raw: &Map) -> Option<String> {
 /// readings. Only collections are kept; the branch's `schema:` and `meta:` stay the
 /// branch's.
 pub(crate) fn branch_differences(document: &V, base: &World<'_>) -> Result<V> {
+    branch_differences_from(document, base, None)
+}
+pub(crate) fn branch_differences_from(
+    document: &V,
+    base: &World<'_>,
+    comparison_base: Option<&V>,
+) -> Result<V> {
     let collections = F::collections(document)?;
     let bodies = map(document)?
         .iter()
@@ -113,25 +120,35 @@ pub(crate) fn branch_differences(document: &V, base: &World<'_>) -> Result<V> {
         .flat_map(|members| members.iter().map(|(id, body)| (id.clone(), body.clone())))
         .collect::<Map>();
     let reader = &base.reader;
+    let basis_doc = comparison_base
+        .and_then(|value| map(value).ok().and_then(|m| m.get("doc")))
+        .or(comparison_base);
+    let basis = basis_doc
+        .map(entries)
+        .transpose()?
+        .unwrap_or_else(|| reader.raw.clone());
+    let dep = text(&reader.fields["deps"])?;
     let differs = |id: &str, body: &V| {
-        if !reader.ids.contains(id) {
+        if !basis.contains_key(id) {
             return true;
         }
-        let old = reader.raw.get(id).unwrap_or(&V::Null);
+        let old = basis.get(id).unwrap_or(&V::Null);
         if !same_claim(&claim(body), &claim(old)) {
             return true;
         }
-        if base.judgments.contains_key(id) {
+        if map(old).is_ok_and(|m| m.contains_key(dep)) {
             // the same verdict on other grounds is a decision written again, and an
             // arrangement re-decided in place carries a new born; the same decision with
             // its seen refreshed is the branch's own review, which stays with the branch
             return matches!((body, old), (V::Map(_), V::Map(_)))
                 && (!python_equal(&version_core(body), &version_core(old))
+                    || get(body, "seen") != get(old, "seen")
+                    || get(body, "reviewed") != get(old, "reviewed")
                     || (G::arrangement(reader, old)
                         && !python_equal(get(body, "born"), get(old, "born"))));
         }
         read_day(body, &bodies)
-            .is_some_and(|read| read_day(old, &reader.raw).is_none_or(|held| read > held))
+            .is_some_and(|read| read_day(old, &basis).is_none_or(|held| read > held))
     };
     let mut out = map(document)?.clone();
     out.retain(|name, members| match members {
@@ -405,6 +422,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         candidates: vec![],
     };
     let mut holders = BTreeMap::<String, Vec<usize>>::new();
+    let mut review_moved = Vec::new();
     for (i, h) in c.hyps.iter().enumerate() {
         for id in &h.ids {
             holders.entry(id.clone()).or_default().push(i);
@@ -447,6 +465,42 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         let old = base.reader.raw.get(id).unwrap_or(&V::Null);
         let (old_claim, new_claim) = (claim(old), claim(new));
         let same = same_claim(&old_claim, &new_claim);
+        if base.judgments.contains_key(id) {
+            let fork = get(&h.head, "_comparison_base");
+            let fork_doc = map(fork).ok().and_then(|m| m.get("doc")).unwrap_or(fork);
+            let fork_body = entries(fork_doc).ok().and_then(|all| all.get(id).cloned());
+            let source_whole = get(&h.head, "_source_document");
+            let source_doc = map(source_whole)
+                .ok()
+                .and_then(|m| m.get("doc"))
+                .or_else(|| (source_whole != &V::Null).then_some(source_whole));
+            let source_all = source_doc.and_then(|doc| entries(doc).ok());
+            let is_review_of_fork = fork_body.as_ref().is_some_and(|forked| {
+                python_equal(&version_core(forked), &version_core(new))
+                    && (get(forked, "seen") != get(new, "seen")
+                        || get(forked, "reviewed") != get(new, "reviewed"))
+            });
+            if is_review_of_fork && let Some(source_all) = source_all {
+                for dependency in strings(get(new, text(&base.reader.fields["deps"])?)) {
+                    let source_day = source_all
+                        .get(&dependency)
+                        .and_then(|body| read_day(body, &source_all));
+                    let destination_day = base
+                        .reader
+                        .raw
+                        .get(&dependency)
+                        .and_then(|body| read_day(body, &base.reader.raw));
+                    if source_day
+                        .zip(destination_day)
+                        .is_some_and(|(source, current)| current > source)
+                    {
+                        review_moved.push(format!(
+                            "{id}: {dependency} was re-read after the source review's basis"
+                        ));
+                    }
+                }
+            }
+        }
         if same && old == new {
             continue;
         }
@@ -472,17 +526,34 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
                 why="the base holds a judgment under this id and the hypothesis an arrangement - an arrangement is born when it is written in place, and no name takes one over a judgment: write it as its own decision".into();
                 c.untakeable.insert(id.clone());
             } else {
-                let decision = G::may_supersede(
-                    &base.reader,
-                    id,
-                    old,
-                    new,
-                    Some(stamp),
-                    page,
-                    take.contains(id),
-                )?;
-                allowed = decision.allowed;
-                why = decision.reason;
+                let comparison_base = get(&h.head, "_comparison_base");
+                let source_origin = map(comparison_base)
+                    .ok()
+                    .and_then(|m| m.get("doc"))
+                    .unwrap_or(comparison_base);
+                let source_origin = entries(source_origin)
+                    .ok()
+                    .and_then(|values| values.get(id).cloned());
+                let only_reviewed_forked_judgment = source_origin.as_ref().is_some_and(|origin| {
+                    python_equal(&version_core(origin), &version_core(new))
+                        && !python_equal(&version_core(old), &version_core(new))
+                });
+                if only_reviewed_forked_judgment {
+                    allowed = false;
+                    why = "the branch only reviewed its fork's judgment, while the destination has since changed it - that review cannot take the older verdict".into();
+                } else {
+                    let decision = G::may_supersede(
+                        &base.reader,
+                        id,
+                        old,
+                        new,
+                        Some(stamp),
+                        page,
+                        take.contains(id),
+                    )?;
+                    allowed = decision.allowed;
+                    why = decision.reason;
+                }
                 let pred = R::predicate_of(&base.judgments[id], &base.reader.fields);
                 if !allowed && truth(&pred) && world.reader.predicate(&pred)? == Some(true) {
                     why += &format!(
@@ -632,6 +703,7 @@ fn union<'a>(input: UnionInput<'_, 'a>) -> Result<Union<'a>> {
         .into_iter()
         .filter(|l| !before_moved.contains(l))
         .collect();
+    c.moved.extend(review_moved);
     for (i, h) in c.hyps.iter().enumerate() {
         let v = get(&h.head, "wrong_if");
         let pred = if truth(v) { py(v) } else { String::new() };

@@ -91,50 +91,137 @@ fn generated_object_row_normalization_is_order_independent() {
 }
 
 #[test]
-fn ordinary_branch_preview_and_fold_keep_source_ref_and_write_only_destination() {
-    let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
-    git(&root, &["init", "-q", "-b", "main"]);
+fn ordinary_branch_preview_ignores_values_inherited_from_the_merge_base() {
+    let (_temp, root) = branched(&[]);
+    let base = git(&root, &["rev-parse", "HEAD"]);
+    git(&root, &["checkout", "-q", "-b", "source"]);
+    git(&root, &["checkout", "-q", "main"]);
     fs::write(
         root.join("GROUNDING.yaml"),
-        "known:\n  p.value:\n    v: 1\n    of: 2026-09-19\n",
+        BRANCHED.replace("local.one: {v: 1}", "local.one: {v: 3}"),
     )
     .unwrap();
-    let source = commit(&root, "source");
-    fs::write(
-        root.join("GROUNDING.yaml"),
-        "known:\n  p.value:\n    v: 3\n    of: 2026-09-18\n",
-    )
-    .unwrap();
-    commit(&root, "current");
+    commit(&root, "current changed independently");
     let before_head = git(&root, &["rev-parse", "HEAD"]);
     let options = Options {
-        from_refs: vec![source.clone()],
+        from_refs: vec![base],
         dry_run: true,
         ..Default::default()
     };
     let preview = public_consolidation::dispatch(&options, &root);
     assert_eq!(preview.code, 0, "{}", preview.stderr);
-    assert!(preview.stdout.contains(&source), "{}", preview.stdout);
+    assert!(preview.stdout.contains("arrived (0)"), "{}", preview.stdout);
+    assert!(preview.stdout.contains("updates (0)"), "{}", preview.stdout);
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), before_head);
-    let folded = public_consolidation::dispatch(
-        &Options {
-            dry_run: false,
-            ..options
-        },
-        &root,
-    );
-    assert_eq!(folded.code, 0, "{}{}", folded.stdout, folded.stderr);
-    assert!(folded.stdout.contains(&format!("folded {source}")));
     assert!(
         fs::read_to_string(root.join("GROUNDING.yaml"))
             .unwrap()
-            .contains("v: 1")
+            .contains("v: 3")
     );
-    assert_eq!(git(&root, &["rev-parse", "HEAD"]), before_head);
-    assert_eq!(
-        git(&root, &["show", &format!("{source}:GROUNDING.yaml")]),
-        "known:\n  p.value:\n    v: 1\n    of: 2026-09-19"
+}
+
+#[test]
+fn ordinary_branch_preview_refuses_missing_merge_base() {
+    let (_temp, root) = branched(&[]);
+    git(&root, &["checkout", "--orphan", "unrelated"]);
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.other: {v: 1}\n").unwrap();
+    commit(&root, "unrelated root");
+    git(&root, &["checkout", "-q", "main"]);
+    let output = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec!["unrelated".into()],
+            dry_run: true,
+            ..Default::default()
+        },
+        &root,
+    );
+    assert_eq!(output.code, 1);
+    assert!(
+        output.stderr.contains("no common Git merge base"),
+        "{}",
+        output.stderr
+    );
+}
+
+#[test]
+fn ordinary_branch_carries_a_fresh_review_and_marks_newer_target_inputs_moved() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    let base = "meta: {purpose: synthetic}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nsources:\n  s.request: {name: request, read: 2026-09-15}\nknown:\n  wave.state: {v: complete, of: 2026-09-15}\n  brief.job_state: {v: failing, of: 2026-09-15}\n  brief.rendered_runs: {v: 0, of: 2026-09-15}\njudgments:\n  d.judgment:\n    request: s.request\n    rests_on: [wave.state, brief.job_state, brief.rendered_runs, s.request]\n    verdict: not demonstrated\n    wrong_if: brief.rendered_runs > 0\n    seen: {wave.state: complete, brief.job_state: failing, brief.rendered_runs: 0, s.request: read 2026-09-15}\n";
+    fs::write(root.join("GROUNDING.yaml"), base).unwrap();
+    commit(&root, "common base");
+    git(&root, &["checkout", "-q", "-b", "reviewed"]);
+    let branch = base
+        .replace(
+            "brief.job_state: {v: failing, of: 2026-09-15}",
+            "brief.job_state: {v: 'still failing', of: 2026-09-16}",
+        )
+        .replace(
+            "brief.job_state: failing, brief.rendered_runs",
+            "brief.job_state: 'still failing', brief.rendered_runs",
+        );
+    fs::write(root.join("GROUNDING.yaml"), branch).unwrap();
+    commit(&root, "reviewed on source branch");
+    git(&root, &["checkout", "-q", "main"]);
+
+    let fresh = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec!["reviewed".into()],
+            dry_run: true,
+            ..Default::default()
+        },
+        &root,
+    );
+    assert_eq!(fresh.code, 0, "{}{}", fresh.stdout, fresh.stderr);
+    assert!(
+        !fresh.stdout.contains("MOVED     d.judgment"),
+        "{}",
+        fresh.stdout
+    );
+
+    let newer = base.replace(
+        "brief.job_state: {v: failing, of: 2026-09-15}",
+        "brief.job_state: {v: 'still failing', of: 2026-09-17}",
+    );
+    fs::write(root.join("GROUNDING.yaml"), newer).unwrap();
+    commit(&root, "destination reread after source review");
+    let stale = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec!["reviewed".into()],
+            dry_run: true,
+            ..Default::default()
+        },
+        &root,
+    );
+    assert_eq!(stale.code, 0, "{}{}", stale.stdout, stale.stderr);
+    assert!(
+        stale.stdout.contains("MOVED d.judgment"),
+        "{}",
+        stale.stdout
+    );
+
+    let changed_decision = fs::read_to_string(root.join("GROUNDING.yaml"))
+        .unwrap()
+        .replace("verdict: not demonstrated", "verdict: demonstrated");
+    fs::write(root.join("GROUNDING.yaml"), changed_decision).unwrap();
+    commit(&root, "destination makes a new judgment");
+    let cannot_take_old_review = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec!["reviewed".into()],
+            take: vec!["d.judgment".into()],
+            dry_run: true,
+            ..Default::default()
+        },
+        &root,
+    );
+    assert_eq!(cannot_take_old_review.code, 1);
+    assert!(
+        cannot_take_old_review
+            .stdout
+            .contains("that review cannot take the older verdict"),
+        "{}",
+        cannot_take_old_review.stdout
     );
 }
 
@@ -446,7 +533,15 @@ fn ordinary_branch_fold_requires_a_committed_record_and_sidecar() {
         .unwrap();
         fs::create_dir_all(root.join(".kpopper")).unwrap();
         fs::write(root.join(".kpopper/replaced.yaml"), "{}\n").unwrap();
-        let source = commit(&root, "source");
+        commit(&root, "common base");
+        git(&root, &["checkout", "-q", "-b", "source"]);
+        fs::write(
+            root.join("GROUNDING.yaml"),
+            "known:\n  p.value: {v: 2, of: 2026-09-20}\n",
+        )
+        .unwrap();
+        let source = commit(&root, "source change");
+        git(&root, &["checkout", "-q", "main"]);
         fs::write(
             root.join("GROUNDING.yaml"),
             "known:\n  p.value: {v: 3, of: 2026-09-18}\n",
@@ -497,7 +592,15 @@ fn ordinary_branch_fold_accepts_ignored_replaced_sidecar() {
         "known:\n  p.value: {v: 1, of: 2026-09-19}\n",
     )
     .unwrap();
-    let source = commit(&root, "source");
+    commit(&root, "common base");
+    git(&root, &["checkout", "-q", "-b", "source"]);
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  p.value: {v: 2, of: 2026-09-20}\n",
+    )
+    .unwrap();
+    let source = commit(&root, "source change");
+    git(&root, &["checkout", "-q", "main"]);
     fs::write(
         root.join("GROUNDING.yaml"),
         "known:\n  p.value: {v: 3, of: 2026-09-18}\n",
@@ -515,7 +618,11 @@ fn ordinary_branch_fold_accepts_ignored_replaced_sidecar() {
         &root,
     );
     assert_eq!(result.code, 0, "{}{}", result.stdout, result.stderr);
-    assert!(fs::read_to_string(root.join("GROUNDING.yaml")).unwrap().contains("v: 1"));
+    assert!(
+        fs::read_to_string(root.join("GROUNDING.yaml"))
+            .unwrap()
+            .contains("v: 2")
+    );
 }
 
 #[test]
@@ -525,17 +632,32 @@ fn ordinary_branch_fold_is_idempotent_and_accepts_multiple_refs() {
     git(&root, &["init", "-q", "-b", "main"]);
     fs::write(
         root.join("GROUNDING.yaml"),
+        "known:\n  p.base: {v: 0, of: 2026-09-17}\n",
+    )
+    .unwrap();
+    commit(&root, "common base");
+    git(&root, &["checkout", "-q", "-b", "one"]);
+    fs::write(
+        root.join("GROUNDING.yaml"),
         "known:\n  p.base: {v: 0, of: 2026-09-17}\n  p.a: {v: 1, of: 2026-09-19}\n",
     )
     .unwrap();
     let one = commit(&root, "one");
-    fs::write(root.join("GROUNDING.yaml"),"known:\n  p.base: {v: 0, of: 2026-09-17}\n  p.a: {v: 1, of: 2026-09-19}\n  p.b: {v: 2, of: 2026-09-19}\n").unwrap();
+    git(&root, &["checkout", "-q", "main"]);
+    git(&root, &["checkout", "-q", "-b", "two"]);
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  p.base: {v: 0, of: 2026-09-17}\n  p.b: {v: 2, of: 2026-09-19}\n",
+    )
+    .unwrap();
     let two = commit(&root, "two");
+    git(&root, &["checkout", "-q", "main"]);
     fs::write(
         root.join("GROUNDING.yaml"),
         "known:\n  p.base: {v: 0, of: 2026-09-17}\n",
     )
     .unwrap();
+    fs::write(root.join("current.txt"), "current destination\n").unwrap();
     commit(&root, "current");
     let options = Options {
         from_refs: vec![one.clone(), two.clone()],
@@ -562,10 +684,18 @@ fn ordinary_branch_fold_keeps_local_hypotheses_in_the_selected_pool() {
     git(&root, &["init", "-q", "-b", "main"]);
     fs::write(
         root.join("GROUNDING.yaml"),
-        "known:\n  p.branch: {v: 2, of: 2026-09-19}\n",
+        "known:\n  p.base: {v: 1, of: 2026-09-18}\n",
     )
     .unwrap();
-    let source = commit(&root, "source");
+    commit(&root, "common base");
+    git(&root, &["checkout", "-q", "-b", "source"]);
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  p.branch: {v: 2, of: 2026-09-19}\n  p.base: {v: 1, of: 2026-09-18}\n",
+    )
+    .unwrap();
+    let source = commit(&root, "source change");
+    git(&root, &["checkout", "-q", "main"]);
     fs::write(
         root.join("GROUNDING.yaml"),
         "known:\n  p.base: {v: 1, of: 2026-09-18}\n",
@@ -975,12 +1105,7 @@ print(json.dumps({'source':source,'head':head}))
         fs::write(&pp, dirty).unwrap();
         let before_n = image(&native);
         let before_p = image(&python);
-        let na = call(
-            Path::new(env!("CARGO_BIN_EXE_kpop")),
-            false,
-            &native,
-            &args,
-        );
+        let na = call(Path::new(env!("CARGO_BIN_EXE_kpop")), false, &native, &args);
         let py = call(&oracle_python, true, &python, &args);
         assert_eq!(
             (na.status.code(), na.stdout, na.stderr),
@@ -1008,12 +1133,7 @@ print(json.dumps({'source':source,'head':head}))
         (na.status.code(), na.stdout, na.stderr),
         (py.status.code(), py.stdout, py.stderr)
     );
-    let a = call(
-        Path::new(env!("CARGO_BIN_EXE_kpop")),
-        false,
-        &native,
-        &args,
-    );
+    let a = call(Path::new(env!("CARGO_BIN_EXE_kpop")), false, &native, &args);
     let p = call(&oracle_python, true, &python, &args);
     assert_eq!(
         a.status.code(),

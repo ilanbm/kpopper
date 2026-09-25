@@ -58,6 +58,10 @@ pub(crate) struct SuppliedHypothesis {
     pub source: O,
     pub text: String,
     pub source_record: V,
+    /// Whole committed record retained for reading permissions when the proposal is pre-diffed.
+    pub whole_document: Option<V>,
+    /// Git merge-base record for this committed branch, when it is available.
+    pub comparison_base: Option<V>,
     /// Another branch's committed record, laid over the base as what it holds differently.
     pub differences_only: bool,
 }
@@ -146,11 +150,16 @@ fn read_hypotheses(
         )?;
         let (doc, whole) = match base {
             Some(base) if h.differences_only => (
-                branch_differences(&h.document, base)?,
+                branch_differences_from(&h.document, base, h.comparison_base.as_ref())?,
                 Some(h.document.clone()),
             ),
-            _ => (h.document.clone(), None),
+            _ => (h.document.clone(), h.whole_document.clone()),
         };
+        let mut head = h.head.clone();
+        if let Some(comparison_base) = &h.comparison_base {
+            map_mut(&mut head)?.insert("_comparison_base".into(), comparison_base.clone());
+            map_mut(&mut head)?.insert("_source_document".into(), h.document.clone());
+        }
         // An id the branch still holds in two collections has no one body to fold.
         crate::reasoning_snapshot::entries(&doc)?;
         let raw = entries(&doc)?;
@@ -160,7 +169,7 @@ fn read_hypotheses(
                 name: h.name.clone(),
                 path: None,
                 doc,
-                head: h.head.clone(),
+                head,
                 ids: raw.keys().cloned().collect(),
                 raw,
                 source: h.source.clone(),
