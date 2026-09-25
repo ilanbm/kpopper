@@ -191,6 +191,47 @@ fn advanced_first_explicit_add_enters_pending_without_creating_a_record() {
     );
 }
 
+/// A core/v1 active-history record as earlier releases created it. Only fixtures
+/// build this format; new records are compact.
+fn legacy_history_record(root: &Path) {
+    use kpop_native::{
+        history_bootstrap as B,
+        reasoning_runtime::{OperationalBounds, Runtime},
+        value::TypedValue as V,
+    };
+    let entry = root.join("GROUNDING.yaml");
+    let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scripts/reasoning/native")
+        .join(format!(
+            "{}.kpopper-runtime",
+            kpop_native::reasoning_runtime::target_name().unwrap()
+        ));
+    let runtime =
+        Runtime::open(&archive, &root.join(".test-cache"), OperationalBounds::default()).unwrap();
+    let policy = kpop_native::project_modes::Project::open(root)
+        .unwrap()
+        .config()
+        .unwrap();
+    let action =
+        V::from_json(&serde_json::json!({"kind":"add","id":"p.base","body":{"v":1},"as_of":"2026-09-19"}))
+            .unwrap();
+    let mutation = B::prepare(
+        &entry,
+        &action,
+        &policy,
+        &B::BootstrapOptions {
+            operation: "first-legacy".into(),
+            recorded_at: "2026-09-19T12:00:00+00:00".into(),
+            recording_day: "2026-09-19".into(),
+            record_id: "legacy-fixture".into(),
+            by: V::Null,
+        },
+        Some(&runtime),
+    )
+    .unwrap();
+    B::publish(&entry, &mutation, &policy, Some(&runtime), &mut |_| Ok(())).unwrap();
+}
+
 #[test]
 fn advanced_history_add_captures_a_version_three_contribution() {
     use kpop_native::value::TypedValue as V;
@@ -199,7 +240,9 @@ fn advanced_history_add_captures_a_version_three_contribution() {
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
-    success(run(&root, &["add", "p.base", "v=1"]));
+    // An existing core/v1 record keeps the v3 transport; compact records use
+    // the v4 semantic closure covered by tests/compact_contributions.rs.
+    legacy_history_record(&root);
     let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
     let args = [
         "add",
@@ -540,6 +583,12 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     assert!(first.contains("history committed:"));
     assert!(first.contains("born with its first entry"));
     let before: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
+    assert_eq!(before["authority"]["profile"], "node-history/v1");
+    let first_view = kpop_native::history_yaml::decode_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
+    let kpop_native::value::TypedValue::Map(first_view) = first_view else { panic!("record mapping") };
+    let kpop_native::value::TypedValue::Map(meta) = &first_view["meta"] else { panic!("record metadata") };
+    assert!(meta.contains_key("node_history"));
+    assert!(!meta.contains_key("history"));
     let old = before["subjects"]["p.x"]["heads"][0].clone();
     let yesterday = chrono::Utc::now()
         .date_naive()
@@ -562,11 +611,11 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     let after: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     assert_eq!(after["commits"], 2);
     assert_ne!(after["subjects"]["p.x"]["heads"][0], old);
-    assert!(
-        fs::read_to_string(root.join("GROUNDING.yaml"))
-            .unwrap()
-            .contains("v: 2")
-    );
+    let current = kpop_native::history_node_capture::Capture::read(&root).unwrap();
+    let kpop_native::value::TypedValue::Map(document) = current.document() else { panic!("record mapping") };
+    let kpop_native::value::TypedValue::Map(known) = &document["known"] else { panic!("known mapping") };
+    let kpop_native::value::TypedValue::Map(body) = &known["p.x"] else { panic!("reading body") };
+    assert_eq!(body["v"].to_json().unwrap(), serde_json::json!(2));
     success(run(
         &root,
         &[
@@ -582,6 +631,29 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
         &["set", "p.x", "3", "--why", "a further observation"],
     ));
     assert!(success(run(&root, &["review", "d.work"])).contains("(review d.work)"));
+}
+
+#[test]
+fn default_git_project_uses_compact_history_for_normal_local_work() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    git(&root, &["config", "user.name", "Fixture"]);
+    git(&root, &["config", "user.email", "fixture@example.test"]);
+    fs::write(root.join(".gitattributes"), "user.txt text\n").unwrap();
+    success(run(&root, &["add", "p.x", "v=1", "--as-of", "2026-01-01"]));
+    success(run(&root, &["add", "p.y", "v=2"]));
+    success(run(&root, &["set", "p.x", "2", "--as-of", "2026-01-02", "--why", "new observation"]));
+    success(run(&root, &["add", "d.small", "verdict=small", "rests_on=[p.x]", "wrong_if=p.x > 3"]));
+    success(run(&root, &["review", "d.small", "--why", "checked source"]));
+    success(run(&root, &["add", "p.alternative", "v=3", "--hypothesis", "alternative"]));
+    success(run(&root, &["consolidate", "alternative", "--dry-run"]));
+    success(run(&root, &["consolidate", "alternative"]));
+    let status: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
+    assert_eq!(status["authority"]["profile"], "node-history/v1");
+    assert_eq!(status["subjects"]["p.alternative"]["acceptance"], "accepted");
+    assert!(fs::read_to_string(root.join(".gitattributes")).unwrap().starts_with("user.txt text\n"));
+    assert!(!root.join("evidence/legacy").exists());
 }
 
 fn history_record_with_one_source() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -622,11 +694,9 @@ fn history_add_names_the_nearest_existing_entries_once_before_the_commit() {
         "nearest existing:\n  p.hours: same from (src.c)\n  one subject: same <id> p.rate folds it in · two: distinct p.rate <id> \"why\" keeps them apart\n"
     );
     assert!(committed.ends_with(" (add p.rate)\n"), "{output}");
-    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
-    assert!(
-        record.contains("  p.rate:\n    from: src.c\n    v: 50\n"),
-        "{record}"
-    );
+    let record = kpop_native::history_yaml::decode_source_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
+    let body = record.get("known").unwrap().get("p.rate").unwrap().typed();
+    assert_eq!(body.to_json().unwrap(), serde_json::json!({"from":"src.c","v":50}));
 
     // Judgments read the record's dependency field: shared premises make a pair.
     let fine = [
@@ -1011,9 +1081,13 @@ fn explicit_core_acts_and_proposals_need_only_the_core_program() {
         assert_eq!(result["state"], "committed");
     }
     let record = root.join("GROUNDING.yaml");
-    let text = fs::read_to_string(&record).unwrap();
-    assert!(text.contains("v: 1"));
-    fs::write(&record, text.replace("v: 1", "v: 8")).unwrap();
+    let mut document = kpop_native::history_yaml::decode_document(&fs::read(&record).unwrap()).unwrap();
+    let kpop_native::value::TypedValue::Map(doc) = &mut document else { panic!("record") };
+    let kpop_native::value::TypedValue::Map(known) = doc.get_mut("known").unwrap() else { panic!("known") };
+    let kpop_native::value::TypedValue::Map(body) = known.get_mut("p.x").unwrap() else { panic!("body") };
+    assert_eq!(body["v"].to_json().unwrap(), serde_json::json!(1));
+    body.insert("v".into(), kpop_native::value::TypedValue::from_json(&serde_json::json!(8)).unwrap());
+    fs::write(&record, kpop_native::history_yaml::encode_document(&document).unwrap()).unwrap();
     let result: Value = serde_json::from_str(&success(run(
         &root,
         &[

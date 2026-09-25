@@ -64,7 +64,11 @@ pub(crate) fn load(raw: &[u8]) -> Result<Arc<Legacy>> {
             }
         }
     }
-    let captured = crate::history_bundle::capture(&core, None)?;
+    Y::with_decoded_documents(|| load_definitions(&core, files.values().map(Vec::len).sum(), &digest))
+}
+
+fn load_definitions(core: &crate::history_authority::Files, decoded_bytes: usize, digest: &str) -> Result<Arc<Legacy>> {
+    let captured = crate::history_bundle::capture(core, None)?;
     let mut manifests = BTreeMap::new();
     let mut receipts = BTreeMap::new();
     for raw in captured.commits.values().chain(
@@ -93,12 +97,12 @@ pub(crate) fn load(raw: &[u8]) -> Result<Arc<Legacy>> {
         manifests,
         receipts,
         orders,
-        decoded_bytes: files.values().map(Vec::len).sum(),
+        decoded_bytes,
     });
     CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         cache.retain(|_, v| v.strong_count() > 0);
-        cache.insert(digest, Arc::downgrade(&legacy));
+        cache.insert(digest.into(), Arc::downgrade(&legacy));
     });
     Ok(legacy)
 }
@@ -165,6 +169,12 @@ fn inventory_of(manifest: &V) -> Result<BTreeSet<String>> {
         .map(|reference| text(&map(reference)?["id"]).map(str::to_owned))
         .collect()
 }
+/// The verified original template used by legacy historical-world reconstruction.
+pub(crate) fn view_template(snapshot: &Snapshot, operation: &str) -> Result<V> {
+    let (_, manifest, _) = definition(snapshot, operation)?;
+    Ok(field(map(manifest)?, "view_template")?.clone())
+}
+
 /// Complete original legacy manifest inventory, including inherited references.
 pub(crate) fn inventory(snapshot: &Snapshot, operation: &str) -> Result<BTreeSet<String>> {
     let (_, manifest, _) = definition(snapshot, operation)?;
@@ -187,11 +197,16 @@ fn introduced_from(legacy: &Legacy, manifest: &V) -> Result<BTreeSet<String>> {
             .commits
             .get(&parent)
             .ok_or_else(|| error("node_legacy_parent_mismatch"))?;
-        let ancestor = Y::decode_document(raw)?;
-        for id in inventory_of(&ancestor)? {
+        // load() already decoded and validated this exact archived manifest.
+        // An ancestry walk must not parse its full before/after receipt again.
+        let ancestor = legacy
+            .manifests
+            .get(&crate::identity::sha256(raw))
+            .ok_or_else(|| error("node_legacy_parent_mismatch"))?;
+        for id in inventory_of(ancestor)? {
             introduced.remove(&id);
         }
-        pending.extend(map(&map(&ancestor)?["parents"])?.keys().cloned());
+        pending.extend(map(&map(ancestor)?["parents"])?.keys().cloned());
     }
     Ok(introduced)
 }

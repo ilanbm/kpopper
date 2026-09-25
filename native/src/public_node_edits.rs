@@ -70,7 +70,7 @@ pub(crate) fn verify_recovery(
 pub(crate) fn run(
     original: &[PathBuf],
     cwd: &Path,
-    baseline: &Path,
+    baseline: Option<&Path>,
     subjects: Option<&[String]>,
     because: &str,
     by: Option<&str>,
@@ -80,8 +80,11 @@ pub(crate) fn run(
     Public::scope(&route)?;
     let root = route.paths()[0].parent().unwrap();
     let _lock = F::DirectoryGuard::acquire(root, true)?;
-    let canonical =
-        F::read(&cwd.join(baseline))?.ok_or_else(|| error("node_edit_baseline_required"))?;
+    let canonical = if let Some(baseline) = baseline {
+        F::read(&cwd.join(baseline))?.ok_or_else(|| error("node_edit_baseline_required"))?
+    } else {
+        crate::history_node_checkpoint::accepted(root)?
+    };
     let capture = E::capture(root, &canonical)?;
     let raw = E::edited(root)?;
     let selected = E::selection(&capture, &raw, subjects)?;
@@ -181,7 +184,7 @@ mod tests {
                 run(
                     &original,
                     root.path(),
-                    Path::new("saved.yaml"),
+                    Some(Path::new("saved.yaml")),
                     None,
                     "human edit",
                     None,

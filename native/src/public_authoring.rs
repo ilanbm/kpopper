@@ -2,13 +2,11 @@
 use crate::{
     Result,
     history_authoring::{obj, s},
-    history_bootstrap as B,
     history_contract::*,
     history_transaction_fs as F,
     history_view::map_mut,
     history_yaml::SourceValue,
     project_modes::WriteRoute,
-    public_history::fresh_id,
     public_workspace, recording_privacy as Privacy, require,
     value::{FiniteFloat, Integer, TypedValue as V},
 };
@@ -439,35 +437,16 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
         ));
     }
     let runtime = public_workspace::core_runtime()?;
-    let now = chrono::Utc::now();
-    let mutation = B::prepare(
-        entry,
-        &action,
-        route.config(),
-        &B::BootstrapOptions {
-            operation: fresh_id("first")?,
-            recorded_at: now.to_rfc3339(),
-            recording_day: chrono::Local::now().date_naive().to_string(),
-            record_id: fresh_id("record")?,
-            by: options.actor.as_deref().map(s).unwrap_or_else(crate::direct_history::actor),
-        },
-        runtime.as_ref(),
+    let (result, notice) = crate::history_node_birth::create(
+        &route, &original, &action, runtime.as_ref(),
+        options.actor.as_deref().map(s).unwrap_or_else(crate::direct_history::actor),
     )?;
-    B::publish(
-        entry,
-        &mutation,
-        route.config(),
-        runtime.as_ref(),
-        &mut |_| route.verify(),
-    )?;
-    crate::session_activity::published(
-        entry.parent().unwrap(),
-        mutation.files(),
-        Some(&std::collections::BTreeSet::from([options.subject.clone()])),
-    );
+    if string_is(&map(&result)?["state"], "private draft") {
+        return Ok(format!("{}\n", crate::public_core_readers::json_value(&result)?));
+    }
     Ok(format!(
-        "history committed: {} ({kind} {})\ncreated {} - this workspace's record, born with its first entry\n",
-        text(&map(&mutation.to_data())?["operation"])?,
+        "{notice}history committed: {} ({kind} {})\ncreated {} - this workspace's record, born with its first entry\n",
+        text(&map(&result)?["operation"])?,
         options.subject,
         entry.display()
     ))

@@ -246,79 +246,56 @@ fn populate(
     bundle: &pending_state::Bundle,
 ) -> Result<()> {
     crate::pending_bundle::validate(&bundle.value, &bundle.files)?;
+    let manifest = field(map(&bundle.value)?, "manifest")?;
+    let version = field(map(manifest)?, "version")?;
+    require(
+        ["1", "2", "3", "4"].iter().any(|v| is_int(version, v)),
+        "unsupported_contribution_version",
+    )?;
+    // Versioned history is materialized as a verified compact record; its closure files
+    // are carried by that record's retained evidence, never as a legacy store layout.
+    let history = is_int(version, "3") || is_int(version, "4");
+    let complete = crate::history_node_complete_union::is_complete(&bundle.value)?;
     for (name, raw) in &bundle.files {
         crate::history_branch::portable_path(name)?;
         require(
             !matches!(name.as_str(), "GROUNDING.yaml" | "snapshot.json"),
             "evidence conflicts with snapshot metadata",
         )?;
+        // Complete legacy history owns its evidence placement. In particular,
+        // original legacy control files belong in the archive, not active compact
+        // directories. Still validate reserved snapshot names before that route.
+        if complete {
+            continue;
+        }
+        if history && (name.starts_with("history-closure/") || name.starts_with("node-closure/")) {
+            continue;
+        }
         let target = guarded_fs::target(root, name)?;
         fs::create_dir_all(target.parent().unwrap())?;
         fs::write(target, raw)?;
     }
-    let manifest = field(map(&bundle.value)?, "manifest")?;
-    let version = field(map(manifest)?, "version")?;
-    let document = field(map(manifest)?, "document")?;
-    if is_int(version, "3") {
-        let captured = crate::history_bundle::validate_contribution(&bundle.value, &bundle.files)?;
-        let layout = crate::history_capture::Layout::for_entry("GROUNDING.yaml")?;
-        for (name, raw) in &bundle.files {
-            let Some(relative) = name.strip_prefix("history-closure/") else {
-                continue;
-            };
-            let destination = if relative == "authority.yaml" {
-                Some(layout.authority.clone())
-            } else if let Some(name) = relative.strip_prefix("commits/") {
-                Some(format!("{}/{name}", layout.commits))
-            } else if let Some(name) = relative.strip_prefix("cancellations/") {
-                Some(format!("{}/{name}", layout.cancellations))
-            } else if let Some(name) = relative.strip_prefix("objects/") {
-                Some(format!("{}/{name}", layout.objects))
-            } else {
-                None
-            };
-            if let Some(destination) = destination {
-                let path = guarded_fs::target(root, &destination)?;
-                if path.exists() {
-                    require(
-                        path.is_file() && fs::read(&path)? == *raw,
-                        "evidence conflicts with history snapshot authority",
-                    )?;
-                } else {
-                    fs::create_dir_all(path.parent().unwrap())?;
-                    fs::write(path, raw)?;
-                }
-            }
-        }
-        fs::write(
-            guarded_fs::target(root, "GROUNDING.yaml")?,
-            crate::history_emit::encode_document(captured.document())?,
-        )?;
+    if complete {
+        crate::history_node_complete_union::materialize_complete(root, &bundle.value, &bundle.files)?;
+    } else if history {
+        crate::history_node_contribution::materialize(root, &bundle.value, &bundle.files)?;
     } else {
         fs::write(
             guarded_fs::target(root, "GROUNDING.yaml")?,
-            crate::history_emit::encode_document(document)?,
+            crate::history_emit::encode_document(field(map(manifest)?, "document")?)?,
         )?;
     }
     fs::write(
         guarded_fs::target(root, "snapshot.json")?,
-        snapshot_bytes(
-            revision,
-            ledger_ref,
-            is_int(version, "3").then_some(manifest),
-        )?,
+        snapshot_bytes(revision, ledger_ref, history.then_some(manifest))?,
     )?;
-    if is_int(version, "3") {
+    if history {
         let capture = capture_source_with_runtime(
             &[root.join("GROUNDING.yaml")],
             root,
             ReadMode::Frozen,
             None,
             None,
-        )?;
-        require(
-            capture.strict_document()?.digest()? == document.digest()?,
-            "materialized history does not reproduce captured contribution",
         )?;
         capture.verify()?;
     }

@@ -3,7 +3,7 @@ use super::Options;
 use crate::{
     Error, Result,
     history_authority::Files,
-    history_contract::{Map, field, map, text, token},
+    history_contract::{Map, field, is_int, map, text, token},
     history_paths::Scheme,
     history_view::map_mut,
     history_yaml::SourceValue,
@@ -222,19 +222,88 @@ fn evidence(document: &V, root: Option<&Path>) -> Result<(Files, BTreeMap<PathBu
     Ok((files, observed))
 }
 
-fn load_document(
-    route: &WriteRoute,
-) -> Result<(V, Inventory, Option<crate::history_capture::Capture>)> {
+/// What an explicit contribution means when no record exists: a plain v2 bundle is
+/// truthful because there is no source history to carry.
+enum PreRecord {
+    Draft(V),
+    Bundle {
+        bundle: V,
+        files: Files,
+        observations: BTreeMap<PathBuf, Vec<u8>>,
+    },
+}
+fn pre_record(kind: &str, options: &Options, action: &V, scope: &V, route: &WriteRoute) -> Result<PreRecord> {
+    require(
+        kind == "add" && map(field(map(action)?, "body")?).is_ok(),
+        "a project contribution requires a complete add or set, not a review refresh",
+    )?;
+    let candidate = preliminary(&V::Map(Map::new()), action)?;
+    let selection = selected(&candidate, &options.subject)?;
+    if Privacy::private_marker(action) || Privacy::private_marker(&selection) {
+        return Ok(PreRecord::Draft(Privacy::draft(
+            route.project(),
+            action,
+            &selection,
+            "private or unclear source permission",
+        )?));
+    }
+    if private_locator(&selection) {
+        return Ok(PreRecord::Draft(Privacy::draft(
+            route.project(),
+            action,
+            &selection,
+            "private source locator needs explicit portable evidence reconciliation",
+        )?));
+    }
+    let (files, observations) = evidence(&selection, options.evidence_root.as_deref())?;
+    let bundle = pending_bundle::prepare(
+        &candidate,
+        std::slice::from_ref(&options.subject),
+        scope,
+        "project",
+        &files,
+    )?;
+    Ok(PreRecord::Bundle {
+        bundle,
+        files,
+        observations,
+    })
+}
+
+type Loaded = (
+    V,
+    Inventory,
+    Option<crate::history_capture::Capture>,
+    Option<crate::source_capture::CapturedSource>,
+);
+
+/// A compact record is read as its own writer reads it: the verified semantic
+/// view, rechecked by source bytes and history revision, never the legacy store.
+fn load_document(route: &WriteRoute) -> Result<Loaded> {
+    if crate::history_node_publication::selected(&route.paths()[0])? {
+        let source = crate::source_capture::capture_source(
+            route.paths(),
+            &route.project().root,
+            crate::source_capture::ReadMode::Frozen,
+            None,
+        )?;
+        let document = source
+            .node_history_capture()
+            .ok_or_else(|| Error("node_semantic_missing_view".into()))?
+            .document()
+            .clone();
+        return Ok((document, Inventory::default(), None, Some(source)));
+    }
     if crate::legacy_authoring::authority_route(&route.paths()[0])?
         == crate::legacy_authoring::AuthorityRoute::History
     {
         let capture = crate::history_store::Store::new(&route.paths()[0])?.capture()?;
         let document = crate::history_authoring::document(&capture)?;
-        return Ok((document, Inventory::default(), Some(capture)));
+        return Ok((document, Inventory::default(), Some(capture), None));
     }
     let mut inventory = Inventory::default();
     let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
-    Ok((document.source.projected(), inventory, document.history))
+    Ok((document.source.projected(), inventory, document.history, None))
 }
 
 pub(crate) fn route(
@@ -299,36 +368,14 @@ pub(crate) fn route(
         {
             return Ok(Outcome::Local(action));
         }
-        require(
-            kind == "add" && map(field(map(&action)?, "body")?).is_ok(),
-            "a project contribution requires a complete add or set, not a review refresh",
-        )?;
-        let candidate = preliminary(&V::Map(Map::new()), &action)?;
-        let selection = selected(&candidate, &options.subject)?;
-        if Privacy::private_marker(&action) || Privacy::private_marker(&selection) {
-            return Ok(Outcome::Handled(Privacy::draft(
-                route.project(),
-                &action,
-                &selection,
-                "private or unclear source permission",
-            )?));
-        }
-        if private_locator(&selection) {
-            return Ok(Outcome::Handled(Privacy::draft(
-                route.project(),
-                &action,
-                &selection,
-                "private source locator needs explicit portable evidence reconciliation",
-            )?));
-        }
-        let (files, observations) = evidence(&selection, options.evidence_root.as_deref())?;
-        let bundle = pending_bundle::prepare(
-            &candidate,
-            std::slice::from_ref(&options.subject),
-            &scope,
-            "project",
-            &files,
-        )?;
+        let (bundle, files, observations) = match pre_record(kind, options, &action, &scope, &route)? {
+            PreRecord::Draft(draft) => return Ok(Outcome::Handled(draft)),
+            PreRecord::Bundle {
+                bundle,
+                files,
+                observations,
+            } => (bundle, files, observations),
+        };
         let event_id = options
             .event_id
             .clone()
@@ -367,17 +414,22 @@ pub(crate) fn route(
         return Ok(Outcome::Handled(receipt));
     }
 
-    let (document, initial_inventory, history) = load_document(&route)?;
+    let (document, initial_inventory, history, node) = load_document(&route)?;
+    let unchanged = || -> Result<()> {
+        initial_inventory.verify()?;
+        node.as_ref().map(|source| source.verify()).transpose()?;
+        Ok(())
+    };
     let candidate = preliminary(&document, &action)?;
     let id = options.subject.as_str();
     let selection = selected(&candidate, id).unwrap_or_else(|_| candidate.clone());
     if let Some(draft) = Privacy::selected_draft(route.project(), &action, &candidate)? {
-        initial_inventory.verify()?;
+        unchanged()?;
         route.verify()?;
         return Ok(Outcome::Handled(draft));
     }
     if private_locator(&selection) {
-        initial_inventory.verify()?;
+        unchanged()?;
         route.verify()?;
         return Ok(Outcome::Handled(Privacy::draft(
             route.project(),
@@ -387,7 +439,7 @@ pub(crate) fn route(
         )?));
     }
     if shareability != Some("project") {
-        initial_inventory.verify()?;
+        unchanged()?;
         route.verify()?;
         return Ok(Outcome::Handled(Privacy::draft(
             route.project(),
@@ -417,11 +469,141 @@ pub(crate) fn route(
         ["add", "set"].contains(&kind),
         "a project contribution requires a complete add or set, not a review refresh",
     )?;
-
     let event_id = options
         .event_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
+    if let Some(source) = &node {
+        let contribution_id = options.contribution_id.clone().unwrap_or_else(|| id.into());
+        token(&s(&event_id))?;
+        token(&s(&contribution_id))?;
+        let project = route.project().clone();
+        let expected_policy = route.config().clone();
+        // An event captured before this record existed replays only by recomputing its
+        // original plain meaning and evidence; identity is never inferred from the ID.
+        let ledger = crate::pending_state::Ledger::capture(&project)?;
+        let recorded = ledger
+            .events
+            .iter()
+            .find(|event| map(event).ok().and_then(|m| m.get("event_id")) == Some(&s(&event_id)));
+        let (bundle, files, observations) = if let Some(recorded) = recorded
+            && is_int(
+                field(
+                    map(field(
+                        map(&ledger.bundles[text(field(map(recorded)?, "revision")?)?].value)?,
+                        "manifest",
+                    )?)?,
+                    "version",
+                )?,
+                "2",
+            ) {
+            match pre_record(kind, options, &action, &scope, &route) {
+                Ok(PreRecord::Bundle {
+                    bundle,
+                    files,
+                    observations,
+                }) if field(map(&bundle)?, "revision")? == field(map(recorded)?, "revision")? => {
+                    (bundle, files, observations)
+                }
+                _ => {
+                    return Err(Error(
+                        "event ID was already used with different content or target".into(),
+                    ));
+                }
+            }
+        } else {
+            let captured = source
+                .node_history_capture()
+                .ok_or_else(|| Error("node_semantic_missing_view".into()))?;
+            let day = options.as_of.clone().unwrap_or_else(today);
+            let recorded_at = format!("{day}T00:00:00Z");
+            let operation = format!("contribution-{event_id}");
+            let runtime = crate::public_workspace::runtime_for_document(captured.document())?;
+            let (new, _) = captured
+                .prepare_claims(
+                    &action,
+                    &crate::history_authoring::Options {
+                        operation: operation.clone(),
+                        recorded_at: recorded_at.clone(),
+                        recording_day: day,
+                        by: V::Null,
+                        strict: true,
+                        paths: Scheme::Hashed,
+                        receipt_version: None,
+                    },
+                    runtime.as_ref(),
+                )
+                .map_err(|e| Error(format!("history contribution authoring: {e}")))?;
+            let disclosures = map(&action)?
+                .get("disclosed_locators")
+                .cloned()
+                .unwrap_or_else(|| V::List(vec![]));
+            let plan = crate::history_node_contribution::plan(
+                captured,
+                &new,
+                &[id.into()],
+                &operation,
+                &recorded_at,
+                &disclosures,
+            )
+            .map_err(|e| Error(format!("history contribution subset: {e}")))?;
+            // Every retained version leaves with the closure, not only current heads.
+            if let Some(draft) = Privacy::candidate_draft(&project, &action, plan.document())? {
+                unchanged()?;
+                route.verify()?;
+                return Ok(Outcome::Handled(draft));
+            }
+            if Privacy::private_marker(&plan.objects()) {
+                unchanged()?;
+                route.verify()?;
+                return Ok(Outcome::Handled(Privacy::draft(
+                    &project,
+                    &action,
+                    plan.document(),
+                    "private or unclear source permission in retained history",
+                )?));
+            }
+            if private_locator(&plan.objects()) {
+                unchanged()?;
+                route.verify()?;
+                return Ok(Outcome::Handled(Privacy::draft(
+                    &project,
+                    &action,
+                    plan.document(),
+                    "private source locator needs explicit portable evidence reconciliation",
+                )?));
+            }
+            let (files, observations) = evidence(&plan.objects(), options.evidence_root.as_deref())?;
+            let (bundle, files) = crate::history_node_contribution::bundle(&plan, &scope, &files)
+                .map_err(|e| Error(format!("history contribution subset: {e}")))?;
+            (bundle, files, observations)
+        };
+        unchanged()?;
+        route.verify()?;
+        drop(route);
+        let receipt = crate::public_knowledge::import_helper::capture_pending(
+            &project,
+            &bundle,
+            &files,
+            &event_id,
+            &contribution_id,
+            &mut || {
+                unchanged()?;
+                require(
+                    project.config()? == expected_policy,
+                    "project policy or destination changed before capture; retry",
+                )?;
+                require(
+                    observations
+                        .iter()
+                        .all(|(path, bytes)| read_evidence(path).ok().as_ref() == Some(bytes)),
+                    "snapshot_changed",
+                )
+            },
+        )
+        .map_err(|e| Error(format!("history contribution capture: {e}")))?;
+        return Ok(Outcome::Handled(receipt));
+    }
     let (candidate, inventory, diagnostics, notice, history_prepared) = if let Some(captured) =
         history
     {

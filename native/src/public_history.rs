@@ -3,7 +3,7 @@
 use crate::{
     Result, history_capture,
     history_contract::{error, map, string_is},
-    history_migration::{self, Plan},
+    history_migration,
     history_store::Store,
     project_modes::{self, WriteRoute},
     public_core_readers::json_value,
@@ -22,7 +22,7 @@ pub struct Options {
     /// Absent destination directory for a verified history copy.
     #[arg(long)]
     pub to: Option<PathBuf>,
-    /// Create a verified copy using compact node history; preserve the original files.
+    /// Compatibility alias: history migrate always creates compact node history.
     #[arg(long)]
     pub node_history: bool,
     #[arg(long, value_parser = ["live", "frozen"])]
@@ -123,6 +123,63 @@ fn status(entry: &Path) -> Result<Value> {
         "objects":capture.objects.len(), "subjects":subjects}))
 }
 
+/// Compact views are bound to their manifest; a mismatch is an unaccepted edit.
+fn node_view(entry: &Path) -> Result<std::result::Result<crate::history_node_capture::Capture, crate::Error>> {
+    let root = entry.parent().ok_or_else(|| error("invalid_path"))?;
+    match crate::history_node_capture::Capture::read(root) {
+        Ok(capture) => Ok(Ok(capture)),
+        Err(e)
+            if [
+                "node_publication_view",
+                "node_publication_view_mismatch",
+                "node_publication_unbound_view",
+            ]
+            .contains(&e.0.as_str()) =>
+        {
+            Ok(Err(e))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn node_reconcile(entry: &Path) -> Result<Value> {
+    let root = entry.parent().ok_or_else(|| error("invalid_path"))?;
+    let captured = node_view(entry)?;
+    let marker = crate::history_transaction_fs::read(&root.join(".kpopper/history.yaml"))?
+        .ok_or_else(|| error("missing_history_authority"))?;
+    let authority = crate::history_yaml::decode_document(&marker)?;
+    crate::history_node_publication::validate_authority(&authority)?;
+    let mut result = json!({"version":1, "authority":authority.to_json()?,
+        "entry_sha256":crate::identity::sha256(&std::fs::read(entry)?),
+        "rebuild_safe":captured.is_ok(), "conflicted":false});
+    if let Ok(capture) = &captured {
+        result["revision"] = json!(capture.revision());
+        capture.verify_current(root)?;
+    } else {
+        result["reason"] = json!("unresolved_view_edit");
+    }
+    Ok(result)
+}
+
+/// The compact view is already the verified rendering; nothing is rewritten.
+fn node_rebuild(entry: &Path) -> Result<Value> {
+    let root = entry.parent().ok_or_else(|| error("invalid_path"))?;
+    let capture = node_view(entry)?.map_err(|_| error("unresolved_view_edit"))?;
+    let unresolved = map(&map(capture.state())?["subjects"])?
+        .iter()
+        .filter(|(_, item)| {
+            map(item)
+                .ok()
+                .and_then(|m| m.get("acceptance"))
+                .is_some_and(|v| !string_is(v, "accepted"))
+        })
+        .map(|(subject, _)| subject.clone())
+        .collect::<Vec<_>>();
+    capture.verify_current(root)?;
+    Ok(json!({"state":"rebuilt", "record":entry, "revision":capture.revision(),
+        "unresolved_subjects":unresolved}))
+}
+
 pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let operation = options
         .operation
@@ -173,37 +230,17 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let paths = project_modes::write_paths(&original, &cwd)?;
     require(paths.len() == 1, "choose one logical record entry")?;
     let entry = &paths[0];
+    let node = crate::history_node_publication::selected(entry)?;
     require(
-        !crate::history_node_publication::selected(entry)?
-            || ["status", "accept", "refute", "correct", "propose", "retire"].contains(&operation)
-            || operation == "reconcile" && options.record_proposals,
+        !node
+            || ["status", "accept", "refute", "correct", "propose", "retire", "adopt",
+                "reconcile", "rebuild"].contains(&operation),
         "node_history_operation_unsupported",
     )?;
-    if options.node_history {
-        require(
-            operation == "migrate",
-            "--node-history belongs to history migrate",
-        )?;
-        let destination = options
-            .to
-            .as_ref()
-            .ok_or_else(|| error("history migrate requires --to DIRECTORY"))?;
-        let destination = cwd.join(destination);
-        require(
-            !crate::history_node_publication::selected(entry)?,
-            "node_history_copy_already_active",
-        )?;
-        let route = crate::legacy_authoring::authority_route(entry)?;
-        return if route == crate::legacy_authoring::AuthorityRoute::History {
-            crate::history_node_migration::Plan::prepare(entry)?
-                .publish(&destination)?
-                .to_json()
-        } else {
-            crate::history_node_bootstrap::Plan::prepare(entry)?
-                .publish(&destination)?
-                .to_json()
-        };
-    }
+    require(
+        !options.node_history || operation == "migrate",
+        "--node-history belongs to history migrate",
+    )?;
     let result = match operation {
         "adopt" => {
             let revision = options
@@ -243,14 +280,10 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             let subjects = (!options.proposal_subject.is_empty())
                 .then_some(options.proposal_subject.as_slice());
             if crate::history_node_publication::selected(entry)? {
-                let baseline = options
-                    .baseline
-                    .as_deref()
-                    .ok_or_else(|| error("node_edit_baseline_required"))?;
                 json_value(&crate::public_node_edits::run(
                     &original,
                     &cwd,
-                    baseline,
+                    options.baseline.as_deref(),
                     subjects,
                     because,
                     options.by.as_deref(),
@@ -271,6 +304,15 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             }
         }
         "status" => status(entry)?,
+        "reconcile" if node => node_reconcile(entry)?,
+        "rebuild" if node => {
+            let route = WriteRoute::capture(&original, &cwd)?;
+            require(route.paths() == paths, "project_route_changed")?;
+            route.verify()?;
+            let result = node_rebuild(entry)?;
+            route.verify()?;
+            result
+        }
         "reconcile" => json_value(&Store::new(entry)?.prepare_reconciliation(None, true, &[])?)?,
         "rebuild" => {
             let route = WriteRoute::capture(&original, &cwd)?;
@@ -290,6 +332,21 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             route.verify()?;
             json!({"state":"rebuilt", "record":entry,
                 "baseline":captured.baseline.to_json()?, "unresolved_subjects":unresolved})
+        }
+        "migrate" if crate::legacy_authoring::authority_route(entry)?
+            == crate::legacy_authoring::AuthorityRoute::History =>
+        {
+            // An active legacy history converts with its original semantic IDs.
+            let plan = crate::history_node_migration::Plan::prepare(entry)?;
+            match &options.to {
+                Some(path) => plan.publish(&cwd.join(path))?.to_json()?,
+                None => {
+                    let mut preview = plan.summary().to_json()?;
+                    preview["state"] = json!("preview");
+                    preview["history_format"] = json!(crate::history_node_codec::FORMAT);
+                    preview
+                }
+            }
         }
         "migrate" => {
             let project = project_modes::project_for(&paths, &cwd)?;
@@ -315,7 +372,8 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             } else {
                 Some(fresh_id("record")?)
             };
-            let plan = Plan::prepare(
+            // New history is compact. The legacy emitter remains a library replay path.
+            let plan = crate::history_node_import::Plan::prepare(
                 entry,
                 &cwd,
                 history_migration::Options {

@@ -106,6 +106,10 @@ fn replay_archive(archive: &Archive) -> Result<Replayed> {
     require(entry == ENTRY, "bootstrap_entry_unsupported")?;
     let reconstructed = archive.reconstruct()?;
     let root = reconstructed.path();
+    // A Git repository above the temporary directory is not part of the archived
+    // source; an unusable gitfile ends discovery at this root.
+    require(!root.join(".git").exists(), "bootstrap_archive_files")?;
+    fs::write(root.join(".git"), b"gitdir: .kpopper-replay-no-repository\n")?;
     let archived_config = archive.files().get(".kpopper/project.json").cloned();
     if archived_config.is_some() {
         fs::remove_file(root.join(".kpopper/project.json"))?;

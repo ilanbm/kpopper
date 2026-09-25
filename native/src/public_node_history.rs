@@ -13,10 +13,8 @@ use crate::{
 use std::path::{Path, PathBuf};
 pub(crate) fn scope(route: &WriteRoute) -> Result<()> {
     require(
-        route.paths().len() == 1
-            && !route.pending_required()?
-            && string_is(&map(route.config())?["mode"], "simple"),
-        "node_history_pending_unsupported",
+        route.paths().len() == 1,
+        "choose one logical record entry",
     )?;
     require(
         P::selected(&route.paths()[0])?,
@@ -186,10 +184,18 @@ pub(crate) fn write_with_runtime(
 pub(crate) fn write_as(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, by: V) -> Result<(V, String)> {
     write_inner(route, original, action, probe, None, by)
 }
-fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, runtime_override: Option<&crate::reasoning_runtime::Runtime>, by: V) -> Result<(V, String)> {
+pub(crate) fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, runtime_override: Option<&crate::reasoning_runtime::Runtime>, by: V) -> Result<(V, String)> {
     scope(route)?;
     let root = route.paths()[0].parent().unwrap();
     let before = Capture::read(root)?;
+    if let Some(name) = map(action)?.get("hypothesis").filter(|v| **v != V::Null) {
+        let store = crate::history_store::Store::new(&route.paths()[0])?;
+        require(
+            !crate::history_hypothesis_authoring::active_physical(&store, before.document())?
+                .contains_key(text(name)?),
+            "hypothesis_authority_collision",
+        )?;
+    }
     if private_targets(&before, action)? {
         return Ok((
             Privacy::draft(
@@ -202,12 +208,16 @@ fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut
         ));
     }
     // Preserve the source inventory and all imported-pointer checks before authoring.
-    let source = crate::source_capture::capture_source(
-        route.paths(),
-        &route.project().root,
-        crate::source_capture::ReadMode::Frozen,
-        None,
-    )?;
+    let source = if before.is_unborn() {
+        None
+    } else {
+        Some(crate::source_capture::capture_source(
+            route.paths(),
+            &route.project().root,
+            crate::source_capture::ReadMode::Frozen,
+            None,
+        )?)
+    };
     let selection = privacy_action(action)?;
     if let Some(draft) = Privacy::selected_draft(route.project(), &selection, before.document())? {
         return Ok((draft, String::new()));
@@ -239,10 +249,16 @@ fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut
     } else {
         action.clone()
     };
+    let mut options = crate::direct_history::options("write", by)?;
+    if before.is_unborn() && string_is(&map(&request)?["kind"], "hypothesis") {
+        // First named observations preserve the established bootstrap intent;
+        // there is no accepted prior world from which to manufacture `seen`.
+        options.receipt_version = Some(1);
+    }
     let prepared = W::prepare(
         root,
         &request,
-        &crate::direct_history::options("write", by)?,
+        &options,
         runtime,
     )?
     .with_guard(&guard(route, original)?)?;
@@ -266,10 +282,18 @@ fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut
         &prepared,
         |p| {
             verify_guard(route, original, p)?;
-            source.verify()?;
+            if let Some(source) = &source {
+                source.verify()?;
+            } else {
+                before.verify_current(root)?;
+            }
             W::verify(root, p, runtime)?;
             candidate(root, p)?;
-            source.verify()?;
+            if let Some(source) = &source {
+                source.verify()?;
+            } else {
+                before.verify_current(root)?;
+            }
             route.verify()
         },
         |phase| {
@@ -308,7 +332,19 @@ fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut
     let notice = if string_is(&map(action)?["kind"], "add")
         && !map(action)?.get("amend").is_some_and(|v| *v != V::Null)
     {
-        crate::direct_history::nearest_existing(before.document(), &Map::new(), action, runtime)
+        if map(action)?.get("hypothesis").is_some_and(|v| *v != V::Null) {
+            let context = crate::history_node_hypothesis::context(&before)?;
+            let name = text(&map(action)?["hypothesis"])?;
+            let groups = map(&context.groups)?;
+            let document = if groups.contains_key(name) {
+                crate::history_hypothesis_authoring::layer(&context.base, &context.groups, &[name.into()])?
+            } else {
+                context.base
+            };
+            crate::direct_history::nearest_existing(&document, groups, action, runtime)
+        } else {
+            crate::direct_history::nearest_existing(before.document(), &Map::new(), action, runtime)
+        }
     } else {
         String::new()
     };

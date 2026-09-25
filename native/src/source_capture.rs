@@ -738,21 +738,16 @@ fn capture_ordinary_with(
                 .as_ref()
                 .is_some_and(|p| p.ledger.head.is_some());
         let mut doc = D::load(&initial.selected, &mut inventory, allow_missing)?;
+        // A compact record is compared through its verified projection, as other
+        // history is; pending readings stay alternatives beside it.
         if canonical && let Some(pending) = &initial.pending {
-            if doc.node_history.is_some() {
-                require(
-                    pending.ledger.head.is_none() && pending.target.is_none(),
-                    "node_history_pending_unsupported",
-                )?;
-            } else {
-                doc.overlay = Some(crate::ordinary_overlay::apply(
-                    &mut doc,
-                    pending,
-                    &initial.root,
-                    text(&map(&initial.config)?["record"])?,
-                    runtime,
-                )?);
-            }
+            doc.overlay = Some(crate::ordinary_overlay::apply(
+                &mut doc,
+                pending,
+                &initial.root,
+                text(&map(&initial.config)?["record"])?,
+                runtime,
+            )?);
         }
         after_load(pass, &doc)?;
         inventory.verify()?;

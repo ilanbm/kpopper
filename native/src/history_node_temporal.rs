@@ -122,17 +122,42 @@ impl Source for NodeSource<'_> {
             .into_iter()
             .flatten()
             .collect::<BTreeSet<_>>();
-        let mut template = None;
-        for operation in operations.difference(&parents) {
-            let next =
-                crate::history_node_transaction::after_template(&self.capture.snapshot, operation)?;
+        let templates = operations
+            .difference(&parents)
+            .map(|operation| {
+                crate::history_node_transaction::after_template(&self.capture.snapshot, operation)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let Some(first) = templates.first() else {
+            return Ok(V::Map(Map::new()));
+        };
+        if templates.iter().all(|next| next == first) {
+            return Ok(first.clone());
+        }
+        // Only this historical closure may witness role equivalence. Current or
+        // later claims/source-clock evidence must not reinterpret an old world.
+        let mut objects = Map::new();
+        for operation in operations {
+            for id in self.introduced(operation)? {
+                objects.insert(
+                    id.clone(),
+                    self.objects()
+                        .get(&id)
+                        .ok_or_else(|| error("incomplete_commit"))?
+                        .clone(),
+                );
+            }
+        }
+        let state = self.reduce(&objects, operations)?;
+        let declared = crate::history_node_transaction::template_in_world(first, &objects, &state)?;
+        for next in templates.iter().skip(1) {
             crate::require(
-                template.as_ref().is_none_or(|old| old == &next),
+                crate::history_node_transaction::template_in_world(next, &objects, &state)?
+                    == declared,
                 "divergent_templates",
             )?;
-            template = Some(next);
         }
-        Ok(template.unwrap_or_else(|| V::Map(Map::new())))
+        Ok(declared)
     }
 }
 

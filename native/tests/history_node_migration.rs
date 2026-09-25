@@ -55,6 +55,26 @@ fn files(root: &Path) -> BTreeMap<String, Vec<u8>> {
     visit(root, root, &mut out);
     out
 }
+/// Public migration now creates compact history; existing history/v1 records
+/// are produced by the retained library emitter.
+fn legacy_copy(source: &Path, destination: &Path) {
+    kpop_native::history_migration::Plan::prepare(
+        Path::new("GROUNDING.yaml"),
+        source,
+        kpop_native::history_migration::Options {
+            operation: "import-fixture".into(),
+            recorded_at: "2026-09-25T00:00:00+00:00".into(),
+            record_id: Some("record-fixture".into()),
+            read_mode: kpop_native::source_capture::ReadMode::Frozen,
+            route: false,
+            as_of: None,
+        },
+        None,
+    )
+    .unwrap()
+    .publish(destination)
+    .unwrap();
+}
 fn write_case(root: &Path, case: &Value) {
     for (name, raw) in case["files"].as_object().unwrap() {
         let path = root.join(name);
@@ -451,16 +471,7 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
     );
     fs::write(source.join(".kpopper/replaced.yaml"), &enriched_replaced).unwrap();
     let replaced = fs::read(source.join(".kpopper/replaced.yaml")).unwrap();
-    let migrated = cli(
-        &source,
-        &["history", "migrate", "--to", v1.to_str().unwrap()],
-    );
-    assert!(
-        migrated.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&migrated.stdout),
-        String::from_utf8_lossy(&migrated.stderr)
-    );
+    legacy_copy(&source, &v1);
     let v1_before = files(&v1);
     let entry_bytes = v1_before.get("GROUNDING.yaml").unwrap().clone();
     let sidecar_bytes = v1_before.get(".kpopper/replaced.yaml").unwrap().clone();
@@ -699,16 +710,7 @@ fn unbound_replaced_sidecar_in_a_legacy_copy_stays_raw_and_is_not_displayed_as_v
         "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 0, of: 2026-09-01}}\njudgments:\n  d.done: {verdict: not demonstrated, rests_on: [p.runs], seen: {p.runs: 0}, wrong_if: 'p.runs > 0'}\n",
     )
     .unwrap();
-    let migrated = cli(
-        &ordinary,
-        &["history", "migrate", "--to", v1.to_str().unwrap()],
-    );
-    assert!(
-        migrated.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&migrated.stdout),
-        String::from_utf8_lossy(&migrated.stderr)
-    );
+    legacy_copy(&ordinary, &v1);
 
     // The import never witnessed this file. A later malformed sidecar is preserved
     // inside the immutable archive, but cannot become verified display evidence.

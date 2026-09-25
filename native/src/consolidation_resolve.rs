@@ -1,6 +1,9 @@
-//! Resolve one conflicted record against the staged merge, without staging or committing it.
+//! Resolve one conflicted record against the staged merge. It never stages the record
+//! or commits; compact history stages only its generated union manifest.
 #[path = "consolidation_resolve_text.rs"]
 mod text_merge;
+#[path = "consolidation_node_resolve.rs"]
+mod node_merge;
 use super::{CommandOutput, Options};
 use crate::{
     Result,
@@ -20,15 +23,24 @@ const MAX_BYTES: usize = 256 * 1024 * 1024;
 const MAX_FILES: usize = 100_000;
 
 fn git(root: &Path, args: &[&str], input: Vec<u8>, limit: usize) -> Result<Vec<u8>> {
+    git_with(root, None, args, input, limit)
+}
+/// One Git child for exactly this checkout. Inherited repository selection and
+/// alternate indexes are never used, and no hook or fsmonitor program runs. Any
+/// inherited configuration, such as `safe.directory`, still applies.
+fn command(root: &Path, hooks: &Path) -> Command {
     let mut cmd = Command::new("git");
     cmd.args([
         "--no-pager",
         "--no-replace-objects",
         "--no-lazy-fetch",
-        "-C",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
     ])
+    .arg(format!("core.hooksPath={}", hooks.display()))
+    .arg("-C")
     .arg(root)
-    .args(args)
     .env("GIT_TERMINAL_PROMPT", "0")
     .env("GIT_OPTIONAL_LOCKS", "0");
     for name in [
@@ -41,6 +53,59 @@ fn git(root: &Path, args: &[&str], input: Vec<u8>, limit: usize) -> Result<Vec<u
     ] {
         cmd.env_remove(name);
     }
+    cmd
+}
+const EMPTY: &str = "KPOPPER_RESOLVE_EMPTY";
+const FALSE: &str = "KPOPPER_RESOLVE_FALSE";
+/// Clean, smudge and process filters are project programs. Every driver this exact
+/// checkout configures, from any scope including inherited parameters, is disabled for
+/// resolver children only. `--config-env` entries follow all inherited configuration,
+/// and Git splits them at the last `=`, so any driver name is safe without a shell.
+/// Attributes and configuration stay as written.
+fn without_filters(cmd: &mut Command, root: &Path, hooks: &Path) -> Result<()> {
+    let mut list = command(root, hooks);
+    list.args(["config", "-z", "--list"]);
+    let raw = crate::reasoning_runtime::run_command_bounded(
+        &mut list,
+        vec![],
+        Duration::from_secs(30),
+        16 * 1024 * 1024,
+    )?;
+    let mut drivers = std::collections::BTreeSet::new();
+    for record in raw.split(|b| *b == 0).filter(|r| !r.is_empty()) {
+        let key = record.split(|b| *b == b'\n').next().unwrap_or_default();
+        let key = String::from_utf8(key.to_vec()).map_err(|_| error("resolve_invalid_git_config"))?;
+        // `filter.<name>.<variable>`: the name is everything between the two outer dots.
+        if key.get(..7).is_some_and(|prefix| prefix.eq_ignore_ascii_case("filter.")) {
+            if let Some((name, _)) = key[7..].rsplit_once('.') {
+                drivers.insert(name.to_owned());
+            }
+        }
+    }
+    for name in drivers {
+        for (variable, value) in [("clean", EMPTY), ("smudge", EMPTY), ("process", EMPTY), ("required", FALSE)] {
+            cmd.arg(format!("--config-env=filter.{name}.{variable}={value}"));
+        }
+    }
+    cmd.env(EMPTY, "").env(FALSE, "false");
+    Ok(())
+}
+/// Git with no project hooks, filters or fsmonitor program. `index` names an explicit
+/// alternate index for this child only; the caller's environment is never used.
+fn git_with(
+    root: &Path,
+    index: Option<&Path>,
+    args: &[&str],
+    input: Vec<u8>,
+    limit: usize,
+) -> Result<Vec<u8>> {
+    let hooks = tempfile::tempdir()?;
+    let mut cmd = command(root, hooks.path());
+    without_filters(&mut cmd, root, hooks.path())?;
+    if let Some(index) = index {
+        cmd.env("GIT_INDEX_FILE", index);
+    }
+    cmd.args(args);
     crate::reasoning_runtime::run_command_bounded(&mut cmd, input, Duration::from_secs(30), limit)
 }
 fn string(raw: Vec<u8>) -> Result<String> {
@@ -279,7 +344,30 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
     }
     let scratch_entry = scratch.join(&relative);
     fs::create_dir_all(scratch_entry.parent().unwrap())?;
-    let candidate = match crate::legacy_authoring::authority_route(&scratch_entry)? {
+    // Validation belongs to this captured tree, not a project that happens to
+    // contain TMPDIR. Preserve any captured local policy; otherwise name this
+    // exact record in a private simple project and stop Git discovery here.
+    F::publish_immutable(&scratch, ".git", b"gitdir: .kpopper-resolve-no-repository\n")?;
+    let policy = F::target(&scratch, ".kpopper/project.json")?;
+    if !policy.exists() {
+        fs::create_dir_all(policy.parent().unwrap())?;
+        F::publish_immutable(&scratch, ".kpopper/project.json", &serde_json::to_vec(
+            &serde_json::json!({"version":1, "mode":"simple", "generation":0,
+                "record":relative, "publication":null})
+        )?)?;
+    }
+    // Compact node history is resolved from both pinned merge commits; its staged
+    // conflict text is never parsed as a record.
+    let node = if crate::history_node_publication::selected(&scratch_entry)? {
+        Some(node_merge::prepare(
+            &root, &relative, &head, &other, &items, &files, &conflicts,
+        )?)
+    } else {
+        None
+    };
+    let candidate = match (&node, crate::legacy_authoring::authority_route(&scratch_entry)) {
+        (Some(node), _) => node.view.clone(),
+        (None, route) => match route? {
         crate::legacy_authoring::AuthorityRoute::Legacy => {
             text_merge::merge(sides[0], sides[1], sides[2])?
         }
@@ -309,8 +397,18 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
             }
             rebuilt.unwrap()
         }
+        },
     };
     fs::write(&scratch_entry, &candidate)?;
+    if let Some(node) = &node {
+        for (path, raw) in &node.files {
+            // A rerun materialized an already-staged manifest, verified identical.
+            if F::read(&F::target(&scratch, path)?)?.is_none() {
+                F::publish_immutable(&scratch, path, raw)?;
+            }
+        }
+        node.verify_candidate(&scratch)?;
+    }
     let options_read = crate::public_readers::Options {
         subjects: vec![relative.clone()],
         ..Default::default()
@@ -360,6 +458,9 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
         &head,
         &other,
     )?;
+    if let Some(node) = &node {
+        node.verify_worktree(&root)?;
+    }
     let verb = if options.dry_run {
         "preview"
     } else {
@@ -382,19 +483,38 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
             &head,
             &other,
         )?;
+        if let Some(node) = &node {
+            node.verify_worktree(&root)?;
+            // Stage the manifest first, so abort or reset removes it with the merge.
+            // Only then may the working tree name it.
+            let staged = node.stage(&root, &index, &index_before, &items)?;
+            node.publish(&root)?;
+            node.refresh(&root, &index, &staged)?;
+        }
         F::replace(&entry, Some(&candidate))?;
         drop(handle);
     }
+    let manifests = node
+        .iter()
+        .flat_map(|n| n.paths())
+        .map(|p| format!("{p:?}"))
+        .collect::<Vec<_>>()
+        .join(" ");
     Ok(CommandOutput {
         stdout: format!(
             "{verb}: {relative}\nCandidate record check:\n{record_report}\n{}\nThe candidate and its hypotheses passed against the staged tree. No recipes or code tests were run.\n{}\n",
             checked.stdout,
-            if options.dry_run {
-                "No files or Git index entries changed.".into()
-            } else {
-                format!(
+            match (options.dry_run, node.is_some()) {
+                (true, false) => "No files or Git index entries changed.".into(),
+                (true, true) => format!(
+                    "No files or Git index entries changed. Resolving would stage only the generated union manifest {manifests}."
+                ),
+                (false, false) => format!(
                     "Review the resolved record, then git add -- {relative:?} and finish your Git merge. The index, commits and remote were not changed."
-                )
+                ),
+                (false, true) => format!(
+                    "Staged only the generated union manifest {manifests}, so aborting or resetting the merge removes it. The record is written but left unmerged: review it, then git add -- {relative:?} and finish your Git merge. No other index entry, commit or remote was changed."
+                ),
             }
         ),
         stderr: String::new(),

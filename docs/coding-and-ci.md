@@ -103,8 +103,9 @@ kpop consolidate --resolve
 ```
 
 An optional record path selects a different in-tree entry. This is an explicit local
-command, not an installed hook, merge driver or hosted service. It never fetches, stages,
-commits, pushes, changes the configured project mode or folds pending findings. Check
+command, not an installed hook, merge driver or hosted service. It never fetches, stages
+the record, commits, pushes, changes the configured project mode or folds pending findings.
+For compact history it stages exactly one file: the union manifest it generated. Check
 `kpop consolidate --help` before using it with an older installation.
 
 For ordinary records, it compares complete entries against Git's stage-1 common base.
@@ -115,12 +116,28 @@ combine fields inside a claim or choose a newer-looking date. For supported acti
 records, it rebuilds from the complete staged history only when both input views are known
 generated views and the history reducer reports no contested subject. Immutable objects
 and manifests remain untouched; unknown hand edits require explicit reconciliation.
+For compact history, both committed sides, including their lazy originals, are verified.
+The staged history must match their union. Resolution adds one immutable union manifest
+and replaces the view without accepting or changing a claim.
 
 The candidate is checked in a private copy of the staged tree with frozen `check` and
-`consolidate --dry-run`. Nothing is written if those checks fail. On success, only the
-working-tree record is replaced; the index still requires `git add` after review. This
-checks recorded knowledge, not code behavior: it runs no measurement recipes, hooks,
-project scripts or tests. Run the relevant validation on the final merge as usual.
+`consolidate --dry-run`. Nothing is written if those checks fail. On success, the
+working-tree record is replaced and left unmerged for review; stage it with `git add` and
+finish the merge. For ordinary and history/v1 records the Git index is left unchanged.
+
+Compact history also needs its generated union manifest in the commit. The command stages
+that one manifest first: it copies the locked index, adds only the manifest blob, checks
+that every other entry and stage is unchanged, and replaces the index while holding Git's
+`index.lock`. Only then does it write the manifest and the record. It then records the
+file status of that manifest alone; no other entry, stage or unstaged edit is reread.
+Aborting or hard-resetting the merge therefore removes the manifest, and staging only the
+record commits a complete, readable history. If your attributes would convert the
+manifest's bytes, it refuses before writing. Split indexes are written back whole; Git
+may split them again. This checks recorded knowledge, not code behavior: its Git commands
+run no hooks, fsmonitor programs or clean, smudge or process filters, including filters
+supplied through Git's environment, and ignore an inherited `GIT_DIR` or work tree. It runs
+no measurement recipes, project scripts or tests. Your attributes and configuration are
+left unchanged. Run the relevant validation on the final merge as usual.
 
 This first resolver is deliberately bounded. It requires a normal two-parent merge with
 Git's `AUTO_MERGE` snapshot and three regular-file index stages for the record. It refuses
@@ -130,6 +147,15 @@ in the staged snapshot, and an alternate Git index. Ordinary entries need block 
 with plain keys. Snapshot capture is bounded to 100,000 index entries, 256 MiB of blob
 output and 256 MiB of materialized files. Concurrent changes to the index, merge heads or record cause refusal before the
 write. These limits are reported, never silently bypassed.
+
+Compact resolution requires the staged streams to contain the complete union without
+new join events. It refuses contested subjects, untracked or changed history, and stream
+merges it cannot represent. The manifest's name depends only on the two merge commits and
+the record's conflict stages, so a rerun names the same manifest even after unrelated files
+are staged. If interrupted after staging, rerun the same command: it accepts the exactly
+staged manifest, writes any missing file and replaces the view. Staged manifest bytes it
+did not generate, or changed history files, are refused. `git merge --abort` also remains
+available at every step. It does not write a separate knowledge act.
 
 The [broader merge question](advanced-mode-merging.md) remains open: resolving a conflict
 still creates work for the user, and a subsequent commit may trigger CI again.

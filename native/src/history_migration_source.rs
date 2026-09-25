@@ -118,6 +118,27 @@ fn references(value: &V, out: &mut BTreeSet<String>) {
         _ => {}
     }
 }
+/// Record-local evidence files named by `file:` in the record or a physical hypothesis.
+/// Absolute, remote and parent-relative references are not record members.
+pub(crate) fn referenced_evidence(source: &CapturedSource) -> Result<BTreeSet<String>> {
+    let mut evidence = BTreeSet::new();
+    references(&source.strict_document()?, &mut evidence);
+    for hyp in map(source.hypotheses())?.values() {
+        let h = map(hyp)?;
+        if !h.get("kind").is_some_and(|v| string_is(v, "contribution"))
+            && let Some(doc) = h.get("document").or_else(|| h.get("doc"))
+        {
+            references(doc, &mut evidence);
+        }
+    }
+    evidence.retain(|file| {
+        let p = Path::new(file);
+        !(p.is_absolute()
+            || file.contains("://")
+            || p.components().any(|v| v == std::path::Component::ParentDir))
+    });
+    Ok(evidence)
+}
 pub(crate) fn extend(
     source: &CapturedSource,
     record: &Path,
@@ -171,24 +192,8 @@ pub(crate) fn extend(
             }
         }
     }
-    let mut evidence = BTreeSet::new();
-    references(&source.strict_document()?, &mut evidence);
-    for hyp in map(source.hypotheses())?.values() {
-        let h = map(hyp)?;
-        if !h.get("kind").is_some_and(|v| string_is(v, "contribution"))
-            && let Some(doc) = h.get("document").or_else(|| h.get("doc"))
-        {
-            references(doc, &mut evidence);
-        }
-    }
-    for file in evidence {
+    for file in referenced_evidence(source)? {
         let p = Path::new(&file);
-        if p.is_absolute()
-            || file.contains("://")
-            || p.components().any(|v| v == std::path::Component::ParentDir)
-        {
-            continue;
-        }
         let relative = p
             .components()
             .filter(|c| *c != std::path::Component::CurDir)

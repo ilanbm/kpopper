@@ -45,10 +45,18 @@ pub(crate) fn operation_member(
         return crate::history_node_legacy::member(snapshot, transaction, semantic);
     }
     let intent = if crate::history_node_transaction::is_context(value) {
-        map(field(
+        let action = map(field(
             crate::history_node_transaction::validate(value)?,
             "action",
-        )?)?
+        )?)?;
+        // Imported contribution objects keep the semantic operations they were authored in.
+        if action
+            .get("kind")
+            .is_some_and(|v| string_is(v, crate::history_node_contribution::IMPORT))
+        {
+            return crate::history_node_contribution::member(action, semantic);
+        }
+        action
     } else {
         let c = context(value)?;
         let side = map(&c["before"])?;
@@ -115,6 +123,7 @@ pub(crate) fn context(value: &V) -> Result<&Map> {
             || string_is(&c["format"], crate::history_node_legacy::FORMAT)
             || string_is(&c["format"], crate::history_node_legacy::CHECKPOINT)
             || string_is(&c["format"], crate::history_node_bootstrap::FORMAT)
+            || string_is(&c["format"], crate::history_node_import::FORMAT)
             || string_is(&c["format"], crate::history_node_physical::FORMAT),
         "node_transaction_format",
     )?;
@@ -281,7 +290,8 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String,
             {
                 require(
                     crate::history_node_clocks::is_clocks(value)?
-                        || crate::history_node_branch::is_union(value)?,
+                        || crate::history_node_branch::is_union(value)?
+                        || crate::history_node_contribution::is_import(value),
                     "source_ancestry_admission",
                 )?;
             }
@@ -312,6 +322,7 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String,
             let restored = receipt_index(snapshot, op, &index)?;
             let expected = if [
                 crate::history_node_bootstrap::FORMAT,
+                crate::history_node_import::FORMAT,
                 crate::history_node_physical::FORMAT,
             ]
             .iter()
@@ -432,16 +443,22 @@ struct Build<'a> {
     bases: BTreeMap<String, C::Version>,
     frames: BTreeMap<String, Vec<u8>>,
     fresh: BTreeSet<String>,
+    lazy_values: usize,
+}
+fn value_count(value: &V) -> usize {
+    1 + match value {
+        V::List(values) => values.iter().map(value_count).sum(),
+        V::Map(values) => values.values().map(value_count).sum(),
+        _ => 0,
+    }
 }
 impl<'a> Build<'a> {
     fn new(capture: &Capture, operation: &'a str) -> Result<Self> {
-        let doc = Y::decode_document(
-            capture
-                .snapshot
-                .current
-                .as_deref()
-                .ok_or_else(|| error("node_semantic_missing_view"))?,
-        )?;
+        let doc = if capture.is_unborn() {
+            capture.document().clone()
+        } else {
+            Y::decode_document(capture.entry_bytes())?
+        };
         let originals = map(&doc)?
             .get("meta")
             .map(map)
@@ -472,6 +489,7 @@ impl<'a> Build<'a> {
                 bases.insert(subject.clone(), tip.clone());
             }
         }
+        let lazy_values = originals.values().map(value_count).sum();
         Ok(Self {
             operation,
             original_document: doc,
@@ -480,6 +498,7 @@ impl<'a> Build<'a> {
             bases,
             frames: BTreeMap::new(),
             fresh: BTreeSet::new(),
+            lazy_values,
         })
     }
     fn lazy(&mut self, subject: &str, payload: &V) -> Result<()> {
@@ -492,14 +511,29 @@ impl<'a> Build<'a> {
             map(&p["context"])?.clone(),
         )?;
         let event = original.restore(p["body"].clone())?;
+        let encoded = original.encode()?;
+        let previous_cost = self.originals.get(subject).map(value_count).unwrap_or(0);
+        let next_cost = self.lazy_values - previous_cost + value_count(&encoded);
         self.bases.insert(subject.into(), event.reconstruct(None)?);
-        self.originals.insert(subject.into(), original.encode()?);
-        self.fresh.insert(subject.into());
+        // Lazy bindings share the bounded current-view document. Keep space for
+        // current values and templates; larger records retain the identical first
+        // event in the subject stream instead of exceeding the document limit.
+        if next_cost <= crate::value::MAX_VALUES / 4 {
+            self.originals.insert(subject.into(), encoded);
+            self.fresh.insert(subject.into());
+            self.lazy_values = next_cost;
+        } else {
+            self.originals.remove(subject);
+            self.fresh.remove(subject);
+            self.lazy_values -= previous_cost;
+            self.frames.insert(subject.into(), event.encode()?);
+        }
         Ok(())
     }
     fn append(&mut self, subject: &str, payload: V) -> Result<()> {
         let fresh = self.fresh.contains(subject);
         if !fresh && let Some(binding) = self.originals.remove(subject) {
+            self.lazy_values -= value_count(&binding);
             let original = Original::decode(&binding)?;
             let event = original.from_document(&self.original_document)?;
             let frames = self.frames.entry(subject.into()).or_default();
@@ -677,7 +711,8 @@ fn materialize_mode(
     capture.check_expected(action)?;
     let kind = text(field(map(action)?, "kind")?)?;
     require(
-        ["batch", "view-edit-proposals", "physical-import"].contains(&kind) || evidence.is_empty(),
+        ["batch", "view-edit-proposals", "physical-import", crate::history_node_contribution::IMPORT]
+            .contains(&kind) || evidence.is_empty(),
         "node_evidence_action_unsupported",
     )?;
     let mut effective_options = options.clone();
@@ -712,6 +747,9 @@ fn materialize_mode(
         (plan.objects, projected.document().clone(), receipt)
     } else if kind == "physical-import" {
         crate::history_node_physical::plan(capture, options, evidence)?
+    } else if kind == crate::history_node_contribution::IMPORT {
+        require(compact, "node_contribution_import_requires_ledger")?;
+        crate::history_node_contribution::plan_import(capture, action, options, evidence)?
     } else if kind == "hypothesis" {
         crate::history_node_hypothesis::prepare(capture, action, options, runtime, audit, archive)?
     } else if kind == "view-edit-proposals" {
@@ -1139,7 +1177,7 @@ pub fn prepare_batch(
     options.receipt_version = Some(batch.receipt_version);
     prepare_evidence(root, &action, &options, runtime, batch.evidence.clone())
 }
-fn prepare_evidence(
+pub(crate) fn prepare_evidence(
     root: &Path,
     action: &V,
     options: &A::Options,
@@ -1191,11 +1229,13 @@ fn check_constructed(root: &Path, capture: &Capture, prepared: &P::Prepared) -> 
     let c = crate::history_node_transaction::validate(&value)?;
     decode_options(prepared.operation(), &c["options"])?;
     require(archive(root)? == c["archive"], "concurrent_archive_edit")?;
+    // Only a contribution import admits carried commits, atomically with its objects.
     require(
-        !prepared
-            .evidence()?
-            .keys()
-            .any(|p| p.starts_with(crate::history_source_ancestry::PREFIX)),
+        crate::history_node_contribution::is_import(&value)
+            || !prepared
+                .evidence()?
+                .keys()
+                .any(|p| p.starts_with(crate::history_source_ancestry::PREFIX)),
         "source_ancestry_admission",
     )?;
 
