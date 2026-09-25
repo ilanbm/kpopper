@@ -429,8 +429,27 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
         String::from_utf8_lossy(&changed_judgment.stdout),
         String::from_utf8_lossy(&changed_judgment.stderr)
     );
-    let replaced_fixture = b"d.done:\n- verdict: not demonstrated\n  because: legacy import reason\n  rests_on: [p.runs]\n  seen: {p.runs: 0}\n  wrong_if: 'p.runs > 0'\n  ended: the old predicate fired\n  day: '2026-08-31'\n  dropped: {p.old: retired earlier}\n";
-    fs::write(source.join(".kpopper/replaced.yaml"), replaced_fixture).unwrap();
+    let generated_replaced = fs::read(source.join(".kpopper/replaced.yaml")).unwrap();
+    let generated_document = Y::decode_source_value(&generated_replaced).unwrap().typed();
+    let generated_versions = list(&map(&generated_document)["d.done"]);
+    let generated_entry = map(&generated_versions[0]);
+    assert_eq!(text(&generated_entry["because"]), "no brief");
+    let generated_day = generated_entry["day"].to_json().unwrap();
+    let generated_ended = generated_entry["ended"].to_json().unwrap();
+    assert!(
+        !generated_entry.contains_key("dropped"),
+        "the CLI fixture already has dropped; update this test fixture deliberately"
+    );
+    // Retain the real authoring output and enrich that same archived entry with
+    // a dropped annotation, so the chain covers CLI-authored and archive data.
+    let mut enriched_replaced = generated_replaced;
+    if !enriched_replaced.ends_with(b"\n") {
+        enriched_replaced.push(b'\n');
+    }
+    enriched_replaced.extend_from_slice(
+        b"  dropped: {p.old: retired earlier}\n",
+    );
+    fs::write(source.join(".kpopper/replaced.yaml"), &enriched_replaced).unwrap();
     let replaced = fs::read(source.join(".kpopper/replaced.yaml")).unwrap();
     let migrated = cli(
         &source,
@@ -595,7 +614,7 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
         "chained copy omitted separately labeled archive evidence: {chained_history_text}"
     );
     assert!(
-        chained_history_text.contains("legacy import reason"),
+        chained_history_text.contains("no brief"),
         "chained copy omitted the old reason: {chained_history_text}"
     );
     let chained_json = cli(
@@ -606,12 +625,16 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
     let wrapper: serde_json::Value = serde_json::from_slice(&chained_json.stdout).unwrap();
     let payload: serde_json::Value =
         serde_json::from_str(wrapper["output"].as_str().unwrap()).unwrap();
-    let archived = &payload["historical_section"]["legacy_archive_evidence"][0];
+    let archive_rows = payload["historical_section"]["legacy_archive_evidence"]
+        .as_array()
+        .unwrap();
+    assert_eq!(archive_rows.len(), 1, "{archive_rows:?}");
+    let archived = &archive_rows[0];
     assert_eq!(archived["source"], "verified_legacy_archive");
     assert_eq!(archived["archive_member"], ".kpopper/replaced.yaml");
-    assert_eq!(archived["entry"]["because"], "legacy import reason");
-    assert_eq!(archived["entry"]["day"], "2026-08-31");
-    assert_eq!(archived["entry"]["ended"], "the old predicate fired");
+    assert_eq!(archived["entry"]["because"], "no brief");
+    assert_eq!(archived["entry"]["day"], generated_day);
+    assert_eq!(archived["entry"]["ended"], generated_ended);
     assert_eq!(archived["entry"]["dropped"]["p.old"], "retired earlier");
     assert!(archived.get("id").is_none(), "archive evidence gained a semantic id: {archived}");
     for args in [
