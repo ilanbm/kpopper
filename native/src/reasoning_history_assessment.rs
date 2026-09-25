@@ -1115,6 +1115,10 @@ fn subject_state(p: &Map, subject: &str, version: &str) -> Result<String> {
     };
     let current = map(current)?;
     if names(&current["heads"])?.contains(&version.into()) {
+        if string_is(&current["acceptance"], "accepted")
+            && crate::history_review::state(p, subject, version)? == crate::history_review::ReviewState::Unreviewed {
+            return Ok("unreviewed".into());
+        }
         return Ok(text(&current["acceptance"])?.into());
     }
     if d.and_then(|m| m.get("proposals"))
@@ -1388,6 +1392,22 @@ fn enrich(id: &str, node: &V, projection: Option<&V>, subjects: &Map) -> Result<
         "unavailable"
     };
     let p = projected.map(map).transpose()?;
+    if let (Some(projection), Some(projected)) = (projection, p) {
+        let projection = map(projection)?;
+        for head in names(&projected["head_ids"])? {
+            let code = match crate::history_review::state(projection, id, &head)? {
+                crate::history_review::ReviewState::Unreviewed => Some("reversal_unreviewed"),
+                crate::history_review::ReviewState::ProvenanceMissing => Some("review_provenance_missing"),
+                _ => None,
+            };
+            if let Some(code) = code {
+                let V::List(attention) = n.get_mut("attention").unwrap() else { return Err(error("invalid attention")) };
+                attention.push(obj([("action", s("review")), ("reasons", V::List(vec![obj([
+                    ("code", s(code)), ("related_ids", V::List(vec![s(&head)])),
+                ])]))]));
+            }
+        }
+    }
     n.insert(
         "acceptance".into(),
         obj([

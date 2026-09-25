@@ -83,6 +83,12 @@ pub fn capture(c: &Capture) -> Result<CapturedHistory> {
                 ("implied", state["implied"].clone()),
             ]),
         );
+        let resolutions = crate::history_review::resolutions(c.history.objects(), value)?;
+        if !resolutions.is_empty() {
+            let acts = resolutions.iter().map(|id| c.object(subject, id)).collect::<Result<Vec<_>>>()?;
+            crate::history_view::map_mut(dispositions.get_mut(subject).unwrap())?
+                .insert("resolutions".into(), V::List(acts));
+        }
         for id in list(&state["heads"])?
             .iter()
             .chain(list(&state["proposals"])?)

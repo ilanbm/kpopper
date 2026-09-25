@@ -373,6 +373,12 @@ pub fn from_store_capture(capture: &Capture) -> Result<CapturedHistory> {
                 ("implied", state["implied"].clone()),
             ]),
         );
+        let resolutions = crate::history_review::resolutions(objects, &V::Map(state.clone()))?;
+        if !resolutions.is_empty() {
+            map_mut(dispositions.get_mut(subject).unwrap())?.insert(
+                "resolutions".into(), V::List(resolutions.iter().map(|id| objects[id].clone()).collect()),
+            );
+        }
         for v in list(&state["heads"])?
             .iter()
             .chain(list(&state["proposals"])?)

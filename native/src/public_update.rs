@@ -1599,7 +1599,8 @@ fn run_bound(
             operation: format!("report-{event}"),
             recorded_at: now.to_rfc3339(),
             recording_day: report.date.clone(),
-            by: V::Null,
+            by: report.raw.get("session_id").and_then(J::as_str).filter(|id| !id.trim().is_empty())
+                        .map(|id| V::Text(format!("session:{id}"))).unwrap_or(V::Null),
             strict: true,
             paths: crate::history_paths::Scheme::Hashed,
             receipt_version: None,

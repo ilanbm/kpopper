@@ -215,7 +215,7 @@ fn authoring_options(prefix: &str, by: V) -> Result<crate::history_authoring::Op
         operation: fresh_id(prefix)?,
         recorded_at: now.to_rfc3339(),
         recording_day: chrono::Local::now().date_naive().to_string(),
-        by,
+        by: if by == V::Null { crate::direct_history::actor() } else { by },
         strict: true,
         paths: Scheme::Hashed,
         receipt_version: None,

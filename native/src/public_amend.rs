@@ -569,7 +569,7 @@ fn committed(held: &Record, record: &BTreeSet<String>) -> Result<Option<BTreeSet
     Ok(Some(found))
 }
 
-fn session() -> Option<String> {
+pub(crate) fn session() -> Option<String> {
     std::env::var("KPOPPER_AGENT_SESSION")
         .ok()
         .filter(|s| !s.is_empty())

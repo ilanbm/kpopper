@@ -185,6 +185,12 @@ pub(crate) fn write_with_runtime(
     probe: &mut dyn FnMut(&str) -> Result<()>,
     runtime_override: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<(V, String)> {
+    write_inner(route, original, action, probe, runtime_override, V::Null)
+}
+pub(crate) fn write_as(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, by: V) -> Result<(V, String)> {
+    write_inner(route, original, action, probe, None, by)
+}
+fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, runtime_override: Option<&crate::reasoning_runtime::Runtime>, by: V) -> Result<(V, String)> {
     scope(route)?;
     let root = route.paths()[0].parent().unwrap();
     let before = Capture::read(root)?;
@@ -240,7 +246,7 @@ pub(crate) fn write_with_runtime(
     let prepared = W::prepare(
         root,
         &request,
-        &crate::direct_history::options("write", V::Null)?,
+        &crate::direct_history::options("write", by)?,
         runtime,
     )?
     .with_guard(&guard(route, original)?)?;
