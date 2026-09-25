@@ -255,6 +255,53 @@ mutation, not routing or policy permission; recovery infers no routing permissio
 
 ## Integrated write scope
 
+### Reviewing a changed judgment
+
+History keeps acceptance separate from review. Replacing a judgment's verdict or
+grounds records the new version, but does not establish that its conclusion follows.
+For versions with recorded authors, the captured assessment reserves the replacement
+and judgments that rely on it until a different recorded actor reviews that exact
+version and its current inputs. A review must have observed the accepting transition;
+a review of an earlier version or earlier inputs does not cover a later one.
+Metadata-only edits and arrangements do not create this review requirement.
+
+Public writes record the current agent session in the existing object `by` field
+when available. A direct command-line author or reviewer can name that provenance:
+
+```sh
+kpop review d.release --by ilan
+```
+
+Actor names are recorded provenance, not authenticated identities. Existing objects
+whose author is unknown keep `by: null`. An unacknowledged replacement with missing
+actor evidence appears as `review_provenance_missing`; an exact explicit review
+acknowledges it without certifying independence or backfilling an author. Ordinary
+records without active history retain their existing day-stamped review behavior.
+If either the writer or accepting actor is known, their own review remains excluded
+even when the other identity is missing. Metadata-only descendants inherit review
+state; returning to an old version starts a new episode requiring review.
+A pending reversal notice in an ordinary record survives a compact copied migration.
+The imported claim supplies that notice's evidence; an exact review acknowledges the
+inherited provenance gap without fabricating pre-import history acts.
+
+`pull ID --history` exposes retained versions and transition reasons from the verified
+captured history. Historical display is separate from computational pins, and clipped
+results explicitly report omitted versions. Increasing `--chars` expands the display.
+Reading history does not create history events or store a second rendered record.
+
+Ordinary branch consolidation compares the source with its unique Git merge base.
+An unchanged inherited reading is not a new observation. A source review keeps its
+original observed values; a later date alone does not invalidate an equal reading.
+Reviewing the fork's old judgment cannot replace a destination judgment that has
+since changed, including through `--take`; reconsidering it requires a new proposal.
+If the record and its owned evidence did not exist at that merge base, the comparison
+starts empty. Missing pointers or retained history still refuse. Comparison evidence
+is kept separately from proposal metadata and does not become a permission source.
+
+Review reservations are derived from immutable claims and acts after acceptance
+reduction. They do not rewrite old objects, change the storage format, or change
+the temporal computation evidence retained in existing receipts.
+
 For existing unactivated records, ordinary `provenance.apply` direct writes stage
 candidate record, replacement-archive and supported view changes before building
 one prepared mutation. They recheck routing, policy, reader-resolved membership

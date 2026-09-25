@@ -364,7 +364,8 @@ pub(crate) fn load(
                 )
             })
             .collect();
-        document.history_projection = Some(adapted.projection().clone());
+        let reviews = crate::history_review::summaries(capture.history.objects(), capture.state(), &|a, b| capture.history.directly_observes(a, b))?;
+        document.history_projection = Some(crate::history_review::attach(adapted.projection(), &reviews)?);
         document.history_view = Some(CV::Map(C::Map::from([
             ("status".into(), CV::Text("current".into())),
             (
@@ -444,7 +445,11 @@ pub(crate) fn load(
                 )
             })
             .collect();
-        document.history_projection = Some(adapted.projection().clone());
+        let reviews = crate::history_review::summaries(&capture.objects, &capture.state, &|a, b| {
+            let object = C::map(capture.objects.get(a).ok_or_else(|| C::error("missing_object"))?)?;
+            Ok(crate::history_view::list(&object["saw"])?.iter().any(|id| C::string_is(id, b)))
+        })?;
+        document.history_projection = Some(crate::history_review::attach(adapted.projection(), &reviews)?);
         document.history_view = Some(
             V::Map(Map::from([
                 (

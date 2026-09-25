@@ -31,6 +31,74 @@ fn unsupported(code: &str) -> crate::Error {
     error(code)
 }
 
+fn strip_retained_replaced_member(
+    document: &mut V,
+    source_files: &BTreeMap<String, Vec<u8>>,
+    retained_prefix: &str,
+) -> Result<()> {
+    let Some(meta) = map_mut(document)?.get_mut("meta") else {
+        return Ok(());
+    };
+    let Some(import) = map_mut(meta)?.get_mut("history_import") else {
+        return Ok(());
+    };
+    let Some(member_list) = map_mut(import)?.get_mut("members") else {
+        return Ok(());
+    };
+    let original_members = list(member_list)?.to_vec();
+    let mut kept = Vec::with_capacity(original_members.len());
+    for member in &original_members {
+        let Ok(fields) = map(member) else {
+            return Err(error("node_migration_replaced_member_unretained"));
+        };
+        if !string_is(fields.get("role").unwrap_or(&V::Null), "replaced") {
+            kept.push(member.clone());
+            continue;
+        }
+        let (Some(V::Text(path)), Some(V::Text(expected))) =
+            (fields.get("path"), fields.get("sha256"))
+        else {
+            return Err(error("node_migration_replaced_member_unretained"));
+        };
+        let Some(replaced_bytes) = source_files.get(path) else {
+            return Err(error("node_migration_replaced_member_unretained"));
+        };
+        if sha256(replaced_bytes).as_str() != expected.as_str() {
+            return Err(error("node_migration_replaced_member_unretained"));
+        }
+        let retained = original_members
+            .iter()
+            .filter_map(|candidate| map(candidate).ok())
+            .any(|candidate| {
+                if !string_is(
+                    candidate.get("role").unwrap_or(&V::Null),
+                    "retained_original",
+                ) {
+                    return false;
+                }
+                let (Some(V::Text(retained_path)), Some(V::Text(retained_hash))) =
+                    (candidate.get("path"), candidate.get("sha256"))
+                else {
+                    return false;
+                };
+                if !retained_path.starts_with(retained_prefix) || retained_hash != expected {
+                    return false;
+                }
+                source_files
+                    .get(retained_path)
+                    .is_some_and(|retained_bytes| {
+                        retained_bytes == replaced_bytes
+                            && sha256(retained_bytes).as_str() == expected.as_str()
+                    })
+            });
+        if !retained {
+            return Err(error("node_migration_replaced_member_unretained"));
+        }
+    }
+    *member_list = V::List(kept);
+    Ok(())
+}
+
 /// A complete, independently checked copy. `files` contains no source paths.
 pub struct Plan {
     source: crate::history_capture::Capture,
@@ -276,6 +344,11 @@ impl Plan {
                 .ok_or_else(|| error("invalid_document"))?,
         )?
         .remove("history");
+        let retained_prefix = format!(
+            "{}/",
+            crate::history_transaction::Layout::for_entry(&source.layout.entry)?.retained
+        );
+        strip_retained_replaced_member(&mut document, &source_files, &retained_prefix)?;
         let capabilities = crate::reasoning_fields::capabilities(&document, None)?;
         let profile = text(field(map(&capabilities)?, "profile")?)?;
         let sides = V::Map(Map::from([("document".into(), document.clone())]));
@@ -410,10 +483,6 @@ impl Plan {
         for path in [&archive_path, &mapping_path] {
             evidence.insert(path.clone(), sha256(&files[path]));
         }
-        let retained_prefix = format!(
-            "{}/",
-            crate::history_transaction::Layout::for_entry(&source.layout.entry)?.retained
-        );
         for (path, raw) in source_files
             .iter()
             .filter(|(path, _)| path.starts_with(&retained_prefix))
@@ -634,4 +703,110 @@ fn collect_files(root: &Path, relative: &str, files: &mut BTreeMap<String, Vec<u
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod replaced_member_tests {
+    use super::*;
+
+    fn member(path: &str, raw: &[u8], role: &str) -> V {
+        V::Map(Map::from([
+            ("path".into(), s(path)),
+            ("sha256".into(), s(&sha256(raw))),
+            ("role".into(), s(role)),
+        ]))
+    }
+
+    fn document(members: Vec<V>) -> V {
+        V::Map(Map::from([
+            (
+                "meta".into(),
+                V::Map(Map::from([(
+                    "history_import".into(),
+                    V::Map(Map::from([("members".into(), V::List(members))])),
+                )])),
+            ),
+            (
+                "known".into(),
+                V::Map(Map::from([("p.x".into(), s("kept"))])),
+            ),
+        ]))
+    }
+
+    #[test]
+    fn removes_only_a_replaced_member_redundantly_retained_in_generation_two() {
+        let replaced_path = ".kpopper/replaced.yaml";
+        let retained_path =
+            ".kpopper-history-migration/generations/2/originals/.kpopper/replaced.yaml";
+        let replaced = b"d.x:\n- verdict: earlier\n";
+        let other = b"original source bytes";
+        let original = document(vec![
+            member(replaced_path, replaced, "replaced"),
+            member(retained_path, replaced, "retained_original"),
+            member(
+                ".kpopper-history-migration/originals/GROUNDING.yaml",
+                other,
+                "retained_original",
+            ),
+        ]);
+        let mut source_files = BTreeMap::from([
+            (replaced_path.into(), replaced.to_vec()),
+            (retained_path.into(), replaced.to_vec()),
+            (
+                ".kpopper-history-migration/originals/GROUNDING.yaml".into(),
+                other.to_vec(),
+            ),
+        ]);
+        let mut converted = original.clone();
+        strip_retained_replaced_member(
+            &mut converted,
+            &source_files,
+            ".kpopper-history-migration/",
+        )
+        .unwrap();
+        let converted_fields = map(&converted).unwrap();
+        let meta = map(&converted_fields["meta"]).unwrap();
+        let import = map(&meta["history_import"]).unwrap();
+        let members = list(&import["members"]).unwrap();
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().all(|member| {
+            map(member).ok().and_then(|fields| fields.get("role")) != Some(&s("replaced"))
+        }));
+        assert_eq!(converted_fields["known"], map(&original).unwrap()["known"]);
+        assert_eq!(source_files.get(replaced_path).unwrap(), replaced);
+
+        source_files.remove(retained_path);
+        let mut missing = original.clone();
+        let failure = strip_retained_replaced_member(
+            &mut missing,
+            &source_files,
+            ".kpopper-history-migration/",
+        )
+        .unwrap_err();
+        assert_eq!(failure.0, "node_migration_replaced_member_unretained");
+        assert_eq!(missing, original);
+
+        source_files.insert(retained_path.into(), b"different bytes".to_vec());
+        let mut mismatch = original.clone();
+        let failure = strip_retained_replaced_member(
+            &mut mismatch,
+            &source_files,
+            ".kpopper-history-migration/",
+        )
+        .unwrap_err();
+        assert_eq!(failure.0, "node_migration_replaced_member_unretained");
+        assert_eq!(mismatch, original);
+    }
+
+    #[test]
+    fn no_replaced_member_keeps_the_document_bytes_identical() {
+        let retained_path = ".kpopper-history-migration/originals/GROUNDING.yaml";
+        let raw = b"original source bytes";
+        let mut document = document(vec![member(retained_path, raw, "retained_original")]);
+        let before = Y::encode_document(&document).unwrap();
+        let source_files = BTreeMap::from([(retained_path.into(), raw.to_vec())]);
+        strip_retained_replaced_member(&mut document, &source_files, ".kpopper-history-migration/")
+            .unwrap();
+        assert_eq!(Y::encode_document(&document).unwrap(), before);
+    }
 }

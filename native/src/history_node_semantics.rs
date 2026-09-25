@@ -249,6 +249,9 @@ impl History {
         validate_object(&full)?;
         Ok(full)
     }
+    pub(crate) fn directly_observes(&self, observer: &str, target: &str) -> Result<bool> {
+        self.index.contains(observer, target)
+    }
     pub fn observations(&self) -> &ObservationChain {
         &self.observations
     }

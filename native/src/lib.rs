@@ -95,6 +95,7 @@ pub mod history_preparation;
 pub mod history_projection;
 pub mod history_prospective;
 pub mod history_reduce;
+pub(crate) mod history_review;
 pub mod history_runtime;
 pub mod history_sources;
 pub mod history_store;
@@ -235,6 +236,7 @@ pub fn require(condition: bool, code: &str) -> Result<()> {
 
 pub mod core_page;
 pub mod public_core_readers;
+mod public_history_read;
 pub mod public_ordinary_readers;
 pub mod public_readers;
 pub mod public_remeasure;

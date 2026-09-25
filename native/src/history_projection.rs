@@ -160,7 +160,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
             "pins",
             "integrity",
         ],
-        &["dispositions", "origin", "requires", "temporal"],
+        &["dispositions", "origin", "requires", "temporal", "review_profile"],
     )?;
     require(
         is_int(&m["projection_version"], "1") || is_int(&m["projection_version"], "2"),
@@ -178,6 +178,9 @@ pub fn validate_projection(value: &V) -> Result<()> {
         )?;
     } else {
         A::bind_authority(&m["authority"], &m["baseline"])?;
+    }
+    if let Some(profile) = m.get("review_profile") {
+        require(string_is(profile, crate::history_review::PROFILE), "unsupported_review_profile")?;
     }
     if let Some(r) = m.get("requires") {
         A::validate_history_requires(r)?;
@@ -303,6 +306,9 @@ pub fn validate_projection(value: &V) -> Result<()> {
         dispositions.keys().all(|s| subjects.contains_key(s)),
         "invalid_dispositions",
     )?;
+    if m.contains_key("review_profile") {
+        require(dispositions.keys().eq(subjects.keys()), "incomplete_review_evidence")?;
+    }
     for (name, disposition) in dispositions {
         let d = schema(
             disposition,
@@ -313,7 +319,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
                 "reviews",
                 "implied",
             ],
-            &["source_state"],
+            &["source_state", "review"],
         )?;
         if let Some(origin) = m.get("origin") {
             let source = &map(&map(origin)?["subjects"])?[name];
@@ -373,6 +379,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
             review_ids.windows(2).all(|w| w[0] < w[1]),
             "invalid_references",
         )?;
+        crate::history_review::validate_summary(m, name, d, pins, map(&subjects[name])?)?;
         for finding in list(&d["implied"], "invalid_dispositions")? {
             let f = schema(
                 finding,

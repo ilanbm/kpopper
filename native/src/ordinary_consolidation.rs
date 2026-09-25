@@ -48,6 +48,8 @@ struct Hypothesis {
     /// Another branch's whole record, when only what it holds differently is laid: the
     /// permissions its unchanged entries carry are still read from it.
     whole: Option<V>,
+    /// Comparison evidence is not authored proposal metadata or a permission source.
+    comparison_base: Option<V>,
 }
 pub(crate) struct SuppliedHypothesis {
     pub name: String,
@@ -58,6 +60,10 @@ pub(crate) struct SuppliedHypothesis {
     pub source: O,
     pub text: String,
     pub source_record: V,
+    /// Whole committed record retained for reading permissions when the proposal is pre-diffed.
+    pub whole_document: Option<V>,
+    /// Git merge-base record for this committed branch, when it is available.
+    pub comparison_base: Option<V>,
     /// Another branch's committed record, laid over the base as what it holds differently.
     pub differences_only: bool,
 }
@@ -68,6 +74,125 @@ impl Hypothesis {
         })
     }
 }
+fn branch_judgment_body(body: &Map) -> bool {
+    [
+        "verdict",
+        "title",
+        "wrong_if",
+        "reopened_by",
+        "rests_on",
+        "depends",
+        "because",
+        "request",
+    ]
+    .iter()
+    .any(|key| body.contains_key(*key))
+}
+fn branch_role_evidence(document: &V) -> Result<V> {
+    let mut evidence = document.clone();
+    for (name, collection) in map_mut(&mut evidence)?.iter_mut() {
+        if [
+            "meta",
+            "schema",
+            "record",
+            "also",
+            "sources",
+            "open",
+            "questions",
+        ]
+        .contains(&name.as_str())
+        {
+            continue;
+        }
+        let Ok(bodies) = map_mut(collection) else {
+            continue;
+        };
+        for body in bodies.values_mut() {
+            let Ok(fields) = map_mut(body) else { continue };
+            if !branch_judgment_body(fields) {
+                fields.retain(|_, value| !matches!(value, V::List(_)));
+            }
+        }
+    }
+    Ok(evidence)
+}
+fn branch_role_order(document: &crate::ordinary_value::Value) -> crate::ordinary_value::Value {
+    use crate::ordinary_value::{Value as OV, map_mut as omap_mut};
+    let mut evidence = document.clone();
+    let Ok(collections) = omap_mut(&mut evidence) else {
+        return evidence;
+    };
+    for (name, collection) in collections.iter_mut() {
+        if [
+            "meta",
+            "schema",
+            "record",
+            "also",
+            "sources",
+            "open",
+            "questions",
+        ]
+        .contains(&name.as_str())
+        {
+            continue;
+        }
+        let Ok(bodies) = omap_mut(collection) else {
+            continue;
+        };
+        for body in bodies.values_mut() {
+            let Ok(fields) = omap_mut(body) else { continue };
+            let judgment = [
+                "verdict",
+                "title",
+                "wrong_if",
+                "reopened_by",
+                "rests_on",
+                "depends",
+                "because",
+                "request",
+            ]
+            .iter()
+            .any(|key| fields.contains_key(*key));
+            if !judgment {
+                fields.retain(|_, value| !matches!(value, OV::List(_)));
+            }
+        }
+    }
+    evidence
+}
+
+fn branch_duplicate_is_an_authored_kind_change(document: &V, basis: &V) -> Result<bool> {
+    let mut source_ids = BTreeMap::<String, Vec<(String, V)>>::new();
+    for (collection, members) in F::collections(document)? {
+        for (id, body) in members {
+            source_ids
+                .entry(id)
+                .or_default()
+                .push((collection.clone(), body.clone()));
+        }
+    }
+    let mut basis_ids = BTreeMap::<String, Vec<(String, V)>>::new();
+    for (collection, members) in F::collections(basis)? {
+        for (id, body) in members {
+            basis_ids
+                .entry(id)
+                .or_default()
+                .push((collection.clone(), body.clone()));
+        }
+    }
+    for (id, bodies) in source_ids.iter().filter(|(_, bodies)| bodies.len() > 1) {
+        let Some([(collection, original)]) = basis_ids.get(id).map(Vec::as_slice) else {
+            return Ok(false);
+        };
+        if !bodies.iter().any(|(source_collection, body)| {
+            source_collection == collection && python_equal(body, original)
+        }) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn captured_projection<'a>(
     capture: &CapturedSource,
     runtime: Option<&'a Runtime>,
@@ -132,6 +257,7 @@ fn read_hypotheses(
                     .into(),
                 source_record: V::Map(Map::new()),
                 whole: None,
+                comparison_base: None,
             },
         );
     }
@@ -144,13 +270,52 @@ fn read_hypotheses(
                 h.name.split(':').next().unwrap_or(&h.name)
             ),
         )?;
+        if h.differences_only {
+            // A source delta cannot stand in for validating the branch's whole record:
+            // its schema and capability boundary remain authoritative.
+            let basis = h
+                .comparison_base
+                .as_ref()
+                .and_then(|value| map(value).ok().and_then(|m| m.get("doc")))
+                .or(h.comparison_base.as_ref())
+                .ok_or_else(|| error("branch_comparison_base_missing"))?;
+            if let Err(failure) = crate::reasoning_snapshot::entries(&h.document) {
+                if failure.0 != "duplicate_entry"
+                    || !branch_duplicate_is_an_authored_kind_change(&h.document, basis)?
+                {
+                    return Err(failure);
+                }
+            }
+            let source = crate::ordinary_value::Value::from_typed(&h.source_record);
+            crate::source_capture::require_ordinary(
+                &source,
+                &crate::ordinary_value::Value::Map(crate::ordinary_value::Map::new()),
+            )?;
+        }
         let (doc, whole) = match base {
             Some(base) if h.differences_only => (
-                branch_differences(&h.document, base)?,
+                branch_differences_from(&h.document, base, h.comparison_base.as_ref())?,
                 Some(h.document.clone()),
             ),
-            _ => (h.document.clone(), None),
+            _ => (h.document.clone(), h.whole_document.clone()),
         };
+        if h.differences_only {
+            let delta_entries = entries(&doc)?;
+            let (validation_doc, source_order) = if delta_entries.is_empty() {
+                (&h.document, std::borrow::Cow::Borrowed(&h.ordered))
+            } else {
+                (
+                    &doc,
+                    std::borrow::Cow::Owned(kept_in_order(&h.ordered, &doc)),
+                )
+            };
+            let role_evidence = branch_role_evidence(validation_doc)?;
+            let merged = layer(capture.ordinary_document(), &role_evidence)?;
+            let source_order = branch_role_order(&source_order);
+            let source_layer = [std::borrow::Cow::Owned(source_order)];
+            Reader::new(&merged, runtime)
+                .map_err(|failure| in_union_order(capture, &source_layer, failure))?;
+        }
         // An id the branch still holds in two collections has no one body to fold.
         crate::reasoning_snapshot::entries(&doc)?;
         let raw = entries(&doc)?;
@@ -167,6 +332,7 @@ fn read_hypotheses(
                 text: h.text.clone(),
                 source_record: h.source_record.clone(),
                 whole,
+                comparison_base: h.comparison_base.clone(),
             },
         );
     }
@@ -445,6 +611,7 @@ fn one_hypothesis(capture: &CapturedSource, name: &str) -> Result<Hypothesis> {
             .into(),
         source_record: V::Map(Map::new()),
         whole: None,
+        comparison_base: None,
     })
 }
 pub(super) fn run(
@@ -766,6 +933,7 @@ pub(super) fn preview(
                 text: String::new(),
                 source_record: V::Map(Map::new()),
                 whole: None,
+                comparison_base: None,
             },
         );
     }
@@ -791,6 +959,7 @@ pub(super) fn preview(
                 text: String::new(),
                 source_record: V::Map(Map::new()),
                 whole: None,
+                comparison_base: None,
             },
         );
     }

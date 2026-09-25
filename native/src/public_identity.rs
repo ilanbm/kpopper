@@ -115,7 +115,7 @@ fn authoring_options(prefix: &str) -> Result<A::Options> {
         operation: fresh_id(prefix)?,
         recorded_at: now.to_rfc3339(),
         recording_day: chrono::Local::now().date_naive().to_string(),
-        by: V::Null,
+        by: crate::direct_history::actor(),
         strict: true,
         paths: Scheme::Hashed,
         receipt_version: None,

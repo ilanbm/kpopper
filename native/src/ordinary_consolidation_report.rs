@@ -371,12 +371,19 @@ pub(super) fn lines(c: &Union<'_>, today: chrono::NaiveDate) -> Result<Vec<Strin
         if !c.refused.is_empty() {
             what.push("a contested reading".into());
         }
-        if !c.untaken.is_empty() {
+        let review_only = c.untaken.iter()
+            .filter(|i| c.reversed[**i].review_only).count();
+        let other_reversals = c.untaken.len() - review_only;
+        if other_reversals > 0 {
             what.push(format!(
                 "{} reversal{} to take by name",
-                c.untaken.len(),
-                if c.untaken.len() == 1 { "" } else { "s" }
+                other_reversals,
+                if other_reversals == 1 { "" } else { "s" }
             ));
+        }
+        if review_only > 0 {
+            what.push(format!("{review_only} reversal{} requiring a new proposal",
+                if review_only == 1 { "" } else { "s" }));
         }
         if !c.drops_needed.is_empty() {
             what.push("a dropped dependency to name".into());
@@ -386,7 +393,7 @@ pub(super) fn lines(c: &Union<'_>, today: chrono::NaiveDate) -> Result<Vec<Strin
             || !c.holes.is_empty()
             || !c.refused.is_empty()
             || !c.contested.is_empty();
-        out.push(format!("not clean: {}{}",what.join(", "),if other{" - nothing folds until it is read again"}else if !c.untaken.is_empty(){" - a verdict the base's own condition has not broken folds only when a person names it"}else{" - a dependency dropped is a decision with a reason, named at the fold"}));
+        out.push(format!("not clean: {}{}",what.join(", "),if review_only > 0{" - revise the proposal before folding"}else if other{" - nothing folds until it is read again"}else if !c.untaken.is_empty(){" - a verdict the base's own condition has not broken folds only when a person names it"}else{" - a dependency dropped is a decision with a reason, named at the fold"}));
         let mut choices = Vec::<(String, Vec<String>)>::new();
         let mut add = |name: &str, arg: String| {
             if let Some((_, args)) = choices.iter_mut().find(|(n, _)| n == name) {
