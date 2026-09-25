@@ -819,6 +819,7 @@ pub fn restore(copied: &Path, destination: &Path) -> Result<V> {
     let captured = N::Capture::read(&copied)?;
     let snapshot = &captured.snapshot;
     let mut import = None;
+    let mut physical = Vec::new();
     for (operation, transaction) in &snapshot.transactions {
         let format = transaction
             .context
@@ -828,7 +829,7 @@ pub fn restore(copied: &Path, destination: &Path) -> Result<V> {
             .and_then(|f| text(f).ok());
         match format {
             Some(FORMAT) if import.is_none() => import = Some((operation, transaction)),
-            Some(crate::history_node_physical::FORMAT) => {}
+            Some(crate::history_node_physical::FORMAT) => physical.push(transaction),
             _ => return Err(error("newer_history_not_representable")),
         }
     }
@@ -842,6 +843,51 @@ pub fn restore(copied: &Path, destination: &Path) -> Result<V> {
         transaction,
         text(field(options, "archive")?)?,
     )?)?;
+    // A physical layer is part of this migration only when it is the one batch
+    // of original hypotheses, directly following the import. Later proposals
+    // must not disappear just because the base entries still match the archive.
+    let mapping_raw = bound(snapshot, transaction, text(field(options, "mapping")?)?)?;
+    let mapping = V::from_tagged(&serde_json::from_slice(mapping_raw)?)?;
+    let mut hypotheses = BTreeMap::new();
+    for item in list(field(map(&mapping)?, "physical_hypotheses")?)? {
+        let item = map(item)?;
+        let member = text(field(item, "source")?)?;
+        let raw = archive
+            .files()
+            .get(member)
+            .ok_or_else(|| error("node_import_archive_topology"))?;
+        require(
+            string_is(field(item, "sha256")?, &sha256(raw)),
+            "node_import_archive_topology",
+        )?;
+        let filename = Path::new(member)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| error("node_import_archive_topology"))?;
+        require(
+            hypotheses
+                .insert(format!(".kpopper/hypotheses/{filename}"), raw)
+                .is_none(),
+            "node_import_archive_topology",
+        )?;
+    }
+    require(
+        physical.len() == usize::from(!hypotheses.is_empty()),
+        "newer_history_not_representable",
+    )?;
+    if let Some(layer) = physical.first() {
+        require(
+            layer.parents.as_slice() == [operation.as_str()]
+                && layer.evidence.keys().eq(hypotheses.keys()),
+            "newer_history_not_representable",
+        )?;
+        for (path, raw) in hypotheses {
+            require(
+                bound(snapshot, layer, &path)? == raw.as_slice(),
+                "newer_history_not_representable",
+            )?;
+        }
+    }
     let layout = members(&archive)?;
     require(layout.absolute.is_empty(), "nonrepresentable_inverse")?;
     let originals = layout
@@ -1099,4 +1145,52 @@ fn replay(
             == evidence,
         "node_import_evidence_set",
     )
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+
+    #[test]
+    fn restore_refuses_physical_hypotheses_added_after_the_original_copy() {
+        for original_hypothesis in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let source = temp.path().join("source");
+            std::fs::create_dir_all(&source).unwrap();
+            std::fs::write(source.join(ENTRY), "known: {p.value: {v: 1}}\n").unwrap();
+            if original_hypothesis {
+                std::fs::create_dir_all(source.join(".kpopper/hypotheses")).unwrap();
+                std::fs::write(
+                    source.join(".kpopper/hypotheses/original.yaml"),
+                    "hypothesis: {claim: Original alternative}\nknown: {p.original: {v: 2}}\n",
+                )
+                .unwrap();
+            }
+            let mut configuration = options("restore-import", "2026-09-25T00:00:00+00:00");
+            configuration.record_id = Some("restore-fixture".into());
+            let copied = temp.path().join("copy");
+            Plan::prepare(&source.join(ENTRY), &source, configuration, None)
+                .unwrap()
+                .publish(&copied)
+                .unwrap();
+            std::fs::create_dir_all(copied.join(".kpopper/hypotheses")).unwrap();
+            std::fs::write(
+                copied.join(".kpopper/hypotheses/later.yaml"),
+                "hypothesis: {claim: Later alternative}\nknown: {p.later: {v: 3}}\n",
+            )
+            .unwrap();
+            crate::history_node_physical::finish_copy(&copied).unwrap();
+            let before = P::export(&copied).unwrap().files().unwrap();
+            let output = temp.path().join("restored");
+            assert_eq!(
+                restore(&copied, &output)
+                    .err()
+                    .expect("later proposal was silently discarded")
+                    .0,
+                "newer_history_not_representable"
+            );
+            assert!(!output.exists());
+            assert_eq!(P::export(&copied).unwrap().files().unwrap(), before);
+        }
+    }
 }
