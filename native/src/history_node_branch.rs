@@ -105,6 +105,14 @@ fn merge_snapshot(target: &mut P::Snapshot, source: &P::Snapshot) -> Result<()> 
         "node_publication_limit",
     )
 }
+fn lazy_value_count(value: &V) -> usize {
+    1 + match value {
+        V::List(values) => values.iter().map(lazy_value_count).sum(),
+        V::Map(values) => values.values().map(lazy_value_count).sum(),
+        _ => 0,
+    }
+}
+
 struct Plan {
     after: Vec<u8>,
     context: V,
@@ -286,6 +294,22 @@ fn plan(
             }
         }
     }
+    // As in the writer, leave room for values and templates in the bounded view.
+    // BTreeMap order makes the choice independent of source order. Removing a
+    // lazy binding here makes prepare_inner retain its identical original/tail
+    // events in the subject stream; no new semantic event is synthesized.
+    let mut lazy_values = 0;
+    originals.retain(|subject, binding| {
+        let cost = lazy_value_count(binding) + tails.get(subject).map_or(0, lazy_value_count);
+        if lazy_values + cost <= crate::value::MAX_VALUES / 4 {
+            lazy_values += cost;
+            true
+        } else {
+            lazy.remove(subject);
+            tails.remove(subject);
+            false
+        }
+    });
     let mut doc = document;
     map_mut(
         map_mut(&mut doc)?

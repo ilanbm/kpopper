@@ -452,3 +452,154 @@ fn nonnegative_authority_generations_work_without_merging_distinct_epochs() {
         );
     }
 }
+
+#[test]
+fn wide_branch_union_bounds_lazy_metadata_and_preserves_original_events() {
+    fn count(v: &V) -> usize {
+        1 + match v {
+            V::Map(values) => values.values().map(count).sum(),
+            V::List(values) => values.iter().map(count).sum(),
+            _ => 0,
+        }
+    }
+    let base = setup();
+    write(base.path(), "seed", &add());
+    let base_bundle = P::export(base.path()).unwrap();
+    let mut branches = vec![];
+    let mut originals = BTreeMap::new();
+    let mut original_frames = BTreeMap::new();
+    let mut lazy_total = 0;
+    for branch in 0..6 {
+        let copy = base_bundle.reconstruct().unwrap();
+        for batch in 0..2 {
+            let actions = (batch * 64..(batch + 1) * 64)
+                .map(|i| json!({"kind":"add", "id":format!("p.branch{branch}.item{i:03}"), "body":{"v":i}}))
+                .collect::<Vec<_>>();
+            write(
+                copy.path(),
+                &format!("branch{branch}-batch{batch}"),
+                &value(json!({"kind":"batch", "actions":actions})),
+            );
+        }
+        let capture = Capture::read(copy.path()).unwrap();
+        assert_eq!(map(&map(capture.state())["subjects"]).len(), 129);
+        let document = kpop_native::history_yaml::decode_document(
+            &fs::read(copy.path().join("GROUNDING.yaml")).unwrap(),
+        )
+        .unwrap();
+        let bindings = &map(&map(&map(&document)["meta"])["node_history"])["originals"];
+        let cost = map(bindings).values().map(count).sum::<usize>();
+        assert!(
+            cost <= kpop_native::value::MAX_VALUES / 4,
+            "each writer-produced branch is already within its lazy budget: {cost}"
+        );
+        lazy_total += cost;
+        for (subject, state) in map(&map(capture.state())["subjects"]) {
+            let V::Text(head) = &map(state)["head"] else {
+                panic!()
+            };
+            originals.insert(
+                subject.clone(),
+                (head.clone(), capture.object(subject, head).unwrap()),
+            );
+        }
+        for (subject, versions) in P::capture_snapshot(copy.path()).unwrap().versions {
+            let frames = versions
+                .iter()
+                .map(|(id, version)| (id.clone(), version.frame_sha256().to_owned()))
+                .collect::<BTreeMap<_, _>>();
+            if let Some(previous) = original_frames.insert(subject, frames.clone()) {
+                assert_eq!(previous, frames);
+            }
+        }
+        branches.push(copy);
+    }
+    assert!(
+        lazy_total > kpop_native::value::MAX_VALUES,
+        "fixture must overflow the old combined lazy view: {lazy_total}"
+    );
+    // Put the lexicographically last subjects in the target so the budget also
+    // materializes originals that were already lazy in the destination.
+    let target = branches.last().unwrap();
+    assert!(
+        !target
+            .path()
+            .join(".kpopper/history")
+            .join(C::subject_path("p.branch5.item000").unwrap())
+            .exists()
+    );
+    let sources = branches
+        .iter()
+        .take(branches.len() - 1)
+        .map(|branch| P::export(branch.path()).unwrap())
+        .collect::<Vec<_>>();
+    let prepared =
+        kpop_native::history_node_branch::prepare(target.path(), &sources, "wide-union").unwrap();
+    let mut reverse = sources.clone();
+    reverse.reverse();
+    assert_eq!(
+        kpop_native::history_node_branch::prepare(target.path(), &reverse, "wide-union")
+            .unwrap()
+            .to_bytes()
+            .unwrap(),
+        prepared.to_bytes().unwrap()
+    );
+    W::publish(target.path(), &prepared, None, |_| Ok(())).unwrap();
+    let document = kpop_native::history_yaml::decode_document(
+        &fs::read(target.path().join("GROUNDING.yaml")).unwrap(),
+    )
+    .unwrap();
+    let bindings = map(&map(&map(&map(&document)["meta"])["node_history"])["originals"]);
+    assert!(bindings.values().map(count).sum::<usize>() <= kpop_native::value::MAX_VALUES / 4);
+    let captured = Capture::read(target.path()).unwrap();
+    assert_eq!(map(&map(captured.state())["subjects"]).len(), 769);
+    for (subject, (id, object)) in &originals {
+        assert_eq!(captured.object(subject, id).unwrap(), *object);
+        assert_eq!(
+            map(&map(captured.state())["subjects"])[subject]
+                .to_json()
+                .unwrap()["head"],
+            id.as_str()
+        );
+    }
+    for (subject, versions) in P::capture_snapshot(target.path()).unwrap().versions {
+        assert_eq!(
+            versions
+                .iter()
+                .map(|(id, version)| (id.clone(), version.frame_sha256().to_owned()))
+                .collect::<BTreeMap<_, _>>(),
+            original_frames[&subject]
+        );
+    }
+    assert!(bindings.contains_key("p.branch0.item000"));
+    assert!(!bindings.contains_key("p.branch5.item000"));
+    assert!(
+        target
+            .path()
+            .join(".kpopper/history")
+            .join(C::subject_path("p.branch5.item000").unwrap())
+            .is_file()
+    );
+    let portable = P::export(target.path()).unwrap().reconstruct().unwrap();
+    drop(branches);
+    assert_eq!(
+        Capture::read(portable.path()).unwrap().state(),
+        captured.state()
+    );
+    for subject in ["p.branch0.item000", "p.branch5.item000"] {
+        write(
+            portable.path(),
+            &subject.replace('.', "-"),
+            &value(json!({"kind":"set", "id":subject, "value":-1})),
+        );
+        let now = Capture::read(portable.path()).unwrap();
+        let (id, original) = &originals[subject];
+        assert_eq!(now.object(subject, id).unwrap(), *original);
+        assert_eq!(
+            map(&map(now.document())["known"])[subject]
+                .to_json()
+                .unwrap()["v"],
+            -1
+        );
+    }
+}
