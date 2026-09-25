@@ -1,5 +1,5 @@
 use serde_json::Value as J;
-use std::{fs, path::Path, process::Command};
+use std::{collections::BTreeMap, fs, path::Path, process::Command};
 fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
@@ -11,7 +11,165 @@ fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
         .output()
         .unwrap()
 }
+fn image(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    fn visit(root: &Path, at: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
+        for entry in fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                visit(root, &path, out);
+            } else {
+                out.insert(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                    fs::read(path).unwrap(),
+                );
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    visit(root, root, &mut out);
+    out
+}
 const ORDINARY: &str = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.load: {v: 61, from: s.note}\n  s.note: {name: source}\njudgments:\n  d.work:\n    verdict: continue\n    rests_on: [p.load]\n    seen: {p.load: 44}\n    wrong_if: p.load > 80\n";
+
+#[test]
+fn ordinary_views_show_captured_history_review_qualifiers_without_mutating_reads() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(
+        source.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.runs: {v: 0, of: 2026-09-01}\njudgments:\n  d.done:\n    verdict: not demonstrated\n    because: no brief arrived\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n  d.other:\n    verdict: other\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n",
+    )
+    .unwrap();
+    let copy = temp.path().join("copy");
+    assert!(
+        cli(
+            &source,
+            &["history", "migrate", "--to", copy.to_str().unwrap()],
+            &temp.path().join("private"),
+        )
+        .status
+        .success()
+    );
+    let private = temp.path().join("private");
+    let changed = cli(
+        &copy,
+        &[
+            "set",
+            "p.runs",
+            "1",
+            "--as-of",
+            "2026-09-02",
+            "--by",
+            "author",
+        ],
+        &private,
+    );
+    assert!(
+        changed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&changed.stderr)
+    );
+    let added = cli(
+        &copy,
+        &[
+            "add",
+            "d.done",
+            "verdict=done",
+            "because=one brief",
+            "rests_on=[p.runs]",
+            "wrong_if=p.runs < 1",
+            "--by",
+            "author",
+        ],
+        &private,
+    );
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+
+    let open = cli(&copy, &["open"], &private);
+    let open_text = String::from_utf8(open.stdout).unwrap();
+    assert!(
+        open_text.contains("d.done: unreviewed change of judgment"),
+        "{open_text}"
+    );
+    assert!(open_text.contains("d.other: wrong_if holds"), "{open_text}");
+    let before_reads = image(&copy);
+    let check = cli(&copy, &["check"], &private);
+    let check_text = String::from_utf8(check.stdout).unwrap();
+    assert!(
+        check_text.contains("NOTE d.done: unreviewed change of judgment"),
+        "{check_text}"
+    );
+    let pull = cli(&copy, &["pull", "d.done"], &private);
+    let pull_text = String::from_utf8(pull.stdout).unwrap();
+    assert!(
+        pull_text.contains("review: unreviewed change of judgment"),
+        "{pull_text}"
+    );
+    assert_eq!(
+        image(&copy),
+        before_reads,
+        "ordinary reads changed captured storage"
+    );
+
+    let self_review = cli(&copy, &["review", "d.done", "--by", "author"], &private);
+    assert!(
+        self_review.status.success(),
+        "{}",
+        String::from_utf8_lossy(&self_review.stderr)
+    );
+    let after_self = cli(&copy, &["open"], &private);
+    let after_self = String::from_utf8(after_self.stdout).unwrap();
+    assert!(
+        after_self.contains("d.done: unreviewed change of judgment"),
+        "{after_self}"
+    );
+
+    let other_review = cli(&copy, &["review", "d.done", "--by", "reviewer"], &private);
+    assert!(
+        other_review.status.success(),
+        "{}",
+        String::from_utf8_lossy(&other_review.stderr)
+    );
+    let after_other = cli(&copy, &["open"], &private);
+    let after_other = String::from_utf8(after_other.stdout).unwrap();
+    assert!(
+        !after_other.contains("d.done: unreviewed change of judgment"),
+        "{after_other}"
+    );
+    assert!(
+        after_other.contains("d.other: wrong_if holds"),
+        "{after_other}"
+    );
+    let after_other_check = cli(&copy, &["check"], &private);
+    let after_other_check = String::from_utf8(after_other_check.stdout).unwrap();
+    assert!(!after_other_check.contains("NOTE d.done: unreviewed change of judgment"));
+    assert!(
+        after_other_check.contains("d.other: wrong_if holds"),
+        "{after_other_check}"
+    );
+
+    let legacy = temp.path().join("legacy");
+    fs::create_dir(&legacy).unwrap();
+    fs::write(
+        legacy.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown: {p.runs: {v: 1}}\njudgments: {d.done: {verdict: done, rests_on: [p.runs], wrong_if: p.runs < 0}}\n",
+    )
+    .unwrap();
+    let legacy_open = cli(&legacy, &["open"], &private);
+    let legacy_open = String::from_utf8(legacy_open.stdout).unwrap();
+    assert!(
+        !legacy_open.contains("unreviewed change of judgment"),
+        "{legacy_open}"
+    );
+}
 
 #[test]
 fn recursive_aliases_fail_closed_in_core_and_custom_collections() {

@@ -572,6 +572,9 @@ impl<T> CapturedSource<T> {
             .as_ref()
             .map(|(_, capture)| capture)
     }
+    pub(crate) fn history_projection(&self) -> Option<&V> {
+        self.document.history_projection.as_ref()
+    }
     pub fn history_capture(&self) -> Option<&crate::history_capture::Capture> {
         self.document.history.as_ref()
     }

@@ -714,7 +714,8 @@ pub fn run(
             conflicts,
             knowledge,
             runtime,
-        )?;
+        )?
+        .with_history_review(capture.history_projection())?;
         let prefix_order = prefix_order(capture.source());
         let output = match command {
             "open" => {
