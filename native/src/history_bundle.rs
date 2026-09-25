@@ -137,7 +137,7 @@ pub(crate) fn capture(files: &Files, rules: Option<&V>) -> Result<Capture> {
         &captured.commits,
     )?;
     require(
-        Store::known_view(&captured)? || rendered.digest()? == captured.document.digest()?,
+        rendered.digest()? == captured.document.digest()? || Store::known_view(&captured)?,
         "unresolved_view_edit",
     )?;
     let actual = map(&map(&captured.document)?["meta"])?;

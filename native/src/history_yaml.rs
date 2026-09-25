@@ -9,6 +9,82 @@ use num_bigint::BigInt;
 use regex::Regex;
 use std::{collections::BTreeSet, sync::LazyLock};
 
+#[derive(Default)]
+struct DecodedDocuments {
+    values: std::collections::BTreeMap<String, TypedValue>,
+    bytes: usize,
+    nodes: usize,
+}
+thread_local! {
+    static DECODED_DOCUMENTS: std::cell::RefCell<Option<DecodedDocuments>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Reuse pure typed decoding only during one immutable archive validation.
+/// Keys bind exact bytes, unsuccessful decodes are never retained, and all
+/// caller-specific authority/receipt checks still run. Nothing survives scope exit.
+pub(crate) fn with_decoded_documents<T>(read: impl FnOnce() -> Result<T>) -> Result<T> {
+    struct Guard(bool);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            if self.0 { DECODED_DOCUMENTS.with(|slot| *slot.borrow_mut() = None); }
+        }
+    }
+    let owned = DECODED_DOCUMENTS.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if slot.is_some() { false } else { *slot = Some(DecodedDocuments::default()); true }
+    });
+    let _guard = Guard(owned);
+    read()
+}
+
+fn value_nodes(value: &TypedValue) -> usize {
+    1 + match value {
+        TypedValue::List(values) => values.iter().map(value_nodes).sum(),
+        TypedValue::Map(values) => values.values().map(value_nodes).sum(),
+        _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod decoded_document_cache_tests {
+    use super::*;
+    #[test]
+    fn scoped_cache_preserves_exact_values_errors_and_owned_results() {
+        let raw = b"known: {p.a: {v: 1}}\n";
+        let expected = decode_document(raw).unwrap();
+        let invalid = b"known: {p.a: {v: [}}\n";
+        let error = decode_document(invalid).unwrap_err().0;
+        with_decoded_documents(|| {
+            let mut changed = decode_document(raw)?;
+            if let TypedValue::Map(fields) = &mut changed { fields.clear(); }
+            assert_eq!(decode_document(raw)?, expected);
+            assert_eq!(decode_document(invalid).unwrap_err().0, error);
+            assert_eq!(decode_document(invalid).unwrap_err().0, error);
+            with_decoded_documents(|| {
+                assert_eq!(decode_document(raw)?, expected);
+                Ok(())
+            })?;
+            DECODED_DOCUMENTS.with(|slot| assert_eq!(slot.borrow().as_ref().unwrap().values.len(), 1));
+            assert_ne!(decode_document(b"known: {p.a: {v: 2}}\n")?, expected);
+            Ok(())
+        }).unwrap();
+        DECODED_DOCUMENTS.with(|slot| assert!(slot.borrow().is_none()));
+        assert_eq!(decode_document(raw).unwrap(), expected);
+    }
+    #[test]
+    fn scoped_cache_clears_after_failure_and_stops_growing_at_its_budget() {
+        let result: Result<()> = with_decoded_documents(|| {
+            decode_document(b"a: 1\n")?;
+            DECODED_DOCUMENTS.with(|slot| slot.borrow_mut().as_mut().unwrap().nodes = 1_000_000);
+            decode_document(b"a: 2\n")?;
+            DECODED_DOCUMENTS.with(|slot| assert_eq!(slot.borrow().as_ref().unwrap().values.len(), 1));
+            Err(Error("test failure".into()))
+        });
+        assert!(result.is_err());
+        DECODED_DOCUMENTS.with(|slot| assert!(slot.borrow().is_none()));
+    }
+}
+
 pub const MAX_DOCUMENT_BYTES: usize = 16 * 1024 * 1024;
 static INT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\A(?:[-+]?0b[0-1_]+|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)|[-+]?0x[0-9a-fA-F_]+|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+)\z").unwrap()
@@ -857,7 +933,32 @@ fn source_for_parser(raw: &[u8]) -> Result<Vec<u8>> {
 }
 
 pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
-    Ok(decode_source_document(raw)?.typed())
+    let key = DECODED_DOCUMENTS.with(|slot| {
+        slot.borrow().as_ref().map(|_| crate::identity::sha256(raw))
+    });
+    if let Some(key) = &key {
+        if let Some(value) = DECODED_DOCUMENTS.with(|slot| {
+            slot.borrow().as_ref().and_then(|cache| cache.values.get(key).cloned())
+        }) { return Ok(value); }
+    }
+    let value = decode_source_document(raw)?.typed();
+    if let Some(key) = key {
+        let bytes = raw.len().saturating_add(compact_json_size(&value));
+        let nodes = value_nodes(&value);
+        DECODED_DOCUMENTS.with(|slot| {
+            if let Some(cache) = slot.borrow_mut().as_mut() {
+                if cache.bytes.saturating_add(bytes) <= 64 * 1024 * 1024
+                    && cache.nodes.saturating_add(nodes) <= 1_000_000
+                    && cache.values.len() < 4096
+                {
+                    cache.bytes += bytes;
+                    cache.nodes += nodes;
+                    cache.values.insert(key, value.clone());
+                }
+            }
+        });
+    }
+    Ok(value)
 }
 
 pub fn decode_source_document(raw: &[u8]) -> Result<SourceValue> {
