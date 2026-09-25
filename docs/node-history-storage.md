@@ -7,6 +7,13 @@ authority marker is version 3 with `profile: node-history/v1`, `authority: histo
 node-history record. Existing legacy records remain readable and writable in their
 original format until explicitly migrated; reading them does not convert them.
 
+In Advanced mode, the first canonical publication also creates compact history.
+Automatic publication into an existing compact target currently accepts complete
+same-authority history. Later plain v1/v2 pending contributions cannot use that path;
+scoped history contributions require explicit local adoption. This compatibility gap
+must be resolved before enabling the default for workflows that rely on repeated
+automatic publication of plain contributions.
+
 To make a verified compact copy of an existing record, run:
 
 ```sh

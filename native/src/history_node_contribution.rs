@@ -142,6 +142,13 @@ impl Plan {
     }
 }
 
+// Domain-profile support is a separate capability; a scoped import must not
+// discard a declared contract when its package cannot be interpreted here.
+pub(crate) fn has_domain_profile(document: &V) -> Result<bool> {
+    let Some(meta) = map(document)?.get("meta") else { return Ok(false); };
+    Ok(map(meta)?.get("domain_profile").is_some_and(|v| *v != V::Null))
+}
+
 /// Select the dependency closure of `roots` from the compact candidate that includes the
 /// prepared claims. Local state is not written; the candidate is an in-memory reduction.
 pub(crate) fn plan(
@@ -153,7 +160,7 @@ pub(crate) fn plan(
     disclosed: &V,
 ) -> Result<Plan> {
     require(
-        crate::domain_profile_binding::from_document(source.document())?.is_none(),
+        !has_domain_profile(source.document())?,
         "domain_profile_subset_unsupported: retain the complete history and package closure",
     )?;
     token(&s(operation))?;
@@ -527,7 +534,7 @@ pub(crate) fn validate(bundle: &V, files: &Files) -> Result<Closure> {
         "contribution_capability_mismatch",
     )?;
     require(
-        crate::domain_profile_binding::from_document(&result.document)?.is_none(),
+        !has_domain_profile(&result.document)?,
         "domain_profile_subset_unsupported: retain the complete history and package closure",
     )?;
     require(
@@ -728,8 +735,8 @@ fn incoming(capture: &Capture, closure: Closure) -> Result<Incoming> {
         }
     }
     require(
-        crate::domain_profile_binding::from_document(capture.document())?.is_none()
-            && crate::domain_profile_binding::from_document(&closure.document)?.is_none(),
+        !has_domain_profile(capture.document())?
+            && !has_domain_profile(&closure.document)?,
         "incompatible_domain_profiles",
     )?;
     let graph = closure.graph()?;

@@ -3,7 +3,6 @@
 //! storage operations, so independent imports can later merge without duplicate owners.
 use crate::{
     Result,
-    domain_profile_binding::{self as Domain, Binding},
     history_authoring::{obj, s},
     history_authority::Files,
     history_contract::*,
@@ -78,8 +77,6 @@ struct Retained {
     orders: BTreeMap<String, V>,
     evidence: Map,
     generations: BTreeMap<String, (String, Option<V>)>,
-    binding: Option<Binding>,
-    package: Option<Vec<u8>>,
 }
 pub(crate) fn is_complete(bundle: &V) -> Result<bool> {
     let m = map(field(map(bundle)?, "manifest")?)?;
@@ -138,16 +135,8 @@ impl Retained {
         }
         let manifest = map(field(map(bundle)?, "manifest")?)?;
         let document = field(manifest, "document")?.clone();
-        let binding = Domain::from_document(&document)?;
-        let package = binding
-            .as_ref()
-            .map(|b| -> Result<Vec<u8>> {
-                let (_, raw) = crate::history_domain::find_package(&captured, b)?
-                    .ok_or_else(|| error("domain_profile_evidence_unavailable"))?;
-                b.package(&raw)?;
-                Ok(raw)
-            })
-            .transpose()?;
+        require(!crate::history_node_contribution::has_domain_profile(&document)?,
+            "unsupported_domain_profile")?;
         Ok(Self {
             revision: text(field(map(bundle)?, "revision")?)?.to_owned(),
             marker: captured.marker.clone(),
@@ -162,8 +151,6 @@ impl Retained {
                 .iter()
                 .map(|(g, held)| (g.clone(), (held.digest.clone(), held.cancellation.clone())))
                 .collect(),
-            binding,
-            package,
         })
     }
 }
@@ -214,33 +201,7 @@ fn generations_held(snapshot: &P::Snapshot, retained: &Retained) -> bool {
             })
         })
 }
-/// The same domain contract on both sides, proven by identical retained package bytes.
-fn domain(snapshot: &P::Snapshot, template: &V, retained: &Retained) -> Result<()> {
-    let target = match (Domain::from_document(template)?, &retained.binding) {
-        (None, None) => return Ok(()),
-        (Some(target), Some(incoming)) if target.same_contract(incoming) => target,
-        _ => return Err(error("incompatible_domain_profiles")),
-    };
-    let held = match snapshot.raw_evidence.get(&target.evidence_path()) {
-        Some(raw) => raw.as_ref().clone(),
-        None => snapshot
-            .legacy
-            .values()
-            .map(|legacy| crate::history_domain::find_package(&legacy.captured, &target))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .map(|(_, raw)| raw)
-            .next()
-            .ok_or_else(|| error("domain_profile_evidence_unavailable"))?,
-    };
-    target.package(&held)?;
-    require(
-        retained.package.as_deref() == Some(held.as_slice()),
-        "domain_binding_mismatch",
-    )
-}
-/// Authority, rules, domain contract, profile and retained generations as of the union.
+/// Authority, rules, profile and retained generations as of the union.
 fn contract(snapshot: &P::Snapshot, template: &V, rules: &V, retained: &Retained) -> Result<()> {
     require(
         same_authority(&snapshot.authority, &retained.marker)?,
@@ -250,7 +211,8 @@ fn contract(snapshot: &P::Snapshot, template: &V, rules: &V, retained: &Retained
         rules.digest()? == retained.rules.digest()?,
         "complete_union_rules_mismatch",
     )?;
-    domain(snapshot, template, retained)?;
+    require(!crate::history_node_contribution::has_domain_profile(template)?,
+        "unsupported_domain_profile")?;
     let (target, incoming) = (reasoning(template), reasoning(&retained.document));
     require(
         target == V::Null || incoming == V::Null || target == incoming,
@@ -269,7 +231,7 @@ fn retained_by(target: &Capture, retained: &Retained) -> Result<bool> {
     {
         return Ok(false);
     }
-    if domain(&target.snapshot, target.document(), retained).is_err() {
+    if crate::history_node_contribution::has_domain_profile(target.document())? {
         return Ok(false);
     }
     if !retained.commits.iter().all(|(op, raw)| {

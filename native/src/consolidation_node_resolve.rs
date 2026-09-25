@@ -293,7 +293,11 @@ fn replace_index(
     let alternate = tempfile::Builder::new()
         .prefix(".kpopper-resolve-index-")
         .tempfile_in(directory)?;
+    let index_modified = std::fs::metadata(index)?.modified()?;
     std::fs::write(alternate.path(), before)?;
+    // Git uses the index timestamp to detect racily clean entries. A fresh
+    // copy's timestamp would hide same-second, same-size unstaged edits.
+    alternate.as_file().set_times(std::fs::FileTimes::new().set_modified(index_modified))?;
     update(alternate.path())?;
     let listing = git_with(
         root,

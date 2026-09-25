@@ -899,6 +899,37 @@ fn compact_manifest_that_attributes_would_convert_is_refused_before_writing() {
 }
 
 #[test]
+fn compact_resolution_keeps_racy_unstaged_edits_visible() {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
+    ok(&node.root, &["config", "core.checkStat", "minimal"]);
+    ok(&node.root, &["config", "core.trustctime", "false"]);
+    let path = node.root.join("a.txt");
+    let index = node.root.join(".git/index");
+    let second = |path: &Path| fs::metadata(path).unwrap().modified().unwrap()
+        .duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let mut same_second = false;
+    for _ in 0..5 {
+        let elapsed = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        std::thread::sleep(Duration::from_millis(1050 - u64::from(elapsed.subsec_millis())));
+        fs::write(&path, b"AAAA\n").unwrap();
+        ok(&node.root, &["add", "a.txt"]);
+        fs::write(&path, b"BBBB\n").unwrap();
+        if second(&path) == second(&index) { same_second = true; break; }
+    }
+    assert!(same_second, "could not construct a racily clean Git entry");
+    // A newer alternate-index timestamp would incorrectly trust the cached stat.
+    std::thread::sleep(Duration::from_millis(1500));
+    node.succeeds(&["consolidate", "--resolve"]);
+    assert_eq!(ok(&node.root, &["status", "--porcelain", "--", "a.txt"]), "AM a.txt\n");
+    assert!(!git(&node.root, &["merge", "--abort"]).status.success(), "abort discarded an unstaged edit");
+    assert_eq!(fs::read(&path).unwrap(), b"BBBB\n");
+    ok(&node.root, &["add", "GROUNDING.yaml"]);
+    ok(&node.root, &["commit", "-qam", "merge with current working content"]);
+    assert_eq!(ok(&node.root, &["show", "HEAD:a.txt"]), "BBBB\n");
+}
+
+#[test]
 fn compact_filter_suppression_outranks_inherited_parameters_and_git_context() {
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
     let run = |node: &Node, env: &[(&str, String)]| {

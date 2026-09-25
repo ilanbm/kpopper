@@ -4935,6 +4935,26 @@ judgments:
     seen:
       p.community_guidance: "GitHub recommends discoverable community files and issue templates;
                              workflow status badges report actual workflow results."
+  d.compact_history_is_default:
+    name: "Compact history is the default for new records and verified copies"
+    verdict: "New records and explicitly requested history copies use compact node history. Existing
+              records retain their authority until explicitly migrated; default selection makes no
+              performance claim."
+    rests_on: [d.compact_history_preserves_evidence]
+    because: "The guarded compact writer preserves historical identities and evidence while avoiding
+              repeated full diagnostic payloads. Choosing this format during first authorship removes
+              the need for a backend selection flag."
+    blocked_on: observational
+    reopened_by: "A fresh default record or verified copied record loses an original claim,
+                  observation, reviewer, dependency pin or recovery boundary, or an established
+                  authoring or publication workflow cannot continue after the switch."
+    from: doc.node_history_storage
+    seen:
+      d.compact_history_preserves_evidence: "Opt-in history copies store subject-local action deltas
+                                             and retain exact legacy originals in a lossless archive.
+                                             Compact storage keeps semantic identities, direct
+                                             observations and source mapping order; it does not turn
+                                             presence into acceptance."
   d.compact_history_preserves_evidence:
     name: "Compact history preserves the evidence it replaces"
     rests_on: [d.history_authority_is_explicit, p.history_source_clock_order]

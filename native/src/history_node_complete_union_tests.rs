@@ -3,7 +3,7 @@
 use super::*;
 use crate::reasoning_runtime::Runtime;
 use crate::{
-    domain_profile_package::Package, history_authority as Authority, history_node_writer as W,
+    history_authority as Authority, history_node_writer as W,
 };
 use crate::{
     history_authoring::{self as A, strings},
@@ -388,65 +388,6 @@ fn contribute_with(files: &Files, evidence: &Files) -> (V, Files) {
     ]);
     crate::history_contribution_prepare::wrap(&artifact, files, evidence).unwrap()
 }
-fn package(version: &str) -> (Binding, Package) {
-    let contract = serde_json::to_vec(&json!({"format":"domain-contract/v1","types":{"reading":{"collection":"readings","required":true,"fields":{"v":{"type":"integer","minimum":0,"required":true}}}}})).unwrap();
-    let manifest = serde_json::to_vec(&json!({"format":"kpopper-domain-package/v1","id":"integer-readings","version":version,"title":"Integer readings","maintainer":"Test","license":"MIT","maturity":"experimental","requires":["domain-contract/v1"],"contract":"contract.json","files":{"contract.json":sha256(&contract)}})).unwrap();
-    let package = Package::capture(
-        &manifest,
-        BTreeMap::from([("contract.json".into(), contract)]),
-    )
-    .unwrap();
-    (Binding::new(&package, BTreeMap::new()).unwrap().0, package)
-}
-/// A legacy domain adoption commit carrying its package, and the bound template after it.
-fn bind(op: &'static str, parent: &'static str, before: &Files, version: &str) -> (Step, V) {
-    let mut document = Y::decode_document(&before["entry.yaml"]).unwrap();
-    let V::Map(d) = &mut document else { panic!() };
-    let V::Map(meta) = d.get_mut("meta").unwrap() else {
-        panic!()
-    };
-    meta.remove("history");
-    let (mut binding, package) = package(version);
-    binding.package_commit = Some(op.into());
-    let after = crate::history_domain::bind_document(&document, &binding, &package).unwrap();
-    let template = Authority::document_template(&after).unwrap();
-    let intent = obj([
-        ("version", A::n("10")),
-        ("kind", s("domain-bind")),
-        (
-            "action",
-            obj([
-                ("kind", s("domain-bind")),
-                ("binding", binding.value().unwrap()),
-                ("because", s("fixture contract")),
-            ]),
-        ),
-        ("recorded_at", s(AT)),
-        ("by", s("fixture")),
-        (
-            "archive",
-            obj([("path", s(".kpopper/replaced.yaml")), ("sha256", V::Null)]),
-        ),
-        (
-            "domain_package_capture",
-            V::from_json(&package.to_capture()).unwrap(),
-        ),
-    ]);
-    let receipt = crate::history_transaction::semantic_receipt(
-        "core/v1",
-        &crate::reasoning_fields::capabilities(&after, None).unwrap(),
-        &obj([("document", document), ("authoring", intent)]),
-        &obj([
-            ("document", after),
-            ("authoring", obj([("objects", V::List(vec![]))])),
-        ]),
-    )
-    .unwrap();
-    let mut step = step(op, 1, &[parent], vec![], &template);
-    step.receipt = receipt;
-    (step, template)
-}
-
 // ---- Behavior ----
 
 #[test]
@@ -794,66 +735,6 @@ fn temporal_history_imports_preserve_original_observations() {
             );
         }
     }
-}
-
-#[test]
-fn same_domain_contract_unions_and_different_or_missing_contracts_refuse() {
-    let template = fixture_commit()["view_template"].clone();
-    let input = step(
-        "input",
-        1,
-        &[],
-        vec![reading("p.input", "input", json!(1))],
-        &template,
-    );
-    let unbound = legacy(1, std::slice::from_ref(&input));
-    let (adopt, bound) = bind("bind", "input", &unbound, "1.0.0");
-    let extra = step(
-        "extra",
-        1,
-        &["bind"],
-        vec![reading("p.extra", "extra", json!(3))],
-        &bound,
-    );
-    let target_files = legacy(1, &[input.clone(), adopt.clone()]);
-    let (bundle, files) = contribute(&legacy(1, &[input.clone(), adopt, extra]));
-
-    let (_temp, root) = migrate(&target_files);
-    union(&root, &bundle, &files).unwrap();
-    let after = Capture::read(&root).unwrap();
-    assert!(accepted(&after, &bundle, &files, &Files::new()).unwrap());
-    let mut expected = package("1.0.0").0;
-    expected.package_commit = Some("bind".into());
-    assert_eq!(
-        Domain::from_document(after.document()).unwrap(),
-        Some(expected)
-    );
-
-    // A different contract version on the incoming side.
-    let (other_adopt, other_bound) = bind("bind2", "input", &unbound, "2.0.0");
-    let other_extra = step(
-        "extra2",
-        1,
-        &["bind2"],
-        vec![reading("p.extra", "extra2", json!(3))],
-        &other_bound,
-    );
-    let (other, other_files) = contribute(&legacy(1, &[input, other_adopt, other_extra]));
-    let (_temp2, root2) = migrate(&target_files);
-    let before = tree(&root2);
-    assert_eq!(
-        code(union(&root2, &other, &other_files)),
-        "incompatible_domain_profiles"
-    );
-    assert_eq!(tree(&root2), before);
-    // A union never adopts a contract the target has not bound.
-    let (_temp3, root3) = migrate(&unbound);
-    let before = tree(&root3);
-    assert_eq!(
-        code(union(&root3, &bundle, &files)),
-        "incompatible_domain_profiles"
-    );
-    assert_eq!(tree(&root3), before);
 }
 
 #[test]
