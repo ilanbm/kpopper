@@ -91,6 +91,29 @@ fn generated_object_row_normalization_is_order_independent() {
 }
 
 #[test]
+fn refreshing_a_source_does_not_reread_every_inherited_value_that_cites_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    git(root, &["init", "-q", "-b", "main"]);
+    let base = "sources:\n  s.note: {name: note, read: 2026-09-10}\nknown:\n  p.counter: {v: 0, from: s.note}\n";
+    fs::write(root.join("GROUNDING.yaml"), base).unwrap();
+    commit(root, "old reading cites a source");
+    git(root, &["checkout", "-q", "-b", "source"]);
+    fs::write(root.join("GROUNDING.yaml"), base.replace("read: 2026-09-10", "read: 2026-09-12")).unwrap();
+    commit(root, "source is read again without updating the counter");
+    git(root, &["checkout", "-q", "main"]);
+    let current = base.replace("v: 0, from: s.note", "v: 1, from: s.note, of: 2026-09-12");
+    fs::write(root.join("GROUNDING.yaml"), &current).unwrap();
+    commit(root, "destination records a new counter reading");
+    let output = public_consolidation::dispatch(&Options {
+        from_refs: vec!["source".into()], dry_run: true, ..Default::default()
+    }, root);
+    assert_eq!(output.code, 0, "{}{}", output.stdout, output.stderr);
+    assert!(!output.stdout.contains("p.counter: 1 -> 0"), "{}", output.stdout);
+    assert_eq!(fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(), current);
+}
+
+#[test]
 fn ordinary_branch_preview_ignores_values_inherited_from_the_merge_base() {
     let (_temp, root) = branched(&[]);
     let base = git(&root, &["rev-parse", "HEAD"]);

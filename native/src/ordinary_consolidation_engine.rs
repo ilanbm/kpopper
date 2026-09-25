@@ -161,6 +161,11 @@ pub(crate) fn branch_differences_from(
             return true;
         }
         let old = basis.get(id).unwrap_or(&V::Null);
+        // A refreshed source date does not mean every unchanged value citing
+        // that source was measured again. The branch must author the reading.
+        if python_equal(body, old) {
+            return false;
+        }
         if !same_claim(&claim(body), &claim(old)) {
             return true;
         }
