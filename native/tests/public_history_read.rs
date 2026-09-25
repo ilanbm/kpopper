@@ -9,7 +9,14 @@ fn v(x: serde_json::Value) -> V {
     V::from_json(&x).unwrap()
 }
 fn opts(op: &str) -> Options {
-    let day = if op == "set-a" { "25" } else { "24" };
+    let day = match op {
+        "set-a" => "25",
+        "proposal-b" => "26",
+        "accept-b" => "27",
+        "proposal-a" => "28",
+        "accept-a" => "29",
+        _ => "24",
+    };
     Options {
         operation: op.into(),
         recorded_at: format!("2026-09-{day}T12:00:00+00:00"),
@@ -19,6 +26,30 @@ fn opts(op: &str) -> Options {
         paths: Scheme::Hashed,
         receipt_version: None,
     }
+}
+fn map(value: &V) -> &std::collections::BTreeMap<String, V> {
+    let V::Map(value) = value else {
+        panic!("expected map: {value:?}")
+    };
+    value
+}
+fn text(value: &V) -> &str {
+    let V::Text(value) = value else {
+        panic!("expected text: {value:?}")
+    };
+    value
+}
+fn core_runtime() -> (tempfile::TempDir, kpop_native::reasoning_runtime::Runtime) {
+    use kpop_native::reasoning_runtime::{OperationalBounds, Runtime};
+    let cache = tempfile::tempdir().unwrap();
+    let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scripts/reasoning/native")
+        .join(format!(
+            "{}.kpopper-runtime",
+            kpop_native::reasoning_runtime::target_name().unwrap()
+        ));
+    let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
+    (cache, runtime)
 }
 fn write(root: &Path, op: &str, action: serde_json::Value) {
     let prepared = W::prepare(root, &v(action), &opts(op), None).unwrap();
@@ -103,5 +134,163 @@ fn pull_history_reads_retained_node_bodies_and_clips_without_writing() {
     assert!(
         !refused.status.success(),
         "corrupt committed history was displayed"
+    );
+}
+
+#[test]
+fn core_pull_reads_active_history_v1_and_json_budget_reports_omissions() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source");
+    let copy = tmp.path().join("copy");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.a: {v: 1, note: 'historic body with details'}\n").unwrap();
+    let migrated = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&source)
+        .args(["history", "migrate", "--to", copy.to_str().unwrap()])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        migrated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&migrated.stderr)
+    );
+    let authority = fs::read_to_string(copy.join(".kpopper/history.yaml")).unwrap();
+    assert!(authority.contains("history/v1"), "{authority}");
+    let before = kpop_native::identity::sha256(&fs::read(copy.join("GROUNDING.yaml")).unwrap());
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&copy)
+        .args(["--frozen", "pull", "p.a", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("HISTORICAL SECTION"), "{text}");
+    assert!(text.contains("historic body"), "{text}");
+    let structured = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&copy)
+        .args([
+            "--json",
+            "--frozen",
+            "pull",
+            "p.a",
+            "--history",
+            "--budget",
+            "1",
+        ])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        structured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&structured.stderr)
+    );
+    let wrapped: serde_json::Value = serde_json::from_slice(&structured.stdout).unwrap();
+    assert!(
+        wrapped["output"].as_str().unwrap_or("").contains("omitted"),
+        "{wrapped}"
+    );
+    assert_eq!(
+        before,
+        kpop_native::identity::sha256(&fs::read(copy.join("GROUNDING.yaml")).unwrap())
+    );
+}
+
+#[test]
+fn judgment_history_keeps_reversal_request_reason_and_dependency_changes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(root.join(".kpopper/history.yaml"), "version: 3\nprofile: node-history/v1\nauthority: history\nrecord_id: fixture\ngeneration: 1\nrequires: [node-history/v1]\n").unwrap();
+    fs::write(root.join("GROUNDING.yaml"), "meta: {purpose: Fixture, reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nreadings: {}\njudgments: {}\n").unwrap();
+    let (_cache, runtime) = core_runtime();
+    let mut initial = opts("core-batch");
+    let action = v(json!({"kind":"batch","actions":[
+        {"kind":"add","id":"p.a","body":{"v":1},"into":"readings"},
+        {"kind":"add","id":"d.b","body":{"verdict":"ready","rests_on":["p.a"],"wrong_if":{"expr":"p.a > 3"}},"into":"judgments"}
+    ]}));
+    let prepared = W::prepare(root, &action, &initial, Some(&runtime)).unwrap();
+    W::publish(root, &prepared, Some(&runtime), |_| Ok(())).unwrap();
+    for (op, verdict, deps, because) in [
+        (
+            "proposal-b",
+            "hold",
+            json!([]),
+            "request: remove obsolete p.a basis and hold",
+        ),
+        (
+            "proposal-a",
+            "ready",
+            json!(["p.a"]),
+            "request: restore p.a after retest",
+        ),
+    ] {
+        let proposal = v(
+            json!({"kind":"proposal","id":"d.b","into":"judgments","body":{"verdict":verdict,"rests_on":deps,"wrong_if":{"expr":"p.a > 3"}},"because":because}),
+        );
+        let mut step_options = opts(op);
+        step_options.strict = true;
+        let prepared = W::prepare(root, &proposal, &step_options, Some(&runtime)).unwrap();
+        W::publish(root, &prepared, Some(&runtime), |_| Ok(())).unwrap();
+        let capture = kpop_native::history_node_capture::Capture::read(root).unwrap();
+        let state = map(map(capture.state()).get("subjects").unwrap());
+        let judgment = map(state.get("d.b").unwrap());
+        let V::List(proposals) = judgment.get("proposals").unwrap() else {
+            panic!()
+        };
+        let proposal_id = text(proposals.last().unwrap());
+        let V::Text(head) = judgment.get("head").unwrap() else {
+            panic!()
+        };
+        let correction = v(
+            json!({"kind":"correct","id":"d.b","of":proposal_id,"over":[head],"because":format!("accepted request: {because}")}),
+        );
+        let accept_op = if op == "proposal-b" {
+            "accept-b"
+        } else {
+            "accept-a"
+        };
+        let mut accept_options = opts(accept_op);
+        accept_options.strict = true;
+        let prepared = W::prepare(root, &correction, &accept_options, Some(&runtime)).unwrap();
+        W::publish(root, &prepared, Some(&runtime), |_| Ok(())).unwrap();
+        initial.operation = accept_op.into();
+    }
+    let before = kpop_native::identity::sha256(&fs::read(root.join("GROUNDING.yaml")).unwrap());
+    let read = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(root)
+        .args(["--frozen", "pull", "d.b", "--history"])
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .output()
+        .unwrap();
+    assert!(
+        read.status.success(),
+        "{}",
+        String::from_utf8_lossy(&read.stderr)
+    );
+    let text = String::from_utf8_lossy(&read.stdout);
+    for expected in [
+        "\"verdict\":\"ready\"",
+        "\"verdict\":\"hold\"",
+        "request: remove obsolete p.a basis and hold",
+        "accepted request:",
+        "\"rests_on\":[]",
+        "\"rests_on\":[\"p.a\"]",
+    ] {
+        assert!(text.contains(expected), "missing {expected}: {text}");
+    }
+    assert_eq!(
+        before,
+        kpop_native::identity::sha256(&fs::read(root.join("GROUNDING.yaml")).unwrap())
     );
 }
