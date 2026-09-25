@@ -986,25 +986,38 @@ fn ordinary_public_cli_matches_python_complete_output_and_files() {
     let repository = source.path().join("source");
     fs::create_dir(&repository).unwrap();
     git(&repository, &["init", "-q", "-b", "main"]);
+    fs::create_dir_all(repository.join(".kpopper")).unwrap();
+    fs::write(repository.join(".kpopper/replaced.yaml"), "{}\n").unwrap();
     fs::write(
         repository.join("GROUNDING.yaml"),
-        "known:\n  p.value:\n    v: 1\n    of: 2026-09-19\n",
+        "known:\n  p.value:\n    v: 1\n    of: 2026-09-17\n",
     )
     .unwrap();
-    let oid = commit(&repository, "source");
+    commit(&repository, "common base");
+    // Keep both source snapshots on the same newer p.value for this pinned
+    // whole-snapshot Python comparison. The stale inherited-read difference is
+    // exercised separately by ordinary_branch_preview_ignores_values_inherited_from_the_merge_base.
+    git(&repository, &["checkout", "-q", "-b", "source-extra"]);
     fs::write(
         repository.join("GROUNDING.yaml"),
         "known:\n  p.value:\n    v: 1\n    of: 2026-09-19\n  p.extra:\n    v: 2\n    of: 2026-09-19\n",
     )
     .unwrap();
-    let second = commit(&repository, "second source");
+    let oid = commit(&repository, "source rereads p.value and adds p.extra");
+    git(&repository, &["checkout", "-q", "main"]);
+    git(&repository, &["checkout", "-q", "-b", "source-value"]);
+    fs::write(
+        repository.join("GROUNDING.yaml"),
+        "known:\n  p.value:\n    v: 1\n    of: 2026-09-19\n",
+    )
+    .unwrap();
+    let second = commit(&repository, "source updates p.value");
+    git(&repository, &["checkout", "-q", "main"]);
     fs::write(
         repository.join("GROUNDING.yaml"),
         "known:\n  p.value:\n    v: 3\n    of: 2026-09-18\n",
     )
     .unwrap();
-    fs::create_dir_all(repository.join(".kpopper")).unwrap();
-    fs::write(repository.join(".kpopper/replaced.yaml"), "{}\n").unwrap();
     commit(&repository, "current");
     let native = source.path().join("native");
     let python = source.path().join("python");
@@ -1083,7 +1096,15 @@ fn ordinary_public_cli_matches_python_complete_output_and_files() {
         .env("XDG_STATE_HOME", source.path().join("python-state"))
         .output()
         .unwrap();
-    assert_eq!(actual.status.code(), expected.status.code());
+    assert_eq!(
+        actual.status.code(),
+        expected.status.code(),
+        "native stdout={} stderr={}\nPython stdout={} stderr={}",
+        String::from_utf8_lossy(&actual.stdout),
+        String::from_utf8_lossy(&actual.stderr),
+        String::from_utf8_lossy(&expected.stdout),
+        String::from_utf8_lossy(&expected.stderr),
+    );
     assert_eq!(actual.stdout, expected.stdout, "stdout");
     assert_eq!(actual.stderr, expected.stderr, "stderr");
     assert_eq!(image(&native), image(&python), "complete after image");
