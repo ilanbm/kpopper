@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.14.0 — 2026-09-26
+
+- Normalize alternate compact record paths on Windows (#268) — patch
+- Fix Windows compact history paths and stress validation (#267) — patch
+- Fix compact history release acceptance (#266) — patch
+- Fix Windows contribution test compilation (#265) — patch
+- Use compact node history by default (#264) — minor
+- Put source sections after findings in writing guidance and examples (#263) — patch
+- Fix historical source citations and Git pin checks (#259) — patch
+- Preserve history review requirements and branch evidence (#260) — minor
+- Read candidate metadata in trusted crate verification (#258) — patch
+
+Decisions recorded: d.compact_history_is_default, d.history_review_follows_lineage, d.source_sections_last, d.workspace_operations, d.write_path_returns_reach, d.written_layer_drawn_by_build, d.young_sections_read_by_shape
+
 ## 0.13.0 — 2026-09-24
 
 - Run node report recovery scenarios independently (#257) — patch
