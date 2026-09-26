@@ -954,7 +954,7 @@ pub(crate) fn plan_import(
         );
         #[allow(unused_mut)]
         let mut act_options = options.clone();
-        #[cfg(test)]
+        #[cfg(all(test, unix))]
         tests::forge(&mut over, &mut saw, &mut act_options.by);
         new.push(adoption_act(
             subject,
