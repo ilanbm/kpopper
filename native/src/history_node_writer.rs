@@ -25,6 +25,51 @@ use std::{
     path::Path,
 };
 const FORMAT: &str = "node-authoring-transaction/v1";
+/// Membership derived once per batch in one immutable snapshot. The same
+/// context validation and bounded child IDs apply to every object in the batch.
+pub(crate) struct OperationMembers<'a> {
+    snapshot: &'a P::Snapshot,
+    batches: BTreeMap<String, BTreeSet<String>>,
+}
+impl<'a> OperationMembers<'a> {
+    pub(crate) fn new(snapshot: &'a P::Snapshot) -> Self {
+        Self { snapshot, batches: BTreeMap::new() }
+    }
+    pub(crate) fn contains(&mut self, transaction: &str, semantic: &str) -> Result<bool> {
+        if transaction == semantic {
+            return Ok(true);
+        }
+        if let Some(members) = self.batches.get(transaction) {
+            return Ok(members.contains(semantic));
+        }
+        let context = self.snapshot.transactions.get(transaction)
+            .and_then(|tx| tx.context.as_ref())
+            .filter(|value| crate::history_node_transaction::is_context(value));
+        let Some(context) = context else {
+            return operation_member(self.snapshot, transaction, semantic);
+        };
+        let batch = map(context).ok().and_then(|c| c.get("action"))
+            .and_then(|a| map(a).ok()).and_then(|a| a.get("kind"))
+            .is_some_and(|kind| string_is(kind, "batch"));
+        if !batch {
+            return operation_member(self.snapshot, transaction, semantic);
+        }
+        let action = map(field(crate::history_node_transaction::validate(context)?, "action")?)?;
+        let actions = list(field(action, "actions")?)?;
+        require(!actions.is_empty() && actions.len() <= 64, "invalid_batch")?;
+        let members = (0..actions.len()).map(|index| batch_step(transaction, index))
+            .collect::<Result<BTreeSet<_>>>()?;
+        let belongs = members.contains(semantic);
+        self.batches.insert(transaction.into(), members);
+        Ok(belongs)
+    }
+}
+fn batch_step(transaction: &str, index: usize) -> Result<String> {
+    Ok(format!("batch-step-{}", A::obj([
+        ("operation", s(transaction)),
+        ("index", A::n(&index.to_string()))
+    ]).digest()?))
+}
 /// Batch children have original semantic operation IDs distinct from their atomic publication.
 /// Membership is derived only from the explicit bounded batch intent, never event ancestry.
 pub(crate) fn operation_member(
@@ -88,14 +133,7 @@ pub(crate) fn operation_member(
     let actions = list(field(intent, "actions")?)?;
     require(!actions.is_empty() && actions.len() <= 64, "invalid_batch")?;
     for index in 0..actions.len() {
-        let id = format!(
-            "batch-step-{}",
-            A::obj([
-                ("operation", s(transaction)),
-                ("index", A::n(&index.to_string()))
-            ])
-            .digest()?
-        );
+        let id = batch_step(transaction, index)?;
         if id == semantic {
             return Ok(true);
         }

@@ -413,6 +413,7 @@ pub(crate) fn derive_receipt(snapshot: &P::Snapshot, operation: &str) -> Result<
         ("archive".into(), c["archive"].clone()),
     ]));
     let mut ids = BTreeSet::new();
+    let mut members = crate::history_node_writer::OperationMembers::new(snapshot);
     for versions in snapshot.versions.values() {
         for version in versions.values().filter(|v| v.operation() == operation) {
             let Some(state) = version.state() else {
@@ -421,8 +422,7 @@ pub(crate) fn derive_receipt(snapshot: &P::Snapshot, operation: &str) -> Result<
             if crate::history_node_ledger::is_ledger(state) {
                 for (object, _) in crate::history_node_ledger::unpack(state)? {
                     require(
-                        crate::history_node_writer::operation_member(
-                            snapshot,
+                        members.contains(
                             operation,
                             text(field(map(&object)?, "op")?)?,
                         )?,

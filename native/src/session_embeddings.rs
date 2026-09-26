@@ -52,7 +52,7 @@ fn sha256(path: &Path) -> Result<String, String> {
     let mut file =
         File::open(path).map_err(|_| "Local E5 model assets are unreadable".to_owned())?;
     let mut digest = Sha256::new();
-    let mut block = [0_u8; 1024 * 1024];
+    let mut block = vec![0_u8; 1024 * 1024];
     loop {
         let read = file
             .read(&mut block)
@@ -501,6 +501,15 @@ impl SemanticProvider for E5Index {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn asset_hashing_fits_a_small_stack() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("asset");
+        std::fs::write(&path, b"abc").unwrap();
+        let digest = std::thread::Builder::new().stack_size(128 * 1024)
+            .spawn(move || sha256(&path).unwrap()).unwrap().join().unwrap();
+        assert_eq!(digest, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
 
     struct Fake {
         encoded: usize,

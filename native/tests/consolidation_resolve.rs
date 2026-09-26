@@ -4,6 +4,8 @@ use std::{
     path::Path,
     process::{Command, Output},
 };
+#[path = "support/git_path.rs"]
+mod git_path;
 
 fn git(root: &Path, args: &[&str]) -> Output {
     Command::new("git")
@@ -436,7 +438,8 @@ impl Node {
         while let Some(dir) = pending.pop() {
             for entry in fs::read_dir(dir).unwrap() {
                 let path = entry.unwrap().path();
-                let name = path.strip_prefix(&self.root).unwrap().to_string_lossy().into_owned();
+                let name = path.strip_prefix(&self.root).unwrap().iter()
+                    .map(|part| part.to_string_lossy()).collect::<Vec<_>>().join("/");
                 if name == ".git" || name.starts_with(".kpopper/.history-local") || name.ends_with(".lock") {
                     continue;
                 }
@@ -866,7 +869,7 @@ fn compact_resolution_in_a_linked_worktree_uses_only_that_worktree_index() {
     let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
     ok(&node.root, &["merge", "--abort"]);
     let linked = node.root.parent().unwrap().join("linked");
-    ok(&node.root, &["worktree", "add", "-q", "-b", "feature", linked.to_str().unwrap(), "main"]);
+    ok(&node.root, &["worktree", "add", "-q", "-b", "feature", &git_path::argument(&linked), "main"]);
     let primary_index = fs::read(node.root.join(".git/index")).unwrap();
     let tree = Node { _temp: tempfile::tempdir().unwrap(), root: linked.clone(), resources: node.resources.clone() };
     tree.succeeds(&["add", "p.c", "v=3"]);
