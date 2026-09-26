@@ -716,6 +716,28 @@ fn public_cli_explicit_acts_preserve_their_result_and_legacy_pin_identity() {
 }
 
 #[test]
+fn batch_updates_the_existing_record_date_and_retains_its_template() {
+    let root = setup();
+    let entry = root.path().join("GROUNDING.yaml");
+    let raw = fs::read_to_string(&entry).unwrap();
+    fs::write(&entry, raw.replace("meta:\n", "meta:\n  updated: 2026-09-01\n")).unwrap();
+    write(root.path(), "dated-add", &add());
+    let mut next = options("dated-batch");
+    next.recording_day = "2026-09-25".into();
+    next.recorded_at = "2026-09-25T12:00:00+00:00".into();
+    let action = value(json!({"kind":"batch", "actions":[
+        {"kind":"set", "id":"p.a", "value":19}
+    ]}));
+    let prepared = W::prepare(root.path(), &action, &next, None).unwrap();
+    W::publish(root.path(), &prepared, None, |_| Ok(())).unwrap();
+    let capture = Capture::read(root.path()).unwrap();
+    assert_eq!(map(&map(capture.document())["meta"])["updated"], value(json!("2026-09-25")));
+    assert_eq!(map(&map(&map(capture.document())["known"])["p.a"])["v"], value(json!(19)));
+    let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
+    assert_eq!(Capture::read(copy.path()).unwrap().document(), capture.document());
+}
+
+#[test]
 fn many_new_subjects_remain_readable_and_portable_after_batched_creation() {
     let root = setup();
     for batch in 0..11 {
