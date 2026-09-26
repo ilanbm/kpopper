@@ -289,7 +289,7 @@ pub(crate) fn comparison_layer(
         } else {
             "GROUNDING.yaml"
         };
-        layouts.push(crate::history_transaction::Layout::for_entry(name(
+        layouts.push(crate::history_transaction::Layout::for_entry(&safe_path(
             &entry_path.with_file_name(alternate),
         )?)?);
     }
@@ -382,7 +382,7 @@ fn committed<'a>(root: &'a Path, entry: &str, revision: &str) -> Result<Committe
     {
         let parent = Path::new(&entry).parent().unwrap();
         for alternate in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
-            let p = name(&parent.join(alternate))?.to_owned();
+            let p = safe_path(&parent.join(alternate))?;
             if reader.tree.contains_key(&p) {
                 entry = p;
                 break;
