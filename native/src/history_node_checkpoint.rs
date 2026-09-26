@@ -16,7 +16,7 @@ pub(crate) fn remember(root: &Path, view: &[u8]) {
         let path = F::target(root, PATH)?;
         let parent = path.parent().ok_or_else(|| error("invalid_path"))?;
         fs::create_dir_all(parent)?;
-        fs::File::open(parent.parent().unwrap())?.sync_all()?;
+        F::sync(parent.parent().unwrap())?;
         F::publish_immutable(root, IGNORE, b"*\n")?;
         F::replace(&path, Some(view))
     };

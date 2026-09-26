@@ -808,7 +808,7 @@ fn materialize_mode(
         let plan = crate::history_authoring_batch_core::prepare(
             capture, &actions, &batch, runtime, audit, archive,
         )?;
-        let projected = capture.candidate(&plan.objects)?;
+        let projected = capture.candidate_with_template(&plan.objects, &plan.document)?;
         require(
             projected.document().digest()? == plan.document.digest()?,
             "batch_final_projection_mismatch",

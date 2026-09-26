@@ -84,5 +84,10 @@ opt-level = 3
 [profile.test.package.sha2]
 opt-level = 3
 
+# Large history closure tests exercise production algorithms on hundreds of
+# subjects. Keep assertions enabled while avoiding unoptimized test-only costs.
+[profile.test.package.kpopper]
+opt-level = 1
+
 [dev-dependencies]
 shlex = "1.3.0"

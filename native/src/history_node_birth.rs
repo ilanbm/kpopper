@@ -205,7 +205,7 @@ fn create_with_probe(
     }
     if existing.is_none() {
         fs::create_dir_all(F::target(root, ".kpopper")?)?;
-        fs::File::open(root)?.sync_all()?;
+        F::sync(root)?;
         F::publish_immutable(root, MARKER, &marker)?;
     }
     // Interruption here leaves only reserved identity; readers still see no record.
