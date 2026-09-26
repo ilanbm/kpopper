@@ -7,10 +7,24 @@ retries = 0
 # Run every test, so that one failure does not hide the others.
 fail-fast = false
 # Report a test as slow each minute it runs, and stop one still running after ten minutes as a
-# failure: a hang is named, far inside the job's own timeout, and no test comes near it.
+# failure: a hang is named, far inside the job's own timeout.
 slow-timeout = { period = "60s", terminate-after = 10, on-timeout = "fail" }
 # Print a failing test's output when it fails, and again in the summary at the end.
 failure-output = "immediate-final"
+
+# The wide union fixture reconstructs hundreds of immutable originals across
+# six branches, including durable file and directory syncs. Reserve the runner
+# so concurrent history fixtures do not compete for its disk and CPU.
+[[profile.ci.overrides]]
+filter = 'binary(=history_node_branch) & test(=wide_branch_union_bounds_lazy_metadata_and_preserves_original_events)'
+threads-required = "num-test-threads"
+
+# These runners exceeded ten minutes on this fixture. Keep a finite failing
+# deadline for it without changing ordinary tests or the job's overall timeout.
+[[profile.ci.overrides]]
+filter = 'binary(=history_node_branch) & test(=wide_branch_union_bounds_lazy_metadata_and_preserves_original_events)'
+platform = 'cfg(any(target_os = "windows", all(target_os = "macos", target_arch = "x86_64")))'
+slow-timeout = { period = "60s", terminate-after = 15, on-timeout = "fail" }
 
 [profile.ci.junit]
 # target/nextest/ci/junit.xml: each test's outcome and duration, kept with the CI evidence.

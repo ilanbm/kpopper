@@ -87,7 +87,7 @@ pub fn original(object: &V, observation: &ObservationNode) -> Result<Original> {
 fn unpack(
     subject: &str,
     version: &C::Version,
-    snapshot: &P::Snapshot,
+    members: &mut crate::history_node_writer::OperationMembers<'_>,
 ) -> Result<(V, ObservationNode, Option<V>)> {
     let value = version
         .state()
@@ -113,8 +113,7 @@ fn unpack(
     require(
         string_is(field(&object, "subject")?, subject)
             && string_is(field(&object, "id")?, &observation.id)
-            && crate::history_node_writer::operation_member(
-                snapshot,
+            && members.contains(
                 version.operation(),
                 text(field(&object, "op")?)?,
             )?,
@@ -353,6 +352,7 @@ impl Capture {
         let mut objects = Vec::new();
         let mut source_orders = BTreeMap::new();
         let mut semantic_events = BTreeMap::new();
+        let mut members = crate::history_node_writer::OperationMembers::new(&snapshot);
         for (subject, versions) in &snapshot.versions {
             for version in versions.values() {
                 require(
@@ -385,8 +385,7 @@ impl Capture {
                         let o = map(&object)?;
                         require(
                             string_is(&o["subject"], subject)
-                                && crate::history_node_writer::operation_member(
-                                    &snapshot,
+                                && members.contains(
                                     version.operation(),
                                     text(&o["op"])?,
                                 )?,
@@ -411,7 +410,7 @@ impl Capture {
                 if !payload.is_semantic {
                     continue;
                 }
-                let (object, observation, source_order) = unpack(subject, version, &snapshot)?;
+                let (object, observation, source_order) = unpack(subject, version, &mut members)?;
                 if let Some(order) = source_order {
                     source_orders.insert(observation.id.clone(), order);
                 }

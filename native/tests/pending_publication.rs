@@ -287,6 +287,9 @@ fn decode_files(value: &Value) -> BTreeMap<String, Vec<u8>> {
         .collect()
 }
 
+#[path = "support/git_path.rs"]
+mod git_path;
+
 fn git_input(root: &Path, args: &[&str], input: &[u8], index: Option<&Path>) -> Vec<u8> {
     let mut command = std::process::Command::new("git");
     command
@@ -297,7 +300,7 @@ fn git_input(root: &Path, args: &[&str], input: &[u8], index: Option<&Path>) -> 
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(index) = index {
-        command.env("GIT_INDEX_FILE", index);
+        command.env("GIT_INDEX_FILE", git_path::argument(index));
     }
     let mut child = command.spawn().unwrap();
     child.stdin.take().unwrap().write_all(input).unwrap();

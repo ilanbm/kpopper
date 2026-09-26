@@ -46,6 +46,17 @@ fn safe(path: &str) -> Result<String> {
     crate::history_branch::portable_path(&value)?;
     Ok(value)
 }
+fn safe_path(path: &Path) -> Result<String> {
+    let mut parts = vec![];
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => parts.push(name(Path::new(part))?),
+            Component::CurDir => {}
+            _ => return Err(error("invalid_target_path")),
+        }
+    }
+    safe(&parts.join("/"))
+}
 fn pointer(path: &Path) -> Result<String> {
     require(!path.is_absolute(), "invalid_target_path")?;
     let mut normalized = std::path::PathBuf::new();
@@ -56,7 +67,7 @@ fn pointer(path: &Path) -> Result<String> {
             normalized.push(part);
         }
     }
-    safe(name(&normalized)?)
+    safe_path(&normalized)
 }
 struct Reader<'a> {
     root: &'a Path,
@@ -476,7 +487,8 @@ fn materialize(
         let mut files = Files::new();
         let mut raw_names = BTreeSet::new();
         for (relative, raw) in observation.bundle.files()? {
-            let path = safe(name(&parent.join(&relative))?)?;
+            let relative = safe(&relative)?;
+            let path = safe_path(&parent.join(&relative))?;
             if path != entry && !path.starts_with(&format!("{}/", layout.hypotheses)) {
                 raw_names.insert(path.clone());
             }
@@ -538,12 +550,13 @@ fn materialize(
             if let Some(imported) = body.get("meta").and_then(|v| v.get("history_import")) {
                 let value = imported.strict_typed()?;
                 for member in list(&map(&value)?["members"])? {
-                    let p = safe(name(
+                    let relative = safe(text(&map(member)?["path"])?)?;
+                    let p = safe_path(
                         &Path::new(&entry)
                             .parent()
                             .unwrap()
-                            .join(text(&map(member)?["path"])?),
-                    )?)?;
+                            .join(relative),
+                    )?;
                     queue.push_back(p.clone());
                     raw_names.insert(p);
                 }
@@ -742,6 +755,12 @@ fn texts(files: &Files, raw_names: &BTreeSet<String>) -> Result<V> {
 #[cfg(test)]
 mod path_tests {
     use super::*;
+    #[test]
+    fn filesystem_paths_become_portable_without_accepting_parent_components() {
+        assert_eq!(safe_path(&Path::new("nested").join(".kpopper").join("history.yaml")).unwrap(), "nested/.kpopper/history.yaml");
+        assert!(safe_path(&Path::new("nested").join("..").join("outside.yaml")).is_err());
+        assert!(safe(r"nested\history.yaml").is_err());
+    }
     #[test]
     fn entries_and_imports_refuse_parent_components_but_pointers_normalize_within_root() {
         assert!(safe("sub/../GROUNDING.yaml").is_err());
