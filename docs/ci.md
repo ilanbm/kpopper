@@ -134,6 +134,13 @@ compares nextest's listing with cargo's own, so the run covers exactly the tests
 `cargo test` runs. nextest does not run doc-tests: the crate has none, and a contract test
 fails when one appears until the workflow also runs `cargo test --doc`.
 
+Intel macOS has a 120-minute whole-job allowance for compilation and the complete
+suite; other targets retain 75 minutes. The 700-subject writer fixture reserves
+all test threads on Intel and has a 15-minute failing deadline. The wide branch
+union also reserves the runner and uses its existing 15-minute deadline on Intel
+and Windows. These resource allowances retain the original workloads, assertions,
+listing comparison and zero-retry policy.
+
 The native command's compiled Rust dependencies are cached per target and build profile.
 The `tests` job restores and saves the test build's entry, and the `release` job the
 release build's, so each job of a check run restores only what its own

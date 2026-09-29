@@ -58,8 +58,9 @@ jobs:
   tests:
     # A distribution builds and accepts the release alone.
     if: inputs.validation != 'distribution'
-    # Full Intel tests can approach an hour on a slow machine.
-    timeout-minutes: 75
+    # Intel needs room for compilation and the full suite on slower runners.
+    # Per-test deadlines still fail hangs long before this job limit.
+    timeout-minutes: ${{ matrix.target == 'darwin-x86_64' && 120 || 75 }}
     strategy:
       fail-fast: false
       matrix:

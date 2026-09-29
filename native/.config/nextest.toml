@@ -26,6 +26,16 @@ filter = 'binary(=history_node_branch) & test(=wide_branch_union_bounds_lazy_met
 platform = 'cfg(any(target_os = "windows", all(target_os = "macos", target_arch = "x86_64")))'
 slow-timeout = { period = "60s", terminate-after = 15, on-timeout = "fail" }
 
+# The 700-subject writer exercises durable writes, export, reconstruction and
+# historical-original retention. It exceeded ten minutes while competing with
+# other filesystem fixtures on Intel macOS. Keep its complete workload and
+# reserve the runner, with a finite failing deadline just like the wide union.
+[[profile.ci.overrides]]
+filter = 'binary(=history_node_writer) & test(=many_new_subjects_remain_readable_and_portable_after_batched_creation)'
+platform = 'cfg(all(target_os = "macos", target_arch = "x86_64"))'
+threads-required = "num-test-threads"
+slow-timeout = { period = "60s", terminate-after = 15, on-timeout = "fail" }
+
 [profile.ci.junit]
 # target/nextest/ci/junit.xml: each test's outcome and duration, kept with the CI evidence.
 path = "junit.xml"
