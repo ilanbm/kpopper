@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -93,9 +94,33 @@ class ChangelogBehavior(unittest.TestCase):
 
     def test_multiple_or_misplaced_unreleased_sections_fail_visibly(self):
         for text in ("# Changelog\n\n## Unreleased\n\nA\n\n## Unreleased\n\nB\n",
-                     "# Changelog\n\n## 0.14.0\n\nA\n\n## Unreleased\n\nB\n"):
+                     "# Changelog\n\n## Notes\n\nA\n\n## Unreleased\n\nB\n"):
             with self.assertRaisesRegex(ValueError, "Unreleased"):
                 R.take_unreleased(text)
+
+    def test_real_changelog_promotes_only_current_notes_and_retains_historical_headings(self):
+        text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        notes, history = R.take_unreleased(text)
+        first_version = re.search(r"^## [0-9]+\.[0-9]+\.[0-9]+", text, re.M)
+        self.assertIsNotNone(first_version)
+        self.assertTrue(history.endswith(text[first_version.start():]))
+        self.assertEqual(R.take_unreleased(history), ("", history))
+
+    def test_historical_unreleased_heading_is_immutable_history(self):
+        history = "# Changelog\n\n## 0.14.0 — old\n\n- Old.\n\n## Unreleased\n\n- Historical text.\n"
+        notes, retained = R.take_unreleased(history.replace("# Changelog\n\n", "# Changelog\n\n## Unreleased\n\n### Added\n\n- Current.\n\n", 1))
+        self.assertEqual(notes, "### Added\n\n- Current.")
+        self.assertEqual(retained, history)
+        self.assertEqual(R.take_unreleased(history), ("", history))
+
+    def test_unreleased_case_and_invalid_current_headings(self):
+        notes, history = R.take_unreleased("# Changelog\n\n## unreleased\n\n- Current.\n")
+        self.assertEqual(notes, "- Current.")
+        for heading in ("Unreleased:", "Unreleased (0.15)", "[Unreleased]:"):
+            with self.subTest(heading=heading), self.assertRaisesRegex(ValueError, "Unreleased"):
+                R.take_unreleased(f"# Changelog\n\n## {heading}\n\n- Current.\n\n## 0.14.0\n\n- Old.\n")
+        with self.assertRaisesRegex(ValueError, "Unreleased"):
+            R.take_unreleased("# Changelog\n\n## Unreleased\n\n- Current.\n\n## Notes\n\n- More.\n\n## 0.14.0\n\n- Old.\n")
 
     def test_entry_lists_merges_and_record_decisions(self):
         entry = R.changelog_entry("0.21.0", "2026-09-04",

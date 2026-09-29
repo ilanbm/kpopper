@@ -26,8 +26,10 @@ For example:
   a reduction in total task time or tokens.
 ```
 
-Keep one Unreleased section above released versions. `## [Unreleased]` is also
-accepted. HTML template comments are removed when the release notes are promoted.
+Keep one Unreleased section above released versions. `## [Unreleased]` and
+case variations are also accepted. Use `###` for subsections; malformed current
+Unreleased headings are refused. Any Unreleased headings already inside historical
+release entries remain unchanged. HTML template comments are removed when the release notes are promoted.
 Do not add release date or version placeholders inside the notes.
 
 ## What automation does

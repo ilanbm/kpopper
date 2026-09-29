@@ -101,6 +101,16 @@ fn ok(output: std::process::Output) -> String {
 }
 
 fn d0_start(root: &Path, host: &str, env: &[(&str, &str)]) -> std::process::Output {
+    d0_start_at(root, root, None, host, env)
+}
+
+fn d0_start_at(
+    root: &Path,
+    cwd: &Path,
+    session_id: Option<&str>,
+    host: &str,
+    env: &[(&str, &str)],
+) -> std::process::Output {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_kpop"));
     cmd.args(["session-start", "--host", host])
         .env("XDG_CONFIG_HOME", root.join("config"))
@@ -115,8 +125,12 @@ fn d0_start(root: &Path, host: &str, env: &[(&str, &str)]) -> std::process::Outp
         .envs(env.iter().copied())
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().unwrap();
+    let mut payload = json!({"cwd":cwd});
+    if let Some(session_id) = session_id {
+        payload["session_id"] = json!(session_id);
+    }
     child.stdin.take().unwrap().write_all(
-        serde_json::to_vec(&json!({"cwd":root})).unwrap().as_slice()
+        serde_json::to_vec(&payload).unwrap().as_slice()
     ).unwrap();
     child.wait_with_output().unwrap()
 }
@@ -144,6 +158,68 @@ fn d0_codex_defaults_to_tagged_and_other_hosts_keep_ordinary() {
             assert!(text.contains("needs a person") || text.contains("nothing needs a person"));
         }
     }
+}
+
+#[test]
+fn d0_managed_continuation_resolves_subdirectory_to_startup_workspace() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let sub = root.join("sub");
+    fs::create_dir_all(&sub).unwrap();
+    copy_resources(&root);
+    fs::write(root.join("GROUNDING.yaml"), RECORD).unwrap();
+
+    let session_id = "d0-managed-subdirectory-regression";
+    let started = ok(d0_start_at(&root, &sub, Some(session_id), "codex", &[]));
+    let route = d0_route(&started).expect("managed Codex startup route");
+    let argv = route["argv"].as_array().unwrap();
+    let mut view = Command::new(argv[0].as_str().unwrap());
+    view.args(argv[1..].iter().map(|arg| arg.as_str().unwrap()))
+        .args(["--query", "express delivery"])
+        .env("KPOPPER_READ_MODE", "frozen")
+        .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
+        .env("KPOPPER_NATIVE_CACHE", root.join("cache"));
+    let queued = view.output().unwrap();
+    assert!(queued.status.success(), "{}", String::from_utf8_lossy(&queued.stderr));
+    let queued_text = String::from_utf8(queued.stdout).unwrap();
+    assert!(queued_text.starts_with("KPOPPER_CONTEXT_QUEUED "), "{queued_text}");
+
+    let transcript = root.join("transcript.jsonl");
+    fs::write(
+        &transcript,
+        serde_json::to_vec(&json!({"type":"session_meta","payload":{"id":session_id}})).unwrap(),
+    )
+    .unwrap();
+    let payload = json!({
+        "session_id":session_id,
+        "hook_event_name":"PostToolUse",
+        "cwd":sub,
+        "turn_id":"turn-1",
+        "transcript_path":transcript,
+        "tool_response":{"output":queued_text}
+    });
+    let hook = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["_hook", "continuation", "codex"])
+        .env("KPOPPER_READ_MODE", "frozen")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut hook = hook;
+    hook.stdin
+        .take()
+        .unwrap()
+        .write_all(&serde_json::to_vec(&payload).unwrap())
+        .unwrap();
+    let output = hook.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(!output.stdout.is_empty(), "managed PostToolUse dropped the queued frame");
+    let delivered: J = serde_json::from_slice(&output.stdout).unwrap();
+    let context = delivered["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(context.starts_with("KPOPPER_CONTEXT_FRAME "), "{context}");
 }
 
 fn d0_config(root: &Path, tokens: Option<J>) {
@@ -306,8 +382,15 @@ fn d0_attention_overflow_falls_back_and_durable_disable_rolls_back() {
     let missing="long_missing_".repeat(210);
     fs::write(root.join("GROUNDING.yaml"),format!("schema:\n  deps: rests_on\nknown:\n  p.a: {{v: 1}}\njudgments:\n  d.keep:\n    verdict: Wait\n    rests_on: ['{missing}']\n    reopened_by: The input arrives\n")).unwrap();
     let text=ok(d0_start(&root,"codex",&[]));
-    assert!(d0_route(&text).is_none() && text.contains("highest-priority opening attention cannot fit"),"{text}");
-    assert!(text.contains("needs a person") && text.contains("d.keep"),"{text}");
+    let (warning, ordinary) = text.split_once('\n').expect("visible canonical fallback warning");
+    assert!(d0_route(&text).is_none() && warning.contains("highest-priority opening attention cannot fit"),"{text}");
+    assert!(ordinary.contains("needs a person"),"{ordinary}");
+    let identity = ordinary.lines().find_map(|line| line.strip_prefix("KPOPPER_AGENT_CONTEXT "))
+        .map(|line| serde_json::from_str::<J>(line).unwrap()).unwrap();
+    assert_eq!(identity["workspace"], root.to_str().unwrap(), "fallback lost its scoped record identity: {ordinary}");
+    let baseline=ok(d0_start(&root,"codex",&[("KPOPPER_CANONICAL_VIEW","0")]));
+    assert_eq!(ordinary.trim_end(),baseline.trim_end(),"canonical failure must keep the bounded ordinary fallback");
+    assert!(ordinary.len()<=4_000,"ordinary fallback exceeded its established output ceiling: {}",ordinary.len());
     fs::write(root.join("GROUNDING.yaml"),RECORD).unwrap();
     ok(Command::new(env!("CARGO_BIN_EXE_kpop")).args(["--workspace",root.to_str().unwrap(),"session","disable"])
         .env("KPOPPER_SESSION_CONFIG",root.join("settings.json")).output().unwrap());
@@ -315,6 +398,28 @@ fn d0_attention_overflow_falls_back_and_durable_disable_rolls_back() {
     assert!(d0_route(&text).is_none() && !text.contains("unavailable"),"{text}");
     let explicit=ok(d0_start(&root,"codex",&[("KPOPPER_CANONICAL_VIEW","1")]));
     assert!(d0_route(&explicit).is_some(),"{explicit}");
+}
+
+#[test]
+fn d0_canonical_warnings_do_not_expand_legacy_fallback_for_any_host() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    copy_resources(&root);
+    fs::write(root.join("GROUNDING.yaml"), RECORD).unwrap();
+    for (host, warning_env, baseline_env, warning_text) in [
+        ("codex", vec![("KPOPPER_CANONICAL_VIEW_FORMAT", "invalid")], vec![("KPOPPER_CANONICAL_VIEW", "0")], "Canonical default unavailable:"),
+        ("claude", vec![("KPOPPER_CANONICAL_VIEW", "true")], vec![], "Invalid KPOPPER_CANONICAL_VIEW:"),
+    ] {
+        let warned=ok(d0_start(&root,host,&warning_env));
+        let baseline=ok(d0_start(&root,host,&baseline_env));
+        let (warning, ordinary)=warned.split_once('\n').expect("visible warning");
+        assert!(warning.starts_with(warning_text),"{warning}");
+        assert_eq!(ordinary.trim_end(),baseline.trim_end(),"warning changed {host}'s ordinary opening");
+        assert!(ordinary.len()<=4_000,"{host} legacy opening grew to {} bytes",ordinary.len());
+        let identity = ordinary.lines().find_map(|line| line.strip_prefix("KPOPPER_AGENT_CONTEXT "))
+            .map(|line| serde_json::from_str::<J>(line).unwrap()).unwrap();
+        assert_eq!(identity["workspace"], root.to_str().unwrap(), "{host} fallback lost its record identity");
+    }
 }
 
 #[test]

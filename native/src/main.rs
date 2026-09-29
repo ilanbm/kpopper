@@ -343,7 +343,6 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                 let options = kpop_native::public_readers::Options {
                     host: options.host.clone(),
                     from_hook: true,
-                    chars: warning.is_some().then_some(8_000),
                     ..Default::default()
                 };
                 match retry_session_snapshot(|| kpop_native::public_readers::run_auto(

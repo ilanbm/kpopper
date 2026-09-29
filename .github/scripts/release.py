@@ -88,16 +88,19 @@ def with_version(texts, version):
 
 def take_unreleased(text):
     """Move curated notes into a release without rewriting historical entries."""
-    heading = re.compile(r"^## (?:Unreleased|\[Unreleased\])\s*$", re.M)
-    matches = list(heading.finditer(text))
-    if not matches:
+    sections = list(re.finditer(r"^## ([^\r\n]+)", text, re.M))
+    version = next((section for section in sections
+                    if re.match(r"\[?[0-9]+\.[0-9]+\.[0-9]+\]?(?:\s|$)", section[1])), None)
+    end = version.start() if version else len(text)
+    # Historical releases may contain old Unreleased headings. Their bytes belong
+    # to history, not to the current release's authoring contract.
+    current = [section for section in sections if section.start() < end]
+    candidates = [section for section in current if "unreleased" in section[1].lower()]
+    if not candidates:
         return "", text
-    first_section = re.search(r"^## ", text, re.M)
-    if len(matches) != 1 or first_section is None or matches[0].start() != first_section.start():
-        raise ValueError("Keep exactly one Unreleased section above released versions")
-    match = matches[0]
-    following = re.search(r"^## ", text[match.end():], re.M)
-    end = match.end() + following.start() if following else len(text)
+    if len(current) != 1 or not re.fullmatch(r"(?:Unreleased|\[Unreleased\])\s*", current[0][1], re.I):
+        raise ValueError("Keep one leading ## Unreleased section; use ### for its subsections")
+    match = current[0]
     notes = re.sub(r"<!--.*?-->", "", text[match.end():end], flags=re.S).strip()
     history = text[:match.start()] + text[end:]
     return notes, history
