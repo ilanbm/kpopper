@@ -1,0 +1,785 @@
+{
+  "assessment_profile": "checked-reader/v1",
+  "coverage": {
+    "count": 15,
+    "source_ids": [
+      "chain.00",
+      "chain.01",
+      "chain.02",
+      "chain.03",
+      "chain.04",
+      "chain.05",
+      "chain.06",
+      "chain.07",
+      "chain.08",
+      "chain.09",
+      "chain.10",
+      "exception.left",
+      "exception.right",
+      "isolate.alpha",
+      "isolate.null"
+    ]
+  },
+  "descriptions": {
+    "generated_claims": false,
+    "generator": "source-labels/v1",
+    "is_source_evidence": false,
+    "kind": "source-labels"
+  },
+  "groups": [],
+  "links": [
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.00",
+        "rel": "rests_on",
+        "to": "chain.01",
+        "weight": 0
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.01",
+        "rel": "rests_on",
+        "to": "chain.02",
+        "weight": 1
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.02",
+        "rel": "rests_on",
+        "to": "chain.03",
+        "weight": 2
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.03",
+        "rel": "rests_on",
+        "to": "chain.04",
+        "weight": 3
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.04",
+        "rel": "rests_on",
+        "to": "chain.05",
+        "weight": 4
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.05",
+        "rel": "rests_on",
+        "to": "chain.06",
+        "weight": 5
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.06",
+        "rel": "rests_on",
+        "to": "chain.07",
+        "weight": 6
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.07",
+        "rel": "rests_on",
+        "to": "chain.08",
+        "weight": 7
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.08",
+        "rel": "rests_on",
+        "to": "chain.09",
+        "weight": 8
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.09",
+        "rel": "rests_on",
+        "to": "chain.10",
+        "weight": 9
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "exception": "cross-group-support",
+        "from": "chain.04",
+        "rel": "from",
+        "to": "exception.left"
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "exception": "cross-group-rule",
+        "from": "exception.right",
+        "rel": "rule_reads",
+        "to": "chain.07"
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.05",
+        "parallel": 1,
+        "rel": "rests_on",
+        "to": "chain.06",
+        "unknown_metadata": {
+          "x": null
+        }
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.05",
+        "parallel": 2,
+        "rel": "rests_on",
+        "to": "chain.06",
+        "unknown_metadata": {
+          "x": null
+        }
+      }
+    },
+    {
+      "projected_from": "",
+      "projected_to": "",
+      "source": {
+        "from": "chain.03",
+        "rel": "same_as",
+        "self_loop": true,
+        "to": "chain.03"
+      }
+    }
+  ],
+  "mode": "expanded",
+  "navigation_membership": {
+    "chain.00": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.01": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.02": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.03": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.04": [
+      "/support",
+      "/support/deep",
+      "/featured"
+    ],
+    "chain.05": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.06": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.07": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.08": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.09": [
+      "/support",
+      "/support/deep"
+    ],
+    "chain.10": [
+      "/support",
+      "/support/deep"
+    ],
+    "exception.left": [
+      "/exceptions",
+      "/exceptions/left",
+      "/featured"
+    ],
+    "exception.right": [
+      "/exceptions",
+      "/exceptions/right"
+    ],
+    "isolate.alpha": [
+      "/isolates"
+    ],
+    "isolate.null": [
+      "/isolates"
+    ]
+  },
+  "nodes": [
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.00"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "0"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.00",
+          "value": 0
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.00"
+      },
+      "source_id": "chain.00",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.01"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "1"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.01",
+          "value": 1
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.01"
+      },
+      "source_id": "chain.01",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.02"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "2"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.02",
+          "value": 2
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.02"
+      },
+      "source_id": "chain.02",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.03"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "3"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.03",
+          "value": 3
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.03"
+      },
+      "source_id": "chain.03",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.04"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "4"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.04",
+          "value": 4
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.04"
+      },
+      "source_id": "chain.04",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.05"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "5"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.05",
+          "value": 5
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.05"
+      },
+      "source_id": "chain.05",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.06"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "6"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.06",
+          "value": 6
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.06"
+      },
+      "source_id": "chain.06",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.07"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "7"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.07",
+          "value": 7
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.07"
+      },
+      "source_id": "chain.07",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.08"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "8"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.08",
+          "value": 8
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.08"
+      },
+      "source_id": "chain.08",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.09"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "9"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.09",
+          "value": 9
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.09"
+      },
+      "source_id": "chain.09",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.10"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "10"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "chain.10",
+          "value": 10
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-chain.10"
+      },
+      "source_id": "chain.10",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "exception.left"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "11"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "exception.left",
+          "value": 11
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-exception.left"
+      },
+      "source_id": "exception.left",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "exception.right"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "12"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": {
+          "name": "exception.right",
+          "value": 12
+        },
+        "kind": "known",
+        "record_source": "record",
+        "states": [],
+        "unique_marker": "meta-exception.right"
+      },
+      "source_id": "exception.right",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "isolate.alpha"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "13"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": null,
+      "original_node": {
+        "kind": "known",
+        "record_source": "record",
+        "unique_marker": "keep-missing-body"
+      },
+      "source_id": "isolate.alpha",
+      "status": null,
+      "status_text": [],
+      "uncertainty": []
+    },
+    {
+      "body": [
+        "null"
+      ],
+      "dependencies": null,
+      "original_node": {
+        "body": null,
+        "kind": "known",
+        "record_source": "record",
+        "unique_marker": "keep-null-type"
+      },
+      "source_id": "isolate.null",
+      "status": null,
+      "status_text": [],
+      "uncertainty": null
+    }
+  ],
+  "project": "compact-fixture",
+  "project_identity": [
+    "map",
+    [
+      [
+        "project",
+        [
+          "text",
+          "compact-fixture"
+        ]
+      ]
+    ]
+  ],
+  "revision": "r1-fixture",
+  "rules": "rules",
+  "schema": "kpopper.canonical-graph-view/v1",
+  "scope": "fixture scope"
+}

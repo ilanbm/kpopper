@@ -753,6 +753,13 @@ pub fn run(
         "watch" => watch(payload, host, mode, wait_seconds),
         "ground" => ground(payload, host, mode),
         "edit" => edit(payload, host),
+        "continuation" if host == Some("codex") && !suppressed(payload) => {
+            let event = payload["hook_event_name"].as_str().unwrap_or_default();
+            crate::view_continuation::hook_for_session(event, payload).map(|context| Output {
+                stdout: context.map(|text| envelope(event, &text)).unwrap_or_default(), ..empty()
+            })
+        },
+        "continuation" => Ok(empty()),
         _ => return Err(Error(format!("unknown host hook kind: {kind}"))),
     };
     match result {
@@ -764,6 +771,7 @@ pub fn run(
                 match kind {
                     "followups" => format!("kpopper followup check unavailable: {error}"),
                     "watch" => format!("kpop watch unavailable: {error}"),
+                    "continuation" => format!("kpopper context continuation unavailable: {error}"),
                     "ground" => format!(
                         "kpopper grounding unavailable: {}",
                         error

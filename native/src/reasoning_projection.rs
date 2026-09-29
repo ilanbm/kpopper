@@ -335,7 +335,14 @@ pub fn project_node_status(node: &V) -> Result<V> {
 }
 pub fn render_node_status(node: &V) -> Result<String> {
     let status = project_node_status(node)?;
-    let m = map(&status)?;
+    render_projected_status(&status)
+}
+
+/// Render an already projected status using exactly the same display grammar
+/// as `render_node_status`. Consumers may reuse this text only after an exact
+/// equality check against the retained structured status.
+pub fn render_projected_status(status: &V) -> Result<String> {
+    let m = map(status)?;
     let c = map(&m["computation"])?;
     let mut computation = text(&c["status"])?.to_owned();
     if c["value_text"] != V::Null {

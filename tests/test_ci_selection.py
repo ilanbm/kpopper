@@ -390,8 +390,16 @@ class NativeTestPool(unittest.TestCase):
         self.assertTrue(period, timeout["period"])
         self.assertEqual(timeout.get("on-timeout", "fail"), "fail")
         # A hung test fails under its own name, and the job has time left to finish the rest.
-        job = self.jobs()["tests"]["timeout-minutes"] * 60
-        self.assertLess(int(period.group(1)) * timeout["terminate-after"], job / 2)
+        job_timeout = self.jobs()["tests"]["timeout-minutes"]
+        if isinstance(job_timeout, int):
+            budgets = [job_timeout]
+        else:
+            per_target = re.fullmatch(
+                r"\$\{\{ matrix.target == 'darwin-x86_64' && (\d+) \|\| (\d+) \}\}", job_timeout)
+            self.assertIsNotNone(per_target, job_timeout)
+            budgets = [int(value) for value in per_target.groups()]
+        for job in budgets:
+            self.assertLess(int(period.group(1)) * timeout["terminate-after"], job * 60 / 2)
         self.assertEqual(profile["junit"]["path"], "junit.xml")
 
     def test_run_keeps_its_junit_report_and_a_listing_check_follows_it(self):

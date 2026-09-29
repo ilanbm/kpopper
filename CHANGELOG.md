@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased
+
+### Conversation context
+
+- Codex now opens a canonical graph view by default. Selected evidence keeps its
+  complete original bodies, source IDs and typed relations; the rest of the record
+  stays reachable through folded navigation groups. Large openings provide a bound
+  read route instead of a clipped graph.
+- Follow-up queries automatically use eligible source IDs cited in the last two
+  completed answers as ranking hints. Global discovery still runs. Explicit
+  `--anchor` and `--no-auto-anchors` controls are available.
+- `kpop session view` supports question focus, exact IDs, group and membership
+  expansion, coarse navigation for large records, and independently enforced token
+  and byte budgets. JSON and checked-text encodings represent the same selected
+  evidence; Codex defaults to tagged checked text.
+- Managed Codex reads deliver complete context frames through PostToolUse. Stop
+  checks retained frames locally, without an extra model request. Missing or lost
+  context can be recovered with a full read using `--view-transport stdout`.
+
+### Experimental
+
+- Delta delivery is available with `KPOPPER_VIEW_DELTA=1` and remains **off by
+  default**. It requires an exact retained base and must be smaller in both bytes
+  and reference tokens. Source changes, compaction, rollback, interruption and
+  invalid state require a full checkpoint. End-to-end savings are not established.
+
+### Compatibility and controls
+
+- This context upgrade requires no record migration. Existing writers and readers
+  remain available; standalone view calls return the full selected view and other
+  hosts keep their existing opening unless explicitly opted in.
+- Use `KPOPPER_CANONICAL_VIEW=0` or `kpop session disable` to opt out. Restore the
+  canonical allowance with `kpop session enable --tokens 16000`. The hard override
+  `KPOPPER_SESSION_DISABLE=1` takes precedence over explicit opt-in.
+- Navigation labels, queued markers and saved files do not count as source-body
+  reads. Complete retained frames establish delivery under the supported host
+  contract; they do not prove source truth or model understanding.
+
+### Documentation and releases
+
+- Added an upgrade guide, a complete conversation walkthrough, a runnable shipping
+  policy example and a canonical view reference, covering follow-ups, changed
+  sources, recovery and optional delta delivery.
+- Release notes now preserve curated `Unreleased` explanations and list included
+  PRs for traceability. Historical entries remain unchanged. Authors can describe
+  behavior, settings, compatibility and limits before the release bot chooses the
+  next version.
+
 ## 0.14.0 — 2026-09-26
 
 - Normalize alternate compact record paths on Windows (#268) — patch

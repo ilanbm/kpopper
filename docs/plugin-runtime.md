@@ -39,6 +39,13 @@ another session in the same project and read the finding back. Merely seeing the
 plugin in the host's installed list is not proof that its hooks ran. Codex also
 requires trust of the installed hook definitions.
 
+In Codex, a record normally produces `KPOPPER_CANONICAL_VIEW_ROUTE` and attention
+items. A large opening can provide a route without inline bodies. Read it once
+and verify that the queued marker is followed by a complete context frame, or
+recover with the same command and `--view-transport stdout`. Automatic query
+anchors are enabled on that managed route; delta is off unless explicitly opted
+in. Existing opt-outs remain valid. See the [upgrade guide](context-upgrade.md).
+
 The automated regression tests exercise a missing runtime, all Claude/Codex hook
 command definitions, paths containing spaces, command writes and reopening through
 subprocesses. These are hook/protocol checks, not evidence of an

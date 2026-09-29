@@ -1,0 +1,8 @@
+{
+  "purpose": "Run the same captured graph in each view mode",
+  "revision": "obtain from `session open` output for the record under test",
+  "broad": {"operation": "view", "ids": [], "expand": []},
+  "focus": {"operation": "view", "ids": ["p.a"], "expand": []},
+  "expand": {"operation": "view", "ids": [], "expand": ["group:/readings"]},
+  "expected_invariants": ["same schema", "same source coverage partition", "same revision", "expanded group members become direct nodes", "source edge endpoints remain unchanged"]
+}

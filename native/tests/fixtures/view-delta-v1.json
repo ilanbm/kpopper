@@ -1,0 +1,3173 @@
+{
+  "base": {
+    "assessment_profile": "checked-reader/v1",
+    "attribute_compaction": {
+      "compacted_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "nodes": {
+        "n0": {
+          "status": "a0"
+        },
+        "n1": {
+          "status": "a0"
+        },
+        "n2": {
+          "status": "a0"
+        },
+        "n3": {
+          "status": "a0"
+        }
+      },
+      "schema": "kpopper.attribute-compaction/v1",
+      "status_pool_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "status_text_nodes": [],
+      "value_text_nodes": []
+    },
+    "coverage": {
+      "count": 15,
+      "direct_count": 4,
+      "folded_count": 11,
+      "receipt": "1bb627897baca608c1d01c5ce929294d3375d4d9a32fbc884ef12a965fc33ac1",
+      "source_ids_sha256": "4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c"
+    },
+    "descriptions": {
+      "generated_claims": false,
+      "generator": "source-labels/v1",
+      "is_source_evidence": false,
+      "kind": "source-labels"
+    },
+    "dictionary": {
+      "f0": {
+        "kind": "group",
+        "original": "group:/exceptions"
+      },
+      "f3": {
+        "kind": "group",
+        "original": "group:/featured"
+      },
+      "f5": {
+        "kind": "group",
+        "original": "group:/support"
+      },
+      "g0": {
+        "kind": "group",
+        "original": "group:/exceptions/left"
+      },
+      "g1": {
+        "kind": "group",
+        "original": "group:/exceptions/right"
+      },
+      "g2": {
+        "kind": "group",
+        "original": "group:/isolates"
+      },
+      "g3": {
+        "kind": "group",
+        "original": "group:/support/deep"
+      },
+      "n0": {
+        "kind": "node",
+        "original": "chain.00"
+      },
+      "n1": {
+        "kind": "node",
+        "original": "chain.01"
+      },
+      "n2": {
+        "kind": "node",
+        "original": "chain.02"
+      },
+      "n3": {
+        "kind": "node",
+        "original": "chain.03"
+      },
+      "x0": {
+        "kind": "external",
+        "original": null,
+        "original_present": false
+      },
+      "x1": {
+        "kind": "external",
+        "original": "outside",
+        "original_present": true
+      },
+      "x2": {
+        "kind": "external",
+        "original": 4,
+        "original_present": true
+      },
+      "x3": {
+        "kind": "external",
+        "original": false,
+        "original_present": true
+      },
+      "x4": {
+        "kind": "external",
+        "original": null,
+        "original_present": true
+      }
+    },
+    "edge_set_handle_template": "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:{edge_set_ref}",
+    "expanded_edges": [
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e0",
+        [
+          {
+            "exception": "cross-group-rule",
+            "from": "exception.right",
+            "rel": "rule_reads",
+            "to": "chain.07"
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e1",
+        [
+          {
+            "from": "chain.10",
+            "rel": "cycle",
+            "to": "chain.00"
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e10",
+        [
+          {
+            "from": "chain.03",
+            "rel": "rests_on",
+            "to": "chain.04",
+            "weight": 3
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e11",
+        [
+          {
+            "from": "chain.03",
+            "rel": "same_as",
+            "self_loop": true,
+            "to": "chain.03"
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e12",
+        [
+          {
+            "from": false,
+            "rel": false,
+            "to": 4
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e2",
+        [
+          {
+            "exception": "cross-group-support",
+            "from": "chain.04",
+            "rel": "from",
+            "to": "exception.left"
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e3",
+        [
+          {
+            "from": "chain.04",
+            "rel": "rests_on",
+            "to": "chain.05",
+            "weight": 4
+          },
+          {
+            "from": "chain.05",
+            "rel": "rests_on",
+            "to": "chain.06",
+            "weight": 5
+          },
+          {
+            "from": "chain.06",
+            "rel": "rests_on",
+            "to": "chain.07",
+            "weight": 6
+          },
+          {
+            "from": "chain.07",
+            "rel": "rests_on",
+            "to": "chain.08",
+            "weight": 7
+          },
+          {
+            "from": "chain.08",
+            "rel": "rests_on",
+            "to": "chain.09",
+            "weight": 8
+          },
+          {
+            "from": "chain.09",
+            "rel": "rests_on",
+            "to": "chain.10",
+            "weight": 9
+          },
+          {
+            "from": "chain.05",
+            "parallel": 1,
+            "rel": "rests_on",
+            "to": "chain.06",
+            "unknown_metadata": {
+              "x": null
+            }
+          },
+          {
+            "from": "chain.05",
+            "parallel": 2,
+            "rel": "rests_on",
+            "to": "chain.06",
+            "unknown_metadata": {
+              "x": null
+            }
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e4",
+        [
+          {
+            "from": "chain.00",
+            "to": null
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e5",
+        [
+          {
+            "from": "chain.00",
+            "rel": "rests_on",
+            "to": "chain.01",
+            "weight": 0
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e6",
+        [
+          {
+            "from": "chain.00",
+            "rel": null,
+            "to": "outside"
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e7",
+        [
+          {
+            "from": "chain.00",
+            "rel": {
+              "typed": "relation"
+            }
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e8",
+        [
+          {
+            "from": "chain.01",
+            "rel": "rests_on",
+            "to": "chain.02",
+            "weight": 1
+          }
+        ]
+      ],
+      [
+        "edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e9",
+        [
+          {
+            "from": "chain.02",
+            "rel": "rests_on",
+            "to": "chain.03",
+            "weight": 2
+          }
+        ]
+      ]
+    ],
+    "fields": {
+      "attribute_compaction": {
+        "manifest": "attribute_compaction.nodes[ref]",
+        "node_rule_values": {
+          "status": "shared assessment alias",
+          "status_text": "status_text mode",
+          "value_text": "body field key"
+        },
+        "restore": "view_attributes::restore_attributes",
+        "schema": "kpopper.attribute-compaction/v1",
+        "status_pool": {
+          "dictionary": "shared_assessments",
+          "exact_json": true,
+          "field": "status_ref"
+        },
+        "status_text": {
+          "derived": true,
+          "display_only": true,
+          "modes": {
+            "status": "render_projected_status",
+            "uncertainty": "exact_array_alias"
+          },
+          "renderer": "reasoning-projection/render_projected_status/v1"
+        },
+        "value_text": {
+          "body_field_candidates": [
+            "v",
+            "quoted",
+            "value"
+          ],
+          "display_only": true,
+          "reference": "attributes.status.computation.value_text_ref",
+          "renderer": "reasoning-projection/render_value/v1"
+        }
+      },
+      "description": {
+        "kind": "navigation_only",
+        "row": [
+          "text",
+          "generator",
+          "basis_sha256",
+          "excerpted"
+        ]
+      },
+      "expanded_edge": [
+        "edge_set",
+        "original_edges"
+      ],
+      "group": [
+        "ref",
+        "count",
+        "label",
+        "description"
+      ],
+      "link": [
+        "from_ref",
+        "rel",
+        "to_ref",
+        "count",
+        "edge_set_ref"
+      ],
+      "navigation_group": [
+        "ref",
+        "count"
+      ],
+      "navigation_node": [
+        "node_ref",
+        "group_refs"
+      ],
+      "node": [
+        "ref",
+        "body",
+        "attributes"
+      ]
+    },
+    "group_expansion_route": "dictionary[group_ref].original (group:/path), with this revision and current focus",
+    "groups": [
+      [
+        "g0",
+        1,
+        "left",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g1",
+        1,
+        "right",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g2",
+        2,
+        "isolates",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g3",
+        7,
+        "deep",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ]
+    ],
+    "links": [
+      [
+        "g1",
+        "rule_reads",
+        "g3",
+        1,
+        "e0"
+      ],
+      [
+        "g3",
+        "cycle",
+        "n0",
+        1,
+        "e1"
+      ],
+      [
+        "g3",
+        "from",
+        "g0",
+        1,
+        "e2"
+      ],
+      [
+        "g3",
+        "rests_on",
+        "g3",
+        8,
+        "e3"
+      ],
+      [
+        "n0",
+        {
+          "missing": true
+        },
+        "x4",
+        1,
+        "e4"
+      ],
+      [
+        "n0",
+        "rests_on",
+        "n1",
+        1,
+        "e5"
+      ],
+      [
+        "n0",
+        null,
+        "x1",
+        1,
+        "e6"
+      ],
+      [
+        "n0",
+        {
+          "typed": "relation"
+        },
+        "x0",
+        1,
+        "e7"
+      ],
+      [
+        "n1",
+        "rests_on",
+        "n2",
+        1,
+        "e8"
+      ],
+      [
+        "n2",
+        "rests_on",
+        "n3",
+        1,
+        "e9"
+      ],
+      [
+        "n3",
+        "rests_on",
+        "g3",
+        1,
+        "e10"
+      ],
+      [
+        "n3",
+        "same_as",
+        "n3",
+        1,
+        "e11"
+      ],
+      [
+        "x3",
+        false,
+        "x2",
+        1,
+        "e12"
+      ]
+    ],
+    "mode": "expanded",
+    "navigation_facets": {
+      "groups": [
+        [
+          "f0",
+          2
+        ],
+        [
+          "f3",
+          2
+        ],
+        [
+          "f5",
+          11
+        ]
+      ],
+      "nodes": [
+        [
+          "n0",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n1",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n2",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n3",
+          [
+            "f5",
+            "g3"
+          ]
+        ]
+      ]
+    },
+    "nodes": [
+      [
+        "n0",
+        [
+          "map",
+          [
+            [
+              "name",
+              [
+                "text",
+                "chain.00"
+              ]
+            ],
+            [
+              "value",
+              [
+                "int",
+                "0"
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.00"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n1",
+        [
+          "map",
+          [
+            [
+              "name",
+              [
+                "text",
+                "chain.01"
+              ]
+            ],
+            [
+              "value",
+              [
+                "int",
+                "1"
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.01"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n2",
+        [
+          "map",
+          [
+            [
+              "name",
+              [
+                "text",
+                "chain.02"
+              ]
+            ],
+            [
+              "value",
+              [
+                "int",
+                "2"
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.02"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n3",
+        [
+          "map",
+          [
+            [
+              "name",
+              [
+                "text",
+                "chain.03"
+              ]
+            ],
+            [
+              "value",
+              [
+                "int",
+                "3"
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.03"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ]
+    ],
+    "project": "compact-fixture",
+    "project_identity": [
+      "map",
+      [
+        [
+          "project",
+          [
+            "text",
+            "compact-fixture"
+          ]
+        ]
+      ]
+    ],
+    "revision": "r1-fixture",
+    "rules": "rules",
+    "schema": "kpopper.canonical-graph-view/v3",
+    "scope": "fixture scope",
+    "shared_assessments": {
+      "a0": {
+        "explanation": "A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. ",
+        "unknown": null
+      }
+    },
+    "view_id": "84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba"
+  },
+  "base_text": "# Checked graph view (kpopper.view-codec/v4; kpopper.canonical-graph-view/v3)\n@field \"assessment_profile\" \"checked-reader/v1\"\n@field \"attribute_compaction\" {\"compacted_nodes\":[\"n0\",\"n1\",\"n2\",\"n3\"],\"nodes\":{\"n0\":{\"status\":\"a0\"},\"n1\":{\"status\":\"a0\"},\"n2\":{\"status\":\"a0\"},\"n3\":{\"status\":\"a0\"}},\"schema\":\"kpopper.attribute-compaction/v1\",\"status_pool_nodes\":[\"n0\",\"n1\",\"n2\",\"n3\"],\"status_text_nodes\":[],\"value_text_nodes\":[]}\n@field \"coverage\" {\"count\":15,\"direct_count\":4,\"folded_count\":11,\"receipt\":\"1bb627897baca608c1d01c5ce929294d3375d4d9a32fbc884ef12a965fc33ac1\",\"source_ids_sha256\":\"4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c\"}\n@field \"descriptions\" {\"generated_claims\":false,\"generator\":\"source-labels/v1\",\"is_source_evidence\":false,\"kind\":\"source-labels\"}\n@field \"dictionary\" {\"f0\":{\"kind\":\"group\",\"original\":\"group:/exceptions\"},\"f3\":{\"kind\":\"group\",\"original\":\"group:/featured\"},\"f5\":{\"kind\":\"group\",\"original\":\"group:/support\"},\"g0\":{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"},\"g1\":{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"},\"g2\":{\"kind\":\"group\",\"original\":\"group:/isolates\"},\"g3\":{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"n0\":{\"kind\":\"node\",\"original\":\"chain.00\"},\"n1\":{\"kind\":\"node\",\"original\":\"chain.01\"},\"n2\":{\"kind\":\"node\",\"original\":\"chain.02\"},\"n3\":{\"kind\":\"node\",\"original\":\"chain.03\"},\"x0\":{\"kind\":\"external\",\"original\":null,\"original_present\":false},\"x1\":{\"kind\":\"external\",\"original\":\"outside\",\"original_present\":true},\"x2\":{\"kind\":\"external\",\"original\":4,\"original_present\":true},\"x3\":{\"kind\":\"external\",\"original\":false,\"original_present\":true},\"x4\":{\"kind\":\"external\",\"original\":null,\"original_present\":true}}\n@field \"edge_set_handle_template\" \"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:{edge_set_ref}\"\n\n## expanded_edges\n@rows \"expanded_edges\" 13\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e0\",[{\"exception\":\"cross-group-rule\",\"from\":\"exception.right\",\"rel\":\"rule_reads\",\"to\":\"chain.07\"}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e1\",[{\"from\":\"chain.10\",\"rel\":\"cycle\",\"to\":\"chain.00\"}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e10\",[{\"from\":\"chain.03\",\"rel\":\"rests_on\",\"to\":\"chain.04\",\"weight\":3}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e11\",[{\"from\":\"chain.03\",\"rel\":\"same_as\",\"self_loop\":true,\"to\":\"chain.03\"}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e12\",[{\"from\":false,\"rel\":false,\"to\":4}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e2\",[{\"exception\":\"cross-group-support\",\"from\":\"chain.04\",\"rel\":\"from\",\"to\":\"exception.left\"}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e3\",[{\"from\":\"chain.04\",\"rel\":\"rests_on\",\"to\":\"chain.05\",\"weight\":4},{\"from\":\"chain.05\",\"rel\":\"rests_on\",\"to\":\"chain.06\",\"weight\":5},{\"from\":\"chain.06\",\"rel\":\"rests_on\",\"to\":\"chain.07\",\"weight\":6},{\"from\":\"chain.07\",\"rel\":\"rests_on\",\"to\":\"chain.08\",\"weight\":7},{\"from\":\"chain.08\",\"rel\":\"rests_on\",\"to\":\"chain.09\",\"weight\":8},{\"from\":\"chain.09\",\"rel\":\"rests_on\",\"to\":\"chain.10\",\"weight\":9},{\"from\":\"chain.05\",\"parallel\":1,\"rel\":\"rests_on\",\"to\":\"chain.06\",\"unknown_metadata\":{\"x\":null}},{\"from\":\"chain.05\",\"parallel\":2,\"rel\":\"rests_on\",\"to\":\"chain.06\",\"unknown_metadata\":{\"x\":null}}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e4\",[{\"from\":\"chain.00\",\"to\":null}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e5\",[{\"from\":\"chain.00\",\"rel\":\"rests_on\",\"to\":\"chain.01\",\"weight\":0}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e6\",[{\"from\":\"chain.00\",\"rel\":null,\"to\":\"outside\"}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e7\",[{\"from\":\"chain.00\",\"rel\":{\"typed\":\"relation\"}}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e8\",[{\"from\":\"chain.01\",\"rel\":\"rests_on\",\"to\":\"chain.02\",\"weight\":1}]]\nedge [\"edgeset:84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba:e9\",[{\"from\":\"chain.02\",\"rel\":\"rests_on\",\"to\":\"chain.03\",\"weight\":2}]]\n@field \"fields\" {\"attribute_compaction\":{\"manifest\":\"attribute_compaction.nodes[ref]\",\"node_rule_values\":{\"status\":\"shared assessment alias\",\"status_text\":\"status_text mode\",\"value_text\":\"body field key\"},\"restore\":\"view_attributes::restore_attributes\",\"schema\":\"kpopper.attribute-compaction/v1\",\"status_pool\":{\"dictionary\":\"shared_assessments\",\"exact_json\":true,\"field\":\"status_ref\"},\"status_text\":{\"derived\":true,\"display_only\":true,\"modes\":{\"status\":\"render_projected_status\",\"uncertainty\":\"exact_array_alias\"},\"renderer\":\"reasoning-projection/render_projected_status/v1\"},\"value_text\":{\"body_field_candidates\":[\"v\",\"quoted\",\"value\"],\"display_only\":true,\"reference\":\"attributes.status.computation.value_text_ref\",\"renderer\":\"reasoning-projection/render_value/v1\"}},\"description\":{\"kind\":\"navigation_only\",\"row\":[\"text\",\"generator\",\"basis_sha256\",\"excerpted\"]},\"expanded_edge\":[\"edge_set\",\"original_edges\"],\"group\":[\"ref\",\"count\",\"label\",\"description\"],\"link\":[\"from_ref\",\"rel\",\"to_ref\",\"count\",\"edge_set_ref\"],\"navigation_group\":[\"ref\",\"count\"],\"navigation_node\":[\"node_ref\",\"group_refs\"],\"node\":[\"ref\",\"body\",\"attributes\"]}\n@field \"group_expansion_route\" \"dictionary[group_ref].original (group:/path), with this revision and current focus\"\n\n## groups\n@rows \"groups\" 4\ngroup [\"g0\",1,\"left\",[\"\",null,null,false]]\ngroup [\"g1\",1,\"right\",[\"\",null,null,false]]\ngroup [\"g2\",2,\"isolates\",[\"\",null,null,false]]\ngroup [\"g3\",7,\"deep\",[\"\",null,null,false]]\n\n## links\n@rows \"links\" 13\nlink [\"g1\",\"rule_reads\",\"g3\",1,\"e0\"]\nlink [\"g3\",\"cycle\",\"n0\",1,\"e1\"]\nlink [\"g3\",\"from\",\"g0\",1,\"e2\"]\nlink [\"g3\",\"rests_on\",\"g3\",8,\"e3\"]\nlink [\"n0\",{\"missing\":true},\"x4\",1,\"e4\"]\nlink [\"n0\",\"rests_on\",\"n1\",1,\"e5\"]\nlink [\"n0\",null,\"x1\",1,\"e6\"]\nlink [\"n0\",{\"typed\":\"relation\"},\"x0\",1,\"e7\"]\nlink [\"n1\",\"rests_on\",\"n2\",1,\"e8\"]\nlink [\"n2\",\"rests_on\",\"n3\",1,\"e9\"]\nlink [\"n3\",\"rests_on\",\"g3\",1,\"e10\"]\nlink [\"n3\",\"same_as\",\"n3\",1,\"e11\"]\nlink [\"x3\",false,\"x2\",1,\"e12\"]\n@field \"mode\" \"expanded\"\n@field \"navigation_facets\" {\"groups\":[[\"f0\",2],[\"f3\",2],[\"f5\",11]],\"nodes\":[[\"n0\",[\"f5\",\"g3\"]],[\"n1\",[\"f5\",\"g3\"]],[\"n2\",[\"f5\",\"g3\"]],[\"n3\",[\"f5\",\"g3\"]]]}\n\n## nodes\n@rows \"nodes\" 4\nnode [\"n0\",[\"map\",[[\"name\",[\"text\",\"chain.00\"]],[\"value\",[\"int\",\"0\"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.00\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n1\",[\"map\",[[\"name\",[\"text\",\"chain.01\"]],[\"value\",[\"int\",\"1\"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.01\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n2\",[\"map\",[[\"name\",[\"text\",\"chain.02\"]],[\"value\",[\"int\",\"2\"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.02\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n3\",[\"map\",[[\"name\",[\"text\",\"chain.03\"]],[\"value\",[\"int\",\"3\"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.03\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\n@field \"project\" \"compact-fixture\"\n@field \"project_identity\" [\"map\",[[\"project\",[\"text\",\"compact-fixture\"]]]]\n@field \"revision\" \"r1-fixture\"\n@field \"rules\" \"rules\"\n@field \"schema\" \"kpopper.canonical-graph-view/v3\"\n@field \"scope\" \"fixture scope\"\n@field \"shared_assessments\" {\"a0\":{\"explanation\":\"A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. \",\"unknown\":null}}\n@field \"view_id\" \"84c9b367ac85a6246cbac2e53e6c4b96b6d62a0d4af48b09ac5ef1a1f6fe5eba\"\n",
+  "delta": {
+    "base_evidence_sha256": "dba7889eafa8629a97235b1fd6f129c6820c7583353a391e8243772a6df6b152",
+    "base_sha256": "125948d16c23669fedcc071288f46cadbd84ecdbd634bdba80e61d88acdb9be6",
+    "evidence_additions": [
+      {
+        "body": [
+          "map",
+          [
+            [
+              "big",
+              [
+                "int",
+                "900719925474099312345"
+              ]
+            ],
+            [
+              "bool",
+              [
+                "bool",
+                false
+              ]
+            ],
+            [
+              "date",
+              [
+                "date",
+                "2026-09-27"
+              ]
+            ],
+            [
+              "float",
+              [
+                "float",
+                "-0x0.0p+0"
+              ]
+            ],
+            [
+              "name",
+              [
+                "text",
+                "שלום 🌍\n\"quotes\" n3"
+              ]
+            ],
+            [
+              "nested",
+              [
+                "list",
+                [
+                  [
+                    "null"
+                  ],
+                  [
+                    "map",
+                    []
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        "body_sha256": "f847c0b34ee4708ba9ae6970f5125bf5f38815b1a568e4ed5a5d02f6c03e0504",
+        "source_id": "chain.04"
+      },
+      {
+        "body": [
+          "null"
+        ],
+        "body_sha256": "53b41ab0dae62befcb8708620b6d14794a24fedad6c24c03dd01e51fa698ff0b",
+        "source_id": "isolate.null"
+      }
+    ],
+    "focus": {
+      "fold": [
+        "chain.00"
+      ],
+      "order": [
+        "chain.01",
+        "chain.02",
+        "chain.03",
+        "chain.04",
+        "isolate.null"
+      ],
+      "upsert": [
+        {
+          "attributes": {
+            "dependencies": null,
+            "extra": {
+              "fraction": 0.125,
+              "literal": "n3 and g0 are quoted source text",
+              "negative_zero": -0.0
+            },
+            "record_metadata": {
+              "body": {
+                "name": "chain.04",
+                "value": 4
+              },
+              "kind": "known",
+              "record_source": "record",
+              "unique_marker": "meta-chain.04"
+            },
+            "status_ref": [
+              "a",
+              0
+            ],
+            "status_text": [],
+            "uncertainty": []
+          },
+          "body_sha256": "f847c0b34ee4708ba9ae6970f5125bf5f38815b1a568e4ed5a5d02f6c03e0504",
+          "source_id": "chain.04"
+        },
+        {
+          "attributes": {
+            "dependencies": null,
+            "extra": {
+              "fraction": 0.125,
+              "literal": "n3 and g0 are quoted source text",
+              "negative_zero": -0.0
+            },
+            "record_metadata": {
+              "kind": "known",
+              "record_source": "record",
+              "unique_marker": "keep-null-type"
+            },
+            "status_ref": [
+              "a",
+              0
+            ],
+            "status_text": [],
+            "uncertainty": null
+          },
+          "body_sha256": "53b41ab0dae62befcb8708620b6d14794a24fedad6c24c03dd01e51fa698ff0b",
+          "source_id": "isolate.null"
+        }
+      ]
+    },
+    "metadata": {
+      "set": {
+        "attribute_compaction": {
+          "compacted_nodes": [
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            {
+              "kind": "node",
+              "original": "isolate.null"
+            }
+          ],
+          "nodes": [
+            [
+              {
+                "kind": "node",
+                "original": "chain.01"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.02"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.03"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.04"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "isolate.null"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ]
+          ],
+          "schema": "kpopper.attribute-compaction/v1",
+          "status_pool_nodes": [
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            {
+              "kind": "node",
+              "original": "isolate.null"
+            }
+          ],
+          "status_text_nodes": [],
+          "value_text_nodes": []
+        },
+        "coverage": {
+          "count": 15,
+          "direct_count": 5,
+          "folded_count": 10,
+          "receipt": "e6a82d27dab1e2880d21c7b70840c221a59590a5e45241d795d903044585a088",
+          "source_ids_sha256": "4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c"
+        },
+        "dictionary": [
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/exceptions"
+            },
+            "slot": [
+              "f",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/featured"
+            },
+            "slot": [
+              "f",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/support"
+            },
+            "slot": [
+              "f",
+              5
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/exceptions/left"
+            },
+            "slot": [
+              "g",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/exceptions/right"
+            },
+            "slot": [
+              "g",
+              1
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/isolates"
+            },
+            "slot": [
+              "g",
+              2
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "slot": [
+              "g",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "exception.left"
+            },
+            "slot": [
+              "m",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "exception.right"
+            },
+            "slot": [
+              "m",
+              1
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "isolate.alpha"
+            },
+            "slot": [
+              "m",
+              2
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.00"
+            },
+            "slot": [
+              "m",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.05"
+            },
+            "slot": [
+              "m",
+              4
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.06"
+            },
+            "slot": [
+              "m",
+              5
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.07"
+            },
+            "slot": [
+              "m",
+              6
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.08"
+            },
+            "slot": [
+              "m",
+              7
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.09"
+            },
+            "slot": [
+              "m",
+              8
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.10"
+            },
+            "slot": [
+              "m",
+              9
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            "slot": [
+              "n",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            "slot": [
+              "n",
+              1
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            "slot": [
+              "n",
+              2
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            "slot": [
+              "n",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "isolate.null"
+            },
+            "slot": [
+              "n",
+              4
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": null,
+              "original_present": false
+            },
+            "slot": [
+              "x",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": "outside",
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              1
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": 4,
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              2
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": false,
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": null,
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              4
+            ]
+          }
+        ],
+        "edge_set_handle_template": "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:{edge_set_ref}",
+        "expanded_edges": [
+          [
+            0,
+            [
+              {
+                "exception": "cross-group-rule",
+                "from": "exception.right",
+                "rel": "rule_reads",
+                "to": "chain.07"
+              }
+            ]
+          ],
+          [
+            1,
+            [
+              {
+                "from": "chain.00",
+                "to": null
+              }
+            ]
+          ],
+          [
+            10,
+            [
+              {
+                "from": "chain.03",
+                "rel": "same_as",
+                "self_loop": true,
+                "to": "chain.03"
+              }
+            ]
+          ],
+          [
+            11,
+            [
+              {
+                "exception": "cross-group-support",
+                "from": "chain.04",
+                "rel": "from",
+                "to": "exception.left"
+              }
+            ]
+          ],
+          [
+            12,
+            [
+              {
+                "from": "chain.04",
+                "rel": "rests_on",
+                "to": "chain.05",
+                "weight": 4
+              }
+            ]
+          ],
+          [
+            13,
+            [
+              {
+                "from": false,
+                "rel": false,
+                "to": 4
+              }
+            ]
+          ],
+          [
+            2,
+            [
+              {
+                "from": "chain.10",
+                "rel": "cycle",
+                "to": "chain.00"
+              }
+            ]
+          ],
+          [
+            3,
+            [
+              {
+                "from": "chain.05",
+                "rel": "rests_on",
+                "to": "chain.06",
+                "weight": 5
+              },
+              {
+                "from": "chain.06",
+                "rel": "rests_on",
+                "to": "chain.07",
+                "weight": 6
+              },
+              {
+                "from": "chain.07",
+                "rel": "rests_on",
+                "to": "chain.08",
+                "weight": 7
+              },
+              {
+                "from": "chain.08",
+                "rel": "rests_on",
+                "to": "chain.09",
+                "weight": 8
+              },
+              {
+                "from": "chain.09",
+                "rel": "rests_on",
+                "to": "chain.10",
+                "weight": 9
+              },
+              {
+                "from": "chain.05",
+                "parallel": 1,
+                "rel": "rests_on",
+                "to": "chain.06",
+                "unknown_metadata": {
+                  "x": null
+                }
+              },
+              {
+                "from": "chain.05",
+                "parallel": 2,
+                "rel": "rests_on",
+                "to": "chain.06",
+                "unknown_metadata": {
+                  "x": null
+                }
+              }
+            ]
+          ],
+          [
+            4,
+            [
+              {
+                "from": "chain.00",
+                "rel": "rests_on",
+                "to": "chain.01",
+                "weight": 0
+              }
+            ]
+          ],
+          [
+            5,
+            [
+              {
+                "from": "chain.00",
+                "rel": null,
+                "to": "outside"
+              }
+            ]
+          ],
+          [
+            6,
+            [
+              {
+                "from": "chain.00",
+                "rel": {
+                  "typed": "relation"
+                }
+              }
+            ]
+          ],
+          [
+            7,
+            [
+              {
+                "from": "chain.01",
+                "rel": "rests_on",
+                "to": "chain.02",
+                "weight": 1
+              }
+            ]
+          ],
+          [
+            8,
+            [
+              {
+                "from": "chain.02",
+                "rel": "rests_on",
+                "to": "chain.03",
+                "weight": 2
+              }
+            ]
+          ],
+          [
+            9,
+            [
+              {
+                "from": "chain.03",
+                "rel": "rests_on",
+                "to": "chain.04",
+                "weight": 3
+              }
+            ]
+          ]
+        ],
+        "groups": [
+          [
+            {
+              "kind": "group",
+              "original": "group:/exceptions/left"
+            },
+            1,
+            "left",
+            [
+              "",
+              null,
+              null,
+              false
+            ]
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/exceptions/right"
+            },
+            1,
+            "right",
+            [
+              "",
+              null,
+              null,
+              false
+            ]
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/isolates"
+            },
+            1,
+            "isolates",
+            [
+              "",
+              null,
+              null,
+              false
+            ]
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            7,
+            "deep",
+            [
+              "",
+              null,
+              null,
+              false
+            ]
+          ]
+        ],
+        "links": [
+          [
+            {
+              "kind": "group",
+              "original": "group:/exceptions/right"
+            },
+            "rule_reads",
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            1,
+            0
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            {
+              "missing": true
+            },
+            {
+              "kind": "external",
+              "original": null,
+              "original_present": true
+            },
+            1,
+            1
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "cycle",
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            1,
+            2
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "rests_on",
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            7,
+            3
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            1,
+            4
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            null,
+            {
+              "kind": "external",
+              "original": "outside",
+              "original_present": true
+            },
+            1,
+            5
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            {
+              "typed": "relation"
+            },
+            {
+              "kind": "external",
+              "original": null,
+              "original_present": false
+            },
+            1,
+            6
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            1,
+            7
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            1,
+            8
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            1,
+            9
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            "same_as",
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            1,
+            10
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            "from",
+            {
+              "kind": "group",
+              "original": "group:/exceptions/left"
+            },
+            1,
+            11
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            "rests_on",
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            1,
+            12
+          ],
+          [
+            {
+              "kind": "external",
+              "original": false,
+              "original_present": true
+            },
+            false,
+            {
+              "kind": "external",
+              "original": 4,
+              "original_present": true
+            },
+            1,
+            13
+          ]
+        ],
+        "membership_detail": {
+          "additional_bodies_read": false,
+          "groups": [
+            "group:/exceptions/left",
+            "group:/exceptions/right",
+            "group:/isolates",
+            "group:/support/deep"
+          ],
+          "next": "Use dictionary node identities with --id to read exact bodies; listed membership alone is not evidence."
+        },
+        "navigation_facets": {
+          "groups": [
+            [
+              {
+                "kind": "group",
+                "original": "group:/exceptions"
+              },
+              2
+            ],
+            [
+              {
+                "kind": "group",
+                "original": "group:/featured"
+              },
+              2
+            ],
+            [
+              {
+                "kind": "group",
+                "original": "group:/support"
+              },
+              11
+            ]
+          ],
+          "nodes": [
+            [
+              {
+                "kind": "node",
+                "original": "exception.left"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/exceptions/left"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "exception.right"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/exceptions/right"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "isolate.alpha"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/isolates"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.00"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.05"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.06"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.07"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.08"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.09"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.10"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.01"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.02"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.03"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.04"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/featured"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "isolate.null"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/isolates"
+                }
+              ]
+            ]
+          ]
+        },
+        "view_id": "3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42"
+      },
+      "unset": []
+    },
+    "project_sha256": "696c0b7ec8e66fd17b3dbd686d950ef1d76302685c72899cd9eb38a7757779a7",
+    "revision": "r1-fixture",
+    "schema": "kpopper.selected-view-delta/v1",
+    "scope": "fixture scope",
+    "target_evidence_sha256": "0f276c5933aa44a5029529e25e782c6f8342903ce41b1d14788f2bb7ad6d0074",
+    "target_sha256": "92a07ca065741139af065d2c5dfe51f9eaa1109ee9c603bf6c0f244684b14768"
+  },
+  "delta_text": "# Checked graph delta (kpopper.selected-view-delta/v1)\nEvidence additions remain received; focus.fold only folds active rows. References name original identities. Group coverage is not a body read.\n{\"schema\":\"kpopper.selected-view-delta/v1\",\"revision\":\"r1-fixture\",\"scope\":\"fixture scope\",\"project_sha256\":\"696c0b7ec8e66fd17b3dbd686d950ef1d76302685c72899cd9eb38a7757779a7\",\"base_sha256\":\"125948d16c23669fedcc071288f46cadbd84ecdbd634bdba80e61d88acdb9be6\",\"target_sha256\":\"92a07ca065741139af065d2c5dfe51f9eaa1109ee9c603bf6c0f244684b14768\",\"base_evidence_sha256\":\"dba7889eafa8629a97235b1fd6f129c6820c7583353a391e8243772a6df6b152\",\"target_evidence_sha256\":\"0f276c5933aa44a5029529e25e782c6f8342903ce41b1d14788f2bb7ad6d0074\",\"evidence_additions\":[{\"source_id\":\"chain.04\",\"body_sha256\":\"f847c0b34ee4708ba9ae6970f5125bf5f38815b1a568e4ed5a5d02f6c03e0504\",\"body\":[\"map\",[[\"big\",[\"int\",\"900719925474099312345\"]],[\"bool\",[\"bool\",false]],[\"date\",[\"date\",\"2026-09-27\"]],[\"float\",[\"float\",\"-0x0.0p+0\"]],[\"name\",[\"text\",\"שלום 🌍\\n\\\"quotes\\\" n3\"]],[\"nested\",[\"list\",[[\"null\"],[\"map\",[]]]]]]]},{\"source_id\":\"isolate.null\",\"body_sha256\":\"53b41ab0dae62befcb8708620b6d14794a24fedad6c24c03dd01e51fa698ff0b\",\"body\":[\"null\"]}],\"metadata\":{\"set\":{\"attribute_compaction\":{\"compacted_nodes\":[{\"kind\":\"node\",\"original\":\"chain.01\"},{\"kind\":\"node\",\"original\":\"chain.02\"},{\"kind\":\"node\",\"original\":\"chain.03\"},{\"kind\":\"node\",\"original\":\"chain.04\"},{\"kind\":\"node\",\"original\":\"isolate.null\"}],\"nodes\":[[{\"kind\":\"node\",\"original\":\"chain.01\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.02\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.03\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.04\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"isolate.null\"},{\"status\":[\"a\",0]}]],\"schema\":\"kpopper.attribute-compaction/v1\",\"status_pool_nodes\":[{\"kind\":\"node\",\"original\":\"chain.01\"},{\"kind\":\"node\",\"original\":\"chain.02\"},{\"kind\":\"node\",\"original\":\"chain.03\"},{\"kind\":\"node\",\"original\":\"chain.04\"},{\"kind\":\"node\",\"original\":\"isolate.null\"}],\"status_text_nodes\":[],\"value_text_nodes\":[]},\"coverage\":{\"count\":15,\"direct_count\":5,\"folded_count\":10,\"receipt\":\"e6a82d27dab1e2880d21c7b70840c221a59590a5e45241d795d903044585a088\",\"source_ids_sha256\":\"4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c\"},\"dictionary\":[{\"identity\":{\"kind\":\"group\",\"original\":\"group:/exceptions\"},\"slot\":[\"f\",0]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/featured\"},\"slot\":[\"f\",3]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/support\"},\"slot\":[\"f\",5]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"},\"slot\":[\"g\",0]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"},\"slot\":[\"g\",1]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/isolates\"},\"slot\":[\"g\",2]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"slot\":[\"g\",3]},{\"identity\":{\"kind\":\"node\",\"original\":\"exception.left\"},\"slot\":[\"m\",0]},{\"identity\":{\"kind\":\"node\",\"original\":\"exception.right\"},\"slot\":[\"m\",1]},{\"identity\":{\"kind\":\"node\",\"original\":\"isolate.alpha\"},\"slot\":[\"m\",2]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.00\"},\"slot\":[\"m\",3]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.05\"},\"slot\":[\"m\",4]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.06\"},\"slot\":[\"m\",5]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.07\"},\"slot\":[\"m\",6]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.08\"},\"slot\":[\"m\",7]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.09\"},\"slot\":[\"m\",8]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.10\"},\"slot\":[\"m\",9]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.01\"},\"slot\":[\"n\",0]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.02\"},\"slot\":[\"n\",1]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.03\"},\"slot\":[\"n\",2]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.04\"},\"slot\":[\"n\",3]},{\"identity\":{\"kind\":\"node\",\"original\":\"isolate.null\"},\"slot\":[\"n\",4]},{\"identity\":{\"kind\":\"external\",\"original\":null,\"original_present\":false},\"slot\":[\"x\",0]},{\"identity\":{\"kind\":\"external\",\"original\":\"outside\",\"original_present\":true},\"slot\":[\"x\",1]},{\"identity\":{\"kind\":\"external\",\"original\":4,\"original_present\":true},\"slot\":[\"x\",2]},{\"identity\":{\"kind\":\"external\",\"original\":false,\"original_present\":true},\"slot\":[\"x\",3]},{\"identity\":{\"kind\":\"external\",\"original\":null,\"original_present\":true},\"slot\":[\"x\",4]}],\"edge_set_handle_template\":\"edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:{edge_set_ref}\",\"expanded_edges\":[[0,[{\"exception\":\"cross-group-rule\",\"from\":\"exception.right\",\"rel\":\"rule_reads\",\"to\":\"chain.07\"}]],[1,[{\"from\":\"chain.00\",\"to\":null}]],[10,[{\"from\":\"chain.03\",\"rel\":\"same_as\",\"self_loop\":true,\"to\":\"chain.03\"}]],[11,[{\"exception\":\"cross-group-support\",\"from\":\"chain.04\",\"rel\":\"from\",\"to\":\"exception.left\"}]],[12,[{\"from\":\"chain.04\",\"rel\":\"rests_on\",\"to\":\"chain.05\",\"weight\":4}]],[13,[{\"from\":false,\"rel\":false,\"to\":4}]],[2,[{\"from\":\"chain.10\",\"rel\":\"cycle\",\"to\":\"chain.00\"}]],[3,[{\"from\":\"chain.05\",\"rel\":\"rests_on\",\"to\":\"chain.06\",\"weight\":5},{\"from\":\"chain.06\",\"rel\":\"rests_on\",\"to\":\"chain.07\",\"weight\":6},{\"from\":\"chain.07\",\"rel\":\"rests_on\",\"to\":\"chain.08\",\"weight\":7},{\"from\":\"chain.08\",\"rel\":\"rests_on\",\"to\":\"chain.09\",\"weight\":8},{\"from\":\"chain.09\",\"rel\":\"rests_on\",\"to\":\"chain.10\",\"weight\":9},{\"from\":\"chain.05\",\"parallel\":1,\"rel\":\"rests_on\",\"to\":\"chain.06\",\"unknown_metadata\":{\"x\":null}},{\"from\":\"chain.05\",\"parallel\":2,\"rel\":\"rests_on\",\"to\":\"chain.06\",\"unknown_metadata\":{\"x\":null}}]],[4,[{\"from\":\"chain.00\",\"rel\":\"rests_on\",\"to\":\"chain.01\",\"weight\":0}]],[5,[{\"from\":\"chain.00\",\"rel\":null,\"to\":\"outside\"}]],[6,[{\"from\":\"chain.00\",\"rel\":{\"typed\":\"relation\"}}]],[7,[{\"from\":\"chain.01\",\"rel\":\"rests_on\",\"to\":\"chain.02\",\"weight\":1}]],[8,[{\"from\":\"chain.02\",\"rel\":\"rests_on\",\"to\":\"chain.03\",\"weight\":2}]],[9,[{\"from\":\"chain.03\",\"rel\":\"rests_on\",\"to\":\"chain.04\",\"weight\":3}]]],\"groups\":[[{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"},1,\"left\",[\"\",null,null,false]],[{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"},1,\"right\",[\"\",null,null,false]],[{\"kind\":\"group\",\"original\":\"group:/isolates\"},1,\"isolates\",[\"\",null,null,false]],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},7,\"deep\",[\"\",null,null,false]]],\"links\":[[{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"},\"rule_reads\",{\"kind\":\"group\",\"original\":\"group:/support/deep\"},1,0],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},{\"missing\":true},{\"kind\":\"external\",\"original\":null,\"original_present\":true},1,1],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"cycle\",{\"kind\":\"group\",\"original\":\"group:/support/deep\"},1,2],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"rests_on\",{\"kind\":\"group\",\"original\":\"group:/support/deep\"},7,3],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.01\"},1,4],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},null,{\"kind\":\"external\",\"original\":\"outside\",\"original_present\":true},1,5],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},{\"typed\":\"relation\"},{\"kind\":\"external\",\"original\":null,\"original_present\":false},1,6],[{\"kind\":\"node\",\"original\":\"chain.01\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.02\"},1,7],[{\"kind\":\"node\",\"original\":\"chain.02\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.03\"},1,8],[{\"kind\":\"node\",\"original\":\"chain.03\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.04\"},1,9],[{\"kind\":\"node\",\"original\":\"chain.03\"},\"same_as\",{\"kind\":\"node\",\"original\":\"chain.03\"},1,10],[{\"kind\":\"node\",\"original\":\"chain.04\"},\"from\",{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"},1,11],[{\"kind\":\"node\",\"original\":\"chain.04\"},\"rests_on\",{\"kind\":\"group\",\"original\":\"group:/support/deep\"},1,12],[{\"kind\":\"external\",\"original\":false,\"original_present\":true},false,{\"kind\":\"external\",\"original\":4,\"original_present\":true},1,13]],\"membership_detail\":{\"additional_bodies_read\":false,\"groups\":[\"group:/exceptions/left\",\"group:/exceptions/right\",\"group:/isolates\",\"group:/support/deep\"],\"next\":\"Use dictionary node identities with --id to read exact bodies; listed membership alone is not evidence.\"},\"navigation_facets\":{\"groups\":[[{\"kind\":\"group\",\"original\":\"group:/exceptions\"},2],[{\"kind\":\"group\",\"original\":\"group:/featured\"},2],[{\"kind\":\"group\",\"original\":\"group:/support\"},11]],\"nodes\":[[{\"kind\":\"node\",\"original\":\"exception.left\"},[{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"}]],[{\"kind\":\"node\",\"original\":\"exception.right\"},[{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"}]],[{\"kind\":\"node\",\"original\":\"isolate.alpha\"},[{\"kind\":\"group\",\"original\":\"group:/isolates\"}]],[{\"kind\":\"node\",\"original\":\"chain.00\"},[{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.05\"},[{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.06\"},[{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.07\"},[{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.08\"},[{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.09\"},[{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.10\"},[{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.01\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.02\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.03\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.04\"},[{\"kind\":\"group\",\"original\":\"group:/featured\"},{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"isolate.null\"},[{\"kind\":\"group\",\"original\":\"group:/isolates\"}]]]},\"view_id\":\"3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42\"},\"unset\":[]},\"focus\":{\"upsert\":[{\"source_id\":\"chain.04\",\"body_sha256\":\"f847c0b34ee4708ba9ae6970f5125bf5f38815b1a568e4ed5a5d02f6c03e0504\",\"attributes\":{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.04\",\"value\":4},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.04\"},\"status_ref\":[\"a\",0],\"status_text\":[],\"uncertainty\":[]}},{\"source_id\":\"isolate.null\",\"body_sha256\":\"53b41ab0dae62befcb8708620b6d14794a24fedad6c24c03dd01e51fa698ff0b\",\"attributes\":{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"keep-null-type\"},\"status_ref\":[\"a\",0],\"status_text\":[],\"uncertainty\":null}}],\"fold\":[\"chain.00\"],\"order\":[\"chain.01\",\"chain.02\",\"chain.03\",\"chain.04\",\"isolate.null\"]}}\n",
+  "received": {
+    "chain.00": {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.00"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "0"
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "17af597608863b302aba4ef79a1b60ee7463363dbe3b143769f248382da6b5d3",
+      "source_id": "chain.00"
+    },
+    "chain.01": {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.01"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "1"
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "a69572577cb13b234f10b03645338b37198fed950bc4f2720d9e0e49a3cfb382",
+      "source_id": "chain.01"
+    },
+    "chain.02": {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.02"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "2"
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "b967db34a59467889441240a1dbb9049a06afbf48fc4075e074305081a5c83f7",
+      "source_id": "chain.02"
+    },
+    "chain.03": {
+      "body": [
+        "map",
+        [
+          [
+            "name",
+            [
+              "text",
+              "chain.03"
+            ]
+          ],
+          [
+            "value",
+            [
+              "int",
+              "3"
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "928a6b8c8215fa18e65cbdc6747d75ff9e6bca5f46a10184c15e296023991e00",
+      "source_id": "chain.03"
+    },
+    "chain.04": {
+      "body": [
+        "map",
+        [
+          [
+            "big",
+            [
+              "int",
+              "900719925474099312345"
+            ]
+          ],
+          [
+            "bool",
+            [
+              "bool",
+              false
+            ]
+          ],
+          [
+            "date",
+            [
+              "date",
+              "2026-09-27"
+            ]
+          ],
+          [
+            "float",
+            [
+              "float",
+              "-0x0.0p+0"
+            ]
+          ],
+          [
+            "name",
+            [
+              "text",
+              "שלום 🌍\n\"quotes\" n3"
+            ]
+          ],
+          [
+            "nested",
+            [
+              "list",
+              [
+                [
+                  "null"
+                ],
+                [
+                  "map",
+                  []
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "f847c0b34ee4708ba9ae6970f5125bf5f38815b1a568e4ed5a5d02f6c03e0504",
+      "source_id": "chain.04"
+    },
+    "isolate.null": {
+      "body": [
+        "null"
+      ],
+      "body_sha256": "53b41ab0dae62befcb8708620b6d14794a24fedad6c24c03dd01e51fa698ff0b",
+      "source_id": "isolate.null"
+    }
+  },
+  "resolution": {
+    "chain.00": [
+      "map",
+      [
+        [
+          "name",
+          [
+            "text",
+            "chain.00"
+          ]
+        ],
+        [
+          "value",
+          [
+            "int",
+            "0"
+          ]
+        ]
+      ]
+    ],
+    "chain.04": [
+      "map",
+      [
+        [
+          "big",
+          [
+            "int",
+            "900719925474099312345"
+          ]
+        ],
+        [
+          "bool",
+          [
+            "bool",
+            false
+          ]
+        ],
+        [
+          "date",
+          [
+            "date",
+            "2026-09-27"
+          ]
+        ],
+        [
+          "float",
+          [
+            "float",
+            "-0x0.0p+0"
+          ]
+        ],
+        [
+          "name",
+          [
+            "text",
+            "שלום 🌍\n\"quotes\" n3"
+          ]
+        ],
+        [
+          "nested",
+          [
+            "list",
+            [
+              [
+                "null"
+              ],
+              [
+                "map",
+                []
+              ]
+            ]
+          ]
+        ]
+      ]
+    ],
+    "chain.10": null,
+    "n3": null
+  },
+  "sizes": {
+    "delta_wrapped_bytes": 12565,
+    "full_wrapped_bytes": 11560
+  },
+  "target": {
+    "assessment_profile": "checked-reader/v1",
+    "attribute_compaction": {
+      "compacted_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3",
+        "n4"
+      ],
+      "nodes": {
+        "n0": {
+          "status": "a0"
+        },
+        "n1": {
+          "status": "a0"
+        },
+        "n2": {
+          "status": "a0"
+        },
+        "n3": {
+          "status": "a0"
+        },
+        "n4": {
+          "status": "a0"
+        }
+      },
+      "schema": "kpopper.attribute-compaction/v1",
+      "status_pool_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3",
+        "n4"
+      ],
+      "status_text_nodes": [],
+      "value_text_nodes": []
+    },
+    "coverage": {
+      "count": 15,
+      "direct_count": 5,
+      "folded_count": 10,
+      "receipt": "e6a82d27dab1e2880d21c7b70840c221a59590a5e45241d795d903044585a088",
+      "source_ids_sha256": "4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c"
+    },
+    "descriptions": {
+      "generated_claims": false,
+      "generator": "source-labels/v1",
+      "is_source_evidence": false,
+      "kind": "source-labels"
+    },
+    "dictionary": {
+      "f0": {
+        "kind": "group",
+        "original": "group:/exceptions"
+      },
+      "f3": {
+        "kind": "group",
+        "original": "group:/featured"
+      },
+      "f5": {
+        "kind": "group",
+        "original": "group:/support"
+      },
+      "g0": {
+        "kind": "group",
+        "original": "group:/exceptions/left"
+      },
+      "g1": {
+        "kind": "group",
+        "original": "group:/exceptions/right"
+      },
+      "g2": {
+        "kind": "group",
+        "original": "group:/isolates"
+      },
+      "g3": {
+        "kind": "group",
+        "original": "group:/support/deep"
+      },
+      "m0": {
+        "kind": "node",
+        "original": "exception.left"
+      },
+      "m1": {
+        "kind": "node",
+        "original": "exception.right"
+      },
+      "m2": {
+        "kind": "node",
+        "original": "isolate.alpha"
+      },
+      "m3": {
+        "kind": "node",
+        "original": "chain.00"
+      },
+      "m4": {
+        "kind": "node",
+        "original": "chain.05"
+      },
+      "m5": {
+        "kind": "node",
+        "original": "chain.06"
+      },
+      "m6": {
+        "kind": "node",
+        "original": "chain.07"
+      },
+      "m7": {
+        "kind": "node",
+        "original": "chain.08"
+      },
+      "m8": {
+        "kind": "node",
+        "original": "chain.09"
+      },
+      "m9": {
+        "kind": "node",
+        "original": "chain.10"
+      },
+      "n0": {
+        "kind": "node",
+        "original": "chain.01"
+      },
+      "n1": {
+        "kind": "node",
+        "original": "chain.02"
+      },
+      "n2": {
+        "kind": "node",
+        "original": "chain.03"
+      },
+      "n3": {
+        "kind": "node",
+        "original": "chain.04"
+      },
+      "n4": {
+        "kind": "node",
+        "original": "isolate.null"
+      },
+      "x0": {
+        "kind": "external",
+        "original": null,
+        "original_present": false
+      },
+      "x1": {
+        "kind": "external",
+        "original": "outside",
+        "original_present": true
+      },
+      "x2": {
+        "kind": "external",
+        "original": 4,
+        "original_present": true
+      },
+      "x3": {
+        "kind": "external",
+        "original": false,
+        "original_present": true
+      },
+      "x4": {
+        "kind": "external",
+        "original": null,
+        "original_present": true
+      }
+    },
+    "edge_set_handle_template": "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:{edge_set_ref}",
+    "expanded_edges": [
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e0",
+        [
+          {
+            "exception": "cross-group-rule",
+            "from": "exception.right",
+            "rel": "rule_reads",
+            "to": "chain.07"
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e1",
+        [
+          {
+            "from": "chain.00",
+            "to": null
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e10",
+        [
+          {
+            "from": "chain.03",
+            "rel": "same_as",
+            "self_loop": true,
+            "to": "chain.03"
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e11",
+        [
+          {
+            "exception": "cross-group-support",
+            "from": "chain.04",
+            "rel": "from",
+            "to": "exception.left"
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e12",
+        [
+          {
+            "from": "chain.04",
+            "rel": "rests_on",
+            "to": "chain.05",
+            "weight": 4
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e13",
+        [
+          {
+            "from": false,
+            "rel": false,
+            "to": 4
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e2",
+        [
+          {
+            "from": "chain.10",
+            "rel": "cycle",
+            "to": "chain.00"
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e3",
+        [
+          {
+            "from": "chain.05",
+            "rel": "rests_on",
+            "to": "chain.06",
+            "weight": 5
+          },
+          {
+            "from": "chain.06",
+            "rel": "rests_on",
+            "to": "chain.07",
+            "weight": 6
+          },
+          {
+            "from": "chain.07",
+            "rel": "rests_on",
+            "to": "chain.08",
+            "weight": 7
+          },
+          {
+            "from": "chain.08",
+            "rel": "rests_on",
+            "to": "chain.09",
+            "weight": 8
+          },
+          {
+            "from": "chain.09",
+            "rel": "rests_on",
+            "to": "chain.10",
+            "weight": 9
+          },
+          {
+            "from": "chain.05",
+            "parallel": 1,
+            "rel": "rests_on",
+            "to": "chain.06",
+            "unknown_metadata": {
+              "x": null
+            }
+          },
+          {
+            "from": "chain.05",
+            "parallel": 2,
+            "rel": "rests_on",
+            "to": "chain.06",
+            "unknown_metadata": {
+              "x": null
+            }
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e4",
+        [
+          {
+            "from": "chain.00",
+            "rel": "rests_on",
+            "to": "chain.01",
+            "weight": 0
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e5",
+        [
+          {
+            "from": "chain.00",
+            "rel": null,
+            "to": "outside"
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e6",
+        [
+          {
+            "from": "chain.00",
+            "rel": {
+              "typed": "relation"
+            }
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e7",
+        [
+          {
+            "from": "chain.01",
+            "rel": "rests_on",
+            "to": "chain.02",
+            "weight": 1
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e8",
+        [
+          {
+            "from": "chain.02",
+            "rel": "rests_on",
+            "to": "chain.03",
+            "weight": 2
+          }
+        ]
+      ],
+      [
+        "edgeset:3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42:e9",
+        [
+          {
+            "from": "chain.03",
+            "rel": "rests_on",
+            "to": "chain.04",
+            "weight": 3
+          }
+        ]
+      ]
+    ],
+    "fields": {
+      "attribute_compaction": {
+        "manifest": "attribute_compaction.nodes[ref]",
+        "node_rule_values": {
+          "status": "shared assessment alias",
+          "status_text": "status_text mode",
+          "value_text": "body field key"
+        },
+        "restore": "view_attributes::restore_attributes",
+        "schema": "kpopper.attribute-compaction/v1",
+        "status_pool": {
+          "dictionary": "shared_assessments",
+          "exact_json": true,
+          "field": "status_ref"
+        },
+        "status_text": {
+          "derived": true,
+          "display_only": true,
+          "modes": {
+            "status": "render_projected_status",
+            "uncertainty": "exact_array_alias"
+          },
+          "renderer": "reasoning-projection/render_projected_status/v1"
+        },
+        "value_text": {
+          "body_field_candidates": [
+            "v",
+            "quoted",
+            "value"
+          ],
+          "display_only": true,
+          "reference": "attributes.status.computation.value_text_ref",
+          "renderer": "reasoning-projection/render_value/v1"
+        }
+      },
+      "description": {
+        "kind": "navigation_only",
+        "row": [
+          "text",
+          "generator",
+          "basis_sha256",
+          "excerpted"
+        ]
+      },
+      "expanded_edge": [
+        "edge_set",
+        "original_edges"
+      ],
+      "group": [
+        "ref",
+        "count",
+        "label",
+        "description"
+      ],
+      "link": [
+        "from_ref",
+        "rel",
+        "to_ref",
+        "count",
+        "edge_set_ref"
+      ],
+      "navigation_group": [
+        "ref",
+        "count"
+      ],
+      "navigation_node": [
+        "node_ref",
+        "group_refs"
+      ],
+      "node": [
+        "ref",
+        "body",
+        "attributes"
+      ]
+    },
+    "group_expansion_route": "dictionary[group_ref].original (group:/path), with this revision and current focus",
+    "groups": [
+      [
+        "g0",
+        1,
+        "left",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g1",
+        1,
+        "right",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g2",
+        1,
+        "isolates",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g3",
+        7,
+        "deep",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ]
+    ],
+    "links": [
+      [
+        "g1",
+        "rule_reads",
+        "g3",
+        1,
+        "e0"
+      ],
+      [
+        "g3",
+        {
+          "missing": true
+        },
+        "x4",
+        1,
+        "e1"
+      ],
+      [
+        "g3",
+        "cycle",
+        "g3",
+        1,
+        "e2"
+      ],
+      [
+        "g3",
+        "rests_on",
+        "g3",
+        7,
+        "e3"
+      ],
+      [
+        "g3",
+        "rests_on",
+        "n0",
+        1,
+        "e4"
+      ],
+      [
+        "g3",
+        null,
+        "x1",
+        1,
+        "e5"
+      ],
+      [
+        "g3",
+        {
+          "typed": "relation"
+        },
+        "x0",
+        1,
+        "e6"
+      ],
+      [
+        "n0",
+        "rests_on",
+        "n1",
+        1,
+        "e7"
+      ],
+      [
+        "n1",
+        "rests_on",
+        "n2",
+        1,
+        "e8"
+      ],
+      [
+        "n2",
+        "rests_on",
+        "n3",
+        1,
+        "e9"
+      ],
+      [
+        "n2",
+        "same_as",
+        "n2",
+        1,
+        "e10"
+      ],
+      [
+        "n3",
+        "from",
+        "g0",
+        1,
+        "e11"
+      ],
+      [
+        "n3",
+        "rests_on",
+        "g3",
+        1,
+        "e12"
+      ],
+      [
+        "x3",
+        false,
+        "x2",
+        1,
+        "e13"
+      ]
+    ],
+    "membership_detail": {
+      "additional_bodies_read": false,
+      "groups": [
+        "group:/exceptions/left",
+        "group:/exceptions/right",
+        "group:/isolates",
+        "group:/support/deep"
+      ],
+      "next": "Use dictionary node identities with --id to read exact bodies; listed membership alone is not evidence."
+    },
+    "mode": "expanded",
+    "navigation_facets": {
+      "groups": [
+        [
+          "f0",
+          2
+        ],
+        [
+          "f3",
+          2
+        ],
+        [
+          "f5",
+          11
+        ]
+      ],
+      "nodes": [
+        [
+          "m0",
+          [
+            "g0"
+          ]
+        ],
+        [
+          "m1",
+          [
+            "g1"
+          ]
+        ],
+        [
+          "m2",
+          [
+            "g2"
+          ]
+        ],
+        [
+          "m3",
+          [
+            "g3"
+          ]
+        ],
+        [
+          "m4",
+          [
+            "g3"
+          ]
+        ],
+        [
+          "m5",
+          [
+            "g3"
+          ]
+        ],
+        [
+          "m6",
+          [
+            "g3"
+          ]
+        ],
+        [
+          "m7",
+          [
+            "g3"
+          ]
+        ],
+        [
+          "m8",
+          [
+            "g3"
+          ]
+        ],
+        [
+          "m9",
+          [
+            "g3"
+          ]
+        ],
+        [
+          "n0",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n1",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n2",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n3",
+          [
+            "f3",
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n4",
+          [
+            "g2"
+          ]
+        ]
+      ]
+    },
+    "nodes": [
+      [
+        "n0",
+        [
+          "map",
+          [
+            [
+              "name",
+              [
+                "text",
+                "chain.01"
+              ]
+            ],
+            [
+              "value",
+              [
+                "int",
+                "1"
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.01"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n1",
+        [
+          "map",
+          [
+            [
+              "name",
+              [
+                "text",
+                "chain.02"
+              ]
+            ],
+            [
+              "value",
+              [
+                "int",
+                "2"
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.02"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n2",
+        [
+          "map",
+          [
+            [
+              "name",
+              [
+                "text",
+                "chain.03"
+              ]
+            ],
+            [
+              "value",
+              [
+                "int",
+                "3"
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.03"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n3",
+        [
+          "map",
+          [
+            [
+              "big",
+              [
+                "int",
+                "900719925474099312345"
+              ]
+            ],
+            [
+              "bool",
+              [
+                "bool",
+                false
+              ]
+            ],
+            [
+              "date",
+              [
+                "date",
+                "2026-09-27"
+              ]
+            ],
+            [
+              "float",
+              [
+                "float",
+                "-0x0.0p+0"
+              ]
+            ],
+            [
+              "name",
+              [
+                "text",
+                "שלום 🌍\n\"quotes\" n3"
+              ]
+            ],
+            [
+              "nested",
+              [
+                "list",
+                [
+                  [
+                    "null"
+                  ],
+                  [
+                    "map",
+                    []
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.04",
+              "value": 4
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.04"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n4",
+        [
+          "null"
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "keep-null-type"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": null
+        }
+      ]
+    ],
+    "project": "compact-fixture",
+    "project_identity": [
+      "map",
+      [
+        [
+          "project",
+          [
+            "text",
+            "compact-fixture"
+          ]
+        ]
+      ]
+    ],
+    "revision": "r1-fixture",
+    "rules": "rules",
+    "schema": "kpopper.canonical-graph-view/v3",
+    "scope": "fixture scope",
+    "shared_assessments": {
+      "a0": {
+        "explanation": "A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. ",
+        "unknown": null
+      }
+    },
+    "view_id": "3aa5226fcc0c56d84277958286bbee935a7f1faa127f03d1277ea5b23578ea42"
+  }
+}

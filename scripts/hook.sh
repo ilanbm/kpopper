@@ -30,6 +30,7 @@ case "$SCRIPT" in
   followups_hook.py) set -- _hook followups "$@" ;;
   watch_hook.py) set -- _hook watch "$@" ;;
   ground_hook.py) set -- _hook ground "$@" ;;
+  continuation_hook.py) set -- _hook continuation "$@" ;;
   edit_hook.py) set -- _hook edit "$@" ;;
   *) printf 'kpopper: unsupported native hook: %s\n' "$SCRIPT" >&2; exit 0 ;;
 esac

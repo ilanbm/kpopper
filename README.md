@@ -935,9 +935,19 @@ selection. Their interfaces and artifact formats may change.
 | `/kpopper:annotated-doc` | [Annotated Documents](skills/annotated-doc/SKILL.md) | Authors or refreshes a standalone HTML document with selected evidence and reviewable copy updates.<br>Uses `kpop experimental annotated-doc` with operations such as `guide`, `build` and `refresh`. |
 
 The CLI entry points are `kpop experimental hub` and `kpop experimental annotated-doc`.
-`page` and `document` remain compatibility aliases. The separate experimental
-[checked-session integration](docs/checked-sessions.md) uses `kpop session` and has its
-own setup; it is optional alongside the default reasoning engine.
+`page` and `document` remain compatibility aliases.
+
+**Context during a conversation**
+
+Codex opens a [canonical view](docs/context-upgrade.md) by default: original bodies
+for the selected evidence, navigation for the rest, and automatic anchors for
+follow-up questions. Full selected views remain the default; incremental delta
+delivery is experimental and off. Other hosts retain their existing opening.
+The persistent record needs no migration for this upgrade.
+
+Follow the [conversation lifecycle](docs/session-lifecycle.md), try the
+[worked CLI example](examples/context-conversation/README.md), or use the
+[checked-session API](docs/checked-sessions.md) for explicit service setup.
 
 ## What you can do with kpopper
 

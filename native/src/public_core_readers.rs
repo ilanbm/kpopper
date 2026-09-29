@@ -280,20 +280,18 @@ fn check_output(context: &CapturedAssessment, findings: J, has_brief: bool) -> R
     })
 }
 
-pub fn opening(
-    context: &CapturedAssessment,
-    mut data: J,
-    fallback_title: &str,
-) -> Result<(J, String)> {
+/// Only project the retained findings and answer flags. Domain checks and the
+/// full text opening belong to the ordinary reader, not host attention delivery.
+pub(crate) fn opening_attention(context: &CapturedAssessment) -> Result<Vec<J>> {
     let report = json_value(context.assessment())?;
     let snapshot = json_value(&context.snapshot().to_data())?;
-    let meta = &snapshot["document"]["meta"];
-    let title = ["name", "scope"]
-        .iter()
-        .filter_map(|key| crate::value::TypedValue::from_json(&meta[*key]).ok())
-        .find(crate::history_view::truth)
-        .map(|v| crate::reasoning_authoring::py(&v))
-        .unwrap_or_else(|| fallback_title.into());
+    let (nodes, answered) = collect_opening_attention(&report, &snapshot);
+    let mut items = nodes.into_iter().map(|item| json!({"id":item["id"],"reason":item["reasons"]})).collect::<Vec<_>>();
+    items.extend(answered);
+    Ok(items)
+}
+
+fn collect_opening_attention(report: &J, snapshot: &J) -> (Vec<J>, Vec<J>) {
     let mut attention = vec![];
     for (id, node) in report["nodes"].as_object().unwrap() {
         let mut reasons = node["attention"]
@@ -317,14 +315,6 @@ pub fn opening(
             attention.push(json!({"id":id,"reasons":reasons}));
         }
     }
-    let nodes = report["nodes"].as_object().unwrap().len();
-    let subjects = report["history_subjects"].as_object().unwrap().len();
-    let mut lines = vec![
-        title.chars().take(300).collect(),
-        format!("core/v1 snapshot {}", context.snapshot_id()),
-        format!("findings {}", context.findings_revision()),
-        format!("{nodes} computational nodes; {subjects} history subjects"),
-    ];
     let falsified = report["nodes"]
         .as_object()
         .unwrap()
@@ -335,6 +325,35 @@ pub fn opening(
     let answered = crate::value::TypedValue::from_json(&snapshot["document"])
         .map(|document| crate::public_amend::document_flags(&document, &falsified))
         .unwrap_or_default();
+    let answered = answered.into_iter().map(|(id, flag)| json!({
+        "id":id,"reason":flag.text(&|a, b| crate::public_ordinary_readers::apart(a, b, 28))
+    })).collect();
+    (attention, answered)
+}
+
+pub fn opening(
+    context: &CapturedAssessment,
+    mut data: J,
+    fallback_title: &str,
+) -> Result<(J, String)> {
+    let report = json_value(context.assessment())?;
+    let snapshot = json_value(&context.snapshot().to_data())?;
+    let meta = &snapshot["document"]["meta"];
+    let title = ["name", "scope"]
+        .iter()
+        .filter_map(|key| crate::value::TypedValue::from_json(&meta[*key]).ok())
+        .find(crate::history_view::truth)
+        .map(|v| crate::reasoning_authoring::py(&v))
+        .unwrap_or_else(|| fallback_title.into());
+    let (attention, answered) = collect_opening_attention(&report, &snapshot);
+    let nodes = report["nodes"].as_object().unwrap().len();
+    let subjects = report["history_subjects"].as_object().unwrap().len();
+    let mut lines = vec![
+        title.chars().take(300).collect(),
+        format!("core/v1 snapshot {}", context.snapshot_id()),
+        format!("findings {}", context.findings_revision()),
+        format!("{nodes} computational nodes; {subjects} history subjects"),
+    ];
     let mut attention_lines = attention
         .iter()
         .map(|a| {
@@ -351,11 +370,8 @@ pub fn opening(
             )
         })
         .collect::<Vec<_>>();
-    attention_lines.extend(answered.iter().map(|(id, flag)| {
-        format!(
-            "  {id}: {}",
-            flag.text(&|a, b| crate::public_ordinary_readers::apart(a, b, 28))
-        )
+    attention_lines.extend(answered.iter().map(|item| {
+        format!("  {}: {}", item["id"].as_str().unwrap(), item["reason"].as_str().unwrap())
     }));
     if attention.is_empty() && answered.is_empty() {
         lines.push(format!(

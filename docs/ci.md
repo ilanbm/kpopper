@@ -81,6 +81,9 @@ cancellation and unexpected skips. The standalone manual `distribution` mode rem
 available for packaging diagnostics; it does not authorize publication.
 
 Release PRs contain one version/changelog commit on the current main. The release bot
+promotes curated `Unreleased` notes into that version's changelog entry and release
+PR body, retaining a list of included PRs. See [writing release notes](release-notes.md).
+The bot
 explicitly dispatches `check.yml` on that branch, because PRs written by `GITHUB_TOKEN` do
 not trigger another workflow automatically. Checks and packages use the exact candidate
 commit; ordinary PR checks retain their synthetic merge tree. `ci-required` initially fails
@@ -130,6 +133,13 @@ run's JUnit report, with each test's outcome and duration, in its evidence. A st
 compares nextest's listing with cargo's own, so the run covers exactly the tests that
 `cargo test` runs. nextest does not run doc-tests: the crate has none, and a contract test
 fails when one appears until the workflow also runs `cargo test --doc`.
+
+Intel macOS has a 120-minute whole-job allowance for compilation and the complete
+suite; other targets retain 75 minutes. The 700-subject writer fixture reserves
+all test threads on Intel and has a 15-minute failing deadline. The wide branch
+union also reserves the runner and uses its existing 15-minute deadline on Intel
+and Windows. These resource allowances retain the original workloads, assertions,
+listing comparison and zero-retry policy.
 
 The native command's compiled Rust dependencies are cached per target and build profile.
 The `tests` job restores and saves the test build's entry, and the `release` job the

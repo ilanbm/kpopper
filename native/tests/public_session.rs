@@ -400,10 +400,13 @@ fn core_only_resources_support_public_reads_history_and_sessions() {
     success(f.run(&["check"]));
 }
 
-fn session_start(f: &Fixture, host: &str) -> Output {
-    let mut child = f
-        .command()
-        .args(["session-start", "--host", host])
+fn session_start(f: &Fixture, host: &str, canonical: Option<&str>) -> Output {
+    let mut command = f.command();
+    command.args(["session-start", "--host", host]);
+    if let Some(value) = canonical {
+        command.env("KPOPPER_CANONICAL_VIEW", value);
+    }
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -422,7 +425,8 @@ fn session_start(f: &Fixture, host: &str) -> Output {
     child.wait_with_output().unwrap()
 }
 
-/// The hook's opening is `open` in the 2000-character slot, with the next moves named as
+/// The ordinary hook opening (explicit opt-out on Codex) is `open` in the
+/// 2000-character slot, with the next moves named as
 /// its host invokes them; a core/v1 record, which has no next moves to name, still opens
 /// under a hook that names its host, while a person's `--host` on it is refused.
 #[test]
@@ -442,7 +446,9 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
             opening.contains(&format!("  ... 14 more - raise --chars\n\n{next}")),
             "{opening}"
         );
-        let started = String::from_utf8(success(session_start(&f, host)).stdout).unwrap();
+        let started = String::from_utf8(success(session_start(
+            &f, host, (host == "codex").then_some("0"),
+        )).stdout).unwrap();
         assert!(started.starts_with(&opening), "{started}");
         assert!(
             started[opening.len()..].starts_with("KPOPPER_AGENT_CONTEXT "),
@@ -454,7 +460,7 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         include_str!("fixtures/core-page/GROUNDING.yaml"),
     )
     .unwrap();
-    let started = String::from_utf8(success(session_start(&f, "claude")).stdout).unwrap();
+    let started = String::from_utf8(success(session_start(&f, "claude", None)).stdout).unwrap();
     assert!(
         started.starts_with("Core page fixture\ncore/v1 snapshot "),
         "{started}"

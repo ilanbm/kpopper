@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-25
+  updated: 2026-09-29
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -6404,6 +6404,47 @@ judgments:
                                      declared parts are the choices no shape can infer, each a
                                      judgment with a sign, and the bindings of one machine, which
                                      stay in that machine's state"
+  decision.canonical_context_default:
+    name: "Canonical context and follow-up anchors in Codex"
+    rests_on: [source.context_delivery_contract]
+    verdict: "Codex opens a canonical view by default and infers query anchors from eligible
+              completed-answer citations; standalone reads retain full selected output."
+    because: "One revision-bound view preserves original bodies and recoverable navigation. Anchors
+              preserve follow-up context while global discovery stays available; complete retained
+              frames constrain reuse."
+    reopened_by: "Evidence loss, unreliable host retention checks, or representative tasks showing
+                  worse grounded answers or unacceptable overhead from the default opening or
+                  anchors."
+    seen:
+      source.context_delivery_contract: "read Canonical views, follow-up anchors, full delivery, and
+                                         experimental delta limits"
+    distinct_from: decision.context_delta_opt_in
+    # distinct 2026-09-29: The first chooses the default view and follow-up ranking; the second controls optional incremental transport of that same selected view.
+  decision.context_delta_opt_in:
+    name: "Delta delivery stays experimental and off"
+    rests_on: [source.context_delivery_contract]
+    verdict: "Full selected views remain the default. Delta requires explicit opt-in, an exact
+              retained base, and smaller output in both bytes and reference tokens."
+    because: "Packet size alone does not establish task-level savings. Missing or changed context
+              must recover through a full checkpoint, and end-to-end benefit has not justified
+              default activation."
+    reopened_by: "A controlled task-level comparison demonstrates sufficient quality, token and
+                  latency benefit, with source and retained-context correctness preserved."
+    seen:
+      source.context_delivery_contract: "read Canonical views, follow-up anchors, full delivery, and
+                                         experimental delta limits"
+  decision.curated_release_notes:
+    name: "Release notes explain resulting behavior"
+    rests_on: [source.release_notes_contract]
+    verdict: "Promote one top-level Unreleased section into release notes, keep included PR
+              traceability, and preserve historical entries."
+    because: "PR titles alone omit defaults, compatibility and practical limits; authors can explain
+              those with the change without editing versions."
+    reopened_by: "Note promotion loses historical text, publishes unreleased claims under the wrong
+                  version, or prevents the existing version-only candidate publication contract."
+    seen:
+      source.release_notes_contract: "read Promote Unreleased explanations into the versioned
+                                      changelog and release PR"
   v.three_occasions:
     rests_on: [s.2026_09_01_consolidation, s.2026_09_02_priors, s.2026_09_03_coverage,
                s.2026_09_03_hypotheses, s.2026_09_03_language, s.2026_09_03_written_layer,
@@ -8680,3 +8721,13 @@ sources:
          not replacing it, and a return to an earlier decision is a new version laid over the one it
          returns from - and twelve more out of the reviews"
     read: "2026-09-16"
+
+  source.context_delivery_contract:
+    name: "Context delivery and conversation contract"
+    file: "docs/context-upgrade.md"
+    of: "Canonical views, follow-up anchors, full delivery, and experimental delta limits"
+
+  source.release_notes_contract:
+    name: "Curated release note contract"
+    file: "docs/release-notes.md"
+    of: "Promote Unreleased explanations into the versioned changelog and release PR"

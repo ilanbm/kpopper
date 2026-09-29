@@ -19,11 +19,20 @@ The Codex package loads the shared skill and these hooks:
 
 | Event | Behavior |
 |---|---|
-| `SessionStart` | The existing record opener and ready important ingestion findings |
-| `PostToolUse`, `UserPromptSubmit` | Asynchronous delivery of newly actionable ingestion results |
-| `UserPromptSubmit` | Current record diagnostics as `additionalContext`; no Stop continuation |
+| `SessionStart` | Canonical opening or its bound recovery route, attention items, and existing ingestion/watch/grounding hooks |
+| `PostToolUse` | Complete managed context frames, grounding/follow-up checks, and asynchronous ingestion/watch delivery |
+| `UserPromptSubmit` | Record diagnostics, session gate, abandoned-read cleanup, and asynchronous ingestion/watch delivery |
+| `Stop` | Passive verification of retained frames and completed-answer citations; no new model turn |
+| `PreCompact`, `PostCompact`, `Interrupt` | Invalidate reusable continuation state so the next read uses a full checkpoint |
 
-The hooks only read the queue. `kpop ingest capture` retains an explicit report and starts the
+Canonical views and automatic anchors are enabled by default on the managed Codex
+route. Delta delivery remains experimental and off. The continuation hook has its
+own native byte/token guards; its PostToolUse definition uses
+`additionalContextLimit: 0` to avoid a second truncation of a complete frame.
+See the [upgrade controls](../../docs/context-upgrade.md) and
+[conversation lifecycle](../../docs/session-lifecycle.md).
+
+The ingestion hooks read the queue. `kpop ingest capture` retains an explicit report and starts the
 independent processor. Routine completion emits no hook output. Important results enter the next
 available model request while a turn is active. If the task is idle, Codex queues ordinary async
 hook output until the next user turn; the hook does not start one. See the
