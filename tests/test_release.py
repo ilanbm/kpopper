@@ -70,6 +70,33 @@ class TheReleaseLine(unittest.TestCase):
 
 
 class ChangelogBehavior(unittest.TestCase):
+    def test_curated_unreleased_notes_become_the_version_entry_once(self):
+        text = "# Changelog\n\n## Unreleased\n\n### Added\n\n- Read exact source bodies.\n\n### Compatibility\n\n- No migration.\n\n## 0.14.0 — old\n\n- Retained history.\n"
+        notes, history = R.take_unreleased(text)
+        entry = R.changelog_entry("0.15.0", "2026-09-29",
+            [{"subject": "Canonical views", "pr": 270, "bump": "minor"}], [], notes=notes)
+        result = R.prepend(history, entry)
+        self.assertNotIn("## Unreleased", result)
+        self.assertEqual(result.count("Read exact source bodies."), 1)
+        self.assertIn("### Compatibility\n\n- No migration.", result)
+        self.assertIn("Canonical views (#270)", result)
+        self.assertTrue(result.endswith("## 0.14.0 — old\n\n- Retained history.\n"))
+        body = R.pr_body("0.15.0", "0.14.0", "minor", [], [], notes=notes)
+        self.assertIn("Read exact source bodies.", body)
+
+    def test_unreleased_does_not_rewrite_old_history_or_publish_template_comments(self):
+        original = "# Changelog\n\n## 0.14.0 — old\n\n- Existing.\n"
+        self.assertEqual(R.take_unreleased(original), ("", original))
+        notes, history = R.take_unreleased("# Changelog\n\n## [Unreleased]\n\n<!-- Write notes here. -->\n\n## 0.14.0 — old\n\n- Existing.\n")
+        self.assertEqual(notes, "")
+        self.assertEqual(history, original)
+
+    def test_multiple_or_misplaced_unreleased_sections_fail_visibly(self):
+        for text in ("# Changelog\n\n## Unreleased\n\nA\n\n## Unreleased\n\nB\n",
+                     "# Changelog\n\n## 0.14.0\n\nA\n\n## Unreleased\n\nB\n"):
+            with self.assertRaisesRegex(ValueError, "Unreleased"):
+                R.take_unreleased(text)
+
     def test_entry_lists_merges_and_record_decisions(self):
         entry = R.changelog_entry("0.21.0", "2026-09-04",
                                   [{"subject": "Accept contract", "pr": 2, "bump": "minor"},
@@ -79,6 +106,11 @@ class ChangelogBehavior(unittest.TestCase):
         self.assertIn("- Accept contract (#2) — minor", entry)
         self.assertIn("- Fix thing — no bump declared", entry)
         self.assertIn("Decisions recorded: d.page_is_graph", entry)
+
+    def test_decision_trace_accepts_legacy_and_whole_word_prefixes(self):
+        diff = "+  d.legacy:\n+  decision.context_default:\n+  source.contract:\n+  decision.context_default:\n"
+        with patch.object(R, "sh", return_value=diff):
+            self.assertEqual(R.decisions_added("base"), ["d.legacy", "decision.context_default"])
 
     def test_new_entry_is_prepended_and_release_body_has_no_bump(self):
         old = R.prepend("", "## 0.20.0 — x\n\n- old\n")

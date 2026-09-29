@@ -71,6 +71,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"continuation_hook.py\" codex",
+            "timeout": 10,
+            "additionalContextLimit": 0
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -108,6 +118,59 @@
           {
             "type": "command",
             "command": "\"$PLUGIN_ROOT/scripts/session_gate.sh\" --host codex --context UserPromptSubmit"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"continuation_hook.py\" codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"continuation_hook.py\" codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"continuation_hook.py\" codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"continuation_hook.py\" codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"continuation_hook.py\" codex",
+            "timeout": 10
           }
         ]
       }

@@ -81,6 +81,9 @@ cancellation and unexpected skips. The standalone manual `distribution` mode rem
 available for packaging diagnostics; it does not authorize publication.
 
 Release PRs contain one version/changelog commit on the current main. The release bot
+promotes curated `Unreleased` notes into that version's changelog entry and release
+PR body, retaining a list of included PRs. See [writing release notes](release-notes.md).
+The bot
 explicitly dispatches `check.yml` on that branch, because PRs written by `GITHUB_TOKEN` do
 not trigger another workflow automatically. Checks and packages use the exact candidate
 commit; ordinary PR checks retain their synthetic merge tree. `ci-required` initially fails

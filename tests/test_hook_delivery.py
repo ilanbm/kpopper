@@ -65,11 +65,18 @@ class ShellDispatch(unittest.TestCase):
 
 
 class Manifests(unittest.TestCase):
-    def test_manifests_do_not_register_stop_or_automatic_rewake(self):
+    def test_only_codex_has_passive_continuation_stop_and_no_automatic_rewake(self):
         for rel in MANIFESTS:
             with self.subTest(rel=rel):
                 value = json.loads((ROOT / rel).read_text())
-                self.assertFalse({'Stop', 'stop', 'SessionEnd', 'agentStop'} & set(value['hooks']))
+                if rel.startswith('adapters/codex/'):
+                    handlers = [hook for group in value['hooks'].get('Stop', []) for hook in group['hooks']]
+                    self.assertEqual(len(handlers), 1)
+                    self.assertIn('continuation_hook.py', handlers[0]['command'])
+                    self.assertNotIn('session_gate', handlers[0]['command'])
+                    self.assertNotIn('async', handlers[0])
+                else:
+                    self.assertFalse({'Stop', 'stop', 'SessionEnd', 'agentStop'} & set(value['hooks']))
                 self.assertNotIn('asyncRewake', json.dumps(value))
 
 

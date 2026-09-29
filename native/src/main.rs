@@ -325,8 +325,9 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let result = Store::open(&root)?;
         output.push(format!("Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}", result["commits"], serde_json::to_string(&result["document"]["readings"])?));
     } else if let Some(location) = location.as_ref().filter(|l| l.status != "missing") {
-        match retry_session_snapshot(|| kpop_native::session_admin::hook_opening(&root, mode)) {
-            Ok(Some(text)) => {
+        match retry_session_snapshot(|| kpop_native::session_admin::hook_opening(&root, mode, options.host.as_deref())) {
+            Ok(kpop_native::session_admin::HookOpening { text: Some(text), warning }) => {
+                if let Some(warning) = warning { output.push(warning); }
                 output.push(text.trim_end().into());
                 if let Some(host) = options.host.as_deref() {
                     let (ground, record) = if host == "claude" {
@@ -337,10 +338,12 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     output.push(format!("next: {ground} <entry|prefix> (values with sources, what a change reaches) · {record} (what this session found) · check"));
                 }
             }
-            Ok(None) => {
+            Ok(kpop_native::session_admin::HookOpening { text: None, warning }) => {
+                if let Some(warning) = warning.as_ref() { output.push(warning.clone()); }
                 let options = kpop_native::public_readers::Options {
                     host: options.host.clone(),
                     from_hook: true,
+                    chars: warning.is_some().then_some(8_000),
                     ..Default::default()
                 };
                 match retry_session_snapshot(|| kpop_native::public_readers::run_auto(
@@ -364,7 +367,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
             }
             Err(error) => {
                 output.push(format!(
-                    "Checked session view unavailable. Read the record before relying on it: {}",
+                    "Checked session view unavailable: {error}. Read the record before relying on it: {}",
                     location.record.display()
                 ));
                 eprintln!("{error}");
@@ -385,6 +388,23 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let sid = payload["session_id"]
         .as_str()
         .filter(|s| kpop_native::public_session::valid_session(s));
+    if options.host.as_deref() == Some("codex") && let Some(sid) = sid {
+        let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
+        match kpop_native::view_continuation::initialize(&root, sid, managed) {
+            Ok(()) if managed => {
+                for text in &mut output {
+                    if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
+                        match kpop_native::view_continuation::bind_opening(text, sid) {
+                            Ok(bound) => { *text = bound; },
+                            Err(error) => { let _ = kpop_native::view_continuation::initialize(&root, sid, false); eprintln!("kpopper managed view route unavailable: {error}"); },
+                        }
+                    }
+                }
+            },
+            Ok(()) => (),
+            Err(error) => eprintln!("kpopper continuation state unavailable: {error}"),
+        }
+    }
     let environment = sid
         .map(|s| json!({"KPOPPER_AGENT_SESSION":s}))
         .unwrap_or_else(|| json!({}));

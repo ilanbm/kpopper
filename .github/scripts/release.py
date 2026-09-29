@@ -32,7 +32,7 @@ VERSION_FILES = {
 BUMPS = ("patch", "minor", "major")
 BUMP_LINE = re.compile(r"^\s*bump\s*:\s*(patch|minor|major)\b", re.I | re.M)
 PR_IN_SUBJECT = re.compile(r"\(#(\d+)\)\s*$")
-DECISION_ADDED = re.compile(r"^\+  (d\.[A-Za-z0-9_]+):", re.M)
+DECISION_ADDED = re.compile(r"^\+  ((?:d|decision)\.[A-Za-z0-9_]+):", re.M)
 
 
 def sh(*args, check=True, cwd=None):
@@ -86,14 +86,33 @@ def with_version(texts, version):
     return out
 
 
-def changelog_entry(version, date, merged, decisions):
+def take_unreleased(text):
+    """Move curated notes into a release without rewriting historical entries."""
+    heading = re.compile(r"^## (?:Unreleased|\[Unreleased\])\s*$", re.M)
+    matches = list(heading.finditer(text))
+    if not matches:
+        return "", text
+    first_section = re.search(r"^## ", text, re.M)
+    if len(matches) != 1 or first_section is None or matches[0].start() != first_section.start():
+        raise ValueError("Keep exactly one Unreleased section above released versions")
+    match = matches[0]
+    following = re.search(r"^## ", text[match.end():], re.M)
+    end = match.end() + following.start() if following else len(text)
+    notes = re.sub(r"<!--.*?-->", "", text[match.end():end], flags=re.S).strip()
+    history = text[:match.start()] + text[end:]
+    return notes, history
+
+
+def changelog_entry(version, date, merged, decisions, *, notes=""):
     """One changelog section: the pull requests since the last release with the bump each
     declared, and the decisions the record gained."""
     lines = [f"## {version} — {date}", ""]
+    if notes:
+        lines += [notes.rstrip(), "", "### Included changes", ""]
     for m in merged:
         ref = f" (#{m['pr']})" if m.get("pr") else ""
         bump = m.get("bump") or "no bump declared"
-        lines.append(f"- {m['subject']}{ref} — {bump}")
+        lines.append(f"- {m['subject']}{ref}" + ("" if notes else f" — {bump}"))
     if decisions:
         lines += ["", "Decisions recorded: " + ", ".join(decisions)]
     return "\n".join(lines) + "\n"
@@ -105,10 +124,12 @@ def prepend(changelog_text, entry):
     return head + entry + ("\n" + body if body.strip() else "")
 
 
-def pr_body(version, previous, bump, merged, decisions):
+def pr_body(version, previous, bump, merged, decisions, *, notes=""):
     lines = ["## What changed", "",
-             f"The version moves from {previous} to **{version}** ({bump}).", "",
-             f"## Merged since {previous}", ""]
+             f"The version moves from {previous} to **{version}** ({bump}).", ""]
+    if notes:
+        lines += ["## Release notes", "", notes.rstrip(), ""]
+    lines += [f"## Merged since {previous}", ""]
     for m in merged:
         ref = f"#{m['pr']} " if m.get("pr") else ""
         lines.append(f"- {ref}{m['subject']} — {m.get('bump') or 'no bump declared'}")
@@ -211,8 +232,10 @@ def main(argv):
     nxt = next_version(current, bump)
     decisions = decisions_added(rel)
     today = datetime.date.today().isoformat()
-    entry = changelog_entry(nxt, today, merged, decisions)
-    body = pr_body(nxt, current, bump, merged, decisions)
+    log = ROOT / "CHANGELOG.md"
+    notes, history = take_unreleased(log.read_text(encoding="utf-8") if log.exists() else "")
+    entry = changelog_entry(nxt, today, merged, decisions, notes=notes)
+    body = pr_body(nxt, current, bump, merged, decisions, notes=notes)
     print(f"{len(merged)} merged since {current}; largest bump {bump} -> {nxt}")
     print(entry)
     if dry:
@@ -224,9 +247,7 @@ def main(argv):
     sh("git", "switch", "-C", branch, "origin/main")
     for name, text in with_version(texts, nxt).items():
         (ROOT / name).write_text(text, encoding="utf-8")
-    log = ROOT / "CHANGELOG.md"
-    log.write_text(prepend(log.read_text(encoding="utf-8") if log.exists() else "", entry),
-                   encoding="utf-8")
+    log.write_text(prepend(history, entry), encoding="utf-8")
     # The bot's PR event does not trigger checks. Dispatch the candidate workflow below.
     sh("kpop", "--frozen", "check")
     sh("kpop", "--frozen", "experimental", "hub", "--verify")

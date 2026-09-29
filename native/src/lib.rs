@@ -7,6 +7,11 @@ pub mod annotated_document;
 mod annotated_document_html;
 pub mod authoring_source;
 pub mod checked_session;
+pub mod view_selection;
+pub mod view_attributes;
+pub mod view_format;
+pub mod view_delta;
+pub mod view_continuation;
 pub mod checked_session_store;
 pub mod core_html;
 pub mod direct_history;
@@ -267,3 +272,6 @@ pub mod watch_store;
 mod session_settings;
 pub mod session_admin;
 pub mod host_hooks;
+
+pub mod canonical_view;
+pub mod view_descriptions;

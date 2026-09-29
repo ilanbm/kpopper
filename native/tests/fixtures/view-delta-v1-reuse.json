@@ -1,0 +1,2823 @@
+{
+  "base": {
+    "assessment_profile": "checked-reader/v1",
+    "attribute_compaction": {
+      "compacted_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3",
+        "n4",
+        "n5",
+        "n6",
+        "n7"
+      ],
+      "nodes": {
+        "n0": {
+          "status": "a0"
+        },
+        "n1": {
+          "status": "a0"
+        },
+        "n2": {
+          "status": "a0"
+        },
+        "n3": {
+          "status": "a0"
+        },
+        "n4": {
+          "status": "a0"
+        },
+        "n5": {
+          "status": "a0"
+        },
+        "n6": {
+          "status": "a0"
+        },
+        "n7": {
+          "status": "a0"
+        }
+      },
+      "schema": "kpopper.attribute-compaction/v1",
+      "status_pool_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3",
+        "n4",
+        "n5",
+        "n6",
+        "n7"
+      ],
+      "status_text_nodes": [],
+      "value_text_nodes": []
+    },
+    "coverage": {
+      "count": 15,
+      "direct_count": 8,
+      "folded_count": 7,
+      "receipt": "639af531d8aa03753c08540e2eebf83dfc52185ae6aafdf49e209866c3219bd3",
+      "source_ids_sha256": "4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c"
+    },
+    "descriptions": {
+      "generated_claims": false,
+      "generator": "source-labels/v1",
+      "is_source_evidence": false,
+      "kind": "source-labels"
+    },
+    "dictionary": {
+      "f0": {
+        "kind": "group",
+        "original": "group:/exceptions"
+      },
+      "f3": {
+        "kind": "group",
+        "original": "group:/featured"
+      },
+      "f5": {
+        "kind": "group",
+        "original": "group:/support"
+      },
+      "g0": {
+        "kind": "group",
+        "original": "group:/exceptions/left"
+      },
+      "g1": {
+        "kind": "group",
+        "original": "group:/exceptions/right"
+      },
+      "g2": {
+        "kind": "group",
+        "original": "group:/isolates"
+      },
+      "g3": {
+        "kind": "group",
+        "original": "group:/support/deep"
+      },
+      "n0": {
+        "kind": "node",
+        "original": "chain.00"
+      },
+      "n1": {
+        "kind": "node",
+        "original": "chain.01"
+      },
+      "n2": {
+        "kind": "node",
+        "original": "chain.02"
+      },
+      "n3": {
+        "kind": "node",
+        "original": "chain.03"
+      },
+      "n4": {
+        "kind": "node",
+        "original": "chain.04"
+      },
+      "n5": {
+        "kind": "node",
+        "original": "chain.05"
+      },
+      "n6": {
+        "kind": "node",
+        "original": "chain.06"
+      },
+      "n7": {
+        "kind": "node",
+        "original": "chain.07"
+      },
+      "x0": {
+        "kind": "external",
+        "original": null,
+        "original_present": false
+      },
+      "x1": {
+        "kind": "external",
+        "original": "outside",
+        "original_present": true
+      },
+      "x2": {
+        "kind": "external",
+        "original": 4,
+        "original_present": true
+      },
+      "x3": {
+        "kind": "external",
+        "original": false,
+        "original_present": true
+      },
+      "x4": {
+        "kind": "external",
+        "original": null,
+        "original_present": true
+      }
+    },
+    "edge_set_handle_template": "edgeset:9de7446e2972f4116edf747508a5272f62465d939f8e1238ef6deb09db8cfc50:{edge_set_ref}",
+    "expanded_edges": [],
+    "fields": {
+      "attribute_compaction": {
+        "manifest": "attribute_compaction.nodes[ref]",
+        "node_rule_values": {
+          "status": "shared assessment alias",
+          "status_text": "status_text mode",
+          "value_text": "body field key"
+        },
+        "restore": "view_attributes::restore_attributes",
+        "schema": "kpopper.attribute-compaction/v1",
+        "status_pool": {
+          "dictionary": "shared_assessments",
+          "exact_json": true,
+          "field": "status_ref"
+        },
+        "status_text": {
+          "derived": true,
+          "display_only": true,
+          "modes": {
+            "status": "render_projected_status",
+            "uncertainty": "exact_array_alias"
+          },
+          "renderer": "reasoning-projection/render_projected_status/v1"
+        },
+        "value_text": {
+          "body_field_candidates": [
+            "v",
+            "quoted",
+            "value"
+          ],
+          "display_only": true,
+          "reference": "attributes.status.computation.value_text_ref",
+          "renderer": "reasoning-projection/render_value/v1"
+        }
+      },
+      "description": {
+        "kind": "navigation_only",
+        "row": [
+          "text",
+          "generator",
+          "basis_sha256",
+          "excerpted"
+        ]
+      },
+      "expanded_edge": [
+        "edge_set",
+        "original_edges"
+      ],
+      "group": [
+        "ref",
+        "count",
+        "label",
+        "description"
+      ],
+      "link": [
+        "from_ref",
+        "rel",
+        "to_ref",
+        "count",
+        "edge_set_ref"
+      ],
+      "navigation_group": [
+        "ref",
+        "count"
+      ],
+      "navigation_node": [
+        "node_ref",
+        "group_refs"
+      ],
+      "node": [
+        "ref",
+        "body",
+        "attributes"
+      ]
+    },
+    "group_expansion_route": "dictionary[group_ref].original (group:/path), with this revision and current focus",
+    "groups": [
+      [
+        "g0",
+        1,
+        "left",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g1",
+        1,
+        "right",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g2",
+        2,
+        "isolates",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g3",
+        3,
+        "deep",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ]
+    ],
+    "links": [
+      [
+        "g1",
+        "rule_reads",
+        "n7",
+        1,
+        "e0"
+      ],
+      [
+        "g3",
+        "cycle",
+        "n0",
+        1,
+        "e1"
+      ],
+      [
+        "g3",
+        "rests_on",
+        "g3",
+        2,
+        "e2"
+      ],
+      [
+        "n0",
+        {
+          "missing": true
+        },
+        "x4",
+        1,
+        "e3"
+      ],
+      [
+        "n0",
+        "rests_on",
+        "n1",
+        1,
+        "e4"
+      ],
+      [
+        "n0",
+        null,
+        "x1",
+        1,
+        "e5"
+      ],
+      [
+        "n0",
+        {
+          "typed": "relation"
+        },
+        "x0",
+        1,
+        "e6"
+      ],
+      [
+        "n1",
+        "rests_on",
+        "n2",
+        1,
+        "e7"
+      ],
+      [
+        "n2",
+        "rests_on",
+        "n3",
+        1,
+        "e8"
+      ],
+      [
+        "n3",
+        "rests_on",
+        "n4",
+        1,
+        "e9"
+      ],
+      [
+        "n3",
+        "same_as",
+        "n3",
+        1,
+        "e10"
+      ],
+      [
+        "n4",
+        "from",
+        "g0",
+        1,
+        "e11"
+      ],
+      [
+        "n4",
+        "rests_on",
+        "n5",
+        1,
+        "e12"
+      ],
+      [
+        "n5",
+        "rests_on",
+        "n6",
+        3,
+        "e13"
+      ],
+      [
+        "n6",
+        "rests_on",
+        "n7",
+        1,
+        "e14"
+      ],
+      [
+        "n7",
+        "rests_on",
+        "g3",
+        1,
+        "e15"
+      ],
+      [
+        "x3",
+        false,
+        "x2",
+        1,
+        "e16"
+      ]
+    ],
+    "mode": "expanded",
+    "navigation_facets": {
+      "groups": [
+        [
+          "f0",
+          2
+        ],
+        [
+          "f3",
+          2
+        ],
+        [
+          "f5",
+          11
+        ]
+      ],
+      "nodes": [
+        [
+          "n0",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n1",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n2",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n3",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n4",
+          [
+            "f3",
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n5",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n6",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n7",
+          [
+            "f5",
+            "g3"
+          ]
+        ]
+      ]
+    },
+    "nodes": [
+      [
+        "n0",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.00"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.00",
+              "value": 0
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.00"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n1",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.01"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.01",
+              "value": 1
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.01"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n2",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.02"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.02",
+              "value": 2
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.02"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n3",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.03"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.03",
+              "value": 3
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.03"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n4",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.04"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.04",
+              "value": 4
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.04"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n5",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.05"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.05",
+              "value": 5
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.05"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n6",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.06"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.06",
+              "value": 6
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.06"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n7",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.07"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.07",
+              "value": 7
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.07"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ]
+    ],
+    "project": "compact-fixture",
+    "project_identity": [
+      "map",
+      [
+        [
+          "project",
+          [
+            "text",
+            "compact-fixture"
+          ]
+        ]
+      ]
+    ],
+    "revision": "r1-fixture",
+    "rules": "rules",
+    "schema": "kpopper.canonical-graph-view/v3",
+    "scope": "fixture scope",
+    "shared_assessments": {
+      "a0": {
+        "explanation": "A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. ",
+        "unknown": null
+      }
+    },
+    "view_id": "9de7446e2972f4116edf747508a5272f62465d939f8e1238ef6deb09db8cfc50"
+  },
+  "base_text": "# Checked graph view (kpopper.view-codec/v4; kpopper.canonical-graph-view/v3)\n@field \"assessment_profile\" \"checked-reader/v1\"\n@field \"attribute_compaction\" {\"compacted_nodes\":[\"n0\",\"n1\",\"n2\",\"n3\",\"n4\",\"n5\",\"n6\",\"n7\"],\"nodes\":{\"n0\":{\"status\":\"a0\"},\"n1\":{\"status\":\"a0\"},\"n2\":{\"status\":\"a0\"},\"n3\":{\"status\":\"a0\"},\"n4\":{\"status\":\"a0\"},\"n5\":{\"status\":\"a0\"},\"n6\":{\"status\":\"a0\"},\"n7\":{\"status\":\"a0\"}},\"schema\":\"kpopper.attribute-compaction/v1\",\"status_pool_nodes\":[\"n0\",\"n1\",\"n2\",\"n3\",\"n4\",\"n5\",\"n6\",\"n7\"],\"status_text_nodes\":[],\"value_text_nodes\":[]}\n@field \"coverage\" {\"count\":15,\"direct_count\":8,\"folded_count\":7,\"receipt\":\"639af531d8aa03753c08540e2eebf83dfc52185ae6aafdf49e209866c3219bd3\",\"source_ids_sha256\":\"4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c\"}\n@field \"descriptions\" {\"generated_claims\":false,\"generator\":\"source-labels/v1\",\"is_source_evidence\":false,\"kind\":\"source-labels\"}\n@field \"dictionary\" {\"f0\":{\"kind\":\"group\",\"original\":\"group:/exceptions\"},\"f3\":{\"kind\":\"group\",\"original\":\"group:/featured\"},\"f5\":{\"kind\":\"group\",\"original\":\"group:/support\"},\"g0\":{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"},\"g1\":{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"},\"g2\":{\"kind\":\"group\",\"original\":\"group:/isolates\"},\"g3\":{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"n0\":{\"kind\":\"node\",\"original\":\"chain.00\"},\"n1\":{\"kind\":\"node\",\"original\":\"chain.01\"},\"n2\":{\"kind\":\"node\",\"original\":\"chain.02\"},\"n3\":{\"kind\":\"node\",\"original\":\"chain.03\"},\"n4\":{\"kind\":\"node\",\"original\":\"chain.04\"},\"n5\":{\"kind\":\"node\",\"original\":\"chain.05\"},\"n6\":{\"kind\":\"node\",\"original\":\"chain.06\"},\"n7\":{\"kind\":\"node\",\"original\":\"chain.07\"},\"x0\":{\"kind\":\"external\",\"original\":null,\"original_present\":false},\"x1\":{\"kind\":\"external\",\"original\":\"outside\",\"original_present\":true},\"x2\":{\"kind\":\"external\",\"original\":4,\"original_present\":true},\"x3\":{\"kind\":\"external\",\"original\":false,\"original_present\":true},\"x4\":{\"kind\":\"external\",\"original\":null,\"original_present\":true}}\n@field \"edge_set_handle_template\" \"edgeset:9de7446e2972f4116edf747508a5272f62465d939f8e1238ef6deb09db8cfc50:{edge_set_ref}\"\n\n## expanded_edges\n@rows \"expanded_edges\" 0\n@field \"fields\" {\"attribute_compaction\":{\"manifest\":\"attribute_compaction.nodes[ref]\",\"node_rule_values\":{\"status\":\"shared assessment alias\",\"status_text\":\"status_text mode\",\"value_text\":\"body field key\"},\"restore\":\"view_attributes::restore_attributes\",\"schema\":\"kpopper.attribute-compaction/v1\",\"status_pool\":{\"dictionary\":\"shared_assessments\",\"exact_json\":true,\"field\":\"status_ref\"},\"status_text\":{\"derived\":true,\"display_only\":true,\"modes\":{\"status\":\"render_projected_status\",\"uncertainty\":\"exact_array_alias\"},\"renderer\":\"reasoning-projection/render_projected_status/v1\"},\"value_text\":{\"body_field_candidates\":[\"v\",\"quoted\",\"value\"],\"display_only\":true,\"reference\":\"attributes.status.computation.value_text_ref\",\"renderer\":\"reasoning-projection/render_value/v1\"}},\"description\":{\"kind\":\"navigation_only\",\"row\":[\"text\",\"generator\",\"basis_sha256\",\"excerpted\"]},\"expanded_edge\":[\"edge_set\",\"original_edges\"],\"group\":[\"ref\",\"count\",\"label\",\"description\"],\"link\":[\"from_ref\",\"rel\",\"to_ref\",\"count\",\"edge_set_ref\"],\"navigation_group\":[\"ref\",\"count\"],\"navigation_node\":[\"node_ref\",\"group_refs\"],\"node\":[\"ref\",\"body\",\"attributes\"]}\n@field \"group_expansion_route\" \"dictionary[group_ref].original (group:/path), with this revision and current focus\"\n\n## groups\n@rows \"groups\" 4\ngroup [\"g0\",1,\"left\",[\"\",null,null,false]]\ngroup [\"g1\",1,\"right\",[\"\",null,null,false]]\ngroup [\"g2\",2,\"isolates\",[\"\",null,null,false]]\ngroup [\"g3\",3,\"deep\",[\"\",null,null,false]]\n\n## links\n@rows \"links\" 17\nlink [\"g1\",\"rule_reads\",\"n7\",1,\"e0\"]\nlink [\"g3\",\"cycle\",\"n0\",1,\"e1\"]\nlink [\"g3\",\"rests_on\",\"g3\",2,\"e2\"]\nlink [\"n0\",{\"missing\":true},\"x4\",1,\"e3\"]\nlink [\"n0\",\"rests_on\",\"n1\",1,\"e4\"]\nlink [\"n0\",null,\"x1\",1,\"e5\"]\nlink [\"n0\",{\"typed\":\"relation\"},\"x0\",1,\"e6\"]\nlink [\"n1\",\"rests_on\",\"n2\",1,\"e7\"]\nlink [\"n2\",\"rests_on\",\"n3\",1,\"e8\"]\nlink [\"n3\",\"rests_on\",\"n4\",1,\"e9\"]\nlink [\"n3\",\"same_as\",\"n3\",1,\"e10\"]\nlink [\"n4\",\"from\",\"g0\",1,\"e11\"]\nlink [\"n4\",\"rests_on\",\"n5\",1,\"e12\"]\nlink [\"n5\",\"rests_on\",\"n6\",3,\"e13\"]\nlink [\"n6\",\"rests_on\",\"n7\",1,\"e14\"]\nlink [\"n7\",\"rests_on\",\"g3\",1,\"e15\"]\nlink [\"x3\",false,\"x2\",1,\"e16\"]\n@field \"mode\" \"expanded\"\n@field \"navigation_facets\" {\"groups\":[[\"f0\",2],[\"f3\",2],[\"f5\",11]],\"nodes\":[[\"n0\",[\"f5\",\"g3\"]],[\"n1\",[\"f5\",\"g3\"]],[\"n2\",[\"f5\",\"g3\"]],[\"n3\",[\"f5\",\"g3\"]],[\"n4\",[\"f3\",\"f5\",\"g3\"]],[\"n5\",[\"f5\",\"g3\"]],[\"n6\",[\"f5\",\"g3\"]],[\"n7\",[\"f5\",\"g3\"]]]}\n\n## nodes\n@rows \"nodes\" 8\nnode [\"n0\",[\"map\",[[\"id\",[\"text\",\"chain.00\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.00\",\"value\":0},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.00\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n1\",[\"map\",[[\"id\",[\"text\",\"chain.01\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.01\",\"value\":1},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.01\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n2\",[\"map\",[[\"id\",[\"text\",\"chain.02\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.02\",\"value\":2},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.02\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n3\",[\"map\",[[\"id\",[\"text\",\"chain.03\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.03\",\"value\":3},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.03\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n4\",[\"map\",[[\"id\",[\"text\",\"chain.04\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.04\",\"value\":4},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.04\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n5\",[\"map\",[[\"id\",[\"text\",\"chain.05\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.05\",\"value\":5},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.05\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n6\",[\"map\",[[\"id\",[\"text\",\"chain.06\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.06\",\"value\":6},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.06\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\nnode [\"n7\",[\"map\",[[\"id\",[\"text\",\"chain.07\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]],{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.07\",\"value\":7},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.07\"},\"status_ref\":\"a0\",\"status_text\":[],\"uncertainty\":[]}]\n@field \"project\" \"compact-fixture\"\n@field \"project_identity\" [\"map\",[[\"project\",[\"text\",\"compact-fixture\"]]]]\n@field \"revision\" \"r1-fixture\"\n@field \"rules\" \"rules\"\n@field \"schema\" \"kpopper.canonical-graph-view/v3\"\n@field \"scope\" \"fixture scope\"\n@field \"shared_assessments\" {\"a0\":{\"explanation\":\"A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. \",\"unknown\":null}}\n@field \"view_id\" \"9de7446e2972f4116edf747508a5272f62465d939f8e1238ef6deb09db8cfc50\"\n",
+  "delta": {
+    "base_evidence_sha256": "8b8a31dd99b25581a7f73b1c844fd6068b81e47f44fd27ab0622729d478b01ff",
+    "base_sha256": "0e0591f023a952a8f1d982ac7db1b2f70197e6cb461123caef173dbf5625b22d",
+    "evidence_additions": [
+      {
+        "body": [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.08"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        "body_sha256": "f0846ad33f3366b59c9ba99d5dfaa01fa65224c6665e214a01a4215972cc757a",
+        "source_id": "chain.08"
+      }
+    ],
+    "focus": {
+      "fold": [
+        "chain.00"
+      ],
+      "order": [
+        "chain.01",
+        "chain.02",
+        "chain.03",
+        "chain.04",
+        "chain.05",
+        "chain.06",
+        "chain.07",
+        "chain.08"
+      ],
+      "upsert": [
+        {
+          "attributes": {
+            "dependencies": null,
+            "extra": {
+              "fraction": 0.125,
+              "literal": "n3 and g0 are quoted source text",
+              "negative_zero": -0.0
+            },
+            "record_metadata": {
+              "body": {
+                "name": "chain.08",
+                "value": 8
+              },
+              "kind": "known",
+              "record_source": "record",
+              "unique_marker": "meta-chain.08"
+            },
+            "status_ref": [
+              "a",
+              0
+            ],
+            "status_text": [],
+            "uncertainty": []
+          },
+          "body_sha256": "f0846ad33f3366b59c9ba99d5dfaa01fa65224c6665e214a01a4215972cc757a",
+          "source_id": "chain.08"
+        }
+      ]
+    },
+    "metadata": {
+      "set": {
+        "attribute_compaction": {
+          "compacted_nodes": [
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            {
+              "kind": "node",
+              "original": "chain.05"
+            },
+            {
+              "kind": "node",
+              "original": "chain.06"
+            },
+            {
+              "kind": "node",
+              "original": "chain.07"
+            },
+            {
+              "kind": "node",
+              "original": "chain.08"
+            }
+          ],
+          "nodes": [
+            [
+              {
+                "kind": "node",
+                "original": "chain.01"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.02"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.03"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.04"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.05"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.06"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.07"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.08"
+              },
+              {
+                "status": [
+                  "a",
+                  0
+                ]
+              }
+            ]
+          ],
+          "schema": "kpopper.attribute-compaction/v1",
+          "status_pool_nodes": [
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            {
+              "kind": "node",
+              "original": "chain.05"
+            },
+            {
+              "kind": "node",
+              "original": "chain.06"
+            },
+            {
+              "kind": "node",
+              "original": "chain.07"
+            },
+            {
+              "kind": "node",
+              "original": "chain.08"
+            }
+          ],
+          "status_text_nodes": [],
+          "value_text_nodes": []
+        },
+        "coverage": {
+          "count": 15,
+          "direct_count": 8,
+          "folded_count": 7,
+          "receipt": "9d74023ae96c2ef4f1def1543f6a895d6fb42db2461df9ad2cb70d33cecd502b",
+          "source_ids_sha256": "4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c"
+        },
+        "dictionary": [
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/exceptions"
+            },
+            "slot": [
+              "f",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/featured"
+            },
+            "slot": [
+              "f",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/support"
+            },
+            "slot": [
+              "f",
+              5
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/exceptions/left"
+            },
+            "slot": [
+              "g",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/exceptions/right"
+            },
+            "slot": [
+              "g",
+              1
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/isolates"
+            },
+            "slot": [
+              "g",
+              2
+            ]
+          },
+          {
+            "identity": {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "slot": [
+              "g",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            "slot": [
+              "n",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            "slot": [
+              "n",
+              1
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            "slot": [
+              "n",
+              2
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            "slot": [
+              "n",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.05"
+            },
+            "slot": [
+              "n",
+              4
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.06"
+            },
+            "slot": [
+              "n",
+              5
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.07"
+            },
+            "slot": [
+              "n",
+              6
+            ]
+          },
+          {
+            "identity": {
+              "kind": "node",
+              "original": "chain.08"
+            },
+            "slot": [
+              "n",
+              7
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": null,
+              "original_present": false
+            },
+            "slot": [
+              "x",
+              0
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": "outside",
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              1
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": 4,
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              2
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": false,
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              3
+            ]
+          },
+          {
+            "identity": {
+              "kind": "external",
+              "original": null,
+              "original_present": true
+            },
+            "slot": [
+              "x",
+              4
+            ]
+          }
+        ],
+        "edge_set_handle_template": "edgeset:4d5cc24f296d7a74ab1e1f17e9e3a54376981efee104a3744b20965e79e69bf0:{edge_set_ref}",
+        "links": [
+          [
+            {
+              "kind": "group",
+              "original": "group:/exceptions/right"
+            },
+            "rule_reads",
+            {
+              "kind": "node",
+              "original": "chain.07"
+            },
+            1,
+            0
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            {
+              "missing": true
+            },
+            {
+              "kind": "external",
+              "original": null,
+              "original_present": true
+            },
+            1,
+            1
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "cycle",
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            1,
+            2
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "rests_on",
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            1,
+            3
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            1,
+            4
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            null,
+            {
+              "kind": "external",
+              "original": "outside",
+              "original_present": true
+            },
+            1,
+            5
+          ],
+          [
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            {
+              "typed": "relation"
+            },
+            {
+              "kind": "external",
+              "original": null,
+              "original_present": false
+            },
+            1,
+            6
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.01"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            1,
+            7
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.02"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            1,
+            8
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            1,
+            9
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            "same_as",
+            {
+              "kind": "node",
+              "original": "chain.03"
+            },
+            1,
+            10
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            "from",
+            {
+              "kind": "group",
+              "original": "group:/exceptions/left"
+            },
+            1,
+            11
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.04"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.05"
+            },
+            1,
+            12
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.05"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.06"
+            },
+            3,
+            13
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.06"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.07"
+            },
+            1,
+            14
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.07"
+            },
+            "rests_on",
+            {
+              "kind": "node",
+              "original": "chain.08"
+            },
+            1,
+            15
+          ],
+          [
+            {
+              "kind": "node",
+              "original": "chain.08"
+            },
+            "rests_on",
+            {
+              "kind": "group",
+              "original": "group:/support/deep"
+            },
+            1,
+            16
+          ],
+          [
+            {
+              "kind": "external",
+              "original": false,
+              "original_present": true
+            },
+            false,
+            {
+              "kind": "external",
+              "original": 4,
+              "original_present": true
+            },
+            1,
+            17
+          ]
+        ],
+        "navigation_facets": {
+          "groups": [
+            [
+              {
+                "kind": "group",
+                "original": "group:/exceptions"
+              },
+              2
+            ],
+            [
+              {
+                "kind": "group",
+                "original": "group:/featured"
+              },
+              2
+            ],
+            [
+              {
+                "kind": "group",
+                "original": "group:/support"
+              },
+              11
+            ]
+          ],
+          "nodes": [
+            [
+              {
+                "kind": "node",
+                "original": "chain.01"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.02"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.03"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.04"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/featured"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.05"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.06"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.07"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ],
+            [
+              {
+                "kind": "node",
+                "original": "chain.08"
+              },
+              [
+                {
+                  "kind": "group",
+                  "original": "group:/support"
+                },
+                {
+                  "kind": "group",
+                  "original": "group:/support/deep"
+                }
+              ]
+            ]
+          ]
+        },
+        "view_id": "4d5cc24f296d7a74ab1e1f17e9e3a54376981efee104a3744b20965e79e69bf0"
+      },
+      "unset": []
+    },
+    "project_sha256": "696c0b7ec8e66fd17b3dbd686d950ef1d76302685c72899cd9eb38a7757779a7",
+    "revision": "r1-fixture",
+    "schema": "kpopper.selected-view-delta/v1",
+    "scope": "fixture scope",
+    "target_evidence_sha256": "e6d6b353dec5c37b1290414dcc91013a05546351a5b797d04a949d1d51fa71b4",
+    "target_sha256": "d6136dd22bd1b88c9ea180f2fd8eb6899219838873028360459b068d941a3b98"
+  },
+  "delta_text": "# Checked graph delta (kpopper.selected-view-delta/v1)\nEvidence additions remain received; focus.fold only folds active rows. References name original identities. Group coverage is not a body read.\n{\"schema\":\"kpopper.selected-view-delta/v1\",\"revision\":\"r1-fixture\",\"scope\":\"fixture scope\",\"project_sha256\":\"696c0b7ec8e66fd17b3dbd686d950ef1d76302685c72899cd9eb38a7757779a7\",\"base_sha256\":\"0e0591f023a952a8f1d982ac7db1b2f70197e6cb461123caef173dbf5625b22d\",\"target_sha256\":\"d6136dd22bd1b88c9ea180f2fd8eb6899219838873028360459b068d941a3b98\",\"base_evidence_sha256\":\"8b8a31dd99b25581a7f73b1c844fd6068b81e47f44fd27ab0622729d478b01ff\",\"target_evidence_sha256\":\"e6d6b353dec5c37b1290414dcc91013a05546351a5b797d04a949d1d51fa71b4\",\"evidence_additions\":[{\"source_id\":\"chain.08\",\"body_sha256\":\"f0846ad33f3366b59c9ba99d5dfaa01fa65224c6665e214a01a4215972cc757a\",\"body\":[\"map\",[[\"id\",[\"text\",\"chain.08\"]],[\"source_text\",[\"text\",\"A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. \"]]]]}],\"metadata\":{\"set\":{\"attribute_compaction\":{\"compacted_nodes\":[{\"kind\":\"node\",\"original\":\"chain.01\"},{\"kind\":\"node\",\"original\":\"chain.02\"},{\"kind\":\"node\",\"original\":\"chain.03\"},{\"kind\":\"node\",\"original\":\"chain.04\"},{\"kind\":\"node\",\"original\":\"chain.05\"},{\"kind\":\"node\",\"original\":\"chain.06\"},{\"kind\":\"node\",\"original\":\"chain.07\"},{\"kind\":\"node\",\"original\":\"chain.08\"}],\"nodes\":[[{\"kind\":\"node\",\"original\":\"chain.01\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.02\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.03\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.04\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.05\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.06\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.07\"},{\"status\":[\"a\",0]}],[{\"kind\":\"node\",\"original\":\"chain.08\"},{\"status\":[\"a\",0]}]],\"schema\":\"kpopper.attribute-compaction/v1\",\"status_pool_nodes\":[{\"kind\":\"node\",\"original\":\"chain.01\"},{\"kind\":\"node\",\"original\":\"chain.02\"},{\"kind\":\"node\",\"original\":\"chain.03\"},{\"kind\":\"node\",\"original\":\"chain.04\"},{\"kind\":\"node\",\"original\":\"chain.05\"},{\"kind\":\"node\",\"original\":\"chain.06\"},{\"kind\":\"node\",\"original\":\"chain.07\"},{\"kind\":\"node\",\"original\":\"chain.08\"}],\"status_text_nodes\":[],\"value_text_nodes\":[]},\"coverage\":{\"count\":15,\"direct_count\":8,\"folded_count\":7,\"receipt\":\"9d74023ae96c2ef4f1def1543f6a895d6fb42db2461df9ad2cb70d33cecd502b\",\"source_ids_sha256\":\"4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c\"},\"dictionary\":[{\"identity\":{\"kind\":\"group\",\"original\":\"group:/exceptions\"},\"slot\":[\"f\",0]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/featured\"},\"slot\":[\"f\",3]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/support\"},\"slot\":[\"f\",5]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"},\"slot\":[\"g\",0]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"},\"slot\":[\"g\",1]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/isolates\"},\"slot\":[\"g\",2]},{\"identity\":{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"slot\":[\"g\",3]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.01\"},\"slot\":[\"n\",0]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.02\"},\"slot\":[\"n\",1]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.03\"},\"slot\":[\"n\",2]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.04\"},\"slot\":[\"n\",3]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.05\"},\"slot\":[\"n\",4]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.06\"},\"slot\":[\"n\",5]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.07\"},\"slot\":[\"n\",6]},{\"identity\":{\"kind\":\"node\",\"original\":\"chain.08\"},\"slot\":[\"n\",7]},{\"identity\":{\"kind\":\"external\",\"original\":null,\"original_present\":false},\"slot\":[\"x\",0]},{\"identity\":{\"kind\":\"external\",\"original\":\"outside\",\"original_present\":true},\"slot\":[\"x\",1]},{\"identity\":{\"kind\":\"external\",\"original\":4,\"original_present\":true},\"slot\":[\"x\",2]},{\"identity\":{\"kind\":\"external\",\"original\":false,\"original_present\":true},\"slot\":[\"x\",3]},{\"identity\":{\"kind\":\"external\",\"original\":null,\"original_present\":true},\"slot\":[\"x\",4]}],\"edge_set_handle_template\":\"edgeset:4d5cc24f296d7a74ab1e1f17e9e3a54376981efee104a3744b20965e79e69bf0:{edge_set_ref}\",\"links\":[[{\"kind\":\"group\",\"original\":\"group:/exceptions/right\"},\"rule_reads\",{\"kind\":\"node\",\"original\":\"chain.07\"},1,0],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},{\"missing\":true},{\"kind\":\"external\",\"original\":null,\"original_present\":true},1,1],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"cycle\",{\"kind\":\"group\",\"original\":\"group:/support/deep\"},1,2],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"rests_on\",{\"kind\":\"group\",\"original\":\"group:/support/deep\"},1,3],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.01\"},1,4],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},null,{\"kind\":\"external\",\"original\":\"outside\",\"original_present\":true},1,5],[{\"kind\":\"group\",\"original\":\"group:/support/deep\"},{\"typed\":\"relation\"},{\"kind\":\"external\",\"original\":null,\"original_present\":false},1,6],[{\"kind\":\"node\",\"original\":\"chain.01\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.02\"},1,7],[{\"kind\":\"node\",\"original\":\"chain.02\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.03\"},1,8],[{\"kind\":\"node\",\"original\":\"chain.03\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.04\"},1,9],[{\"kind\":\"node\",\"original\":\"chain.03\"},\"same_as\",{\"kind\":\"node\",\"original\":\"chain.03\"},1,10],[{\"kind\":\"node\",\"original\":\"chain.04\"},\"from\",{\"kind\":\"group\",\"original\":\"group:/exceptions/left\"},1,11],[{\"kind\":\"node\",\"original\":\"chain.04\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.05\"},1,12],[{\"kind\":\"node\",\"original\":\"chain.05\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.06\"},3,13],[{\"kind\":\"node\",\"original\":\"chain.06\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.07\"},1,14],[{\"kind\":\"node\",\"original\":\"chain.07\"},\"rests_on\",{\"kind\":\"node\",\"original\":\"chain.08\"},1,15],[{\"kind\":\"node\",\"original\":\"chain.08\"},\"rests_on\",{\"kind\":\"group\",\"original\":\"group:/support/deep\"},1,16],[{\"kind\":\"external\",\"original\":false,\"original_present\":true},false,{\"kind\":\"external\",\"original\":4,\"original_present\":true},1,17]],\"navigation_facets\":{\"groups\":[[{\"kind\":\"group\",\"original\":\"group:/exceptions\"},2],[{\"kind\":\"group\",\"original\":\"group:/featured\"},2],[{\"kind\":\"group\",\"original\":\"group:/support\"},11]],\"nodes\":[[{\"kind\":\"node\",\"original\":\"chain.01\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.02\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.03\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.04\"},[{\"kind\":\"group\",\"original\":\"group:/featured\"},{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.05\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.06\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.07\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]],[{\"kind\":\"node\",\"original\":\"chain.08\"},[{\"kind\":\"group\",\"original\":\"group:/support\"},{\"kind\":\"group\",\"original\":\"group:/support/deep\"}]]]},\"view_id\":\"4d5cc24f296d7a74ab1e1f17e9e3a54376981efee104a3744b20965e79e69bf0\"},\"unset\":[]},\"focus\":{\"upsert\":[{\"source_id\":\"chain.08\",\"body_sha256\":\"f0846ad33f3366b59c9ba99d5dfaa01fa65224c6665e214a01a4215972cc757a\",\"attributes\":{\"dependencies\":null,\"extra\":{\"fraction\":0.125,\"literal\":\"n3 and g0 are quoted source text\",\"negative_zero\":-0.0},\"record_metadata\":{\"body\":{\"name\":\"chain.08\",\"value\":8},\"kind\":\"known\",\"record_source\":\"record\",\"unique_marker\":\"meta-chain.08\"},\"status_ref\":[\"a\",0],\"status_text\":[],\"uncertainty\":[]}}],\"fold\":[\"chain.00\"],\"order\":[\"chain.01\",\"chain.02\",\"chain.03\",\"chain.04\",\"chain.05\",\"chain.06\",\"chain.07\",\"chain.08\"]}}\n",
+  "received": {
+    "chain.00": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.00"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "f897c498ffb1deca297678bbb6a9cb77f86ab22cd6b529c010a642bb132fe850",
+      "source_id": "chain.00"
+    },
+    "chain.01": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.01"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "243c75cdc8f3d7f20b563ea43012ae2bc4b7e6dfa6fde56fe54dbd54609b8f3a",
+      "source_id": "chain.01"
+    },
+    "chain.02": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.02"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "b1b5f1f16a6337ce1fe60d52c25e3a96c186632bc5a4b8b1cf4f49f2232b7aa9",
+      "source_id": "chain.02"
+    },
+    "chain.03": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.03"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "3ad9c8ddb83633ca5914d8a2537ce51e2a493ca8b251a7b6da3b87710de3d9df",
+      "source_id": "chain.03"
+    },
+    "chain.04": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.04"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "b01d13445359625885152093c70708062b2c226a2717d2f44d65ad7bdd574461",
+      "source_id": "chain.04"
+    },
+    "chain.05": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.05"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "649a70665f7b3fb40b4cd96c2a8cfec08603920cde91e58c193286831a3f427c",
+      "source_id": "chain.05"
+    },
+    "chain.06": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.06"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "009e95e906ac7fc98335f49743fc3c573d1f855421b2810088e228d711af71fa",
+      "source_id": "chain.06"
+    },
+    "chain.07": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.07"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "9ba0f0db5a9a4e1d7589a16087c30ba162a3b7c3202a3b21f3850608a0cec028",
+      "source_id": "chain.07"
+    },
+    "chain.08": {
+      "body": [
+        "map",
+        [
+          [
+            "id",
+            [
+              "text",
+              "chain.08"
+            ]
+          ],
+          [
+            "source_text",
+            [
+              "text",
+              "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+            ]
+          ]
+        ]
+      ],
+      "body_sha256": "f0846ad33f3366b59c9ba99d5dfaa01fa65224c6665e214a01a4215972cc757a",
+      "source_id": "chain.08"
+    }
+  },
+  "resolution": {
+    "chain.00": [
+      "map",
+      [
+        [
+          "id",
+          [
+            "text",
+            "chain.00"
+          ]
+        ],
+        [
+          "source_text",
+          [
+            "text",
+            "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+          ]
+        ]
+      ]
+    ],
+    "chain.08": [
+      "map",
+      [
+        [
+          "id",
+          [
+            "text",
+            "chain.08"
+          ]
+        ],
+        [
+          "source_text",
+          [
+            "text",
+            "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+          ]
+        ]
+      ]
+    ],
+    "chain.10": null,
+    "n3": null
+  },
+  "sizes": {
+    "delta_wrapped_bytes": 11031,
+    "full_wrapped_bytes": 23825
+  },
+  "target": {
+    "assessment_profile": "checked-reader/v1",
+    "attribute_compaction": {
+      "compacted_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3",
+        "n4",
+        "n5",
+        "n6",
+        "n7"
+      ],
+      "nodes": {
+        "n0": {
+          "status": "a0"
+        },
+        "n1": {
+          "status": "a0"
+        },
+        "n2": {
+          "status": "a0"
+        },
+        "n3": {
+          "status": "a0"
+        },
+        "n4": {
+          "status": "a0"
+        },
+        "n5": {
+          "status": "a0"
+        },
+        "n6": {
+          "status": "a0"
+        },
+        "n7": {
+          "status": "a0"
+        }
+      },
+      "schema": "kpopper.attribute-compaction/v1",
+      "status_pool_nodes": [
+        "n0",
+        "n1",
+        "n2",
+        "n3",
+        "n4",
+        "n5",
+        "n6",
+        "n7"
+      ],
+      "status_text_nodes": [],
+      "value_text_nodes": []
+    },
+    "coverage": {
+      "count": 15,
+      "direct_count": 8,
+      "folded_count": 7,
+      "receipt": "9d74023ae96c2ef4f1def1543f6a895d6fb42db2461df9ad2cb70d33cecd502b",
+      "source_ids_sha256": "4c3461163d950f357a3c98c57c4a8a96fc7bbaf833b7f112ddb859066f55282c"
+    },
+    "descriptions": {
+      "generated_claims": false,
+      "generator": "source-labels/v1",
+      "is_source_evidence": false,
+      "kind": "source-labels"
+    },
+    "dictionary": {
+      "f0": {
+        "kind": "group",
+        "original": "group:/exceptions"
+      },
+      "f3": {
+        "kind": "group",
+        "original": "group:/featured"
+      },
+      "f5": {
+        "kind": "group",
+        "original": "group:/support"
+      },
+      "g0": {
+        "kind": "group",
+        "original": "group:/exceptions/left"
+      },
+      "g1": {
+        "kind": "group",
+        "original": "group:/exceptions/right"
+      },
+      "g2": {
+        "kind": "group",
+        "original": "group:/isolates"
+      },
+      "g3": {
+        "kind": "group",
+        "original": "group:/support/deep"
+      },
+      "n0": {
+        "kind": "node",
+        "original": "chain.01"
+      },
+      "n1": {
+        "kind": "node",
+        "original": "chain.02"
+      },
+      "n2": {
+        "kind": "node",
+        "original": "chain.03"
+      },
+      "n3": {
+        "kind": "node",
+        "original": "chain.04"
+      },
+      "n4": {
+        "kind": "node",
+        "original": "chain.05"
+      },
+      "n5": {
+        "kind": "node",
+        "original": "chain.06"
+      },
+      "n6": {
+        "kind": "node",
+        "original": "chain.07"
+      },
+      "n7": {
+        "kind": "node",
+        "original": "chain.08"
+      },
+      "x0": {
+        "kind": "external",
+        "original": null,
+        "original_present": false
+      },
+      "x1": {
+        "kind": "external",
+        "original": "outside",
+        "original_present": true
+      },
+      "x2": {
+        "kind": "external",
+        "original": 4,
+        "original_present": true
+      },
+      "x3": {
+        "kind": "external",
+        "original": false,
+        "original_present": true
+      },
+      "x4": {
+        "kind": "external",
+        "original": null,
+        "original_present": true
+      }
+    },
+    "edge_set_handle_template": "edgeset:4d5cc24f296d7a74ab1e1f17e9e3a54376981efee104a3744b20965e79e69bf0:{edge_set_ref}",
+    "expanded_edges": [],
+    "fields": {
+      "attribute_compaction": {
+        "manifest": "attribute_compaction.nodes[ref]",
+        "node_rule_values": {
+          "status": "shared assessment alias",
+          "status_text": "status_text mode",
+          "value_text": "body field key"
+        },
+        "restore": "view_attributes::restore_attributes",
+        "schema": "kpopper.attribute-compaction/v1",
+        "status_pool": {
+          "dictionary": "shared_assessments",
+          "exact_json": true,
+          "field": "status_ref"
+        },
+        "status_text": {
+          "derived": true,
+          "display_only": true,
+          "modes": {
+            "status": "render_projected_status",
+            "uncertainty": "exact_array_alias"
+          },
+          "renderer": "reasoning-projection/render_projected_status/v1"
+        },
+        "value_text": {
+          "body_field_candidates": [
+            "v",
+            "quoted",
+            "value"
+          ],
+          "display_only": true,
+          "reference": "attributes.status.computation.value_text_ref",
+          "renderer": "reasoning-projection/render_value/v1"
+        }
+      },
+      "description": {
+        "kind": "navigation_only",
+        "row": [
+          "text",
+          "generator",
+          "basis_sha256",
+          "excerpted"
+        ]
+      },
+      "expanded_edge": [
+        "edge_set",
+        "original_edges"
+      ],
+      "group": [
+        "ref",
+        "count",
+        "label",
+        "description"
+      ],
+      "link": [
+        "from_ref",
+        "rel",
+        "to_ref",
+        "count",
+        "edge_set_ref"
+      ],
+      "navigation_group": [
+        "ref",
+        "count"
+      ],
+      "navigation_node": [
+        "node_ref",
+        "group_refs"
+      ],
+      "node": [
+        "ref",
+        "body",
+        "attributes"
+      ]
+    },
+    "group_expansion_route": "dictionary[group_ref].original (group:/path), with this revision and current focus",
+    "groups": [
+      [
+        "g0",
+        1,
+        "left",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g1",
+        1,
+        "right",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g2",
+        2,
+        "isolates",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ],
+      [
+        "g3",
+        3,
+        "deep",
+        [
+          "",
+          null,
+          null,
+          false
+        ]
+      ]
+    ],
+    "links": [
+      [
+        "g1",
+        "rule_reads",
+        "n6",
+        1,
+        "e0"
+      ],
+      [
+        "g3",
+        {
+          "missing": true
+        },
+        "x4",
+        1,
+        "e1"
+      ],
+      [
+        "g3",
+        "cycle",
+        "g3",
+        1,
+        "e2"
+      ],
+      [
+        "g3",
+        "rests_on",
+        "g3",
+        1,
+        "e3"
+      ],
+      [
+        "g3",
+        "rests_on",
+        "n0",
+        1,
+        "e4"
+      ],
+      [
+        "g3",
+        null,
+        "x1",
+        1,
+        "e5"
+      ],
+      [
+        "g3",
+        {
+          "typed": "relation"
+        },
+        "x0",
+        1,
+        "e6"
+      ],
+      [
+        "n0",
+        "rests_on",
+        "n1",
+        1,
+        "e7"
+      ],
+      [
+        "n1",
+        "rests_on",
+        "n2",
+        1,
+        "e8"
+      ],
+      [
+        "n2",
+        "rests_on",
+        "n3",
+        1,
+        "e9"
+      ],
+      [
+        "n2",
+        "same_as",
+        "n2",
+        1,
+        "e10"
+      ],
+      [
+        "n3",
+        "from",
+        "g0",
+        1,
+        "e11"
+      ],
+      [
+        "n3",
+        "rests_on",
+        "n4",
+        1,
+        "e12"
+      ],
+      [
+        "n4",
+        "rests_on",
+        "n5",
+        3,
+        "e13"
+      ],
+      [
+        "n5",
+        "rests_on",
+        "n6",
+        1,
+        "e14"
+      ],
+      [
+        "n6",
+        "rests_on",
+        "n7",
+        1,
+        "e15"
+      ],
+      [
+        "n7",
+        "rests_on",
+        "g3",
+        1,
+        "e16"
+      ],
+      [
+        "x3",
+        false,
+        "x2",
+        1,
+        "e17"
+      ]
+    ],
+    "mode": "expanded",
+    "navigation_facets": {
+      "groups": [
+        [
+          "f0",
+          2
+        ],
+        [
+          "f3",
+          2
+        ],
+        [
+          "f5",
+          11
+        ]
+      ],
+      "nodes": [
+        [
+          "n0",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n1",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n2",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n3",
+          [
+            "f3",
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n4",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n5",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n6",
+          [
+            "f5",
+            "g3"
+          ]
+        ],
+        [
+          "n7",
+          [
+            "f5",
+            "g3"
+          ]
+        ]
+      ]
+    },
+    "nodes": [
+      [
+        "n0",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.01"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.01",
+              "value": 1
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.01"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n1",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.02"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.02",
+              "value": 2
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.02"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n2",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.03"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.03",
+              "value": 3
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.03"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n3",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.04"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.04",
+              "value": 4
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.04"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n4",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.05"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.05",
+              "value": 5
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.05"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n5",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.06"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.06",
+              "value": 6
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.06"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n6",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.07"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.07",
+              "value": 7
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.07"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ],
+      [
+        "n7",
+        [
+          "map",
+          [
+            [
+              "id",
+              [
+                "text",
+                "chain.08"
+              ]
+            ],
+            [
+              "source_text",
+              [
+                "text",
+                "A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. A retained source statement with its original typed value and provenance. "
+              ]
+            ]
+          ]
+        ],
+        {
+          "dependencies": null,
+          "extra": {
+            "fraction": 0.125,
+            "literal": "n3 and g0 are quoted source text",
+            "negative_zero": -0.0
+          },
+          "record_metadata": {
+            "body": {
+              "name": "chain.08",
+              "value": 8
+            },
+            "kind": "known",
+            "record_source": "record",
+            "unique_marker": "meta-chain.08"
+          },
+          "status_ref": "a0",
+          "status_text": [],
+          "uncertainty": []
+        }
+      ]
+    ],
+    "project": "compact-fixture",
+    "project_identity": [
+      "map",
+      [
+        [
+          "project",
+          [
+            "text",
+            "compact-fixture"
+          ]
+        ]
+      ]
+    ],
+    "revision": "r1-fixture",
+    "rules": "rules",
+    "schema": "kpopper.canonical-graph-view/v3",
+    "scope": "fixture scope",
+    "shared_assessments": {
+      "a0": {
+        "explanation": "A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. A shared structured assessment with source provenance and uncertainty. ",
+        "unknown": null
+      }
+    },
+    "view_id": "4d5cc24f296d7a74ab1e1f17e9e3a54376981efee104a3744b20965e79e69bf0"
+  }
+}

@@ -1,0 +1,31 @@
+meta:
+  name: Fictional delivery policy
+  scope: Worked conversation example; no real customer or operational data.
+
+known:
+  policy.standard_days:
+    name: Standard delivery time in working days
+    v: 5
+    from: source.delivery_policy
+    at: Section 1
+  policy.express_days:
+    name: Express delivery time in working days
+    v: 2
+    from: source.delivery_policy
+    at: Section 2
+  policy.express_region:
+    name: Express service region
+    v: local service region only
+    from: source.delivery_policy
+    at: Section 2
+  policy.weekend_dispatch:
+    name: Whether dispatch operates on weekends
+    v: false
+    from: source.delivery_policy
+    at: Section 3
+
+sources:
+  source.delivery_policy:
+    name: Fictional delivery policy
+    file: sources/delivery-policy.md
+    as_of: 2026-09-28

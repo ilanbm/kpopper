@@ -332,6 +332,16 @@ impl OrdinarySession {
         project: &str,
         navigation: Option<&V>,
     ) -> Result<Self> {
+        Ok(Self::capture_with_attention(capture, runtime, project, navigation, false)?.0)
+    }
+
+    pub(crate) fn capture_with_attention(
+        capture: &CapturedSource,
+        runtime: &Runtime,
+        project: &str,
+        navigation: Option<&V>,
+        include_attention: bool,
+    ) -> Result<(Self, J)> {
         capture.require_ordinary_reader()?;
         let context = capture.ordinary_context();
         let (document, contributed) = with_contributions(capture)?;
@@ -342,6 +352,9 @@ impl OrdinarySession {
             capture.reader_lines()?,
             Some(runtime),
         )?;
+        let attention = if include_attention {
+            crate::ordinary_views::Projection::checked_attention(&projection, capture.history_projection())?
+        } else { J::Null };
         let data = projection.session_data(&contributed.keys().cloned().collect())?;
         let mut directory_keys = source_directory_keys(capture.source(), &data.sections);
         let program = runtime
@@ -358,7 +371,7 @@ impl OrdinarySession {
         let snapshot = sha256(canonical(&graph)?.as_bytes());
         let revision = sha256(canonical(&json!({"project":project,"graph":snapshot}))?.as_bytes());
         let groups = navigation.groups.clone();
-        Ok(Self {
+        Ok((Self {
             project: project.into(),
             revision,
             graph,
@@ -367,7 +380,53 @@ impl OrdinarySession {
             navigation,
             proposals: BTreeMap::new(),
             directory_keys,
-        })
+        }, attention))
+    }
+
+    /// The same experimental view contract over the ordinary reader's captured graph.
+    pub fn canonical_view(&self, revision: &str, request: &crate::canonical_view::CanonicalViewRequest) -> Result<J> {
+        self.expect(revision)?;
+        let mut nodes = BTreeMap::new();
+        for (id, node) in self.graph["nodes"].as_object().ok_or_else(|| Error("invalid ordinary graph".into()))? {
+            let status = self.assessment(id).cloned().unwrap_or(J::Null);
+            nodes.insert(id.clone(), json!({"source_id":id,
+                "body":V::from_json(&node["body"])?.to_tagged()?,
+                "status":status,"status_text":node["states"],
+                "dependencies":node["assessment_fields"]["deps"],"uncertainty":node["states"],
+                "original_node":node}));
+        }
+        let identity = V::from_json(&json!({"project":self.project,"origin":self.graph["origin"]}))?.to_tagged()?;
+        let mut packet = crate::canonical_view::build(&self.project,identity,revision,
+            self.graph["scope"].as_str().unwrap_or(""),&nodes,
+            self.graph["edges"].as_array().ok_or_else(|| Error("invalid ordinary edges".into()))?,
+            &self.navigation.groups,&self.navigation.children,&self.navigation.direct,&self.navigation.leaves,request)?;
+        packet["rules"] = json!(RULES.trim());
+        packet["assessment_profile"] = json!("checked-reader/v1");
+        Ok(packet)
+    }
+
+    pub fn canonical_query_focus(&self, revision: &str, query: &str) -> Result<Vec<String>> {
+        use crate::session_search::{SearchMode, SearchRequest};
+        let mut ids = BTreeSet::new(); let mut cursor = None;
+        loop {
+            let text = self.search(revision,&SearchRequest {query:query.into(),ids:None,tokens:65_536,
+                limit:32,branch:None,mode:SearchMode::Lexical,cursor:cursor.clone()},
+                |s| crate::tokenizer::Encoding::O200kBase.count(s))?;
+            let response:J=serde_json::from_str(&text)?;
+            for hit in response["hits"].as_array().into_iter().flatten() {
+                if let Some(id)=hit["id"].as_str() {ids.insert(id.to_owned());}
+            }
+            let next=response["next_cursor"].as_str().map(str::to_owned);
+            if next.is_none(){break;}
+            require(next!=cursor,"search pagination made no progress")?;cursor=next;
+        }
+        let seeds=ids.clone();
+        for edge in self.graph["edges"].as_array().into_iter().flatten() {
+            if edge["from"].as_str().is_some_and(|id|seeds.contains(id)) {
+                if let Some(id)=edge["to"].as_str().filter(|id| self.graph["nodes"].get(*id).is_some()) {ids.insert(id.to_owned());}
+            }
+        }
+        Ok(ids.into_iter().collect())
     }
 
     pub fn revision(&self) -> &str {

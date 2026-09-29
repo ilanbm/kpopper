@@ -5,7 +5,13 @@ It captures the current revision automatically; `--revision` can require an exis
 view. [Graph context](retrieval.md#read-a-declared-neighborhood) documents its bounds
 and recovery routes. The `session` commands below remain the transport and setup API.
 
-The optional session transport opens a complete navigable view of the record, keeps exact field references, and computes assessment fields with a local Lean core. It exposes the same operations through the command line and MCP. It does not apply pending proposals or certify source-world truth.
+The session transport opens a complete navigable view of the record, keeps exact field references, and computes assessment fields with a local Lean core. It exposes operations through the command line and MCP. It does not apply pending proposals or certify source-world truth.
+
+Codex uses [canonical opening](canonical-view.md) by default, with automatic anchors
+on managed follow-up queries. Full selected views remain the default; delta delivery
+is experimental and off. Other hosts retain their previous opening unless opted in.
+The [upgrade guide](context-upgrade.md) explains settings and compatibility; the
+[conversation walkthrough](session-lifecycle.md) follows the complete lifecycle.
 
 Native 0.9.0 bundles include the checked-session resources. Enable the native
 session path with:
@@ -89,13 +95,19 @@ Unassigned IDs remain visible under their namespace. Profiles cannot run code. A
 
 ## Session hooks and rollback
 
-The installed plugin's native hook uses the bundled session runtime when checked mode
-is explicitly enabled:
+Codex's native hook uses the bundled runtime for its default canonical opening.
+Other hosts can explicitly enable the checked session path:
 
 ```sh
-kpop session enable --tokens 1000
+kpop session enable --tokens 16000
 kpop session disable
 ```
+
+For Codex, `KPOPPER_CANONICAL_VIEW=0` selects the ordinary opening for this process.
+`KPOPPER_SESSION_DISABLE=1` takes precedence even over explicit canonical opt-in.
+`session enable` without a token argument retains its 1,000-token default; that
+allowance often needs the ordinary fallback. Use 16,000 to restore the canonical
+default allowance.
 
 Enable stores the native executable and project-scoped settings outside the record, so
 the hook and later CLI reads use the same runtime. Optional `--profile`, `--project`
@@ -115,6 +127,15 @@ Codex also reviews and trusts plugin hook definitions separately from installati
 host asks for that review, inspect the hook definition there before expecting automatic
 SessionStart output. Reinstalling a plugin does not itself grant hook trust. The CLI and
 explicitly configured MCP reader can be tested independently of that host step.
+
+The managed Codex route binds each read through `--context-session`. A queued
+marker is followed by a complete PostToolUse context frame. Stop verifies retained
+typed developer frames and completed-answer citations locally, without waking the
+assistant or making an inference request. Missing frames can be recovered with
+the same read and `--view-transport stdout`. Reset, rollback, interruption and
+changed source/scope prevent reuse of an old base. Standalone CLI and MCP calls
+retain full-view output; inherited session environment variables do not enroll them
+in hook delivery.
 
 ## MCP
 

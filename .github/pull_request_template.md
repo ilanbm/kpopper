@@ -10,6 +10,11 @@
 <!-- Commands and results, or the path through the page. Note relevant skipped checks
      and include screenshots for visible changes when useful. -->
 
+<!-- For a user-visible change, update CHANGELOG.md under ## Unreleased. Explain
+     resulting behavior, defaults, compatibility and relevant limits; link the
+     detailed guide instead of copying internal implementation history. See
+     docs/release-notes.md. Do not edit version files in a feature PR. -->
+
 Bump: patch
 
 <!-- patch: a fix, a doc, tooling - nothing a user of the reader, the page or the hooks
