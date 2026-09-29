@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 — 2026-09-29
 
 ### Conversation context
 
@@ -47,6 +47,12 @@
   PRs for traceability. Historical entries remain unchanged. Authors can describe
   behavior, settings, compatibility and limits before the release bot chooses the
   next version.
+
+### Included changes
+
+- Add canonical conversation context and curated release notes (#269)
+
+Decisions recorded: decision.canonical_context_default, decision.context_delta_opt_in, decision.curated_release_notes
 
 ## 0.14.0 — 2026-09-26
 
