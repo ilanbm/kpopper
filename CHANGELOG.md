@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Conversation freshness
+
+- Managed Codex conversations refresh previously received evidence and its
+  declared support before the next answer when captured record inputs change.
+  Unchanged inputs add no context. Deleted entries are named; unavailable,
+  out-of-scope or oversized refreshes require an explicit current read.
+- Received context frames provide a short, session-bound `revision_ref` for
+  answer metadata and follow-up `session view` calls. The runtime verifies the
+  retained frame and full revision; unknown or expired references are refused.
+- Refresh preserves the original source, read mode and navigation profile.
+  Stop remains passive, delta remains off by default, and the existing session
+  opt-out controls apply. No record migration is required. Refresh checks
+  captured record inputs, not changes in the external world; the bounded hook
+  deadline and complete-body limits still apply.
+- Reuse the immutable snapshot's input index across node evaluations to avoid
+  rebuilding it for every record. See the [conversation lifecycle](docs/session-lifecycle.md)
+  and [canonical view reference](docs/canonical-view.md).
+
 ## 0.15.0 — 2026-09-29
 
 ### Conversation context
