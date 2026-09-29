@@ -301,10 +301,12 @@ fn fresh(root: &Path, session: &str, enabled: bool) -> Result<State> {
         history: vec![],
     })
 }
-fn home(session: &str, create: bool) -> Result<PathBuf> {
+fn home_path(session: &str) -> Result<PathBuf> {
     crate::require(valid_session(session), "invalid context session")?;
-    let path =
-        crate::session_activity::temporary_directory().join(format!("kpopper-view-{session}"));
+    Ok(crate::session_activity::temporary_directory().join(format!("kpopper-view-{session}")))
+}
+fn home(session: &str, create: bool) -> Result<PathBuf> {
+    let path = home_path(session)?;
     if create {
         let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
@@ -330,7 +332,7 @@ fn safe_file(path: &Path) -> Result<()> {
     }
     Ok(())
 }
-fn load(root: &Path, session: &str, path: &Path) -> Result<State> {
+fn read_state_file(session: &str, path: &Path) -> Result<State> {
     safe_file(path)?;
     let mut bytes = Vec::new();
     File::open(path)?
@@ -340,7 +342,6 @@ fn load(root: &Path, session: &str, path: &Path) -> Result<State> {
     let s: State = serde_json::from_slice(&bytes)?;
     crate::require(
         s.schema == SCHEMA
-            && s.root == root_key(root)?
             && s.session == session
             && s.pending.len() <= MAX_PENDING
             && s.frames.len() <= MAX_FRAMES
@@ -349,8 +350,40 @@ fn load(root: &Path, session: &str, path: &Path) -> Result<State> {
     )?;
     Ok(s)
 }
+fn validate_state_root(state: &State, root: &Path) -> Result<()> {
+    crate::require(root.is_absolute(), "invalid continuation workspace")?;
+    crate::require(state.root == root_key(root)?, "invalid continuation state")
+}
+fn load(root: &Path, session: &str, path: &Path) -> Result<State> {
+    let state = read_state_file(session, path)?;
+    validate_state_root(&state, root)?;
+    Ok(state)
+}
 fn read_state(root: &Path, session: &str) -> Result<State> {
     load(root, session, &home(session, false)?.join("state.json"))
+}
+
+/// Read the workspace pinned by private session state without rediscovering it
+/// from the host cwd, which can change when nested records or project settings
+/// appear during a live session. Missing state stays silent; malformed state is
+/// an error for the dedicated hook to report.
+fn pinned_state(session: &str) -> Result<Option<(PathBuf, State)>> {
+    let directory = home_path(session)?;
+    match fs::symlink_metadata(&directory) {
+        Ok(_) => safe_home(&directory)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+    let path = directory.join("state.json");
+    match fs::symlink_metadata(&path) {
+        Ok(_) => (),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+    let state = read_state_file(session, &path)?;
+    let root = PathBuf::from(&state.root);
+    validate_state_root(&state, &root)?;
+    Ok(Some((root, state)))
 }
 fn update<T>(
     root: &Path,
@@ -722,6 +755,25 @@ fn trim(s: &mut State) {
 pub fn hook(root: &Path, event: &str, payload: &J) -> Result<Option<String>> {
     hook_with_delta(root, event, payload, setting("KPOPPER_VIEW_DELTA", false))
 }
+
+/// Dedicated host entry point. State is looked up only by the validated host
+/// session ID, then its private, canonical workspace root is used for all
+/// existing root/session/epoch checks. An unmanaged session never calls the
+/// workspace locator (or reads project configuration).
+pub fn hook_for_session(event: &str, payload: &J) -> Result<Option<String>> {
+    let session = payload["session_id"]
+        .as_str()
+        .filter(|session| valid_session(session))
+        .ok_or_else(|| Error("invalid context session".into()))?;
+    let Some((root, state)) = pinned_state(session)? else {
+        return Ok(None);
+    };
+    if !state.enabled {
+        return Ok(None);
+    }
+    hook(&root, event, payload)
+}
+
 fn hook_with_delta(
     root: &Path,
     event: &str,
@@ -733,7 +785,7 @@ fn hook_with_delta(
         .filter(|s| valid_session(s))
         .ok_or_else(|| Error("invalid context session".into()))?;
     if matches!(event, "PreCompact" | "PostCompact" | "Interrupt") {
-        if read_state(root, session).is_ok() {
+        if read_state(root, session)?.enabled {
             update(root, session, false, |s| {
                 s.base = None;
                 s.history.clear();
@@ -746,7 +798,7 @@ fn hook_with_delta(
         return Ok(None);
     }
     if event == "UserPromptSubmit" {
-        if read_state(root, session).is_ok() {
+        if read_state(root, session)?.enabled {
             update(root, session, false, |s| {
                 s.pending.clear();
                 trim(s);
@@ -755,7 +807,7 @@ fn hook_with_delta(
         }
         return Ok(None);
     }
-    if read_state(root, session).is_err() { return Ok(None); }
+    crate::require(read_state(root, session)?.enabled, "inactive continuation")?;
     let turn = payload["turn_id"].as_str().filter(|s| !s.is_empty());
     let transcript = payload["transcript_path"].as_str();
     if event == "PostToolUse" {
@@ -1455,6 +1507,34 @@ mod tests {
             )
             .unwrap(),
             text
+        );
+    }
+    #[test]
+    fn malformed_private_hook_state_fails_closed_but_stdout_recovery_stays_complete() {
+        let p = Probe::new();
+        let value = packet();
+        let text = view_format::render(&value, ViewFormat::CheckedTextTagged).unwrap();
+        let marker = p.queue(&value);
+        fs::write(
+            home(&p.session, false).unwrap().join("state.json"),
+            "{broken",
+        )
+        .unwrap();
+        let mut payload = p.payload("turn");
+        payload["hook_event_name"] = json!("PostToolUse");
+        payload["tool_response"] = json!({"output":marker});
+        assert!(hook_for_session("PostToolUse", &payload).is_err());
+        assert_eq!(
+            prepare_output(
+                p.root.path(),
+                Some(&p.session),
+                &value,
+                &text,
+                ViewFormat::CheckedTextTagged,
+                ViewTransport::Stdout,
+            )
+            .unwrap(),
+            text,
         );
     }
     #[test]

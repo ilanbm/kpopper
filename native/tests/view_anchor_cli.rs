@@ -304,28 +304,28 @@ fn optional_trace_shrinks_before_mandatory_evidence_is_refused() {
     }
     fs::write(root.path().join("GROUNDING.yaml"), record).unwrap();
     let revision = revision(root.path());
-    let text = ok(cli(root.path(), "view")
-        .args([
-            "--revision",
-            &revision,
-            "--id",
-            "p.big",
-            "--query",
-            "orchard",
-            "--anchor",
-            "p.other",
-            "--tokens",
-            "1750",
-        ])
-        .output()
-        .unwrap());
-    assert!(Encoding::O200kBase.count(&text) <= 1750);
-    let packet: Value = serde_json::from_str(&text).unwrap();
-    assert!(body(&packet, "p.big").is_some());
-    assert!(
-        packet["selection"]["anchor_ranking"]["omitted_affected_rows"]
-            .as_u64()
-            .unwrap()
-            > 0
-    );
+    // Paths and revision hashes change reference-token counts across platforms.
+    // Tighten from the actual output until optional diagnostics must shrink;
+    // every successful step must retain the complete explicitly requested body.
+    let mut budget = 4096;
+    for _ in 0..16 {
+        let text = ok(cli(root.path(), "view")
+            .args([
+                "--revision", &revision, "--id", "p.big", "--query", "orchard",
+                "--anchor", "p.other", "--tokens", &budget.to_string(),
+            ])
+            .output().unwrap());
+        let used = Encoding::O200kBase.count(&text);
+        assert!(used <= budget);
+        let packet: Value = serde_json::from_str(&text).unwrap();
+        let received = TypedValue::from_tagged(body(&packet, "p.big").unwrap())
+            .unwrap().to_json().unwrap();
+        assert_eq!(received["v"], "orchard ".repeat(300));
+        if packet["selection"]["anchor_ranking"]["omitted_affected_rows"]
+            .as_u64().unwrap() > 0 {
+            return;
+        }
+        budget = used - 1;
+    }
+    panic!("optional anchor diagnostics did not shrink before mandatory evidence");
 }

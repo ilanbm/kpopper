@@ -161,10 +161,10 @@ fn d0_codex_defaults_to_tagged_and_other_hosts_keep_ordinary() {
 }
 
 #[test]
-fn d0_managed_continuation_resolves_subdirectory_to_startup_workspace() {
+fn d0_managed_continuation_uses_pinned_workspace_after_nested_record_appears() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
-    let sub = root.join("sub");
+    let sub = root.join("sub").join("deeper");
     fs::create_dir_all(&sub).unwrap();
     copy_resources(&root);
     fs::write(root.join("GROUNDING.yaml"), RECORD).unwrap();
@@ -183,6 +183,10 @@ fn d0_managed_continuation_resolves_subdirectory_to_startup_workspace() {
     assert!(queued.status.success(), "{}", String::from_utf8_lossy(&queued.stderr));
     let queued_text = String::from_utf8(queued.stdout).unwrap();
     assert!(queued_text.starts_with("KPOPPER_CONTEXT_QUEUED "), "{queued_text}");
+
+    // The same host cwd now resolves to a nested record. The queued command is
+    // still bound to the original workspace and its private continuation state.
+    fs::write(sub.join("GROUNDING.yaml"), RECORD).unwrap();
 
     let transcript = root.join("transcript.jsonl");
     fs::write(

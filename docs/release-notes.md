@@ -32,6 +32,12 @@ Unreleased headings are refused. Any Unreleased headings already inside historic
 release entries remain unchanged. HTML template comments are removed when the release notes are promoted.
 Do not add release date or version placeholders inside the notes.
 
+The bot compares released history with `CHANGELOG.md` at the commit that introduced
+the current version. That exact history must remain below the new notes. A section
+inserted inside it or a change to a released entry is refused, so new notes cannot
+silently become historical text. Historical corrections need an explicit release
+maintenance change rather than the normal note-promotion path.
+
 ## What automation does
 
 The release bot chooses the largest `Bump:` declared by PRs merged since the last

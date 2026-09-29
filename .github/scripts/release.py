@@ -86,24 +86,23 @@ def with_version(texts, version):
     return out
 
 
-def take_unreleased(text):
-    """Move curated notes into a release without rewriting historical entries."""
-    sections = list(re.finditer(r"^## ([^\r\n]+)", text, re.M))
-    version = next((section for section in sections
-                    if re.match(r"\[?[0-9]+\.[0-9]+\.[0-9]+\]?(?:\s|$)", section[1])), None)
-    end = version.start() if version else len(text)
-    # Historical releases may contain old Unreleased headings. Their bytes belong
-    # to history, not to the current release's authoring contract.
-    current = [section for section in sections if section.start() < end]
-    candidates = [section for section in current if "unreleased" in section[1].lower()]
-    if not candidates:
-        return "", text
-    if len(current) != 1 or not re.fullmatch(r"(?:Unreleased|\[Unreleased\])\s*", current[0][1], re.I):
+def take_unreleased(text, released_history):
+    """Promote only additions above the exact changelog held by the last release."""
+    header = "# Changelog\n\n"
+    body = text.removeprefix(header)
+    history = released_history.removeprefix(header)
+    if history and not body.endswith(history):
+        raise ValueError("Unreleased notes must precede the unchanged published changelog")
+    current = (body[:-len(history)] if history else body).strip()
+    if not current:
+        return "", released_history
+    lines = current.splitlines()
+    if not re.fullmatch(r"## (?:Unreleased|\[Unreleased\])[ \t]*", lines[0], re.I):
+        raise ValueError("Keep one leading ## Unreleased section above published history")
+    if any(re.match(r"^##(?:\s|$)", line) for line in lines[1:]):
         raise ValueError("Keep one leading ## Unreleased section; use ### for its subsections")
-    match = current[0]
-    notes = re.sub(r"<!--.*?-->", "", text[match.end():end], flags=re.S).strip()
-    history = text[:match.start()] + text[end:]
-    return notes, history
+    notes = re.sub(r"<!--.*?-->", "", "\n".join(lines[1:]), flags=re.S).strip()
+    return notes, released_history
 
 
 def changelog_entry(version, date, merged, decisions, *, notes=""):
@@ -236,7 +235,8 @@ def main(argv):
     decisions = decisions_added(rel)
     today = datetime.date.today().isoformat()
     log = ROOT / "CHANGELOG.md"
-    notes, history = take_unreleased(log.read_text(encoding="utf-8") if log.exists() else "")
+    released_history = sh("git", "show", f"{rel}:CHANGELOG.md")
+    notes, history = take_unreleased(log.read_text(encoding="utf-8") if log.exists() else "", released_history)
     entry = changelog_entry(nxt, today, merged, decisions, notes=notes)
     body = pr_body(nxt, current, bump, merged, decisions, notes=notes)
     print(f"{len(merged)} merged since {current}; largest bump {bump} -> {nxt}")

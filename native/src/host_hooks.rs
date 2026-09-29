@@ -81,18 +81,6 @@ fn cwd(payload: &J) -> Result<PathBuf> {
     };
     Ok(path.canonicalize()?)
 }
-fn continuation_root(payload: &J) -> Result<PathBuf> {
-    // SessionStart keys continuation state to the located record workspace, not
-    // necessarily to the host's cwd. Canonicalize first, matching startup's
-    // symlink handling, then use the same live/frozen workspace locator.
-    let cwd = cwd(payload)?;
-    let mode = if std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
-        crate::source_capture::ReadMode::Frozen
-    } else {
-        crate::source_capture::ReadMode::Live
-    };
-    Ok(crate::public_workspace::locate(&cwd, mode)?.workspace)
-}
 fn atomic_json(path: &Path, value: &J) -> Result<()> {
     let parent = path
         .parent()
@@ -767,7 +755,7 @@ pub fn run(
         "edit" => edit(payload, host),
         "continuation" if host == Some("codex") && !suppressed(payload) => {
             let event = payload["hook_event_name"].as_str().unwrap_or_default();
-            crate::view_continuation::hook(&continuation_root(payload)?, event, payload).map(|context| Output {
+            crate::view_continuation::hook_for_session(event, payload).map(|context| Output {
                 stdout: context.map(|text| envelope(event, &text)).unwrap_or_default(), ..empty()
             })
         },
