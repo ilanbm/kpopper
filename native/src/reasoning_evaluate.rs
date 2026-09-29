@@ -417,7 +417,7 @@ impl<'a> Evaluator<'a> {
         let mut view = SnapshotView::new(self.snapshot, &potential, &[], None);
         for id in component["nodes"].as_object().unwrap().keys() {
             require(
-                view.read_node(id)? != V::Null,
+                view.read_node_with_basis(id, self.input_basis()?)? != V::Null,
                 "module input was not captured",
             )?;
         }

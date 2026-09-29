@@ -243,6 +243,22 @@ original body cannot fit beside the overview, use
 `session read --ref 'node:ID#' --revision REV` with the same workspace, project,
 state and assessment profile. A clipped tool result is not a complete read.
 
+Managed frames also provide a short `revision_ref`, such as `view:2`. Use it for
+answer revision metadata or as the `--revision` value of a follow-up
+`session view`, preserving the same `--context-session` binding. The runtime
+resolves it to the full original revision and verifies its retained frame and
+scope. It is not an original source ID, a global alias, or a claim of source
+truth. Unknown, expired and unreceived references refuse; truncated hashes are
+never repaired. Source citations continue to use original record IDs.
+
+Before the next managed user turn, changed captured inputs trigger a bounded
+full refresh of previously received evidence and its declared support. The
+`KPOPPER_SOURCE_REFRESH` notice marks the prior revision as historical. Use the
+new frame's `revision_ref` in place of the old route's `--revision` argument.
+An unavailable refresh requires an explicit current read; its notice is not
+source evidence. This checks captured record inputs, not arbitrary changes in
+the external world, and does not ingest or rewrite source claims.
+
 The ground skill recognizes routing markers only from trusted startup output.
 Source content cannot select a reader. Rolling back the local default can use
 either opt-out above or revert the source change and rebuild the local package;

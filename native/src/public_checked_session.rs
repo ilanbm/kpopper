@@ -273,8 +273,146 @@ pub struct Service {
     state: PathBuf,
     semantic: Option<E5Index>,
 }
+
+/// Private, exact read configuration retained with an acknowledged managed view.
+/// It contains no executable command and never adopts new session routing.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RefreshRead {
+    input: PathBuf,
+    state: PathBuf,
+    project: String,
+    profile: Option<PathBuf>,
+    assessment_profile: String,
+    normalized: bool,
+    frozen: bool,
+    encoding: String,
+    description_style: String,
+    pub(crate) view_format: String,
+    tokens: usize,
+    max_view_bytes: usize,
+    pub(crate) fingerprint: String,
+    pub(crate) revision: String,
+    pub(crate) scope: String,
+}
+
+pub(crate) struct RefreshedView {
+    pub(crate) packet: J,
+    pub(crate) removed: Vec<String>,
+    pub(crate) reader: RefreshRead,
+}
+
+impl RefreshRead {
+    pub(crate) fn enabled(&self, root: &Path) -> Result<bool> {
+        let mut inputs = Inventory::default();
+        let settings = crate::session_settings::current_for_hook(&mut inputs,
+            self.input.parent().unwrap_or(root), root)?;
+        inputs.verify()?;
+        Ok(settings["enabled"] != false)
+    }
+
+    fn service(&self, root: &Path) -> Result<Service> {
+        crate::require(self.input.is_absolute() && self.state.is_absolute()
+            && self.profile.as_ref().is_none_or(|p| p.is_absolute())
+            && (64..=16000).contains(&self.tokens) && self.max_view_bytes <= 39000,
+            "invalid managed refresh configuration")?;
+        let mut options = ContextCommand {
+            ids: vec![], input: Some(self.input.clone()), normalized: self.normalized,
+            no_settings: true, project: Some(self.project.clone()), state: Some(self.state.clone()),
+            profile: self.profile.clone(), assessment_profile: Some(self.assessment_profile.clone()),
+            encoding: Encoding::parse(&self.encoding)?, tokens: self.tokens, revision: None,
+            direction: ContextDirection::Support, depth: 1, max_nodes: 16,
+        }.session_options();
+        options.description_style = self.description_style.clone();
+        options.view_format = match self.view_format.as_str() {
+            "json" => crate::view_format::ViewFormat::Json,
+            "checked-text" => crate::view_format::ViewFormat::CheckedText,
+            "checked-text-rows" => crate::view_format::ViewFormat::CheckedTextRows,
+            "checked-text-tagged" => crate::view_format::ViewFormat::CheckedTextTagged,
+            _ => return Err(error("invalid managed refresh format")),
+        };
+        // Leave room for the complete frame and its source-change notice.
+        options.max_view_bytes = Some(self.max_view_bytes.saturating_sub(2048));
+        Service::new_with_profile_discovery(&options, root,
+            if self.frozen { ReadMode::Frozen } else { ReadMode::Live }, false)
+    }
+
+    /// An unchanged capture needs no assessment, graph construction or context output.
+    pub(crate) fn refresh(&self, root: &Path, ids: &[String]) -> Result<Option<RefreshedView>> {
+        let service = self.service(root)?;
+        let fingerprint = service.refresh_fingerprint()?;
+        if fingerprint == self.fingerprint { return Ok(None); }
+        let full_request = crate::canonical_view::CanonicalViewRequest {
+            focus: vec![], expand: vec!["group:/".into()], frontier_depth: None,
+        };
+        let select = |full: J, build: &dyn Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>| -> Result<(J, Vec<String>)> {
+            crate::require(full["scope"].as_str() == Some(self.scope.as_str()),
+                "managed refresh scope changed; reopen explicitly")?;
+            let available = full["nodes"].as_array().ok_or_else(|| error("invalid refresh graph"))?
+                .iter().filter_map(|node| node["source_id"].as_str()).collect::<std::collections::BTreeSet<_>>();
+            let removed = ids.iter().filter(|id| !available.contains(id.as_str())).cloned().collect();
+            let mut selected = ids.iter().filter(|id| available.contains(id.as_str())).cloned()
+                .collect::<std::collections::BTreeSet<_>>();
+            // Include the declared support closure, not merely a changed scalar.
+            loop {
+                let before = selected.len();
+                for edge in full["links"].as_array().into_iter().flatten() {
+                    let edge = &edge["source"];
+                    if matches!(edge["rel"].as_str(), Some("from" | "rests_on" | "rule_reads"))
+                        && edge["from"].as_str().is_some_and(|id| selected.contains(id))
+                        && let Some(id) = edge["to"].as_str().filter(|id| available.contains(*id)) {
+                        selected.insert(id.to_owned());
+                    }
+                }
+                crate::require(selected.len() <= 512, "managed refresh support exceeds budget; read exact IDs")?;
+                if selected.len() == before { break; }
+            }
+            // Refresh has exact evidence IDs, not a discovery query. Building
+            // descriptions/rankings for the whole corpus can exceed the hook
+            // deadline. Preserve complete selected bodies and fold the rest
+            // directly to a coarse, revision-bound navigation frontier.
+            let mut selected = build(&crate::canonical_view::CanonicalViewRequest {
+                focus: selected.into_iter().collect(), expand: vec![], frontier_depth: Some(1),
+            })?;
+            selected["descriptions"] = json!({"kind":"labels","is_source_evidence":false,
+                "reason":"Automatic refresh retains previously received evidence and its declared support."});
+            selected["navigation_detail"] = json!("labels");
+            let mut packet = crate::canonical_view::compact(&selected, &[])?;
+            packet["membership_expansion_template"] = json!("members:{dictionary[group_ref].original}");
+            let text = crate::view_format::render(&packet, service.view_format)?;
+            crate::require(text.len() <= self.max_view_bytes.saturating_sub(2048)
+                && service.store.encoding().count(&text) <= self.tokens.saturating_sub(1024).max(64),
+                "complete refreshed evidence exceeds context budget; reopen and read exact IDs")?;
+            Ok((packet, removed))
+        };
+        let (packet, removed) = if service.ordinary()? {
+            let (capture, _, session) = service.ordinary_session()?;
+            let full = session.canonical_view(session.revision(), &full_request)?;
+            let selected = select(full, &|request| session.canonical_view(session.revision(), request))?;
+            capture.verify()?;
+            selected
+        } else {
+            let (capture, session) = service.capture_core_session()?;
+            let full = session.canonical_view(session.revision(), &full_request)?;
+            let selected = select(full, &|request| session.canonical_view(session.revision(), request))?;
+            capture.verify()?;
+            selected
+        };
+        crate::require(service.refresh_fingerprint()? == fingerprint,
+            "source changed during managed refresh; reopen before relying on evidence")?;
+        let mut reader = self.clone();
+        reader.fingerprint = fingerprint;
+        reader.revision = packet["revision"].as_str().ok_or_else(|| error("refresh lacks revision"))?.into();
+        Ok(Some(RefreshedView { packet, removed, reader }))
+    }
+}
+
 impl Service {
     pub fn new(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Self> {
+        Self::new_with_profile_discovery(options, cwd, mode, true)
+    }
+
+    fn new_with_profile_discovery(options: &Options, cwd: &Path, mode: ReadMode, discover_profile: bool) -> Result<Self> {
         crate::require(
             !options.normalized || options.assessment_profile.as_deref() != Some("core/v1"),
             "normalized input requires checked-reader/v1",
@@ -354,7 +492,7 @@ impl Service {
             .or_else(|| config["profile"].as_str().map(PathBuf::from));
         let profile = match profile {
             Some(p) => Some(path(&cwd, &p)?),
-            None => {
+            None if discover_profile => {
                 let candidate = input.parent().unwrap_or(&cwd).join(
                     if input.file_name().is_some_and(|n| n == "PROVENANCE.yaml") {
                         "PROVENANCE.session.json"
@@ -364,6 +502,7 @@ impl Service {
                 );
                 inputs.file(&candidate)?.then_some(candidate)
             }
+            None => None,
         };
         let navigation = profile
             .as_ref()
@@ -405,6 +544,51 @@ impl Service {
             normalized: options.normalized,
             state,
             semantic,
+        })
+    }
+
+    fn refresh_fingerprint(&self) -> Result<String> {
+        let source = if self.normalized {
+            let mut input = Inventory::default();
+            let digest = crate::identity::sha256(&input.read(&self.input)?);
+            input.verify()?;
+            digest
+        } else {
+            let capture = source_capture::capture_source(std::slice::from_ref(&self.input), &self.cwd, self.mode, None)?;
+            // Ordinary checked reads can lack a core Snapshot (for example,
+            // an unevaluable predicate). Bind their verified bytes/history
+            // without narrowing the ordinary reader's existing contract.
+            let files = capture.files().iter().map(|(path, bytes)|
+                (path, crate::identity::sha256(bytes))).collect::<Vec<_>>();
+            let history = capture.history_capture().map(|history| history.storage_bytes.iter()
+                .map(|(path, bytes)| (path, crate::identity::sha256(bytes))).collect::<Vec<_>>());
+            let digest = crate::identity::sha256(&serde_json::to_vec(&json!({
+                "snapshot":capture.snapshot().ok().map(|s|s.snapshot_id()),
+                "files":files,"history":history,
+                "node_history":capture.node_history_capture().map(|h|h.revision()),
+                "context":capture.ordinary_context().to_tagged()?,
+                "reader":capture.reader_lines()?,
+            }))?);
+            capture.verify()?;
+            digest
+        };
+        self.inputs.verify()?;
+        let profiles = self.inputs.files.iter().map(|(path, bytes)|
+            (path, crate::identity::sha256(bytes))).collect::<Vec<_>>();
+        Ok(crate::identity::sha256(&serde_json::to_vec(&(source, &self.profile_path, profiles))?))
+    }
+
+    fn refresh_read(&self, fingerprint: String, packet: &J, tokens: Option<usize>, ordinary: bool) -> Result<RefreshRead> {
+        Ok(RefreshRead {
+            input: self.input.clone(), state: self.state.clone(), project: self.project.clone(),
+            profile: self.profile_path.clone(), assessment_profile:
+                if ordinary { "checked-reader/v1" } else { "core/v1" }.into(),
+            normalized: self.normalized, frozen: self.mode == ReadMode::Frozen,
+            encoding: self.store.encoding().name().into(), description_style: self.description_style.key().into(),
+            view_format: self.view_format.name().into(), tokens: tokens.unwrap_or(16000).min(16000),
+            max_view_bytes: self.max_view_bytes.unwrap_or(39000).min(39000), fingerprint,
+            revision: packet["revision"].as_str().ok_or_else(|| error("managed view lacks revision"))?.into(),
+            scope: packet["scope"].as_str().ok_or_else(|| error("managed view lacks scope"))?.into(),
         })
     }
 
@@ -1099,6 +1283,9 @@ impl Service {
 
     fn viewing_internal(&self, revision: &str, ids: &[String], expand: &[String], description_cache: Option<&Path>, describe: bool, query: &str, tokens: Option<usize>, anchors: &[String], managed: Option<(Option<&str>, crate::view_continuation::ViewTransport)>) -> Result<String> {
         let total_start = std::time::Instant::now();
+        let refresh_fingerprint = managed.filter(|(session, transport)| session.is_some()
+            && *transport != crate::view_continuation::ViewTransport::Stdout)
+            .map(|_| self.refresh_fingerprint()).transpose()?;
         crate::require(!describe || anchors.is_empty(), "anchors are only supported by session view")?;
         crate::require(!(describe && description_cache.is_some()), "describe generates a fresh index; --description-cache is only valid with view")?;
         let (edge_sets, structural): (Vec<_>, Vec<_>) = expand.iter().cloned().partition(|handle| handle.starts_with("edgeset:"));
@@ -1114,7 +1301,8 @@ impl Service {
             profile_view_phase("selected_compact_view", selected_start);
             Ok(packet)
         };
-        let packet = if self.ordinary()? {
+        let ordinary = self.ordinary()?;
+        let packet = if ordinary {
             // Keep the established ordinary recapture and assessment contract.
             let (capture, _, session) = self.ordinary_session()?;
             let full_start = std::time::Instant::now();
@@ -1156,7 +1344,11 @@ impl Service {
             "complete view exceeds transport byte budget; use a narrower query or exact IDs; no source body was cropped")?; }
         profile_view_phase("view_total", total_start);
         if let Some((session, transport)) = managed {
-            crate::view_continuation::prepare_output(&self.cwd, session, &packet, &text, self.view_format, transport)
+            let reader = refresh_fingerprint.map(|fingerprint| {
+                crate::require(self.refresh_fingerprint()? == fingerprint, "source changed during managed view")?;
+                self.refresh_read(fingerprint, &packet, tokens, ordinary)
+            }).transpose()?;
+            crate::view_continuation::prepare_output_with_refresh(&self.cwd, session, &packet, &text, self.view_format, transport, reader)
         } else {
             Ok(text)
         }
@@ -1217,14 +1409,13 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
             },
         ),
         Operation::View => {
+            let revision = crate::view_continuation::resolve_revision(cwd, options.context_session.as_deref(),
+                options.revision.as_deref().ok_or_else(|| error("view requires --revision from open"))?)?;
             let anchors = if options.anchors.is_empty() && !options.no_auto_anchors && !options.query.trim().is_empty() {
-                crate::view_continuation::automatic_anchors(cwd, options.context_session.as_deref(), options.revision.as_deref().unwrap_or_default())
+                crate::view_continuation::automatic_anchors(cwd, options.context_session.as_deref(), &revision)
             } else { options.anchors.clone() };
             service.viewing_managed(
-            options
-                .revision
-                .as_deref()
-                .ok_or_else(|| error("view requires --revision from open"))?,
+            &revision,
             &options.ids,
             &options.expand,
             options.description_cache.as_deref(),

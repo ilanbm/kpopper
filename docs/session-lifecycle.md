@@ -140,7 +140,20 @@ kpop check
 ```
 
 The update and its reach are distinct from approving dependent judgments.
-The previous captured revision is now stale: reopen and use the new revision.
+The previous captured revision is now stale. In a managed Codex conversation,
+the next user prompt checks the inputs behind the last acknowledged view. If
+they changed, it delivers a complete current view of previously received IDs
+and their declared support, with a `KPOPPER_SOURCE_REFRESH` notice. This does not
+require the model to request another read. Unchanged inputs add no context and
+do not rebuild an assessment.
+
+The refresh retains the original read configuration and scope. Deleted IDs are
+named. A missing record, changed scope, read failure, or complete bodies that
+exceed the budget produces explicit unavailable context; old evidence must not
+be used as current. Delivery is acknowledged only after the complete frame is
+present in the retained conversation. Stop remains passive.
+
+For standalone commands or an unavailable refresh, reopen and use the new revision.
 An old revision is refused, not silently redirected. A fresh full checkpoint is
 required even when experimental delta delivery is enabled.
 
