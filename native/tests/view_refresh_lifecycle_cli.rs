@@ -303,6 +303,33 @@ fn opt_out_suppresses_warning_after_receipt_loss() {
 }
 
 #[test]
+fn legacy_readerless_warning_obeys_explicit_durable_opt_out() {
+    let p = Probe::new();
+    p.read();
+    p.change();
+    let unreceived = p.hook("UserPromptSubmit", Some("second"), json!({}), false);
+    assert!(unreceived.contains("KPOPPER_CONTEXT_FRAME"), "{unreceived}");
+    p.hook("Stop", Some("second"), json!({"last_assistant_message":"lost refresh"}), false);
+    let state_path = kpop_native::session_activity::temporary_directory()
+        .join(format!("kpopper-view-{}", p.session)).join("state.json");
+    let mut state: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+    assert!(state["refresh_error"].is_string());
+    state.as_object_mut().unwrap().remove("freshness");
+    state["reader"] = Value::Null;
+    fs::write(&state_path, serde_json::to_vec(&state).unwrap()).unwrap();
+    let settings = p.root.path().join("preferences.json");
+    fs::write(&settings, json!({"schema":1,"enabled":true,
+        "native":env!("CARGO_BIN_EXE_kpop"),"tokens":16000}).to_string()).unwrap();
+    let enabled = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(enabled.contains("\"status\":\"unavailable\""), "{enabled}");
+    fs::write(&settings, "{broken").unwrap();
+    let unreadable = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(unreadable.contains("\"status\":\"unavailable\""), "{unreadable}");
+    fs::write(&settings, json!({"schema":1,"enabled":false}).to_string()).unwrap();
+    assert!(p.hook("UserPromptSubmit", None, json!({}), false).is_empty());
+}
+
+#[test]
 fn lost_refresh_is_retried_and_only_received_frame_recovers() {
     let p = Probe::new();
     p.read();
