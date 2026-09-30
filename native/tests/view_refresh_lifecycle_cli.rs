@@ -325,6 +325,21 @@ fn lost_refresh_is_retried_and_only_received_frame_recovers() {
 }
 
 #[test]
+fn complete_managed_read_recovers_after_unavailable_source() {
+    let p = Probe::new();
+    p.read();
+    let source = p.root.path().join("GROUNDING.yaml");
+    let original = fs::read_to_string(&source).unwrap();
+    fs::remove_file(&source).unwrap();
+    let unavailable = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(unavailable.contains("\"status\":\"unavailable\""), "{unavailable}");
+    fs::write(&source, original.replace("p.deduction: {v: 9}", "p.deduction: {v: 19}")).unwrap();
+    let complete = p.read();
+    assert_eq!(evidence_value(&evidence_packet(&complete), "p.deduction")["v"], 19);
+    assert!(p.hook("UserPromptSubmit", None, json!({}), false).is_empty());
+}
+
+#[test]
 fn reinitialization_expires_old_epoch_reference() {
     let p = Probe::new();
     let old = p.read();
@@ -360,4 +375,20 @@ fn reinitialization_expires_old_epoch_reference() {
         kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:1")
             .is_err()
     );
+}
+
+#[test]
+fn persisted_pre_upgrade_reader_survives_same_root_restart() {
+    let p = Probe::new();
+    p.read();
+    let state_path = kpop_native::session_activity::temporary_directory()
+        .join(format!("kpopper-view-{}", p.session)).join("state.json");
+    let mut state: Value = serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+    state.as_object_mut().unwrap().remove("freshness");
+    fs::write(&state_path, serde_json::to_vec(&state).unwrap()).unwrap();
+    kpop_native::view_continuation::initialize(p.root.path(), &p.session, true).unwrap();
+    p.change();
+    let refreshed = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(refreshed.contains("KPOPPER_SOURCE_REFRESH"), "{refreshed}");
+    assert_eq!(evidence_value(&evidence_packet(&refreshed), "p.deduction")["v"], 19);
 }
