@@ -227,6 +227,8 @@ struct State {
     #[serde(default)]
     refresh_error: Option<String>,
     #[serde(default)]
+    unacknowledged_refresh: bool,
+    #[serde(default)]
     references: BTreeMap<String, RevisionReference>,
 }
 fn now() -> u128 {
@@ -333,6 +335,7 @@ fn fresh(root: &Path, session: &str, enabled: bool) -> Result<State> {
         reader: None,
         freshness: None,
         refresh_error: None,
+        unacknowledged_refresh: false,
         references: BTreeMap::new(),
     })
 }
@@ -620,12 +623,14 @@ pub fn initialize(root: &Path, session: &str, enabled: bool) -> Result<()> {
         let retained = s.freshness.take();
         let control_reader = s.reader.clone();
         let warning = s.refresh_error.clone();
+        let unacknowledged_refresh = s.unacknowledged_refresh;
         *s = fresh(root, session, enabled)?;
         if same_root {
             s.freshness = retained;
+            s.refresh_error = warning;
+            s.unacknowledged_refresh = unacknowledged_refresh;
             if s.freshness.is_none() {
                 s.reader = control_reader;
-                s.refresh_error = warning;
             }
         }
         Ok(())
@@ -794,7 +799,19 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
     let refreshed = reader.refresh(root, &ids);
     // A failed delivery is retried against source on every enabled prompt.
     // Only a completed, retained developer frame may clear its warning.
-    if matches!(&refreshed, Ok(None)) { return Ok(state.refresh_error.clone()); }
+    if matches!(&refreshed, Ok(None)) {
+        if state.refresh_error.is_some() && !state.unacknowledged_refresh {
+            update(root, session, false, |s| {
+                crate::require(s.epoch == state.epoch
+                    && s.freshness.as_ref().is_some_and(|f| f.reader.revision == reader.revision),
+                    "managed context changed during source recovery")?;
+                s.refresh_error = None;
+                Ok(())
+            })?;
+            return Ok(None);
+        }
+        return Ok(state.refresh_error.clone());
+    }
     let transcript = payload["transcript_path"].as_str().or(state.transcript.as_deref());
     let Some(transcript) = transcript else {
         return Ok(Some(refresh_notice(&reader.revision, None, &[],
@@ -832,6 +849,7 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
             s.transcript = Some(transcript.into());
             s.refresh_error = Some(refresh_notice(&reader.revision, None, &[],
                 Some("current refresh has not been acknowledged by a completed turn; read current evidence"))?);
+            s.unacknowledged_refresh = true;
             trim(s);
             crate::require(s.frames.len() <= MAX_FRAMES, "context frame cache exhausted")?;
             Ok(output)
@@ -1221,6 +1239,7 @@ fn hook_with_delta(
                         && (acknowledged_prompt || covers_prior) {
                         s.freshness = Some(Freshness { reader, ids: eligible.clone() });
                         s.refresh_error = None;
+                        s.unacknowledged_refresh = false;
                     }
                 }
                 if let Some(answer) = payload["last_assistant_message"].as_str() {
