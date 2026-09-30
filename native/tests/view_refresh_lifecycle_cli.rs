@@ -1,3 +1,4 @@
+use kpop_native::value::TypedValue;
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -181,6 +182,15 @@ impl Probe {
         );
         frame
     }
+    fn session_start(&self) -> String {
+        let mut child = self.command().args(["session-start", "--host", "codex"])
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+        child.stdin.take().unwrap().write_all(json!({"cwd":self.root.path(),"session_id":self.session})
+            .to_string().as_bytes()).unwrap();
+        let result = child.wait_with_output().unwrap();
+        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        String::from_utf8(result.stdout).unwrap()
+    }
     fn change(&self) {
         let path = self.root.path().join("GROUNDING.yaml");
         fs::write(
@@ -191,6 +201,18 @@ impl Probe {
         )
         .unwrap();
     }
+}
+
+fn evidence_packet(text: &str) -> Value {
+    let start = text.find("# Checked graph view").unwrap();
+    let end = text[start..].find("KPOPPER_CONTEXT_END ").unwrap() + start;
+    kpop_native::view_format::decode_checked_text(&text[start..end]).unwrap()
+}
+
+fn evidence_value(packet: &Value, id: &str) -> Value {
+    let row = packet["nodes"].as_array().unwrap().iter()
+        .find(|row| packet["dictionary"][row[0].as_str().unwrap()]["original"] == id).unwrap();
+    TypedValue::from_tagged(&row[1]).unwrap().to_json().unwrap()
 }
 
 impl Drop for Probe {
@@ -210,7 +232,18 @@ fn interrupt_keeps_source_obligation_and_refreshes_changed_evidence() {
     let refreshed = p.hook("UserPromptSubmit", None, json!({}), false);
     assert!(refreshed.contains("KPOPPER_SOURCE_REFRESH"), "{refreshed}");
     assert!(refreshed.contains("KPOPPER_CONTEXT_FRAME"), "{refreshed}");
-    assert!(refreshed.contains("19"), "{refreshed}");
+    assert_eq!(evidence_value(&evidence_packet(&refreshed), "p.deduction")["v"], 19);
+}
+
+#[test]
+fn failed_session_start_preserves_prior_source_obligation() {
+    let p = Probe::new();
+    p.read();
+    fs::write(p.root.path().join("GROUNDING.yaml"), "known: [unterminated").unwrap();
+    p.session_start();
+    let notice = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(notice.contains("KPOPPER_SOURCE_REFRESH"), "{notice}");
+    assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");
 }
 
 #[test]
@@ -253,8 +286,10 @@ fn malformed_or_unknown_transcript_keeps_source_obligation() {
 fn opt_out_suppresses_warning_after_receipt_loss() {
     let p = Probe::new();
     p.read();
-    p.hook("Interrupt", Some("first"), json!({}), false);
     p.change();
+    let unreceived = p.hook("UserPromptSubmit", Some("second"), json!({}), false);
+    assert!(unreceived.contains("KPOPPER_CONTEXT_FRAME"), "{unreceived}");
+    p.hook("Stop", Some("second"), json!({"last_assistant_message":"current frame missing"}), false);
     assert!(p.hook("UserPromptSubmit", None, json!({}), true).is_empty());
     fs::write(
         p.root.path().join("preferences.json"),
@@ -310,8 +345,7 @@ fn reinitialization_expires_old_epoch_reference() {
         kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &old_ref)
             .is_err()
     );
-    p.change();
-    let current = p.hook("UserPromptSubmit", None, json!({}), false);
+    let current = p.read();
     let new_ref = current
         .lines()
         .find_map(|line| line.strip_prefix("KPOPPER_CONTEXT_FRAME "))
@@ -321,6 +355,7 @@ fn reinitialization_expires_old_epoch_reference() {
         .unwrap()
         .to_owned();
     assert_ne!(new_ref, old_ref);
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &new_ref).is_ok());
     assert!(
         kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:1")
             .is_err()
