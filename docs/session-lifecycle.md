@@ -153,9 +153,25 @@ exceed the budget produces explicit unavailable context; old evidence must not
 be used as current. Delivery is acknowledged only after the complete frame is
 present in the retained conversation. Stop remains passive.
 
+Interrupts, compaction and failed transcript reads discard reusable frames and
+references but keep the tracked source configuration and received evidence IDs.
+The next enabled prompt checks them again, including after a same-session
+restart. A failed refresh is retried against current inputs. A complete current
+managed read covering that evidence can acknowledge recovery; unrelated or
+partial reads cannot clear the outstanding warning. Restoring the exact
+previously acknowledged source can clear a source-unavailable warning without
+reviving expired references or acknowledging a lost changed frame.
+
 For standalone commands or an unavailable refresh, reopen and use the new revision.
 An old revision is refused, not silently redirected. A fresh full checkpoint is
 required even when experimental delta delivery is enabled.
+
+These guarantees depend on the host invoking the hook and allowing it to finish.
+The Codex prompt hook has a 15-second timeout. If the host disables or terminates
+it before output, the plugin cannot guarantee a model-visible warning. A successful
+command or complete local stdout alone also does not prove that the host retained
+all of that output. Keep source-reading success separate from acknowledged
+conversation delivery.
 
 **Answer:** “The recorded standard-delivery policy is now seven working days.
 Any promise based on the old five-day value needs review.”

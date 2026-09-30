@@ -16,6 +16,14 @@
   opt-out controls apply. No record migration is required. Refresh checks
   captured record inputs, not changes in the external world; the bounded hook
   deadline and complete-body limits still apply.
+- Source tracking survives interrupted turns, compaction, failed transcript
+  reads and same-session restarts. Failed refreshes are retried, and complete
+  retained managed reads can acknowledge recovery. Raw stdout alone does not
+  prove host reception. A disabled or terminated hook cannot guarantee a warning.
+- Revision references include a random session epoch so restarting a session
+  cannot reuse an old reference for new evidence. Managed views reuse their
+  captured source for freshness; unrelated resolver settings do not trigger a
+  refresh.
 - Reuse the immutable snapshot's input index across node evaluations to avoid
   rebuilding it for every record. See the [conversation lifecycle](docs/session-lifecycle.md)
   and [canonical view reference](docs/canonical-view.md).

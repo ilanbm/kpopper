@@ -96,6 +96,11 @@ fn value(packet: &Value, id: &str) -> Value {
         .find(|r| packet["dictionary"][r[0].as_str().unwrap()]["original"] == id).unwrap();
     TypedValue::from_tagged(&row[1]).unwrap().to_json().unwrap()
 }
+fn revision_reference(text: &str) -> String {
+    text.lines().find_map(|line| line.strip_prefix("KPOPPER_CONTEXT_FRAME "))
+        .map(|header| serde_json::from_str::<Value>(header).unwrap()["revision_ref"]
+            .as_str().unwrap().to_owned()).expect("delivered frame has a revision reference")
+}
 
 #[test]
 fn next_prompt_delivers_updated_evidence_without_a_model_tool_call() {
@@ -171,20 +176,25 @@ fn unrelated_files_do_not_refresh_the_record() {
 fn revision_references_resolve_only_received_current_session_frames() {
     let p = Probe::new();
     let old = p.read();
-    assert_eq!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:1").unwrap(), old);
-    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:999").is_err());
-    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), None, "view:1").is_err());
-    let read = p.session(&["view", "--revision", "view:1", "--tokens", "16000", "--view-transport", "stdout", "--context-session", &p.session]);
+    let transcript = fs::read_to_string(p.root.path().join("transcript.jsonl")).unwrap();
+    let message = serde_json::from_str::<Value>(transcript.lines().last().unwrap()).unwrap();
+    let old_ref = revision_reference(message["payload"]["content"][0]["text"].as_str().unwrap());
+    assert_eq!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &old_ref).unwrap(), old);
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:1").is_err());
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &format!("{old_ref}-unknown")).is_err());
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), None, &old_ref).is_err());
+    let read = p.session(&["view", "--revision", &old_ref, "--tokens", "16000", "--view-transport", "stdout", "--context-session", &p.session]);
     assert_eq!(serde_json::from_str::<Value>(&read).unwrap()["revision"], old);
     p.change();
     let fresh = p.hook("UserPromptSubmit", None, json!({}));
-    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:1").is_err());
-    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:2").is_err(), "issued is not received");
+    let new_ref = revision_reference(&fresh);
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &old_ref).is_err());
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &new_ref).is_err(), "issued is not received");
     let revision = packet(&fresh)["revision"].as_str().unwrap().to_owned();
     p.context(&fresh);
-    assert_eq!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:2").unwrap(), revision);
+    assert_eq!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &new_ref).unwrap(), revision);
     p.hook("PreCompact", Some("compact"), json!({}));
-    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), "view:2").is_err());
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &new_ref).is_err());
 }
 
 #[test]
@@ -195,9 +205,12 @@ fn an_unacknowledged_refresh_cannot_silently_become_current() {
     let fresh = p.hook("UserPromptSubmit", None, json!({}));
     assert!(fresh.contains("KPOPPER_CONTEXT_FRAME"));
     // Simulate lost hook context: no retained developer frame and no completed turn.
-    let notice = p.hook("UserPromptSubmit", None, json!({}));
-    assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");
-    assert!(!notice.contains("KPOPPER_CONTEXT_FRAME"));
+    let retry = p.hook("UserPromptSubmit", None, json!({}));
+    assert_eq!(value(&packet(&retry), "p.deduction")["v"], 19);
+    for reference in [revision_reference(&fresh), revision_reference(&retry)] {
+        assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &reference).is_err(),
+            "retry output is not an acknowledged receipt");
+    }
 }
 
 #[test]

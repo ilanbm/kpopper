@@ -21,14 +21,18 @@ The Codex package loads the shared skill and these hooks:
 |---|---|
 | `SessionStart` | Canonical opening or its bound recovery route, attention items, and existing ingestion/watch/grounding hooks |
 | `PostToolUse` | Complete managed context frames, grounding/follow-up checks, and asynchronous ingestion/watch delivery |
-| `UserPromptSubmit` | Record diagnostics, session gate, abandoned-read cleanup, and asynchronous ingestion/watch delivery |
+| `UserPromptSubmit` | Refresh changed sources behind the last acknowledged view, or report unavailable evidence; record diagnostics, session gate, abandoned-read cleanup, and asynchronous ingestion/watch delivery |
 | `Stop` | Passive verification of retained frames and completed-answer citations; no new model turn |
 | `PreCompact`, `PostCompact`, `Interrupt` | Invalidate reusable continuation state so the next read uses a full checkpoint |
 
 Canonical views and automatic anchors are enabled by default on the managed Codex
 route. Delta delivery remains experimental and off. The continuation hook has its
-own native byte/token guards; its PostToolUse definition uses
+own native byte/token guards; its PostToolUse and UserPromptSubmit definitions use
 `additionalContextLimit: 0` to avoid a second truncation of a complete frame.
+The prompt refresh has a 15-second timeout. It can report unavailable evidence
+only when the host runs the hook and lets it finish. A disabled, killed, crashed
+or timed-out hook cannot guarantee that a warning reaches the model; reopen and
+read current evidence when hook delivery is unavailable.
 See the [upgrade controls](../../docs/context-upgrade.md) and
 [conversation lifecycle](../../docs/session-lifecycle.md).
 
