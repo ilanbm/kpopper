@@ -340,6 +340,38 @@ fn complete_managed_read_recovers_after_unavailable_source() {
 }
 
 #[test]
+fn exact_source_restore_clears_unavailable_without_reviving_old_reference() {
+    let p = Probe::new();
+    let old = p.read();
+    let old_ref = old.lines().find_map(|line| line.strip_prefix("KPOPPER_CONTEXT_FRAME "))
+        .and_then(|line| serde_json::from_str::<Value>(line).ok()).unwrap()["revision_ref"]
+        .as_str().unwrap().to_owned();
+    let source = p.root.path().join("GROUNDING.yaml");
+    let original = fs::read(&source).unwrap();
+    fs::remove_file(&source).unwrap();
+    let unavailable = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(unavailable.contains("\"status\":\"unavailable\""), "{unavailable}");
+    fs::write(&source, original).unwrap();
+    assert!(p.hook("UserPromptSubmit", None, json!({}), false).is_empty());
+    assert!(kpop_native::view_continuation::resolve_revision(p.root.path(), Some(&p.session), &old_ref).is_err());
+}
+
+#[test]
+fn exact_restore_does_not_acknowledge_a_lost_changed_frame() {
+    let p = Probe::new();
+    p.read();
+    let source = p.root.path().join("GROUNDING.yaml");
+    let original = fs::read(&source).unwrap();
+    p.change();
+    let unreceived = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(unreceived.contains("KPOPPER_CONTEXT_FRAME"), "{unreceived}");
+    fs::write(&source, original).unwrap();
+    let notice = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");
+    assert!(!notice.contains("KPOPPER_CONTEXT_FRAME"));
+}
+
+#[test]
 fn reinitialization_expires_old_epoch_reference() {
     let p = Probe::new();
     let old = p.read();
