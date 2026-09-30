@@ -182,6 +182,17 @@ impl Probe {
         );
         frame
     }
+    fn read_one(&self, id: &str, turn: &str) {
+        let revision = self.revision();
+        let marker = self.session(&["view", "--revision", &revision, "--tokens", "16000",
+            "--max-view-bytes", "39000", "--view-format", "checked-text-tagged",
+            "--id", id, "--context-session", &self.session]);
+        assert!(marker.starts_with("KPOPPER_CONTEXT_QUEUED "), "{marker}");
+        let frame = self.hook("PostToolUse", Some(turn), json!({"tool_response":{"output":marker}}), false);
+        assert!(frame.contains("KPOPPER_CONTEXT_FRAME"), "{frame}");
+        self.context(&frame);
+        self.hook("Stop", Some(turn), json!({"last_assistant_message":id}), false);
+    }
     fn session_start(&self) -> String {
         let mut child = self.command().args(["session-start", "--host", "codex"])
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
@@ -244,6 +255,36 @@ fn failed_session_start_preserves_prior_source_obligation() {
     let notice = p.hook("UserPromptSubmit", None, json!({}), false);
     assert!(notice.contains("KPOPPER_SOURCE_REFRESH"), "{notice}");
     assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");
+}
+
+#[test]
+fn missing_record_on_same_session_restart_keeps_refresh_active() {
+    let p = Probe::new();
+    p.read();
+    let source = p.root.path().join("GROUNDING.yaml");
+    let original = fs::read_to_string(&source).unwrap();
+    fs::remove_file(&source).unwrap();
+    p.session_start();
+    let unavailable = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(unavailable.contains("\"status\":\"unavailable\""), "{unavailable}");
+    fs::write(&source, original.replace("p.deduction: {v: 9}", "p.deduction: {v: 19}")).unwrap();
+    let refreshed = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(refreshed.contains("KPOPPER_CONTEXT_FRAME"), "{refreshed}");
+    assert_eq!(evidence_value(&evidence_packet(&refreshed), "p.deduction")["v"], 19);
+}
+
+#[test]
+fn canonical_fallback_restart_keeps_prior_refresh_active() {
+    let p = Probe::new();
+    p.read();
+    let source = p.root.path().join("GROUNDING.yaml");
+    fs::write(&source, fs::read_to_string(&source).unwrap().replace("known:\n", "# reviewed\nknown:\n")).unwrap();
+    let unavailable = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(unavailable.contains("\"status\":\"unavailable\""), "{unavailable}");
+    p.session_start();
+    p.change();
+    let current = p.hook("UserPromptSubmit", None, json!({}), false);
+    assert!(!current.is_empty(), "fallback restart must retain the earlier source warning");
 }
 
 #[test]
@@ -396,6 +437,27 @@ fn exact_restore_does_not_acknowledge_a_lost_changed_frame() {
     let notice = p.hook("UserPromptSubmit", None, json!({}), false);
     assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");
     assert!(!notice.contains("KPOPPER_CONTEXT_FRAME"));
+}
+
+#[test]
+fn partial_read_cannot_use_pre_warning_frames_to_clear_lost_refresh() {
+    for late_receipt in [false, true] {
+        let p = Probe::new();
+        p.read();
+        let source = p.root.path().join("GROUNDING.yaml");
+        let original = fs::read(&source).unwrap();
+        p.change();
+        let changed = p.hook("UserPromptSubmit", Some("second"), json!({}), false);
+        assert!(changed.contains("KPOPPER_CONTEXT_FRAME"), "{changed}");
+        p.hook("Stop", Some("second"), json!({"last_assistant_message":"changed value"}), false);
+        if late_receipt { p.context(&changed); }
+        fs::write(&source, original).unwrap();
+        let warning = p.hook("UserPromptSubmit", Some("third"), json!({}), false);
+        assert!(warning.contains("\"status\":\"unavailable\""), "{warning}");
+        p.read_one("p.opening", "third");
+        let next = p.hook("UserPromptSubmit", Some("fourth"), json!({}), false);
+        assert!(next.contains("\"status\":\"unavailable\""), "late_receipt={late_receipt}: {next}");
+    }
 }
 
 #[test]
