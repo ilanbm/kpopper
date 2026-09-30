@@ -547,35 +547,61 @@ impl Service {
         })
     }
 
-    fn refresh_fingerprint(&self) -> Result<String> {
-        let source = if self.normalized {
-            let mut input = Inventory::default();
-            let digest = crate::identity::sha256(&input.read(&self.input)?);
-            input.verify()?;
-            digest
-        } else {
-            let capture = source_capture::capture_source(std::slice::from_ref(&self.input), &self.cwd, self.mode, None)?;
-            // Ordinary checked reads can lack a core Snapshot (for example,
-            // an unevaluable predicate). Bind their verified bytes/history
-            // without narrowing the ordinary reader's existing contract.
-            let files = capture.files().iter().map(|(path, bytes)|
-                (path, crate::identity::sha256(bytes))).collect::<Vec<_>>();
-            let history = capture.history_capture().map(|history| history.storage_bytes.iter()
-                .map(|(path, bytes)| (path, crate::identity::sha256(bytes))).collect::<Vec<_>>());
-            let digest = crate::identity::sha256(&serde_json::to_vec(&json!({
-                "snapshot":capture.snapshot().ok().map(|s|s.snapshot_id()),
-                "files":files,"history":history,
-                "node_history":capture.node_history_capture().map(|h|h.revision()),
-                "context":capture.ordinary_context().to_tagged()?,
-                "reader":capture.reader_lines()?,
-            }))?);
-            capture.verify()?;
-            digest
+    fn refresh_fingerprint_from_capture(&self, capture: &SessionCapture) -> Result<String> {
+        let source = match capture {
+            SessionCapture::Normalized(input) => {
+                let bytes = input.files.get(&self.input)
+                    .ok_or_else(|| error("managed refresh input is absent from its capture"))?;
+                crate::identity::sha256(bytes)
+            }
+            SessionCapture::Record(capture) => {
+                // Ordinary checked reads can lack a core Snapshot (for
+                // example, an unevaluable predicate). Bind their verified
+                // bytes/history without narrowing the reader's contract.
+                let files = capture.files().iter().map(|(path, bytes)|
+                    (path, crate::identity::sha256(bytes))).collect::<Vec<_>>();
+                let history = capture.history_capture().map(|history| history.storage_bytes.iter()
+                    .map(|(path, bytes)| (path, crate::identity::sha256(bytes))).collect::<Vec<_>>());
+                crate::identity::sha256(&serde_json::to_vec(&json!({
+                    "snapshot":capture.snapshot().ok().map(|s|s.snapshot_id()),
+                    "files":files,"history":history,
+                    "node_history":capture.node_history_capture().map(|h|h.revision()),
+                    "context":capture.ordinary_context().to_tagged()?,
+                    "reader":capture.reader_lines()?,
+                }))?)
+            }
         };
+        // Settings bytes select routing at startup, but do not describe the
+        // captured source. Retain only the selected profile path and its raw
+        // captured bytes; `self.inputs.verify()` still detects a race.
+        let profile = self.profile_path.as_ref().map(|path| {
+            let bytes = self.inputs.files.get(path)
+                .ok_or_else(|| error("selected profile is absent from its capture"))?;
+            Ok::<_, crate::Error>((path, crate::identity::sha256(bytes)))
+        }).transpose()?;
+        Ok(crate::identity::sha256(&serde_json::to_vec(&(source, profile))?))
+    }
+
+    fn refresh_fingerprint(&self) -> Result<String> {
+        let capture = if self.normalized {
+            let mut input = Inventory::default();
+            input.read(&self.input)?;
+            SessionCapture::Normalized(input)
+        } else if self.requested_profile.as_deref() == Some("checked-reader/v1") {
+            let runtime = W::runtime()?
+                .ok_or_else(|| error("checked session core is not ready; run kpop session setup"))?;
+            SessionCapture::Record(Box::new(source_capture::capture_source_with_runtime(
+                std::slice::from_ref(&self.input), &self.cwd, self.mode, None, Some(&runtime),
+            )?))
+        } else {
+            SessionCapture::Record(Box::new(source_capture::capture_source(
+                std::slice::from_ref(&self.input), &self.cwd, self.mode, None,
+            )?))
+        };
+        let fingerprint = self.refresh_fingerprint_from_capture(&capture)?;
+        capture.verify()?;
         self.inputs.verify()?;
-        let profiles = self.inputs.files.iter().map(|(path, bytes)|
-            (path, crate::identity::sha256(bytes))).collect::<Vec<_>>();
-        Ok(crate::identity::sha256(&serde_json::to_vec(&(source, &self.profile_path, profiles))?))
+        Ok(fingerprint)
     }
 
     fn refresh_read(&self, fingerprint: String, packet: &J, tokens: Option<usize>, ordinary: bool) -> Result<RefreshRead> {
@@ -1283,9 +1309,7 @@ impl Service {
 
     fn viewing_internal(&self, revision: &str, ids: &[String], expand: &[String], description_cache: Option<&Path>, describe: bool, query: &str, tokens: Option<usize>, anchors: &[String], managed: Option<(Option<&str>, crate::view_continuation::ViewTransport)>) -> Result<String> {
         let total_start = std::time::Instant::now();
-        let refresh_fingerprint = managed.filter(|(session, transport)| session.is_some()
-            && *transport != crate::view_continuation::ViewTransport::Stdout)
-            .map(|_| self.refresh_fingerprint()).transpose()?;
+        let refresh_enabled = managed.is_some_and(|(session, _)| session.is_some());
         crate::require(!describe || anchors.is_empty(), "anchors are only supported by session view")?;
         crate::require(!(describe && description_cache.is_some()), "describe generates a fresh index; --description-cache is only valid with view")?;
         let (edge_sets, structural): (Vec<_>, Vec<_>) = expand.iter().cloned().partition(|handle| handle.starts_with("edgeset:"));
@@ -1302,15 +1326,15 @@ impl Service {
             Ok(packet)
         };
         let ordinary = self.ordinary()?;
-        let packet = if ordinary {
+        let (packet, refresh_fingerprint, capture) = if ordinary {
             // Keep the established ordinary recapture and assessment contract.
             let (capture, _, session) = self.ordinary_session()?;
             let full_start = std::time::Instant::now();
             let full = session.canonical_view(revision, &full_request)?;
             profile_view_phase("full_view_for_descriptions", full_start);
             let packet = render(full, &|request| session.canonical_view(revision, request))?;
-            capture.verify()?;
-            packet
+            let fingerprint = refresh_enabled.then(|| self.refresh_fingerprint_from_capture(&capture)).transpose()?;
+            (packet, fingerprint, capture)
         } else {
             let capture_start = std::time::Instant::now();
             let capture = source_capture::capture_source(std::slice::from_ref(&self.input), &self.cwd, self.mode, None)?;
@@ -1322,11 +1346,10 @@ impl Service {
             let full = session.canonical_view(revision, &full_request)?;
             profile_view_phase("full_view_for_descriptions", full_start);
             let packet = render(full, &|request| session.canonical_view(revision, request))?;
-            capture.verify()?;
-            packet
+            let capture = SessionCapture::Record(Box::new(capture));
+            let fingerprint = refresh_enabled.then(|| self.refresh_fingerprint_from_capture(&capture)).transpose()?;
+            (packet, fingerprint, capture)
         };
-        description_inputs.verify()?;
-        self.inputs.verify()?;
         let serialization_start = std::time::Instant::now();
         let text = if describe { serde_json::to_string(&packet)?+"\n" }
                    else { crate::view_format::render(&packet,self.view_format)? };
@@ -1343,9 +1366,13 @@ impl Service {
         if !describe { crate::require(self.max_view_bytes.is_none_or(|cap|text.len()<=cap),
             "complete view exceeds transport byte budget; use a narrower query or exact IDs; no source body was cropped")?; }
         profile_view_phase("view_total", total_start);
+        capture.verify()?;
+        description_inputs.verify()?;
+        self.inputs.verify()?;
         if let Some((session, transport)) = managed {
             let reader = refresh_fingerprint.map(|fingerprint| {
-                crate::require(self.refresh_fingerprint()? == fingerprint, "source changed during managed view")?;
+                // Both the packet and its freshness receipt came from this
+                // verified capture; only resolver inputs are verified here.
                 self.refresh_read(fingerprint, &packet, tokens, ordinary)
             }).transpose()?;
             crate::view_continuation::prepare_output_with_refresh(&self.cwd, session, &packet, &text, self.view_format, transport, reader)
