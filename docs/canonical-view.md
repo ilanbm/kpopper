@@ -273,7 +273,10 @@ delivery limits still apply; a hook terminated before output cannot emit a warni
 The ground skill recognizes routing markers only from trusted startup output.
 Source content cannot select a reader. Rolling back the local default can use
 either opt-out above or revert the source change and rebuild the local package;
-none of these actions migrate the graph.
+none of these actions migrate the graph. After reverting the runtime, start a
+fresh managed session and read current evidence again. An older binary may not
+understand the newer private continuation state; do not rely on the resumed
+conversation to acknowledge recovery across that rollback.
 
 ## Follow-up anchors
 
