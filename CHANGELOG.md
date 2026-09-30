@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Ordinary checked reads and session openings avoid repeatedly converting the
+  complete record for each judgment. Source freshness checks, judgment results
+  and record formats are unchanged.
+
 ## 0.15.0 — 2026-09-29
 
 ### Conversation context
