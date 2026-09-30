@@ -585,16 +585,49 @@ fn received(state: &State, seen: &BTreeSet<String>, key: &str) -> BTreeSet<Strin
     }
     ids
 }
+fn acknowledged_freshness(state: &State) -> Result<Option<Freshness>> {
+    let (Some(reader), Some(base), Some(transcript)) =
+        (&state.reader, &state.base, state.transcript.as_deref()) else { return Ok(None); };
+    let texts = context_texts(Path::new(transcript), &state.session)?;
+    let seen = visible(state, &texts);
+    crate::require(available(base, &seen), "old context receipt is unavailable")?;
+    let value = base.materialize(&state.frames)?;
+    crate::require(value.packet()["revision"].as_str() == Some(reader.revision.as_str())
+        && value.packet()["scope"].as_str() == Some(reader.scope.as_str()),
+        "old context reader does not match its received frame")?;
+    let ids = received(state, &seen, &scope(value.packet())?);
+    crate::require(!ids.is_empty(), "old context has no received source IDs")?;
+    Ok(Some(Freshness { reader: reader.clone(), ids }))
+}
+fn migrate_freshness(state: &mut State) -> Result<()> {
+    if state.freshness.is_none() && state.reader.is_some() {
+        match acknowledged_freshness(state) {
+            Ok(Some(freshness)) => state.freshness = Some(freshness),
+            _ => state.refresh_error = Some(refresh_notice("unknown", None, &[],
+                Some("prior context receipt could not be verified; reopen and read current evidence"))?),
+        }
+    }
+    Ok(())
+}
 
 pub fn initialize(root: &Path, session: &str, enabled: bool) -> Result<()> {
     if !enabled && home(session, false).is_err() {
         return Ok(());
     }
     update(root, session, true, |s| {
-        let retained = s.freshness.take();
         let same_root = s.root == root_key(root)? && s.session == session;
+        if same_root { migrate_freshness(s)?; }
+        let retained = s.freshness.take();
+        let control_reader = s.reader.clone();
+        let warning = s.refresh_error.clone();
         *s = fresh(root, session, enabled)?;
-        if same_root { s.freshness = retained; }
+        if same_root {
+            s.freshness = retained;
+            if s.freshness.is_none() {
+                s.reader = control_reader;
+                s.refresh_error = warning;
+            }
+        }
         Ok(())
     })
 }
@@ -947,6 +980,10 @@ fn hook_with_delta(
         .as_str()
         .filter(|s| valid_session(s))
         .ok_or_else(|| Error("invalid context session".into()))?;
+    let state = read_state(root, session)?;
+    if state.freshness.is_none() && state.reader.is_some() {
+        update(root, session, false, migrate_freshness)?;
+    }
     if matches!(event, "PreCompact" | "PostCompact" | "Interrupt") {
         if read_state(root, session)?.enabled {
             update(root, session, false, |s| {
@@ -1150,6 +1187,7 @@ fn hook_with_delta(
             // Use transcript order, not parallel hook completion order, to
             // choose one retained head. Sibling deltas never implicitly merge.
             let mut acknowledged_prompt = false;
+            let mut acknowledged_head = false;
             for text in texts.iter().filter(|_| !incomplete) {
                 let mut heads = s
                     .pending
@@ -1166,9 +1204,7 @@ fn hook_with_delta(
                     s.base = Some(chain.clone());
                     s.reader = s.pending[id].reader.clone();
                     acknowledged_prompt = s.pending[id].prompt;
-                    if s.reader.is_some() && (acknowledged_prompt || s.refresh_error.is_none()) {
-                        s.refresh_error = None;
-                    }
+                    acknowledged_head = true;
                 }
             }
             if let Some(base) = &s.base {
@@ -1177,8 +1213,14 @@ fn hook_with_delta(
                 let eligible = received(s, &seen, &key);
                 if let Some(reader) = s.reader.clone() {
                     let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(&eligible));
-                    if acknowledged_prompt || covers_prior {
+                    let same_source = s.freshness.as_ref().is_none_or(|prior|
+                        prior.reader.same_source(&reader));
+                    let matches_packet = value.packet()["revision"].as_str() == Some(reader.revision.as_str())
+                        && value.packet()["scope"].as_str() == Some(reader.scope.as_str());
+                    if acknowledged_head && same_source && matches_packet
+                        && (acknowledged_prompt || covers_prior) {
                         s.freshness = Some(Freshness { reader, ids: eligible.clone() });
+                        s.refresh_error = None;
                     }
                 }
                 if let Some(answer) = payload["last_assistant_message"].as_str() {
