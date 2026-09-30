@@ -300,6 +300,14 @@ impl Probe {
     }
 }
 
+impl Drop for Probe {
+    fn drop(&mut self) {
+        let path = kpop_native::session_activity::temporary_directory()
+            .join(format!("kpopper-view-{}", self.session));
+        let _ = fs::remove_dir_all(path);
+    }
+}
+
 fn assert_unchanged_source_stays_silent(probe: &Probe) {
     probe.read_and_acknowledge();
     let prompt = probe.hook("UserPromptSubmit", None, json!({}));
