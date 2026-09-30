@@ -303,6 +303,18 @@ pub(crate) struct RefreshedView {
 }
 
 impl RefreshRead {
+    /// Whether two retained readers address the same pinned source identity.
+    /// Fingerprint, revision and scope describe observations, not identity.
+    pub(crate) fn same_source(&self, other: &Self) -> bool {
+        self.input == other.input
+            && self.state == other.state
+            && self.project == other.project
+            && self.profile == other.profile
+            && self.assessment_profile == other.assessment_profile
+            && self.normalized == other.normalized
+            && self.frozen == other.frozen
+    }
+
     pub(crate) fn enabled(&self, root: &Path) -> Result<bool> {
         let mut inputs = Inventory::default();
         let settings = crate::session_settings::current_for_hook(&mut inputs,
