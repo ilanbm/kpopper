@@ -349,3 +349,33 @@ fn resolver_settings_bytes_are_excluded_but_selected_profile_bytes_remain_in_the
         "selected profile change was missed: {refreshed}"
     );
 }
+
+#[test]
+fn settings_and_profile_freshness_are_consistent_for_ordinary_and_normalized_views() {
+    for (ordinary, normalized) in [(true, false), (false, true)] {
+        let settings = Probe::new(ordinary, normalized, true, true);
+        settings.read_and_acknowledge();
+        let path = settings.root.path().join("preferences.json");
+        let mut preferences: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        preferences["unused_display_note"] = json!("updated resolver-only bytes");
+        fs::write(&path, preferences.to_string()).unwrap();
+        assert!(
+            settings
+                .hook("UserPromptSubmit", None, json!({}))
+                .is_empty()
+        );
+
+        let profiled = Probe::new(ordinary, normalized, false, true);
+        profiled.read_and_acknowledge();
+        fs::write(
+            profiled.root.path().join("view-profile.json"),
+            json!({"groups":{"priority":[]}}).to_string(),
+        )
+        .unwrap();
+        let refreshed = profiled.hook("UserPromptSubmit", None, json!({}));
+        assert!(
+            refreshed.contains("KPOPPER_SOURCE_REFRESH"),
+            "selected profile change was missed for ordinary={ordinary}, normalized={normalized}: {refreshed}"
+        );
+    }
+}
