@@ -791,6 +791,17 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
             Err(_) => return Ok(Some(refresh_notice(&reader.revision, None, &[],
                 Some("session controls could not be checked; reopen before relying on current evidence"))?)),
         }
+    } else if state.refresh_error.is_some() {
+        // Pre-Freshness private state may have lost its reader while retaining
+        // an unavailable warning. The bound workspace still identifies where
+        // to check durable controls, including an explicit config override.
+        // A failed settings read never proves opt-out or clears the warning.
+        let mut inventory = crate::source_inventory::Inventory::default();
+        if let Ok(settings) = crate::session_settings::current_for_hook(&mut inventory, root, root)
+            .and_then(|settings| { inventory.verify()?; Ok(settings) })
+            && settings["enabled"] == false {
+            return Ok(None);
+        }
     }
     let Some(freshness) = &state.freshness else { return Ok(state.refresh_error.clone()); };
     let reader = &freshness.reader;
