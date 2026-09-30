@@ -198,6 +198,14 @@ struct Answer {
     scope: String,
     ids: BTreeSet<String>,
 }
+/// Source evidence acknowledged by a completed turn. This survives loss of a
+/// continuation base, so a receipt failure cannot erase the revision to check.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Freshness {
+    reader: crate::public_checked_session::RefreshRead,
+    ids: BTreeSet<String>,
+}
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct State {
@@ -214,6 +222,8 @@ struct State {
     history: Vec<Answer>,
     #[serde(default)]
     reader: Option<crate::public_checked_session::RefreshRead>,
+    #[serde(default)]
+    freshness: Option<Freshness>,
     #[serde(default)]
     refresh_error: Option<String>,
     #[serde(default)]
@@ -312,7 +322,7 @@ fn fresh(root: &Path, session: &str, enabled: bool) -> Result<State> {
         schema: SCHEMA.into(),
         root: root_key(root)?,
         session: session.into(),
-        epoch: sha256(format!("{session}:{}:{}", now(), std::process::id()).as_bytes()),
+        epoch: uuid::Uuid::new_v4().to_string(),
         enabled,
         transcript: None,
         counter: 0,
@@ -321,6 +331,7 @@ fn fresh(root: &Path, session: &str, enabled: bool) -> Result<State> {
         base: None,
         history: vec![],
         reader: None,
+        freshness: None,
         refresh_error: None,
         references: BTreeMap::new(),
     })
@@ -580,7 +591,10 @@ pub fn initialize(root: &Path, session: &str, enabled: bool) -> Result<()> {
         return Ok(());
     }
     update(root, session, true, |s| {
+        let retained = s.freshness.take();
+        let same_root = s.root == root_key(root)? && s.session == session;
         *s = fresh(root, session, enabled)?;
+        if same_root { s.freshness = retained; }
         Ok(())
     })
 }
@@ -629,6 +643,8 @@ pub fn resolve_revision(root: &Path, session: Option<&str>, revision: &str) -> R
     let bound = binding(root, session)?;
     let state = load(root, &bound.session, &bound.directory.join("state.json"))?;
     crate::require(state.enabled && state.epoch == bound.epoch, "expired context binding")?;
+    crate::require(revision.starts_with(&format!("view:{}:", state.epoch)),
+        "unknown or expired revision reference; use a received frame or reopen")?;
     let reference = state.references.get(revision)
         .ok_or_else(|| Error("unknown or expired revision reference; use a received frame or reopen".into()))?;
     let materialized = reference.chain.materialize(&state.frames)?;
@@ -698,7 +714,7 @@ pub(crate) fn prepare_output_with_refresh(
                     chain: None,
                     prompt: false,
                     reader: reader.clone(),
-                    reference: format!("view:{}", s.counter),
+                    reference: format!("view:{}:{}", s.epoch, s.counter),
                 },
             );
             Ok(format!(
@@ -730,7 +746,7 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
     if !state.enabled || setting("KPOPPER_SESSION_DISABLE", false) || !setting("KPOPPER_CANONICAL_VIEW", true) {
         return Ok(None);
     }
-    if let Some(reader) = &state.reader {
+    if let Some(reader) = state.freshness.as_ref().map(|f| &f.reader).or(state.reader.as_ref()) {
         match reader.enabled(root) {
             Ok(false) => return Ok(None),
             Ok(true) => (),
@@ -738,20 +754,21 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
                 Some("session controls could not be checked; reopen before relying on current evidence"))?)),
         }
     }
-    if let Some(error) = &state.refresh_error { return Ok(Some(error.clone())); }
-    let (Some(reader), Some(base)) = (&state.reader, &state.base) else { return Ok(None); };
-    let transcript = payload["transcript_path"].as_str().or(state.transcript.as_deref());
-    let Some(transcript) = transcript else { return Ok(None); };
-    let texts = context_texts(Path::new(transcript), session)?;
-    let seen = visible(&state, &texts);
-    if !available(base, &seen) { return Ok(None); }
-    let value = base.materialize(&state.frames)?;
-    let ids = received(&state, &seen, &scope(value.packet())?).into_iter().collect::<Vec<_>>();
-    if ids.is_empty() { return Ok(None); }
+    let Some(freshness) = &state.freshness else { return Ok(state.refresh_error.clone()); };
+    let reader = &freshness.reader;
+    let ids = freshness.ids.iter().cloned().collect::<Vec<_>>();
+    if ids.is_empty() { return Ok(state.refresh_error.clone()); }
     let refreshed = reader.refresh(root, &ids);
-    if matches!(&refreshed, Ok(None)) { return Ok(None); }
+    // A failed delivery is retried against source on every enabled prompt.
+    // Only a completed, retained developer frame may clear its warning.
+    if matches!(&refreshed, Ok(None)) { return Ok(state.refresh_error.clone()); }
+    let transcript = payload["transcript_path"].as_str().or(state.transcript.as_deref());
+    let Some(transcript) = transcript else {
+        return Ok(Some(refresh_notice(&reader.revision, None, &[],
+            Some("current context transcript is unavailable; reopen and read current evidence"))?));
+    };
     update(root, session, false, |s| {
-        crate::require(s.epoch == state.epoch && s.base.as_ref().is_some_and(|b| b.target == base.target),
+        crate::require(s.epoch == state.epoch && s.freshness.as_ref().is_some_and(|f| f.reader.revision == reader.revision),
             "managed context changed during source refresh")?;
         // Old frames remain historical transcript data, never a new base or anchor.
         s.base = None;
@@ -765,7 +782,7 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
             let notice = refresh_notice(&reader.revision, Some(&fresh.reader.revision), &fresh.removed, None)?;
             s.counter = s.counter.checked_add(1).ok_or_else(|| Error("context sequence exhausted".into()))?;
             let id = sha256(format!("{}:{}:{}", s.epoch, s.counter, now()).as_bytes());
-            let reference = format!("view:{}", s.counter);
+            let reference = format!("view:{}:{}", s.epoch, s.counter);
             let chosen = view_delta::choose(None, &fresh.packet, format(&reader.view_format)?,
                 |kind, wire| frame_with_reference(&id, None, kind, wire, Some(&reference)))?;
             let output = notice + &chosen.wire;
@@ -939,7 +956,6 @@ fn hook_with_delta(
                 s.pending.clear();
                 s.transcript = None;
                 s.reader = None;
-                s.refresh_error = None;
                 s.references.clear();
                 Ok(())
             })?;
@@ -997,7 +1013,7 @@ fn hook_with_delta(
                 }
                 if pending.reference.is_empty() {
                     s.counter = s.counter.checked_add(1).ok_or_else(|| Error("context sequence exhausted".into()))?;
-                    pending.reference = format!("view:{}", s.counter);
+                    pending.reference = format!("view:{}:{}", s.epoch, s.counter);
                 }
                 crate::require(
                     marker["target_sha256"].as_str()
@@ -1095,7 +1111,6 @@ fn hook_with_delta(
                     s.pending.clear();
                     s.transcript = None;
                     s.reader = None;
-                    s.refresh_error = None;
                     s.references.clear();
                     Ok(None)
                 });
@@ -1134,6 +1149,7 @@ fn hook_with_delta(
             }
             // Use transcript order, not parallel hook completion order, to
             // choose one retained head. Sibling deltas never implicitly merge.
+            let mut acknowledged_prompt = false;
             for text in texts.iter().filter(|_| !incomplete) {
                 let mut heads = s
                     .pending
@@ -1149,13 +1165,22 @@ fn hook_with_delta(
                 for (id, chain) in heads {
                     s.base = Some(chain.clone());
                     s.reader = s.pending[id].reader.clone();
-                    s.refresh_error = None;
+                    acknowledged_prompt = s.pending[id].prompt;
+                    if s.reader.is_some() && (acknowledged_prompt || s.refresh_error.is_none()) {
+                        s.refresh_error = None;
+                    }
                 }
             }
             if let Some(base) = &s.base {
                 let value = base.materialize(&s.frames)?;
                 let key = scope(value.packet())?;
                 let eligible = received(s, &seen, &key);
+                if let Some(reader) = s.reader.clone() {
+                    let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(&eligible));
+                    if acknowledged_prompt || covers_prior {
+                        s.freshness = Some(Freshness { reader, ids: eligible.clone() });
+                    }
+                }
                 if let Some(answer) = payload["last_assistant_message"].as_str() {
                     s.history.retain(|a| a.turn != turn);
                     s.history.push(Answer {

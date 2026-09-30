@@ -319,6 +319,10 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
     });
     if location.as_ref().is_some_and(|l| l.status == "unavailable") {
+        if options.host.as_deref() == Some("codex")
+            && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
+            let _ = kpop_native::view_continuation::initialize(&root, sid, true);
+        }
         return Ok(first_use.unwrap_or_default());
     }
     if feasibility {
@@ -389,13 +393,15 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         .filter(|s| kpop_native::public_session::valid_session(s));
     if options.host.as_deref() == Some("codex") && let Some(sid) = sid {
         let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
-        match kpop_native::view_continuation::initialize(&root, sid, managed) {
+        // A failed opening keeps the prior source obligation active on resume.
+        // An intentional route opt-out remains inactive.
+        match kpop_native::view_continuation::initialize(&root, sid, managed || opening_failed) {
             Ok(()) if managed => {
                 for text in &mut output {
                     if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
                         match kpop_native::view_continuation::bind_opening(text, sid) {
                             Ok(bound) => { *text = bound; },
-                            Err(error) => { let _ = kpop_native::view_continuation::initialize(&root, sid, false); eprintln!("kpopper managed view route unavailable: {error}"); },
+                            Err(error) => { let _ = kpop_native::view_continuation::initialize(&root, sid, true); eprintln!("kpopper managed view route unavailable: {error}"); },
                         }
                     }
                 }
