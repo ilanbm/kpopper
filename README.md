@@ -1148,6 +1148,7 @@ person or agent working on the goal.
 | Your weekly plan | Why a task has priority, the deadline behind it, and the availability it assumes. |
 | Research with an agent and an Obsidian vault | The evidence for an explanation, competing accounts, and the observation that would challenge it. |
 | A mortgage application | Which lender offer and documents support the plan, when the offer expires, and which conditions still need confirmation. |
+| A standalone policy or operational model | The evidence, assumptions and rules behind a version-controlled model, alongside the model at its existing Git location. |
 
 The same five questions orient the work:
 
@@ -1161,6 +1162,13 @@ These questions guide what to record. Learn from findings during ordinary work, 
 for an [initial map or deeper investigation](docs/first-use.md) of selected materials.
 The agent uses the sources available in your context; access to a file alone does not
 make it part of the project.
+
+When you explicitly identify an already versioned standalone model as the product, kpopper
+can keep its sources, assumptions, rules, evaluated readings and limits reviewable across
+sessions. The model remains the product; `GROUNDING.yaml` records what supports it and what
+could change a conclusion. Existing Git placement and any selected kpopper record location
+remain in force. This record does not establish that a model is complete or that its result
+settles a question beyond its stated inputs and scope.
 
 </details>
 
