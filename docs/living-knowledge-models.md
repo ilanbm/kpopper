@@ -33,15 +33,16 @@ side effect. See [project modes](project-modes.md).
 
 ## Keep case inputs in a disposable copy
 
-For a person-specific case or hypothetical, use the case adapter to make a complete disposable
-copy of the model bundle, identified by its source commit. Keep case values and any case-specific
-native authoring in that private copy. Never write those values into the canonical model with
-`add`, `set`, or `--hypothesis`; `--hypothesis` writes retained proposal history, not a temporary
-case. Do not substitute a blank record that merely cites the model commit. For supported
-record layouts, `kpop history migrate --to` creates a verified compact conversion; see
-[node-history storage](node-history-storage.md). It is not a general whole-bundle copy.
-`kpop knowledge materialize` copies one contribution into a frozen snapshot, not a complete model
-([native command reference](../native/README.md)).
+For a person-specific case or hypothetical, if your application has a case adapter, use it to
+make a complete disposable copy of the model bundle, identified by its source commit, and keep
+case values and any case-specific native authoring in that private copy. kpopper has no generic
+private-case binding service. If no case adapter exists, keep personal values out of the
+canonical model; do not write them with `add`, `set`, or `--hypothesis`. The latter writes
+retained proposal history, not a temporary case. Do not substitute a blank record that merely
+cites the model commit. For supported record layouts, `kpop history migrate --to` creates a
+verified compact conversion; see [node-history storage](node-history-storage.md). It is not a
+general whole-bundle copy. `kpop knowledge materialize` copies one contribution into a frozen
+snapshot, not a complete model ([native command reference](../native/README.md)).
 
 Keep reusable findings separate from person-specific facts. Unknown inputs and failed
 components stay visible as such; they do not establish a conclusion about the case.
