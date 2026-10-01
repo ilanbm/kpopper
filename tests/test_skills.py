@@ -192,6 +192,10 @@ class Community(unittest.TestCase):
             with self.subTest(file=name):
                 self.assertEqual(local_link_errors(path.read_text(encoding="utf-8"), path, ROOT), [])
 
+    def test_living_knowledge_model_guide_links_resolve(self):
+        path = ROOT / "docs" / "living-knowledge-models.md"
+        self.assertEqual(local_link_errors(path.read_text(encoding="utf-8"), path, ROOT), [])
+
     def test_issue_forms_and_their_documentation_links(self):
         directory = ROOT / ".github/ISSUE_TEMPLATE"
         forms = [p for p in directory.iterdir() if p.suffix in {".yml", ".yaml"} and p.stem != "config"]

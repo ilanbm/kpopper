@@ -16,13 +16,6 @@ Existing mode choices are preserved. Choosing a local Board is not the same as S
 See [mode and Board setup](project-modes.md#choose-a-mode-then-connect-the-board) for the
 location, migration and publication boundaries.
 
-Model-specific guidance applies only when you explicitly identify an already versioned
-standalone model as the product. Its existing Git location remains settled, and the model
-remains the deliverable; a kpopper record can keep the evidence and reasoning behind it
-available across sessions. Preserve any selected record mode and location. If the mode is
-still unset, choose where the knowledge record belongs separately from the model's location.
-The agent does not infer this use case from files or move the model during onboarding.
-
 For a non-Git project, choose **Learn while working**, **Initial map**, or **Deeper investigation** in the conversation.
 An initial map covers your goals, current situation, commitments, decisions, evidence and
 open questions. A deeper investigation adds historical context within agreed subjects,

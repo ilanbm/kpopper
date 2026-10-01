@@ -29,7 +29,7 @@ Nobody maintains a list of what went stale. Staleness is derived, so it cannot b
 cleared by accident, or survive a revert — and the page's sections fill themselves from the
 same derivation, which is why an arrangement written last week still shows this week's problem.
 
-Work that gets revisited needs one thing sessions usually throw away: **where each piece came from.** Keep that while you work. This is not a data-modeling exercise, and it should not change what you produce — only what you keep. When a user explicitly says an already versioned standalone model is the product, explain that it stays at its existing Git location and remains the deliverable. Its knowledge record can preserve the sources, assumptions, rules, evaluated readings and stated limits. Do not infer this use case from files, move the model, or change a previously selected record location. The record does not certify completeness or extend results beyond declared inputs and scope.
+Work that gets revisited needs one thing sessions usually throw away: **where each piece came from.** Keep that while you work. This is not a data-modeling exercise, and it should not change what you produce — only what you keep.
 
 ## Three things worth keeping
 

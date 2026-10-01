@@ -22,14 +22,6 @@ contexts. Never describe Board-local as Simple. The existing Git fallback is Adv
 `mode_selected: false` means the owner has not configured a mode yet. Do not silently change
 an existing project because Advanced is now experimental.
 
-Use model-specific guidance only when the user explicitly identifies an already versioned
-standalone model as the product. Then say that the model stays at its current Git location
-and remains the deliverable; a kpopper record can hold the sources, assumptions, rules,
-evaluated readings and stated limits behind it. Do not infer this use case from filenames or
-folder contents, move or copy the model, or replace its Git location with a record location.
-Preserve any selected kpopper mode and record path. If none is selected, the usual mode choice
-is about where the knowledge record lives; it does not change where the model lives.
-
 At the first suitable moment in meaningful user work, if `mode_offer` is true, show the
 existing Simple/Advanced README illustration with an enlargement link and two mode choices.
 If `illustration` is null, run `kpop board illustration` to export the exact image bundled
