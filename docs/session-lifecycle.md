@@ -153,6 +153,10 @@ exceed the budget produces explicit unavailable context; old evidence must not
 be used as current. Delivery is acknowledged only after the complete frame is
 present in the retained conversation. Stop remains passive.
 
+`kpop session disable` applies to the invoking workspace, including when its
+record is stored outside that workspace. An external record does not select a
+different opt-out setting for the conversation.
+
 Interrupts, compaction and failed transcript reads discard reusable frames and
 references but keep the tracked source configuration and received evidence IDs.
 The next enabled prompt checks them again, including after a same-session
