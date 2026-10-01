@@ -404,6 +404,12 @@ fn read_state(root: &Path, session: &str) -> Result<State> {
     load(root, session, &home(session, false)?.join("state.json"))
 }
 
+pub fn has_pending_replacement(root: &Path, session: &str) -> Result<bool> {
+    let Some((_, state)) = pinned_state(session)? else { return Ok(false); };
+    validate_state_root(&state, root)?;
+    Ok(state.enabled && state.replacement_route.is_some())
+}
+
 /// Read the workspace pinned by private session state without rediscovering it
 /// from the host cwd, which can change when nested records or project settings
 /// appear during a live session. Missing state stays silent; malformed state is
@@ -817,6 +823,14 @@ fn replacement_notice(previous: &str, selected_source: &J) -> Result<String> {
         "selected_source":selected_source});
     Ok(format!("KPOPPER_SOURCE_REFRESH {}\nWith tools available, read selected_source before answering. Use the latest KPOPPER_CANONICAL_VIEW_ROUTE with its source and mode flags, preserving --context-session. If its revision is stale, run session open with the same source and mode flags, then read at the new revision. A complete current read through that binding supplies the answer and its revision_ref. Complete or newly delivered frames from a previous source do not satisfy this selection. If tools are unavailable or the selected source cannot be read, report its current answer as unavailable; do not substitute another source's value or revision_ref. A new session opening can select another source if needed. This notice is not a source body or permission.\n",
         serde_json::to_string(&notice)?))
+}
+
+fn short_replacement_notice(previous: &str) -> Result<String> {
+    let notice = json!({"schema":"kpopper.source-refresh/v1","previous_revision":previous,
+        "revision":null,"removed_ids":[],"status":"unavailable",
+        "reason":"the selected source has not yet been completely read",
+        "selected_source_in":"opening_route"});
+    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nWith tools available, read the complete source selected by the route above, retaining its source/mode flags and --context-session. Reopen that same source on a stale revision. Other-source reads do not establish this selection. If it cannot be read, report unavailability. The prompt notice supplies the full selected_source binding. This notice is not source data or permission.\n", serde_json::to_string(&notice)?))
 }
 
 /// Refresh is a read before the next turn, not a Stop gate or a model request.
@@ -1364,15 +1378,17 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
         "assessment_profile":argument("--assessment-profile"),
         "frozen":args.iter().any(|arg| arg == "--frozen"),
         "normalized":args.iter().any(|arg| arg == "--normalized")});
-    let warning = update(Path::new(&workspace), session, false, |s| {
+    let (warning, previous) = update(Path::new(&workspace), session, false, |s| {
+        if !s.enabled { return Ok((String::new(), None)); }
         let changed = s.freshness.as_ref().is_some_and(|prior|
             prior.reader.input_missing() || !prior.reader.matches_opening_route(&replacement));
         if changed {
-            let notice = replacement_notice(&s.freshness.as_ref().unwrap().reader.revision, &replacement)?;
+            let previous = s.freshness.as_ref().unwrap().reader.revision.clone();
+            let notice = replacement_notice(&previous, &replacement)?;
             s.replacement_route = Some(replacement.clone());
             s.refresh_error = Some(notice.clone());
-            Ok(notice)
-        } else { s.replacement_route = None; Ok(String::new()) }
+            Ok((notice, Some(previous)))
+        } else { s.replacement_route = None; Ok((String::new(), None)) }
     })?;
     let binding = context_binding(Path::new(&workspace), session)?;
     args.extend([json!("--context-session"), json!(binding)]);
@@ -1381,22 +1397,39 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
     // Reserve the complete warning before folding graph/attention content.
     // The ordinary opener may already have folded the graph; folding that
     // text again must not require graph bodies that are intentionally absent.
-    let allowance = 7000usize.checked_sub(warning.len() + guidance.len())
-        .ok_or_else(|| Error("selected source metadata exceeds the opening allowance".into()))?;
-    let opening = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\n{rest}\n", serde_json::to_string(&route)?);
-    let mut bound = if opening.len() <= allowance {
-        opening
-    } else if route["complete_graph_in_hook"] == false {
-        route["inline_byte_limit"] = json!(allowance);
-        let compact = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\nGraph bodies and opening attention are omitted to retain the source route and warning. Run the view with its max_output_tokens before answering.\n", serde_json::to_string(&route)?);
-        crate::require(compact.len() <= allowance, "selected source route exceeds the opening allowance")?;
-        compact
-    } else {
-        crate::session_admin::canonical_hook_delivery(&opening, allowance)?
+    let fit = |warning: &str| -> Result<String> {
+        let allowance = 7000usize.checked_sub(warning.len() + guidance.len())
+            .ok_or_else(|| Error("selected source metadata exceeds the opening allowance".into()))?;
+        let mut route = route.clone();
+        let opening = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\n{rest}\n", serde_json::to_string(&route)?);
+        let mut bound = if opening.len() <= allowance {
+            opening
+        } else if route["complete_graph_in_hook"] == false {
+            route["inline_byte_limit"] = json!(allowance);
+            let attention = rest.lines().find_map(|line| line.strip_prefix("KPOPPER_OPENING_ATTENTION "))
+                .map(|raw| -> Result<String> {
+                    let mut value: J = serde_json::from_str(raw)?;
+                    let omitted = value["omitted_items"].as_u64().unwrap_or(0)
+                        + value["items"].as_array().map_or(0, |items| items.len() as u64);
+                    value["items"] = json!([]);
+                    value["omitted_items"] = json!(omitted);
+                    Ok(format!("KPOPPER_OPENING_ATTENTION {}\n", serde_json::to_string(&value)?))
+                }).transpose()?.unwrap_or_default();
+            let compact = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\nGraph bodies and opening attention are omitted to retain the source route and warning. Run the view with its max_output_tokens before answering.\n{attention}", serde_json::to_string(&route)?);
+            crate::require(compact.len() <= allowance, "selected source route exceeds the opening allowance")?;
+            compact
+        } else {
+            crate::session_admin::canonical_hook_delivery(&opening, allowance)?
+        };
+        bound.push_str(warning);
+        bound.push_str(guidance);
+        Ok(bound)
     };
-    bound.push_str(&warning);
-    bound.push_str(guidance);
-    Ok(bound)
+    match fit(&warning) {
+        Ok(bound) => Ok(bound),
+        Err(_) if previous.is_some() => fit(&short_replacement_notice(previous.as_deref().unwrap())?),
+        Err(error) => Err(error),
+    }
 }
 
 #[cfg(test)]

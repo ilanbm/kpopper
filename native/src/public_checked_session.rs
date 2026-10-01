@@ -515,9 +515,10 @@ impl Service {
             crate::require(base.is_absolute(), "XDG_STATE_HOME must be absolute")?;
             // Reopening the advertised route makes this an explicit --state.
             // Resolve both forms identically, including symlinked ancestors.
-            path(&cwd, &base.join("kpopper").join(crate::identity::sha256(
+            // Leave the leaf unresolved so the store still refuses a symlink there.
+            path(&cwd, &base.join("kpopper"))?.join(crate::identity::sha256(
                 format!("{name}\0{}", input.display()).as_bytes(),
-            )))?
+            ))
         };
         let profile = options
             .profile

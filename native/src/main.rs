@@ -410,9 +410,15 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                         match kpop_native::view_continuation::bind_opening(text, sid) {
                             Ok(bound) => { *text = bound; },
                             Err(error) => {
-                                // Binding may already have recorded a replacement
-                                // obligation. An output limit must not erase it.
-                                *text = format!("Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source.");
+                                if matches!(kpop_native::view_continuation::has_pending_replacement(&root, sid), Ok(false)) {
+                                    // An inactive binding still permits the unbound
+                                    // canonical opening requested by the user.
+                                    let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
+                                } else {
+                                    // Never erase a recorded replacement, or an
+                                    // obligation whose state cannot be checked.
+                                    *text = format!("Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source.");
+                                }
                                 eprintln!("kpopper managed view route unavailable: {error}");
                             },
                         }

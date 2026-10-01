@@ -9,6 +9,7 @@ use std::{
 
 struct Probe {
     root: tempfile::TempDir,
+    runtime: tempfile::TempDir,
     session: String,
 }
 
@@ -17,6 +18,7 @@ impl Probe {
         Self::with_root(tempfile::tempdir().unwrap())
     }
     fn with_root(root: tempfile::TempDir) -> Self {
+        let runtime = tempfile::tempdir().unwrap();
         let session = format!("refresh-life-{}", uuid::Uuid::new_v4());
         fs::write(root.path().join("GROUNDING.yaml"),
             "meta:\n  scope: Water allocation\n  reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.opening: {v: 106}\n  p.inflow: {v: 42}\n  p.reserve: {v: 22}\n  p.deduction: {v: 9}\ncomputed:\n  r.usable: {rule: {op: sub, args: [{op: sub, args: [{op: add, args: [{ref: p.opening}, {ref: p.inflow}]}, {ref: p.reserve}]}, {ref: p.deduction}]}}\n").unwrap();
@@ -26,18 +28,18 @@ impl Probe {
         )
         .unwrap();
         let target = kpop_native::reasoning_runtime::target_name().unwrap();
-        fs::create_dir_all(root.path().join("resources/reasoning")).unwrap();
+        fs::create_dir_all(runtime.path().join("resources/reasoning")).unwrap();
         fs::copy(
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../scripts/reasoning/native")
                 .join(format!("{target}.kpopper-runtime")),
-            root.path()
+            runtime.path()
                 .join("resources/reasoning")
                 .join(format!("{target}.zip")),
         )
         .unwrap();
         kpop_native::view_continuation::initialize(root.path(), &session, true).unwrap();
-        Self { root, session }
+        Self { root, runtime, session }
     }
     fn command(&self) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
@@ -49,9 +51,9 @@ impl Probe {
             ])
             .env(
                 "KPOPPER_NATIVE_RESOURCES",
-                self.root.path().join("resources"),
+                self.runtime.path().join("resources"),
             )
-            .env("KPOPPER_NATIVE_CACHE", self.root.path().join("cache"))
+            .env("KPOPPER_NATIVE_CACHE", self.runtime.path().join("cache"))
             .env(
                 "KPOPPER_SESSION_CONFIG",
                 self.root.path().join("preferences.json"),
@@ -203,7 +205,10 @@ impl Probe {
         self.hook("Stop", Some(turn), json!({"last_assistant_message":id}), false);
     }
     fn session_start(&self) -> String {
-        let mut child = self.command().args(["session-start", "--host", "codex"])
+        self.session_start_with_env(&[])
+    }
+    fn session_start_with_env(&self, env: &[(&str, &str)]) -> String {
+        let mut child = self.command().envs(env.iter().copied()).args(["session-start", "--host", "codex"])
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
         child.stdin.take().unwrap().write_all(json!({"cwd":self.root.path(),"session_id":self.session})
             .to_string().as_bytes()).unwrap();
@@ -370,7 +375,7 @@ fn a_complete_replacement_read_tracks_the_new_source_when_the_old_one_is_missing
 fn a_folded_opening_keeps_its_handover_warning_and_binding() {
     let container = tempfile::tempdir().unwrap();
     let mut deep = container.path().to_owned();
-    while deep.as_os_str().len() < 590 {
+    while deep.as_os_str().len() < 780 {
         deep.push("nested_source_workspace_xxxxxxxxxxxxxxxxxx");
     }
     fs::create_dir_all(&deep).unwrap();
@@ -442,6 +447,44 @@ fn a_folded_opening_keeps_its_handover_warning_and_binding() {
         kpop_native::session_activity::temporary_directory()
             .join(format!("kpopper-view-{}/state.json", p.session))).unwrap()).unwrap();
     assert!(recovery.is_empty(), "{recovery}\nroute={} reader={}", state["replacement_route"], state["reader"]);
+}
+
+#[test]
+fn canonical_opt_out_keeps_an_unbound_opening_without_a_pending_selection() {
+    for prior in [false, true] {
+        let p = Probe::new();
+        if prior {
+            p.read();
+            fs::rename(p.root.path().join("GROUNDING.yaml"), p.root.path().join("PROVENANCE.yaml")).unwrap();
+        } else {
+            fs::remove_dir_all(kpop_native::session_activity::temporary_directory()
+                .join(format!("kpopper-view-{}", p.session))).unwrap();
+        }
+        fs::write(p.root.path().join("preferences.json"), "{\"schema\":1,\"enabled\":false}").unwrap();
+        let opened = p.session_start_with_env(&[("KPOPPER_CANONICAL_VIEW", "1")]);
+        assert!(opened.contains("KPOPPER_CANONICAL_VIEW_ROUTE"), "{opened}");
+        assert!(!opened.contains("--context-session"), "{opened}");
+        assert!(!opened.contains("KPOPPER_SOURCE_REFRESH"), "{opened}");
+        assert!(p.hook("UserPromptSubmit", Some("disabled"), json!({}), false).is_empty());
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn a_default_state_leaf_symlink_is_still_refused() {
+    let p = Probe::new();
+    let open = || p.command().args(["session", "--no-settings", "--input", "GROUNDING.yaml",
+        "--project", "leaf-guard", "--assessment-profile", "core/v1", "open"]).output().unwrap();
+    assert!(open().status.success());
+    let parent = p.root.path().join("xdg-state/kpopper");
+    let leaf = fs::read_dir(&parent).unwrap().next().unwrap().unwrap().path();
+    fs::rename(&leaf, p.root.path().join("original-state")).unwrap();
+    let target = tempfile::tempdir_in(p.root.path()).unwrap();
+    std::os::unix::fs::symlink(target.path(), &leaf).unwrap();
+    let result = open();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("state root"));
+    assert!(fs::read_dir(target.path()).unwrap().next().is_none());
 }
 
 #[test]

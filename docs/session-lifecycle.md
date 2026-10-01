@@ -167,7 +167,7 @@ previously acknowledged source can clear a source-unavailable warning without
 reviving expired references or acknowledging a lost changed frame.
 
 When a session opening selects a replacement source, it emits a warning and binds
-the exact input, state, project and profile. The warning names this binding as
+the exact input, state, project and profile. The full warning names this binding as
 `selected_source`; even a newly delivered complete view of the previous source
 cannot answer for the selected one. With tools available, the notice requests a
 complete read before answering. A stale revision requires reopening the same
@@ -181,6 +181,10 @@ does not switch tracking back automatically; a new opening must select it again.
 The opening reserves room for the warning and may omit graph bodies and opening
 attention to retain its bound route. An output-limit failure reports unavailability
 without discarding an already recorded pending selection.
+When duplicating long source paths would crowd out the route, the opening uses a
+short warning and the next prompt supplies the full binding. Compact attention
+retains its omission and review counts. A session opt-out still permits an
+explicitly requested unbound canonical opening.
 
 For standalone commands or an unavailable refresh, reopen and use the new revision.
 An old revision is refused, not silently redirected. A fresh full checkpoint is
