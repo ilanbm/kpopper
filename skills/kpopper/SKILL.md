@@ -29,7 +29,7 @@ Nobody maintains a list of what went stale. Staleness is derived, so it cannot b
 cleared by accident, or survive a revert — and the page's sections fill themselves from the
 same derivation, which is why an arrangement written last week still shows this week's problem.
 
-Work that gets revisited needs one thing sessions usually throw away: **where each piece came from.** Keep that while you work. This is not a data-modeling exercise, and it should not change what you produce — only what you keep.
+A knowledge record can accompany work or itself be the deliverable; see [living knowledge models](../../docs/living-knowledge-models.md).
 
 ## Three things worth keeping
 

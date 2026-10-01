@@ -23,6 +23,9 @@
 >
 > [**Try it and see for yourself →**](#get-started)
 
+Use kpopper's knowledge record to carry reasoning across work, or make a Git-resident
+knowledge model the product itself. See [Living knowledge models](docs/living-knowledge-models.md).
+
 kpopper connects decisions to the evidence, assumptions and earlier decisions they
 depend on, and records what would make them worth revisiting. When a recorded premise
 changes, kpopper traces its reach through the record and surfaces what needs another look.
@@ -1161,12 +1164,6 @@ These questions guide what to record. Learn from findings during ordinary work, 
 for an [initial map or deeper investigation](docs/first-use.md) of selected materials.
 The agent uses the sources available in your context; access to a file alone does not
 make it part of the project.
-
-A standalone knowledge model already kept in Git can be the product itself: `GROUNDING.yaml`,
-its generated `.gitattributes`, and every extant path covered by its rules, including
-`.kpopper/**`, `evidence/**` and `.kpopper-history-migration/**` when present, plus its
-referenced in-project sources. See the
-[living knowledge model guide](docs/living-knowledge-models.md).
 
 </details>
 
