@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Skill guidance uses **kpopper** in ordinary conversation. Fully qualified skill
+  names such as `kpopper:ground` are reserved for invocation instructions,
+  technical documentation, debugging and explanations of a specific skill.
+
 ## 0.15.1 — 2026-10-01
 
 ### Fixed

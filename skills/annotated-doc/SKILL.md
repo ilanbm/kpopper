@@ -39,4 +39,4 @@ standalone choice controls affect the document copy only. When using ingestion-b
 record readings, preserve the same event envelope/date on retries and inspect the durable
 outcome by event ID. Capture and an empty queue pass do not establish whether it applied.
 
-When mentioning this skill to the user, include the plugin name: `kpopper:annotated-doc` or "annotated-doc from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+In ordinary conversation, name the product **kpopper** and describe the action in the user's language. Reserve the exact skill name `kpopper:annotated-doc` for invocation instructions, technical documentation, debugging, or explaining this specific skill. Fold the product name into the explanation of the action; no extra announcement is needed.

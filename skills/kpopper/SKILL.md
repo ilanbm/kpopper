@@ -5,11 +5,11 @@ description: "The kpopper method: a knowledge record (GROUNDING.yaml) for work t
 
 # kpopper
 
-Start with the work the user wants to move forward. A project may span documents,
-conversations, calendars, task systems and earlier sessions; code and repositories are one
-important setting among these. Keep the goals, commitments, constraints, decisions, sources
-and open questions that help later sessions continue. The connection to the user's goal
-determines what belongs, rather than the mere availability of a tool or folder.
+In ordinary conversation, name the product **kpopper** and describe the action in the user's language. Reserve the exact skill name `kpopper:kpopper` for invocation instructions, technical documentation, debugging, or explaining this specific skill. Fold the product name into the explanation of the action; no extra announcement is needed.
+
+Start with the work the user wants to move forward. A project may span documents, conversations, calendars, task systems and earlier sessions;
+code and repositories are one important setting among these. Keep the goals, commitments, constraints, decisions, sources and open questions that help later sessions continue.
+The connection to the user's goal determines what belongs, rather than the mere availability of a tool or folder.
 
 *Named for Popper: nothing here is ever verified, only exposed to refutation. Every judgment
 must say what would make it wrong, and one that cannot be wrong is an opinion.*
