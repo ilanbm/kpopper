@@ -426,13 +426,25 @@ fn pinned_state(session: &str) -> Result<Option<(PathBuf, State)>> {
 /// A resumed host must not lose its pinned root merely because its record
 /// disappeared and workspace discovery now resolves to an ancestor.
 pub fn session_start_root(cwd: &Path, session: &str) -> Result<Option<PathBuf>> {
-    let Some((root, _)) = pinned_state(session)? else { return Ok(None); };
-    Ok(cwd.canonicalize()?.starts_with(&root).then_some(root))
+    let directory = home_path(session)?;
+    match fs::symlink_metadata(directory.join("state.json")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+        Ok(_) => (),
+    }
+    safe_home(&directory)?;
+    let state = read_state_file(session, &directory.join("state.json"))?;
+    let root = PathBuf::from(&state.root);
+    // A reused session ID outside its prior workspace is a fresh opening,
+    // including when that old disposable workspace no longer exists.
+    if !cwd.canonicalize()?.starts_with(&root) { return Ok(None); }
+    validate_state_root(&state, &root)?;
+    Ok(Some(root))
 }
 
 pub fn initialize_for_start(root: &Path, session: &str, managed: bool) -> Result<()> {
-    let prior = pinned_state(session)?.is_some_and(|(pinned, state)| pinned == root
-        && (state.freshness.is_some() || state.reader.is_some() || state.refresh_error.is_some()));
+    let prior = read_state(root, session).is_ok_and(|state|
+        state.freshness.is_some() || state.reader.is_some() || state.refresh_error.is_some());
     let mut inputs = crate::source_inventory::Inventory::default();
     let enabled = !setting("KPOPPER_SESSION_DISABLE", false) && setting("KPOPPER_CANONICAL_VIEW", true)
         && !crate::session_settings::current_for_hook(&mut inputs, root, root)
