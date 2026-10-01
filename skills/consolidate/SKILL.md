@@ -7,7 +7,7 @@ description: "Test, fold or refute hypotheses beside the knowledge record, and r
 
 A hypothesis is a claim the base does not yet hold: a refused reading, a proposal not yet approved, a branch's record, a what-if. Nothing here decides for a person; the dry run tests, the fold and the refutation are the person's acts, recorded so the question never returns. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH.
 
-When mentioning this skill to the user, include the plugin name: `kpopper:consolidate` or "consolidate from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+In ordinary conversation, name the product **kpopper** and describe the action in the user's language. Reserve the exact skill name `kpopper:consolidate` for invocation instructions, technical documentation, debugging, or explaining this specific skill. Fold the product name into the explanation of the action; no extra announcement is needed.
 
 One record is written by everyone, from any session or branch, as long as the write is consistent
 with it. **A contradiction opens a hypothesis**, and the reader tells one by the id and the day.
