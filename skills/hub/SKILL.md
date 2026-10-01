@@ -34,4 +34,4 @@ sed -n '1,400p' "$(dirname "$R")/../skills/kpopper/PAGE.md"
 took a browser and six bugs to get right, and a session rebuilding it will produce something
 worse and not know. Write layout if you need layout; call this for the mechanism.
 
-When mentioning this skill to the user, include the plugin name: `kpopper:hub` or "hub from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+In ordinary conversation, name the product **kpopper** and describe the action in the user's language. Reserve the exact skill name `kpopper:hub` for invocation instructions, technical documentation, debugging, or explaining this specific skill. Fold the product name into the explanation of the action; no extra announcement is needed.

@@ -8,4 +8,4 @@ description: "Compatibility alias for kpopper Hub. Use when explicitly invoked a
 Follow [kpopper Hub](../hub/SKILL.md), including its optional installation and explicit-selection rules.
 Use `kpop experimental hub`. This alias preserves existing explicit invocations.
 
-When mentioning this skill to the user, include the plugin name: `kpopper:page` or "page from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+In ordinary conversation, name the product **kpopper** and describe the action in the user's language. Reserve the exact skill name `kpopper:page` for invocation instructions, technical documentation, debugging, or explaining this specific skill. Fold the product name into the explanation of the action; no extra announcement is needed.

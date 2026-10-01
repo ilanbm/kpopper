@@ -7,7 +7,7 @@ description: "Map existing materials into a first knowledge record, or investiga
 
 A map is work in its own right, with a scope and a result the user asked for. Learning while working - the default - needs none of this: the [record skill](../record/SKILL.md) keeps findings as they arise, and the first useful one creates the record. Run `kpop` or `kpopper` from the native runtime and prefer the canonical executable in `KPOPPER_AGENT_CONTEXT.command`. Do not guess a path or silently use PATH.
 
-When mentioning this skill to the user, include the plugin name: `kpopper:map` or "map from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+In ordinary conversation, name the product **kpopper** and describe the action in the user's language. Reserve the exact skill name `kpopper:map` for invocation instructions, technical documentation, debugging, or explaining this specific skill. Fold the product name into the explanation of the action; no extra announcement is needed.
 
 **If it does not exist:** there is no record here yet; knowledge may already live in the
 materials. Run `kpop open` if the hook did not supply `KPOPPER_START`, and follow
