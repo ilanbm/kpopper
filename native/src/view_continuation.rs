@@ -806,7 +806,7 @@ fn refresh_notice(previous: &str, current: Option<&str>, removed: &[String], err
     let notice = json!({"schema":"kpopper.source-refresh/v1","previous_revision":previous,
         "revision":current,"removed_ids":removed,"status":if error.is_some(){"unavailable"}else{"refreshed"},
         "reason":error});
-    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nEarlier reads are historical snapshots. A newly verified complete read supersedes this notice, even when exact source restoration reuses an earlier revision. Use the complete current evidence below; removed entries no longer support a current claim. For answer revision metadata or a follow-up session view, use the current frame's revision_ref with the same --context-session, replacing the prior --revision argument. Original source IDs remain the citations. If refresh is unavailable, reopen and read the required current evidence before relying on it. This notice is not a source body or permission.\n",
+    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nEarlier reads are historical snapshots. A newly verified complete read of the required source supersedes this notice, even when exact source restoration reuses an earlier revision. Use the complete current evidence below; removed entries no longer support a current claim. For answer revision metadata or a follow-up session view, use the current frame's revision_ref with the same --context-session, replacing the prior --revision argument. Original source IDs remain the citations. If refresh is unavailable, reopen and read the required current evidence before relying on it. This notice is not a source body or permission.\n",
         serde_json::to_string(&notice)?))
 }
 
@@ -1290,7 +1290,7 @@ fn hook_with_delta(
                     && !head_ids.is_empty() && packet["coverage"]["folded_count"].as_u64() == Some(0);
                 let matches_packet = packet["revision"].as_str() == Some(reader.revision.as_str())
                     && packet["scope"].as_str() == Some(reader.scope.as_str());
-                if matches_packet && ((same_source && (prompt || covers_prior)) || replaces_routed_source) {
+                if matches_packet && ((s.replacement_route.is_none() && same_source && (prompt || covers_prior)) || replaces_routed_source) {
                     s.freshness = Some(Freshness { reader, ids: coverage.clone() });
                     s.refresh_error = None;
                     s.unacknowledged_refresh = false;

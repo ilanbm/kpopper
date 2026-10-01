@@ -323,6 +323,12 @@ fn a_complete_replacement_read_tracks_the_new_source_when_the_old_one_is_missing
         "--assessment-profile", "core/v1", "--frozen"]}));
     let bound = kpop_native::view_continuation::bind_opening(&route, &p.session).unwrap();
     assert!(bound.contains("KPOPPER_SOURCE_REFRESH"));
+    // Even a complete read of the old record cannot cancel the newly issued
+    // replacement route. A new opening must make that selection instead.
+    fs::write(&original, fs::read_to_string(&replacement).unwrap().replace("p.opening: {v: 500}", "p.opening: {v: 106}")).unwrap();
+    p.read();
+    assert!(p.hook("UserPromptSubmit", Some("old-read"), json!({}), false).contains("\"status\":\"unavailable\""));
+    fs::remove_file(&original).unwrap();
     for complete in [false, true] {
         let open = p.session_at("replacement.yaml", "replacement-state", &["open", "--tokens", "16000"]);
         let revision = open.lines().find_map(|line| line.strip_prefix("project=refresh-life revision=")).unwrap();
