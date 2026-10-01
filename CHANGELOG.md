@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 — 2026-10-01
 
 ### Conversation freshness
 
@@ -39,6 +39,13 @@
 - Skill guidance uses **kpopper** in ordinary conversation. Fully qualified skill
   names such as `kpopper:ground` are reserved for invocation instructions,
   technical documentation, debugging and explanations of a specific skill.
+
+### Included changes
+
+- Refresh changed conversation evidence before the next answer (#271)
+- Use kpopper as the product name in conversation (#274)
+
+Decisions recorded: decision.source_refresh_before_answer
 
 ## 0.15.1 — 2026-10-01
 
