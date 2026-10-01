@@ -169,12 +169,18 @@ reviving expired references or acknowledging a lost changed frame.
 When a session opening selects a replacement source, it emits a warning and binds
 the exact input, state, project and profile. The warning names this binding as
 `selected_source`; even a newly delivered complete view of the previous source
-cannot answer for the selected one. If the selected source cannot be read, its
-current answer remains unavailable. A complete acknowledged view of that
+cannot answer for the selected one. With tools available, the notice requests a
+complete read before answering. A stale revision requires reopening the same
+source with the same source and mode flags, retaining `--context-session` for
+the view. If the selected source cannot be read, its current answer remains
+unavailable. A complete acknowledged view of that
 record can establish the new tracked source. It must include the whole record,
 with no folded entries; partial or unrelated reads leave the warning in place.
 After that handover, tracking follows the replacement. A previous record returning
 does not switch tracking back automatically; a new opening must select it again.
+The opening reserves room for the warning and may omit graph bodies and opening
+attention to retain its bound route. An output-limit failure reports unavailability
+without discarding an already recorded pending selection.
 
 For standalone commands or an unavailable refresh, reopen and use the new revision.
 An old revision is refused, not silently redirected. A fresh full checkpoint is

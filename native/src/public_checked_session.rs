@@ -513,9 +513,11 @@ impl Service {
                 .map(PathBuf::from)
                 .unwrap_or(home()?.join(".local/state"));
             crate::require(base.is_absolute(), "XDG_STATE_HOME must be absolute")?;
-            base.join("kpopper").join(crate::identity::sha256(
+            // Reopening the advertised route makes this an explicit --state.
+            // Resolve both forms identically, including symlinked ancestors.
+            path(&cwd, &base.join("kpopper").join(crate::identity::sha256(
                 format!("{name}\0{}", input.display()).as_bytes(),
-            ))
+            )))?
         };
         let profile = options
             .profile

@@ -409,7 +409,12 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
                         match kpop_native::view_continuation::bind_opening(text, sid) {
                             Ok(bound) => { *text = bound; },
-                            Err(error) => { let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false); eprintln!("kpopper managed view route unavailable: {error}"); },
+                            Err(error) => {
+                                // Binding may already have recorded a replacement
+                                // obligation. An output limit must not erase it.
+                                *text = format!("Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source.");
+                                eprintln!("kpopper managed view route unavailable: {error}");
+                            },
                         }
                     }
                 }

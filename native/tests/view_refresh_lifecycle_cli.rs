@@ -14,7 +14,9 @@ struct Probe {
 
 impl Probe {
     fn new() -> Self {
-        let root = tempfile::tempdir().unwrap();
+        Self::with_root(tempfile::tempdir().unwrap())
+    }
+    fn with_root(root: tempfile::TempDir) -> Self {
         let session = format!("refresh-life-{}", uuid::Uuid::new_v4());
         fs::write(root.path().join("GROUNDING.yaml"),
             "meta:\n  scope: Water allocation\n  reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.opening: {v: 106}\n  p.inflow: {v: 42}\n  p.reserve: {v: 22}\n  p.deduction: {v: 9}\ncomputed:\n  r.usable: {rule: {op: sub, args: [{op: sub, args: [{op: add, args: [{ref: p.opening}, {ref: p.inflow}]}, {ref: p.reserve}]}, {ref: p.deduction}]}}\n").unwrap();
@@ -55,6 +57,7 @@ impl Probe {
                 self.root.path().join("preferences.json"),
             )
             .env("XDG_CONFIG_HOME", self.root.path().join("config"))
+            .env("XDG_STATE_HOME", self.root.path().join("xdg-state"))
             .env_remove("KPOPPER_SESSION_DISABLE")
             .env_remove("KPOPPER_CANONICAL_VIEW");
         command
@@ -360,6 +363,85 @@ fn a_complete_replacement_read_tracks_the_new_source_when_the_old_one_is_missing
     fs::write(&replacement, fs::read_to_string(&replacement).unwrap().replace("p.opening: {v: 500}", "p.opening: {v: 900}")).unwrap();
     let current = p.hook("UserPromptSubmit", Some("changed"), json!({}), false);
     assert_eq!(evidence_value(&evidence_packet(&current), "p.opening")["v"], 900);
+}
+
+#[test]
+#[cfg(unix)] // Exercise long real paths without depending on Windows long-path policy.
+fn a_folded_opening_keeps_its_handover_warning_and_binding() {
+    let container = tempfile::tempdir().unwrap();
+    let mut deep = container.path().to_owned();
+    while deep.as_os_str().len() < 590 {
+        deep.push("nested_source_workspace_xxxxxxxxxxxxxxxxxx");
+    }
+    fs::create_dir_all(&deep).unwrap();
+    let p = Probe::with_root(tempfile::tempdir_in(&deep).unwrap());
+    p.read();
+    let original = p.root.path().join("GROUNDING.yaml");
+    let replacement = p.root.path().join("PROVENANCE.yaml");
+    fs::write(&replacement, fs::read_to_string(&original).unwrap()
+        .replace("p.opening: {v: 106}", "p.opening: {v: 500}")).unwrap();
+    fs::remove_file(&original).unwrap();
+    let opened = p.session_start();
+    assert!(opened.contains("KPOPPER_SOURCE_REFRESH"), "{opened}");
+    assert!(opened.contains("--context-session"), "{opened}");
+    assert!(opened.split("\nKPOPPER_AGENT_CONTEXT").next().unwrap().len() <= 7000);
+    let notice = p.hook("UserPromptSubmit", Some("after-opening"), json!({}), false);
+    assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");
+    assert!(notice.contains("PROVENANCE.yaml"), "{notice}");
+    assert!(!notice.contains("KPOPPER_CONTEXT_FRAME"), "{notice}");
+    // A freshly received old source cannot undo the selected replacement.
+    fs::write(&original, fs::read_to_string(&replacement).unwrap()
+        .replace("p.opening: {v: 500}", "p.opening: {v: 106}")).unwrap();
+    p.read();
+    assert!(p.hook("UserPromptSubmit", Some("after-old-read"), json!({}), false)
+        .contains("\"status\":\"unavailable\""));
+    let route: Value = serde_json::from_str(opened.lines().find_map(|line|
+        line.strip_prefix("KPOPPER_CANONICAL_VIEW_ROUTE ")).unwrap()).unwrap();
+    let mut argv = route["argv"].as_array().unwrap().iter()
+        .map(|arg| arg.as_str().unwrap().to_owned()).collect::<Vec<_>>();
+    let template = p.command();
+    let run = |args: &[String]| {
+        let mut command = Command::new(&args[0]);
+        command.args(&args[1..]);
+        for (key, value) in template.get_envs() {
+            if let Some(value) = value { command.env(key, value); }
+            else { command.env_remove(key); }
+        }
+        command.output().unwrap()
+    };
+    // Restoring the old record changed the captured workspace after opening.
+    // Reopen B with the same binding, rather than adopting A or ignoring staleness.
+    let stale = run(&argv);
+    assert!(!stale.status.success());
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("reopen"));
+    let mut reopen = vec![argv[0].clone(), "session".into(), "open".into(), "--no-settings".into()];
+    for flag in ["--workspace", "--input", "--state", "--project", "--profile", "--assessment-profile"] {
+        if let Some(i) = argv.iter().position(|arg| arg == flag) {
+            reopen.extend([flag.to_owned(), argv[i + 1].clone()]);
+        }
+    }
+    for flag in ["--frozen", "--normalized"] {
+        if argv.iter().any(|arg| arg == flag) { reopen.push(flag.into()); }
+    }
+    let current = run(&reopen);
+    assert!(current.status.success(), "{}", String::from_utf8_lossy(&current.stderr));
+    let current = String::from_utf8(current.stdout).unwrap();
+    let revision = current.lines().find_map(|line| line.starts_with("project=")
+        .then(|| line.split_once(" revision=").map(|(_, revision)| revision)).flatten()).unwrap();
+    let i = argv.iter().position(|arg| arg == "--revision").unwrap();
+    argv[i + 1] = revision.to_owned();
+    let result = run(&argv);
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    let frame = p.hook("PostToolUse", Some("selected"),
+        json!({"tool_response":{"output":String::from_utf8(result.stdout).unwrap()}}), false);
+    assert_eq!(evidence_value(&evidence_packet(&frame), "p.opening")["v"], 500);
+    p.context(&frame);
+    p.hook("Stop", Some("selected"), json!({"last_assistant_message":"r.usable"}), false);
+    let recovery = p.hook("UserPromptSubmit", Some("recovered"), json!({}), false);
+    let state: Value = serde_json::from_str(&fs::read_to_string(
+        kpop_native::session_activity::temporary_directory()
+            .join(format!("kpopper-view-{}/state.json", p.session))).unwrap()).unwrap();
+    assert!(recovery.is_empty(), "{recovery}\nroute={} reader={}", state["replacement_route"], state["reader"]);
 }
 
 #[test]
