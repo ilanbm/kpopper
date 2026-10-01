@@ -27,6 +27,8 @@
 - Preserve tracked evidence when a resumed session has a missing record or an
   ordinary opening fallback. Honor workspace opt-out settings for external
   records, and measure the full refresh envelope against its configured budget.
+- Source-handover warnings identify the selected record and explicitly keep
+  complete reads of a previous record from serving as current evidence.
 - Reuse the immutable snapshot's input index across node evaluations to avoid
   rebuilding it for every record. See the [conversation lifecycle](docs/session-lifecycle.md)
   and [canonical view reference](docs/canonical-view.md).

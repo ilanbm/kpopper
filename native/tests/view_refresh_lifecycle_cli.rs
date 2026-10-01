@@ -323,11 +323,26 @@ fn a_complete_replacement_read_tracks_the_new_source_when_the_old_one_is_missing
         "--assessment-profile", "core/v1", "--frozen"]}));
     let bound = kpop_native::view_continuation::bind_opening(&route, &p.session).unwrap();
     assert!(bound.contains("KPOPPER_SOURCE_REFRESH"));
+    let selected_notice = |text: &str| -> Value {
+        serde_json::from_str(text.lines().find_map(|line|
+            line.strip_prefix("KPOPPER_SOURCE_REFRESH ")).unwrap()).unwrap()
+    };
+    let expected_source = json!({
+        "input": replacement.canonicalize().unwrap(),
+        "state": p.root.path().join("replacement-state").canonicalize().unwrap(),
+        "project": "refresh-life", "profile": null, "assessment_profile": "core/v1",
+        "frozen": true, "normalized": false
+    });
+    // The model needs the same source identity used by the native receipt gate;
+    // "a complete read" alone does not distinguish a new old-source frame.
+    assert_eq!(selected_notice(&bound)["selected_source"], expected_source);
     // Even a complete read of the old record cannot cancel the newly issued
     // replacement route. A new opening must make that selection instead.
     fs::write(&original, fs::read_to_string(&replacement).unwrap().replace("p.opening: {v: 500}", "p.opening: {v: 106}")).unwrap();
     p.read();
-    assert!(p.hook("UserPromptSubmit", Some("old-read"), json!({}), false).contains("\"status\":\"unavailable\""));
+    let old_read_notice = p.hook("UserPromptSubmit", Some("old-read"), json!({}), false);
+    assert_eq!(selected_notice(&old_read_notice)["status"], "unavailable");
+    assert_eq!(selected_notice(&old_read_notice)["selected_source"], expected_source);
     fs::remove_file(&original).unwrap();
     for complete in [false, true] {
         let open = p.session_at("replacement.yaml", "replacement-state", &["open", "--tokens", "16000"]);

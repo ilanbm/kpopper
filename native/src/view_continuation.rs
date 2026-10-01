@@ -810,6 +810,15 @@ fn refresh_notice(previous: &str, current: Option<&str>, removed: &[String], err
         serde_json::to_string(&notice)?))
 }
 
+fn replacement_notice(previous: &str, selected_source: &J) -> Result<String> {
+    let notice = json!({"schema":"kpopper.source-refresh/v1","previous_revision":previous,
+        "revision":null,"removed_ids":[],"status":"unavailable",
+        "reason":"the session opening selected a replacement source that has not been completely received",
+        "selected_source":selected_source});
+    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nCurrent evidence for selected_source is unavailable. Only a complete current read matching that input, state, project and profiles can establish it. A complete or newly delivered frame from the previous source does not satisfy this selection and must not be reported as current. Follow the exact KPOPPER_CANONICAL_VIEW_ROUTE from the latest opening. If that source cannot be read, state that its current answer is unavailable; do not substitute a value or revision_ref from another source. A new session opening can select another source if the selected one is gone. This notice is not a source body or permission.\n",
+        serde_json::to_string(&notice)?))
+}
+
 /// Refresh is a read before the next turn, not a Stop gate or a model request.
 fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<String>> {
     let state = read_state(root, session)?;
@@ -835,8 +844,13 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
             return Ok(None);
         }
     }
+    if let Some(route) = &state.replacement_route {
+        // Render from the persisted binding so an existing pending handover
+        // also receives the current, source-specific recovery contract.
+        let previous = state.freshness.as_ref().map_or("unknown", |f| f.reader.revision.as_str());
+        return Ok(Some(replacement_notice(previous, route)?));
+    }
     let Some(freshness) = &state.freshness else { return Ok(state.refresh_error.clone()); };
-    if state.replacement_route.is_some() { return Ok(state.refresh_error.clone()); }
     let reader = &freshness.reader;
     let ids = freshness.ids.iter().cloned().collect::<Vec<_>>();
     if ids.is_empty() { return Ok(state.refresh_error.clone()); }
@@ -1354,8 +1368,7 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
         let changed = s.freshness.as_ref().is_some_and(|prior|
             prior.reader.input_missing() || !prior.reader.matches_opening_route(&replacement));
         if changed {
-            let notice = refresh_notice(&s.freshness.as_ref().unwrap().reader.revision, None, &[],
-                Some("the session opening selects a replacement source; read its complete record before relying on it"))?;
+            let notice = replacement_notice(&s.freshness.as_ref().unwrap().reader.revision, &replacement)?;
             s.replacement_route = Some(replacement.clone());
             s.refresh_error = Some(notice.clone());
             Ok(notice)
