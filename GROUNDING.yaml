@@ -6445,6 +6445,18 @@ judgments:
     seen:
       source.release_notes_contract: "read Promote Unreleased explanations into the versioned
                                       changelog and release PR"
+  decision.source_refresh_before_answer:
+    name: "Refresh changed evidence before the next answer"
+    rests_on: [source.managed_source_refresh]
+    verdict: "Managed Codex prompts refresh previously received evidence and its declared support
+              when captured inputs change; unchanged inputs add no context."
+    because: "A stale read refusal cannot protect an answer that makes no new read. Delivering a
+              complete current frame before inference supplies updated evidence while preserving
+              scope, source identities and passive Stop behavior."
+    reopened_by: "Changed input is used as current without fresh evidence, refresh accepts an
+                  unretained frame, scope or profile changes silently, or refresh cannot meet the
+                  bounded host deadline."
+    seen: {source.managed_source_refresh: "read 2026-09-29"}
   v.three_occasions:
     rests_on: [s.2026_09_01_consolidation, s.2026_09_02_priors, s.2026_09_03_coverage,
                s.2026_09_03_hypotheses, s.2026_09_03_language, s.2026_09_03_written_layer,
@@ -8726,6 +8738,13 @@ sources:
     name: "Context delivery and conversation contract"
     file: "docs/context-upgrade.md"
     of: "Canonical views, follow-up anchors, full delivery, and experimental delta limits"
+
+  source.managed_source_refresh:
+    name: "Managed conversation source refresh and revision references"
+    file: "docs/session-lifecycle.md"
+    of: "Current evidence before the next prompt, retained-frame acknowledgment, explicit
+         unavailability, and verified per-session revision references"
+    read: "2026-09-29"
 
   source.release_notes_contract:
     name: "Curated release note contract"

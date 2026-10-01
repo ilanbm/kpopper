@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### Conversation freshness
+
+- Managed Codex conversations refresh previously received evidence and its
+  declared support before the next answer when captured record inputs change.
+  Unchanged inputs add no context. Deleted entries are named; unavailable,
+  out-of-scope or oversized refreshes require an explicit current read.
+- Received context frames provide a short, session-bound `revision_ref` for
+  answer metadata and follow-up `session view` calls. The runtime verifies the
+  retained frame and full revision; unknown or expired references are refused.
+- Refresh preserves the original source, read mode and navigation profile.
+  Stop remains passive, delta remains off by default, and the existing session
+  opt-out controls apply. No record migration is required. Refresh checks
+  captured record inputs, not changes in the external world; the bounded hook
+  deadline and complete-body limits still apply.
+- Source tracking survives interrupted turns, compaction, failed transcript
+  reads and same-session restarts. Failed refreshes are retried, and complete
+  retained managed reads can acknowledge recovery. Raw stdout alone does not
+  prove host reception. A disabled or terminated hook cannot guarantee a warning.
+- Revision references include a random session epoch so restarting a session
+  cannot reuse an old reference for new evidence. Managed views reuse their
+  captured source for freshness; unrelated resolver settings do not trigger a
+  refresh.
+- Preserve tracked evidence when a resumed session has a missing record or an
+  ordinary opening fallback. Honor workspace opt-out settings for external
+  records, and measure the full refresh envelope against its configured budget.
+- Source-handover warnings identify the selected record and explicitly keep
+  complete reads of a previous record from serving as current evidence. Bounded
+  openings preserve the warning and pending selection when paths are long.
+- Reuse the immutable snapshot's input index across node evaluations to avoid
+  rebuilding it for every record. See the [conversation lifecycle](docs/session-lifecycle.md)
+  and [canonical view reference](docs/canonical-view.md).
+
 ### Fixed
 
 - Skill guidance uses **kpopper** in ordinary conversation. Fully qualified skill

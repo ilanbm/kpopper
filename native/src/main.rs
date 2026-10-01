@@ -309,7 +309,15 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let root = location
         .as_ref()
         .map(|l| l.workspace.clone())
-        .unwrap_or(cwd);
+        .unwrap_or_else(|| cwd.clone());
+    let root = if options.host.as_deref() == Some("codex")
+        && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
+        kpop_native::view_continuation::session_start_root(&cwd, sid)
+            .unwrap_or_else(|error| {
+                eprintln!("kpopper prior continuation unavailable: {error}");
+                None
+            }).unwrap_or(root)
+    } else { root };
     payload["cwd"] = json!(root);
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
@@ -319,6 +327,10 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
     });
     if location.as_ref().is_some_and(|l| l.status == "unavailable") {
+        if options.host.as_deref() == Some("codex")
+            && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
+            let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
+        }
         return Ok(first_use.unwrap_or_default());
     }
     if feasibility {
@@ -389,13 +401,26 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         .filter(|s| kpop_native::public_session::valid_session(s));
     if options.host.as_deref() == Some("codex") && let Some(sid) = sid {
         let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
-        match kpop_native::view_continuation::initialize(&root, sid, managed) {
+        // A failed opening keeps the prior source obligation active on resume.
+        // An intentional route opt-out remains inactive.
+        match kpop_native::view_continuation::initialize_for_start(&root, sid, managed) {
             Ok(()) if managed => {
                 for text in &mut output {
                     if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
                         match kpop_native::view_continuation::bind_opening(text, sid) {
                             Ok(bound) => { *text = bound; },
-                            Err(error) => { let _ = kpop_native::view_continuation::initialize(&root, sid, false); eprintln!("kpopper managed view route unavailable: {error}"); },
+                            Err(error) => {
+                                if matches!(kpop_native::view_continuation::has_pending_replacement(&root, sid), Ok(false)) {
+                                    // An inactive binding still permits the unbound
+                                    // canonical opening requested by the user.
+                                    let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
+                                } else {
+                                    // Never erase a recorded replacement, or an
+                                    // obligation whose state cannot be checked.
+                                    *text = format!("Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source.");
+                                }
+                                eprintln!("kpopper managed view route unavailable: {error}");
+                            },
                         }
                     }
                 }

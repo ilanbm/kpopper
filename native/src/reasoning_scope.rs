@@ -503,10 +503,22 @@ impl<'a> SnapshotView<'a> {
             self.basis = Some(InputBasis::new(self.snapshot.data())?);
         }
         let basis = self.basis.as_mut().unwrap().summary(id)?;
+        self.record_node_read(id, &basis)
+    }
+
+    /// Reuse the owning evaluator's index for this same immutable Snapshot.
+    /// The per-request node grant and witness are still checked independently.
+    pub(crate) fn read_node_with_basis(&mut self, id: &str, basis: &mut InputBasis) -> Result<V> {
+        require(self.nodes.contains(id), "undeclared_dependency")?;
+        let basis = basis.summary(id)?;
+        self.record_node_read(id, &basis)
+    }
+
+    fn record_node_read(&mut self, id: &str, basis: &V) -> Result<V> {
         let witness = obj([
             ("kind", s("node")),
             ("id", s(id)),
-            ("fingerprint", map(&basis)?["fingerprint"].clone()),
+            ("fingerprint", map(basis)?["fingerprint"].clone()),
         ]);
         self.reads.insert(digest(&witness)?, witness);
         Ok(map(&map(self.snapshot.data())?["nodes"])?
