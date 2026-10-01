@@ -306,6 +306,23 @@ fn a_complete_replacement_read_tracks_the_new_source_when_the_old_one_is_missing
     fs::write(&replacement, fs::read_to_string(&original).unwrap().replace("p.opening: {v: 106}", "p.opening: {v: 500}")).unwrap();
     fs::remove_file(&original).unwrap();
     assert!(p.hook("UserPromptSubmit", Some("missing"), json!({}), false).contains("\"status\":\"unavailable\""));
+    // An arbitrary complete read has no authority to take over the session.
+    let opened = p.session_at("replacement.yaml", "replacement-state", &["open", "--tokens", "16000"]);
+    let revision = opened.lines().find_map(|line| line.strip_prefix("project=refresh-life revision=")).unwrap();
+    let marker = p.session_at("replacement.yaml", "replacement-state", &["view", "--revision", revision,
+        "--tokens", "16000", "--view-format", "checked-text-tagged", "--expand", "group:/", "--context-session", &p.session]);
+    let frame = p.hook("PostToolUse", Some("unrouted"), json!({"tool_response":{"output":marker}}), false);
+    p.context(&frame);
+    p.hook("Stop", Some("unrouted"), json!({"last_assistant_message":"p.opening"}), false);
+    assert!(p.hook("UserPromptSubmit", Some("still-missing"), json!({}), false).contains("\"status\":\"unavailable\""));
+    // Only the trusted opening's exact source/state/project/profile route can
+    // nominate a replacement; receiving it partially still cannot acknowledge it.
+    let route = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\n", json!({"argv":[
+        "kpop", "--workspace", p.root.path(), "session", "view", "--input", replacement.canonicalize().unwrap(),
+        "--state", p.root.path().join("replacement-state").canonicalize().unwrap(), "--project", "refresh-life",
+        "--assessment-profile", "core/v1", "--frozen"]}));
+    let bound = kpop_native::view_continuation::bind_opening(&route, &p.session).unwrap();
+    assert!(bound.contains("KPOPPER_SOURCE_REFRESH"));
     for complete in [false, true] {
         let open = p.session_at("replacement.yaml", "replacement-state", &["open", "--tokens", "16000"]);
         let revision = open.lines().find_map(|line| line.strip_prefix("project=refresh-life revision=")).unwrap();

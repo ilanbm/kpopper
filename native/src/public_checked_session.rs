@@ -306,6 +306,15 @@ impl RefreshRead {
     pub(crate) fn input_missing(&self) -> bool {
         std::fs::metadata(&self.input).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
     }
+    pub(crate) fn matches_opening_route(&self, route: &J) -> bool {
+        route["input"].as_str().map(Path::new) == Some(self.input.as_path())
+            && route["state"].as_str().map(Path::new) == Some(self.state.as_path())
+            && route["project"].as_str() == Some(self.project.as_str())
+            && route["profile"].as_str().map(Path::new) == self.profile.as_deref()
+            && route["assessment_profile"].as_str() == Some(self.assessment_profile.as_str())
+            && route["frozen"].as_bool() == Some(self.frozen)
+            && route["normalized"].as_bool() == Some(self.normalized)
+    }
     pub(crate) fn validate_refresh_output(&self, output: &str) -> Result<()> {
         crate::require(output.len() <= self.max_view_bytes
             && Encoding::parse(&self.encoding)?.count(output) <= self.tokens,

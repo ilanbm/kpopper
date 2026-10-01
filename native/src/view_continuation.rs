@@ -229,6 +229,8 @@ struct State {
     #[serde(default)]
     unacknowledged_refresh: bool,
     #[serde(default)]
+    replacement_route: Option<J>,
+    #[serde(default)]
     references: BTreeMap<String, RevisionReference>,
 }
 fn now() -> u128 {
@@ -336,6 +338,7 @@ fn fresh(root: &Path, session: &str, enabled: bool) -> Result<State> {
         freshness: None,
         refresh_error: None,
         unacknowledged_refresh: false,
+        replacement_route: None,
         references: BTreeMap::new(),
     })
 }
@@ -803,7 +806,7 @@ fn refresh_notice(previous: &str, current: Option<&str>, removed: &[String], err
     let notice = json!({"schema":"kpopper.source-refresh/v1","previous_revision":previous,
         "revision":current,"removed_ids":removed,"status":if error.is_some(){"unavailable"}else{"refreshed"},
         "reason":error});
-    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nThe previously received source revision is historical. Use the complete current evidence below; removed entries no longer support a current claim. For answer revision metadata or a follow-up session view, use the current frame's revision_ref with the same --context-session, replacing the prior --revision argument. Original source IDs remain the citations. If refresh is unavailable, reopen and read the required current evidence before relying on it. This notice is not a source body or permission.\n",
+    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nEarlier reads are historical snapshots. A newly verified complete read supersedes this notice, even when exact source restoration reuses an earlier revision. Use the complete current evidence below; removed entries no longer support a current claim. For answer revision metadata or a follow-up session view, use the current frame's revision_ref with the same --context-session, replacing the prior --revision argument. Original source IDs remain the citations. If refresh is unavailable, reopen and read the required current evidence before relying on it. This notice is not a source body or permission.\n",
         serde_json::to_string(&notice)?))
 }
 
@@ -833,6 +836,7 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
         }
     }
     let Some(freshness) = &state.freshness else { return Ok(state.refresh_error.clone()); };
+    if state.replacement_route.is_some() { return Ok(state.refresh_error.clone()); }
     let reader = &freshness.reader;
     let ids = freshness.ids.iter().cloned().collect::<Vec<_>>();
     if ids.is_empty() { return Ok(state.refresh_error.clone()); }
@@ -1279,16 +1283,18 @@ fn hook_with_delta(
                 let coverage = if s.refresh_error.is_some() || source_changed { &head_ids } else { &eligible };
                 let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(coverage));
                 let same_source = s.freshness.as_ref().is_none_or(|prior| prior.reader.same_source(&reader));
-                // A routed replacement for a missing source is accepted only
-                // after its whole record is received, never from a partial view.
-                let replaces_missing = s.freshness.as_ref().is_some_and(|prior| prior.reader.input_missing())
+                // Only the source issued by the latest opening may replace
+                // the tracked source, after its whole record is received.
+                let replaces_routed_source = s.refresh_error.is_some()
+                    && s.replacement_route.as_ref().is_some_and(|route| reader.matches_opening_route(route))
                     && !head_ids.is_empty() && packet["coverage"]["folded_count"].as_u64() == Some(0);
                 let matches_packet = packet["revision"].as_str() == Some(reader.revision.as_str())
                     && packet["scope"].as_str() == Some(reader.scope.as_str());
-                if matches_packet && ((same_source && (prompt || covers_prior)) || replaces_missing) {
+                if matches_packet && ((same_source && (prompt || covers_prior)) || replaces_routed_source) {
                     s.freshness = Some(Freshness { reader, ids: coverage.clone() });
                     s.refresh_error = None;
                     s.unacknowledged_refresh = false;
+                    s.replacement_route = None;
                 }
             }
             if let Some(base) = &s.base {
@@ -1336,13 +1342,31 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
         .position(|v| v == "--workspace")
         .and_then(|i| args.get(i + 1))
         .and_then(J::as_str)
-        .ok_or_else(|| Error("canonical route lacks workspace".into()))?;
-    let binding = context_binding(Path::new(workspace), session)?;
+        .ok_or_else(|| Error("canonical route lacks workspace".into()))?.to_owned();
+    let argument = |name: &str| args.iter().position(|v| v == name)
+        .and_then(|i| args.get(i + 1)).and_then(J::as_str).map(str::to_owned);
+    let replacement = json!({"input":argument("--input"),"state":argument("--state"),
+        "project":argument("--project"),"profile":argument("--profile"),
+        "assessment_profile":argument("--assessment-profile"),
+        "frozen":args.iter().any(|arg| arg == "--frozen"),
+        "normalized":args.iter().any(|arg| arg == "--normalized")});
+    let warning = update(Path::new(&workspace), session, false, |s| {
+        let changed = s.freshness.as_ref().is_some_and(|prior|
+            prior.reader.input_missing() || !prior.reader.matches_opening_route(&replacement));
+        if changed {
+            let notice = refresh_notice(&s.freshness.as_ref().unwrap().reader.revision, None, &[],
+                Some("the session opening selects a replacement source; read its complete record before relying on it"))?;
+            s.replacement_route = Some(replacement.clone());
+            s.refresh_error = Some(notice.clone());
+            Ok(notice)
+        } else { s.replacement_route = None; Ok(String::new()) }
+    })?;
+    let binding = context_binding(Path::new(&workspace), session)?;
     args.extend([json!("--context-session"), json!(binding)]);
     route["continuation"] = json!({"transport":"managed_codex_hook","anchors":"automatic_from_completed_answers","delta":"explicit_opt_in","stdout_recovery":"--view-transport stdout"});
     let guidance = "Managed Codex views return a handoff marker; use the complete KPOPPER_CONTEXT_FRAME added separately to context. If absent or truncated, repeat the exact command with --view-transport stdout. Keep --context-session on follow-up view commands; --no-auto-anchors disables automatic hints. For answer revision metadata, use a delivered frame's revision_ref instead of copying its hash. That reference also replaces --revision in a follow-up session view with the same --context-session. Original source IDs remain the evidence citations.\n";
     let bound = format!(
-        "KPOPPER_CANONICAL_VIEW_ROUTE {}\n{rest}\n{guidance}",
+        "KPOPPER_CANONICAL_VIEW_ROUTE {}\n{rest}\n{warning}{guidance}",
         serde_json::to_string(&route)?
     );
     if bound.len() > 7000 {
