@@ -1162,8 +1162,11 @@ for an [initial map or deeper investigation](docs/first-use.md) of selected mate
 The agent uses the sources available in your context; access to a file alone does not
 make it part of the project.
 
-A standalone knowledge model can be the product itself: `GROUNDING.yaml` with its complete
-native history closure and source references. See the [living knowledge model guide](docs/living-knowledge-models.md).
+A standalone knowledge model already kept in Git can be the product itself: `GROUNDING.yaml`,
+its generated `.gitattributes`, and every extant path covered by its rules, including
+`.kpopper/**`, `evidence/**` and `.kpopper-history-migration/**` when present, plus its
+referenced in-project sources. See the
+[living knowledge model guide](docs/living-knowledge-models.md).
 
 </details>
 
