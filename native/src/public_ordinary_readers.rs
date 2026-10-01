@@ -199,9 +199,19 @@ impl<'a> World<'a> {
         for body in judgments.values() {
             iterable(get(map(body)?, dep))?;
         }
+        // This world is immutable during assessment. Convert its maps once,
+        // lazily so a world without judgments still needs no conversion.
+        let mut ordinary_reader = None;
         let states = judgments
             .iter()
-            .map(|(id, b)| Ok((id.clone(), A::judgment_state(&reader, b)?)))
+            .map(|(id, body)| {
+                let ordinary = ordinary_reader.get_or_insert_with(|| reader.ordinary());
+                Ok((
+                    id.clone(),
+                    crate::ordinary_findings::judgment_state(ordinary, &R::ordinary(body))?
+                        .finite_projection()?,
+                ))
+            })
             .collect::<Result<Map>>()?;
         Ok(Self {
             reader,
@@ -692,6 +702,9 @@ impl<'a> Projection<'a> {
         let mut nodes = BTreeMap::new();
         let mut topics = BTreeMap::new();
         let mut edges = Vec::new();
+        // Only the bodies vary in this loop; keep the conversion local to this
+        // immutable base world, without retaining it across reads or layers.
+        let mut ordinary_reader = None;
         for id in &self.base.reader.ids {
             let source_body = self.base.reader.raw.get(id).cloned().unwrap_or(V::Null);
             let body = if matches!(source_body, V::Map(_)) {
@@ -700,10 +713,13 @@ impl<'a> Projection<'a> {
                 V::Map(Map::from([("v".into(), source_body.clone())]))
             };
             let mut states = if let Some(judgment) = self.base.judgments.get(id) {
-                crate::ordinary_counts::flags(&self.base.reader, judgment)?
-                    .into_iter()
-                    .map(str::to_owned)
-                    .collect::<BTreeSet<_>>()
+                crate::ordinary_domain_counts::flags(
+                    ordinary_reader.get_or_insert_with(|| self.base.reader.ordinary()),
+                    &R::ordinary(judgment),
+                )?
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<BTreeSet<_>>()
             } else {
                 BTreeSet::new()
             };
@@ -2759,6 +2775,83 @@ impl Projection<'_> {
 mod tests {
     use super::*;
     use serde_json::Value as J;
+    #[test]
+    fn reused_reader_matches_fresh_assessment_in_each_world() {
+        let corpus: J =
+            serde_json::from_str(include_str!("../tests/fixtures/ordinary-assessment.json"))
+                .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(cache.path())
+            .with_ordinary_program(crate::ordinary_reader::tests::program());
+        let flag_names = BTreeSet::from([
+            "blocked",
+            "broken",
+            "unchecked",
+            "no_predicate",
+            "falsified",
+            "unknown",
+            "moved",
+            "reversed",
+        ]);
+        let mut checked_states = 0;
+        let mut checked_layers = 0;
+        for case in corpus["cases"].as_array().unwrap() {
+            let document = V::from_tagged(&case["document"]).unwrap();
+            let layers = V::from_tagged(&case["layers"]).unwrap();
+            let context = V::from_tagged(&case["context"]).unwrap();
+            let empty = Map::new();
+            let conflicts = map(&context)
+                .unwrap()
+                .get("conflicts")
+                .and_then(|value| map(value).ok())
+                .unwrap_or(&empty);
+            let Ok(projection) = Projection::new(
+                &document,
+                map(&layers).unwrap(),
+                conflicts,
+                vec![],
+                Some(&runtime),
+            ) else {
+                // Refused corpus cases are covered by the public projection oracle.
+                continue;
+            };
+            for world in std::iter::once(&projection.base).chain(projection.layers.values()) {
+                for (id, body) in &world.judgments {
+                    assert_eq!(
+                        world.states[id],
+                        A::judgment_state(&world.reader, body).unwrap(),
+                        "{}: {id}",
+                        case["name"]
+                    );
+                    checked_states += 1;
+                }
+            }
+            checked_layers += projection.layers.len();
+            let pending = projection.base.judgments.keys().cloned().collect();
+            let data = projection.session_data(&pending).unwrap();
+            for (id, body) in &projection.base.judgments {
+                let states = data.nodes[id]["states"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_str().unwrap())
+                    .collect::<BTreeSet<_>>();
+                assert_eq!(
+                    states
+                        .intersection(&flag_names)
+                        .copied()
+                        .collect::<BTreeSet<_>>(),
+                    crate::ordinary_counts::flags(&projection.base.reader, body).unwrap(),
+                    "{}: {id}",
+                    case["name"]
+                );
+                assert!(states.contains("pending"));
+            }
+        }
+        assert!(checked_states > 20);
+        assert!(checked_layers > 0);
+    }
+
     #[test]
     fn ordinary_reference_numbers_preserve_the_public_format() {
         for (value, expected) in [
