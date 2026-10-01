@@ -60,17 +60,20 @@ impl Probe {
         command
     }
     fn session(&self, args: &[&str]) -> String {
+        self.session_at("GROUNDING.yaml", "state", args)
+    }
+    fn session_at(&self, input: &str, state: &str, args: &[&str]) -> String {
         let result = self
             .command()
             .args([
                 "session",
                 "--no-settings",
                 "--input",
-                "GROUNDING.yaml",
+                input,
                 "--project",
                 "refresh-life",
                 "--state",
-                "state",
+                state,
                 "--assessment-profile",
                 "core/v1",
             ])
@@ -258,6 +261,67 @@ fn failed_session_start_preserves_prior_source_obligation() {
     let notice = p.hook("UserPromptSubmit", None, json!({}), false);
     assert!(notice.contains("KPOPPER_SOURCE_REFRESH"), "{notice}");
     assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");
+}
+
+#[test]
+fn bad_private_state_does_not_suppress_the_session_opening() {
+    for bad in ["{not json", r#"{"schema":"foreign"}"#] {
+        let p = Probe::new();
+        p.read();
+        let state = kpop_native::session_activity::temporary_directory()
+            .join(format!("kpopper-view-{}", p.session)).join("state.json");
+        fs::write(state, bad).unwrap();
+        let opened = p.session_start();
+        assert!(opened.contains("KPOPPER_AGENT_CONTEXT"), "{opened}");
+        assert!(opened.contains("KPOPPER_CANONICAL_VIEW_ROUTE"), "{opened}");
+    }
+}
+
+#[test]
+fn a_partial_read_after_a_refresh_does_not_discard_its_receipt() {
+    for change_again in [false, true] {
+        let p = Probe::new();
+        p.read();
+        p.change();
+        let refreshed = p.hook("UserPromptSubmit", Some("second"), json!({}), false);
+        p.context(&refreshed);
+        if change_again {
+            let path = p.root.path().join("GROUNDING.yaml");
+            fs::write(&path, fs::read_to_string(&path).unwrap().replace("p.deduction: {v: 19}", "p.deduction: {v: 20}")).unwrap();
+        }
+        p.read_one("p.opening", "second");
+        let next = p.hook("UserPromptSubmit", Some("third"), json!({}), false);
+        if change_again {
+            assert_eq!(evidence_value(&evidence_packet(&next), "p.deduction")["v"], 20);
+        } else { assert!(next.is_empty(), "{next}"); }
+    }
+}
+
+#[test]
+fn a_complete_replacement_read_tracks_the_new_source_when_the_old_one_is_missing() {
+    let p = Probe::new();
+    p.read();
+    let original = p.root.path().join("GROUNDING.yaml");
+    let replacement = p.root.path().join("replacement.yaml");
+    fs::write(&replacement, fs::read_to_string(&original).unwrap().replace("p.opening: {v: 106}", "p.opening: {v: 500}")).unwrap();
+    fs::remove_file(&original).unwrap();
+    assert!(p.hook("UserPromptSubmit", Some("missing"), json!({}), false).contains("\"status\":\"unavailable\""));
+    for complete in [false, true] {
+        let open = p.session_at("replacement.yaml", "replacement-state", &["open", "--tokens", "16000"]);
+        let revision = open.lines().find_map(|line| line.strip_prefix("project=refresh-life revision=")).unwrap();
+        let mut args = vec!["view", "--revision", revision, "--tokens", "16000", "--view-format", "checked-text-tagged", "--context-session", &p.session];
+        args.extend(if complete { ["--expand", "group:/"] } else { ["--id", "p.opening"] });
+        let marker = p.session_at("replacement.yaml", "replacement-state", &args);
+        let frame = p.hook("PostToolUse", Some("replacement"), json!({"tool_response":{"output":marker}}), false);
+        p.context(&frame);
+        p.hook("Stop", Some("replacement"), json!({"last_assistant_message":"p.opening"}), false);
+        let next = p.hook("UserPromptSubmit", Some("next"), json!({}), false);
+        if complete { assert!(next.is_empty(), "{next}"); }
+        else { assert!(next.contains("\"status\":\"unavailable\""), "{next}"); }
+    }
+    fs::write(&replacement, fs::read_to_string(&replacement).unwrap().replace("p.opening: {v: 500}", "p.opening: {v: 900}")).unwrap();
+    let current = p.hook("UserPromptSubmit", Some("changed"), json!({}), false);
+    assert_eq!(evidence_value(&evidence_packet(&current), "p.opening")["v"], 900);
 }
 
 #[test]

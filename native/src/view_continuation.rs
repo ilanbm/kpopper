@@ -1245,8 +1245,7 @@ fn hook_with_delta(
             }
             // Use transcript order, not parallel hook completion order, to
             // choose one retained head. Sibling deltas never implicitly merge.
-            let mut acknowledged_prompt = false;
-            let mut acknowledged_head = false;
+            let mut acknowledged_heads = Vec::new();
             for text in texts.iter().filter(|_| !incomplete) {
                 let mut heads = s
                     .pending
@@ -1262,33 +1261,40 @@ fn hook_with_delta(
                 for (id, chain) in heads {
                     s.base = Some(chain.clone());
                     s.reader = s.pending[id].reader.clone();
-                    acknowledged_prompt = s.pending[id].prompt;
-                    acknowledged_head = true;
+                    acknowledged_heads.push((chain.clone(), s.reader.clone(), s.pending[id].prompt));
+                }
+            }
+            // Process each retained head in transcript order. A partial read
+            // after a complete refresh neither cancels that receipt nor grants
+            // coverage at a newer source revision.
+            for (chain, reader, prompt) in acknowledged_heads {
+                let Some(reader) = reader else { continue; };
+                let value = chain.materialize(&s.frames)?;
+                let packet = value.packet();
+                let key = scope(packet)?;
+                let eligible = received(s, &seen, &key);
+                let head_ids = value.received().keys().cloned().collect::<BTreeSet<_>>();
+                let source_changed = s.freshness.as_ref().is_some_and(|prior|
+                    prior.reader.fingerprint != reader.fingerprint);
+                let coverage = if s.refresh_error.is_some() || source_changed { &head_ids } else { &eligible };
+                let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(coverage));
+                let same_source = s.freshness.as_ref().is_none_or(|prior| prior.reader.same_source(&reader));
+                // A routed replacement for a missing source is accepted only
+                // after its whole record is received, never from a partial view.
+                let replaces_missing = s.freshness.as_ref().is_some_and(|prior| prior.reader.input_missing())
+                    && !head_ids.is_empty() && packet["coverage"]["folded_count"].as_u64() == Some(0);
+                let matches_packet = packet["revision"].as_str() == Some(reader.revision.as_str())
+                    && packet["scope"].as_str() == Some(reader.scope.as_str());
+                if matches_packet && ((same_source && (prompt || covers_prior)) || replaces_missing) {
+                    s.freshness = Some(Freshness { reader, ids: coverage.clone() });
+                    s.refresh_error = None;
+                    s.unacknowledged_refresh = false;
                 }
             }
             if let Some(base) = &s.base {
                 let value = base.materialize(&s.frames)?;
                 let key = scope(value.packet())?;
                 let eligible = received(s, &seen, &key);
-                if let Some(reader) = s.reader.clone() {
-                    // Recovery coverage comes from the newly acknowledged
-                    // head itself. Historical frames at the same revision can
-                    // reappear after an exact source revert, but cannot fill
-                    // holes in a partial recovery read.
-                    let recovery_ids = value.received().keys().cloned().collect::<BTreeSet<_>>();
-                    let coverage = if s.refresh_error.is_some() { &recovery_ids } else { &eligible };
-                    let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(coverage));
-                    let same_source = s.freshness.as_ref().is_none_or(|prior|
-                        prior.reader.same_source(&reader));
-                    let matches_packet = value.packet()["revision"].as_str() == Some(reader.revision.as_str())
-                        && value.packet()["scope"].as_str() == Some(reader.scope.as_str());
-                    if acknowledged_head && same_source && matches_packet
-                        && (acknowledged_prompt || covers_prior) {
-                        s.freshness = Some(Freshness { reader, ids: eligible.clone() });
-                        s.refresh_error = None;
-                        s.unacknowledged_refresh = false;
-                    }
-                }
                 if let Some(answer) = payload["last_assistant_message"].as_str() {
                     s.history.retain(|a| a.turn != turn);
                     s.history.push(Answer {

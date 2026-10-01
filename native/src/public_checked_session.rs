@@ -303,6 +303,9 @@ pub(crate) struct RefreshedView {
 }
 
 impl RefreshRead {
+    pub(crate) fn input_missing(&self) -> bool {
+        std::fs::metadata(&self.input).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+    }
     pub(crate) fn validate_refresh_output(&self, output: &str) -> Result<()> {
         crate::require(output.len() <= self.max_view_bytes
             && Encoding::parse(&self.encoding)?.count(output) <= self.tokens,

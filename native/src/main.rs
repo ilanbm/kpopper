@@ -312,7 +312,11 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         .unwrap_or_else(|| cwd.clone());
     let root = if options.host.as_deref() == Some("codex")
         && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
-        kpop_native::view_continuation::session_start_root(&cwd, sid)?.unwrap_or(root)
+        kpop_native::view_continuation::session_start_root(&cwd, sid)
+            .unwrap_or_else(|error| {
+                eprintln!("kpopper prior continuation unavailable: {error}");
+                None
+            }).unwrap_or(root)
     } else { root };
     payload["cwd"] = json!(root);
     let command = std::env::current_exe()?.canonicalize()?;

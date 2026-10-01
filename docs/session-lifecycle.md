@@ -166,6 +166,10 @@ partial reads cannot clear the outstanding warning. Restoring the exact
 previously acknowledged source can clear a source-unavailable warning without
 reviving expired references or acknowledging a lost changed frame.
 
+If the previous record is missing, a complete acknowledged view of a replacement
+record can establish the new tracked source. That replacement must include its
+whole record, with no folded entries; a partial view leaves the warning in place.
+
 For standalone commands or an unavailable refresh, reopen and use the new revision.
 An old revision is refused, not silently redirected. A fresh full checkpoint is
 required even when experimental delta delivery is enabled.
