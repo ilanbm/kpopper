@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Ordinary checked reads and `kpop session open` avoid repeated record
+  conversions while assessing judgments and building session data. Source
+  freshness checks, judgment results and record formats are unchanged.
+
 ## 0.15.0 — 2026-09-29
 
 ### Conversation context
