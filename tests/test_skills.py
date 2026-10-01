@@ -212,7 +212,7 @@ class Community(unittest.TestCase):
                          manifest["files"]["case.json"])
         self.assertEqual(manifest["files"]["case.json"],
                          manifest["source"]["files"]["examples/domestic-below.json"])
-        self.assertEqual(manifest["source"]["commit"], "cccc9c674293a075cdb88d6c40c639ffdf37336a")
+        self.assertEqual(manifest["source"]["commit"], "03486df1546a2a4b7f11568f7fe815f73c934e9a")
         self.assertEqual(manifest["source"]["model_sha256"],
                          "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500")
         excerpt = yaml.safe_load(excerpt_path.read_text(encoding="utf-8"))

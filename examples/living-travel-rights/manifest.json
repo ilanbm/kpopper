@@ -5,9 +5,9 @@
     "case.json": "14b47acc455b12fe22b8b20f9043f1c765fa4d2d7afc772d4b11e5004b6310ab",
     "docs/scope.md": "c3ee79fb5f21061dfb0acc9acb7735e03114d1018e400470116be19bbb9c48b7",
     "docs/sources.md": "2bb28b80b12e20a90d0390e217cb282400a56273634f16cc0c4f9af1de9f7cf3",
-    "living-travel-rights.zip": "10dc9c1d1e58af1bfe4f6f7f301a8ce85d107fb2131d074e01dcc6de6653f47b",
-    "model-excerpt.yaml": "aa7ce28bca7ecca394eebf4784efd6b18f60e5d134ec3812e2aed83bc89aba02",
-    "results.json": "da89fe904b2f15f4cfaaeef37df25832225e85e75046b4870751b3618cbc5057"
+    "living-travel-rights.zip": "42dd69a34c62e1e3c98a395aaf6c845d509a6e003452626a9419c77c296e2525",
+    "model-excerpt.yaml": "5d8c4ca103fd29119b74d4de5d6de48f153e5e9b4826ccb23bbbba29ee1d5fd9",
+    "results.json": "f13c099120192d038ac886db78f2ce939d2f533839b03cf8168f88746be71fe5"
   },
   "generated_by": "living-travel-rights/scripts/export_example.py",
   "hypothetical_overrides": {
@@ -15,7 +15,7 @@
   },
   "schema_version": 1,
   "source": {
-    "commit": "cccc9c674293a075cdb88d6c40c639ffdf37336a",
+    "commit": "03486df1546a2a4b7f11568f7fe815f73c934e9a",
     "files": {
       ".gitattributes": "511310f5aef64a04846c109b1b31c7cf602d34ecad8c01e314a18e09b4ac57be",
       ".gitignore": "11479c3a4d08450f7eda82f722adc293a71a8e56b8c204bd1764f2cb1ef6adfb",
@@ -62,7 +62,7 @@
       "scripts/assess_case.py": "e864db5d7f2953744b4bb879bbf4f45da9cf4e0721d49d7011cf9742c4ae56dd",
       "scripts/build_model.py": "1b801569e13cf35f752460cf1875c7e223ef408d2c99c19378b2762d10461bb1",
       "scripts/export_example.py": "bb4eed2dc4d4c61688742ff17ecaa5f85f647b2538153f71e09e913b38c01588",
-      "skills/travel-rights/SKILL.md": "114e6bc748b1513d764d88bc82f215f2edf2c3e27b74644622830ef8f1d94f9a",
+      "skills/travel-rights/SKILL.md": "f2f86e504dcd3cd7dda3c3b6fdd8ef94c087bcf6abbacde9e563aaaceff05c15",
       "tests/source_cases.json": "99657800e508ff7f726fe5628facca6e6371e1f407fb801825e305124bc5af18",
       "tests/test_adapter.py": "31f661bac5a482a82dec3f6907a152a4fb2175f37669ea31a2a9836f658c4d2e",
       "tests/test_build.py": "0e8c4edfd2c8ec7048cf40bacae8b1792dd832a253206f2bcc52acbda69df8e2",
