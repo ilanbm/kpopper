@@ -4,6 +4,8 @@ This module runs in the mandatory CI job, including documentation-only changes.
 """
 from html import unescape
 from html.parser import HTMLParser
+import hashlib
+import json
 import pathlib
 import re
 import tempfile
@@ -195,6 +197,34 @@ class Community(unittest.TestCase):
     def test_living_knowledge_model_guide_links_resolve(self):
         path = ROOT / "docs" / "living-knowledge-models.md"
         self.assertEqual(local_link_errors(path.read_text(encoding="utf-8"), path, ROOT), [])
+
+    def test_living_travel_rights_example_matches_its_manifest(self):
+        directory = ROOT / "examples" / "living-travel-rights"
+        manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+        excerpt_path = directory / "model-excerpt.yaml"
+        results_path = directory / "results.json"
+        self.assertEqual(hashlib.sha256(excerpt_path.read_bytes()).hexdigest(),
+                         manifest["files"]["model-excerpt.yaml"])
+        self.assertEqual(hashlib.sha256(results_path.read_bytes()).hexdigest(),
+                         manifest["files"]["results.json"])
+        self.assertEqual(manifest["source"]["commit"], "cccc9c674293a075cdb88d6c40c639ffdf37336a")
+        self.assertEqual(manifest["source"]["model_sha256"],
+                         "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500")
+        excerpt = yaml.safe_load(excerpt_path.read_text(encoding="utf-8"))
+        self.assertEqual(excerpt["kind"], "read-only-model-excerpt/v1")
+        self.assertEqual(excerpt["source_commit"], manifest["source"]["commit"])
+        self.assertEqual(excerpt["source_model_sha256"], manifest["source"]["model_sha256"])
+        results = json.loads(results_path.read_text(encoding="utf-8"))
+        for result in results.values():
+            self.assertIs(result["other_rights_not_ruled_out"], True)
+            self.assertTrue(result["coverage_notice"])
+            self.assertEqual(result["identity"]["model_commit"], manifest["source"]["commit"])
+            self.assertEqual(result["identity"]["model_digest"], manifest["source"]["model_sha256"])
+            self.assertEqual(result["identity"]["runtime_version"], "kpop 0.15.1")
+        self.assertEqual(results["baseline"]["components"]["arrival_change"]["evaluation"], "fail")
+        self.assertEqual(results["hypothetical"]["components"]["arrival_change"]["evaluation"], "pass")
+        readme = directory / "README.md"
+        self.assertEqual(local_link_errors(readme.read_text(encoding="utf-8"), readme, ROOT), [])
 
     def test_issue_forms_and_their_documentation_links(self):
         directory = ROOT / ".github/ISSUE_TEMPLATE"

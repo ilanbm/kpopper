@@ -1,0 +1,199 @@
+{
+  "baseline": {
+    "assessment_contract": {
+      "assessment_profile": "core/v1",
+      "schema_version": 2
+    },
+    "components": {
+      "arrival_change": {
+        "coverage": "implemented",
+        "evaluation": "fail",
+        "scope_reason": null,
+        "sources": [
+          "source.case",
+          "source.definitions",
+          "source.model_scope",
+          "source.refunds"
+        ]
+      },
+      "cancellation": {
+        "coverage": "implemented",
+        "evaluation": "fail",
+        "scope_reason": "Deliberate model exclusion of every cancellation claim arising solely from renumbering, including cases not covered by enforcement discretion; this is not a denial of the right.",
+        "sources": [
+          "source.case",
+          "source.definitions",
+          "source.model_scope",
+          "source.refunds",
+          "source.renumbering"
+        ]
+      }
+    },
+    "context": {
+      "applicability_status": "supported",
+      "freshness_status": "recorded_source_edition_matches_request",
+      "global_scope_rule": "rule.scope",
+      "jurisdiction": "US",
+      "model_review_status": "not_established_by_adapter",
+      "requested_as_of": "2026-09-23",
+      "scenario": "recorded_policy",
+      "scope_status": "in_scope",
+      "source_as_of": "2026-09-23",
+      "source_read_at": "2026-09-25"
+    },
+    "coverage_notice": "A failed component does not establish that no other refund basis applies.",
+    "identity": {
+      "adapter_digest": "e864db5d7f2953744b4bb879bbf4f45da9cf4e0721d49d7011cf9742c4ae56dd",
+      "baseline_authority_digest": "ddf85e95c416a54068d8b35e7ec7ce33391023f531bbbb06978fc5205d58a8b1",
+      "input_digest": "344f440d79862e268f328597183837bf5a011c3a77aeb4bf1013f2b33531ace6",
+      "model_commit": "cccc9c674293a075cdb88d6c40c639ffdf37336a",
+      "model_commit_basis": "GROUNDING.yaml and referenced local source files match intended repo HEAD; native history is separately bound by baseline_authority_digest",
+      "model_digest": "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500",
+      "model_revision_status": "committed",
+      "policy_overlay_digest": null,
+      "runtime_digest": "0631b444c5d4006cb379aea0cad25e8e037587feed13420051dabb11e5036614",
+      "runtime_version": "kpop 0.15.1",
+      "scenario_request_digest": "8c4e0c2f56fce6c47f5cce9f38f6f14376142881bdd9ee041d696049e922c748",
+      "source_snapshot_digest": "c7a2933055c1c7e0f222c16cd60d1e728c19b9f37fb2ea5cdb38044694c6ecbf"
+    },
+    "other_rights_not_ruled_out": true,
+    "policy_overrides": [],
+    "reasoning_implementations": [
+      {
+        "adapter_source_sha256": "ea73ed3e2ee1dc88900e814c371b5ba37c7ed42221e6648bfd0ce326402c8fd4",
+        "archive_sha256": "b58371e8cd3c365951658627e41efbf7e750192913fac9e6554dd197c40186b5",
+        "binary_sha256": "b17f49c97d799db7b43f9cb7baea148f79ab6e32650bd39ecb86e34e61feb3d2",
+        "lean_version": "4.33.1",
+        "libraries": {
+          ".dylibs/libgmp.10.dylib": "594faadeb060cb6a8d4b14776dceb8943f9b783ac88e1e50b50a13e02baaafb0"
+        },
+        "modified_libraries": [],
+        "protocol": "KP2",
+        "source_sha256": "d7f56e50a86bf8dfda02eaf839295b7826f109e3d15877b36e10a230d0c81b3c",
+        "target": "darwin-arm64"
+      },
+      {
+        "adapter_source_sha256": "ea73ed3e2ee1dc88900e814c371b5ba37c7ed42221e6648bfd0ce326402c8fd4",
+        "archive_sha256": "b58371e8cd3c365951658627e41efbf7e750192913fac9e6554dd197c40186b5",
+        "binary_sha256": "b17f49c97d799db7b43f9cb7baea148f79ab6e32650bd39ecb86e34e61feb3d2",
+        "lean_version": "4.33.1",
+        "libraries": {
+          ".dylibs/libgmp.10.dylib": "594faadeb060cb6a8d4b14776dceb8943f9b783ac88e1e50b50a13e02baaafb0"
+        },
+        "modified_libraries": [],
+        "protocol": "KP3",
+        "source_sha256": "d7f56e50a86bf8dfda02eaf839295b7826f109e3d15877b36e10a230d0c81b3c",
+        "target": "darwin-arm64"
+      }
+    ],
+    "reopened_interpretations": []
+  },
+  "hypothetical": {
+    "assessment_contract": {
+      "assessment_profile": "core/v1",
+      "schema_version": 2
+    },
+    "components": {
+      "arrival_change": {
+        "coverage": "implemented",
+        "evaluation": "pass",
+        "scope_reason": null,
+        "sources": [
+          "source.case",
+          "source.definitions",
+          "source.model_scope",
+          "source.refunds"
+        ]
+      },
+      "cancellation": {
+        "coverage": "implemented",
+        "evaluation": "fail",
+        "scope_reason": "Deliberate model exclusion of every cancellation claim arising solely from renumbering, including cases not covered by enforcement discretion; this is not a denial of the right.",
+        "sources": [
+          "source.case",
+          "source.definitions",
+          "source.model_scope",
+          "source.refunds",
+          "source.renumbering"
+        ]
+      }
+    },
+    "context": {
+      "applicability_status": "supported",
+      "freshness_status": "hypothetical_policy_not_reviewed_as_law",
+      "global_scope_rule": "rule.scope",
+      "jurisdiction": "US",
+      "model_review_status": "not_established_by_adapter",
+      "requested_as_of": "2026-09-23",
+      "scenario": "hypothetical_policy",
+      "scope_status": "in_scope",
+      "source_as_of": "2026-09-23",
+      "source_read_at": "2026-09-25"
+    },
+    "coverage_notice": "A failed component does not establish that no other refund basis applies.",
+    "identity": {
+      "adapter_digest": "e864db5d7f2953744b4bb879bbf4f45da9cf4e0721d49d7011cf9742c4ae56dd",
+      "baseline_authority_digest": "ddf85e95c416a54068d8b35e7ec7ce33391023f531bbbb06978fc5205d58a8b1",
+      "input_digest": "344f440d79862e268f328597183837bf5a011c3a77aeb4bf1013f2b33531ace6",
+      "model_commit": "cccc9c674293a075cdb88d6c40c639ffdf37336a",
+      "model_commit_basis": "GROUNDING.yaml and referenced local source files match intended repo HEAD; native history is separately bound by baseline_authority_digest",
+      "model_digest": "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500",
+      "model_revision_status": "committed",
+      "policy_overlay_digest": "d5a6836b63c4405c6e3bb32dee5b9e63b973ed4d4cf8b54bc63b00e701259fe3",
+      "runtime_digest": "0631b444c5d4006cb379aea0cad25e8e037587feed13420051dabb11e5036614",
+      "runtime_version": "kpop 0.15.1",
+      "scenario_request_digest": "ae753fbc9c5d4c3badffd576df2bdb94ce9be2c6291f22dd7f8ca17d27d41772",
+      "source_snapshot_digest": "c7a2933055c1c7e0f222c16cd60d1e728c19b9f37fb2ea5cdb38044694c6ecbf"
+    },
+    "other_rights_not_ruled_out": true,
+    "policy_overrides": [
+      {
+        "baseline": {
+          "at": "Significantly delayed or changed flight (2), domestic itineraries",
+          "from": "source.definitions",
+          "v": 180
+        },
+        "baseline_locator": "Significantly delayed or changed flight (2), domestic itineraries",
+        "baseline_source_id": "source.definitions",
+        "baseline_value": 180,
+        "hypothesis": true,
+        "hypothetical_value": 120,
+        "id": "policy.domestic_arrival_minutes",
+        "key": "policy.domestic_arrival_minutes",
+        "origin": "user-supplied hypothetical policy assumption; not an updated legal source",
+        "scenario_locator": "policy_overrides.policy.domestic_arrival_minutes"
+      }
+    ],
+    "reasoning_implementations": [
+      {
+        "adapter_source_sha256": "ea73ed3e2ee1dc88900e814c371b5ba37c7ed42221e6648bfd0ce326402c8fd4",
+        "archive_sha256": "b58371e8cd3c365951658627e41efbf7e750192913fac9e6554dd197c40186b5",
+        "binary_sha256": "b17f49c97d799db7b43f9cb7baea148f79ab6e32650bd39ecb86e34e61feb3d2",
+        "lean_version": "4.33.1",
+        "libraries": {
+          ".dylibs/libgmp.10.dylib": "594faadeb060cb6a8d4b14776dceb8943f9b783ac88e1e50b50a13e02baaafb0"
+        },
+        "modified_libraries": [],
+        "protocol": "KP2",
+        "source_sha256": "d7f56e50a86bf8dfda02eaf839295b7826f109e3d15877b36e10a230d0c81b3c",
+        "target": "darwin-arm64"
+      },
+      {
+        "adapter_source_sha256": "ea73ed3e2ee1dc88900e814c371b5ba37c7ed42221e6648bfd0ce326402c8fd4",
+        "archive_sha256": "b58371e8cd3c365951658627e41efbf7e750192913fac9e6554dd197c40186b5",
+        "binary_sha256": "b17f49c97d799db7b43f9cb7baea148f79ab6e32650bd39ecb86e34e61feb3d2",
+        "lean_version": "4.33.1",
+        "libraries": {
+          ".dylibs/libgmp.10.dylib": "594faadeb060cb6a8d4b14776dceb8943f9b783ac88e1e50b50a13e02baaafb0"
+        },
+        "modified_libraries": [],
+        "protocol": "KP3",
+        "source_sha256": "d7f56e50a86bf8dfda02eaf839295b7826f109e3d15877b36e10a230d0c81b3c",
+        "target": "darwin-arm64"
+      }
+    ],
+    "reopened_interpretations": [
+      "interpretation.arrival"
+    ]
+  }
+}

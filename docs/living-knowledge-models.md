@@ -24,6 +24,8 @@ structure; it does not establish that the sources are true or that the model is 
 See the [record shape](../skills/kpopper/references/shape.md), [reasoning core](reasoning-core.md)
 and [command reference](reference.md).
 
+See a [generated, source-bound travel-rights excerpt and captured results](../examples/living-travel-rights/README.md).
+
 ## Keep the product and its storage choice distinct
 
 The model's purpose as the product does not select Simple or Advanced storage mode. Preserve

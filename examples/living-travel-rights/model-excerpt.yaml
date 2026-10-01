@@ -1,0 +1,156 @@
+kind: read-only-model-excerpt/v1
+source_commit: cccc9c674293a075cdb88d6c40c639ffdf37336a
+source_model_sha256: 55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500
+note: Incomplete reading excerpt. Execute the full native-history model in the source bundle.
+parameters:
+  policy.domestic_arrival_minutes:
+    at: Significantly delayed or changed flight (2), domestic itineraries
+    from: source.definitions
+    name: Domestic arrival minutes
+    unit: minutes
+    v: 180
+  policy.international_arrival_minutes:
+    at: Significantly delayed or changed flight (2), international itineraries
+    from: source.definitions
+    name: International arrival minutes
+    unit: minutes
+    v: 360
+rules:
+  rule.arrival_threshold:
+    at: Significantly delayed or changed flight (2)
+    blocked_on:
+      missing:
+      - input.itinerary_kind
+      - input.unresolved_minutes
+      why: Case inputs are intentionally absent from the canonical model; supply them only in an isolated case copy.
+    from: source.definitions
+    name: Arrival threshold
+    rule:
+      expr: policy.domestic_arrival_minutes if input.itinerary_kind == "domestic" else policy.international_arrival_minutes
+        if input.itinerary_kind == "international" else input.unresolved_minutes
+  rule.arrival_trigger:
+    at: Significantly delayed or changed flight (2)
+    blocked_on:
+      missing:
+      - input.carrier_changed_itinerary
+      - input.itinerary_kind
+      - input.scheduled_arrival_shift_minutes
+      - input.unresolved_minutes
+      why: Case inputs are intentionally absent from the canonical model; supply them only in an isolated case copy.
+    from: source.definitions
+    name: Arrival trigger
+    rule:
+      expr: input.carrier_changed_itinerary and input.scheduled_arrival_shift_minutes >= rule.arrival_threshold
+  rule.arrival_choice:
+    at: (a)(1), (a)(2)(ii); other response paths not modeled
+    blocked_on:
+      missing:
+      - input.choice
+      - input.unresolved
+      why: Case inputs are intentionally absent from the canonical model; supply them only in an isolated case copy.
+    from: source.refunds
+    name: Arrival choice
+    rule:
+      expr: true if input.choice == "declined_all" else false if input.choice == "accepted" else input.unresolved
+  rule.arrival_basis:
+    at: Conditional modeled arrival-change basis
+    blocked_on:
+      missing:
+      - input.carrier_changed_itinerary
+      - input.choice
+      - input.itinerary_kind
+      - input.scheduled_arrival_shift_minutes
+      - input.unresolved
+      - input.unresolved_minutes
+      why: Case inputs are intentionally absent from the canonical model; supply them only in an isolated case copy.
+    from: source.refunds
+    name: Arrival basis
+    rule:
+      expr: rule.arrival_trigger and rule.arrival_choice
+scope:
+  global_scope_rule: rule.scope
+  scope_precedence:
+    error: operational_error
+    'false': out_of_scope
+    unknown: unknown
+  coverage:
+  - coverage: implemented
+    id: cancellation
+    limitations: Renumbering-only cases are outside the computed cancellation component.
+    name: Cancellation refund basis
+  - coverage: implemented
+    id: arrival_change
+    limitations: The scheduled-arrival difference must be supplied; this is not actual touchdown delay.
+    name: Significant scheduled-arrival change refund basis
+  - coverage: unimplemented
+    id: early_departure
+    name: Early departure
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: changed_airports
+    name: Changed endpoints
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: extra_connections
+    name: Additional connections
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: downgrade
+    name: Cabin downgrade
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: accessibility
+    name: Accessibility changes
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: fees
+    name: Baggage and ancillary fees
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: deadlines
+    name: Refund timing and deadlines
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: ticket_agents
+    name: Ticket-agent purchases
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: partial_use
+    name: Partly used itineraries
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: other_jurisdictions
+    name: EU, UK and other jurisdictions
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: unanswered_offers
+    name: Unanswered offers and response/departure timing
+    sources:
+    - source.definitions
+    - source.refunds
+  - coverage: unimplemented
+    id: voucher_validity
+    name: Validity or compliance of an accepted alternative
+    sources:
+    - source.definitions
+    - source.refunds
