@@ -27,9 +27,9 @@ here rewrites your conclusions. What the record does on its own is re-check ever
 against what it was last checked against, and put the ones that no longer hold in front of you.
 Nobody maintains a list of what went stale. Staleness is derived, so it cannot be forgotten,
 cleared by accident, or survive a revert — and the page's sections fill themselves from the
-same derivation, which is why an arrangement written last week still shows this week's problem. Work that gets revisited needs one thing sessions usually throw away: **where each piece came from.** Keep that while you work. This is not a data-modeling exercise, and it should not change what you
-produce — only what you keep. If the user identifies `GROUNDING.yaml` and supporting files
-committed together in one Git repository as the product, see [living knowledge models](../../docs/living-knowledge-models.md).
+same derivation. Keep where each piece came from without changing the user's deliverable.
+If the user explicitly chooses the record itself as the product, see
+[living knowledge models](../../docs/living-knowledge-models.md) for a model committed with its supporting files.
 
 ## Three things worth keeping
 
