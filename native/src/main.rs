@@ -314,6 +314,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
     let mut opening_failed = false;
+    let mut opening_degraded = false;
     let first_use = location.as_ref().map(|location| {
         kpop_native::onboarding::context_with_mode(location, options.host.as_deref(), mode)
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
@@ -343,6 +344,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                 }
             }
             Ok(kpop_native::session_admin::HookOpening { text: None, warning }) => {
+                opening_degraded = warning.is_some();
                 if let Some(warning) = warning.as_ref() { output.push(warning.clone()); }
                 let options = kpop_native::public_readers::Options {
                     host: options.host.clone(),
@@ -395,7 +397,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
         // A failed opening keeps the prior source obligation active on resume.
         // An intentional route opt-out remains inactive.
-        match kpop_native::view_continuation::initialize(&root, sid, managed || opening_failed) {
+        match kpop_native::view_continuation::initialize(&root, sid, managed || opening_failed || opening_degraded) {
             Ok(()) if managed => {
                 for text in &mut output {
                     if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {

@@ -1246,8 +1246,14 @@ fn hook_with_delta(
                         prior.reader.same_source(&reader));
                     let matches_packet = value.packet()["revision"].as_str() == Some(reader.revision.as_str())
                         && value.packet()["scope"].as_str() == Some(reader.scope.as_str());
+                    // A manually read frame after an unacknowledged refresh is
+                    // not a receipt for that refresh.  The source may have
+                    // been restored to the older revision, and its retained
+                    // frame can therefore look complete while still being
+                    // pre-warning evidence.  Only the refresh prompt's own
+                    // frame may clear this obligation.
                     if acknowledged_head && same_source && matches_packet
-                        && (acknowledged_prompt || covers_prior) {
+                        && (acknowledged_prompt || (!s.unacknowledged_refresh && covers_prior)) {
                         s.freshness = Some(Freshness { reader, ids: eligible.clone() });
                         s.refresh_error = None;
                         s.unacknowledged_refresh = false;
