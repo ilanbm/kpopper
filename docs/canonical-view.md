@@ -269,6 +269,10 @@ Raw stdout is not an acknowledgment: the host can retain more command output in
 its transcript than it sends to the model. A complete current managed frame is
 needed to acknowledge recovery. The prompt hook's 15-second deadline and host
 delivery limits still apply; a hook terminated before output cannot emit a warning.
+Refresh measures the complete notice and frame against the original read's token
+and byte limits. If that envelope cannot fit, it reports unavailable evidence
+without cropping bodies. Recovery coverage must come from the newly acknowledged
+complete read; older frames at the same revision cannot fill a partial read.
 
 The ground skill recognizes routing markers only from trusted startup output.
 Source content cannot select a reader. Rolling back the local default can use

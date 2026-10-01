@@ -303,6 +303,11 @@ pub(crate) struct RefreshedView {
 }
 
 impl RefreshRead {
+    pub(crate) fn validate_refresh_output(&self, output: &str) -> Result<()> {
+        crate::require(output.len() <= self.max_view_bytes
+            && Encoding::parse(&self.encoding)?.count(output) <= self.tokens,
+            "complete source refresh exceeds context budget; reopen and read exact IDs")
+    }
     /// Whether two retained readers address the same pinned source identity.
     /// Fingerprint, revision and scope describe observations, not identity.
     pub(crate) fn same_source(&self, other: &Self) -> bool {
@@ -318,7 +323,7 @@ impl RefreshRead {
     pub(crate) fn enabled(&self, root: &Path) -> Result<bool> {
         let mut inputs = Inventory::default();
         let settings = crate::session_settings::current_for_hook(&mut inputs,
-            self.input.parent().unwrap_or(root), root)?;
+            root, root)?;
         inputs.verify()?;
         Ok(settings["enabled"] != false)
     }
@@ -343,8 +348,8 @@ impl RefreshRead {
             "checked-text-tagged" => crate::view_format::ViewFormat::CheckedTextTagged,
             _ => return Err(error("invalid managed refresh format")),
         };
-        // Leave room for the complete frame and its source-change notice.
-        options.max_view_bytes = Some(self.max_view_bytes.saturating_sub(2048));
+        // The completed frame and notice are measured together before delivery.
+        options.max_view_bytes = Some(self.max_view_bytes);
         Service::new_with_profile_discovery(&options, root,
             if self.frozen { ReadMode::Frozen } else { ReadMode::Live }, false)
     }
@@ -392,8 +397,10 @@ impl RefreshRead {
             let mut packet = crate::canonical_view::compact(&selected, &[])?;
             packet["membership_expansion_template"] = json!("members:{dictionary[group_ref].original}");
             let text = crate::view_format::render(&packet, service.view_format)?;
-            crate::require(text.len() <= self.max_view_bytes.saturating_sub(2048)
-                && service.store.encoding().count(&text) <= self.tokens.saturating_sub(1024).max(64),
+            // Check the packet here, then measure the actual complete notice
+            // and frame before delivery instead of guessing fixed overhead.
+            crate::require(text.len() <= self.max_view_bytes
+                && service.store.encoding().count(&text) <= self.tokens,
                 "complete refreshed evidence exceeds context budget; reopen and read exact IDs")?;
             Ok((packet, removed))
         };

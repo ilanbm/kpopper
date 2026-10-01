@@ -309,12 +309,15 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let root = location
         .as_ref()
         .map(|l| l.workspace.clone())
-        .unwrap_or(cwd);
+        .unwrap_or_else(|| cwd.clone());
+    let root = if options.host.as_deref() == Some("codex")
+        && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
+        kpop_native::view_continuation::session_start_root(&cwd, sid)?.unwrap_or(root)
+    } else { root };
     payload["cwd"] = json!(root);
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
     let mut opening_failed = false;
-    let mut opening_degraded = false;
     let first_use = location.as_ref().map(|location| {
         kpop_native::onboarding::context_with_mode(location, options.host.as_deref(), mode)
             .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}"))
@@ -322,7 +325,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     if location.as_ref().is_some_and(|l| l.status == "unavailable") {
         if options.host.as_deref() == Some("codex")
             && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
-            let _ = kpop_native::view_continuation::initialize(&root, sid, true);
+            let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
         }
         return Ok(first_use.unwrap_or_default());
     }
@@ -344,7 +347,6 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                 }
             }
             Ok(kpop_native::session_admin::HookOpening { text: None, warning }) => {
-                opening_degraded = warning.is_some();
                 if let Some(warning) = warning.as_ref() { output.push(warning.clone()); }
                 let options = kpop_native::public_readers::Options {
                     host: options.host.clone(),
@@ -397,13 +399,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
         // A failed opening keeps the prior source obligation active on resume.
         // An intentional route opt-out remains inactive.
-        match kpop_native::view_continuation::initialize(&root, sid, managed || opening_failed || opening_degraded) {
+        match kpop_native::view_continuation::initialize_for_start(&root, sid, managed) {
             Ok(()) if managed => {
                 for text in &mut output {
                     if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
                         match kpop_native::view_continuation::bind_opening(text, sid) {
                             Ok(bound) => { *text = bound; },
-                            Err(error) => { let _ = kpop_native::view_continuation::initialize(&root, sid, true); eprintln!("kpopper managed view route unavailable: {error}"); },
+                            Err(error) => { let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false); eprintln!("kpopper managed view route unavailable: {error}"); },
                         }
                     }
                 }

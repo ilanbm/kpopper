@@ -423,6 +423,23 @@ fn pinned_state(session: &str) -> Result<Option<(PathBuf, State)>> {
     validate_state_root(&state, &root)?;
     Ok(Some((root, state)))
 }
+/// A resumed host must not lose its pinned root merely because its record
+/// disappeared and workspace discovery now resolves to an ancestor.
+pub fn session_start_root(cwd: &Path, session: &str) -> Result<Option<PathBuf>> {
+    let Some((root, _)) = pinned_state(session)? else { return Ok(None); };
+    Ok(cwd.canonicalize()?.starts_with(&root).then_some(root))
+}
+
+pub fn initialize_for_start(root: &Path, session: &str, managed: bool) -> Result<()> {
+    let prior = pinned_state(session)?.is_some_and(|(pinned, state)| pinned == root
+        && (state.freshness.is_some() || state.reader.is_some() || state.refresh_error.is_some()));
+    let mut inputs = crate::source_inventory::Inventory::default();
+    let enabled = !setting("KPOPPER_SESSION_DISABLE", false) && setting("KPOPPER_CANONICAL_VIEW", true)
+        && !crate::session_settings::current_for_hook(&mut inputs, root, root)
+            .and_then(|settings| { inputs.verify()?; Ok(settings["enabled"] == false) })
+            .unwrap_or(false);
+    initialize(root, session, enabled && (managed || prior))
+}
 fn update<T>(
     root: &Path,
     session: &str,
@@ -847,6 +864,7 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
             let chosen = view_delta::choose(None, &fresh.packet, format(&reader.view_format)?,
                 |kind, wire| frame_with_reference(&id, None, kind, wire, Some(&reference)))?;
             let output = notice + &chosen.wire;
+            reader.validate_refresh_output(&output)?;
             crate::require(output.len() <= MAX_WIRE && Encoding::O200kBase.count(&output) <= 16000,
                 "complete source refresh exceeds context budget; reopen and read exact IDs")?;
             let chain = Chain { frames: vec![id.clone()], target: chosen.target_sha256 };
@@ -1241,19 +1259,19 @@ fn hook_with_delta(
                 let key = scope(value.packet())?;
                 let eligible = received(s, &seen, &key);
                 if let Some(reader) = s.reader.clone() {
-                    let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(&eligible));
+                    // Recovery coverage comes from the newly acknowledged
+                    // head itself. Historical frames at the same revision can
+                    // reappear after an exact source revert, but cannot fill
+                    // holes in a partial recovery read.
+                    let recovery_ids = value.received().keys().cloned().collect::<BTreeSet<_>>();
+                    let coverage = if s.refresh_error.is_some() { &recovery_ids } else { &eligible };
+                    let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(coverage));
                     let same_source = s.freshness.as_ref().is_none_or(|prior|
                         prior.reader.same_source(&reader));
                     let matches_packet = value.packet()["revision"].as_str() == Some(reader.revision.as_str())
                         && value.packet()["scope"].as_str() == Some(reader.scope.as_str());
-                    // A manually read frame after an unacknowledged refresh is
-                    // not a receipt for that refresh.  The source may have
-                    // been restored to the older revision, and its retained
-                    // frame can therefore look complete while still being
-                    // pre-warning evidence.  Only the refresh prompt's own
-                    // frame may clear this obligation.
                     if acknowledged_head && same_source && matches_packet
-                        && (acknowledged_prompt || (!s.unacknowledged_refresh && covers_prior)) {
+                        && (acknowledged_prompt || covers_prior) {
                         s.freshness = Some(Freshness { reader, ids: eligible.clone() });
                         s.refresh_error = None;
                         s.unacknowledged_refresh = false;

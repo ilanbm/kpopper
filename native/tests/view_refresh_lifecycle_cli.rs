@@ -150,13 +150,16 @@ impl Probe {
             .as_str().unwrap().to_owned()
     }
     fn read(&self) -> String {
+        self.read_with_tokens(16000)
+    }
+    fn read_with_tokens(&self, tokens: usize) -> String {
         let revision = self.revision();
         let marker = self.session(&[
             "view",
             "--revision",
             &revision,
             "--tokens",
-            "16000",
+            &tokens.to_string(),
             "--max-view-bytes",
             "39000",
             "--view-format",
@@ -457,7 +460,43 @@ fn partial_read_cannot_use_pre_warning_frames_to_clear_lost_refresh() {
         p.read_one("p.opening", "third");
         let next = p.hook("UserPromptSubmit", Some("fourth"), json!({}), false);
         assert!(next.contains("\"status\":\"unavailable\""), "late_receipt={late_receipt}: {next}");
+        p.read();
+        assert!(p.hook("UserPromptSubmit", Some("recovered"), json!({}), false).is_empty(),
+            "a new complete current managed read must recover");
     }
+}
+
+#[test]
+fn small_refresh_budget_measures_the_complete_actual_output() {
+    for tokens in [3200, 4000] {
+        let p = Probe::new();
+        p.read_with_tokens(tokens);
+        p.change();
+        let current = p.hook("UserPromptSubmit", Some("changed"), json!({}), false);
+        assert!(current.contains("KPOPPER_CONTEXT_FRAME"), "{tokens}: {current}");
+        assert_eq!(evidence_value(&evidence_packet(&current), "p.deduction")["v"], 19);
+        assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&current) <= tokens);
+        assert!(current.len() <= 39000);
+    }
+    // The original view can fit while a replacement plus notice cannot.
+    // Such a budget still fails closed, rather than cropping source bodies.
+    let p = Probe::new();
+    p.read_with_tokens(2200);
+    p.change();
+    let unavailable = p.hook("UserPromptSubmit", Some("tight"), json!({}), false);
+    assert!(unavailable.contains("\"status\":\"unavailable\""));
+    assert!(!unavailable.contains("KPOPPER_CONTEXT_FRAME"));
+}
+
+#[test]
+fn resume_keeps_a_pinned_root_within_the_same_host_directory() {
+    let p = Probe::new();
+    p.read();
+    fs::remove_file(p.root.path().join("GROUNDING.yaml")).unwrap();
+    assert_eq!(kpop_native::view_continuation::session_start_root(p.root.path(), &p.session).unwrap(),
+        Some(p.root.path().canonicalize().unwrap()));
+    let other = tempfile::tempdir().unwrap();
+    assert!(kpop_native::view_continuation::session_start_root(other.path(), &p.session).unwrap().is_none());
 }
 
 #[test]

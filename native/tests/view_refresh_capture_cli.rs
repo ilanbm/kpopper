@@ -17,6 +17,7 @@ struct Probe {
     ordinary: bool,
     settings: bool,
     profile: bool,
+    config_override: bool,
 }
 
 impl Probe {
@@ -130,6 +131,7 @@ impl Probe {
             ordinary,
             settings,
             profile,
+            config_override: true,
         }
     }
 
@@ -182,6 +184,7 @@ impl Probe {
                 self.root.path().join("preferences.json"),
             );
         }
+        if !self.config_override { command.env_remove("KPOPPER_SESSION_CONFIG"); }
         command
     }
 
@@ -209,8 +212,8 @@ impl Probe {
             .as_object_mut()
             .unwrap()
             .extend(extra.as_object().unwrap().clone());
-        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
-            .args(["_hook", "continuation", "codex"])
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+        command.args(["_hook", "continuation", "codex"])
             .current_dir(self.root.path())
             .env("XDG_STATE_HOME", self.root.path().join("xdg-state"))
             .env(
@@ -226,9 +229,9 @@ impl Probe {
             .env_remove("KPOPPER_SESSION_DISABLE")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
+            .stderr(Stdio::piped());
+        if !self.config_override { command.env_remove("KPOPPER_SESSION_CONFIG"); }
+        let mut child = command.spawn().unwrap();
         child
             .stdin
             .take()
@@ -253,7 +256,7 @@ impl Probe {
             .as_str().unwrap().to_owned()
     }
 
-    fn read_and_acknowledge(&self) -> String {
+    fn read_and_acknowledge_with_tokens(&self, tokens: usize) -> String {
         let opened = self.command("open").output().unwrap();
         assert!(
             opened.status.success(),
@@ -269,7 +272,7 @@ impl Probe {
             "--revision",
             revision,
             "--tokens",
-            "16000",
+            &tokens.to_string(),
             "--max-view-bytes",
             "39000",
             "--expand",
@@ -297,6 +300,10 @@ impl Probe {
             json!({"last_assistant_message":"The current value is 7."}),
         );
         revision.to_owned()
+    }
+
+    fn read_and_acknowledge(&self) -> String {
+        self.read_and_acknowledge_with_tokens(16000)
     }
 }
 
@@ -386,4 +393,28 @@ fn settings_and_profile_freshness_are_consistent_for_ordinary_and_normalized_vie
             "selected profile change was missed for ordinary={ordinary}, normalized={normalized}: {refreshed}"
         );
     }
+}
+
+#[test]
+fn configured_external_record_obeys_workspace_disable_without_config_override() {
+    let mut probe = Probe::new(false, false, false, false);
+    let external = tempfile::tempdir().unwrap();
+    let path = external.path().join("GROUNDING.yaml");
+    fs::rename(probe.root.path().join("GROUNDING.yaml"), &path).unwrap();
+    probe.input = path.to_str().unwrap().to_owned();
+    probe.config_override = false;
+    fs::create_dir(probe.root.path().join(".kpopper")).unwrap();
+    fs::write(probe.root.path().join(".kpopper/project.json"),
+        json!({"version":1,"mode":"simple","generation":0,"record":path}).to_string()).unwrap();
+    probe.read_and_acknowledge();
+    let disabled = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["--workspace", probe.root.path().to_str().unwrap(), "session", "disable"])
+        .current_dir(probe.root.path()).env("XDG_CONFIG_HOME", probe.root.path().join("config"))
+        .env_remove("KPOPPER_SESSION_CONFIG").env_remove("KPOPPER_SESSION_DISABLE")
+        .output().unwrap();
+    assert!(disabled.status.success(), "{}", String::from_utf8_lossy(&disabled.stderr));
+    let settings: Value = serde_json::from_slice(&disabled.stdout).unwrap();
+    assert_eq!(settings["enabled"], false);
+    fs::write(&path, fs::read_to_string(&path).unwrap().replace("p.value: {v: 7}", "p.value: {v: 8}")).unwrap();
+    assert!(probe.hook("UserPromptSubmit", None, json!({})).is_empty());
 }
