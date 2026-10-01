@@ -31,11 +31,17 @@
   rebuilding it for every record. See the [conversation lifecycle](docs/session-lifecycle.md)
   and [canonical view reference](docs/canonical-view.md).
 
+## 0.15.1 — 2026-10-01
+
 ### Fixed
 
 - Ordinary checked reads and `kpop session open` avoid repeated record
   conversions while assessing judgments and building session data. Source
   freshness checks, judgment results and record formats are unchanged.
+
+### Included changes
+
+- Reuse ordinary reader conversion within immutable projections (#272)
 
 ## 0.15.0 — 2026-09-29
 
