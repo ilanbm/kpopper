@@ -210,6 +210,8 @@ class Community(unittest.TestCase):
                          manifest["files"]["results.json"])
         self.assertEqual(hashlib.sha256(case_path.read_bytes()).hexdigest(),
                          manifest["files"]["case.json"])
+        self.assertEqual(manifest["files"]["case.json"],
+                         manifest["source"]["files"]["examples/domestic-below.json"])
         self.assertEqual(manifest["source"]["commit"], "cccc9c674293a075cdb88d6c40c639ffdf37336a")
         self.assertEqual(manifest["source"]["model_sha256"],
                          "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500")
@@ -221,9 +223,23 @@ class Community(unittest.TestCase):
         self.assertEqual(excerpt["parameters"]["policy.domestic_arrival_minutes"]["v"],
                          results["hypothetical"]["policy_overrides"][0]["baseline"]["v"])
         case = json.loads(case_path.read_text(encoding="utf-8"))
-        self.assertFalse(case["flight_cancelled"])
-        self.assertFalse(case["renumbering_only"])
+        self.assertEqual(case, {
+            "jurisdiction": "US",
+            "covered_scheduled_service": True,
+            "direct_airline_purchase": True,
+            "airline_merchant_of_record": True,
+            "entirely_unused": True,
+            "nonrefundable_ticket": True,
+            "flight_cancelled": False,
+            "renumbering_only": False,
+            "itinerary_kind": "domestic",
+            "scheduled_arrival_shift_minutes": 179,
+            "choice": "declined_all",
+            "carrier_changed_itinerary": True,
+        })
         self.assertEqual(manifest["case_sha256"], results["baseline"]["identity"]["input_digest"])
+        self.assertEqual(results["baseline"]["identity"]["input_digest"],
+                         results["hypothetical"]["identity"]["input_digest"])
         for result in results.values():
             self.assertIs(result["other_rights_not_ruled_out"], True)
             self.assertTrue(result["coverage_notice"])
@@ -243,21 +259,33 @@ class Community(unittest.TestCase):
         self.assertEqual(hypo[0]["baseline_value"],
                          excerpt["parameters"]["policy.domestic_arrival_minutes"]["v"])
         self.assertEqual(hypo[0]["baseline"]["v"], hypo[0]["baseline_value"])
+        self.assertEqual(hypo[0]["baseline_source_id"],
+                         excerpt["parameters"]["policy.domestic_arrival_minutes"]["from"])
+        self.assertEqual(hypo[0]["baseline_locator"],
+                         excerpt["parameters"]["policy.domestic_arrival_minutes"]["at"])
+        self.assertEqual({item["id"]: item["hypothetical_value"] for item in hypo},
+                         manifest["hypothetical_overrides"])
         self.assertEqual(results["baseline"]["components"]["arrival_change"]["evaluation"], "fail")
         self.assertEqual(results["hypothetical"]["components"]["arrival_change"]["evaluation"], "pass")
         self.assertEqual(results["baseline"]["components"]["cancellation"]["evaluation"], "fail")
         self.assertEqual(results["hypothetical"]["components"]["cancellation"]["evaluation"], "fail")
         readme = directory / "README.md"
-        readme_text = readme.read_text(encoding="utf-8")
-        self.assertEqual(local_link_errors(readme_text, readme, ROOT), [])
+        readme_raw = readme.read_text(encoding="utf-8")
+        readme_text = " ".join(readme_raw.split())
+        self.assertEqual(local_link_errors(readme_raw, readme, ROOT), [])
         referenced_sources = {source for result in results.values()
                               for component in result["components"].values()
                               for source in component["sources"]}
         for source in referenced_sources:
             with self.subTest(source=source):
                 self.assertIn(f"`{source}`", readme_text)
-        self.assertIn("no cancelled flight", readme_text)
-        self.assertIn("active reason for this case", readme_text)
+        self.assertIn("flight_cancelled: false", readme_text)
+        self.assertIn("renumbering_only: false", readme_text)
+        self.assertIn("not an active exclusion in this case", readme_text)
+        self.assertIn("Both baseline components fail", readme_text)
+        self.assertIn("arrival-change passes", readme_text)
+        for label, result in results.items():
+            self.assertIn(result["context"]["source_as_of"], readme_text)
 
     def test_issue_forms_and_their_documentation_links(self):
         directory = ROOT / ".github/ISSUE_TEMPLATE"

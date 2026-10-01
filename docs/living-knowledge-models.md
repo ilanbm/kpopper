@@ -1,8 +1,9 @@
 # Living knowledge models
 
-This guide covers a **standalone knowledge model already kept with its model in Git** and
-identified by its owner as the product. The product is one versioned knowledge model, not a
-separate model with a second kpopper record. Its Git bundle consists of `GROUNDING.yaml`, the
+This guide covers a standalone knowledge model where **`GROUNDING.yaml` and supporting files
+are committed together in one Git repository**, and the owner identifies that knowledge model
+as the product. It is one versioned knowledge model, not a separate model with a second
+kpopper record. Its Git bundle consists of `GROUNDING.yaml`, the
 `.gitattributes` file carrying its byte-preservation rules, every extant path covered by those
 rules (including `.kpopper/**`,
 `evidence/**`, and `.kpopper-history-migration/**` when present), and any in-project source
@@ -25,17 +26,17 @@ structure; it does not establish that the sources are true or that the model is 
 See the [record shape](../skills/kpopper/references/shape.md), [reasoning core](reasoning-core.md)
 and [command reference](reference.md).
 
-See a [generated, source-bound travel-rights excerpt and captured results](../examples/living-travel-rights/README.md).
+See a [generated travel-rights excerpt bound to its source commit](../examples/living-travel-rights/README.md).
 
 ## Keep the product and its storage choice distinct
 
-The model's purpose as the product does not select or change Simple or Advanced storage mode.
-This Git-bundle guide applies only when the complete model is already kept with its model in
-Git. In Simple mode the registered record is outside the checkout, so this in-repository
-bundle definition does not describe it. Preserve that location. If the user explicitly asks
-for a Git-co-located copy or mode change, use only the existing supported checked transition
-and materialization for that layout, then read back the result; the guide triggers no automatic
-configuration or migration. See [project modes](project-modes.md) and [node-history storage](node-history-storage.md).
+The model's purpose as the product does not select or change storage mode. Resolve the record
+with `kpop where` and inspect `kpop config --json`; do not infer its location from a mode label
+or checkout. If the resolved record is external, ordinary storage guidance applies and this
+Git-bundle description does not cover it. If the user asks to co-locate or change a record,
+use a documented supported command for the actual layout; if none produces the requested
+layout, stop and report that limit. The guide triggers no automatic configuration, copying or
+migration. See [project modes](project-modes.md) and [node-history storage](node-history-storage.md).
 
 ## Keep case inputs in a disposable copy
 
