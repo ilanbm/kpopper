@@ -126,7 +126,8 @@
           {
             "type": "command",
             "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"continuation_hook.py\" codex",
-            "timeout": 10
+            "timeout": 15,
+            "additionalContextLimit": 0
           }
         ]
       }

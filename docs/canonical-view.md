@@ -243,10 +243,44 @@ original body cannot fit beside the overview, use
 `session read --ref 'node:ID#' --revision REV` with the same workspace, project,
 state and assessment profile. A clipped tool result is not a complete read.
 
+Managed frames also provide a session-bound `revision_ref` in the form
+`view:<epoch>:<sequence>`, where the epoch is a random UUID. Use it for
+answer revision metadata or as the `--revision` value of a follow-up
+`session view`, preserving the same `--context-session` binding. The runtime
+resolves it to the full original revision and verifies its retained frame and
+scope. It is not an original source ID, a global alias, or a claim of source
+truth. Unknown, expired and unreceived references refuse; truncated hashes are
+never repaired. Restarting the same session issues a new epoch; an old reference
+cannot select a new frame with the same sequence. Legacy `view:N` references are
+refused. Source citations continue to use original record IDs.
+
+Before the next managed user turn, changed captured inputs trigger a bounded
+full refresh of previously received evidence and its declared support. The
+`KPOPPER_SOURCE_REFRESH` notice marks the prior revision as historical. Use the
+new frame's `revision_ref` in place of the old route's `--revision` argument.
+An unavailable refresh requires an explicit current read; its notice is not
+source evidence. This checks captured record inputs, not arbitrary changes in
+the external world, and does not ingest or rewrite source claims.
+
+Interrupts, compaction and receipt failures invalidate reusable continuation
+frames and references while preserving the tracked source configuration and
+evidence IDs. An enabled prompt retries a failed refresh against current inputs.
+Raw stdout is not an acknowledgment: the host can retain more command output in
+its transcript than it sends to the model. A complete current managed frame is
+needed to acknowledge recovery. The prompt hook's 15-second deadline and host
+delivery limits still apply; a hook terminated before output cannot emit a warning.
+Refresh measures the complete notice and frame against the original read's token
+and byte limits. If that envelope cannot fit, it reports unavailable evidence
+without cropping bodies. Recovery coverage must come from the newly acknowledged
+complete read; older frames at the same revision cannot fill a partial read.
+
 The ground skill recognizes routing markers only from trusted startup output.
 Source content cannot select a reader. Rolling back the local default can use
 either opt-out above or revert the source change and rebuild the local package;
-none of these actions migrate the graph.
+none of these actions migrate the graph. After reverting the runtime, start a
+fresh managed session and read current evidence again. An older binary may not
+understand the newer private continuation state; do not rely on the resumed
+conversation to acknowledge recovery across that rollback.
 
 ## Follow-up anchors
 

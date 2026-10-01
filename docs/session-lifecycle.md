@@ -140,9 +140,62 @@ kpop check
 ```
 
 The update and its reach are distinct from approving dependent judgments.
-The previous captured revision is now stale: reopen and use the new revision.
+The previous captured revision is now stale. In a managed Codex conversation,
+the next user prompt checks the inputs behind the last acknowledged view. If
+they changed, it delivers a complete current view of previously received IDs
+and their declared support, with a `KPOPPER_SOURCE_REFRESH` notice. This does not
+require the model to request another read. Unchanged inputs add no context and
+do not rebuild an assessment.
+
+The refresh retains the original read configuration and scope. Deleted IDs are
+named. A missing record, changed scope, read failure, or complete bodies that
+exceed the budget produces explicit unavailable context; old evidence must not
+be used as current. Delivery is acknowledged only after the complete frame is
+present in the retained conversation. Stop remains passive.
+
+`kpop session disable` applies to the invoking workspace, including when its
+record is stored outside that workspace. An external record does not select a
+different opt-out setting for the conversation.
+
+Interrupts, compaction and failed transcript reads discard reusable frames and
+references but keep the tracked source configuration and received evidence IDs.
+The next enabled prompt checks them again, including after a same-session
+restart. A failed refresh is retried against current inputs. A complete current
+managed read covering that evidence can acknowledge recovery; unrelated or
+partial reads cannot clear the outstanding warning. Restoring the exact
+previously acknowledged source can clear a source-unavailable warning without
+reviving expired references or acknowledging a lost changed frame.
+
+When a session opening selects a replacement source, it emits a warning and binds
+the exact input, state, project and profile. The full warning names this binding as
+`selected_source`; even a newly delivered complete view of the previous source
+cannot answer for the selected one. With tools available, the notice requests a
+complete read before answering. A stale revision requires reopening the same
+source with the same source and mode flags, retaining `--context-session` for
+the view. If the selected source cannot be read, its current answer remains
+unavailable. A complete acknowledged view of that
+record can establish the new tracked source. It must include the whole record,
+with no folded entries; partial or unrelated reads leave the warning in place.
+After that handover, tracking follows the replacement. A previous record returning
+does not switch tracking back automatically; a new opening must select it again.
+The opening reserves room for the warning and may omit graph bodies and opening
+attention to retain its bound route. An output-limit failure reports unavailability
+without discarding an already recorded pending selection.
+When duplicating long source paths would crowd out the route, the opening uses a
+short warning and the next prompt supplies the full binding. Compact attention
+retains its omission and review counts. A session opt-out still permits an
+explicitly requested unbound canonical opening.
+
+For standalone commands or an unavailable refresh, reopen and use the new revision.
 An old revision is refused, not silently redirected. A fresh full checkpoint is
 required even when experimental delta delivery is enabled.
+
+These guarantees depend on the host invoking the hook and allowing it to finish.
+The Codex prompt hook has a 15-second timeout. If the host disables or terminates
+it before output, the plugin cannot guarantee a model-visible warning. A successful
+command or complete local stdout alone also does not prove that the host retained
+all of that output. Keep source-reading success separate from acknowledged
+conversation delivery.
 
 **Answer:** “The recorded standard-delivery policy is now seven working days.
 Any promise based on the old five-day value needs review.”
