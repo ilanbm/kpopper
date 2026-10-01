@@ -1,15 +1,16 @@
 # Living knowledge models
 
-This guide describes a **standalone knowledge model already kept in Git** and identified by
-its owner as the product. The product is one versioned knowledge model, not a separate model
-with a second kpopper record. Its Git bundle consists of `GROUNDING.yaml`, the generated
-`.gitattributes`, every extant path covered by its rules (including `.kpopper/**`,
+This guide covers a **standalone knowledge model already kept with its model in Git** and
+identified by its owner as the product. The product is one versioned knowledge model, not a
+separate model with a second kpopper record. Its Git bundle consists of `GROUNDING.yaml`, the
+`.gitattributes` file carrying its byte-preservation rules, every extant path covered by those
+rules (including `.kpopper/**`,
 `evidence/**`, and `.kpopper-history-migration/**` when present), and any in-project source
 materials it references. A fresh model need not have the migration directory. Keep the bundle
 at its established Git location and identify the exact commit being read or changed.
 
-The native history closure is only part of that bundle. Preserve the generated attributes
-file, all covered paths and in-project source materials referenced as evidence. External
+The native history closure is only part of that bundle. Preserve that attributes file, all
+covered paths and in-project source materials referenced as evidence. External
 sources remain locators to passages; their contents are not made immutable by the model.
 See [node-history storage](node-history-storage.md) for supported file layouts and
 [history evidence](history-contract.md) for the narrower native closure definition. Optional
@@ -28,10 +29,13 @@ See a [generated, source-bound travel-rights excerpt and captured results](../ex
 
 ## Keep the product and its storage choice distinct
 
-The model's purpose as the product does not select Simple or Advanced storage mode. Preserve
-the user's existing mode and record location. If the user explicitly asks to change either,
-use the documented checked transition and read back its result; do not move the model as a
-side effect. See [project modes](project-modes.md).
+The model's purpose as the product does not select or change Simple or Advanced storage mode.
+This Git-bundle guide applies only when the complete model is already kept with its model in
+Git. In Simple mode the registered record is outside the checkout, so this in-repository
+bundle definition does not describe it. Preserve that location. If the user explicitly asks
+for a Git-co-located copy or mode change, use only the existing supported checked transition
+and materialization for that layout, then read back the result; the guide triggers no automatic
+configuration or migration. See [project modes](project-modes.md) and [node-history storage](node-history-storage.md).
 
 ## Keep case inputs in a disposable copy
 

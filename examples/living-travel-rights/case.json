@@ -1,0 +1,14 @@
+{
+  "jurisdiction": "US",
+  "covered_scheduled_service": true,
+  "direct_airline_purchase": true,
+  "airline_merchant_of_record": true,
+  "entirely_unused": true,
+  "nonrefundable_ticket": true,
+  "flight_cancelled": false,
+  "renumbering_only": false,
+  "itinerary_kind": "domestic",
+  "scheduled_arrival_shift_minutes": 179,
+  "choice": "declined_all",
+  "carrier_changed_itinerary": true
+}

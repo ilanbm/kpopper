@@ -203,10 +203,13 @@ class Community(unittest.TestCase):
         manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         excerpt_path = directory / "model-excerpt.yaml"
         results_path = directory / "results.json"
+        case_path = directory / "case.json"
         self.assertEqual(hashlib.sha256(excerpt_path.read_bytes()).hexdigest(),
                          manifest["files"]["model-excerpt.yaml"])
         self.assertEqual(hashlib.sha256(results_path.read_bytes()).hexdigest(),
                          manifest["files"]["results.json"])
+        self.assertEqual(hashlib.sha256(case_path.read_bytes()).hexdigest(),
+                         manifest["files"]["case.json"])
         self.assertEqual(manifest["source"]["commit"], "cccc9c674293a075cdb88d6c40c639ffdf37336a")
         self.assertEqual(manifest["source"]["model_sha256"],
                          "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500")
@@ -215,16 +218,46 @@ class Community(unittest.TestCase):
         self.assertEqual(excerpt["source_commit"], manifest["source"]["commit"])
         self.assertEqual(excerpt["source_model_sha256"], manifest["source"]["model_sha256"])
         results = json.loads(results_path.read_text(encoding="utf-8"))
+        self.assertEqual(excerpt["parameters"]["policy.domestic_arrival_minutes"]["v"],
+                         results["hypothetical"]["policy_overrides"][0]["baseline"]["v"])
+        case = json.loads(case_path.read_text(encoding="utf-8"))
+        self.assertFalse(case["flight_cancelled"])
+        self.assertFalse(case["renumbering_only"])
+        self.assertEqual(manifest["case_sha256"], results["baseline"]["identity"]["input_digest"])
         for result in results.values():
             self.assertIs(result["other_rights_not_ruled_out"], True)
             self.assertTrue(result["coverage_notice"])
             self.assertEqual(result["identity"]["model_commit"], manifest["source"]["commit"])
             self.assertEqual(result["identity"]["model_digest"], manifest["source"]["model_sha256"])
             self.assertEqual(result["identity"]["runtime_version"], "kpop 0.15.1")
+            self.assertEqual(result["identity"]["adapter_digest"],
+                             manifest["source"]["files"]["scripts/assess_case.py"])
+            self.assertEqual(result["identity"]["input_digest"], manifest["case_sha256"])
+            self.assertEqual(result["components"]["cancellation"]["evaluation"], "fail")
+            self.assertIn("not a denial of the right",
+                          result["components"]["cancellation"]["scope_reason"])
+        hypo = results["hypothetical"]["policy_overrides"]
+        self.assertEqual(hypo[0]["id"], "policy.domestic_arrival_minutes")
+        self.assertEqual(hypo[0]["hypothetical_value"],
+                         manifest["hypothetical_overrides"]["policy.domestic_arrival_minutes"])
+        self.assertEqual(hypo[0]["baseline_value"],
+                         excerpt["parameters"]["policy.domestic_arrival_minutes"]["v"])
+        self.assertEqual(hypo[0]["baseline"]["v"], hypo[0]["baseline_value"])
         self.assertEqual(results["baseline"]["components"]["arrival_change"]["evaluation"], "fail")
         self.assertEqual(results["hypothetical"]["components"]["arrival_change"]["evaluation"], "pass")
+        self.assertEqual(results["baseline"]["components"]["cancellation"]["evaluation"], "fail")
+        self.assertEqual(results["hypothetical"]["components"]["cancellation"]["evaluation"], "fail")
         readme = directory / "README.md"
-        self.assertEqual(local_link_errors(readme.read_text(encoding="utf-8"), readme, ROOT), [])
+        readme_text = readme.read_text(encoding="utf-8")
+        self.assertEqual(local_link_errors(readme_text, readme, ROOT), [])
+        referenced_sources = {source for result in results.values()
+                              for component in result["components"].values()
+                              for source in component["sources"]}
+        for source in referenced_sources:
+            with self.subTest(source=source):
+                self.assertIn(f"`{source}`", readme_text)
+        self.assertIn("no cancelled flight", readme_text)
+        self.assertIn("active reason for this case", readme_text)
 
     def test_issue_forms_and_their_documentation_links(self):
         directory = ROOT / ".github/ISSUE_TEMPLATE"
