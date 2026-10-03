@@ -212,7 +212,14 @@ class Community(unittest.TestCase):
                          manifest["files"]["case.json"])
         self.assertEqual(manifest["files"]["case.json"],
                          manifest["source"]["files"]["examples/domestic-below.json"])
-        self.assertEqual(manifest["source"]["commit"], "39932a684c25cc87851ccf313ea3ea8919ad10b9")
+        self.assertEqual(manifest["source"]["commit"], "a1a7c14a4e2ef22f04613aee8b645f12ea86e888")
+        self.assertEqual(manifest["source"]["model_path"],
+                         "knowledge/us-flight-refunds/GROUNDING.yaml")
+        self.assertEqual(manifest["source"]["files"][manifest["source"]["model_path"]],
+                         manifest["source"]["model_sha256"])
+        self.assertNotIn("GROUNDING.yaml", manifest["source"]["files"])
+        self.assertFalse(any(name.startswith((".kpopper/", "evidence/"))
+                             for name in manifest["source"]["files"]))
         self.assertEqual(manifest["source"]["model_sha256"],
                          "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500")
         excerpt = yaml.safe_load(excerpt_path.read_text(encoding="utf-8"))

@@ -1,14 +1,20 @@
 # Living knowledge models
 
-This guide covers a standalone knowledge model where **`GROUNDING.yaml` and supporting files
-are committed together in one Git repository**, and the owner identifies that knowledge model
-as the product. It is one versioned knowledge model, not a separate model with a second
-kpopper record. Its Git bundle consists of `GROUNDING.yaml`, the
-`.gitattributes` file carrying its byte-preservation rules, every extant path covered by those
+This guide covers an application that treats a sourced knowledge model as a product. The model
+can live in its own repository or in a subdirectory beside an optional ordinary project record.
+For example, an application can keep its domain model at
+`knowledge/us-flight-refunds/GROUNDING.yaml` while the project uses the record selected by its
+normal kpopper configuration. These are separate records with separate purposes; the model
+does not replace or absorb project knowledge.
+
+Treat the model as a complete, versioned bundle: its `GROUNDING.yaml`, its own
+`.gitattributes` file carrying its byte-preservation rules, every retained path covered by those
 rules (including `.kpopper/**`,
 `evidence/**`, and `.kpopper-history-migration/**` when present), and any in-project source
-materials it references. A fresh model need not have the migration directory. Keep the bundle
-at its established Git location and identify the exact commit being read or changed.
+materials it references. Preserve relative paths and bytes, and identify the exact commit being
+read or changed. Keep the application's adapter and any person-specific case binding outside
+the canonical model. Documented transient state such as `.kpopper/project.lock` and
+`.kpopper/.history-local/` does not belong in the portable bundle.
 
 The native history closure is only part of that bundle. Preserve that attributes file, all
 covered paths and in-project source materials referenced as evidence. External
@@ -26,7 +32,27 @@ structure; it does not establish that the sources are true or that the model is 
 See the [record shape](../skills/kpopper/references/shape.md), [reasoning core](reasoning-core.md)
 and [command reference](reference.md).
 
-See a [generated travel-rights excerpt bound to its source commit](../examples/living-travel-rights/README.md).
+See the [travel-rights application example](../examples/living-travel-rights/README.md).
+
+## Select project and model explicitly
+
+Use the explicit record path for commands that accept one. For example, a project-scoped pull
+can name both its workspace and the model record:
+`kpop --workspace /path/to/project pull ID /path/to/model/GROUNDING.yaml`.
+Other native commands have command-specific target syntax; check their help instead of assuming
+that `--record` applies everywhere. Bind ordinary project commands to the application's project
+workspace with `--workspace /path/to/project`; do not rely on the current directory to
+distinguish the two.
+The model folder itself remains a native authoring context: bare commands run there can select
+and change the model. A folder boundary does not make it read-only, and native discovery is not
+a package registry or an asset-role security boundary.
+
+The project record is optional. When no project record exists, native project discovery can
+report absence; do not create a blank placeholder or copy the domain model into the project
+record just to make it open. An ordinary configured project record may be external, so a root
+`GROUNDING.yaml` must not be assumed to override configuration. These are application patterns
+using existing explicit APIs, not a new storage mode, automatic migration or general package
+contract. See [project modes](project-modes.md) and [node-history storage](node-history-storage.md).
 
 ## Keep the product and its storage choice distinct
 
@@ -42,7 +68,8 @@ migration. See [project modes](project-modes.md) and [node-history storage](node
 
 For a person-specific case or hypothetical, if your application has a case adapter, use it to
 make a complete disposable copy of the model bundle, identified by its source commit, and keep
-case values and any case-specific native authoring in that private copy. kpopper has no generic
+case values and any case-specific native authoring in that private copy. The case binding belongs
+to the adapter's ephemeral workspace, not the canonical model or project record. kpopper has no generic
 private-case binding service. If no case adapter exists, keep personal values out of the
 canonical model; do not write them with `add`, `set`, or `--hypothesis`. The latter writes
 retained proposal history, not a temporary case. Do not substitute a blank record that merely
@@ -54,12 +81,29 @@ snapshot, not a complete model ([native command reference](../native/README.md))
 Keep reusable findings separate from person-specific facts. Unknown inputs and failed
 components stay visible as such; they do not establish a conclusion about the case.
 
+## Export only application-selected contents
+
+When an application ships a portable bundle, its exporter must select the model closure and
+product files from the exact committed tree and verify their committed bytes. A project record,
+its history and project-only evidence are not part of the model bundle. The application defines
+the portable package contents; this guide does not define a general package format or exporter.
+
 ## Update only from a source review
 
-A changed reading starts with rereading the relevant source and locating the passage. For a
-scalar, `kpop set ID VALUE --as-of DATE --source SOURCE_ID --at LOCATION` records its own date
-and citation; `--source` and `--at` are supplied together. Use `kpop add` for a new sourced
-fact or rule. `kpop update --file` applies a prepared report under its documented contract.
+Model maintenance must explicitly target the model record; ordinary project recording does not
+authorize a model change. A changed reading starts with rereading the relevant source and locating
+the passage. For a scalar, name the model file as well as its date and citation:
+
+```sh
+kpop --workspace /path/to/project set ID VALUE /path/to/model/GROUNDING.yaml \
+  --as-of DATE --source SOURCE_ID --at LOCATION
+```
+
+`--source` and `--at` are supplied together. `add` also accepts a trailing model-file path
+for a new sourced fact or rule. Other operations have command-specific selectors:
+`update --file REPORT --record /path/to/model/GROUNDING.yaml` applies a prepared report
+under its documented contract. Do not assume selecting a workspace overrides project
+configuration; verify the target and use the selector supported by each command.
 Inspect the write result and run `kpop check` for declared movement and conditions; it does
 not fetch sources or decide whether an interpretation is true.
 

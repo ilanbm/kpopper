@@ -23,8 +23,9 @@
 >
 > [**Try it and see for yourself →**](#get-started)
 
-Use kpopper's knowledge record alongside other work, or make `GROUNDING.yaml` and supporting
-files committed together in one Git repository the product. See [Living knowledge models](docs/living-knowledge-models.md).
+Use kpopper's project knowledge record alongside other work, or keep an application-owned
+knowledge model in its own repository or beside an optional project record. See
+[Living knowledge models](docs/living-knowledge-models.md).
 
 kpopper connects decisions to the evidence, assumptions and earlier decisions they
 depend on, and records what would make them worth revisiting. When a recorded premise
