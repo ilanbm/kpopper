@@ -26,10 +26,10 @@ That makes the record **self-evolving**, in one exact sense worth being precise 
 here rewrites your conclusions. What the record does on its own is re-check every judgment
 against what it was last checked against, and put the ones that no longer hold in front of you.
 Nobody maintains a list of what went stale. Staleness is derived, so it cannot be forgotten,
-cleared by accident, or survive a revert — and the page's sections fill themselves from the
-same derivation, which is why an arrangement written last week still shows this week's problem.
-
-Work that gets revisited needs one thing sessions usually throw away: **where each piece came from.** Keep that while you work. This is not a data-modeling exercise, and it should not change what you produce — only what you keep.
+cleared by accident, or survive a revert; the page's sections fill themselves from that derivation. Keep where each piece came from without changing the user's deliverable.
+If the user explicitly chooses the record itself as the product, see
+[living knowledge models](../../docs/living-knowledge-models.md) for keeping its complete bundle
+separate from optional project knowledge and case data.
 
 ## Three things worth keeping
 
@@ -92,7 +92,7 @@ is not up for revision. These four are that floor.
 Each is recognizable while you are doing it. If you catch yourself, stop.
 
 - Designing a structure before meeting the evidence, including during a selected mapping.
-- Starting a second record, or renaming `GROUNDING.yaml` to something you like better.
+- Starting another record without a distinct purpose or renaming `GROUNDING.yaml`.
 - Creating a category with one member. One is a case, two a coincidence, three a category.
 - Recording things nobody asked about, for completeness. Completeness is not the goal.
 - Renaming or reorganizing because it would be tidier, with no question behind it.
