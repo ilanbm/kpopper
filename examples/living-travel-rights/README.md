@@ -1,8 +1,8 @@
 # Living travel-rights model example
 
-This generated, read-only excerpt and its results come from the **unpublished local source
-commit** `39932a684c25cc87851ccf313ea3ea8919ad10b9` of `living-travel-rights`. There is no
-public source URL. `55a95eae…` is the **`GROUNDING.yaml` SHA-256**, not a hash of the whole
+This generated, read-only excerpt and its results come from **private source commit**
+`39932a684c25cc87851ccf313ea3ea8919ad10b9` of `living-travel-rights`. The complete source
+repository is not public. `55a95eae…` is the **`GROUNDING.yaml` SHA-256**, not a hash of the whole
 Git bundle. Results carry `baseline_authority_digest` as an opaque native-history provenance
 receipt. The manifest and results include other source/runtime/input digests as provenance
 receipts too. Because their contents are omitted, those values cannot be independently checked
