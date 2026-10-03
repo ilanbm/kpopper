@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Documentation
+
+- Added a [living knowledge model guide](docs/living-knowledge-models.md) for
+  projects where the versioned record is the deliverable. It covers complete
+  artifact contents, private case copies and source-grounded maintenance using
+  existing operations. The flight example is a reading excerpt with synthetic
+  results; it is not a standalone runnable model or a complete account of rights.
+
 ### Conversation freshness
 
 - Managed Codex conversations refresh previously received evidence and its
