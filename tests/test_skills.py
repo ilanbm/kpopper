@@ -212,7 +212,7 @@ class Community(unittest.TestCase):
                          manifest["files"]["case.json"])
         self.assertEqual(manifest["files"]["case.json"],
                          manifest["source"]["files"]["examples/domestic-below.json"])
-        self.assertEqual(manifest["source"]["commit"], "a1a7c14a4e2ef22f04613aee8b645f12ea86e888")
+        self.assertEqual(manifest["source"]["commit"], "8cc12d243bef52bb2442abe5915238c2ba97adb5")
         self.assertEqual(manifest["source"]["model_path"],
                          "knowledge/us-flight-refunds/GROUNDING.yaml")
         self.assertEqual(manifest["source"]["files"][manifest["source"]["model_path"]],

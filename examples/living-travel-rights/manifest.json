@@ -5,9 +5,9 @@
     "case.json": "14b47acc455b12fe22b8b20f9043f1c765fa4d2d7afc772d4b11e5004b6310ab",
     "docs/scope.md": "c3ee79fb5f21061dfb0acc9acb7735e03114d1018e400470116be19bbb9c48b7",
     "docs/sources.md": "2bb28b80b12e20a90d0390e217cb282400a56273634f16cc0c4f9af1de9f7cf3",
-    "living-travel-rights.zip": "54ad2f771c88dcfa5616670a3ff0edd943d683f0fa37e75de8788d15085a0f22",
-    "model-excerpt.yaml": "7b4782c44f26046cc41840ab1d727613674613371927b93ab0c12a23d2fff51a",
-    "results.json": "012af437df9ead5e1220f5b97d8fcdb6c976fe08c18e3c6ef7e0de5311aed0d3"
+    "living-travel-rights.zip": "377a07a1a6ad15e8bc1906b7e7b96159a2f5b7d91ee691181a300abf6311b6b1",
+    "model-excerpt.yaml": "063c5aebe90bfff357d53868bc5cc11c8954d7966a429eef7c7ae136508cc512",
+    "results.json": "ec3b5baa83c69712ba4594c8a29540d03223139b4ff087ff516a1b895216c58c"
   },
   "generated_by": "living-travel-rights/scripts/export_example.py",
   "hypothetical_overrides": {
@@ -15,15 +15,14 @@
   },
   "schema_version": 1,
   "source": {
-    "commit": "a1a7c14a4e2ef22f04613aee8b645f12ea86e888",
+    "commit": "8cc12d243bef52bb2442abe5915238c2ba97adb5",
     "files": {
       ".gitattributes": "511310f5aef64a04846c109b1b31c7cf602d34ecad8c01e314a18e09b4ac57be",
       ".gitignore": "ff265f43483d2f7121ce57673ff5d27c04500a31e4211a8dca201919ae8dae11",
       "AGENTS.md": "871456042ac28f03130f3b5ae44320896ac2393e79027b6db292957b81c927fa",
       "LICENSE": "ccd53c624b8ead01a11a8ab44e0ad2e547fcfdb01928fe5dc06482daf40b3e98",
-      "README.md": "dd0184a73d8e2a6a9054f2080dc027699724bd9e9998dcae75c17c16c0ac71fd",
-      "docs/maintenance.md": "a38ace50f3b5ef7527a8df5c7c36f97c0bcfefd4282fd76d79abad420f1bd979",
-      "docs/migration.md": "c296afe7da01ed6109ef7477c859d06ca3e4a5984b3e6826f12430137ea3bc3e",
+      "README.md": "da75b6da0995062febc951deee5c47adba45a84e4b37e006b10503215eebd3da",
+      "docs/maintenance.md": "8f2db78a3c20ecce3a7b6baaaa48ba20a294a3b44223666841d7256376486538",
       "docs/sources.md": "a9472c9d5c0731ed0debe4fac36b24cc5e644badc828c542fdc0843668086afd",
       "examples/accepted-voucher.json": "3d9e9c78c9c16a5de0c7c0299b270ba757ad526e9d5a53cc7721f629798d02be",
       "examples/cancelled-no-offer.json": "3d3889b844ea1aaded422a0cc599499afa258b2874dad279533123b5630b1ff3",
@@ -62,7 +61,7 @@
       "requirements.txt": "0969da99a0bc2a1b71ed50584560f4588a37567ac63af3ddbaf3c4617ca5621a",
       "scripts/assess_case.py": "8ba9e0e8da29c1614562754a0097f7a06f1d0d3ec39992600aa5da0488dd67d1",
       "scripts/build_model.py": "24a59899e656783b1746abdac08683e188e822b76b99113543b64c28c9ecde98",
-      "scripts/export_example.py": "23f7076a499611f9ce7df95727280512974169a5ba3028fd02570e1bea04fb47",
+      "scripts/export_example.py": "bd2ba68fad98816414ec58a86ea7e646eb10c3e2509642b9ec738d59263deebd",
       "skills/travel-rights/SKILL.md": "9b4103d013158f3841632391508c492134cd51681d4485fde7e7ebdf1c14bd84",
       "tests/source_cases.json": "99657800e508ff7f726fe5628facca6e6371e1f407fb801825e305124bc5af18",
       "tests/test_adapter.py": "346188f7bc1ed9df04893beb68e5f0958e1229967b0b17de8151e50fe2668a58",

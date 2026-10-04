@@ -1,5 +1,5 @@
 kind: read-only-model-excerpt/v1
-source_commit: a1a7c14a4e2ef22f04613aee8b645f12ea86e888
+source_commit: 8cc12d243bef52bb2442abe5915238c2ba97adb5
 source_model_sha256: 55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500
 note: Incomplete reading excerpt. Execute the full native-history model in the source bundle.
 parameters:
