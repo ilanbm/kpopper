@@ -4,6 +4,8 @@ This module runs in the mandatory CI job, including documentation-only changes.
 """
 from html import unescape
 from html.parser import HTMLParser
+import hashlib
+import json
 import pathlib
 import re
 import tempfile
@@ -191,6 +193,106 @@ class Community(unittest.TestCase):
             path = ROOT / name
             with self.subTest(file=name):
                 self.assertEqual(local_link_errors(path.read_text(encoding="utf-8"), path, ROOT), [])
+
+    def test_living_knowledge_model_guide_links_resolve(self):
+        path = ROOT / "docs" / "living-knowledge-models.md"
+        self.assertEqual(local_link_errors(path.read_text(encoding="utf-8"), path, ROOT), [])
+
+    def test_living_travel_rights_example_matches_its_manifest(self):
+        directory = ROOT / "examples" / "living-travel-rights"
+        manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+        excerpt_path = directory / "model-excerpt.yaml"
+        results_path = directory / "results.json"
+        case_path = directory / "case.json"
+        self.assertEqual(hashlib.sha256(excerpt_path.read_bytes()).hexdigest(),
+                         manifest["files"]["model-excerpt.yaml"])
+        self.assertEqual(hashlib.sha256(results_path.read_bytes()).hexdigest(),
+                         manifest["files"]["results.json"])
+        self.assertEqual(hashlib.sha256(case_path.read_bytes()).hexdigest(),
+                         manifest["files"]["case.json"])
+        self.assertEqual(manifest["files"]["case.json"],
+                         manifest["source"]["files"]["examples/domestic-below.json"])
+        self.assertEqual(manifest["source"]["commit"], "a1a7c14a4e2ef22f04613aee8b645f12ea86e888")
+        self.assertEqual(manifest["source"]["model_path"],
+                         "knowledge/us-flight-refunds/GROUNDING.yaml")
+        self.assertEqual(manifest["source"]["files"][manifest["source"]["model_path"]],
+                         manifest["source"]["model_sha256"])
+        self.assertNotIn("GROUNDING.yaml", manifest["source"]["files"])
+        self.assertFalse(any(name.startswith((".kpopper/", "evidence/"))
+                             for name in manifest["source"]["files"]))
+        self.assertEqual(manifest["source"]["model_sha256"],
+                         "55a95eae5c79de98e4c02e26a8332f21de4838a3dfa197cb548dedbc6bb4e500")
+        excerpt = yaml.safe_load(excerpt_path.read_text(encoding="utf-8"))
+        self.assertEqual(excerpt["kind"], "read-only-model-excerpt/v1")
+        self.assertEqual(excerpt["source_commit"], manifest["source"]["commit"])
+        self.assertEqual(excerpt["source_model_sha256"], manifest["source"]["model_sha256"])
+        results = json.loads(results_path.read_text(encoding="utf-8"))
+        self.assertEqual(excerpt["parameters"]["policy.domestic_arrival_minutes"]["v"],
+                         results["hypothetical"]["policy_overrides"][0]["baseline"]["v"])
+        case = json.loads(case_path.read_text(encoding="utf-8"))
+        self.assertEqual(case, {
+            "jurisdiction": "US",
+            "covered_scheduled_service": True,
+            "direct_airline_purchase": True,
+            "airline_merchant_of_record": True,
+            "entirely_unused": True,
+            "nonrefundable_ticket": True,
+            "flight_cancelled": False,
+            "renumbering_only": False,
+            "itinerary_kind": "domestic",
+            "scheduled_arrival_shift_minutes": 179,
+            "choice": "declined_all",
+            "carrier_changed_itinerary": True,
+        })
+        self.assertEqual(manifest["case_sha256"], results["baseline"]["identity"]["input_digest"])
+        self.assertEqual(results["baseline"]["identity"]["input_digest"],
+                         results["hypothetical"]["identity"]["input_digest"])
+        for result in results.values():
+            self.assertIs(result["other_rights_not_ruled_out"], True)
+            self.assertTrue(result["coverage_notice"])
+            self.assertEqual(result["identity"]["model_commit"], manifest["source"]["commit"])
+            self.assertEqual(result["identity"]["model_digest"], manifest["source"]["model_sha256"])
+            self.assertEqual(result["identity"]["runtime_version"], "kpop 0.15.1")
+            self.assertEqual(result["identity"]["adapter_digest"],
+                             manifest["source"]["files"]["scripts/assess_case.py"])
+            self.assertEqual(result["identity"]["input_digest"], manifest["case_sha256"])
+            self.assertEqual(result["components"]["cancellation"]["evaluation"], "fail")
+            self.assertIn("not a denial of the right",
+                          result["components"]["cancellation"]["scope_reason"])
+        hypo = results["hypothetical"]["policy_overrides"]
+        self.assertEqual(hypo[0]["id"], "policy.domestic_arrival_minutes")
+        self.assertEqual(hypo[0]["hypothetical_value"],
+                         manifest["hypothetical_overrides"]["policy.domestic_arrival_minutes"])
+        self.assertEqual(hypo[0]["baseline_value"],
+                         excerpt["parameters"]["policy.domestic_arrival_minutes"]["v"])
+        self.assertEqual(hypo[0]["baseline"]["v"], hypo[0]["baseline_value"])
+        self.assertEqual(hypo[0]["baseline_source_id"],
+                         excerpt["parameters"]["policy.domestic_arrival_minutes"]["from"])
+        self.assertEqual(hypo[0]["baseline_locator"],
+                         excerpt["parameters"]["policy.domestic_arrival_minutes"]["at"])
+        self.assertEqual({item["id"]: item["hypothetical_value"] for item in hypo},
+                         manifest["hypothetical_overrides"])
+        self.assertEqual(results["baseline"]["components"]["arrival_change"]["evaluation"], "fail")
+        self.assertEqual(results["hypothetical"]["components"]["arrival_change"]["evaluation"], "pass")
+        self.assertEqual(results["baseline"]["components"]["cancellation"]["evaluation"], "fail")
+        self.assertEqual(results["hypothetical"]["components"]["cancellation"]["evaluation"], "fail")
+        readme = directory / "README.md"
+        readme_raw = readme.read_text(encoding="utf-8")
+        readme_text = " ".join(readme_raw.split())
+        self.assertEqual(local_link_errors(readme_raw, readme, ROOT), [])
+        referenced_sources = {source for result in results.values()
+                              for component in result["components"].values()
+                              for source in component["sources"]}
+        for source in referenced_sources:
+            with self.subTest(source=source):
+                self.assertIn(f"`{source}`", readme_text)
+        self.assertIn("flight_cancelled: false", readme_text)
+        self.assertIn("renumbering_only: false", readme_text)
+        self.assertIn("not an active exclusion in this case", readme_text)
+        self.assertIn("Both baseline components fail", readme_text)
+        self.assertIn("arrival-change passes", readme_text)
+        for label, result in results.items():
+            self.assertIn(result["context"]["source_as_of"], readme_text)
 
     def test_issue_forms_and_their_documentation_links(self):
         directory = ROOT / ".github/ISSUE_TEMPLATE"

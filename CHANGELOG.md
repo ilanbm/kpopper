@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Documentation
+
+- Expanded the [living knowledge model guide](docs/living-knowledge-models.md) to
+  cover an application-owned model bundle alongside an optional project record,
+  explicit project/model selection and ephemeral case data. It describes an
+  application pattern using existing operations, not a general package or runtime
+  security contract. The flight example is a reading excerpt with synthetic
+  results; it is not a standalone runnable model or a complete account of rights.
+
 ### Conversation freshness
 
 - Managed Codex conversations refresh previously received evidence and its
