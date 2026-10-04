@@ -14,22 +14,40 @@
 
 <a id="keep-the-reasoning-move-the-work-forward"></a>
 
-# Your project, more self-aware.
+<a id="your-project-more-self-aware"></a>
 
-**Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#deterministically-checkable).**
+# Knowledge your agents can build on.
 
-> [!IMPORTANT]
-> **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
->
-> [**Try it and see for yourself →**](#get-started)
+**Your agents reason. kpopper makes their recorded knowledge explicit, persistent, and [deterministically checkable](#deterministically-checkable).**
 
-Use kpopper's project knowledge record alongside other work, or keep an application-owned
-knowledge model in its own repository or beside an optional project record. See
-[Living knowledge models](docs/living-knowledge-models.md).
+In kpopper, a **living knowledge model** is a structured, versioned record of facts,
+assumptions, rules and judgments, with their sources and dependencies. When a recorded premise changes,
+kpopper checks what depends on it and surfaces conclusions that need another look.
+External sources still need to be reviewed and updated in the record.
 
-kpopper connects decisions to the evidence, assumptions and earlier decisions they
-depend on, and records what would make them worth revisiting. When a recorded premise
-changes, kpopper traces its reach through the record and surfaces what needs another look.
+<a id="choose-your-path"></a>
+
+## Two ways to use kpopper
+
+### Use kpopper in your project
+
+**Knowledge that supports your work.** Keep the reasons behind your code, research and
+planning available to the next session. As you work, your agent records useful findings
+and checks which decisions depend on them.
+
+**[Install kpopper](#get-started)** · [See project workflows](#project-workflows)
+
+### Build a reusable knowledge model
+
+**Knowledge as the product.** Turn a body of knowledge into a versioned model of sources,
+rules and judgments that agents can inspect and applications can evaluate. Maintain and
+share the model itself—for example, a model of policy conditions or software compatibility.
+
+**[Build a model](docs/living-knowledge-models.md#build-a-model)** ·
+[Already have a model?](docs/living-knowledge-models.md#use-an-existing-model)
+
+Both paths use living knowledge models and the same kpopper runtime. One project can do both,
+with the reusable model kept as its own record. Individual cases stay in private copies.
 
 Agent reasoning costs time and tokens. kpopper runs calculations and dependency checks
 deterministically, aiming to turn seconds of model work into milliseconds of
@@ -46,7 +64,8 @@ computation—and focus the agent on decisions that need judgment.
 
 [Phone layout](assets/diagrams/dependency-checks-mobile.png)
 
-**[Get started](#get-started)** · [Choose your path](#choose-your-path) ·
+**[Get started](#get-started)** · [Two ways to use kpopper](#two-ways-to-use-kpopper) ·
+[Project workflows](#project-workflows) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#how-it-works) ·
 [Commands](#quick-reference) ·
 [Contributing](CONTRIBUTING.md) · [Why the name?](#user-content-popper-give-a-conclusion-a-way-to-fail)
@@ -65,7 +84,10 @@ computation—and focus the agent on decisions that need judgment.
 <details open>
 <summary>Contents</summary>
 
-- [Choose your path](#choose-your-path)
+- [Two ways to use kpopper](#two-ways-to-use-kpopper)
+  - [Use it in your project](#use-kpopper-in-your-project)
+  - [Build a reusable model](#build-a-reusable-knowledge-model)
+- [Project workflows](#project-workflows)
   - [Coding agents](#user-content-example-1-coding-agent)
   - [Claude Cowork / ChatGPT Work](#user-content-example-2-claude-cowork-and-chatgpt-work)
   - [Research](#user-content-example-3-research)
@@ -85,12 +107,14 @@ computation—and focus the agent on decisions that need judgment.
 
 </details>
 
-<a id="choose-your-path"></a>
+<a id="where-would-you-like-to-start"></a>
 
-## Where would you like to start?
+## Project workflows
 
-Choose your path. Click a banner to open its section, or a title to open or close it.
-Each section includes workflows, examples and the records behind them.
+See how kpopper supports ongoing coding, planning and research. Click a banner to open
+its section, or a title to open or close it. Each section includes examples and the
+records behind them. To make a reusable model the deliverable, follow the
+[living knowledge model guide](docs/living-knowledge-models.md#build-a-model).
 You can also [go straight to installation](#get-started).
 
 <a id="access-control-and-shared-caching"></a>
@@ -702,6 +726,8 @@ live independent research is part of that replay.
 
 ## Get started
 
+Both usage paths use the same installation.
+
 You can use this request with any of the agents listed below. The agent can carry out
 the steps its tools allow and guide you through any clicks, approvals or administrator
 steps that need your input.
@@ -841,10 +867,17 @@ than replacing it. What runs automatically differs by agent; see the
 
 ### After installing
 
-In Claude Code and Codex, kpopper opens with each new session. Installing creates no record;
-your agent starts `GROUNDING.yaml` when it records the first finding worth keeping (on native
-Windows, under WSL). To start from what already exists, ask your agent to map the project.
+In Claude Code and Codex, kpopper opens with each new session. Installing creates no record.
 The native runtime needs no Python, Node, Rust or Lean toolchain.
+An individual model's adapter may have additional requirements.
+
+- **For ongoing project work:** your agent starts `GROUNDING.yaml` when it records the first
+  finding worth keeping (on native Windows, under WSL). To start from existing materials,
+  ask your agent to map the project.
+- **For a reusable knowledge model:** follow [Build a model](docs/living-knowledge-models.md#build-a-model)
+  or [use a complete model you already have](docs/living-knowledge-models.md#use-an-existing-model).
+  Select the model explicitly and use its documented input interface for individual cases;
+  keep those cases separate from both the model and ordinary project knowledge.
 
 [Use the command line without an agent](docs/reference.md#try-it-from-the-command-line) ·
 [Runtime setup and troubleshooting](docs/plugin-runtime.md)

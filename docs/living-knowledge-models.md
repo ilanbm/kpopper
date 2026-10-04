@@ -1,7 +1,49 @@
 # Living knowledge models
 
-This guide covers an application that treats a sourced knowledge model as a product. The model
-can live in its own repository or in a subdirectory beside an optional ordinary project record.
+In kpopper, a living knowledge model is a structured, versioned record of facts, assumptions,
+rules and judgments, with their sources and dependencies. Its checks can expose affected conclusions when recorded
+premises change. "Living" describes a model that can be maintained and checked over time;
+external sources still need review. It does not mean a trained language model or automatic
+source synchronization.
+
+An ordinary project record is also a living knowledge model. This guide covers the other
+purpose: **knowledge as the product**, maintained for reuse across questions or applications.
+Both purposes use the same kpopper runtime and record format.
+
+## Start with a model
+
+First, [install kpopper](../README.md#get-started) if it is not available in your environment.
+Then build a model, or use a complete one supplied by its publisher.
+
+### Build a model
+
+1. Choose a bounded subject and its sources. State what the model will answer and what
+   remains outside its coverage.
+2. Author its facts, rules and judgments using the existing
+   [record commands](reference.md#write-and-review), keeping the complete model together.
+3. For rules that need case inputs, provide an application-owned adapter or test harness:
+   it makes a disposable complete copy, writes synthetic inputs through native commands,
+   and runs the [assessment](assessment.md). Compare the results with independently
+   expected outcomes. A shape check alone does not establish that a rule is correct.
+4. Version the model with its sources, tests and usage instructions. Explain how another
+   person or agent supplies inputs and interprets results, including unknowns and scope.
+
+### Use an existing model
+
+Start with the complete model bundle and instructions from its publisher. Select the
+intended version and inspect its sources and coverage. Follow its setup instructions,
+including any dependencies required by its adapter. To evaluate a case, use its
+documented adapter or input interface, keeping private case data out of the model.
+kpopper does not supply a generic case adapter or install models from a catalog.
+
+The [flight-refund example](../examples/living-travel-rights/README.md) shows a sourced
+rule and captured baseline/hypothetical results. It is a read-only excerpt from a private
+repository, not a public runnable starter. The remaining sections describe any model's
+contents, explicit selection, private case data and maintenance.
+
+## Keep the complete model together
+
+The model can live in its own repository or in a subdirectory beside an optional ordinary project record.
 For example, an application can keep its domain model at
 `knowledge/us-flight-refunds/GROUNDING.yaml` while the project uses the record selected by its
 normal kpopper configuration. These are separate records with separate purposes; the model
@@ -31,8 +73,6 @@ unmodeled cases as unknowns. A passing `kpop check` reports on recorded conditio
 structure; it does not establish that the sources are true or that the model is complete.
 See the [record shape](../skills/kpopper/references/shape.md), [reasoning core](reasoning-core.md)
 and [command reference](reference.md).
-
-See the [travel-rights application example](../examples/living-travel-rights/README.md).
 
 ## Select project and model explicitly
 
