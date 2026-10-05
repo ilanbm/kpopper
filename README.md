@@ -14,9 +14,9 @@
 
 <a id="keep-the-reasoning-move-the-work-forward"></a>
 
-<a id="your-project-more-self-aware"></a>
+<a id="knowledge-your-agents-can-build-on"></a>
 
-# Knowledge your agents can build on.
+# Your project, more self-aware.
 
 **Your agents reason. kpopper makes their recorded knowledge explicit, persistent, and [deterministically checkable](#deterministically-checkable).**
 
