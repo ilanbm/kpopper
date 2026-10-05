@@ -896,6 +896,113 @@ fn a_configured_simple_record_that_is_not_there_is_named_in_full() {
     );
 }
 
+/// A repository whose record location cannot be read, in each of the three ways, with the
+/// path and reason every command refuses it with.
+fn unavailable_records() -> Vec<(&'static str, tempfile::TempDir, std::path::PathBuf, String)> {
+    let mut cases = vec![];
+    for kind in ["directory", "registered", "configured"] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let git = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["init", "-q", "-b", "main"])
+            .output()
+            .unwrap();
+        assert!(git.status.success());
+        let (record, reason) = match kind {
+            "directory" => {
+                fs::create_dir(root.join("GROUNDING.yaml")).unwrap();
+                fs::write(root.join("GROUNDING.yaml/x.txt"), "").unwrap();
+                (
+                    root.join("GROUNDING.yaml"),
+                    "The record path exists but is not an accessible file.",
+                )
+            }
+            "registered" => {
+                fs::write(root.join(".git/kpopper-record"), "records/elsewhere.yaml\n").unwrap();
+                (
+                    root.join("records/elsewhere.yaml"),
+                    "The registered record is unavailable. Restore its location before creating another.",
+                )
+            }
+            _ => {
+                fs::create_dir_all(root.join(".git/kpopper/project")).unwrap();
+                fs::create_dir_all(root.join("notes")).unwrap();
+                fs::write(
+                    root.join(".git/kpopper/project/project.json"),
+                    r#"{"version": 1, "mode": "simple", "record": "notes", "publication": null, "generation": 0}"#,
+                )
+                .unwrap();
+                (root.join("notes"), "The configured record is unavailable.")
+            }
+        };
+        let refusal = format!("{reason} {}\n", record.display());
+        cases.push((kind, temp, root, refusal));
+    }
+    cases
+}
+
+#[test]
+fn an_unavailable_record_is_refused_with_its_path_by_every_command() {
+    for (kind, _temp, root, refusal) in unavailable_records() {
+        let private = root.join("private");
+        let before = image(&root);
+        for args in [
+            vec!["check"],
+            vec!["pull", "a.b"],
+            vec!["affects", "a.b"],
+            vec!["export", "a.b"],
+            vec!["where"],
+            vec!["add", "a.b", "v=2"],
+            vec!["set", "a.b", "2"],
+            vec!["same", "a.b", "a.c"],
+        ] {
+            let output = cli(&root, &args, &private);
+            assert_eq!(output.status.code(), Some(1), "{kind} {args:?}");
+            assert!(output.stdout.is_empty(), "{kind} {args:?}");
+            assert_eq!(
+                String::from_utf8(output.stderr).unwrap(),
+                refusal,
+                "{kind} {args:?}"
+            );
+            let output = cli(&root, &[&["--json"], &args[..]].concat(), &private);
+            assert_eq!(output.status.code(), Some(1), "{kind} --json {args:?}");
+            let envelope: J = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(envelope["exit_code"], 1, "{kind} --json {args:?}");
+            assert_eq!(
+                envelope["error"],
+                refusal.as_str(),
+                "{kind} --json {args:?}"
+            );
+            assert_eq!(envelope["output"], "", "{kind} --json {args:?}");
+        }
+        // The context reply has no envelope, so it refuses the same way with --json.
+        for args in [&["context", "a.b"][..], &["--json", "context", "a.b"]] {
+            let output = cli(&root, args, &private);
+            assert_eq!(output.status.code(), Some(1), "{kind} {args:?}");
+            assert!(output.stdout.is_empty(), "{kind} {args:?}");
+            assert_eq!(
+                String::from_utf8(output.stderr).unwrap(),
+                refusal,
+                "{kind} {args:?}"
+            );
+        }
+        // The opener keeps the reason alone.
+        let output = cli(&root, &["open"], &private);
+        assert_eq!(output.status.code(), Some(1), "{kind}");
+        let reason = refusal.rsplit_once(' ').unwrap().0;
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap().trim_end(),
+            reason,
+            "{kind}"
+        );
+        let mut after = image(&root);
+        after.retain(|name, _| !name.starts_with("private"));
+        assert_eq!(after, before, "{kind}: a refused command wrote");
+    }
+}
+
 const BROKEN_YAML: &str = "known:\n  a.b: {v: 1\n  c.d: [unclosed\n";
 fn broken_yaml_refusal(name: &str) -> String {
     format!(

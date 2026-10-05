@@ -429,19 +429,23 @@ fn orientation(source: &crate::ordinary_source::Source) -> Vec<String> {
     }
 }
 /// Whether a failure is the reader's account of a record it cannot read: one whose field
-/// roles it cannot take, one that is not there, or one whose file does not parse. Commands
-/// print it as it stands, with exit status 1, as the Python reader does.
+/// roles it cannot take, one that is not there, one whose location is no readable file,
+/// or one whose file does not parse. Commands print it as it stands, with exit status 1,
+/// as the Python reader does.
 pub fn unreadable_record(failure: &crate::Error) -> bool {
     crate::ordinary_fields::explains_unreadable(failure)
         || failure.0.ends_with(NO_RECORD_HERE)
+        || W::refuses_unavailable(failure)
         || crate::ordinary_yaml_diagnostic::explains_record(failure)
 }
 /// Whether a failure is the ordinary reader's refusal of a record, or of a layer read with
-/// it, that only a core/v1 consumer reads, or whose reasoning declaration it cannot read.
-/// Commands print it as it stands, with exit status 1, as the Python reader does.
+/// it, that only a core/v1 consumer reads, or whose reasoning declaration it cannot read,
+/// or of a record whose location is no readable file. Commands print it as it stands,
+/// with exit status 1, as the Python reader does.
 pub fn core_consumer_refusal(failure: &crate::Error) -> bool {
     failure.0 == crate::source_capture::CORE_CONSUMER
         || crate::ordinary_fields::refuses_declaration(failure)
+        || W::refuses_unavailable(failure)
 }
 /// What a read command prints on stderr when it fails, and its exit status. With
 /// --json the same text travels: wrapped for check, pull and affects, as open's `error`.

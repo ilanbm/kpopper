@@ -7,11 +7,42 @@ use crate::{
 };
 use std::path::{Path, PathBuf};
 
+/// Why a record's location cannot be read: an entry name that is no readable file, a
+/// registered location that is not there, and a configured one that is no file.
+pub const UNREADABLE_ENTRY: &str = "The record path exists but is not an accessible file.";
+pub const UNAVAILABLE_REGISTERED: &str =
+    "The registered record is unavailable. Restore its location before creating another.";
+pub const UNAVAILABLE_CONFIGURED: &str = "The configured record is unavailable.";
+/// The refusal every command prints for a record it cannot reach: the reason, then the
+/// record's absolute path.
+fn unavailable(reason: &str, record: &Path) -> crate::Error {
+    error(&format!("{reason} {}", record.display()))
+}
+/// Whether a failure is the refusal of a record whose location cannot be read.
+pub fn refuses_unavailable(failure: &crate::Error) -> bool {
+    [
+        UNREADABLE_ENTRY,
+        UNAVAILABLE_REGISTERED,
+        UNAVAILABLE_CONFIGURED,
+    ]
+    .iter()
+    .any(|reason| {
+        failure
+            .0
+            .strip_prefix(reason)
+            .is_some_and(|rest| rest.starts_with(' '))
+    })
+}
+
 pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
     if project.config_path.exists() {
-        return Ok(vec![project.record(None)?]);
+        let record = project.record(None)?;
+        if record.exists() && !record.is_file() {
+            return Err(unavailable(UNAVAILABLE_CONFIGURED, &record));
+        }
+        return Ok(vec![record]);
     }
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
@@ -22,10 +53,9 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
         for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
             let path = current.join(name);
             if std::fs::symlink_metadata(&path).is_ok() {
-                crate::require(
-                    path.is_file(),
-                    "The record path exists but is not an accessible file.",
-                )?;
+                if !path.is_file() {
+                    return Err(unavailable(UNREADABLE_ENTRY, &path));
+                }
                 return Ok(vec![path]);
             }
         }
@@ -48,11 +78,9 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
         .common
         .as_ref()
         .is_some_and(|p| p.join("kpopper-record").exists())
+        && !record.is_file()
     {
-        crate::require(
-            record.is_file(),
-            "The registered record is unavailable. Restore its location before creating another.",
-        )?;
+        return Err(unavailable(UNAVAILABLE_REGISTERED, &record));
     }
     Ok(vec![record])
 }
@@ -244,7 +272,7 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
                 "unavailable"
             };
             if status == "unavailable" {
-                reason = "The record path exists but is not an accessible file.".into();
+                reason = UNREADABLE_ENTRY.into();
             }
             record = Some(path);
             break;
@@ -273,7 +301,7 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
                 "unavailable"
             };
             if status == "unavailable" {
-                reason="The registered record is unavailable. Restore its location before creating another.".into();
+                reason = UNAVAILABLE_REGISTERED.into();
             }
             record = Some(path);
         }
@@ -289,7 +317,7 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
             "missing"
         };
         reason = if status == "unavailable" {
-            "The configured record is unavailable.".into()
+            UNAVAILABLE_CONFIGURED.into()
         } else {
             String::new()
         };
