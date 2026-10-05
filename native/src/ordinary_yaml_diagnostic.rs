@@ -664,8 +664,42 @@ pub(crate) fn record_error(path: &Path, raw: &[u8], failure: crate::Error) -> cr
         .display()
         .to_string();
     crate::Error(format!(
-        "{name}{NOT_YAML}{}",
-        diagnostic.render(source, &name)
+        "{name}{NOT_YAML}{}{}",
+        diagnostic.render(source, &name),
+        conflict_recovery(source, &name).unwrap_or_default()
+    ))
+}
+
+/// The way back from a merge that left Git's conflict markers in a record: keep this
+/// branch's side, then fold the other branch in through consolidate. The other branch is
+/// the one its closing marker names, when that is a single name.
+fn conflict_recovery(source: &str, name: &str) -> Option<String> {
+    let lines = source
+        .split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line));
+    let (mut opened, mut divided, mut branch) = (false, false, None);
+    for line in lines {
+        let marker = |sign: &str| {
+            line.strip_prefix(sign)
+                .filter(|rest| rest.is_empty() || rest.starts_with(' '))
+                .map(str::trim)
+        };
+        if marker("<<<<<<<").is_some() {
+            opened = true;
+        } else if line == "=======" {
+            divided = true;
+        } else if let Some(label) = marker(">>>>>>>") {
+            branch.get_or_insert(label);
+        }
+    }
+    let branch = branch.filter(|_| opened && divided)?;
+    let branch = match branch {
+        "" => "<branch>",
+        label if label.contains(char::is_whitespace) => "<branch>",
+        label => label,
+    };
+    Some(format!(
+        "\n{name} holds Git conflict markers. Keep this branch's side, then fold the other branch in:\n  git checkout --ours {name}\n  kpop consolidate --from {branch} --dry-run\n  kpop consolidate --from {branch}"
     ))
 }
 
