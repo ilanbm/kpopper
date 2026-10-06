@@ -131,6 +131,39 @@ pub(crate) fn assess(
         }
         if m["kind"] == "clock" {
             policy_reasons.push("current_native_clock");
+            let effective_due = item["next_at"]
+                .as_str()
+                .or_else(|| m["due_at"].as_str())
+                .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+                .map(|value| value.with_timezone(&Utc));
+            if item["state"] == "needs_user" {
+                unknown = true;
+                policy_reasons.push("clock_check_needs_user");
+            } else if !item["claim"].is_null() {
+                unknown = true;
+                policy_reasons.push("clock_check_running_or_interrupted");
+            } else if effective_due.is_none() {
+                unknown = true;
+                policy_reasons.push("clock_deadline_unestablished");
+            } else if effective_due.is_some_and(|due| due <= now) {
+                unknown = true;
+                policy_reasons.push("clock_check_due_or_unperformed");
+            } else if item["next_at"].is_string() {
+                let rearmed_by_checked_attempt = item["attempts"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|attempt| {
+                        attempt["outcome"] == "checked"
+                            && attempt["request"]["next_at"] == item["next_at"]
+                            && instant(&attempt["finished_at"])
+                                .is_some_and(|finished| finished <= now)
+                    });
+                if !rearmed_by_checked_attempt {
+                    unknown = true;
+                    policy_reasons.push("clock_rearm_not_checked");
+                }
+            }
         } else {
             let reference = m["source_ref"].as_str().unwrap_or("");
             let observation = &observations[reference];
