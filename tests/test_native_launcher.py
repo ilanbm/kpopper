@@ -186,7 +186,6 @@ class NativeShellLaunchers(unittest.TestCase):
         self.assertEqual((grounded.returncode, grounded.stdout), (0, ""))
         self.assertIn("unsupported native platform", grounded.stderr)
 
-
     def use_platform(self, system, machine):
         self.write_executable(self.tools / "uname",
                               '#!/bin/sh\ncase "$1" in -s) echo %s;; -m) echo %s;; esac\n' % (system, machine))
@@ -213,11 +212,13 @@ class NativeShellLaunchers(unittest.TestCase):
         self.assertFalse(self.python_called.exists())
 
     def test_a_windows_package_without_its_runtime_offers_the_powershell_installer(self):
+        # The fake names the directory it is given, so the offer shows which one was converted.
         self.write_executable(self.tools / "cygpath",
-                              '#!/bin/sh\n[ "$1" = -m ] || exit 98\nprintf "C:/Users/me/kpopper plugin\\n"\n')
-        (self.plugin / "VERSION").write_text("0.9.0\n")
-        install = ('Install this active copy: pwsh -NoProfile -File "C:/Users/me/kpopper plugin/install.ps1" '
-                   '-Version "0.9.0" -PluginRoot "C:/Users/me/kpopper plugin"\n')
+                              '#!/bin/sh\n[ $# -eq 2 ] && [ "$1" = -m ] || exit 98\n'
+                              'printf "C:/%s\\n" "$(CDPATH= cd -- "$2" && basename -- "$(pwd)")"\n')
+        (self.plugin / "VERSION").write_text("9.8.7-test\n")
+        install = ('Install this active copy: pwsh -NoProfile -File "C:/plugin with spaces/install.ps1" '
+                   '-Version "9.8.7-test" -PluginRoot "C:/plugin with spaces"\n')
         for system in ("MINGW64_NT-10.0", "MSYS_NT-10.0", "CYGWIN_NT-10.0"):
             with self.subTest(system=system):
                 self.use_platform(system, "x86_64")
