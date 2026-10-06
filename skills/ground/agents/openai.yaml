@@ -1,4 +1,4 @@
 interface:
-  display_name: "kpop ground"
+  display_name: "Ground"
   short_description: "Read the knowledge record before answering from memory"
   default_prompt: "Use $ground to check what the knowledge record says before answering."

@@ -1,4 +1,4 @@
 interface:
-  display_name: "kpop map"
+  display_name: "Map"
   short_description: "Map existing materials into a first knowledge record"
   default_prompt: "Use $map to map this project's existing materials into a knowledge record."

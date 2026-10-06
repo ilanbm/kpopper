@@ -1,4 +1,4 @@
 interface:
-  display_name: "kpop hub"
-  short_description: "Explore the knowledge record in its visual home"
-  default_prompt: "Use $hub to build and open the visual home of this project's knowledge record."
+  display_name: "kpopper Hub"
+  short_description: "Experimental: explore the knowledge record as a visual page"
+  default_prompt: "Use $hub to build this project's kpopper Hub page."
