@@ -56,12 +56,27 @@ fn maintenance_retry_at(now: DateTime<Utc>, timezone: &str, check_time: &str) ->
     let local_date = now.with_timezone(&timezone).date_naive();
     for days in 1..=3 {
         let date = local_date.checked_add_signed(Duration::days(days))?;
-        if let chrono::LocalResult::Single(retry) =
-            timezone.from_local_datetime(&date.and_time(check_time))
-        {
-            let retry = retry.with_timezone(&Utc);
-            if retry > now {
-                return Some(triggers::stamp(retry));
+        let retry = maintenance_local_instant(&timezone, date.and_time(check_time))?;
+        if retry > now {
+            return Some(triggers::stamp(retry));
+        }
+    }
+    None
+}
+
+fn maintenance_local_instant(
+    timezone: &chrono_tz::Tz,
+    local: chrono::NaiveDateTime,
+) -> Option<DateTime<Utc>> {
+    let mut candidate = local;
+    for _ in 0..=86_400 {
+        match timezone.from_local_datetime(&candidate) {
+            chrono::LocalResult::Single(instant) => return Some(instant.with_timezone(&Utc)),
+            chrono::LocalResult::Ambiguous(first, second) => {
+                return Some(first.min(second).with_timezone(&Utc));
+            }
+            chrono::LocalResult::None => {
+                candidate = candidate.checked_add_signed(Duration::seconds(1))?;
             }
         }
     }
@@ -1778,10 +1793,10 @@ impl Store {
             .map(|item| self.row(item, data, &graph, graph_error.as_deref(), now))
             .collect::<Result<Vec<_>>>()?;
         let order = [
-            "ready",
             "interrupted",
             "unknown",
             "needs_user",
+            "ready",
             "claimed",
             "delegated",
             "waiting",
@@ -1824,10 +1839,7 @@ impl Store {
         let omitted = rows.len().saturating_sub(limit);
         let maintenance_omitted = graph.maintenance.len().saturating_sub(1);
         let maintenance_health = crate::followup_daily::maintenance_health(data, now)?;
-        let degraded = graph_error.is_some()
-            || omitted > 0
-            || maintenance_omitted > 0
-            || maintenance_health["degraded"] == true;
+        let degraded = graph_error.is_some() || maintenance_health["degraded"] == true;
         let mut report = json!({
             "workspace":data["config"]["workspace"],"record":data["config"]["record"],"ledger":self.path,
             "counts":counts,"items":rows.into_iter().take(limit).collect::<Vec<_>>(),"omitted":omitted,
@@ -2297,13 +2309,13 @@ impl Store {
                     let days = maintenance["cadence_days"].as_u64().ok_or_else(|| error("Maintenance cadence is unavailable"))?;
                     let timezone = maintenance["timezone"].as_str().unwrap_or("").parse::<chrono_tz::Tz>().map_err(|e| error(format!("invalid maintenance timezone: {e}")))?;
                     let check_time = chrono::NaiveTime::parse_from_str(maintenance["check_time"].as_str().unwrap_or(""), "%H:%M").map_err(|_| error("Maintenance check_time is invalid"))?;
-                    let date = self.now().with_timezone(&timezone).date_naive()
+                    let started_at = triggers::parse_time(claim["started_at"].as_str().unwrap(), "UTC")?;
+                    let date = started_at.with_timezone(&timezone).date_naive()
                         .checked_add_signed(Duration::days(i64::try_from(days).map_err(|_| error("Maintenance cadence is out of range"))?))
                         .ok_or_else(|| error("Maintenance next check date is out of range"))?;
                     let local = date.and_time(check_time);
-                    let expected = timezone.from_local_datetime(&local).single()
-                        .ok_or_else(|| error("Maintenance next check time is ambiguous or nonexistent; select a compatible check_time"))?
-                        .with_timezone(&Utc);
+                    let expected = maintenance_local_instant(&timezone, local)
+                        .ok_or_else(|| error("Maintenance next check time cannot be resolved"))?;
                     require(parsed == expected, "Maintenance next_at must be cadence_days calendar days after this admitted check at check_time")?;
                 }
                 Some(triggers::stamp(parsed))
@@ -2710,6 +2722,27 @@ mod fresh_clock_tests {
         assert_eq!(
             store.observe(report).unwrap()["observed_at"],
             "2026-09-10T12:00:01Z"
+        );
+    }
+}
+
+#[cfg(test)]
+mod maintenance_calendar_tests {
+    use super::maintenance_retry_at;
+    use chrono::{TimeZone, Utc};
+
+    #[test]
+    fn retry_times_resolve_prague_overlap_and_gap_consistently() {
+        let overlap_eve = Utc.with_ymd_and_hms(2026, 10, 24, 21, 55, 0).unwrap();
+        let gap_eve = Utc.with_ymd_and_hms(2026, 3, 28, 22, 55, 0).unwrap();
+
+        assert_eq!(
+            maintenance_retry_at(overlap_eve, "Europe/Prague", "02:30").as_deref(),
+            Some("2026-10-25T00:30:00Z")
+        );
+        assert_eq!(
+            maintenance_retry_at(gap_eve, "Europe/Prague", "02:30").as_deref(),
+            Some("2026-03-29T01:00:00Z")
         );
     }
 }
