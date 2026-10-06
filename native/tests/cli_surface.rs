@@ -116,7 +116,8 @@ fn parse(text: &str) -> Help {
                         .extend(values.split(", ").map(str::to_string));
                 }
             }
-            "Options:" => {
+            // `Options:` and any custom heading such as `Output options:`.
+            _ if section.to_ascii_lowercase().ends_with("options:") => {
                 if let Some(option) = option(line) {
                     parsed.options.insert(option);
                 }
@@ -221,6 +222,11 @@ fn surface_parses_both_help_layouts() {
     assert_eq!(
         parse(long).options.into_iter().collect::<Vec<_>>(),
         ["--help", "--rebuild", "--tokens="]
+    );
+    let headed = "Output options:\n      --format <FORMAT>  How\n";
+    assert_eq!(
+        parse(headed).options.into_iter().collect::<Vec<_>>(),
+        ["--format="]
     );
     let commands = "Commands:\n  pull    Read entries\n  help    Print this message\n\nArguments:\n  <OPERATION>  [possible values: open, view]\n";
     let parsed = parse(commands);

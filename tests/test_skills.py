@@ -383,6 +383,7 @@ def code_segments(text):
         elif match:
             fence = match[1]
         else:
+            # A span that wraps onto the next line is not read.
             for span in re.findall(r"(`+)(.+?)\1(?!`)", line):
                 yield number, span[1]
 
@@ -400,7 +401,7 @@ def invocation_words(code):
         for word in words:
             word = word.strip("[]{}()").rstrip(".,;:!?")
             if word.startswith("--"):
-                word = word.split("=", 1)[0]
+                word = word.split("=", 1)[0] + ("=" if "=" in word else "")
             if word:
                 cleaned.append(word)
         yield match[1], cleaned
@@ -419,14 +420,16 @@ def invocation_errors(program, words, surface):
         word = words[index]
         index += 1
         if word.startswith("--"):
-            if word not in allowed:
-                errors.append("%s has no option %s" % (" ".join(("kpop",) + path), word))
-            elif allowed[word] and index < len(words) and not words[index].startswith("-"):
+            name, attached = word.rstrip("="), word.endswith("=")
+            if name not in allowed:
+                errors.append("%s has no option %s" % (" ".join(("kpop",) + path), name))
+            elif allowed[name] and not attached and index < len(words) and not words[index].startswith("-"):
                 index += 1
         elif word.startswith("-") or positional:
             continue
         elif path + (word,) in surface:
             path += (word,)
+            allowed.pop("--version", None)    # the one root option subcommands do not inherit
             allowed.update(surface[path])
         elif not path:
             if program == "kpopper" or placeholder(word):
@@ -472,13 +475,16 @@ class CommandReferences(unittest.TestCase):
                 "$ kpop session view --view-format json  # a comment with --not-a-flag",
                 "kpop pull [--from <ref>].", "kpop set key value --why=\"a reason\"",
                 "kpop experimental hub --verify", "kpop <command> --help", "kpopper keeps a record",
-                "kpopper _agent guide", "kpop check && git diff --exit-code"]
+                "kpopper _agent guide", "kpop check && git diff --exit-code",
+                "kpop --workspace=DIR pull --from x", "kpop --version"]
         for code in good:
             with self.subTest(code=code):
                 self.assertEqual([e for p, w in invocation_words(code) for e in invocation_errors(p, w, surface)], [])
         bad = {"kpop pull x --bogus": "kpop pull has no option --bogus", "kpop pul x": "kpop has no command pul",
                "kpop --workspace DIR pull --bogus": "kpop pull has no option --bogus",
-               "kpopper pull --bogus": "kpop pull has no option --bogus"}
+               "kpopper pull --bogus": "kpop pull has no option --bogus",
+               "kpop --workspace=DIR bogus": "kpop has no command bogus",
+               "kpop pull --version": "kpop pull has no option --version"}
         for code, error in bad.items():
             with self.subTest(code=code):
                 self.assertEqual([e for p, w in invocation_words(code) for e in invocation_errors(p, w, surface)], [error])
