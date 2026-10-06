@@ -207,6 +207,22 @@ fn private_draft_count(paths: &[PathBuf], cwd: &Path, inventory: &mut Inventory)
     }
     Ok(count)
 }
+/// A live read says how many private drafts this project retains; a frozen read says nothing.
+fn draft_notes(
+    mode: ReadMode,
+    paths: &[PathBuf],
+    cwd: &Path,
+    inventory: &mut Inventory,
+) -> Result<Vec<String>> {
+    if mode != ReadMode::Live {
+        return Ok(vec![]);
+    }
+    let drafts = private_draft_count(paths, cwd, inventory)?;
+    Ok((drafts > 0)
+        .then(|| format!("{drafts} private drafts retained; inspect `kpop knowledge status`"))
+        .into_iter()
+        .collect())
+}
 fn has_brief(paths: &[PathBuf], inventory: &mut Inventory) -> Result<bool> {
     let first = paths.first().ok_or_else(|| error("record_required"))?;
     let layout = crate::history_transaction::Layout::for_entry(
@@ -704,6 +720,7 @@ pub fn run(
     if let Some(reference) = options.from_ref.as_deref() {
         crate::require(command == "pull", "--from is available only with pull")?;
         crate::require(!options.history, "--from cannot be combined with --history")?;
+        let notes = draft_notes(mode, &paths, &cwd, &mut inventory)?;
         let output = branch_read::pull(
             reference,
             &seeds,
@@ -711,6 +728,7 @@ pub fn run(
             &cwd,
             &paths,
             &capture,
+            notes,
             runtime,
         )?;
         capture.verify()?;
@@ -745,14 +763,7 @@ pub fn run(
         )?;
         let mut knowledge = capture.reader_lines()?;
         knowledge.extend(file_notes.iter().cloned());
-        if mode == ReadMode::Live {
-            let drafts = private_draft_count(&paths, &cwd, &mut inventory)?;
-            if drafts > 0 {
-                knowledge.push(format!(
-                    "{drafts} private drafts retained; inspect `kpop knowledge status`"
-                ));
-            }
-        }
+        knowledge.extend(draft_notes(mode, &paths, &cwd, &mut inventory)?);
         let projection = crate::ordinary_views::Projection::new(
             capture.ordinary_document(),
             crate::ordinary_value::map(capture.hypotheses())?,

@@ -112,6 +112,72 @@ fn core_fixture() -> (tempfile::TempDir, PathBuf, String) {
     commit(&root, "current core");
     (temp, root, source)
 }
+fn private_home(root: &Path) -> PathBuf {
+    root.parent().unwrap().join("private")
+}
+/// One record with a branch that proposes a new value, and one project-scope contribution
+/// captured locally beside it.
+fn pending_fixture() -> (tempfile::TempDir, PathBuf) {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    fs::create_dir(&root).unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    let record = |value| {
+        format!(
+            "sources:\n  s.base: {{name: Base}}\nknown:\n  a.one:\n    v: {value}\n    from: s.base\n"
+        )
+    };
+    fs::write(root.join("GROUNDING.yaml"), record(1)).unwrap();
+    commit(&root, "base");
+    git(&root, &["checkout", "-q", "-b", "other"]);
+    fs::write(root.join("GROUNDING.yaml"), record(2)).unwrap();
+    commit(&root, "other");
+    git(&root, &["checkout", "-q", "main"]);
+    import(&root, "project");
+    (temp, root)
+}
+fn import(root: &Path, shareability: &str) {
+    let source = root.parent().unwrap().join("import.yaml");
+    fs::write(
+        &source,
+        "sources:\n  s.vendor: {name: Vendor}\nknown:\n  fact.import:\n    v: 10\n    from: s.vendor\n    scope: {kind: external, environment: vendor}\n",
+    )
+    .unwrap();
+    let output = run(
+        root,
+        &[
+            "knowledge",
+            "import",
+            source.to_str().unwrap(),
+            "--shareability",
+            shareability,
+            "--scope",
+            "external",
+            "--environment",
+            "vendor",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+fn run(root: &Path, args: &[&str]) -> Output {
+    invoke(Path::new(env!("CARGO_BIN_EXE_kpop")), None, root, args)
+}
+fn stdout(root: &Path, args: &[&str]) -> String {
+    let output = run(root, args);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
+}
+const PENDING: &str = "PENDING cf9b97d86bfd · captured locally · external: vendor · fact.import\n";
+const DRAFTS: &str = "1 private drafts retained; inspect `kpop knowledge status`\n";
+const HINT: &str = "\naffects <entry> shows what a change reaches\n";
 fn invoke(program: &Path, oracle: Option<&Path>, root: &Path, args: &[&str]) -> Output {
     let mut command = Command::new(program);
     if let Some(oracle) = oracle {
@@ -123,6 +189,7 @@ fn invoke(program: &Path, oracle: Option<&Path>, root: &Path, args: &[&str]) -> 
         .env("KPOPPER_SESSION_DISABLE", "1")
         .env("KPOPPER_NO_CACHE", "1")
         .env("XDG_STATE_HOME", root.join("state"))
+        .env("KPOPPER_PRIVATE_HOME", private_home(root))
         .output()
         .unwrap()
 }
@@ -131,12 +198,7 @@ fn compare(root: &Path, args: &[&str]) {
         PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle Python"));
     let oracle = PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root"));
     let before = image(root);
-    let actual = invoke(
-        Path::new(env!("CARGO_BIN_EXE_kpop")),
-        None,
-        root,
-        args,
-    );
+    let actual = invoke(Path::new(env!("CARGO_BIN_EXE_kpop")), None, root, args);
     assert_eq!(
         image(root),
         before,
@@ -267,4 +329,73 @@ fn active_history_branch_report_is_exact_for_tag_commit_budget_and_hypotheses() 
             ],
         );
     }
+}
+
+#[test]
+fn branch_pull_leads_with_the_records_pending_lines() {
+    let (_temp, root) = pending_fixture();
+    let before = image(&root);
+    assert!(stdout(&root, &["pull", "a.one"]).starts_with(PENDING));
+    assert_eq!(
+        stdout(&root, &["pull", "--from", "other", "a.one"]),
+        format!("{PENDING}a.one: 1 <- s.base\n    proposes 1 -> 2, from other\n{HINT}")
+    );
+    assert_eq!(image(&root), before);
+}
+
+#[test]
+fn branch_pull_counts_the_pending_lines_toward_the_budget() {
+    let (_temp, root) = pending_fixture();
+    // The pending line takes one of the budget's lines in both reads, so the same record
+    // lines survive the cut.
+    assert_eq!(
+        stdout(&root, &["pull", "a.one", "--budget", "2"]),
+        format!("{PENDING}a.one: 1 <- s.base\n{HINT}")
+    );
+    assert_eq!(
+        stdout(
+            &root,
+            &["pull", "--from", "other", "a.one", "--budget", "2"]
+        ),
+        format!("{PENDING}a.one: 1 <- s.base\n... 1 more lines - raise the budget\n{HINT}")
+    );
+    assert_eq!(
+        stdout(&root, &["pull", "a.one", "--budget", "1"]),
+        format!("{PENDING}... 1 more lines - raise the budget\n{HINT}")
+    );
+    assert_eq!(
+        stdout(
+            &root,
+            &["pull", "--from", "other", "a.one", "--budget", "1"]
+        ),
+        format!("{PENDING}... 2 more lines - raise the budget\n{HINT}")
+    );
+}
+
+#[test]
+fn branch_pull_names_private_drafts_only_in_a_live_read() {
+    let (_temp, root) = pending_fixture();
+    import(&root, "private");
+    let proposal = "a.one: 1 <- s.base\n    proposes 1 -> 2, from other\n";
+    assert!(stdout(&root, &["pull", "a.one"]).starts_with(&format!("{PENDING}{DRAFTS}")));
+    assert_eq!(
+        stdout(&root, &["pull", "--from", "other", "a.one"]),
+        format!("{PENDING}{DRAFTS}{proposal}{HINT}")
+    );
+    let frozen = stdout(&root, &["--frozen", "pull", "--from", "other", "a.one"]);
+    assert!(!frozen.contains("private drafts"), "{frozen}");
+    assert!(!stdout(&root, &["--frozen", "pull", "a.one"]).contains("private drafts"));
+}
+
+#[test]
+#[ignore = "requires immutable Python 1.8 oracle"]
+fn branch_pull_pending_lines_and_budget_cut_are_exact() {
+    let (_temp, root) = pending_fixture();
+    compare(&root, &["pull", "--from", "other", "a.one"]);
+    compare(
+        &root,
+        &["pull", "--from", "other", "a.one", "--budget", "2"],
+    );
+    import(&root, "private");
+    compare(&root, &["pull", "--from", "other", "a.one"]);
 }

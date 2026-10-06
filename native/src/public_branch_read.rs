@@ -444,6 +444,7 @@ fn ordinary_pull(
     oid: &str,
     day: &str,
     current: &OrdinaryCapture,
+    notes: Vec<String>,
     runtime: Option<&Runtime>,
 ) -> Result<C::Output> {
     let PullQuery {
@@ -509,12 +510,17 @@ fn ordinary_pull(
             );
         }
     }
-    let conflicts = OMap::new();
+    // The record's own knowledge lines lead, as in a plain pull, and count toward the budget.
+    let context = OV::from_typed(&current.ordinary_context());
+    let conflicts =
+        crate::ordinary_value::map(&crate::ordinary_value::map(&context)?["conflicts"])?;
+    let mut knowledge = current.reader_lines()?;
+    knowledge.extend(notes);
     let projection = crate::ordinary_views::Projection::new(
         current.ordinary_document(),
         &hypotheses,
-        &conflicts,
-        vec![],
+        conflicts,
+        knowledge,
         runtime,
     )?;
     Ok(C::Output {
@@ -530,6 +536,7 @@ pub(super) fn pull(
     cwd: &Path,
     paths: &[PathBuf],
     current: &OrdinaryCapture,
+    notes: Vec<String>,
     runtime: Option<&Runtime>,
 ) -> Result<C::Output> {
     require((1..=1000).contains(&budget), "invalid_pull_budget")?;
@@ -585,6 +592,7 @@ pub(super) fn pull(
             &oid,
             &day,
             current,
+            notes,
             runtime,
         )
     }
