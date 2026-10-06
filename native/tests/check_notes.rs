@@ -119,6 +119,11 @@ fn a_formatter_that_can_rewrite_the_record_is_noted_once() {
     let record = RECORD.replace(", also: [x.two, x.two]", "");
     let quiet = check(&record, None);
     let noted = check_in(&record, None, &[(".prettierrc", "{}")]);
+    let reincluded = [
+        (".prettierrc", "{}"),
+        (".prettierignore", "*.yaml\n!GROUNDING.yaml\n"),
+    ];
+    assert_eq!(check_in(&record, None, &reincluded), noted);
     assert_eq!(noted.matches("NOTE").count(), 1);
     assert_eq!(
         noted,

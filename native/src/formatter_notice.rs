@@ -3,9 +3,10 @@
 //! when the workspace configures one and its ignore file leaves the record exposed.
 use std::path::{Path, PathBuf};
 
-/// The note `check` prints for the record at `record`, if any: the record's
-/// directory and the Git top level above it are searched for a formatter
-/// configuration, and `.prettierignore` in either is searched for the record.
+/// The note `check` prints for the record at `record`, if any. The record's
+/// directory and the Git top level above it are each a place a formatter may run
+/// from; each one that configures a formatter must exclude the record through
+/// its own `.prettierignore`, since a formatter run there reads no other.
 pub(crate) fn notice(record: &Path) -> Option<String> {
     let name = record.file_name()?.to_str()?;
     let directory = record
@@ -18,10 +19,11 @@ pub(crate) fn notice(record: &Path) -> Option<String> {
     {
         roots.push(top);
     }
-    let found = roots.iter().find_map(|root| formatter(root))?;
-    if roots.iter().any(|root| ignored(root, record, name)) {
-        return None;
-    }
+    let found = roots
+        .iter()
+        .filter_map(|root| Some((root, formatter(root)?)))
+        .find(|(root, _)| !ignored(root, record))?
+        .1;
     Some(format!(
         "formatter: {found} is present and .prettierignore does not list {name} - a pre-commit formatter may rewrite the record; add {name} and .kpopper/ to .prettierignore"
     ))
@@ -59,35 +61,85 @@ fn package_key(root: &Path) -> Option<String> {
         .map(|key| format!("the {key} key in package.json"))
 }
 
-/// Whether `.prettierignore` in `root` lists the record, by its file name or by
-/// its path from `root`. Negated and commented lines list nothing.
-fn ignored(root: &Path, record: &Path, name: &str) -> bool {
+/// Whether `.prettierignore` in `root` excludes the record, read with gitignore
+/// rules: the last matching line decides, `!` re-includes, and nothing under an
+/// excluded directory can be re-included.
+fn ignored(root: &Path, record: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(root.join(".prettierignore")) else {
         return false;
     };
-    let relative = record
+    let Some(relative) = record
         .strip_prefix(root)
         .ok()
         .and_then(Path::to_str)
-        .map(|path| path.replace('\\', "/"));
-    text.lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#') && !line.starts_with('!'))
-        .any(|line| {
-            let anchored = line.starts_with('/');
-            let pattern = line.trim_start_matches('/');
-            let pattern = pattern.strip_prefix("**/").unwrap_or(pattern);
-            if let Some(folder) = pattern.strip_suffix('/') {
-                return relative.as_deref().is_some_and(|path| {
-                    path.split('/')
-                        .rev()
-                        .skip(1)
-                        .any(|segment| glob(folder, segment))
-                });
-            }
-            (!anchored || relative.as_deref() == Some(name)) && glob(pattern, name)
-                || relative.as_deref().is_some_and(|path| glob(pattern, path))
-        })
+        .map(|path| path.replace('\\', "/"))
+    else {
+        return false;
+    };
+    let rules = text.lines().filter_map(rule).collect::<Vec<_>>();
+    let excluded = |path: &[&str], directory: bool| {
+        rules
+            .iter()
+            .rev()
+            .find(|rule| rule.matches(path, directory))
+            .is_some_and(|rule| !rule.negated)
+    };
+    let segments = relative.split('/').collect::<Vec<_>>();
+    (1..segments.len()).any(|end| excluded(&segments[..end], true)) || excluded(&segments, false)
+}
+
+struct Rule<'a> {
+    negated: bool,
+    directory_only: bool,
+    anchored: bool,
+    segments: Vec<&'a str>,
+}
+
+fn rule(line: &str) -> Option<Rule<'_>> {
+    let line = line.trim_end();
+    if line.is_empty() || line.starts_with('#') {
+        return None;
+    }
+    let (negated, line) = match line.strip_prefix('!') {
+        Some(rest) => (true, rest),
+        None => (false, line.strip_prefix('\\').unwrap_or(line)),
+    };
+    let (directory_only, line) = match line.strip_suffix('/') {
+        Some(rest) => (true, rest),
+        None => (false, line),
+    };
+    let anchored = line.contains('/');
+    let segments = line.trim_start_matches('/').split('/').collect::<Vec<_>>();
+    (!segments.iter().all(|s| s.is_empty())).then_some(Rule {
+        negated,
+        directory_only,
+        anchored,
+        segments,
+    })
+}
+
+impl Rule<'_> {
+    fn matches(&self, path: &[&str], directory: bool) -> bool {
+        if self.directory_only && !directory {
+            return false;
+        }
+        if self.anchored {
+            segments(&self.segments, path)
+        } else {
+            path.last().is_some_and(|last| glob(self.segments[0], last))
+        }
+    }
+}
+
+/// Pattern segments against path segments; `**` stands for any number of segments.
+fn segments(pattern: &[&str], path: &[&str]) -> bool {
+    match pattern.split_first() {
+        None => path.is_empty(),
+        Some((&"**", rest)) => (0..=path.len()).any(|skip| segments(rest, &path[skip..])),
+        Some((first, rest)) => path
+            .split_first()
+            .is_some_and(|(segment, tail)| glob(first, segment) && segments(rest, tail)),
+    }
 }
 
 /// `*` and `?` within one path segment; everything else is literal.
@@ -95,16 +147,14 @@ fn glob(pattern: &str, text: &str) -> bool {
     let (p, t) = (pattern.as_bytes(), text.as_bytes());
     let (mut i, mut j, mut star, mut mark) = (0, 0, None, 0);
     while j < t.len() {
-        if i < p.len() && (p[i] == b'?' && t[j] != b'/' || p[i] == t[j]) {
+        if i < p.len() && (p[i] == b'?' || p[i] == t[j]) {
             i += 1;
             j += 1;
         } else if i < p.len() && p[i] == b'*' {
             star = Some(i);
             mark = j;
             i += 1;
-        } else if let Some(s) = star
-            && t[mark] != b'/'
-        {
+        } else if let Some(s) = star {
             i = s + 1;
             mark += 1;
             j = mark;
@@ -165,10 +215,17 @@ mod tests {
         );
         for listed in [
             "docs/PROVENANCE.yaml",
+            "/docs/PROVENANCE.yaml",
             "**/PROVENANCE.yaml",
+            "PROVENANCE.yaml",
             "*.yaml",
             "docs/*",
             "docs/",
+            "/docs/",
+            "docs",
+            "docs/**",
+            "**/docs/**/*.yaml",
+            "\\!x\nPROVENANCE.yaml",
         ] {
             fs::write(root.path().join(".prettierignore"), format!("{listed}\n")).unwrap();
             assert_eq!(notice(&record), None, "{listed}");
@@ -178,6 +235,7 @@ mod tests {
             "!PROVENANCE.yaml",
             "# PROVENANCE.yaml",
             "*.yml",
+            "docs/PROVENANCE.yaml/",
         ] {
             fs::write(root.path().join(".prettierignore"), format!("{unlisted}\n")).unwrap();
             assert!(notice(&record).is_some(), "{unlisted}");
@@ -185,11 +243,68 @@ mod tests {
     }
 
     #[test]
+    fn a_later_negation_re_includes_the_record_unless_its_directory_is_excluded() {
+        let root = workspace(&[(".git/HEAD", ""), (".prettierrc", "{}")]);
+        let record = root.path().join("GROUNDING.yaml");
+        let nested = root.path().join("docs/GROUNDING.yaml");
+        let ignore = |text: &str| fs::write(root.path().join(".prettierignore"), text).unwrap();
+        ignore("*.yaml\n!GROUNDING.yaml\n");
+        assert!(notice(&record).is_some());
+        assert!(notice(&nested).is_some());
+        ignore("!GROUNDING.yaml\n*.yaml\n");
+        assert_eq!(notice(&record), None);
+        ignore("docs/\n!docs/GROUNDING.yaml\n");
+        assert_eq!(notice(&nested), None);
+    }
+
+    #[test]
+    fn an_anchored_directory_excludes_only_its_own_path() {
+        let root = workspace(&[(".git/HEAD", ""), (".prettierrc", "{}")]);
+        fs::write(root.path().join(".prettierignore"), "/docs/\n").unwrap();
+        assert_eq!(notice(&root.path().join("docs/GROUNDING.yaml")), None);
+        assert!(notice(&root.path().join("other/docs/GROUNDING.yaml")).is_some());
+        fs::write(root.path().join(".prettierignore"), "docs/\n").unwrap();
+        assert_eq!(notice(&root.path().join("other/docs/GROUNDING.yaml")), None);
+    }
+
+    #[test]
+    fn each_formatter_root_needs_its_own_ignore_file() {
+        let root = workspace(&[
+            (".git/HEAD", ""),
+            (
+                "package.json",
+                r#"{"lint-staged": {"*": "prettier --write"}}"#,
+            ),
+            ("notes/.prettierignore", "GROUNDING.yaml\n"),
+        ]);
+        let record = root.path().join("notes/GROUNDING.yaml");
+        assert!(
+            notice(&record)
+                .unwrap()
+                .starts_with("formatter: the lint-staged key in package.json is present")
+        );
+        fs::write(
+            root.path().join(".prettierignore"),
+            "notes/GROUNDING.yaml\n",
+        )
+        .unwrap();
+        assert_eq!(notice(&record), None);
+        fs::write(root.path().join("notes/.prettierrc"), "{}").unwrap();
+        fs::remove_file(root.path().join("notes/.prettierignore")).unwrap();
+        assert!(
+            notice(&record)
+                .unwrap()
+                .starts_with("formatter: .prettierrc is present")
+        );
+    }
+
+    #[test]
     fn glob_stays_within_a_segment() {
         assert!(glob("*.yaml", "GROUNDING.yaml"));
         assert!(glob("GROUNDING.y?ml", "GROUNDING.yaml"));
-        assert!(!glob("*.yaml", "docs/GROUNDING.yaml"));
-        assert!(glob("docs/*.yaml", "docs/GROUNDING.yaml"));
         assert!(!glob("GROUNDING.yaml", "GROUNDING.yaml.bak"));
+        assert!(segments(&["docs", "*.yaml"], &["docs", "GROUNDING.yaml"]));
+        assert!(!segments(&["*.yaml"], &["docs", "GROUNDING.yaml"]));
+        assert!(segments(&["**", "*.yaml"], &["a", "b", "GROUNDING.yaml"]));
     }
 }
