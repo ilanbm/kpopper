@@ -7,7 +7,7 @@ use crate::{
     followup_triggers::{parse_time, stamp},
     require,
 };
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeSet, fs, path::Path};
 use uuid::Uuid;
@@ -148,11 +148,228 @@ pub fn status(store: &Store) -> Result<Value> {
     } else {
         "running"
     };
+    let adoption = adoption_status(&data, store.now())?;
+    let maintenance_health = maintenance_health(&data, store.now())?;
     Ok(
         json!({"state":state,"binding":binding,"run":run,"claim":claim,
         "last_review":daily["receipts"].as_array().and_then(|rows|rows.last()).cloned(),
-        "timezone":data["config"]["timezone"]}),
+        "timezone":data["config"]["timezone"],"adoption":adoption,"maintenance_health":maintenance_health}),
     )
+}
+
+fn adoption_status(data: &Value, now: DateTime<Utc>) -> Result<Value> {
+    let daily = &data["daily"];
+    let saved = daily.get("adoption").filter(|value| value.is_object());
+    let saved_state = saved
+        .and_then(|value| value["state"].as_str())
+        .unwrap_or("proposed");
+    let choice = match saved_state {
+        "shown" | "declined" | "authorized_uninstalled" => saved_state,
+        "snoozed" => {
+            let until = saved
+                .and_then(|value| value["until"].as_str())
+                .ok_or_else(|| error("Invalid followup adoption snooze"))?;
+            if parse_time(until, "UTC")? > now {
+                "snoozed"
+            } else {
+                "proposed"
+            }
+        }
+        _ => "proposed",
+    };
+    let authorized = saved.is_some_and(|value| value["authorized"] == true);
+    let binding = &daily["binding"];
+    let configuration = if binding.is_null() {
+        if authorized { "uninstalled" } else { "unconfigured" }.to_owned()
+    } else {
+        match binding["state"].as_str() {
+            Some("paused") => "paused".into(),
+            Some("missing") => "missing".into(),
+            Some("active") => {
+                let observed = parse_time(binding["observed_at"].as_str().unwrap_or(""), "UTC")?;
+                let fresh = now.signed_duration_since(observed) < Duration::hours(24);
+                let run_observed = daily["receipts"].as_array().is_some_and(|receipts| {
+                    receipts.iter().any(|receipt| {
+                        receipt["outcome"] == "complete"
+                            && receipt["finished_at"].as_str().is_some_and(|finished| {
+                                parse_time(finished, "UTC").is_ok_and(|finished| finished >= observed)
+                            })
+                    })
+                });
+                if fresh && run_observed {
+                    "active_observed".to_owned()
+                } else {
+                    "configuration_unverified".to_owned()
+                }
+            }
+            _ => "configuration_unverified".into(),
+        }
+    };
+    let state = match choice {
+        "declined" | "snoozed" | "shown" => choice.to_owned(),
+        "authorized_uninstalled" if authorized => match configuration.as_str() {
+            "active_observed" | "configuration_unverified" => configuration.clone(),
+            _ => "authorized_uninstalled".into(),
+        },
+        _ => "proposed".into(),
+    };
+    Ok(json!({
+        "state":state,
+        "choice":choice,
+        "configuration":configuration,
+        "authorized":authorized,
+        "acknowledged":saved.is_some_and(|value| value.get("shown_at").is_some()) || saved_state == "shown",
+        "authorization_evidence":saved.and_then(|value| value["authorization_evidence"].as_str()),
+        "binding":binding,
+    }))
+}
+
+pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Result<Value> {
+    require(
+        ["shown", "declined", "snoozed", "authorized"].contains(&action),
+        "Adoption action must be shown, declined, snoozed or authorized",
+    )?;
+    store.transaction(|data| {
+        let mut adoption = data["daily"].get("adoption")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        adoption.insert("updated_at".into(), json!(stamp(store.now())));
+        match action {
+            "shown" => {
+                adoption.insert("shown_at".into(), json!(stamp(store.now())));
+                if adoption.get("authorized") != Some(&json!(true))
+                    && !matches!(adoption.get("state").and_then(Value::as_str), Some("declined" | "snoozed"))
+                {
+                    adoption.insert("state".into(), json!("shown"));
+                }
+            }
+            "declined" => {
+                adoption.insert("state".into(), json!("declined"));
+                adoption.insert("declined_at".into(), json!(stamp(store.now())));
+            }
+            "snoozed" => {
+                let supplied = json!(value.unwrap_or_default());
+                let until = text(Some(&supplied), "snooze until")?;
+                let parsed = parse_time(&until, "UTC")?;
+                require(parsed > store.now(), "Snooze time must be in the future")?;
+                adoption.insert("state".into(), json!("snoozed"));
+                adoption.insert("until".into(), json!(stamp(parsed)));
+                adoption.insert("snoozed_at".into(), json!(stamp(store.now())));
+            }
+            "authorized" => {
+                let supplied = json!(value.unwrap_or_default());
+                let evidence = text(Some(&supplied), "authorization evidence")?;
+                adoption.insert("state".into(), json!("authorized_uninstalled"));
+                adoption.insert("authorized".into(), json!(true));
+                adoption.insert("authorization_evidence".into(), json!(evidence));
+                adoption.insert("authorized_at".into(), json!(stamp(store.now())));
+            }
+            _ => unreachable!(),
+        }
+        let adoption = Value::Object(adoption);
+        data["daily"]["adoption"] = adoption.clone();
+        Ok(adoption)
+    })?;
+    let data = store.load(true)?.unwrap();
+    adoption_status(&data, store.now())
+}
+
+pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Value> {
+    let daily = &data["daily"];
+    let binding = &daily["binding"];
+    let host_state = if binding.is_null() {
+        "missing".to_owned()
+    } else {
+        match binding["state"].as_str() {
+            Some("paused") => "paused".into(),
+            Some("missing") => "missing".into(),
+            Some("active") => {
+                let observed = parse_time(binding["observed_at"].as_str().unwrap_or(""), "UTC")?;
+                let fresh = now.signed_duration_since(observed) < Duration::hours(24);
+                let run_observed = daily["receipts"].as_array().is_some_and(|receipts| {
+                    receipts.iter().any(|receipt| {
+                        receipt["outcome"] == "complete"
+                            && receipt["finished_at"].as_str().is_some_and(|finished| {
+                                parse_time(finished, "UTC").is_ok_and(|finished| finished >= observed)
+                            })
+                    })
+                });
+                if fresh && run_observed { "active_observed" } else { "configuration_unverified" }.into()
+            }
+            _ => "configuration_unverified".into(),
+        }
+    };
+    let mut obligations = Vec::new();
+    for item in data["items"].as_object().into_iter().flat_map(|items| items.values()) {
+        let maintenance = &item["spec"]["maintenance"];
+        if !maintenance.is_object() {
+            continue;
+        }
+        let due_at = item["next_at"].as_str().unwrap_or_else(|| maintenance["due_at"].as_str().unwrap_or(""));
+        let due = parse_time(due_at, "UTC")?;
+        let check_state = if item["state"] == "done" || item["state"] == "cancelled" {
+            "closed"
+        } else if item["state"] == "needs_user" {
+            "needs_user"
+        } else if !item["claim"].is_null() {
+            if parse_time(item["claim"]["expires_at"].as_str().unwrap_or(""), "UTC")? > now {
+                "running"
+            } else {
+                "interrupted"
+            }
+        } else if due < now {
+            "overdue"
+        } else if due == now {
+            "due"
+        } else {
+            "scheduled"
+        };
+        let observation = maintenance["source_ref"]
+            .as_str()
+            .and_then(|reference| data["observations"].get(reference));
+        let source_state = if maintenance["kind"] == "clock" {
+            "not_applicable"
+        } else if let Some(observation) = observation {
+            let observed = parse_time(observation["observed_at"].as_str().unwrap_or(""), "UTC")?;
+            let max_age = maintenance["max_age_hours"].as_f64().unwrap_or(0.0);
+            let age = now.signed_duration_since(observed);
+            let age_seconds = age.num_seconds() as f64 + f64::from(age.subsec_nanos()) / 1_000_000_000.0;
+            if max_age <= 0.0 || age_seconds >= max_age * 3_600.0 {
+                "stale"
+            } else {
+                "fresh"
+            }
+        } else {
+            "missing"
+        };
+        let last_attempt = item["attempts"].as_array().into_iter().flatten().rev().find(|attempt| attempt["type"] == "maintenance_inspection");
+        let attempt_state = last_attempt.map(|attempt| attempt["outcome"].as_str().unwrap_or("unknown")).unwrap_or("none");
+        let failure = last_attempt
+            .filter(|attempt| attempt["outcome"] == "unavailable")
+            .map(|attempt| attempt["reason"].as_str().unwrap_or("Source check unavailable"));
+        obligations.push(json!({
+            "id":item["id"],"kind":maintenance["kind"],"check_state":check_state,
+            "source_state":source_state,"host_state":host_state,"attempt_state":attempt_state,
+            "failure_state":if attempt_state == "unavailable" {"failed"} else {"none"},
+            "due_at":due_at,"observed_at":observation.and_then(|value| value["observed_at"].as_str()),
+            "failure":failure
+        }));
+    }
+    let degraded = obligations.iter().any(|item| {
+        ["due", "overdue", "needs_user", "interrupted", "closed"].contains(&item["check_state"].as_str().unwrap_or(""))
+            || ["missing", "stale"].contains(&item["source_state"].as_str().unwrap_or(""))
+            || item["attempt_state"] == "unavailable"
+            || ["paused", "missing", "configuration_unverified"].contains(&item["host_state"].as_str().unwrap_or(""))
+    });
+    let meaningful = obligations.iter().map(|obligation| json!({
+        "id":obligation["id"],"kind":obligation["kind"],"check_state":obligation["check_state"],
+        "source_state":obligation["source_state"],"host_state":obligation["host_state"],
+        "attempt_state":obligation["attempt_state"],"failure_state":obligation["failure_state"],
+        "due_at":obligation["due_at"]
+    })).collect::<Vec<_>>();
+    let fingerprint = digest(&json!({"obligations":meaningful}))?;
+    Ok(json!({"obligations":obligations,"degraded":degraded,"fingerprint":fingerprint}))
 }
 
 fn attention_key(packet: &Value) -> Result<String> {
@@ -167,7 +384,7 @@ fn attention_key(packet: &Value) -> Result<String> {
         })
         .collect::<Vec<_>>();
     digest(
-        &json!({"counts":packet["counts"],"graph_error":packet["graph_error"],"maintenance":packet["maintenance"],"items":items}),
+        &json!({"counts":packet["counts"],"graph_error":packet["graph_error"],"maintenance":packet["maintenance"],"maintenance_health_fingerprint":packet["maintenance_health"]["fingerprint"],"items":items}),
     )
 }
 

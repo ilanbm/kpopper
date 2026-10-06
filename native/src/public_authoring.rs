@@ -326,6 +326,23 @@ fn entry_is_legacy_or_pending(route: &WriteRoute) -> Result<bool> {
         && crate::legacy_authoring::authority_route(&route.paths()[0])? == crate::legacy_authoring::AuthorityRoute::Legacy))
 }
 pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
+    let mut output = run_inner(kind, options, cwd)?;
+    if let Some(notice) = crate::onboarding::continuity_notice(
+        cwd,
+        crate::onboarding::guidance().unwrap_or(false),
+    ) {
+        if !output.ends_with('\n') {
+            output.push('\n');
+        }
+        output.push_str(&notice);
+        if !output.ends_with('\n') {
+            output.push('\n');
+        }
+    }
+    Ok(output)
+}
+
+fn run_inner(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     let cwd = cwd.canonicalize()?;
     require(options.actor.as_ref().is_none_or(|a| !a.trim().is_empty() && a.len() <= 200), "--by must be non-empty recorded actor text, at most 200 bytes")?;
     let (action, files, source_body) = action(kind, options)?;

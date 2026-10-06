@@ -93,6 +93,58 @@ pub fn guidance() -> Result<bool> {
         .and_then(Value::as_bool)
         .ok_or_else(|| Error("Invalid first-use guidance preference".into()))
 }
+
+fn continuity_notice_from_report(report: &Value, include_advisories: bool) -> Option<String> {
+    let mut lines = Vec::new();
+    if report["maintenance_health"]["degraded"] == true {
+        lines.push(format!(
+            "Maintenance continuity health (local detection only; no source or network access): {}",
+            serde_json::to_string(&report["maintenance_health"]).ok()?
+        ));
+    }
+    if include_advisories {
+        for row in report["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|row| row["maintenance_advisory"].is_object())
+        {
+            lines.push(format!(
+                "Recurring task {} has a sourced maintenance discovery suggestion: {}. This is advisory only. Ask for the missing choices, compile a declaration proposal, and show its unresolved fields; never turn task prose into an executable policy or permission, and do not add or schedule it without explicit authorization.",
+                row["id"], serde_json::to_string(&row["maintenance_advisory"]).ok()?
+            ));
+        }
+    }
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
+pub fn continuity_notice(workspace: &Path, include_advisories: bool) -> Option<String> {
+    let unavailable = |reason: String| {
+        format!(
+            "Maintenance continuity health is unavailable from local state: {}. Do not report checks as healthy or fresh.",
+            reason.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(300).collect::<String>()
+        )
+    };
+    let store = match crate::followup_store::Store::open(workspace) {
+        Ok(store) => store,
+        Err(reason) => return Some(unavailable(reason.to_string())),
+    };
+    match store.load(false) {
+        Ok(None) => None,
+        Err(reason) => Some(unavailable(reason.to_string())),
+        Ok(Some(_)) => match store.scan(20) {
+            Ok(report) => {
+                let show_advisories = include_advisories
+                    && crate::followup_daily::status(&store).is_ok_and(|status| {
+                        !matches!(status["adoption"]["choice"].as_str(), Some("declined" | "snoozed"))
+                    });
+                continuity_notice_from_report(&report, show_advisories)
+            }
+            Err(reason) => Some(unavailable(reason.to_string())),
+        },
+    }
+}
+
 pub fn status(workspace: &Path, record: &Path, record_found: bool) -> Result<Value> {
     let dir = project_dir(workspace)?;
     let map = read(&dir.join("mapping.json"))?
@@ -192,6 +244,13 @@ pub fn mark(workspace: &Path, event: &str) -> Result<Value> {
             &json!({"shown":true}),
         )?;
     }
+    if event == "followups" {
+        if let Ok(store) = crate::followup_store::Store::open(workspace) {
+            if store.load(false)?.is_some() {
+                crate::followup_daily::record_adoption(&store, "shown", None)?;
+            }
+        }
+    }
     status(
         workspace,
         &workspace.join("GROUNDING.yaml"),
@@ -226,6 +285,13 @@ pub fn mark_key(
             &json!({"shown":true}),
         )?;
     }
+    if event == "followups" {
+        if let Ok(store) = crate::followup_store::Store::open(workspace) {
+            if store.load(false)?.is_some() {
+                crate::followup_daily::record_adoption(&store, "shown", None)?;
+            }
+        }
+    }
     status_at(workspace, key, record, status_value, "")
 }
 
@@ -253,13 +319,45 @@ pub fn context_with_mode(
     )?;
     let string = |key: &str| current[key].as_str().unwrap_or("");
     if string("status") == "unavailable" {
-        return Ok(format!(
+        let mut context = format!(
             "KPOPPER_START: record unavailable. {}\n{{\"record\": {}}}\nThis is not a first-use signal. Do not create a replacement or start onboarding.",
             string("reason"),
             serde_json::to_string(&current["record"])?
-        ));
+        );
+        if let Some(notice) = continuity_notice(&location.workspace, guidance().unwrap_or(false)) {
+            context.push('\n');
+            context.push_str(&notice);
+        }
+        return Ok(context);
     }
     let mut lines = Vec::new();
+    let followups = crate::followup_store::Store::open(&location.workspace)
+        .and_then(|store| {
+            let data = store.load(false)?;
+            let Some(data) = data else {
+                return Ok(None);
+            };
+            let report = store.scan(20)?;
+            Ok(Some((data, report)))
+        });
+    match &followups {
+        Ok(Some((_, report))) => {
+            let show_advisories = current["guidance"] == true
+                && crate::followup_store::Store::open(&location.workspace)
+                    .and_then(|store| crate::followup_daily::status(&store))
+                    .is_ok_and(|status| {
+                        !matches!(status["adoption"]["choice"].as_str(), Some("declined" | "snoozed"))
+                    });
+            if let Some(notice) = continuity_notice_from_report(report, show_advisories) {
+                lines.push(notice);
+            }
+        }
+        Ok(None) => {}
+        Err(reason) => lines.push(format!(
+            "Maintenance continuity health is unavailable from local state: {}. Do not report checks as healthy or fresh.",
+            reason.to_string().split_whitespace().collect::<Vec<_>>().join(" ").chars().take(300).collect::<String>()
+        )),
+    }
     let board = crate::public_board::status(&location.workspace)?;
     if read_mode == crate::source_capture::ReadMode::Live
         && let Some(offer) = crate::public_board::opening(&board)? {
@@ -305,19 +403,23 @@ pub fn context_with_mode(
         }
     }
     if current["guidance"] == true && current["followups_offered"] == false {
-        let deferred = crate::followup_store::Store::open(&location.workspace)
-            .and_then(|store| store.load(false))
-            .ok()
-            .flatten();
-        if deferred.is_some_and(|value| {
-            (value["daily"]["binding"].is_null() || value["daily"]["binding"]["state"] == "missing")
-                && value["items"].as_object().is_some_and(|items| {
-                    items
-                        .values()
-                        .any(|item| !matches!(item["state"].as_str(), Some("done" | "cancelled")))
-                })
-        }) {
-            lines.push("When deferred work first arises, strongly recommend a short daily review, alongside event checks. Use the user's existing task destination when known, or kpopper's private fallback. Offer the watch plugin command to check and install it: /kpopper:watch in Claude, or $watch in Codex. The command inspects existing schedules before creating one. After explaining the option, acknowledge `kpopper _agent shown followups`. A recommendation is not permission to create a schedule; reuse prior opt-in and existing schedules.".into());
+        let eligible = if let Ok(Some((data, report))) = &followups {
+            let adoption = crate::followup_daily::status(
+                &crate::followup_store::Store::open(&location.workspace)?,
+            )?["adoption"].clone();
+            !matches!(adoption["choice"].as_str(), Some("declined" | "snoozed"))
+                && (report["items"].as_array().is_some_and(|rows| rows.iter().any(|row| {
+                    row["maintenance_advisory"].is_object()
+                        || (row["next_at"].is_string() && !matches!(row["state"].as_str(), Some("done" | "cancelled")))
+                })) || data["items"].as_object().is_some_and(|items| items.values().any(|item| {
+                    !matches!(item["state"].as_str(), Some("done" | "cancelled"))
+                        && item["next_at"].is_string()
+                })))
+        } else {
+            false
+        };
+        if eligible {
+            lines.push("For explicitly recurring deferred work, recommend a short daily review alongside event checks. Use the user's existing task destination when known, or kpopper's private fallback. The watch command inspects existing schedules before any separate installation request. Acknowledging `kpopper _agent shown followups` records only that the offer was shown, not consent. Use `kpop followups daily adoption authorized --evidence USER_AUTHORIZATION_REFERENCE` only after explicit user authorization; this records permission but does not install a host job. Decline with `kpop followups daily adoption declined` or snooze with `kpop followups daily adoption snoozed --until RFC3339`; either suppresses repeated promotional offers. Health checks remain visible either way.".into());
         }
     }
     if lines.is_empty() {

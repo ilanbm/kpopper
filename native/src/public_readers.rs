@@ -513,6 +513,7 @@ fn opening_fields(
     paths: &[PathBuf],
     seeds: &[String],
     inventory: &mut Inventory,
+    include_advisories: bool,
 ) -> Result<J> {
     crate::require(
         seeds.is_empty(),
@@ -533,6 +534,11 @@ fn opening_fields(
         Err(e) => data["warning"] = json!(e.0),
         _ => {}
     }
+    if let Some(notice) =
+        crate::onboarding::continuity_notice(&location.workspace, include_advisories)
+    {
+        data["continuity"] = json!(notice);
+    }
     Ok(data)
 }
 /// `open` on an ordinary record, around the view the reader produced.
@@ -550,6 +556,9 @@ fn opened(
         });
     }
     let mut text = view.clone();
+    if let Some(notice) = data["continuity"].as_str() {
+        text.push_str(&format!("\n{notice}"));
+    }
     match crate::session_admin::followup_summary(workspace) {
         Ok(Some(summary)) => {
             text.push_str(&format!("\n{summary}"));
@@ -607,7 +616,14 @@ fn unopened(
         let location = W::locate(&cwd, mode)?;
         let (paths, seeds) = read_paths("open", options, &cwd, &location)?;
         let mut inventory = Inventory::default();
-        let mut data = opening_fields(&location, options, &paths, &seeds, &mut inventory)?;
+        let mut data = opening_fields(
+            &location,
+            options,
+            &paths,
+            &seeds,
+            &mut inventory,
+            mode == ReadMode::Live && crate::onboarding::guidance().unwrap_or(false),
+        )?;
         if data["status"] == "missing" || data["status"] == "unavailable" {
             return Ok(data);
         }
@@ -650,7 +666,14 @@ pub fn run(
     let mut data =
         json!({"workspace":location.workspace,"record":location.record,"status":location.status});
     if command == "open" {
-        data = opening_fields(&location, options, &paths, &seeds, &mut inventory)?;
+        data = opening_fields(
+            &location,
+            options,
+            &paths,
+            &seeds,
+            &mut inventory,
+            mode == ReadMode::Live && crate::onboarding::guidance().unwrap_or(false),
+        )?;
         if data["status"] == "unavailable" || data["status"] == "missing" {
             let unavailable = data["status"] == "unavailable";
             let mut message = if unavailable {
@@ -667,6 +690,10 @@ pub fn run(
             };
             if !unavailable && let Some(state) = data["mapping"]["mapping"].as_str() {
                 message.push_str(&format!("\nMapping: {state}"));
+            }
+            if let Some(notice) = data["continuity"].as_str() {
+                message.push('\n');
+                message.push_str(notice);
             }
             data[if unavailable { "error" } else { "message" }] = json!(message);
             inventory.verify()?;
@@ -782,6 +809,12 @@ pub fn run(
             }
             "check" => {
                 let (mut text, code) = projection.check(None)?;
+                if let Some(notice) = crate::onboarding::continuity_notice(
+                    &location.workspace,
+                    mode == ReadMode::Live && crate::onboarding::guidance().unwrap_or(false),
+                ) {
+                    text.push_str(&format!("\n{notice}"));
+                }
                 if has_brief(&paths, &mut inventory)? {
                     text.insert_str(0, C::LAYOUT_NOTICE);
                 }

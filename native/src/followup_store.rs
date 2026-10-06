@@ -3,7 +3,7 @@ use crate::{
     Error, Result, followup_triggers as triggers, history_contract as H, identity::sha256,
     ordinary_reader::Reader, require, source_capture::ReadMode, value::TypedValue as V,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use fs2::FileExt;
 use serde_json::{Map, Value, json};
 use std::{
@@ -20,6 +20,7 @@ pub const MAX_BYTES: usize = 8 * 1024 * 1024;
 const OBSERVATION_BYTES: usize = 64 * 1024;
 const MAINTENANCE_HOT_ATTEMPTS: usize = 32;
 const MAINTENANCE_REFERENCE_BYTES: usize = 512;
+const MAX_CONSECUTIVE_MAINTENANCE_FAILURES: usize = 3;
 
 #[derive(Clone, Debug)]
 struct Location {
@@ -45,6 +46,24 @@ pub struct Store {
 
 fn error(message: impl Into<String>) -> Error {
     Error(message.into())
+}
+
+fn maintenance_retry_at(now: DateTime<Utc>, timezone: &str, check_time: &str) -> Option<String> {
+    let timezone = timezone.parse::<chrono_tz::Tz>().ok()?;
+    let check_time = chrono::NaiveTime::parse_from_str(check_time, "%H:%M").ok()?;
+    let local_date = now.with_timezone(&timezone).date_naive();
+    for days in 1..=3 {
+        let date = local_date.checked_add_signed(Duration::days(days))?;
+        if let chrono::LocalResult::Single(retry) =
+            timezone.from_local_datetime(&date.and_time(check_time))
+        {
+            let retry = retry.with_timezone(&Utc);
+            if retry > now {
+                return Some(triggers::stamp(retry));
+            }
+        }
+    }
+    None
 }
 
 fn state_home() -> Result<PathBuf> {
@@ -1271,6 +1290,71 @@ impl Store {
         }
     }
 
+    fn last_admitted(item: &Value) -> Option<String> {
+        item["attempts"]
+            .as_array()?
+            .iter()
+            .filter_map(|attempt| {
+                if attempt["type"] == "maintenance_inspection" {
+                    matches!(
+                        attempt["outcome"].as_str(),
+                        Some("observed" | "unavailable")
+                    )
+                    .then(|| attempt["receipt_at"].as_str().map(str::to_owned))
+                    .flatten()
+                } else {
+                    matches!(
+                        attempt["outcome"].as_str(),
+                        Some("checked" | "done" | "released")
+                    )
+                    .then(|| attempt["finished_at"].as_str().map(str::to_owned))
+                    .flatten()
+                }
+            })
+            .max()
+    }
+
+    fn fairness_order(item: &Value) -> (bool, String, String) {
+        let served = Self::last_admitted(item);
+        (
+            served.is_some(),
+            served.unwrap_or_default(),
+            item["id"].as_str().unwrap_or_default().to_owned(),
+        )
+    }
+
+    fn maintenance_advisory(item: &Value) -> Result<Value> {
+        if item["spec"].get("maintenance").is_some()
+            || matches!(
+                item["state"].as_str(),
+                Some("done" | "cancelled" | "needs_user")
+            )
+            || item["next_at"].is_null()
+        {
+            return Ok(Value::Null);
+        }
+        let spec = &item["spec"];
+        let external = triggers::referenced_external(&spec["when"])?;
+        if !external.is_empty() {
+            return Ok(json!({
+                "kind":"source",
+                "source_refs":external,
+                "state":"advisory_only",
+                "unresolved":["source_id","publisher","selection","inspection adapter","evidence format","tool policy","allowed roots","cadence_days","timezone","check_time","use_policy","evidence_requirement","authorization"]
+            }));
+        }
+        if spec["when"].get("at").and_then(Value::as_str).is_some() {
+            return Ok(json!({
+                "kind":"clock",
+                "due_at":spec["when"]["at"],
+                "next_at":item["next_at"],
+                "state":"advisory_only",
+                "unresolved":["cadence_days","timezone","check_time","deadline meaning","evidence_requirement","authorization"]
+            }));
+        }
+        Ok(Value::Null)
+    }
+
     pub fn add(&self, supplied: Value) -> Result<Value> {
         let mut supplied = canonical(&supplied)?;
         self.transaction(|data| {
@@ -1545,13 +1629,19 @@ impl Store {
             "external":external.into_iter().map(|reference|{let observation=data["observations"].get(&reference);(reference,json!({"available":observation.is_some(),"value":observation.and_then(|v|v.get("value")).cloned()}))}).collect::<Map<_,_>>(),
             "next_at":item["next_at"],
         });
-        Ok(json!({
+        let mut row = json!({
             "id":item["id"],"task":item["task"],"state":state,"executor":item["executor"],
             "title":spec.get("title").and_then(Value::as_str).unwrap_or(item["id"].as_str().unwrap()).chars().take(160).collect::<String>(),
             "reasons":assessment.reasons.into_iter().take(5).map(|reason|reason.chars().take(400).collect::<String>()).collect::<Vec<_>>(),
             "occurrence":digest(&inputs)?,"next_at":item["next_at"],"wake_hint":assessment.next_at.map(triggers::stamp),
-            "scope":spec["scope"].as_str().unwrap().chars().take(600).collect::<String>(),"related":spec["related"],
-        }))
+            "scope":spec["scope"].as_str().unwrap().chars().take(600).collect::<String>(),
+            "related":spec["related"],
+        });
+        let advisory = Self::maintenance_advisory(item)?;
+        if !advisory.is_null() {
+            row["maintenance_advisory"] = advisory;
+        }
+        Ok(row)
     }
 
     pub fn scan(&self, limit: usize) -> Result<Value> {
@@ -1580,10 +1670,10 @@ impl Store {
             .map(|item| self.row(item, data, &graph, graph_error.as_deref(), now))
             .collect::<Result<Vec<_>>>()?;
         let order = [
+            "ready",
             "interrupted",
             "unknown",
             "needs_user",
-            "ready",
             "claimed",
             "delegated",
             "waiting",
@@ -1591,12 +1681,26 @@ impl Store {
             "cancelled",
         ];
         rows.sort_by_key(|row| {
+            let item = &data["items"][row["id"].as_str().unwrap()];
+            let ready = row["state"] == "ready";
+            let (served, served_at, fairness_id) = if ready {
+                Self::fairness_order(item)
+            } else {
+                (false, String::new(), String::new())
+            };
             (
                 order
                     .iter()
                     .position(|state| row["state"] == *state)
                     .unwrap(),
-                row["next_at"].as_str().unwrap_or("").to_owned(),
+                served,
+                served_at,
+                if ready {
+                    String::new()
+                } else {
+                    row["next_at"].as_str().unwrap_or("").to_owned()
+                },
+                fairness_id,
                 row["id"].as_str().unwrap().to_owned(),
             )
         });
@@ -1611,13 +1715,28 @@ impl Store {
             .collect::<Map<_, _>>();
         let omitted = rows.len().saturating_sub(limit);
         let maintenance_omitted = graph.maintenance.len().saturating_sub(1);
-        Ok(json!({
+        let maintenance_health = crate::followup_daily::maintenance_health(data, now)?;
+        let degraded = graph_error.is_some()
+            || omitted > 0
+            || maintenance_omitted > 0
+            || maintenance_health["degraded"] == true;
+        let mut report = json!({
             "workspace":data["config"]["workspace"],"record":data["config"]["record"],"ledger":self.path,
             "counts":counts,"items":rows.into_iter().take(limit).collect::<Vec<_>>(),"omitted":omitted,
             "maintenance":graph.maintenance.into_iter().take(1).collect::<Vec<_>>(),"maintenance_omitted":maintenance_omitted,
             "graph_error":graph_error,"daily":data["daily"]["binding"],
-            "notification":graph_error.is_some() || ["interrupted","unknown","needs_user","ready"].iter().any(|state|counts[*state].as_u64().unwrap_or(0)>0),
-        }))
+            "notification":degraded || ["interrupted","unknown","needs_user","ready"].iter().any(|state|counts[*state].as_u64().unwrap_or(0)>0),
+        });
+        if maintenance_health["obligations"]
+            .as_array()
+            .is_some_and(|items| !items.is_empty())
+        {
+            report["maintenance_health"] = maintenance_health;
+        }
+        if degraded {
+            report["degraded"] = json!(true);
+        }
+        Ok(report)
     }
 
     pub fn observe(&self, report: Value) -> Result<Value> {
@@ -1727,12 +1846,13 @@ impl Store {
         self.transaction(|data| {
             let receipt_at = self.now();
             let item = Self::item(data, &id)?;
-            let maintenance = &item["spec"]["maintenance"];
+            let maintenance = item["spec"]["maintenance"].clone();
             require(maintenance["kind"] == "source" && maintenance["policy_digest"] == report["policy_digest"] && maintenance["source_ref"] == report["source_ref"], "Maintenance report no longer matches the current policy and source reference")?;
-            require(!matches!(item["state"].as_str(), Some("done" | "cancelled")), "A closed maintenance obligation cannot admit an inspection")?;
+            require(!matches!(item["state"].as_str(), Some("done" | "cancelled" | "needs_user")), "A parked or closed maintenance obligation needs explicit resume before inspection")?;
             require(fingerprint(item["task"].as_str().unwrap())?.map(|v| json!(v)).unwrap_or(Value::Null) == item["task_fingerprint"], "Task content changed; explicitly refresh its declaration before inspection")?;
             let requirement = maintenance["evidence_requirement"].clone();
             let use_policy = maintenance["use_policy"].clone();
+            let attempts = item["attempts"].as_array().unwrap().clone();
             let source_ref = maintenance["source_ref"].as_str().unwrap().to_owned();
             let usable = report.get("value").is_some_and(|value| match value {
                 Value::Null => false,
@@ -1771,10 +1891,22 @@ impl Store {
                 }
             }
             let outcome = if failure.is_empty() { "observed" } else { "unavailable" };
+            let consecutive_failures = attempts.iter().rev()
+                .take_while(|attempt| attempt["type"] == "maintenance_inspection" && attempt["outcome"] == "unavailable")
+                .count() + usize::from(outcome == "unavailable");
+            let retry_at = if outcome == "unavailable" && consecutive_failures < MAX_CONSECUTIVE_MAINTENANCE_FAILURES {
+                maintenance_retry_at(
+                    receipt_at,
+                    maintenance["timezone"].as_str().unwrap_or(""),
+                    maintenance["check_time"].as_str().unwrap_or(""),
+                )
+            } else {
+                None
+            };
             let attempt = json!({"type":"maintenance_inspection", "outcome":outcome,
                 "policy_digest":report["policy_digest"], "source_ref":source_ref,
                 "receipt_at":triggers::stamp(receipt_at), "inspected_at":inspected_at.map(triggers::stamp),
-                "evidence":evidence, "reason":failure,
+                "evidence":evidence, "reason":failure,"retry_at":retry_at.clone(),
                 "observation_digest":if observation.is_null() { Value::Null } else { json!(digest(&observation)?) },
                 "attestation":"host-supplied inspection; no transport/origin authentication",
                 "assurance":{"recording":"host_attested", "evidence_requirement":requirement,
@@ -1782,6 +1914,13 @@ impl Store {
                     "use_policy":use_policy, "current_use_adequacy":"unassessed"}});
             require(serde_json::to_vec(&attempt)?.len() <= OBSERVATION_BYTES, "Maintenance attempt metadata exceeds 64 KiB")?;
             data["items"][&id]["attempts"].as_array_mut().unwrap().push(attempt.clone());
+            if outcome == "unavailable" {
+                if consecutive_failures >= MAX_CONSECUTIVE_MAINTENANCE_FAILURES || retry_at.is_none() {
+                    data["items"][&id]["state"] = json!("needs_user");
+                } else {
+                    data["items"][&id]["next_at"] = json!(retry_at);
+                }
+            }
             Ok(json!({"id":id, "outcome":outcome, "attempt":attempt,
                 "policy_digest":report["policy_digest"], "source_ref":source_ref,
                 "receipt_at":triggers::stamp(receipt_at), "observation":observation}))
@@ -1812,6 +1951,13 @@ impl Store {
                 let daily=&data["daily"]["claim"];
                 require(!daily.is_null() && daily["token"]==token && triggers::parse_time(daily["expires_at"].as_str().unwrap(),"UTC")?>self.now(), "The daily review is not live or owned by this token")?;
                 require(daily["actions"].as_array().is_some_and(|a|a.len()<3), "Daily review's three-action budget is exhausted")?;
+                let mut ready = data["items"].as_object().unwrap().values()
+                    .map(|item| self.row(item,data,&graph,None,self.now()))
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter().filter(|candidate| candidate["state"] == "ready")
+                    .collect::<Vec<_>>();
+                ready.sort_by_key(|candidate| Self::fairness_order(&data["items"][candidate["id"].as_str().unwrap()]));
+                require(ready.first().is_some_and(|candidate| candidate["id"] == key), "Claim the oldest-served ready followup first; rescan for the fair order")?;
                 data["daily"]["claim"]["actions"].as_array_mut().unwrap().push(json!(key));
             }
             let spec=Self::item(data,key)?["spec"].clone();
@@ -1873,10 +2019,27 @@ impl Store {
                 return Ok(json!({"id":key,"state":item["state"],"already_recorded":true}));
             }
             let claim=self.owned_claim(item,token,true)?.clone();
+            require(
+                !(item["spec"].get("maintenance").is_some() && outcome == "done"),
+                "A periodic maintenance check cannot be finished as done",
+            )?;
             let normalized_next=if outcome=="checked" {
                 let next=next_at.ok_or_else(||error("A completed check needs a justified future next_at"))?;
                 let parsed=triggers::parse_time(next,data["config"]["timezone"].as_str().unwrap())?;
                 require(parsed>self.now(),"A completed check needs a justified future next_at")?;
+                if let Some(maintenance) = item["spec"].get("maintenance") {
+                    let days = maintenance["cadence_days"].as_u64().ok_or_else(|| error("Maintenance cadence is unavailable"))?;
+                    let timezone = maintenance["timezone"].as_str().unwrap_or("").parse::<chrono_tz::Tz>().map_err(|e| error(format!("invalid maintenance timezone: {e}")))?;
+                    let check_time = chrono::NaiveTime::parse_from_str(maintenance["check_time"].as_str().unwrap_or(""), "%H:%M").map_err(|_| error("Maintenance check_time is invalid"))?;
+                    let date = self.now().with_timezone(&timezone).date_naive()
+                        .checked_add_signed(Duration::days(i64::try_from(days).map_err(|_| error("Maintenance cadence is out of range"))?))
+                        .ok_or_else(|| error("Maintenance next check date is out of range"))?;
+                    let local = date.and_time(check_time);
+                    let expected = timezone.from_local_datetime(&local).single()
+                        .ok_or_else(|| error("Maintenance next check time is ambiguous or nonexistent; select a compatible check_time"))?
+                        .with_timezone(&Utc);
+                    require(parsed == expected, "Maintenance next_at must be cadence_days calendar days after this admitted check at check_time")?;
+                }
                 Some(triggers::stamp(parsed))
             } else { require(next_at.is_none(),"Only checked outcomes take next_at")?; None };
             let graph_result=self.graph(data);

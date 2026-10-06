@@ -131,13 +131,30 @@ fn state_path(sid: &str) -> PathBuf {
 fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
     let report = store.scan(3)?;
     let visible=report["items"].as_array().cloned().unwrap_or_default().into_iter().filter(|r|!matches!(r["state"].as_str(),Some("waiting"|"done"|"cancelled"))).map(|r|json!({"id":r["id"],"state":r["state"],"title":r["title"],"reasons":r["reasons"].as_array().into_iter().flatten().take(2).map(|x|J::String(x.as_str().unwrap_or("").chars().take(240).collect())).collect::<Vec<_>>()})).collect::<Vec<_>>();
-    if visible.is_empty() && report["graph_error"].is_null() {
+    if visible.is_empty()
+        && report["graph_error"].is_null()
+        && report["degraded"] != true
+        && report["maintenance_health"]["degraded"] != true
+    {
         return Ok(String::new());
     }
+    let maintenance_health = if report["maintenance_health"]["degraded"] == true {
+        json!({
+            "fingerprint":report["maintenance_health"]["fingerprint"],
+            "degraded":true,
+            "obligations":report["maintenance_health"]["obligations"].as_array().into_iter().flatten().map(|item|json!({
+                "id":item["id"],"kind":item["kind"],"check_state":item["check_state"],
+                "source_state":item["source_state"],"host_state":item["host_state"],
+                "failure_state":item["failure_state"]
+            })).collect::<Vec<_>>()
+        })
+    } else {
+        J::Null
+    };
     Ok(format!(
-        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue.",
+        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission.",
         serde_json::to_string(
-            &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"]})
+            &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"],"maintenance_health":maintenance_health,"maintenance_omitted":report["maintenance_omitted"],"omitted":report["omitted"],"degraded":report["degraded"]})
         )?
     ))
 }

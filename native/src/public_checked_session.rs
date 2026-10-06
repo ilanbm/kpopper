@@ -883,7 +883,14 @@ impl Service {
             session.guard_opening(&opening, program)?;
             capture.verify()?;
             self.inputs.verify()?;
-            return Ok(opening.text);
+            return Ok(if let Some(notice) = crate::onboarding::continuity_notice(
+                &self.cwd,
+                self.mode == ReadMode::Live && crate::onboarding::guidance().unwrap_or(false),
+            ) {
+                format!("{}\n{notice}", opening.text)
+            } else {
+                opening.text
+            });
         }
         let (capture, session) = self.capture_core_session()?;
         let result = session
@@ -892,7 +899,14 @@ impl Service {
             .text;
         capture.verify()?;
         self.inputs.verify()?;
-        Ok(result)
+        Ok(if let Some(notice) = crate::onboarding::continuity_notice(
+            &self.cwd,
+            self.mode == ReadMode::Live && crate::onboarding::guidance().unwrap_or(false),
+        ) {
+            format!("{result}\n{notice}")
+        } else {
+            result
+        })
     }
 
     fn capture_core_session(&self) -> Result<(source_capture::CapturedSource, CheckedSession)> {

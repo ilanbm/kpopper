@@ -203,6 +203,15 @@ pub enum DailyCommand {
         #[arg(long)]
         evidence: String,
     },
+    /// Record an explicit offer, decline, snooze or user authorization; never installs a host job.
+    Adoption {
+        #[arg(value_parser = ["shown", "declined", "snoozed", "authorized"])]
+        action: String,
+        #[arg(long)]
+        until: Option<String>,
+        #[arg(long)]
+        evidence: Option<String>,
+    },
 }
 
 fn supplied(path: &str) -> Result<Value> {
@@ -367,6 +376,10 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             }
             DailyCommand::Renew { token } => crate::followup_daily::renew(&store, token),
             DailyCommand::Recover { evidence } => crate::followup_daily::recover(&store, evidence),
+            DailyCommand::Adoption { action, until, evidence } => {
+                let value = if action == "snoozed" { until.as_deref() } else { evidence.as_deref() };
+                crate::followup_daily::record_adoption(&store, action, value)
+            }
         },
     }
 }
