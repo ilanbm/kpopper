@@ -781,6 +781,10 @@ pub fn run(
                 })?
             }
             "check" => {
+                let projection = match paths.first() {
+                    Some(record) => projection.with_formatter_notice(record),
+                    None => projection,
+                };
                 let (mut text, code) = projection.check(None)?;
                 if has_brief(&paths, &mut inventory)? {
                     text.insert_str(0, C::LAYOUT_NOTICE);
