@@ -81,18 +81,46 @@ and bounded `reason`. Invalid typed input is refused and can be reported through
 unavailable-attempt path. Successful attempts retain an observation digest and their native
 receipt, so a later success is distinguishable from a previous failed attempt.
 
+Each attempt explicitly records host-attested recording, the declared requirement, whether
+that recording meets the requirement, and `current_use_adequacy: unassessed`. An `observed`
+outcome means a guarded observation was recorded. It does not establish current freshness,
+applicability, truth, or permission. Assess adequacy with current time at each material use;
+a receipt never renews an old inspection time. Legacy `observe` cannot write a maintenance
+source reference, including a retained maintenance observation after its policy changes.
+
+Evidence references and unavailable reasons are at most 512 bytes. Link full output and
+diagnostics instead of copying their bodies. At 67 attempts, the ledger compacts to 32 recent attempts plus the latest successful
+inspection and refresh when older. Hot history is bounded at 66 attempts. Older attempts move automatically to
+immutable, digest-verified linked segments in its `attempt-history/` directory. Each successful
+observation is retained by digest in `observation-history/`; its attempt names that digest.
+`followups show` includes the archive head and recent attempts. Preserve the ledger and both
+history directories together for backup, relocation of state, or recovery. To recover missing
+or damaged history, restore the exact digest-named segment from that backup; never delete or
+rewrite an archive reference to bypass the failure. Completed request idempotence includes
+retained segments. Local retention needs available disk space; a write/storage failure is an
+explicit failure, not a successful refresh. No cumulative attempt cap disables an obligation.
+
 Authorized edits within the existing inspection scope use `followups refresh --evidence ...`.
-A changed source/scope additionally requires `--authorization-evidence` referencing actual
-existing user authorization. That reference records the caller's basis; source prose does
+A change to source identity, inspection scope, executor ownership, use/evidence policy,
+an increased maximum age or cadence, delayed due time, changed check time/timezone,
+or removal of maintenance additionally requires `--authorization-evidence` referencing actual
+existing or new user authorization. Reusing an applicable standing grant does not require
+renewed permission. Same-scope descriptive edits and stronger age/cadence bounds need no
+new authorization reference. That reference records the caller's basis; source prose does
 not establish it. Keep unchanged inspections local. Changed evidence enters ordinary
 proposal/affects/review work; inspection does not accept semantic changes or publish a model.
+Rebinding maintenance to another record with `followups relocate` likewise needs
+`--authorization-evidence`; relocation evidence and authorization are separate references.
 Recurring checks finish `checked` with a justified future `next_at`; host scheduling and
 execution receipts remain separate from the source observation.
 
 ## Runtime compatibility
 
-Capturing maintenance promotes only that local followup ledger to version 2. Legacy-only
-ledgers remain version 1. Older coordinators must refuse the new ledger instead of treating
+Capturing maintenance promotes only that local followup ledger to version 2. Ledgers that
+have never captured maintenance remain version 1. A historically promoted ledger remains
+version 2 even after its last maintenance declaration is removed; it never auto-demotes.
+Metadata version 1 pins the policy digest's v1 field set. Future metadata versions must use
+a separate schema while preserving validation of recorded v1 digests. Older coordinators must refuse the new ledger instead of treating
 required maintenance semantics as ordinary work. Preserve the full ledger and its evidence;
 do not lower its version or delete metadata to make a downgrade appear compatible. A prior
 consumer can still read the unchanged knowledge record, but reading or operating a version 2

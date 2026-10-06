@@ -228,6 +228,15 @@ fn source_fields(
 }
 
 fn policy_digest(spec: &Value) -> Result<String> {
+    match spec["maintenance"]["version"].as_u64() {
+        Some(1) => policy_digest_v1(spec),
+        _ => Err(error("unsupported maintenance policy digest schema")),
+    }
+}
+
+// Frozen field set for metadata version 1. A future version must add a new
+// digest function and keep this one intact for persisted ledger validation.
+fn policy_digest_v1(spec: &Value) -> Result<String> {
     followup_store::digest(&json!({
         "schema":"kpopper.maintenance-policy/v1",
         "id":spec["id"],

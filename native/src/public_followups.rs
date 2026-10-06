@@ -128,6 +128,9 @@ pub enum Command {
         record: PathBuf,
         #[arg(long)]
         evidence: String,
+        /// Existing or new user authorization for rebinding maintenance to a record.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
     },
     /// Restore an inspected backup and park uncertain unfinished work.
     Restore {
@@ -292,7 +295,11 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             outcome,
             evidence,
         } => store.resolve(id, outcome, evidence),
-        Command::Relocate { record, evidence } => store.relocate(record, evidence),
+        Command::Relocate {
+            record,
+            evidence,
+            authorization_evidence,
+        } => store.relocate_with_authority(record, evidence, authorization_evidence.as_deref()),
         Command::Restore { backup, evidence } => store.restore(backup, evidence),
         Command::Daily { operation } => match operation {
             DailyCommand::Plan { time } => crate::followup_daily::plan(&store, time),

@@ -18,7 +18,8 @@ use uuid::Uuid;
 
 pub const MAX_BYTES: usize = 8 * 1024 * 1024;
 const OBSERVATION_BYTES: usize = 64 * 1024;
-const MAX_MAINTENANCE_ATTEMPTS_PER_ITEM: usize = 1_000;
+const MAINTENANCE_HOT_ATTEMPTS: usize = 32;
+const MAINTENANCE_REFERENCE_BYTES: usize = 512;
 
 #[derive(Clone, Debug)]
 struct Location {
@@ -625,6 +626,37 @@ impl Store {
                 &format!("Invalid followup: {key}"),
             )?;
             self.validate_spec(&item["spec"], data, Some(key))?;
+            if let Some(refs) = item.get("protected_source_refs") {
+                require(
+                    refs.as_array().is_some_and(|refs| {
+                        refs.iter()
+                            .all(|r| r.as_str().is_some_and(|r| !r.is_empty() && r.len() <= 512))
+                    }),
+                    "Invalid protected maintenance source references",
+                )?;
+            }
+            if let Some(head) = item.get("attempt_archive") {
+                let hash = head
+                    .as_str()
+                    .ok_or_else(|| error("Invalid attempt archive reference"))?;
+                require(
+                    hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
+                    "Invalid attempt archive reference",
+                )?;
+                let segment = read_value(
+                    &self
+                        .root
+                        .join("attempt-history")
+                        .join(format!("{hash}.json")),
+                )?;
+                require(
+                    digest(&segment)? == hash
+                        && segment["schema"] == "kpopper.followup-attempts/v1"
+                        && segment["workspace_key"] == self.location.key
+                        && segment["id"] == *key,
+                    "Retained attempt history is unavailable or corrupt; restore its exact evidence",
+                )?;
+            }
             for attempt in item["attempts"]
                 .as_array()
                 .unwrap()
@@ -748,8 +780,27 @@ impl Store {
         let _lock = self.lock()?;
         let mut data = self.load(true)?.unwrap();
         let before = digest(&data)?;
+        for item in data["items"].as_object_mut().unwrap().values_mut() {
+            if let Some(reference) = item["spec"]["maintenance"]["source_ref"]
+                .as_str()
+                .filter(|v| !v.is_empty())
+                .map(str::to_owned)
+            {
+                let refs = item
+                    .as_object_mut()
+                    .unwrap()
+                    .entry("protected_source_refs")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .unwrap();
+                if !refs.contains(&json!(reference)) {
+                    refs.push(json!(reference));
+                }
+            }
+        }
         let result = mutation(&mut data)?;
         if digest(&data)? != before {
+            self.retain_maintenance_history(&mut data)?;
             let serialized = serialized_value(&data)?;
             atomic(
                 &self.root.join("followups.previous.yaml"),
@@ -758,6 +809,156 @@ impl Store {
             atomic(&self.path, &serialized)?;
         }
         Ok(result)
+    }
+
+    // Immutable segments live beside the existing ledger, not in a receipt database.
+    // Write and sync evidence before replacing the ledger; a crash can leave an
+    // unreferenced segment, but cannot lose a referenced attempt.
+    fn retain_maintenance_history(&self, data: &mut Value) -> Result<()> {
+        for (id, item) in data["items"].as_object_mut().unwrap() {
+            if let Some(reference) = item["spec"]["maintenance"]["source_ref"]
+                .as_str()
+                .filter(|v| !v.is_empty())
+                .map(str::to_owned)
+            {
+                let refs = item
+                    .as_object_mut()
+                    .unwrap()
+                    .entry("protected_source_refs")
+                    .or_insert_with(|| json!([]))
+                    .as_array_mut()
+                    .unwrap();
+                if !refs.contains(&json!(reference)) {
+                    refs.push(json!(reference));
+                }
+            }
+            if item["spec"].get("maintenance").is_none()
+                && item.get("attempt_archive").is_none()
+                && item.get("protected_source_refs").is_none()
+            {
+                continue;
+            }
+            let attempts = item["attempts"].as_array().unwrap();
+            if attempts.len() <= MAINTENANCE_HOT_ATTEMPTS * 2 + 2 {
+                continue;
+            }
+            let latest_observed = attempts
+                .iter()
+                .rposition(|a| a["type"] == "maintenance_inspection" && a["outcome"] == "observed");
+            let latest_refresh = attempts.iter().rposition(|a| a["outcome"] == "refreshed");
+            let cutoff = attempts.len() - MAINTENANCE_HOT_ATTEMPTS;
+            let (archived, hot): (Vec<_>, Vec<_>) =
+                attempts.iter().enumerate().partition(|(i, _)| {
+                    *i < cutoff && Some(*i) != latest_observed && Some(*i) != latest_refresh
+                });
+            let segment = json!({"schema":"kpopper.followup-attempts/v1", "workspace_key":self.location.key,
+                "id":id, "previous":item.get("attempt_archive").cloned().unwrap_or(Value::Null),
+                "attempts":archived.into_iter().map(|(_, a)|a.clone()).collect::<Vec<_>>()});
+            let hash = digest(&segment)?;
+            let directory = self.root.join("attempt-history");
+            fs::create_dir_all(&directory)?;
+            require(
+                directory.symlink_metadata()?.file_type().is_dir(),
+                "Attempt history must not be a symlink",
+            )?;
+            let path = directory.join(format!("{hash}.json"));
+            let raw = serialized_value(&segment)?;
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(mut file) => {
+                    file.write_all(&raw)?;
+                    file.sync_all()?;
+                    File::open(&directory)?.sync_all()?;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    require(
+                        path.symlink_metadata()?.file_type().is_file() && fs::read(&path)? == raw,
+                        "Retained attempt segment is corrupt; preserve and restore its exact evidence",
+                    )?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+            let hot = hot.into_iter().map(|(_, a)| a.clone()).collect::<Vec<_>>();
+            item["attempts"] = json!(hot);
+            item["attempt_archive"] = json!(hash);
+        }
+        Ok(())
+    }
+
+    fn retain_observation(&self, observation: &Value) -> Result<()> {
+        let hash = digest(observation)?;
+        let directory = self.root.join("observation-history");
+        fs::create_dir_all(&directory)?;
+        require(
+            directory.symlink_metadata()?.file_type().is_dir(),
+            "Observation history must not be a symlink",
+        )?;
+        let path = directory.join(format!("{hash}.json"));
+        let raw = serialized_value(observation)?;
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                file.write_all(&raw)?;
+                file.sync_all()?;
+                File::open(&directory)?.sync_all()?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                require(
+                    path.symlink_metadata()?.file_type().is_file() && fs::read(&path)? == raw,
+                    "Retained observation is corrupt; preserve and restore its exact evidence",
+                )?;
+            }
+            Err(e) => return Err(e.into()),
+        }
+        Ok(())
+    }
+
+    fn has_recorded_request(&self, item: &Value, request: &Value) -> Result<bool> {
+        if item["attempts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a.get("request") == Some(request))
+        {
+            return Ok(true);
+        }
+        // An admitted active claim token cannot also belong to a completed request.
+        // Keep normal recurring finishes bounded; archive traversal is for retries.
+        if item["claim"]["token"] == request["token"] {
+            return Ok(false);
+        }
+        let mut head = item.get("attempt_archive").cloned().unwrap_or(Value::Null);
+        let mut seen = BTreeSet::new();
+        while !head.is_null() {
+            let hash = head
+                .as_str()
+                .ok_or_else(|| error("Invalid attempt archive reference"))?;
+            require(
+                hash.len() == 64
+                    && hash.bytes().all(|b| b.is_ascii_hexdigit())
+                    && seen.insert(hash.to_owned()),
+                "Invalid or cyclic attempt archive",
+            )?;
+            let segment = read_value(
+                &self
+                    .root
+                    .join("attempt-history")
+                    .join(format!("{hash}.json")),
+            )?;
+            require(
+                digest(&segment)? == hash
+                    && segment["schema"] == "kpopper.followup-attempts/v1"
+                    && segment["workspace_key"] == self.location.key
+                    && segment["id"] == item["id"],
+                "Retained attempt history is unavailable or corrupt; restore its exact evidence",
+            )?;
+            let attempts = segment["attempts"]
+                .as_array()
+                .ok_or_else(|| error("Invalid archived attempts"))?;
+            if attempts.iter().any(|a| a.get("request") == Some(request)) {
+                return Ok(true);
+            }
+            head = segment["previous"].clone();
+        }
+        Ok(false)
     }
 
     pub fn suggested_store(&self) -> Option<PathBuf> {
@@ -1461,6 +1662,11 @@ impl Store {
         let value = json!({"value":object["value"],"observed_at":triggers::stamp(observed),"evidence":evidence});
         digest(&value)?;
         self.transaction(|data| {
+            require(!data["items"].as_object().unwrap().values().any(|item|
+                item["spec"]["maintenance"]["source_ref"].as_str() == Some(&reference)
+                || item["protected_source_refs"].as_array().is_some_and(|refs| refs.iter().any(|v| v.as_str() == Some(&reference))))
+                && data["observations"][&reference]["maintenance_observation"] != true,
+                "Maintenance source references require guarded followups inspect")?;
             if let Some(old) = data["observations"].get(&reference) {
                 let old_time = triggers::parse_time(old["observed_at"].as_str().unwrap(),"UTC")?;
                 require(old_time <= observed && (old_time != observed || old == &value), "Observation is older than, or conflicts with, the retained observation")?;
@@ -1508,12 +1714,16 @@ impl Store {
             .transpose()?
             .unwrap_or_default();
         require(
-            reason.chars().count() <= 2000,
-            "maintenance failure reason exceeds 2000 characters",
+            reason.len() <= MAINTENANCE_REFERENCE_BYTES,
+            "maintenance failure reason exceeds 512 bytes; link full diagnostics",
         )?;
         require(
             allow_value || !reason.is_empty(),
             "An unavailable maintenance attempt needs a failure reason",
+        )?;
+        require(
+            object["evidence"].as_str().unwrap().len() <= MAINTENANCE_REFERENCE_BYTES,
+            "maintenance evidence reference exceeds 512 bytes; link full evidence",
         )?;
         let inspected_at = object
             .get("inspected_at")
@@ -1533,8 +1743,8 @@ impl Store {
             require(maintenance["kind"] == "source" && maintenance["policy_digest"] == report["policy_digest"] && maintenance["source_ref"] == report["source_ref"], "Maintenance report no longer matches the current policy and source reference")?;
             require(!matches!(item["state"].as_str(), Some("done" | "cancelled")), "A closed maintenance obligation cannot admit an inspection")?;
             require(fingerprint(item["task"].as_str().unwrap())?.map(|v| json!(v)).unwrap_or(Value::Null) == item["task_fingerprint"], "Task content changed; explicitly refresh its declaration before inspection")?;
-            let attempts = item["attempts"].as_array().unwrap();
-            require(attempts.len() < MAX_MAINTENANCE_ATTEMPTS_PER_ITEM, "Maintenance attempt history is full; preserve and reconcile the ledger")?;
+            let requirement = maintenance["evidence_requirement"].clone();
+            let use_policy = maintenance["use_policy"].clone();
             let source_ref = maintenance["source_ref"].as_str().unwrap().to_owned();
             let usable = report.get("value").is_some_and(|value| match value {
                 Value::Null => false,
@@ -1554,14 +1764,20 @@ impl Store {
             let mut observation = Value::Null;
             if failure.is_empty() {
                 require(serde_json::to_vec(&report["value"])?.len() <= OBSERVATION_BYTES, "Observation value exceeds 64 KiB")?;
-                let value = json!({"value":report["value"], "observed_at":triggers::stamp(inspected_at.unwrap()), "evidence":evidence});
+                let value = json!({"value":report["value"], "observed_at":triggers::stamp(inspected_at.unwrap()), "evidence":evidence, "maintenance_observation":true});
                 if let Some(old) = data["observations"].get(&source_ref) {
                     let old_time = triggers::parse_time(old["observed_at"].as_str().unwrap(), "UTC")?;
-                    if old_time > inspected_at.unwrap() || (old_time == inspected_at.unwrap() && old != &value) {
+                    let mut old_reading = old.clone();
+                    let mut new_reading = value.clone();
+                    old_reading.as_object_mut().unwrap().remove("maintenance_observation");
+                    new_reading.as_object_mut().unwrap().remove("maintenance_observation");
+                    if old_time > inspected_at.unwrap() || (old_time == inspected_at.unwrap() && old_reading != new_reading) {
                         failure = "Observation is older than, or conflicts with, the retained observation".into();
                     }
                 }
                 if failure.is_empty() {
+                    if let Some(old) = data["observations"].get(&source_ref) { self.retain_observation(old)?; }
+                    self.retain_observation(&value)?;
                     data["observations"].as_object_mut().unwrap().insert(source_ref.clone(), value.clone());
                     observation = value;
                 }
@@ -1572,7 +1788,10 @@ impl Store {
                 "receipt_at":triggers::stamp(receipt_at), "inspected_at":inspected_at.map(triggers::stamp),
                 "evidence":evidence, "reason":failure,
                 "observation_digest":if observation.is_null() { Value::Null } else { json!(digest(&observation)?) },
-                "attestation":"host-supplied inspection; no transport/origin authentication"});
+                "attestation":"host-supplied inspection; no transport/origin authentication",
+                "assurance":{"recording":"host_attested", "evidence_requirement":requirement,
+                    "requirement_met":if outcome == "observed" && requirement == "host_attested" { json!(true) } else { json!(false) },
+                    "use_policy":use_policy, "current_use_adequacy":"unassessed"}});
             require(serde_json::to_vec(&attempt)?.len() <= OBSERVATION_BYTES, "Maintenance attempt metadata exceeds 64 KiB")?;
             data["items"][&id]["attempts"].as_array_mut().unwrap().push(attempt.clone());
             Ok(json!({"id":id, "outcome":outcome, "attempt":attempt,
@@ -1662,7 +1881,7 @@ impl Store {
         self.transaction(|data|{
             let request=json!({"token":token,"outcome":outcome,"evidence":evidence,"next_at":next_at});
             let item=Self::item(data,key)?;
-            if item["attempts"].as_array().unwrap().iter().any(|attempt|attempt.get("request")==Some(&request)) {
+            if self.has_recorded_request(item, &request)? {
                 return Ok(json!({"id":key,"state":item["state"],"already_recorded":true}));
             }
             let claim=self.owned_claim(item,token,true)?.clone();
@@ -1732,13 +1951,23 @@ impl Store {
             if supplied.get("maintenance").is_some() {
                 require(supplied["maintenance"].is_object(), "maintenance metadata must be a mapping")?;
                 let same_subjects = |spec: &Value| spec["related"].as_array().map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_owned).collect::<BTreeSet<_>>());
-                let compatible = old["spec"].get("maintenance").is_some()
+                let no_delay = if old["spec"].get("maintenance").is_some() {
+                    triggers::parse_time(supplied["maintenance"]["due_at"].as_str().unwrap_or(""), "UTC")? <= triggers::parse_time(old["spec"]["maintenance"]["due_at"].as_str().unwrap_or(""), "UTC")?
+                } else { false };
+                let compatible = no_delay && old["spec"].get("maintenance").is_some()
                     && old["spec"]["scope"] == supplied["scope"] && same_subjects(&old["spec"]) == same_subjects(&supplied)
-                    && ["kind", "inspection"].iter().all(|field| old["spec"]["maintenance"][*field] == supplied["maintenance"][*field]);
-                require(compatible || authorization_evidence.is_some(), "Inspection scope changed: inspect existing standing user authorization and supply its reference; declaration text is not permission")?;
+                    && old["executor"].as_str().unwrap_or("kpopper") == supplied["executor"].as_str().unwrap_or("kpopper")
+                    && ["kind", "inspection", "source_id", "timezone", "check_time"].iter().all(|field| old["spec"]["maintenance"][*field] == supplied["maintenance"][*field])
+                    && (old["spec"]["maintenance"]["use_policy"] == supplied["maintenance"]["use_policy"] || (old["spec"]["maintenance"]["use_policy"] == "allow_cached_until_expiry" && supplied["maintenance"]["use_policy"] == "require_live"))
+                    && (old["spec"]["maintenance"]["evidence_requirement"] == supplied["maintenance"]["evidence_requirement"] || (old["spec"]["maintenance"]["evidence_requirement"] == "host_attested" && supplied["maintenance"]["evidence_requirement"] == "trusted_origin"))
+                    && supplied["maintenance"]["cadence_days"].as_u64() <= old["spec"]["maintenance"]["cadence_days"].as_u64()
+                    && (old["spec"]["maintenance"]["kind"] == "clock" || supplied["maintenance"]["max_age_hours"].as_f64() <= old["spec"]["maintenance"]["max_age_hours"].as_f64());
+                require(compatible || authorization_evidence.is_some(), "Maintenance scope, identity, ownership or evidence policy changed: supply an existing or new user authorization reference; declaration text is not permission")?;
                 supplied["maintenance"]["consent_digest"] = json!(crate::maintenance_contract::consent_digest(
                     supplied["maintenance"]["policy_digest"].as_str().unwrap_or(""), supplied["scope"].as_str().unwrap_or(""),
                     &self.location.key, data["config"]["record"].as_str().unwrap())?);
+            } else if old["spec"].get("maintenance").is_some() {
+                require(authorization_evidence.is_some(), "Removing maintenance requires an existing or new user authorization reference")?;
             }
 
             let executor=self.validate_spec(&supplied,data,Some(key))?;
@@ -1750,7 +1979,7 @@ impl Store {
             let mut updated=old.clone();
             let item=updated.as_object_mut().unwrap();
             let mut refresh_attempt = json!({"outcome":"refreshed","finished_at":triggers::stamp(self.now()),"evidence":evidence,"previous_spec":old["spec"]});
-            if supplied.get("maintenance").is_some() { refresh_attempt["authorization_reference"] = json!(authorization_evidence); }
+            if supplied.get("maintenance").is_some() || old["spec"].get("maintenance").is_some() { refresh_attempt["authorization_reference"] = json!(authorization_evidence); }
             item["attempts"].as_array_mut().unwrap().push(refresh_attempt);
             item.insert("spec".into(),supplied.clone()); item.insert("executor".into(),json!(executor)); item.insert("task".into(),json!(reference)); item.insert("task_fingerprint".into(),json!(fingerprint(&reference)?)); item.insert("state".into(),json!("waiting")); item.insert("next_at".into(),Value::Null); item.insert("baseline".into(),Self::baseline(&supplied,&graph)); item.insert("baseline_events".into(),Self::event_values(&supplied,data)?); item.insert("generation".into(),json!(old["generation"].as_u64().unwrap()+1));
             Self::mark_core(item,&supplied,&graph);
@@ -1795,10 +2024,34 @@ impl Store {
     }
 
     pub fn relocate(&self, record: &Path, evidence: &str) -> Result<Value> {
+        self.relocate_with_authority(record, evidence, None)
+    }
+
+    pub fn relocate_with_authority(
+        &self,
+        record: &Path,
+        evidence: &str,
+        authorization_evidence: Option<&str>,
+    ) -> Result<Value> {
+        if let Some(reference) = authorization_evidence {
+            text(
+                Some(&json!(reference)),
+                "existing or new user authorization reference",
+            )?;
+        }
         text(Some(&json!(evidence)), "relocation evidence")?;
         let record = record.canonicalize()?;
         let _lock = self.lock()?;
         let mut data = self.load(true)?.unwrap();
+        require(
+            !data["items"]
+                .as_object()
+                .unwrap()
+                .values()
+                .any(|item| item["spec"].get("maintenance").is_some())
+                || authorization_evidence.is_some(),
+            "Relocating maintenance requires an existing or new user authorization reference",
+        )?;
         let mut probe = data.clone();
         probe["config"]["record"] = json!(record);
         let graph = self.graph(&probe)?;
@@ -1830,7 +2083,7 @@ impl Store {
             .as_array_mut()
             .unwrap()
             .push(
-                json!({"previous":previous,"at":triggers::stamp(self.now()),"evidence":evidence}),
+                json!({"previous":previous,"at":triggers::stamp(self.now()),"evidence":evidence,"authorization_reference":authorization_evidence}),
             );
         data["config"]["record"] = json!(record);
         data["config"]["workspace"] = json!(self.location.workspace);
