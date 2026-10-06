@@ -214,8 +214,11 @@ pub enum DailyCommand {
     Start {
         #[arg(long)]
         owner: String,
-        #[arg(long)]
+        #[arg(long, conflicts_with = "host_execution")]
         manual_evidence: Option<String>,
+        /// Actual normalized readback of this bound scheduled invocation; owner text is not proof.
+        #[arg(long)]
+        host_execution: Option<String>,
     },
     Finish {
         #[arg(long)]
@@ -435,10 +438,16 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             DailyCommand::Start {
                 owner,
                 manual_evidence,
-            } => match manual_evidence {
-                Some(reference) => crate::followup_daily::start_manual(&store, owner, reference),
-                None => crate::followup_daily::start(&store, owner),
-            },
+                host_execution,
+            } => {
+                if let Some(file) = host_execution {
+                    crate::followup_daily::start_attested(&store, owner, supplied(file)?)
+                } else if let Some(reference) = manual_evidence {
+                    crate::followup_daily::start_manual(&store, owner, reference)
+                } else {
+                    crate::followup_daily::start(&store, owner)
+                }
+            }
             DailyCommand::Finish { token, evidence } => {
                 crate::followup_daily::finish(&store, token, evidence)
             }

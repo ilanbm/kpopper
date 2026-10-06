@@ -77,11 +77,11 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
         followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["configuration"],
         "configuration_unverified"
     );
-    let run = followup_daily::start(&store, "observed-session").unwrap();
+    let run = followup_daily::start_attested(&store, "observed-session", serde_json::json!({"schema":"kpopper.host-execution/v1","trigger":"scheduled","host":"fixture","id":"schedule-1","executed_at":"2026-10-06T12:00:00Z","observed_at":"2026-10-06T12:00:00Z","evidence":"fixture://actual-host-runtime-readback"})).unwrap();
     followup_daily::finish(
         &store,
         run["claim"]["token"].as_str().unwrap(),
-        "observed local daily execution",
+        "completed host-attested scheduled execution",
     )
     .unwrap();
     assert_eq!(

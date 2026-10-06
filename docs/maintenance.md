@@ -201,3 +201,20 @@ shift the periodic due time. Periodic sources cannot finish checked without a su
 current-claim inspection. A cached policy can retain finite-window evidence after a failed
 attempt while explicitly disclosing that failure; exactly at expiry it is stale. No receipt
 renews an old inspection timestamp, and a current clock/attestation does not certify current law.
+
+
+## Daily execution evidence
+
+A local daily completion records work performed. Manual and legacy or unattested completions
+leave the host configuration unverified; owner text does not identify a scheduled invocation.
+`daily start --manual-evidence REF` retains the current-user authorization and manual origin.
+These receipts do not establish automatic host execution.
+
+When an authorized host tool supplies an actual readback of the current scheduled invocation,
+pass it with `daily start --host-execution FILE`. Its exact fields are `schema:
+kpopper.host-execution/v1`, `trigger: scheduled`, `host`, `id`, `executed_at`, `observed_at`,
+and `evidence`. The owner must match the active binding, execution must follow that binding's
+readback, and the report must describe an invocation within ten minutes, with ordered current
+timestamps. Manual and host-execution flags cannot be combined. A matching completed receipt
+can establish host-attested execution; the attestation is not host authentication, future
+scheduler availability, source truth or semantic acceptance. This command changes no host job.
