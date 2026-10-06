@@ -139,3 +139,60 @@ do not lower its version or delete metadata to make a downgrade appear compatibl
 consumer can still read the unchanged knowledge record, but reading or operating a version 2
 maintenance ledger requires a supporting runtime. Host runtime reconciliation and rollback
 therefore need their own receipt.
+
+
+## One workspace wake and local execution intent
+
+`followups daily mode paused --authorization-evidence REF` pauses local automatic execution;
+it changes no host schedule and creates no host readback. `manual` selects current-session
+work only; use `daily start --owner SESSION --manual-evidence REF` for an explicitly requested
+manual review. Source access still uses its own actual authorization. Mode/adoption metadata
+promotes the local ledger to version2 so older coordinators cannot silently ignore it.
+
+For N greater than one, a newly selected daily fallback requires `daily mode daily_fallback
+--authorization-evidence REF --acknowledge-empty-run-cost`. This records the selection and
+acknowledgement that otherwise empty agent wakes can spend tokens; it installs nothing.
+An already owned daily wake can serve due work alongside its existing authorized tasks.
+
+Native mode records an actual normalized host readback with `daily mode native --file FILE
+--authorization-evidence REF`. The file contains host/id, positive whole `cadence_days`,
+`anchor_at`, timezone, `interval_semantics: calendar_days`, actual host-attested `observed_at`
+and an evidence reference. Unknown semantics, absent/expired phase data and incompatible
+ordinary obligations stay unknown. Attested compatibility is configuration evidence, not a
+host execution receipt or a scheduling guarantee. With no owner, installation returns a
+native-admission inspection request; supported host tools and actual readback remain necessary.
+
+A fixed Monday native N=7 wake caught up on Tuesday cannot serve Tuesday+7 exactly. Status
+exposes the incompatible phase and requires a separately selected daily fallback or manual
+mode. It never silently changes or replaces the old owner. Paused, missing, incompatible and
+unverified execution remain visible independently of source age and guidance preference.
+
+
+## Scoped current use and source/model review
+
+`followups assess --ids SUBJECT...` reads the actual declared transitive closure and current
+native time. It separates evidence/alignment adequacy from applicability, truth, authority and
+the consumer artifact/version. Cycles, missing required policies, uninspectable scope, pending
+alignment and expired evidence remain explicit; unknown takes precedence without hiding stale
+reasons. Historical facts do not become false merely because current-use evidence expires.
+
+A fresh observation does not align an old canonical decision automatically. Perform the actual
+ordinary `affects`/proposal/hypothesis/review/history work first. `followups review-source ID
+--outcome candidate_pending --evidence REF --authorization-evidence REF` records that the
+candidate remains unaccepted. After the actual authorized review, `no_model_change_needed` or
+`reviewed_model_update` correlates that review with the native captured model-scope identity
+and exact guarded observation. This command writes no knowledge/model acceptance or publication,
+and its references are not proof of authority. Changing the selected observation or declared
+model scope invalidates the correlation. An unchanged selected state with an unchanged model
+scope can carry the existing correlation to a later guarded inspection; no recurring semantic
+approval or date bump is invented.
+
+Require-live use needs a current owned source claim and matching successful inspection after
+its native start, supplied with `assess --claim-token TOKEN`. A separately authorized current
+user request can take a source lease before its periodic due time using `claim ...
+--current-use-authority REF`; this is manual current-use work, not a background budget bypass
+or source-access permission. Release this lease after use; it cannot finish checked or silently
+shift the periodic due time. Periodic sources cannot finish checked without a successful
+current-claim inspection. A cached policy can retain finite-window evidence after a failed
+attempt while explicitly disclosing that failure; exactly at expiry it is stale. No receipt
+renews an old inspection timestamp, and a current clock/attestation does not certify current law.

@@ -1083,3 +1083,73 @@ fn archived_finish_requests_remain_idempotent_and_missing_history_is_explicit() 
         true
     );
 }
+
+#[test]
+fn preseeded_legacy_observation_cannot_be_adopted_by_add_or_identity_refresh() {
+    let (_t, w, state, now) = fixture();
+    let store = Store::at_in_state(&w, &state, now).unwrap();
+    let original =
+        kpop_native::maintenance_contract::compile(&source_declaration()).unwrap()["spec"].clone();
+    let mut changed = source_declaration();
+    changed["source"]["source_id"] = json!("preseeded-target");
+    let target = kpop_native::maintenance_contract::compile(&changed).unwrap()["spec"].clone();
+    store.observe(json!({"ref":target["maintenance"]["source_ref"],"value":"legacy-forged","observed_at":"2026-09-10T12:00:00Z","evidence":"fixture://legacy"})).unwrap();
+    assert!(store.add(target.clone()).is_err());
+    assert_eq!(store.load(true).unwrap().unwrap()["version"], 1);
+    store.add(original.clone()).unwrap();
+    let bytes = fs::read(&store.path).unwrap();
+    assert!(
+        store
+            .refresh_with_authority(
+                "source-refresh",
+                target,
+                "fixture://reread",
+                Some("fixture://actual-standing-grant")
+            )
+            .is_err()
+    );
+    assert_eq!(fs::read(&store.path).unwrap(), bytes);
+    assert_eq!(
+        store.show("source-refresh").unwrap()["spec"]["maintenance"]["source_ref"],
+        original["maintenance"]["source_ref"]
+    );
+}
+
+#[test]
+fn old_v2_noop_does_not_consume_backup_or_rewrite_metadata() {
+    let (_t, w, state, now) = fixture();
+    let store = Store::at_in_state(&w, &state, now).unwrap();
+    store
+        .add(
+            kpop_native::maintenance_contract::compile(&source_declaration()).unwrap()["spec"]
+                .clone(),
+        )
+        .unwrap();
+    store
+        .resolve_with_authority(
+            "source-refresh",
+            "cancelled",
+            "fixture://closed",
+            Some("fixture://close-grant"),
+        )
+        .unwrap();
+    let mut data = store.load(true).unwrap().unwrap();
+    data["items"]["source-refresh"]
+        .as_object_mut()
+        .unwrap()
+        .remove("protected_source_refs");
+    fs::write(&store.path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+    let before = fs::read(&store.path).unwrap();
+    let backup = fs::read(store.root.join("followups.previous.yaml")).unwrap();
+    assert_eq!(
+        store
+            .resolve("source-refresh", "cancelled", "fixture://same-closed-state")
+            .unwrap()["already_recorded"],
+        true
+    );
+    assert_eq!(fs::read(&store.path).unwrap(), before);
+    assert_eq!(
+        fs::read(store.root.join("followups.previous.yaml")).unwrap(),
+        backup
+    );
+}

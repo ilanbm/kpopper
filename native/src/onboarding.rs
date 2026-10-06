@@ -99,18 +99,25 @@ pub fn guidance() -> Result<bool> {
 pub(crate) fn maintenance_discovery_notice(workspace: &Path, enabled: bool) -> Result<String> {
     let store = crate::followup_store::Store::open(workspace)?;
     let status = if store.load(false)?.is_some() {
-        crate::followup_daily::status(&store)?
+        crate::followup_daily::status_with_maintenance(&store)?
     } else {
         json!({"adoption":{"choice":"proposed","configuration":"uninstalled","authorized":false}})
     };
     let adoption = &status["adoption"];
     let choice = adoption["choice"].as_str().unwrap_or("unknown");
+    let local_mode = status["wake"]["mode"]
+        .as_str()
+        .filter(|mode| *mode != "existing");
     let promotional = enabled
+        && !matches!(local_mode, Some("paused" | "manual"))
         && !matches!(
             choice,
             "declined" | "snoozed" | "shown" | "authorized_uninstalled"
         );
-    let preference = json!({"guidance_enabled":enabled,"choice":choice,"configuration":adoption["configuration"],"authorized":adoption["authorized"],"promotion_allowed":promotional});
+    let mut preference = json!({"guidance_enabled":enabled,"choice":choice,"configuration":adoption["configuration"],"authorized":adoption["authorized"],"promotion_allowed":promotional});
+    if let Some(mode) = local_mode {
+        preference["local_mode"] = json!(mode);
+    }
     let mut notice = format!(
         "KPOPPER_MAINTENANCE_CHOICE {}. This is a workspace choice, not permission or evidence of refresh. No policy or receipt is created by this notice. Always disclose applicable missing, paused, overdue or failed continuity and current-use limits; promotional suppression does not suppress truthful health.",
         serde_json::to_string(&preference)?
@@ -133,6 +140,12 @@ fn continuity_notice_from_report(report: &Value, include_advisories: bool) -> Op
             "Maintenance continuity health (local detection only; no source or network access): {}",
             serde_json::to_string(&report["maintenance_health"]).ok()?
         ));
+    }
+    if report["maintenance_health"]["obligations"]
+        .as_array()
+        .is_some_and(|v| !v.is_empty())
+    {
+        lines.push("Before material current use, run `kpop followups assess --ids ACTUAL_SUBJECT_IDS`. This recomputes declared closure, native current time, guarded evidence and source/model alignment; age_window alone is not adequacy. Require-live needs a current authorized claim and successful matching inspection, then `--claim-token TOKEN`. A failed current attempt must be disclosed explicitly; cached policy may retain finite-window evidence with the failure warning. Changed source evidence remains pending until actual ordinary affects/proposal/review/history; `review-source` only correlates an actual review and never accepts a model or grants authority. Domain applicability and consumer artifact/version remain separate.".into());
     }
     if include_advisories {
         for row in report["items"]
@@ -173,7 +186,7 @@ pub fn continuity_notice(workspace: &Path, include_advisories: bool) -> Option<S
         Ok(Some(_)) => match store.scan(20) {
             Ok(report) => {
                 let show_advisories = include_advisories
-                    && crate::followup_daily::status(&store).is_ok_and(|status| {
+                    && crate::followup_daily::status_with_maintenance(&store).is_ok_and(|status| {
                         !matches!(
                             status["adoption"]["choice"].as_str(),
                             Some("declined" | "snoozed")
@@ -388,7 +401,7 @@ pub fn context_with_mode(
         Ok(Some((_, report))) => {
             let show_advisories = current["guidance"] == true
                 && crate::followup_store::Store::open(&location.workspace)
-                    .and_then(|store| crate::followup_daily::status(&store))
+                    .and_then(|store| crate::followup_daily::status_with_maintenance(&store))
                     .is_ok_and(|status| {
                         !matches!(status["adoption"]["choice"].as_str(), Some("declined" | "snoozed"))
                     });
@@ -449,9 +462,9 @@ pub fn context_with_mode(
     }
     if current["guidance"] == true && current["followups_offered"] == false {
         let eligible = if let Ok(Some((data, report))) = &followups {
-            let adoption = crate::followup_daily::status(&crate::followup_store::Store::open(
-                &location.workspace,
-            )?)?["adoption"]
+            let adoption = crate::followup_daily::status_with_maintenance(
+                &crate::followup_store::Store::open(&location.workspace)?,
+            )?["adoption"]
                 .clone();
             !matches!(adoption["choice"].as_str(), Some("declined" | "snoozed"))
                 && (report["items"].as_array().is_some_and(|rows| {

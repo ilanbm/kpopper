@@ -160,6 +160,18 @@ fn periodic_check_rearms_from_admitted_local_day_and_health_changes_at_next_at()
             )
             .is_err()
     );
+    assert!(
+        store
+            .finish(
+                "source-check",
+                token,
+                "checked",
+                "no actual current inspection",
+                Some("2026-10-07T09:00:00Z")
+            )
+            .is_err()
+    );
+    store.inspect_maintenance(json!({"id":"source-check","policy_digest":claim["spec"]["maintenance"]["policy_digest"],"source_ref":claim["spec"]["maintenance"]["source_ref"],"inspection":claim["spec"]["maintenance"]["inspection"],"inspected_at":claim["claim"]["started_at"],"value":"actual selected synthetic state","evidence":"fixture://current-inspection"})).unwrap();
     store
         .finish(
             "source-check",

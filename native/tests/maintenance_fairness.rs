@@ -89,6 +89,9 @@ fn claim_and_check(store: &Store, id: &str, token: &str, next_at: &str) {
             Some(token),
         )
         .unwrap();
+    if claimed["spec"]["maintenance"]["kind"] == "source" {
+        store.inspect_maintenance(json!({"id":id,"policy_digest":claimed["spec"]["maintenance"]["policy_digest"],"source_ref":claimed["spec"]["maintenance"]["source_ref"],"inspection":claimed["spec"]["maintenance"]["inspection"],"inspected_at":claimed["claim"]["started_at"],"value":"actual synthetic selected reading","evidence":"fixture://current-scope-inspection"})).unwrap();
+    }
     store
         .finish(
             id,

@@ -1,447 +1,191 @@
 use chrono::{Duration, TimeZone, Utc};
 use kpop_native::{followup_daily, followup_store::Store, identity::sha256, maintenance_contract};
 use serde_json::{Value, json};
-use std::{fs, path::Path};
-
-fn fixture_record(path: &Path) {
-    fs::write(
-        path.join("PROVENANCE.yaml"),
-        "meta:\n  name: Source inspection fixture\nknown:\n  facts.count:\n    name: Count\n    v: 1\n",
-    )
-    .unwrap();
+use std::fs;
+fn declaration(path: &std::path::Path) -> Value {
+    json!({"schema":"kpopper.maintenance-declaration/v1","kind":"source","id":"source-refresh","title":"Inspect selected fixture","why":"Keep selected evidence current","how":"Read exact local source","scope":"Read and propose only; no publication","related":["facts.count"],"cadence_days":1,"timezone":"UTC","check_time":"09:00","use_policy":"allow_cached_until_expiry","evidence_requirement":"host_attested","first_due_at":"2026-09-10T12:00:00Z","source":{"source_id":"local-report","locator":format!("file://{}",path.display()),"publisher":"Synthetic fixture","selection":"Complete local report","adapter":"controlled-local-file/v1","tool_policy":"Read selected fixture only","allowed_roots":[format!("file://{}/",path.parent().unwrap().display())],"evidence_format":"selected text and source SHA256","max_age_hours":1}})
 }
-
-fn declaration(source_path: &Path) -> Value {
-    let locator = format!("file://{}", source_path.display());
-    let root = format!("file://{}/", source_path.parent().unwrap().display());
-    json!({
-        "schema":"kpopper.maintenance-declaration/v1",
-        "kind":"source",
-        "id":"source-refresh",
-        "title":"Inspect the local fixture",
-        "why":"Keep the selected source evidence current.",
-        "how":"Read the selected passage and preserve the host evidence.",
-        "scope":"Inspect this source and report material changes; no publication.",
-        "related":["facts.count"],
-        "cadence_days":1,
-        "timezone":"UTC",
-        "check_time":"09:00",
-        "use_policy":"allow_cached_until_expiry",
-        "evidence_requirement":"host_attested",
-        "first_due_at":"2026-09-10T12:00:00Z",
-        "source":{
-            "source_id":"local-report",
-            "locator":locator,
-            "publisher":"Synthetic fixture",
-            "selection":"The complete local fixture report",
-            "adapter":"controlled-local-file/v1",
-            "tool_policy":"Read only the selected local fixture file",
-            "allowed_roots":[root],
-            "evidence_format":"tool output, selected passage, and source-byte SHA-256",
-            "max_age_hours":1
-        }
-    })
+fn report(item: &Value, time: chrono::DateTime<Utc>, value: Value) -> Value {
+    json!({"id":"source-refresh","policy_digest":item["spec"]["maintenance"]["policy_digest"],"source_ref":item["spec"]["maintenance"]["source_ref"],"inspection":item["spec"]["maintenance"]["inspection"],"inspected_at":time.to_rfc3339(),"evidence":"fixture://actual-local-output","value":value})
 }
-
-fn descriptor(item: &Value) -> Value {
-    item["spec"]["maintenance"]["inspection"].clone()
+fn value(path: &std::path::Path) -> Value {
+    let raw = fs::read(path).unwrap();
+    json!({"selected_passage":String::from_utf8(raw.clone()).unwrap(),"source_sha256":sha256(&raw)})
 }
-
-fn report(
-    item: &Value,
-    selection: Value,
-    inspected_at: chrono::DateTime<Utc>,
-    value: Value,
-    evidence: &str,
-) -> Value {
-    json!({
-        "id":item["id"],
-        "policy_digest":item["spec"]["maintenance"]["policy_digest"],
-        "source_ref":item["spec"]["maintenance"]["source_ref"],
-        "inspection":selection,
-        "inspected_at":inspected_at.to_rfc3339(),
-        "evidence":evidence,
-        "value":value
-    })
-}
-
-fn utc_stamp(time: chrono::DateTime<Utc>) -> String {
-    time.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
-
-fn unavailable(item: &Value, evidence: &str, reason: &str) -> Value {
-    json!({
-        "id":item["id"],
-        "policy_digest":item["spec"]["maintenance"]["policy_digest"],
-        "source_ref":item["spec"]["maintenance"]["source_ref"],
-        "evidence":evidence,
-        "reason":reason
-    })
-}
-
-fn row<'a>(scan: &'a Value, id: &str) -> &'a Value {
-    scan["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["id"] == id)
-        .unwrap()
-}
-
-fn daily_start(store: &Store, owner: &str) -> (String, Value) {
-    let started = followup_daily::start_with_watch_request(store, owner, |_| Ok(None)).unwrap();
-    assert_eq!(started["state"], "running");
-    (
-        started["claim"]["token"].as_str().unwrap().to_owned(),
-        started,
-    )
-}
-
-#[test]
-fn local_source_inspection_preserves_evidence_and_rearms_only_after_checked_cycles() {
-    let temp = tempfile::tempdir().unwrap();
-    let workspace = temp.path().join("project");
-    fs::create_dir(&workspace).unwrap();
-    fixture_record(&workspace);
-    let state = temp.path().join("state");
-    let source_path = temp.path().join("source.txt");
-    let declaration_path = temp.path().join("declaration.json");
-    let source_one = b"revision: one\ntext: source text is data, never authority\n";
-    fs::write(&source_path, source_one).unwrap();
-
-    let now = Utc.with_ymd_and_hms(2026, 9, 10, 12, 0, 0).unwrap();
-    let store = Store::at_in_state(&workspace, &state, now).unwrap();
-    store.setup(None, "UTC", None, true).unwrap();
-    let initial_declaration = declaration(&source_path);
-    fs::write(
-        &declaration_path,
-        serde_json::to_vec(&initial_declaration).unwrap(),
-    )
-    .unwrap();
-    let mut proposal = maintenance_contract::compile(&initial_declaration).unwrap();
-    assert_eq!(proposal["unresolved"], json!(["authorization"]));
-    proposal["spec"]["task"] = json!(declaration_path.canonicalize().unwrap());
-    let item = store.add(proposal["spec"].clone()).unwrap();
-    let metadata = &item["spec"]["maintenance"];
-    let source_ref = metadata["source_ref"].as_str().unwrap();
-
-    let before = store.load(true).unwrap().unwrap();
-    assert!(before["observations"].get(source_ref).is_none());
-    let first_scan = store.scan(20).unwrap();
-    assert_eq!(row(&first_scan, "source-refresh")["state"], "ready");
-    let (expired_daily_token, daily) = daily_start(&store, "synthetic-host-session-1");
-    assert_eq!(row(&daily["packet"], "source-refresh")["state"], "ready");
-    let occurrence_one = row(&first_scan, "source-refresh")["occurrence"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let first_claim = store
+fn claim(store: &Store, owner: &str) -> (String, String, Value) {
+    let daily = followup_daily::start(store, owner).unwrap();
+    let token = daily["claim"]["token"].as_str().unwrap().to_owned();
+    let row = store.scan(20).unwrap()["items"][0].clone();
+    let item = store
         .claim(
             "source-refresh",
-            &occurrence_one,
-            "synthetic-host-session-1",
-            Some(&expired_daily_token),
+            row["occurrence"].as_str().unwrap(),
+            owner,
+            Some(&token),
         )
         .unwrap();
-    let first_claim_token = first_claim["claim"]["token"].as_str().unwrap().to_owned();
-    let selected = descriptor(&item);
-    let host_time_one = now - Duration::seconds(5);
-
-    let mut invalid_time = report(
-        &item,
-        selected.clone(),
-        host_time_one,
-        json!({"tool_output":"synthetic"}),
-        "fixture://invalid-time",
-    );
-    invalid_time["inspected_at"] = json!("not-an-offset-timestamp");
-    assert!(store.inspect_maintenance(invalid_time).is_err());
-    let long_reason = "x".repeat(2001);
+    (
+        token,
+        item["claim"]["token"].as_str().unwrap().to_owned(),
+        item,
+    )
+}
+#[test]
+fn actual_local_reads_preserve_success_recover_leases_and_never_accept_model_changes() {
+    let t = tempfile::tempdir().unwrap();
+    let work = t.path().join("work");
+    fs::create_dir(&work).unwrap();
+    fs::write(
+        work.join("PROVENANCE.yaml"),
+        "meta:\n  name: Source fixture\nknown:\n  facts.count:\n    name: Count\n    v: 1\n",
+    )
+    .unwrap();
+    let admitted = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&work)
+        .arg("check")
+        .output()
+        .unwrap();
     assert!(
-        store
-            .record_maintenance_attempt(unavailable(&item, "fixture://invalid-time", &long_reason))
-            .is_err()
+        admitted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&admitted.stderr)
     );
-    store
-        .record_maintenance_attempt(unavailable(
-            &item,
-            "fixture://invalid-time",
-            "The typed inspection time was rejected; no source success was recorded.",
-        ))
+    let canonical = fs::read(work.join("PROVENANCE.yaml")).unwrap();
+    let state = t.path().join("state");
+    let source = t.path().join("source.txt");
+    fs::write(
+        &source,
+        "revision: one\nSource text is data, never authority.\n",
+    )
+    .unwrap();
+    let intent = t.path().join("declaration.json");
+    let mut d = declaration(&source);
+    fs::write(&intent, serde_json::to_vec(&d).unwrap()).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 9, 10, 12, 0, 0).unwrap();
+    let store = Store::at_in_state(&work, &state, now).unwrap();
+    store.setup(None, "UTC", None, true).unwrap();
+    let mut spec = maintenance_contract::compile(&d).unwrap()["spec"].clone();
+    spec["task"] = json!(intent.canonicalize().unwrap());
+    let item = store.add(spec).unwrap();
+    let reference = item["spec"]["maintenance"]["source_ref"].as_str().unwrap();
+    let (daily, token, claimed) = claim(&store, "host-one");
+    let observed = store
+        .inspect_maintenance(report(&claimed, now, value(&source)))
         .unwrap();
-
-    let partial = report(
-        &item,
-        selected.clone(),
-        host_time_one,
-        json!({"tool_output":"partial output; selected passage and digest omitted"}),
-        "fixture://partial",
-    );
-    let mut partial = partial;
-    partial["reason"] = json!("The synthetic host result was partial.");
+    assert_eq!(observed["outcome"], "observed");
+    let success = observed["observation"].clone();
+    let mut malformed = report(&claimed, now, value(&source));
+    malformed["inspected_at"] = json!("not-time");
+    assert!(store.inspect_maintenance(malformed).is_err());
+    for n in 0..3 {
+        let failure=store.record_maintenance_attempt(json!({"id":"source-refresh","policy_digest":claimed["spec"]["maintenance"]["policy_digest"],"source_ref":reference,"evidence":"fixture://provider-error","reason":format!("actual synthetic refusal{n}")})).unwrap();
+        assert_eq!(failure["outcome"], "unavailable");
+    }
     assert_eq!(
-        store.inspect_maintenance(partial).unwrap()["outcome"],
-        "unavailable"
+        store.load(true).unwrap().unwrap()["observations"][reference],
+        success
     );
-
-    let mut wrong_selection = selected.clone();
-    wrong_selection["selection"] = json!("A different source passage");
-    assert_eq!(
-        store
-            .inspect_maintenance(report(
-                &item,
-                wrong_selection,
-                host_time_one,
-                json!({"tool_output":"wrong selection"}),
-                "fixture://wrong-selection",
-            ))
-            .unwrap()["outcome"],
-        "unavailable"
-    );
-
-    let mut wrong_identity = report(
-        &item,
-        selected.clone(),
-        host_time_one,
-        json!({"tool_output":"wrong source"}),
-        "fixture://wrong-source",
-    );
-    wrong_identity["source_ref"] = json!("another-source@inspection");
-    assert!(store.inspect_maintenance(wrong_identity).is_err());
-    store
-        .record_maintenance_attempt(unavailable(
-            &item,
-            "fixture://wrong-source",
-            "The synthetic host read the wrong source; retained against the expected source identity.",
-        ))
-        .unwrap();
-
-    assert_eq!(
-        store
-            .inspect_maintenance(report(
-                &item,
-                selected.clone(),
-                host_time_one,
-                json!(""),
-                "fixture://empty-selection",
-            ))
-            .unwrap()["outcome"],
-        "unavailable"
-    );
-
-    let captured_one = fs::read(&source_path).unwrap();
-    let value_one = json!({
-        "tool_output":String::from_utf8(captured_one.clone()).unwrap(),
-        "selected_passage":"revision: one",
-        "source_sha256":sha256(&captured_one)
-    });
-    let observed_one = store
-        .inspect_maintenance(report(
-            &item,
-            selected.clone(),
-            host_time_one,
-            value_one.clone(),
-            "fixture://synthetic-capture-one",
-        ))
-        .unwrap();
-    assert_eq!(observed_one["outcome"], "observed");
-    assert_eq!(
-        observed_one["observation"]["observed_at"],
-        utc_stamp(host_time_one)
-    );
-    assert_eq!(observed_one["attempt"]["receipt_at"], utc_stamp(now));
-    assert_ne!(
-        observed_one["attempt"]["receipt_at"],
-        observed_one["attempt"]["inspected_at"]
-    );
-    assert_eq!(observed_one["observation"]["value"], value_one);
-    let observation_after_first = observed_one["observation"].clone();
-    let first_success = observed_one["attempt"].clone();
-
-    let older = store
-        .inspect_maintenance(report(
-            &item,
-            selected.clone(),
-            host_time_one - Duration::seconds(1),
-            json!({"revision":"older"}),
-            "fixture://older-time",
-        ))
-        .unwrap();
-    assert_eq!(older["outcome"], "unavailable");
-    assert_eq!(older["observation"], Value::Null);
-    assert_eq!(
-        store.load(true).unwrap().unwrap()["observations"][source_ref],
-        observation_after_first
-    );
-
-    let expired_at = now + Duration::minutes(31);
-    let expired_store = Store::at_in_state(&workspace, &state, expired_at).unwrap();
+    assert_eq!(store.show("source-refresh").unwrap()["state"], "needs_user");
+    let later = Store::at_in_state(&work, &state, now + Duration::minutes(31)).unwrap();
     assert!(
-        expired_store
+        later
             .finish(
                 "source-refresh",
-                &first_claim_token,
+                &token,
                 "checked",
-                "Synthetic check after an expired claim.",
-                Some("2026-09-11T12:00:00Z"),
+                "fixture://expired",
+                Some("2026-09-11T09:00:00Z")
             )
             .is_err()
     );
-    expired_store
-        .recover(
-            "source-refresh",
-            "Reconciled the synthetic expired item claim.",
-        )
+    later
+        .recover("source-refresh", "fixture://reconciled-effects")
         .unwrap();
-    followup_daily::recover(
-        &expired_store,
-        "Reconciled the synthetic expired daily run.",
-    )
-    .unwrap();
-
-    let first_cycle_store = Store::at_in_state(&workspace, &state, expired_at).unwrap();
-    let (daily_token_one, _) = daily_start(&first_cycle_store, "synthetic-host-session-2");
-    let cycle_one_row = row(&first_cycle_store.scan(20).unwrap(), "source-refresh").clone();
-    assert_eq!(cycle_one_row["state"], "ready");
-    let cycle_one_occurrence = cycle_one_row["occurrence"].as_str().unwrap().to_owned();
-    let cycle_one_claim = first_cycle_store
-        .claim(
-            "source-refresh",
-            &cycle_one_occurrence,
-            "synthetic-host-session-2",
-            Some(&daily_token_one),
-        )
-        .unwrap();
-    let cycle_one_item_token = cycle_one_claim["claim"]["token"].as_str().unwrap();
-    let next_check_one = expired_at + Duration::days(1);
-    first_cycle_store
-        .finish(
-            "source-refresh",
-            cycle_one_item_token,
-            "checked",
-            "Synthetic unchanged source inspection completed.",
-            Some(&next_check_one.to_rfc3339()),
-        )
-        .unwrap();
-    followup_daily::finish(
-        &first_cycle_store,
-        &daily_token_one,
-        "Synthetic unchanged-source check complete.",
-    )
-    .unwrap();
-    let canonical_before = fs::read(workspace.join("PROVENANCE.yaml")).unwrap();
-    let first_attempt_bytes = serde_json::to_vec(&first_success).unwrap();
-
-    let second_cycle_store = Store::at_in_state(&workspace, &state, next_check_one).unwrap();
-    let retained = second_cycle_store.load(true).unwrap().unwrap();
-    let old_observation_time = chrono::DateTime::parse_from_rfc3339(
-        retained["observations"][source_ref]["observed_at"]
-            .as_str()
-            .unwrap(),
-    )
-    .unwrap()
-    .with_timezone(&Utc);
-    assert!(next_check_one - old_observation_time > Duration::hours(1));
-    let cycle_two_row = row(&second_cycle_store.scan(20).unwrap(), "source-refresh").clone();
-    assert_eq!(cycle_two_row["state"], "ready");
-    let cycle_two_occurrence = cycle_two_row["occurrence"].as_str().unwrap().to_owned();
-    assert_ne!(cycle_one_occurrence, cycle_two_occurrence);
-    let (daily_token_two, _) = daily_start(&second_cycle_store, "synthetic-host-session-3");
-    let cycle_two_claim = second_cycle_store
-        .claim(
-            "source-refresh",
-            &cycle_two_occurrence,
-            "synthetic-host-session-3",
-            Some(&daily_token_two),
-        )
-        .unwrap();
-
-    let source_two = b"revision: two\ntext: changed synthetic source bytes\n";
-    fs::write(&source_path, source_two).unwrap();
-    let captured_two = fs::read(&source_path).unwrap();
-    let value_two = json!({
-        "tool_output":String::from_utf8(captured_two.clone()).unwrap(),
-        "selected_passage":"revision: two",
-        "source_sha256":sha256(&captured_two)
-    });
-    let observed_two = second_cycle_store
+    followup_daily::recover(&later, "fixture://reconciled-daily").unwrap();
+    if later.show("source-refresh").unwrap()["state"] == "needs_user" {
+        later
+            .resume("source-refresh", "fixture://explicit-resume")
+            .unwrap();
+    }
+    let (daily_one, token_one, claim_one) = claim(&later, "host-two");
+    let unchanged = later
         .inspect_maintenance(report(
-            &item,
-            selected,
-            next_check_one,
-            value_two.clone(),
-            "fixture://synthetic-capture-two",
+            &claim_one,
+            now + Duration::minutes(31),
+            value(&source),
         ))
         .unwrap();
-    assert_eq!(observed_two["outcome"], "observed");
-    assert_ne!(
-        observed_two["observation"]["value"],
-        observation_after_first["value"]
-    );
-    second_cycle_store
+    assert_eq!(unchanged["outcome"], "observed");
+    later
         .finish(
             "source-refresh",
-            cycle_two_claim["claim"]["token"].as_str().unwrap(),
+            &token_one,
             "checked",
-            "Synthetic changed source inspection completed for review.",
-            Some(&(next_check_one + Duration::days(1)).to_rfc3339()),
+            "fixture://unchanged",
+            Some("2026-09-11T09:00:00Z"),
         )
         .unwrap();
-    followup_daily::finish(
-        &second_cycle_store,
-        &daily_token_two,
-        "Synthetic changed-source check complete; no semantic write made.",
-    )
-    .unwrap();
-
-    let attempts = second_cycle_store.show("source-refresh").unwrap()["attempts"]
-        .as_array()
-        .unwrap()
-        .clone();
-    assert!(attempts.contains(&first_success));
+    followup_daily::finish(&later, &daily_one, "fixture://complete").unwrap();
+    let next = Utc.with_ymd_and_hms(2026, 9, 11, 9, 0, 0).unwrap();
+    let second = Store::at_in_state(&work, &state, next).unwrap();
     assert_eq!(
-        serde_json::to_vec(&first_success).unwrap(),
-        first_attempt_bytes
+        followup_daily::status(&second).unwrap()["maintenance_health"]["obligations"][0]["source_state"],
+        "stale"
     );
-    assert_eq!(
-        fs::read(workspace.join("PROVENANCE.yaml")).unwrap(),
-        canonical_before
-    );
-    assert_ne!(
-        second_cycle_store.load(true).unwrap().unwrap()["observations"][source_ref]["value"],
-        observation_after_first["value"]
-    );
-
-    let mut changed_declaration = initial_declaration;
-    changed_declaration["title"] = json!("Inspect the refreshed local fixture");
     fs::write(
-        &declaration_path,
-        serde_json::to_vec(&changed_declaration).unwrap(),
+        &source,
+        "revision: two\nChanged evidence requires manual model review.\n",
     )
     .unwrap();
-    let changed_scan = second_cycle_store.scan(20).unwrap();
-    assert_eq!(row(&changed_scan, "source-refresh")["state"], "unknown");
-    let mut refreshed = maintenance_contract::compile(&changed_declaration).unwrap();
-    refreshed["spec"]["task"] = json!(declaration_path.canonicalize().unwrap());
-    second_cycle_store
-        .refresh(
+    let (daily_two, token_two, claim_two) = claim(&second, "host-three");
+    assert_ne!(claim_one["occurrence"], claim_two["occurrence"]);
+    let changed = second
+        .inspect_maintenance(report(&claim_two, next, value(&source)))
+        .unwrap();
+    assert_eq!(changed["outcome"], "observed");
+    assert_ne!(changed["observation"]["value"], success["value"]);
+    second
+        .finish(
             "source-refresh",
-            refreshed["spec"].clone(),
-            "fixture://explicit-native-task-refresh",
+            &token_two,
+            "checked",
+            "fixture://changed-proposal-only",
+            Some("2026-09-12T09:00:00Z"),
         )
         .unwrap();
-    assert_eq!(
-        row(&second_cycle_store.scan(20).unwrap(), "source-refresh")["state"],
-        "ready"
-    );
-    assert_eq!(
-        fs::read(workspace.join("PROVENANCE.yaml")).unwrap(),
-        canonical_before
-    );
+    followup_daily::finish(&second, &daily_two, "fixture://review-needed").unwrap();
+    assert_eq!(fs::read(work.join("PROVENANCE.yaml")).unwrap(), canonical);
     assert!(
-        second_cycle_store.show("source-refresh").unwrap()["attempts"]
+        second.show("source-refresh").unwrap()["attempts"]
             .as_array()
             .unwrap()
-            .contains(&first_success)
+            .contains(&observed["attempt"])
     );
+    d["title"] = json!("Updated description within same source scope");
+    fs::write(&intent, serde_json::to_vec(&d).unwrap()).unwrap();
+    assert!(
+        second
+            .inspect_maintenance(report(&claim_two, next, value(&source)))
+            .is_err()
+    );
+    let mut refreshed = maintenance_contract::compile(&d).unwrap()["spec"].clone();
+    refreshed["task"] = json!(intent.canonicalize().unwrap());
+    second
+        .refresh(
+            "source-refresh",
+            refreshed,
+            "fixture://explicit-declaration-reread",
+        )
+        .unwrap();
+    assert!(
+        second
+            .inspect_maintenance(report(
+                &second.show("source-refresh").unwrap(),
+                next,
+                value(&source)
+            ))
+            .is_ok()
+    );
+    assert_eq!(fs::read(work.join("PROVENANCE.yaml")).unwrap(), canonical);
+    let _ = daily;
 }

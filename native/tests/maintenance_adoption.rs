@@ -35,7 +35,7 @@ fn setup() -> (tempfile::TempDir, Store) {
 #[test]
 fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
     let (_temp, store) = setup();
-    let proposed = followup_daily::status(&store).unwrap();
+    let proposed = followup_daily::status_with_maintenance(&store).unwrap();
     assert_eq!(proposed["adoption"]["state"], "proposed");
     assert_eq!(proposed["adoption"]["authorized"], false);
 
@@ -56,7 +56,7 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
             .unwrap();
     assert_eq!(authorized["state"], "authorized_uninstalled");
     assert_eq!(authorized["authorized"], true);
-    let status = followup_daily::status(&store).unwrap();
+    let status = followup_daily::status_with_maintenance(&store).unwrap();
     assert_eq!(status["state"], "proposed");
     assert_eq!(status["adoption"]["state"], "authorized_uninstalled");
     assert_eq!(status["adoption"]["acknowledged"], true);
@@ -70,11 +70,11 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
     )
     .unwrap();
     assert_eq!(
-        followup_daily::status(&store).unwrap()["adoption"]["state"],
+        followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["state"],
         "configuration_unverified"
     );
     assert_eq!(
-        followup_daily::status(&store).unwrap()["adoption"]["configuration"],
+        followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["configuration"],
         "configuration_unverified"
     );
     let run = followup_daily::start(&store, "observed-session").unwrap();
@@ -85,11 +85,11 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
     )
     .unwrap();
     assert_eq!(
-        followup_daily::status(&store).unwrap()["adoption"]["state"],
+        followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["state"],
         "active_observed"
     );
     followup_daily::record_adoption(&store, "declined", None).unwrap();
-    let declined_with_binding = followup_daily::status(&store).unwrap();
+    let declined_with_binding = followup_daily::status_with_maintenance(&store).unwrap();
     assert_eq!(declined_with_binding["adoption"]["state"], "declined");
     assert_eq!(
         declined_with_binding["adoption"]["configuration"],
@@ -101,11 +101,11 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
     )
     .unwrap();
     assert_eq!(
-        followup_daily::status(&store).unwrap()["adoption"]["state"],
+        followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["state"],
         "declined"
     );
     assert_eq!(
-        followup_daily::status(&store).unwrap()["adoption"]["configuration"],
+        followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["configuration"],
         "paused"
     );
 }

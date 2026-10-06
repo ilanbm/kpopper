@@ -141,6 +141,14 @@ fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
     {
         return Ok(String::new());
     }
+    if report["maintenance_health"].is_null() && report["degraded"] != true {
+        return Ok(format!(
+            "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue.",
+            serde_json::to_string(
+                &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"]})
+            )?
+        ));
+    }
     let maintenance_health = if report["maintenance_health"]["obligations"]
         .as_array()
         .is_some_and(|v| !v.is_empty())
@@ -159,7 +167,7 @@ fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
         J::Null
     };
     Ok(format!(
-        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission.",
+        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission. For material current use, run followups assess over actual requested subject IDs. Disclose failed/expired/unknown evidence explicitly; within_age_window is not current adequacy. Changed observation/model alignment remains pending until actual review. Source truth, applicability, authority and consumer version are separate.",
         serde_json::to_string(
             &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"],"maintenance_health":maintenance_health,"maintenance_omitted":report["maintenance_omitted"],"omitted":report["omitted"],"degraded":report["degraded"]})
         )?
@@ -180,7 +188,12 @@ fn followups(payload: &J) -> Result<Output> {
     let text = if store.load(false)?.is_none() {
         discovery
     } else {
-        format!("{}\n{}", discovery, followup_text(&store)?)
+        let followup = followup_text(&store)?;
+        if followup.is_empty() {
+            discovery
+        } else {
+            format!("{}\n{}", followup, discovery)
+        }
     };
     let fingerprint = crate::followup_store::digest(&J::String(text.clone()))?;
     fs::create_dir_all(&store.root)?;
@@ -831,5 +844,56 @@ pub fn run(
             ),
             code: 0,
         }),
+    }
+}
+
+#[cfg(test)]
+mod maintenance_clock_transition_tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicI64, Ordering},
+    };
+    #[test]
+    fn unchanged_graph_and_ledger_do_not_hide_active_session_expiry_or_due_health() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("PROVENANCE.yaml"),"meta:\n  name: Clock transition\nknown:\n  subject.value:\n    name: Subject\n    v: 1\n").unwrap();
+        let initial = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let ticks = Arc::new(AtomicI64::new(initial.timestamp()));
+        let clock = ticks.clone();
+        let store = crate::followup_store::Store::at_in_state(
+            &workspace,
+            &temp.path().join("state"),
+            initial,
+        )
+        .unwrap()
+        .with_test_clock(move || Utc.timestamp_opt(clock.load(Ordering::SeqCst), 0).unwrap());
+        store.setup(None, "UTC", None, true).unwrap();
+        let declaration = json!({"schema":"kpopper.maintenance-declaration/v1","kind":"source","id":"subject-check","title":"Subject check","why":"Current subject","how":"Read source","scope":"Read only","related":["subject.value"],"cadence_days":1,"timezone":"UTC","check_time":"09:00","use_policy":"allow_cached_until_expiry","evidence_requirement":"host_attested","first_due_at":"2026-10-06T14:00:00Z","source":{"source_id":"subject-provider","locator":"https://example.test/subject","publisher":"Example","selection":"Subject","adapter":"host/v1","tool_policy":"authorized read","allowed_roots":["https://example.test/"],"evidence_format":"text","max_age_hours":1}});
+        let item = store
+            .add(crate::maintenance_contract::compile(&declaration).unwrap()["spec"].clone())
+            .unwrap();
+        store.inspect_maintenance(json!({"id":"subject-check","policy_digest":item["spec"]["maintenance"]["policy_digest"],"source_ref":item["spec"]["maintenance"]["source_ref"],"inspection":item["spec"]["maintenance"]["inspection"],"inspected_at":initial.to_rfc3339(),"value":"selected data","evidence":"fixture://selected"})).unwrap();
+        let ledger = fs::read(&store.path).unwrap();
+        let graph = fs::read(workspace.join("PROVENANCE.yaml")).unwrap();
+        let before = followup_text(&store).unwrap();
+        let before_key = crate::followup_store::digest(&J::String(before.clone())).unwrap();
+        ticks.store(initial.timestamp() + 3600, Ordering::SeqCst);
+        let expired = followup_text(&store).unwrap();
+        assert!(expired.contains("stale"));
+        assert_ne!(
+            before_key,
+            crate::followup_store::digest(&J::String(expired.clone())).unwrap()
+        );
+        assert_eq!(expired, followup_text(&store).unwrap());
+        ticks.store(initial.timestamp() + 7200, Ordering::SeqCst);
+        let due = followup_text(&store).unwrap();
+        assert!(due.contains("due"));
+        assert_ne!(expired, due);
+        assert_eq!(ledger, fs::read(&store.path).unwrap());
+        assert_eq!(graph, fs::read(workspace.join("PROVENANCE.yaml")).unwrap());
     }
 }

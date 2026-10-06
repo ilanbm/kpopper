@@ -257,6 +257,8 @@ pub mod public_session;
 
 pub mod application_cli;
 pub mod followup_daily;
+mod maintenance_wake;
+mod maintenance_assessment;
 pub mod history_contribution_adoption;
 pub(crate) mod history_contribution_prepare;
 pub mod public_expressions;

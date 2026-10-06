@@ -68,6 +68,23 @@ pub enum Command {
         #[arg(long)]
         authorization_evidence: Option<String>,
     },
+    /// Correlate an actual source/model review; never accepts a semantic model change.
+    ReviewSource {
+        id: String,
+        #[arg(long, value_parser = ["no_model_change_needed", "candidate_pending", "reviewed_model_update"])]
+        outcome: String,
+        #[arg(long)]
+        evidence: String,
+        #[arg(long)]
+        authorization_evidence: String,
+    },
+    /// Recompute declared-scope evidence/alignment adequacy with current native time.
+    Assess {
+        #[arg(long, required = true, num_args = 1..)]
+        ids: Vec<String>,
+        #[arg(long)]
+        claim_token: Vec<String>,
+    },
     /// Read-only readiness check; never executes a task.
     Scan {
         #[arg(long, default_value_t = 20)]
@@ -81,6 +98,9 @@ pub enum Command {
         owner: String,
         #[arg(long)]
         daily_token: Option<String>,
+        /// Actual current-user authorization for an inspection before periodic due time.
+        #[arg(long)]
+        current_use_authority: Option<String>,
     },
     Renew {
         id: String,
@@ -194,6 +214,8 @@ pub enum DailyCommand {
     Start {
         #[arg(long)]
         owner: String,
+        #[arg(long)]
+        manual_evidence: Option<String>,
     },
     Finish {
         #[arg(long)]
@@ -208,6 +230,17 @@ pub enum DailyCommand {
     Recover {
         #[arg(long)]
         evidence: String,
+    },
+    /// Select local execution intent; does not mutate a host schedule.
+    Mode {
+        #[arg(value_parser = ["manual", "paused", "daily_fallback", "native"])]
+        mode: String,
+        #[arg(long)]
+        authorization_evidence: String,
+        #[arg(long)]
+        acknowledge_empty_run_cost: bool,
+        #[arg(long)]
+        file: Option<String>,
     },
     /// Record an explicit offer, decline, snooze or user authorization; never installs a host job.
     Adoption {
@@ -283,13 +316,27 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             evidence,
             authorization_evidence.as_deref(),
         ),
+        Command::ReviewSource {
+            id,
+            outcome,
+            evidence,
+            authorization_evidence,
+        } => store.record_model_alignment(id, outcome, evidence, authorization_evidence),
+        Command::Assess { ids, claim_token } => store.assess_use(ids, claim_token),
         Command::Scan { limit } => store.scan(*limit),
         Command::Claim {
             id,
             occurrence,
             owner,
             daily_token,
-        } => store.claim(id, occurrence, owner, daily_token.as_deref()),
+            current_use_authority,
+        } => store.claim_for_use(
+            id,
+            occurrence,
+            owner,
+            daily_token.as_deref(),
+            current_use_authority.as_deref(),
+        ),
         Command::Renew { id, token } => store.renew(id, token),
         Command::Release {
             id,
@@ -385,12 +432,30 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             }
             DailyCommand::Status => crate::followup_daily::status(&store),
             DailyCommand::Bind { file } => crate::followup_daily::bind(&store, supplied(file)?),
-            DailyCommand::Start { owner } => crate::followup_daily::start(&store, owner),
+            DailyCommand::Start {
+                owner,
+                manual_evidence,
+            } => match manual_evidence {
+                Some(reference) => crate::followup_daily::start_manual(&store, owner, reference),
+                None => crate::followup_daily::start(&store, owner),
+            },
             DailyCommand::Finish { token, evidence } => {
                 crate::followup_daily::finish(&store, token, evidence)
             }
             DailyCommand::Renew { token } => crate::followup_daily::renew(&store, token),
             DailyCommand::Recover { evidence } => crate::followup_daily::recover(&store, evidence),
+            DailyCommand::Mode {
+                mode,
+                authorization_evidence,
+                acknowledge_empty_run_cost,
+                file,
+            } => crate::followup_daily::maintenance_mode(
+                &store,
+                mode,
+                authorization_evidence,
+                *acknowledge_empty_run_cost,
+                file.as_deref().map(supplied).transpose()?,
+            ),
             DailyCommand::Adoption {
                 action,
                 until,

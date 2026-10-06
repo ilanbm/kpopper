@@ -125,6 +125,17 @@ pub fn bind(store: &Store, report: Value) -> Result<Value> {
 
 pub fn status(store: &Store) -> Result<Value> {
     let data = store.load(true)?.unwrap();
+    let mut result = status_with_maintenance(store)?;
+    if data["version"] == 1 {
+        for key in ["adoption", "maintenance_health", "wake"] {
+            result.as_object_mut().unwrap().remove(key);
+        }
+    }
+    Ok(result)
+}
+
+pub fn status_with_maintenance(store: &Store) -> Result<Value> {
+    let data = store.load(true)?.unwrap();
     let daily = &data["daily"];
     let binding = daily["binding"].clone();
     let state = if binding.is_null() {
@@ -153,7 +164,7 @@ pub fn status(store: &Store) -> Result<Value> {
     Ok(
         json!({"state":state,"binding":binding,"run":run,"claim":claim,
         "last_review":daily["receipts"].as_array().and_then(|rows|rows.last()).cloned(),
-        "timezone":data["config"]["timezone"],"adoption":adoption,"maintenance_health":maintenance_health}),
+        "timezone":data["config"]["timezone"],"adoption":adoption,"maintenance_health":maintenance_health,"wake":crate::maintenance_wake::assess(&data,store.now())}),
     )
 }
 
@@ -192,7 +203,8 @@ fn adoption_status(data: &Value, now: DateTime<Utc>) -> Result<Value> {
             Some("missing") => "missing".into(),
             Some("active") => {
                 let observed = parse_time(binding["observed_at"].as_str().unwrap_or(""), "UTC")?;
-                let fresh = now.signed_duration_since(observed) < Duration::hours(24);
+                let fresh =
+                    observed <= now && now.signed_duration_since(observed) < Duration::hours(24);
                 let run_observed = daily["receipts"].as_array().is_some_and(|receipts| {
                     receipts.iter().any(|receipt| {
                         receipt["outcome"] == "complete"
@@ -228,6 +240,16 @@ fn adoption_status(data: &Value, now: DateTime<Utc>) -> Result<Value> {
         "authorization_evidence":saved.and_then(|value| value["authorization_evidence"].as_str()),
         "binding":binding,
     }))
+}
+
+pub fn maintenance_mode(
+    store: &Store,
+    mode: &str,
+    authority: &str,
+    cost_acknowledged: bool,
+    readback: Option<Value>,
+) -> Result<Value> {
+    crate::maintenance_wake::select(store, mode, authority, cost_acknowledged, readback)
 }
 
 pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Result<Value> {
@@ -278,6 +300,7 @@ pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Resu
             _ => unreachable!(),
         }
         let adoption = Value::Object(adoption);
+        data["version"] = json!(2);
         data["daily"]["adoption"] = adoption.clone();
         Ok(adoption)
     })?;
@@ -288,7 +311,15 @@ pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Resu
 pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Value> {
     let daily = &data["daily"];
     let binding = &daily["binding"];
-    let host_state = if binding.is_null() {
+    let wake = crate::maintenance_wake::assess(data, now);
+    let host_state = if matches!(
+        wake["state"].as_str(),
+        Some("paused_locally" | "manual" | "incompatible")
+    ) {
+        wake["state"].as_str().unwrap().to_owned()
+    } else if wake["state"] == "unknown" && data["daily"].get("maintenance_mode").is_some() {
+        "wake_unknown".to_owned()
+    } else if binding.is_null() {
         "missing".to_owned()
     } else {
         match binding["state"].as_str() {
@@ -296,7 +327,8 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
             Some("missing") => "missing".into(),
             Some("active") => {
                 let observed = parse_time(binding["observed_at"].as_str().unwrap_or(""), "UTC")?;
-                let fresh = now.signed_duration_since(observed) < Duration::hours(24);
+                let fresh =
+                    observed <= now && now.signed_duration_since(observed) < Duration::hours(24);
                 let run_observed = daily["receipts"].as_array().is_some_and(|receipts| {
                     receipts.iter().any(|receipt| {
                         receipt["outcome"] == "complete"
@@ -358,7 +390,9 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
             let age = now.signed_duration_since(observed);
             let age_seconds =
                 age.num_seconds() as f64 + f64::from(age.subsec_nanos()) / 1_000_000_000.0;
-            if max_age <= 0.0 || age_seconds >= max_age * 3_600.0 {
+            if observed > now {
+                "time_unestablished"
+            } else if max_age <= 0.0 || age_seconds >= max_age * 3_600.0 {
                 "stale"
             } else {
                 "within_age_window"
@@ -389,16 +423,25 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
             "use_policy":maintenance["use_policy"],
             "failure_state":if attempt_state == "unavailable" {"failed"} else {"none"},
             "due_at":due_at,"observed_at":observation.and_then(|value| value["observed_at"].as_str()),
-            "failure":failure
+            "failure":failure, "wake_state":wake["state"]
         }));
     }
     let degraded = obligations.iter().any(|item| {
         ["due", "overdue", "needs_user", "interrupted", "closed"]
             .contains(&item["check_state"].as_str().unwrap_or(""))
-            || ["missing", "stale"].contains(&item["source_state"].as_str().unwrap_or(""))
+            || ["missing", "stale", "time_unestablished"]
+                .contains(&item["source_state"].as_str().unwrap_or(""))
             || item["attempt_state"] == "unavailable"
-            || ["paused", "missing", "configuration_unverified"]
-                .contains(&item["host_state"].as_str().unwrap_or(""))
+            || [
+                "paused",
+                "paused_locally",
+                "manual",
+                "incompatible",
+                "wake_unknown",
+                "missing",
+                "configuration_unverified",
+            ]
+            .contains(&item["host_state"].as_str().unwrap_or(""))
     });
     let meaningful = obligations.iter().map(|obligation| json!({
         "id":obligation["id"],"kind":obligation["kind"],"check_state":obligation["check_state"],
@@ -421,9 +464,12 @@ fn attention_key(packet: &Value) -> Result<String> {
             Value::Object(row)
         })
         .collect::<Vec<_>>();
-    digest(
-        &json!({"counts":packet["counts"],"graph_error":packet["graph_error"],"maintenance":packet["maintenance"],"maintenance_health_fingerprint":packet["maintenance_health"]["fingerprint"],"items":items}),
-    )
+    let mut material = json!({"counts":packet["counts"],"graph_error":packet["graph_error"],"maintenance":packet["maintenance"],"items":items});
+    if !packet["maintenance_health"].is_null() {
+        material["maintenance_health_fingerprint"] =
+            packet["maintenance_health"]["fingerprint"].clone();
+    }
+    digest(&material)
 }
 
 pub fn start(store: &Store, owner: &str) -> Result<Value> {
@@ -437,8 +483,32 @@ pub fn start_with_watch_request(
     owner: &str,
     request: impl Fn(&Path) -> Result<Option<Value>>,
 ) -> Result<Value> {
+    start_with_mode(store, owner, request, None)
+}
+
+pub fn start_manual(store: &Store, owner: &str, reference: &str) -> Result<Value> {
+    start_with_mode(store, owner, default_watch_request, Some(reference))
+}
+
+pub fn start_with_mode(
+    store: &Store,
+    owner: &str,
+    request: impl Fn(&Path) -> Result<Option<Value>>,
+    manual_evidence: Option<&str>,
+) -> Result<Value> {
+    if let Some(reference) = manual_evidence {
+        text(
+            Some(&json!(reference)),
+            "manual current-session authorization reference",
+        )?;
+    }
     text(Some(&json!(owner)), "unique session owner")?;
     store.transaction(|data| {
+        let mode = data["daily"]["maintenance_mode"]["mode"].as_str().unwrap_or("existing");
+        let wake = crate::maintenance_wake::assess(data, store.now());
+        require(mode != "paused", "Maintenance is paused locally; host wake state is separate")?;
+        require(mode != "manual" || manual_evidence.is_some(), "Manual mode needs an explicit current-session authorization reference")?;
+        require(mode != "native" || wake["state"] == "compatible" || manual_evidence.is_some(), "Native wake is unknown or incompatible; select daily fallback or manual mode instead of silently changing the host")?;
         let timezone = data["config"]["timezone"].as_str().unwrap().parse::<chrono_tz::Tz>()
             .map_err(|e| error(format!("invalid time or timezone: {e}")))?;
         let day = store.now().with_timezone(&timezone).date_naive().to_string();
@@ -649,10 +719,21 @@ pub fn install_begin(
     })?;
     text(Some(&json!(owner)), "unique host/session owner")?;
     store.transaction(|data|{
+        require(!matches!(data["daily"]["maintenance_mode"]["mode"].as_str(),Some("manual"|"paused")), "Local maintenance is manual or paused; explicitly select native/daily_fallback intent before proposing installation")?;
+        let needs_fallback = data["daily"]["binding"].is_null() && data["items"].as_object().unwrap().values().any(|item|
+            item["spec"]["maintenance"]["cadence_days"].as_u64().is_some_and(|n| n > 1) && !matches!(item["state"].as_str(),Some("done"|"cancelled")));
+        require(!needs_fallback || data["daily"]["maintenance_mode"]["mode"] == "native" || (data["daily"]["maintenance_mode"]["mode"] == "daily_fallback" && data["daily"]["maintenance_mode"]["empty_run_cost_acknowledged"] == true),
+            "N-day checks do not silently authorize daily wakes; select daily_fallback with its empty-run token cost, or native/manual mode")?;
+
         let mut previous=data["daily"].get("installation").cloned().unwrap_or(Value::Null);
         if !previous.is_null() && matches!(previous["state"].as_str(),Some("apply"|"uncertain")) {
             if previous["owner"]!=owner { return Ok(json!({"state":"needs_reconciliation","action":"inspect_only","installation":previous,"instruction":"A host change may already have happened. Inspect it; never create another schedule. An actual matching readback can finish the retained token."})); }
             return install_packet(store,data,Some(&previous),false);
+        }
+        if data["daily"]["maintenance_mode"]["mode"] == "native" && data["daily"]["binding"].is_null() {
+            return Ok(json!({"state":"native_host_admission_required","action":"inspect_only","workspace_key":data["workspace_key"],"prompt":prompt(store,data)?,
+                "policies":data["items"].as_object().unwrap().values().filter(|item|item["spec"].get("maintenance").is_some()).map(|item|item["spec"]["maintenance"].clone()).collect::<Vec<_>>(),
+                "instruction":"Selected native mode requires actual supported calendar-day host capability, one workspace owner and exact phase/readback. Configure only through separately authorized host tools, then record real binding/readback. No daily fallback or host change has occurred; manual/daily_fallback remain explicit alternatives."}));
         }
         if !previous.is_null() && previous["state"]=="inspect" && previous["owner"]==owner {
             if previous["config"]!=digest(&data["config"])? { data["daily"]["installation"]["state"]=json!("blocked"); data["daily"]["installation"]["reason"]=json!("Configuration changed before host mutation"); previous=data["daily"]["installation"].clone(); }

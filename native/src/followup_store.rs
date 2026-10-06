@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use fs2::FileExt;
 use serde_json::{Map, Value, json};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Component, Path, PathBuf},
@@ -34,6 +34,8 @@ struct Graph {
     values: Map<String, Value>,
     core: BTreeSet<String>,
     maintenance: Vec<Value>,
+    nodes: BTreeMap<String, crate::maintenance_assessment::Node>,
+    record_identity: String,
 }
 
 pub struct Store {
@@ -630,6 +632,25 @@ impl Store {
                     .any(|item| item["spec"].get("maintenance").is_some()),
             "Maintenance declarations require the version 2 followup capability boundary",
         )?;
+        require(
+            data["version"] == 2
+                || (data["daily"].get("maintenance_mode").is_none()
+                    && data["daily"].get("adoption").is_none()),
+            "Maintenance execution/choice metadata requires the version2 capability boundary",
+        )?;
+        if let Some(mode) = data["daily"].get("maintenance_mode") {
+            require(
+                matches!(
+                    mode["mode"].as_str(),
+                    Some("manual" | "paused" | "daily_fallback" | "native")
+                ) && mode["authorization_reference"]
+                    .as_str()
+                    .is_some_and(|r| !r.trim().is_empty() && r.len() <= 512),
+                "Invalid local maintenance execution intent",
+            )?;
+            triggers::parse_time(mode["selected_at"].as_str().unwrap_or(""), "UTC")?;
+        }
+
         for (key, item) in object["items"].as_object().unwrap() {
             let item = item
                 .as_object()
@@ -789,6 +810,15 @@ impl Store {
             "Invalid ledger section: daily",
         )?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_clock(
+        mut self,
+        clock: impl Fn() -> DateTime<Utc> + Send + Sync + 'static,
+    ) -> Self {
+        self.now = Box::new(clock);
+        self
     }
 
     pub(crate) fn transaction<T>(
@@ -1162,6 +1192,33 @@ impl Store {
             .map_err(|reason| error(format!("Knowledge record unavailable: {reason}")))
     }
 
+    fn use_node(body: &V, fields: &V, unavailable: bool) -> crate::maintenance_assessment::Node {
+        let projected = || -> Result<_> {
+            let fields_map = H::map(fields)?;
+            let body_map = H::map(body)?;
+            let dependency_field = fields_map.get("deps").and_then(|v| H::text(v).ok());
+            let dependencies = if let Some(key) = dependency_field {
+                crate::public_ordinary_readers::iterable(body_map.get(key).unwrap_or(&V::Null))?
+            } else {
+                Vec::new()
+            };
+            let identity = digest(&json!({"body":typed_json(body)?,"fields":typed_json(fields)?}))?;
+            Ok((dependencies, identity))
+        };
+        match projected() {
+            Ok((dependencies, identity)) => crate::maintenance_assessment::Node {
+                dependencies,
+                identity,
+                dependency_error: unavailable
+                    .then(|| "knowledge reading or attention is unresolved".into()),
+            },
+            Err(reason) => crate::maintenance_assessment::Node {
+                dependency_error: Some(reason.to_string()),
+                ..Default::default()
+            },
+        }
+    }
+
     fn graph_inner(&self, data: &Value) -> Result<Graph> {
         let record = PathBuf::from(data["config"]["record"].as_str().unwrap());
         let workspace = PathBuf::from(data["config"]["workspace"].as_str().unwrap());
@@ -1191,16 +1248,27 @@ impl Store {
                 context.snapshot_id(),
                 context.findings_revision(),
             )?;
-            let graph = Graph {
+            let mut graph = Graph {
                 core: projected.values.keys().cloned().collect(),
                 values: projected.values,
                 maintenance: projected.maintenance,
+                nodes: BTreeMap::new(),
+                record_identity: context.snapshot_id().to_owned(),
             };
+            for (id, node) in H::map(&H::map(context.assessment())?["nodes"])? {
+                let node = H::map(node)?;
+                let unresolved = graph.maintenance.iter().any(|item| item["id"] == *id);
+                graph.nodes.insert(
+                    id.clone(),
+                    Self::use_node(&node["body"], &node["fields"], unresolved),
+                );
+            }
             capture.verify()?;
             return Ok(graph);
         }
         let reader = Reader::for_followups(capture.ordinary_document(), runtime.as_ref())?;
         let mut graph = Graph::default();
+        graph.record_identity = digest(&typed_json(capture.ordinary_document())?)?;
         for id in &reader.ids {
             let Some(body) = reader.raw().get(id) else {
                 continue;
@@ -1232,6 +1300,16 @@ impl Store {
                 if !reasons.is_empty() {
                     graph.maintenance.push(json!({"id":id,"reasons":reasons}));
                 }
+            }
+        }
+        for id in &reader.ids {
+            if let Some(body) = reader.raw().get(id) {
+                let unresolved = graph.values[id].get("unavailable").is_some()
+                    || graph.maintenance.iter().any(|item| item["id"] == *id);
+                graph.nodes.insert(
+                    id.clone(),
+                    Self::use_node(body, &V::Map(reader.fields().clone()), unresolved),
+                );
             }
         }
         capture.verify()?;
@@ -1884,6 +1962,7 @@ impl Store {
             let use_policy = maintenance["use_policy"].clone();
             let attempts = item["attempts"].as_array().unwrap().clone();
             let claim_token = item["claim"]["token"].clone();
+            let prior_alignment = item["model_alignment"].clone();
             let source_ref = maintenance["source_ref"].as_str().unwrap().to_owned();
             let usable = report.get("value").is_some_and(|value| match value {
                 Value::Null => false,
@@ -1901,6 +1980,7 @@ impl Store {
                 else { String::new() };
             let evidence = text(report.get("evidence"), "evidence")?;
             let mut observation = Value::Null;
+            let mut carried_alignment = Value::Null;
             if failure.is_empty() {
                 require(serde_json::to_vec(&report["value"])?.len() <= OBSERVATION_BYTES, "Observation value exceeds 64 KiB")?;
                 let value = json!({"value":report["value"], "observed_at":triggers::stamp(inspected_at.unwrap()), "evidence":evidence, "maintenance_observation":true});
@@ -1917,6 +1997,20 @@ impl Store {
                 if failure.is_empty() {
                     if let Some(old) = data["observations"].get(&source_ref) { self.retain_observation(old)?; }
                     self.retain_observation(&value)?;
+                    if let Some(old) = data["observations"].get(&source_ref) {
+                        if prior_alignment["source_ref"] == source_ref && prior_alignment["observation_digest"] == digest(old)?
+                            && matches!(prior_alignment["outcome"].as_str(),Some("no_model_change_needed"|"reviewed_model_update"))
+                            && digest(&old["value"])? == digest(&value["value"])? {
+                            if let Ok(graph) = self.graph(data) {
+                                if crate::maintenance_assessment::scope_identity(&Self::item(data,&id)?["spec"],&graph.nodes).is_ok_and(|scope|prior_alignment["scope_identity"] == scope) {
+                                    carried_alignment = prior_alignment.clone();
+                                    carried_alignment["carried_from_observation"] = prior_alignment["observation_digest"].clone();
+                                    carried_alignment["observation_digest"] = json!(digest(&value)?);
+                                    carried_alignment["carried_at"] = json!(triggers::stamp(receipt_at));
+                                }
+                            }
+                        }
+                    }
                     data["observations"].as_object_mut().unwrap().insert(source_ref.clone(), value.clone());
                     observation = value;
                 }
@@ -1947,6 +2041,7 @@ impl Store {
                     "use_policy":use_policy, "current_use_adequacy":"unassessed"}});
             require(serde_json::to_vec(&attempt)?.len() <= OBSERVATION_BYTES, "Maintenance attempt metadata exceeds 64 KiB")?;
             data["items"][&id]["attempts"].as_array_mut().unwrap().push(attempt.clone());
+            if !carried_alignment.is_null() { data["items"][&id]["model_alignment"] = carried_alignment; }
             if outcome == "unavailable" {
                 if consecutive_failures >= MAX_CONSECUTIVE_MAINTENANCE_FAILURES || retry_at.is_none() {
                     data["items"][&id]["state"] = json!("needs_user");
@@ -1958,6 +2053,104 @@ impl Store {
                 "policy_digest":report["policy_digest"], "source_ref":source_ref,
                 "receipt_at":triggers::stamp(receipt_at), "observation":observation}))
         })
+    }
+
+    pub fn record_model_alignment(
+        &self,
+        key: &str,
+        outcome: &str,
+        evidence: &str,
+        authority: &str,
+    ) -> Result<Value> {
+        require(
+            [
+                "no_model_change_needed",
+                "candidate_pending",
+                "reviewed_model_update",
+            ]
+            .contains(&outcome),
+            "Unknown source/model review outcome",
+        )?;
+        text(
+            Some(&json!(evidence)),
+            "actual source-to-model review evidence",
+        )?;
+        text(
+            Some(&json!(authority)),
+            "existing or new user review authorization reference",
+        )?;
+        require(
+            evidence.len() <= 512 && authority.len() <= 512,
+            "Model review evidence and authority must be references of at most512 bytes",
+        )?;
+        self.transaction(|data| {
+            let item = Self::item(data,key)?.clone();
+            require(item["spec"]["maintenance"]["kind"] == "source", "Model alignment needs a declared source check")?;
+            let reference = item["spec"]["maintenance"]["source_ref"].as_str().unwrap();
+            let observation = data["observations"].get(reference).ok_or_else(||error("No guarded source observation to review"))?;
+            let hash = digest(observation)?;
+            require(item["attempts"].as_array().unwrap().iter().any(|a|a["type"] == "maintenance_inspection" && a["source_ref"] == reference && a["outcome"] == "observed" && a["observation_digest"] == hash), "The retained source reading has no guarded inspection receipt")?;
+            require(fingerprint(item["task"].as_str().unwrap())?.map(|v|json!(v)).unwrap_or(Value::Null) == item["task_fingerprint"], "Task changed; refresh its declaration before model alignment")?;
+            let graph = self.graph(data)?;
+            let scope = crate::maintenance_assessment::scope_identity(&item["spec"], &graph.nodes)?;
+            let review = json!({"type":"maintenance_model_review","outcome":outcome,"source_ref":reference,"observation_digest":hash,"scope_identity":scope,
+                "record_identity":graph.record_identity,"recorded_at":triggers::stamp(self.now()),"evidence":evidence,"authorization_reference":authority,
+                "assurance":"host-attested review correlation; no semantic acceptance, permission or source truth is created"});
+            data["items"][key]["attempts"].as_array_mut().unwrap().push(review.clone());
+            data["items"][key]["model_alignment"] = review.clone();
+            Ok(review)
+        })
+    }
+
+    pub fn assess_use(&self, subjects: &[String], claim_tokens: &[String]) -> Result<Value> {
+        let data = self.load(true)?.unwrap();
+        let graph = self.graph(&data)?;
+        let mut current = BTreeSet::new();
+        let mut active = BTreeMap::new();
+        for (id, item) in data["items"].as_object().unwrap() {
+            if item["spec"].get("maintenance").is_none() {
+                continue;
+            }
+            if fingerprint(item["task"].as_str().unwrap())
+                .ok()
+                .flatten()
+                .map(|v| json!(v))
+                .unwrap_or(Value::Null)
+                == item["task_fingerprint"]
+            {
+                current.insert(id.clone());
+            }
+            if let Some(token) = item["claim"]["token"]
+                .as_str()
+                .filter(|token| claim_tokens.iter().any(|t| t == token))
+            {
+                if let Ok(claim) = self.owned_claim(item, token, true) {
+                    active.insert(
+                        id.clone(),
+                        crate::maintenance_assessment::ActiveUse {
+                            started_at: triggers::parse_time(
+                                claim["started_at"].as_str().unwrap(),
+                                "UTC",
+                            )?,
+                            expires_at: triggers::parse_time(
+                                claim["expires_at"].as_str().unwrap(),
+                                "UTC",
+                            )?,
+                        },
+                    );
+                }
+            }
+        }
+        crate::maintenance_assessment::assess(
+            subjects,
+            &graph.nodes,
+            &data["items"],
+            &data["observations"],
+            &current,
+            &active,
+            self.now(),
+            &graph.record_identity,
+        )
     }
 
     pub fn record_maintenance_attempt(&self, report: Value) -> Result<Value> {
@@ -1975,11 +2168,29 @@ impl Store {
         owner: &str,
         daily_token: Option<&str>,
     ) -> Result<Value> {
+        self.claim_for_use(key, occurrence, owner, daily_token, None)
+    }
+
+    pub fn claim_for_use(
+        &self,
+        key: &str,
+        occurrence: &str,
+        owner: &str,
+        daily_token: Option<&str>,
+        current_use_authority: Option<&str>,
+    ) -> Result<Value> {
+        if let Some(reference) = current_use_authority {
+            text(
+                Some(&json!(reference)),
+                "current-use user authorization reference",
+            )?;
+        }
         text(Some(&json!(owner)), "session owner")?;
         self.transaction(|data| {
             let graph = self.graph(data)?;
             let row = self.row(Self::item(data,key)?,data,&graph,None,self.now())?;
-            require(row["state"]=="ready" && row["occurrence"]==occurrence, &format!("Followup is not ready or the scan is stale; scan again ({})",row["state"].as_str().unwrap()))?;
+            let manual_use = current_use_authority.is_some() && daily_token.is_none() && Self::item(data,key)?["spec"]["maintenance"]["kind"] == "source" && row["state"] == "waiting";
+            require((row["state"]=="ready" || manual_use) && row["occurrence"]==occurrence, &format!("Followup is not eligible or the scan is stale; scan again ({})",row["state"].as_str().unwrap()))?;
             if let Some(token)=daily_token {
                 let daily=&data["daily"]["claim"];
                 require(!daily.is_null() && daily["token"]==token && triggers::parse_time(daily["expires_at"].as_str().unwrap(),"UTC")?>self.now(), "The daily review is not live or owned by this token")?;
@@ -1995,6 +2206,7 @@ impl Store {
             }
             let spec=Self::item(data,key)?["spec"].clone();
             let mut claim=json!({"token":Uuid::new_v4().simple().to_string(),"owner":owner,"started_at":triggers::stamp(self.now()),"expires_at":triggers::stamp(self.now()+Duration::minutes(30)),"occurrence":occurrence,"baseline":Self::baseline(&spec,&graph),"daily_token":daily_token,"baseline_events":Self::event_values(&spec,data)?});
+            if let Some(reference) = current_use_authority { claim["current_use_authorization_reference"] = json!(reference); }
             Self::mark_core(claim.as_object_mut().unwrap(),&spec,&graph);
             data["items"][key]["claim"]=claim.clone();
             let mut result=row;
@@ -2076,6 +2288,7 @@ impl Store {
                 !(item["spec"].get("maintenance").is_some() && outcome == "done"),
                 "A periodic maintenance check cannot be finished as done",
             )?;
+            require(outcome != "checked" || claim["current_use_authorization_reference"].is_null(), "Manual current-use inspections release their lease; they cannot silently advance the periodic schedule")?;
             let normalized_next=if outcome=="checked" {
                 let next=next_at.ok_or_else(||error("A completed check needs a justified future next_at"))?;
                 let parsed=triggers::parse_time(next,data["config"]["timezone"].as_str().unwrap())?;
@@ -2103,6 +2316,12 @@ impl Store {
             let parked = item["spec"].get("maintenance").is_some() && item["state"] == "needs_user";
             let last_inspection = item["attempts"].as_array().unwrap().iter().rev().find(|a| a["type"] == "maintenance_inspection" && a["claim_token"] == token);
             require(!(outcome == "checked" && last_inspection.is_some_and(|a| a["outcome"] == "unavailable")), "Unavailable inspection cannot finish checked; release it for its bounded retry or park it for reconciliation")?;
+            if outcome == "checked" && item["spec"]["maintenance"]["kind"] == "source" {
+                let started = triggers::parse_time(claim["started_at"].as_str().unwrap(),"UTC")?;
+                require(last_inspection.is_some_and(|a|a["outcome"] == "observed" && a["policy_digest"] == item["spec"]["maintenance"]["policy_digest"]
+                    && a["inspected_at"].as_str().is_some_and(|t|triggers::parse_time(t,"UTC").is_ok_and(|t|t>=started&&t<=self.now()))),
+                    "A source check needs a guarded successful current-claim inspection; historical/cache evidence cannot advance its schedule")?;
+            }
             let retry = last_inspection.filter(|a| a["outcome"] == "unavailable").and_then(|a| a.get("retry_at")).cloned();
             let effective=if parked || (stale && outcome!="released"){"needs_user"}else{outcome};
             let mut attempt=json!({"run":claim,"finished_at":triggers::stamp(self.now()),"request":request,"outcome":effective,"evidence":evidence,"inputs_changed":stale});
@@ -2111,7 +2330,7 @@ impl Store {
             item["attempts"].as_array_mut().unwrap().push(attempt);
             item.insert("claim".into(),Value::Null);
             item.insert("state".into(),json!(if ["checked","released"].contains(&effective){"waiting"}else{effective}));
-            if effective == "released" && let Some(retry) = retry.filter(|v| !v.is_null()) { item.insert("next_at".into(), retry); }
+            if effective == "released" && claim["current_use_authorization_reference"].is_null() && let Some(retry) = retry.filter(|v| !v.is_null()) { item.insert("next_at".into(), retry); }
             if effective=="checked" {
                 item.insert("baseline".into(),claim["baseline"].clone());
                 if let Some(core)=claim.get("core_baseline"){item.insert("core_baseline".into(),core.clone());}else{item.remove("core_baseline");}
@@ -2128,10 +2347,11 @@ impl Store {
             let item=Self::item(data,key)?;
             let claim=item.get("claim").filter(|v|!v.is_null()).ok_or_else(||error("Only an interrupted run can be recovered"))?.clone();
             require(triggers::parse_time(claim["expires_at"].as_str().unwrap(),"UTC")?<=self.now(),"Only an interrupted run can be recovered")?;
+            let parked = item["spec"].get("maintenance").is_some() && item["state"] == "needs_user";
             let item=data["items"][key].as_object_mut().unwrap();
             item["attempts"].as_array_mut().unwrap().push(json!({"run":claim,"finished_at":triggers::stamp(self.now()),"outcome":"recovered","evidence":evidence}));
-            item.insert("claim".into(),Value::Null); item.insert("state".into(),json!("waiting"));
-            Ok(json!({"id":key,"state":"waiting"}))
+            item.insert("claim".into(),Value::Null); item.insert("state".into(),json!(if parked {"needs_user"} else {"waiting"}));
+            Ok(json!({"id":key,"state":item["state"]}))
         })
     }
 
