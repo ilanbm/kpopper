@@ -27,7 +27,7 @@ here rewrites your conclusions. What the record does on its own is re-check ever
 against what it was last checked against, and put the ones that no longer hold in front of you.
 Nobody maintains a list of what went stale. Staleness is derived, so it cannot be forgotten,
 cleared by accident, or survive a revert; the page's sections fill themselves from that derivation. Keep where each piece came from without changing the user's deliverable.
-If the user explicitly chooses the record itself as the product, see
+If the user explicitly chooses the record itself as the product, use the [model skill](../model/SKILL.md). See
 [living knowledge models](../../docs/living-knowledge-models.md) for keeping its complete bundle
 separate from optional project knowledge and case data.
 

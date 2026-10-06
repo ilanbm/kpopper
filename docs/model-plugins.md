@@ -2,6 +2,10 @@
 
 A model plugin is for a reusable, sourced knowledge model that people can install and query from different projects. It is separate from an ordinary project record, a personal case, and an application adapter. Start with a dedicated native record and keep its source and history closure intact. The minimal read-model source fixture shows the descriptor and skill shape; its source is synthetic.
 
+Initial support is local Codex on macOS ARM64. The companion is currently a source
+candidate; a public prebuilt companion download has not been released. The author
+flow below requires a qualified prebuilt candidate supplied by a maintainer.
+
 ## Decide what the model covers
 
 Write down the questions the model is meant to answer, the source edition or retrieval date, the facts and rules it can support, and the boundaries it leaves unknown or outside scope. Make each claim traceable to a source passage. When a rule can be represented, record the rule and its inputs instead of only a computed result.
@@ -62,3 +66,19 @@ Install only a generated plugin using Codex's supported plugin route. The local 
 A read model uses the common native reader and needs no custom Rust code. Existing native rules can derive values from recorded inputs without a custom adapter. If an application additionally supplies case-specific inputs, private binding or domain output projection, declare capability application and maintain its adapter, independent cases, build, compatibility and release separately. Do not put domain-specific case fields into the generic descriptor or write case data into the reusable model.
 
 For case adapters, bind each case in a disposable copy of the complete model; keep personal inputs outside the canonical model and project. A failed model component or missing field is unknown for that component, not an overall denial. Publishing, remote marketplace setup and consumer-machine installation are separate decisions beyond building a local candidate.
+
+## Maintain the native companion
+
+The companion in `tools/model-package` is a separate Rust crate. The core engine's
+CI lane does not test it. Maintainers must run its own native package gate on the
+supported target with the complete archive pinned in the example descriptor:
+
+```sh
+export KPOP_MODEL_ENGINE_ARCHIVE=/ABS/kpopper-0.15.1-darwin-arm64.tar.gz
+cargo +1.98.1 test --release --locked --manifest-path tools/model-package/Cargo.toml
+cargo +1.98.1 clippy --locked --manifest-path tools/model-package/Cargo.toml --all-targets -- -D warnings
+cargo +1.98.1 build --release --locked --manifest-path tools/model-package/Cargo.toml
+```
+
+The gate exercises actual package creation, installation, native reads, updates,
+rollback and failure recovery. A build alone does not qualify an artifact.
