@@ -644,6 +644,16 @@ pub(crate) fn record_error(path: &Path, raw: &[u8], failure: crate::Error) -> cr
     let Some(diagnostic) = diagnose(raw, source) else {
         return failure;
     };
+    let name = shown(path);
+    crate::Error(format!(
+        "{name}{NOT_YAML}{}{}",
+        diagnostic.render(source, &name),
+        conflict_recovery(source, &name).unwrap_or_default()
+    ))
+}
+
+/// A record path as the person reading the message would type it.
+fn shown(path: &Path) -> String {
     // The file's directory and the working directory are both resolved, so a path given
     // through a link, or spelled another way (Windows resolves to its `\\?\` form), still
     // reads relative; the file keeps its own name.
@@ -656,51 +666,51 @@ pub(crate) fn record_error(path: &Path, raw: &[u8], failure: crate::Error) -> cr
             || path.to_path_buf(),
             |(directory, file)| directory.join(file),
         );
-    let name = std::env::current_dir()
+    std::env::current_dir()
         .ok()
         .and_then(|cwd| resolved(&cwd))
         .and_then(|cwd| path.strip_prefix(cwd).ok().map(Path::to_path_buf))
         .unwrap_or(path)
         .display()
-        .to_string();
-    crate::Error(format!(
-        "{name}{NOT_YAML}{}{}",
-        diagnostic.render(source, &name),
-        conflict_recovery(source, &name).unwrap_or_default()
-    ))
+        .to_string()
 }
 
-/// The way back from a merge that left Git's conflict markers in a record: keep this
-/// branch's side, then fold the other branch in through consolidate. The other branch is
-/// the one its closing marker names, when that is a single name.
-fn conflict_recovery(source: &str, name: &str) -> Option<String> {
-    let lines = source
-        .split('\n')
-        .map(|line| line.strip_suffix('\r').unwrap_or(line));
-    let (mut opened, mut divided, mut branch) = (false, false, None);
-    for line in lines {
-        let marker = |sign: &str| {
-            line.strip_prefix(sign)
-                .filter(|rest| rest.is_empty() || rest.starts_with(' '))
-                .map(str::trim)
-        };
-        if marker("<<<<<<<").is_some() {
-            opened = true;
-        } else if line == "=======" {
-            divided = true;
-        } else if let Some(label) = marker(">>>>>>>") {
-            branch.get_or_insert(label);
-        }
+/// A history-backed record that does not read keeps its code; when Git left conflict
+/// markers in it, the code is followed by the same way back as an ordinary record's.
+pub(crate) fn history_error(path: &Path, failure: crate::Error) -> crate::Error {
+    let recovery = std::fs::read(path)
+        .ok()
+        .and_then(|raw| String::from_utf8(raw).ok())
+        .and_then(|source| conflict_recovery(&source, &shown(path)));
+    match recovery {
+        Some(recovery) => crate::Error(format!("{}{recovery}", failure.0)),
+        None => failure,
     }
-    let branch = branch.filter(|_| opened && divided)?;
-    let branch = match branch {
-        "" => "<branch>",
-        label if label.contains(char::is_whitespace) => "<branch>",
-        label => label,
+}
+
+/// The way back from a stopped Git merge that left conflict markers in a record: the
+/// checked resolution through consolidate. Markers count only as a complete conflict,
+/// an opening line, then a divider, then a closing line, each at the start of a line.
+fn conflict_recovery(source: &str, name: &str) -> Option<String> {
+    let marker = |line: &str, sign: &str| {
+        line.strip_prefix(sign)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
     };
-    Some(format!(
-        "\n{name} holds Git conflict markers. Keep this branch's side, then fold the other branch in:\n  git checkout --ours {name}\n  kpop consolidate --from {branch} --dry-run\n  kpop consolidate --from {branch}"
-    ))
+    let mut seen = 0;
+    for line in source.split('\n') {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        seen = match seen {
+            0 if marker(line, "<<<<<<<") => 1,
+            1 if line == "=======" => 2,
+            2 if marker(line, ">>>>>>>") => 3,
+            seen => seen,
+        };
+    }
+    (seen == 3).then(|| {
+        format!(
+            "\n{name} holds Git conflict markers. During a stopped git merge (not a rebase or cherry-pick), resolve it with:\n  kpop consolidate --resolve --dry-run\n  kpop consolidate --resolve\nThen review the record, git add it and finish the merge."
+        )
+    })
 }
 
 /// Whether a failure is `record_error`'s account rather than a code.

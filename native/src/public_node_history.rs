@@ -187,7 +187,8 @@ pub(crate) fn write_as(route: &WriteRoute, original: &[PathBuf], action: &V, pro
 pub(crate) fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, runtime_override: Option<&crate::reasoning_runtime::Runtime>, by: V) -> Result<(V, String)> {
     scope(route)?;
     let root = route.paths()[0].parent().unwrap();
-    let before = Capture::read(root)?;
+    let before = Capture::read(root)
+        .map_err(|e| crate::ordinary_yaml_diagnostic::history_error(&route.paths()[0], e))?;
     if let Some(name) = map(action)?.get("hypothesis").filter(|v| **v != V::Null) {
         let store = crate::history_store::Store::new(&route.paths()[0])?;
         require(
