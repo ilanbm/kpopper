@@ -104,6 +104,9 @@ pub enum Command {
         evidence: String,
         #[arg(long)]
         next_at: Option<String>,
+        /// Existing or new user authorization when cancelling maintenance.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
     },
     Recover {
         id: String,
@@ -121,6 +124,9 @@ pub enum Command {
         outcome: String,
         #[arg(long)]
         evidence: String,
+        /// Existing or new user authorization when closing maintenance.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
     },
     /// Explicitly rebind a moved pinned record, preserving history.
     Relocate {
@@ -296,14 +302,23 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             outcome,
             evidence,
             next_at,
-        } => store.finish(id, token, outcome, evidence, next_at.as_deref()),
+            authorization_evidence,
+        } => store.finish_with_authority(
+            id,
+            token,
+            outcome,
+            evidence,
+            next_at.as_deref(),
+            authorization_evidence.as_deref(),
+        ),
         Command::Recover { id, evidence } => store.recover(id, evidence),
         Command::Resume { id, evidence } => store.resume(id, evidence),
         Command::Resolve {
             id,
             outcome,
             evidence,
-        } => store.resolve(id, outcome, evidence),
+            authorization_evidence,
+        } => store.resolve_with_authority(id, outcome, evidence, authorization_evidence.as_deref()),
         Command::Relocate {
             record,
             evidence,
@@ -376,8 +391,16 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             }
             DailyCommand::Renew { token } => crate::followup_daily::renew(&store, token),
             DailyCommand::Recover { evidence } => crate::followup_daily::recover(&store, evidence),
-            DailyCommand::Adoption { action, until, evidence } => {
-                let value = if action == "snoozed" { until.as_deref() } else { evidence.as_deref() };
+            DailyCommand::Adoption {
+                action,
+                until,
+                evidence,
+            } => {
+                let value = if action == "snoozed" {
+                    until.as_deref()
+                } else {
+                    evidence.as_deref()
+                };
                 crate::followup_daily::record_adoption(&store, action, value)
             }
         },

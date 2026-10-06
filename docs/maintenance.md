@@ -93,7 +93,10 @@ diagnostics instead of copying their bodies. At 67 attempts, the ledger compacts
 inspection and refresh when older. Hot history is bounded at 66 attempts. Older attempts move automatically to
 immutable, digest-verified linked segments in its `attempt-history/` directory. Each successful
 observation is retained by digest in `observation-history/`; its attempt names that digest.
-`followups show` includes the archive head and recent attempts. Preserve the ledger and both
+`followups show` includes the archive head and recent attempts. Normal loads verify only the
+current archive head to keep recurring work bounded. Retried old finishes verify every visited
+segment; older-chain and observation-directory completeness is not certified by a normal load.
+Keep full backups and treat a traversal/recovery error as incomplete retained evidence. Preserve the ledger and both
 history directories together for backup, relocation of state, or recovery. To recover missing
 or damaged history, restore the exact digest-named segment from that backup; never delete or
 rewrite an archive reference to bypass the failure. Completed request idempotence includes
@@ -114,7 +117,14 @@ not establish it. Keep unchanged inspections local. Changed evidence enters ordi
 proposal/affects/review work; inspection does not accept semantic changes or publish a model.
 Rebinding maintenance to another record with `followups relocate` likewise needs
 `--authorization-evidence`; relocation evidence and authorization are separate references.
-Recurring checks finish `checked` with a justified future `next_at`; host scheduling and
+Cancelling/closing a maintenance obligation with `finish cancelled` or `resolve` requires
+`--authorization-evidence`, separately from the outcome narrative. Routine lease release
+cannot unpark a check stopped after repeated source failures; explicit reconciliation/resume
+remains necessary.
+Recurring checks finish `checked` with `next_at` computed from the admitted check's local
+calendar day plus `cadence_days`, at the declared `check_time`; an arbitrary later date is
+refused. An unavailable inspection releases its lease into the native bounded retry, or parks
+for reconciliation after repeated failures. It cannot finish as a successful checked inspection; host scheduling and
 execution receipts remain separate from the source observation.
 
 ## Runtime compatibility

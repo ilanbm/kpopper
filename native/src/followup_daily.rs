@@ -180,7 +180,12 @@ fn adoption_status(data: &Value, now: DateTime<Utc>) -> Result<Value> {
     let authorized = saved.is_some_and(|value| value["authorized"] == true);
     let binding = &daily["binding"];
     let configuration = if binding.is_null() {
-        if authorized { "uninstalled" } else { "unconfigured" }.to_owned()
+        if authorized {
+            "uninstalled"
+        } else {
+            "unconfigured"
+        }
+        .to_owned()
     } else {
         match binding["state"].as_str() {
             Some("paused") => "paused".into(),
@@ -192,7 +197,8 @@ fn adoption_status(data: &Value, now: DateTime<Utc>) -> Result<Value> {
                     receipts.iter().any(|receipt| {
                         receipt["outcome"] == "complete"
                             && receipt["finished_at"].as_str().is_some_and(|finished| {
-                                parse_time(finished, "UTC").is_ok_and(|finished| finished >= observed)
+                                parse_time(finished, "UTC")
+                                    .is_ok_and(|finished| finished >= observed)
                             })
                     })
                 });
@@ -230,7 +236,8 @@ pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Resu
         "Adoption action must be shown, declined, snoozed or authorized",
     )?;
     store.transaction(|data| {
-        let mut adoption = data["daily"].get("adoption")
+        let mut adoption = data["daily"]
+            .get("adoption")
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
@@ -239,7 +246,10 @@ pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Resu
             "shown" => {
                 adoption.insert("shown_at".into(), json!(stamp(store.now())));
                 if adoption.get("authorized") != Some(&json!(true))
-                    && !matches!(adoption.get("state").and_then(Value::as_str), Some("declined" | "snoozed"))
+                    && !matches!(
+                        adoption.get("state").and_then(Value::as_str),
+                        Some("declined" | "snoozed")
+                    )
                 {
                     adoption.insert("state".into(), json!("shown"));
                 }
@@ -291,22 +301,34 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
                     receipts.iter().any(|receipt| {
                         receipt["outcome"] == "complete"
                             && receipt["finished_at"].as_str().is_some_and(|finished| {
-                                parse_time(finished, "UTC").is_ok_and(|finished| finished >= observed)
+                                parse_time(finished, "UTC")
+                                    .is_ok_and(|finished| finished >= observed)
                             })
                     })
                 });
-                if fresh && run_observed { "active_observed" } else { "configuration_unverified" }.into()
+                if fresh && run_observed {
+                    "active_observed"
+                } else {
+                    "configuration_unverified"
+                }
+                .into()
             }
             _ => "configuration_unverified".into(),
         }
     };
     let mut obligations = Vec::new();
-    for item in data["items"].as_object().into_iter().flat_map(|items| items.values()) {
+    for item in data["items"]
+        .as_object()
+        .into_iter()
+        .flat_map(|items| items.values())
+    {
         let maintenance = &item["spec"]["maintenance"];
         if !maintenance.is_object() {
             continue;
         }
-        let due_at = item["next_at"].as_str().unwrap_or_else(|| maintenance["due_at"].as_str().unwrap_or(""));
+        let due_at = item["next_at"]
+            .as_str()
+            .unwrap_or_else(|| maintenance["due_at"].as_str().unwrap_or(""));
         let due = parse_time(due_at, "UTC")?;
         let check_state = if item["state"] == "done" || item["state"] == "cancelled" {
             "closed"
@@ -334,33 +356,49 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
             let observed = parse_time(observation["observed_at"].as_str().unwrap_or(""), "UTC")?;
             let max_age = maintenance["max_age_hours"].as_f64().unwrap_or(0.0);
             let age = now.signed_duration_since(observed);
-            let age_seconds = age.num_seconds() as f64 + f64::from(age.subsec_nanos()) / 1_000_000_000.0;
+            let age_seconds =
+                age.num_seconds() as f64 + f64::from(age.subsec_nanos()) / 1_000_000_000.0;
             if max_age <= 0.0 || age_seconds >= max_age * 3_600.0 {
                 "stale"
             } else {
-                "fresh"
+                "within_age_window"
             }
         } else {
             "missing"
         };
-        let last_attempt = item["attempts"].as_array().into_iter().flatten().rev().find(|attempt| attempt["type"] == "maintenance_inspection");
-        let attempt_state = last_attempt.map(|attempt| attempt["outcome"].as_str().unwrap_or("unknown")).unwrap_or("none");
+        let last_attempt = item["attempts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .rev()
+            .find(|attempt| attempt["type"] == "maintenance_inspection");
+        let attempt_state = last_attempt
+            .map(|attempt| attempt["outcome"].as_str().unwrap_or("unknown"))
+            .unwrap_or("none");
         let failure = last_attempt
             .filter(|attempt| attempt["outcome"] == "unavailable")
-            .map(|attempt| attempt["reason"].as_str().unwrap_or("Source check unavailable"));
+            .map(|attempt| {
+                attempt["reason"]
+                    .as_str()
+                    .unwrap_or("Source check unavailable")
+            });
         obligations.push(json!({
             "id":item["id"],"kind":maintenance["kind"],"check_state":check_state,
             "source_state":source_state,"host_state":host_state,"attempt_state":attempt_state,
+            "current_use_adequacy":"unassessed", "evidence_requirement":maintenance["evidence_requirement"],
+            "use_policy":maintenance["use_policy"],
             "failure_state":if attempt_state == "unavailable" {"failed"} else {"none"},
             "due_at":due_at,"observed_at":observation.and_then(|value| value["observed_at"].as_str()),
             "failure":failure
         }));
     }
     let degraded = obligations.iter().any(|item| {
-        ["due", "overdue", "needs_user", "interrupted", "closed"].contains(&item["check_state"].as_str().unwrap_or(""))
+        ["due", "overdue", "needs_user", "interrupted", "closed"]
+            .contains(&item["check_state"].as_str().unwrap_or(""))
             || ["missing", "stale"].contains(&item["source_state"].as_str().unwrap_or(""))
             || item["attempt_state"] == "unavailable"
-            || ["paused", "missing", "configuration_unverified"].contains(&item["host_state"].as_str().unwrap_or(""))
+            || ["paused", "missing", "configuration_unverified"]
+                .contains(&item["host_state"].as_str().unwrap_or(""))
     });
     let meaningful = obligations.iter().map(|obligation| json!({
         "id":obligation["id"],"kind":obligation["kind"],"check_state":obligation["check_state"],

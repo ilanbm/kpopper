@@ -1,3 +1,17 @@
+fn admit(workspace: &std::path::Path) {
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(workspace)
+        .arg("check")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "fixture failed native admission: {} {}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
 use chrono::{TimeZone, Utc};
 use kpop_native::{followup_daily, followup_store::Store};
 use std::fs;
@@ -8,9 +22,10 @@ fn setup() -> (tempfile::TempDir, Store) {
     fs::create_dir(&workspace).unwrap();
     fs::write(
         workspace.join("PROVENANCE.yaml"),
-        "meta:\n  name: Adoption fixture\n  updated: 2026-10-06\nschema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  facts.count:\n    name: Count\n    v: 1\n",
+        "meta:\n  name: Adoption fixture\n  updated: 2026-10-06\nknown:\n  facts.count:\n    name: Count\n    v: 1\n",
     )
     .unwrap();
+    admit(&workspace);
     let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
     let store = Store::at_in_state(&workspace, &temp.path().join("state"), now).unwrap();
     store.setup(None, "UTC", None, true).unwrap();
@@ -32,16 +47,13 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
     assert_eq!(declined["state"], "declined");
     assert_eq!(declined["authorized"], false);
 
-    let snoozed = followup_daily::record_adoption(
-        &store,
-        "snoozed",
-        Some("2026-10-08T12:00:00Z"),
-    )
-    .unwrap();
+    let snoozed =
+        followup_daily::record_adoption(&store, "snoozed", Some("2026-10-08T12:00:00Z")).unwrap();
     assert_eq!(snoozed["state"], "snoozed");
 
-    let authorized = followup_daily::record_adoption(&store, "authorized", Some("explicit user approval"))
-        .unwrap();
+    let authorized =
+        followup_daily::record_adoption(&store, "authorized", Some("explicit user approval"))
+            .unwrap();
     assert_eq!(authorized["state"], "authorized_uninstalled");
     assert_eq!(authorized["authorized"], true);
     let status = followup_daily::status(&store).unwrap();
@@ -79,7 +91,10 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
     followup_daily::record_adoption(&store, "declined", None).unwrap();
     let declined_with_binding = followup_daily::status(&store).unwrap();
     assert_eq!(declined_with_binding["adoption"]["state"], "declined");
-    assert_eq!(declined_with_binding["adoption"]["configuration"], "active_observed");
+    assert_eq!(
+        declined_with_binding["adoption"]["configuration"],
+        "active_observed"
+    );
     followup_daily::bind(
         &store,
         serde_json::json!({"host":"fixture","id":"schedule-1","state":"paused","evidence":"host readback"}),
@@ -89,5 +104,8 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
         followup_daily::status(&store).unwrap()["adoption"]["state"],
         "declined"
     );
-    assert_eq!(followup_daily::status(&store).unwrap()["adoption"]["configuration"], "paused");
+    assert_eq!(
+        followup_daily::status(&store).unwrap()["adoption"]["configuration"],
+        "paused"
+    );
 }

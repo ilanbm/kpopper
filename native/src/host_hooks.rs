@@ -135,16 +135,23 @@ fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
         && report["graph_error"].is_null()
         && report["degraded"] != true
         && report["maintenance_health"]["degraded"] != true
+        && report["maintenance_health"]["obligations"]
+            .as_array()
+            .is_none_or(|v| v.is_empty())
     {
         return Ok(String::new());
     }
-    let maintenance_health = if report["maintenance_health"]["degraded"] == true {
+    let maintenance_health = if report["maintenance_health"]["obligations"]
+        .as_array()
+        .is_some_and(|v| !v.is_empty())
+    {
         json!({
             "fingerprint":report["maintenance_health"]["fingerprint"],
-            "degraded":true,
+            "degraded":report["maintenance_health"]["degraded"],
             "obligations":report["maintenance_health"]["obligations"].as_array().into_iter().flatten().map(|item|json!({
                 "id":item["id"],"kind":item["kind"],"check_state":item["check_state"],
                 "source_state":item["source_state"],"host_state":item["host_state"],
+                "current_use_adequacy":item["current_use_adequacy"],"use_policy":item["use_policy"],"evidence_requirement":item["evidence_requirement"],
                 "failure_state":item["failure_state"]
             })).collect::<Vec<_>>()
         })
@@ -166,10 +173,15 @@ fn followups(payload: &J) -> Result<Output> {
         return Ok(empty());
     };
     let store = crate::followup_store::Store::open(&cwd(payload)?)?;
-    if store.load(false)?.is_none() {
-        return Ok(empty());
-    }
-    let text = followup_text(&store)?;
+    let discovery = crate::onboarding::maintenance_discovery_notice(
+        &cwd(payload)?,
+        crate::onboarding::guidance().unwrap_or(false),
+    )?;
+    let text = if store.load(false)?.is_none() {
+        discovery
+    } else {
+        format!("{}\n{}", discovery, followup_text(&store)?)
+    };
     let fingerprint = crate::followup_store::digest(&J::String(text.clone()))?;
     fs::create_dir_all(&store.root)?;
     let lock = OpenOptions::new()
@@ -773,9 +785,12 @@ pub fn run(
         "continuation" if host == Some("codex") && !suppressed(payload) => {
             let event = payload["hook_event_name"].as_str().unwrap_or_default();
             crate::view_continuation::hook_for_session(event, payload).map(|context| Output {
-                stdout: context.map(|text| envelope(event, &text)).unwrap_or_default(), ..empty()
+                stdout: context
+                    .map(|text| envelope(event, &text))
+                    .unwrap_or_default(),
+                ..empty()
             })
-        },
+        }
         "continuation" => Ok(empty()),
         _ => return Err(Error(format!("unknown host hook kind: {kind}"))),
     };

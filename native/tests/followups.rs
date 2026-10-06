@@ -857,7 +857,12 @@ fn maintenance_ref_cannot_be_overwritten_by_legacy_observe_even_after_closure() 
     let observation = json!({"ref":added["spec"]["maintenance"]["source_ref"],"value":"forged", "observed_at":"2026-09-10T12:00:00Z", "evidence":"fixture://forged"});
     assert!(store.observe(observation.clone()).is_err());
     store
-        .resolve("source-refresh", "cancelled", "fixture://user-closed")
+        .resolve_with_authority(
+            "source-refresh",
+            "cancelled",
+            "fixture://user-closed",
+            Some("fixture://user-authority"),
+        )
         .unwrap();
     assert!(store.observe(observation).is_err());
     store.observe(json!({"ref":"unrelated-legacy", "value":"ok", "observed_at":"2026-09-10T12:00:00Z", "evidence":"fixture://legacy"})).unwrap();
@@ -960,12 +965,12 @@ fn recurring_attempts_keep_bounded_hot_history_and_immutable_recoverable_segment
         )
         .unwrap();
     let m = &item["spec"]["maintenance"];
-    let report = json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "evidence":"fixture://unavailable", "reason":"source unavailable"});
+    let report = json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "evidence":"fixture://success", "value":"current", "inspection":m["inspection"], "inspected_at":"2026-09-10T12:00:00Z"});
     let mut oversized = report.clone();
     oversized["evidence"] = json!("x".repeat(513));
-    assert!(store.record_maintenance_attempt(oversized).is_err());
+    assert!(store.inspect_maintenance(oversized).is_err());
     for _ in 0..1002 {
-        store.record_maintenance_attempt(report.clone()).unwrap();
+        store.inspect_maintenance(report.clone()).unwrap();
     }
     let data = store.load(true).unwrap().unwrap();
     assert!(
@@ -995,7 +1000,7 @@ fn recurring_attempts_keep_bounded_hot_history_and_immutable_recoverable_segment
         head = segment["previous"].clone();
     }
     assert_eq!(count, 1002);
-    store.record_maintenance_attempt(report).unwrap();
+    store.inspect_maintenance(report).unwrap();
     let (path, bytes) = first_bytes.unwrap();
     assert_eq!(fs::read(path).unwrap(), bytes);
     let success = store.inspect_maintenance(json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "inspection":m["inspection"], "value":"current", "inspected_at":"2026-09-10T12:00:00Z", "evidence":"fixture://success"})).unwrap();
@@ -1039,7 +1044,7 @@ fn archived_finish_requests_remain_idempotent_and_missing_history_is_explicit() 
         .unwrap();
     let m = &item["spec"]["maintenance"];
     for _ in 0..80 {
-        store.record_maintenance_attempt(json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "evidence":"fixture://unavailable", "reason":"source unavailable"})).unwrap();
+        store.inspect_maintenance(json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "evidence":"fixture://success", "value":"current", "inspection":m["inspection"], "inspected_at":"2026-09-10T12:00:00Z"})).unwrap();
     }
     assert_eq!(
         store

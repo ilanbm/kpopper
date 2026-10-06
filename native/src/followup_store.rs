@@ -798,7 +798,6 @@ impl Store {
         self.load(true)?;
         let _lock = self.lock()?;
         let mut data = self.load(true)?.unwrap();
-        let before = digest(&data)?;
         for item in data["items"].as_object_mut().unwrap().values_mut() {
             if let Some(reference) = item["spec"]["maintenance"]["source_ref"]
                 .as_str()
@@ -817,6 +816,7 @@ impl Store {
                 }
             }
         }
+        let before = digest(&data)?;
         let result = mutation(&mut data)?;
         if digest(&data)? != before {
             self.retain_maintenance_history(&mut data)?;
@@ -949,7 +949,7 @@ impl Store {
                     .root
                     .join("attempt-history")
                     .join(format!("{hash}.json")),
-            )?;
+            ).map_err(|reason| error(format!("Retained attempt history is unavailable or corrupt; restore its exact evidence ({reason})")))?;
             require(
                 digest(&segment)? == hash
                     && segment["schema"] == "kpopper.followup-attempts/v1"
@@ -1355,6 +1355,35 @@ impl Store {
         Ok(Value::Null)
     }
 
+    fn admit_maintenance_reference(data: &Value, spec: &Value) -> Result<()> {
+        let Some(reference) = spec["maintenance"]["source_ref"]
+            .as_str()
+            .filter(|r| !r.is_empty())
+        else {
+            return Ok(());
+        };
+        let Some(observation) = data["observations"].get(reference) else {
+            return Ok(());
+        };
+        let hash = digest(observation)?;
+        let guarded = observation["maintenance_observation"] == true
+            || data["items"].as_object().unwrap().values().any(|item| {
+                item["spec"]["maintenance"]["source_ref"] == reference
+                    && item["attempts"].as_array().is_some_and(|attempts| {
+                        attempts.iter().any(|a| {
+                            a["type"] == "maintenance_inspection"
+                                && a["outcome"] == "observed"
+                                && a["source_ref"] == reference
+                                && a["observation_digest"] == hash
+                        })
+                    })
+            });
+        require(
+            guarded,
+            "Existing legacy observation conflicts with the maintenance source reference; retain its evidence and select a distinct source identity or explicitly reconcile it before registration",
+        )
+    }
+
     pub fn add(&self, supplied: Value) -> Result<Value> {
         let mut supplied = canonical(&supplied)?;
         self.transaction(|data| {
@@ -1381,6 +1410,7 @@ impl Store {
                     crate::maintenance_contract::consent_digest(policy, &scope, &self.location.key, data["config"]["record"].as_str().unwrap())?
                 );
             }
+            Self::admit_maintenance_reference(data, &supplied)?;
             let executor = self.validate_spec(&supplied, data, None)?;
             if supplied.get("maintenance").is_some() { data["version"] = json!(2); }
             let key = supplied["id"].as_str().unwrap().to_owned();
@@ -1853,6 +1883,7 @@ impl Store {
             let requirement = maintenance["evidence_requirement"].clone();
             let use_policy = maintenance["use_policy"].clone();
             let attempts = item["attempts"].as_array().unwrap().clone();
+            let claim_token = item["claim"]["token"].clone();
             let source_ref = maintenance["source_ref"].as_str().unwrap().to_owned();
             let usable = report.get("value").is_some_and(|value| match value {
                 Value::Null => false,
@@ -1892,7 +1923,9 @@ impl Store {
             }
             let outcome = if failure.is_empty() { "observed" } else { "unavailable" };
             let consecutive_failures = attempts.iter().rev()
-                .take_while(|attempt| attempt["type"] == "maintenance_inspection" && attempt["outcome"] == "unavailable")
+                .take_while(|attempt| !matches!(attempt["outcome"].as_str(), Some("resumed" | "refreshed"))
+                    && !(attempt["type"] == "maintenance_inspection" && attempt["source_ref"] == source_ref && attempt["outcome"] == "observed"))
+                .filter(|attempt| attempt["type"] == "maintenance_inspection" && attempt["source_ref"] == source_ref && attempt["outcome"] == "unavailable")
                 .count() + usize::from(outcome == "unavailable");
             let retry_at = if outcome == "unavailable" && consecutive_failures < MAX_CONSECUTIVE_MAINTENANCE_FAILURES {
                 maintenance_retry_at(
@@ -1906,7 +1939,7 @@ impl Store {
             let attempt = json!({"type":"maintenance_inspection", "outcome":outcome,
                 "policy_digest":report["policy_digest"], "source_ref":source_ref,
                 "receipt_at":triggers::stamp(receipt_at), "inspected_at":inspected_at.map(triggers::stamp),
-                "evidence":evidence, "reason":failure,"retry_at":retry_at.clone(),
+                "evidence":evidence, "reason":failure,"retry_at":retry_at.clone(), "claim_token":claim_token,
                 "observation_digest":if observation.is_null() { Value::Null } else { json!(digest(&observation)?) },
                 "attestation":"host-supplied inspection; no transport/origin authentication",
                 "assurance":{"recording":"host_attested", "evidence_requirement":requirement,
@@ -1917,7 +1950,7 @@ impl Store {
             if outcome == "unavailable" {
                 if consecutive_failures >= MAX_CONSECUTIVE_MAINTENANCE_FAILURES || retry_at.is_none() {
                     data["items"][&id]["state"] = json!("needs_user");
-                } else {
+                } else if data["items"][&id]["claim"].is_null() {
                     data["items"][&id]["next_at"] = json!(retry_at);
                 }
             }
@@ -2007,17 +2040,37 @@ impl Store {
         evidence: &str,
         next_at: Option<&str>,
     ) -> Result<Value> {
+        self.finish_with_authority(key, token, outcome, evidence, next_at, None)
+    }
+
+    pub fn finish_with_authority(
+        &self,
+        key: &str,
+        token: &str,
+        outcome: &str,
+        evidence: &str,
+        next_at: Option<&str>,
+        authorization_evidence: Option<&str>,
+    ) -> Result<Value> {
+        if let Some(reference) = authorization_evidence {
+            text(
+                Some(&json!(reference)),
+                "existing or new user authorization reference",
+            )?;
+        }
         text(Some(&json!(evidence)), "outcome evidence")?;
         require(
             ["checked", "done", "cancelled", "needs_user", "released"].contains(&outcome),
             "Unknown outcome",
         )?;
         self.transaction(|data|{
-            let request=json!({"token":token,"outcome":outcome,"evidence":evidence,"next_at":next_at});
+            let mut request=json!({"token":token,"outcome":outcome,"evidence":evidence,"next_at":next_at});
+            if let Some(reference) = authorization_evidence { request["authorization_reference"] = json!(reference); }
             let item=Self::item(data,key)?;
             if self.has_recorded_request(item, &request)? {
                 return Ok(json!({"id":key,"state":item["state"],"already_recorded":true}));
             }
+            require(outcome != "cancelled" || item["spec"].get("maintenance").is_none() || authorization_evidence.is_some(), "Cancelling maintenance requires an existing or new user authorization reference")?;
             let claim=self.owned_claim(item,token,true)?.clone();
             require(
                 !(item["spec"].get("maintenance").is_some() && outcome == "done"),
@@ -2047,12 +2100,18 @@ impl Store {
                 Ok(ref graph)=>self.row(Self::item(data,key)?,data,graph,None,self.now())?["occurrence"]!=claim["occurrence"],
                 Err(_)=>true,
             };
-            let effective=if stale && outcome!="released"{"needs_user"}else{outcome};
-            let attempt=json!({"run":claim,"finished_at":triggers::stamp(self.now()),"request":request,"outcome":effective,"evidence":evidence,"inputs_changed":stale});
+            let parked = item["spec"].get("maintenance").is_some() && item["state"] == "needs_user";
+            let last_inspection = item["attempts"].as_array().unwrap().iter().rev().find(|a| a["type"] == "maintenance_inspection" && a["claim_token"] == token);
+            require(!(outcome == "checked" && last_inspection.is_some_and(|a| a["outcome"] == "unavailable")), "Unavailable inspection cannot finish checked; release it for its bounded retry or park it for reconciliation")?;
+            let retry = last_inspection.filter(|a| a["outcome"] == "unavailable").and_then(|a| a.get("retry_at")).cloned();
+            let effective=if parked || (stale && outcome!="released"){"needs_user"}else{outcome};
+            let mut attempt=json!({"run":claim,"finished_at":triggers::stamp(self.now()),"request":request,"outcome":effective,"evidence":evidence,"inputs_changed":stale});
+            if item["spec"].get("maintenance").is_some() { attempt["authorization_reference"] = json!(authorization_evidence); }
             let item=data["items"][key].as_object_mut().unwrap();
             item["attempts"].as_array_mut().unwrap().push(attempt);
             item.insert("claim".into(),Value::Null);
             item.insert("state".into(),json!(if ["checked","released"].contains(&effective){"waiting"}else{effective}));
+            if effective == "released" && let Some(retry) = retry.filter(|v| !v.is_null()) { item.insert("next_at".into(), retry); }
             if effective=="checked" {
                 item.insert("baseline".into(),claim["baseline"].clone());
                 if let Some(core)=claim.get("core_baseline"){item.insert("core_baseline".into(),core.clone());}else{item.remove("core_baseline");}
@@ -2121,6 +2180,7 @@ impl Store {
                 require(authorization_evidence.is_some(), "Removing maintenance requires an existing or new user authorization reference")?;
             }
 
+            Self::admit_maintenance_reference(data, &supplied)?;
             let executor=self.validate_spec(&supplied,data,Some(key))?;
             if supplied.get("maintenance").is_some() { data["version"] = json!(2); }
             let reference=task_reference(supplied.get("task").unwrap_or(&old["task"]).as_str().unwrap_or(""))?;
@@ -2139,6 +2199,22 @@ impl Store {
     }
 
     pub fn resolve(&self, key: &str, outcome: &str, evidence: &str) -> Result<Value> {
+        self.resolve_with_authority(key, outcome, evidence, None)
+    }
+
+    pub fn resolve_with_authority(
+        &self,
+        key: &str,
+        outcome: &str,
+        evidence: &str,
+        authorization_evidence: Option<&str>,
+    ) -> Result<Value> {
+        if let Some(reference) = authorization_evidence {
+            text(
+                Some(&json!(reference)),
+                "existing or new user authorization reference",
+            )?;
+        }
         text(Some(&json!(evidence)), "external outcome evidence")?;
         require(
             ["done", "cancelled"].contains(&outcome),
@@ -2151,8 +2227,12 @@ impl Store {
                 require(item["state"]==outcome,"The obligation is already closed with another outcome")?;
                 return Ok(json!({"id":key,"state":outcome,"already_recorded":true}));
             }
+            let maintenance = item["spec"].get("maintenance").is_some();
+            require(!maintenance || authorization_evidence.is_some(), "Closing maintenance requires an existing or new user authorization reference")?;
             let item=data["items"][key].as_object_mut().unwrap();
-            item["attempts"].as_array_mut().unwrap().push(json!({"outcome":outcome,"evidence":evidence,"finished_at":triggers::stamp(self.now()),"reconciled_external":true}));
+            let mut attempt = json!({"outcome":outcome,"evidence":evidence,"finished_at":triggers::stamp(self.now()),"reconciled_external":true});
+            if maintenance { attempt["authorization_reference"] = json!(authorization_evidence); }
+            item["attempts"].as_array_mut().unwrap().push(attempt);
             item.insert("state".into(),json!(outcome)); Ok(json!({"id":key,"state":outcome}))
         })
     }

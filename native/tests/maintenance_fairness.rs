@@ -1,3 +1,17 @@
+fn admit(workspace: &std::path::Path) {
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(workspace)
+        .arg("check")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "fixture failed native admission: {} {}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
 use chrono::{Duration, TimeZone, Utc};
 use kpop_native::{followup_daily, followup_store::Store};
 use serde_json::{Value, json};
@@ -6,9 +20,10 @@ use std::{fs, path::Path};
 fn record(path: &Path) {
     fs::write(
         path.join("PROVENANCE.yaml"),
-        "meta:\n  name: Fairness fixture\n  updated: 2026-10-06\nschema:\n  deps: rests_on\n  snapshot: seen\n  predicate: wrong_if\nknown:\n  facts.count:\n    name: Count\n    v: 1\n",
+        "meta:\n  name: Fairness fixture\n  updated: 2026-10-06\nknown:\n  facts.count:\n    name: Count\n    v: 1\n",
     )
     .unwrap();
+    admit(path);
 }
 
 fn ordinary(id: &str) -> Value {
@@ -59,9 +74,7 @@ fn maintenance(id: &str, kind: &str) -> Value {
 }
 
 fn claim_and_check(store: &Store, id: &str, token: &str, next_at: &str) {
-    let row = store
-        .scan(20)
-        .unwrap()["items"]
+    let row = store.scan(20).unwrap()["items"]
         .as_array()
         .unwrap()
         .iter()
@@ -69,7 +82,12 @@ fn claim_and_check(store: &Store, id: &str, token: &str, next_at: &str) {
         .unwrap()
         .clone();
     let claimed = store
-        .claim(id, row["occurrence"].as_str().unwrap(), "tester", Some(token))
+        .claim(
+            id,
+            row["occurrence"].as_str().unwrap(),
+            "tester",
+            Some(token),
+        )
         .unwrap();
     store
         .finish(
@@ -104,17 +122,21 @@ fn never_served_and_oldest_served_tasks_share_three_daily_slots() {
     second_store.add(ordinary("served-new")).unwrap();
     let second = followup_daily::start(&second_store, "second-session").unwrap();
     let second_token = second["claim"]["token"].as_str().unwrap();
-    claim_and_check(&second_store, "served-new", second_token, "2026-10-08T12:00:00Z");
+    claim_and_check(
+        &second_store,
+        "served-new",
+        second_token,
+        "2026-10-08T12:00:00Z",
+    );
     followup_daily::finish(&second_store, second_token, "one admitted check").unwrap();
-    second_store.add(maintenance("clock-never", "clock")).unwrap();
-    second_store.add(maintenance("source-never", "source")).unwrap();
+    second_store
+        .add(maintenance("clock-never", "clock"))
+        .unwrap();
+    second_store
+        .add(maintenance("source-never", "source"))
+        .unwrap();
 
-    let return_day = Store::at_in_state(
-        &workspace,
-        &state,
-        first_day + Duration::days(5),
-    )
-    .unwrap();
+    let return_day = Store::at_in_state(&workspace, &state, first_day + Duration::days(5)).unwrap();
     let limited = return_day.scan(1).unwrap();
     assert_eq!(limited["omitted"], 3);
     assert_eq!(limited["degraded"], true);
@@ -142,14 +164,16 @@ fn never_served_and_oldest_served_tasks_share_three_daily_slots() {
     assert_eq!(packet["maintenance_omitted"], 0);
 
     let items = packet["items"].as_array().unwrap();
-    assert!(return_day
-        .claim(
-            items[1]["id"].as_str().unwrap(),
-            items[1]["occurrence"].as_str().unwrap(),
-            "tester",
-            Some(token),
-        )
-        .is_err());
+    assert!(
+        return_day
+            .claim(
+                items[1]["id"].as_str().unwrap(),
+                items[1]["occurrence"].as_str().unwrap(),
+                "tester",
+                Some(token),
+            )
+            .is_err()
+    );
     for item in items.iter().take(3) {
         return_day
             .claim(
@@ -160,23 +184,23 @@ fn never_served_and_oldest_served_tasks_share_three_daily_slots() {
             )
             .unwrap();
     }
-    let fourth = return_day
-        .scan(20)
-        .unwrap()["items"]
+    let fourth = return_day.scan(20).unwrap()["items"]
         .as_array()
         .unwrap()
         .iter()
         .find(|row| row["id"] == "served-new")
         .unwrap()
         .clone();
-    assert!(return_day
-        .claim(
-            "served-new",
-            fourth["occurrence"].as_str().unwrap(),
-            "tester",
-            Some(token),
-        )
-        .is_err());
+    assert!(
+        return_day
+            .claim(
+                "served-new",
+                fourth["occurrence"].as_str().unwrap(),
+                "tester",
+                Some(token),
+            )
+            .is_err()
+    );
 }
 
 #[test]
@@ -267,11 +291,16 @@ fn no_policy_discovery_is_sourced_and_skips_one_off_or_historical_work() {
         .unwrap();
 
     assert_eq!(source_row["maintenance_advisory"]["kind"], "source");
-    assert_eq!(source_row["maintenance_advisory"]["source_refs"], json!(["explicit-feed"]));
-    assert!(source_row["maintenance_advisory"]["unresolved"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("authorization")));
+    assert_eq!(
+        source_row["maintenance_advisory"]["source_refs"],
+        json!(["explicit-feed"])
+    );
+    assert!(
+        source_row["maintenance_advisory"]["unresolved"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("authorization"))
+    );
     assert!(historical_row.get("maintenance_advisory").is_none());
     assert_eq!(store.load(true).unwrap().unwrap()["version"], 1);
     assert_eq!(one_off["spec"]["maintenance"], Value::Null);
