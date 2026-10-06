@@ -86,14 +86,14 @@ fn acknowledgement_is_not_consent_and_adoption_states_remain_distinct() {
     .unwrap();
     assert_eq!(
         followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["state"],
-        "active_observed"
+        "scheduled_execution_reported"
     );
     followup_daily::record_adoption(&store, "declined", None).unwrap();
     let declined_with_binding = followup_daily::status_with_maintenance(&store).unwrap();
     assert_eq!(declined_with_binding["adoption"]["state"], "declined");
     assert_eq!(
         declined_with_binding["adoption"]["configuration"],
-        "active_observed"
+        "scheduled_execution_reported"
     );
     followup_daily::bind(
         &store,

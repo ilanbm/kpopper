@@ -155,7 +155,7 @@ pub(crate) fn assess(
                     .flatten()
                     .any(|attempt| {
                         attempt["outcome"] == "checked"
-                            && attempt["request"]["next_at"] == item["next_at"]
+                            && instant(&attempt["request"]["next_at"]) == instant(&item["next_at"])
                             && instant(&attempt["finished_at"])
                                 .is_some_and(|finished| finished <= now)
                     });

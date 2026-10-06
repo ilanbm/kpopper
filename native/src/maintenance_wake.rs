@@ -3,6 +3,14 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
 pub(crate) fn assess(data: &Value, now: DateTime<Utc>) -> Value {
+    let mut result = assess_phase(data, now);
+    result["assurance_scope"] = json!("calendar_phase_only");
+    result["capacity_and_age_guarantee"] = json!("not_established");
+    result["host_authentication"] = json!("unestablished");
+    result
+}
+
+fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
     let daily = &data["daily"];
     let selection = &daily["maintenance_mode"];
     let mode = selection["mode"].as_str().unwrap_or("existing");
@@ -94,11 +102,14 @@ pub(crate) fn assess(data: &Value, now: DateTime<Utc>) -> Value {
         return json!({"state":"unknown","mode":mode,"reason":"native_anchor_or_timezone_unestablished","required_choice":["daily_fallback","manual"]});
     };
     let mut reasons = Vec::new();
+    let mut ordinary_unknown = false;
+    let mut maintenance_incompatible = false;
     for (id, item) in data["items"].as_object().into_iter().flatten() {
         if matches!(item["state"].as_str(), Some("done" | "cancelled")) {
             continue;
         }
         let Some(m) = item["spec"].get("maintenance") else {
+            ordinary_unknown = true;
             reasons.push(
                 json!({"id":id,"reason":"ordinary_obligation_requires_separate_compatibility"}),
             );
@@ -124,10 +135,11 @@ pub(crate) fn assess(data: &Value, now: DateTime<Utc>) -> Value {
                 && cadence.is_some_and(|n| n % days == 0)
         });
         if !compatible {
+            maintenance_incompatible = true;
             reasons.push(json!({"id":id,"reason":"fixed_native_phase_cannot_serve_next_calendar_check","next_at":next.map(|v|v.to_rfc3339())}));
         }
     }
-    json!({"state":if reasons.is_empty(){"compatible"}else{"incompatible"},"mode":mode,"reasons":reasons,"assessed_at":now.to_rfc3339(),
+    json!({"state":if maintenance_incompatible{"incompatible"}else if ordinary_unknown{"unknown"}else{"compatible"},"mode":mode,"reasons":reasons,"assessed_at":now.to_rfc3339(),
         "required_choice":if reasons.is_empty(){json!([])}else{json!(["daily_fallback","manual"])},
         "execution":"unestablished_by_attested_configuration","host_mutation":"none"})
 }

@@ -130,7 +130,7 @@ execution receipts remain separate from the source observation.
 ## Runtime compatibility
 
 Capturing maintenance promotes only that local followup ledger to version 2. Ledgers that
-have never captured maintenance remain version 1. A historically promoted ledger remains
+have never captured maintenance or selected a new execution mode remain version 1. A historically promoted ledger remains
 version 2 even after its last maintenance declaration is removed; it never auto-demotes.
 Metadata version 1 pins the policy digest's v1 field set. Future metadata versions must use
 a separate schema while preserving validation of recorded v1 digests. Older coordinators must refuse the new ledger instead of treating
@@ -213,8 +213,39 @@ These receipts do not establish automatic host execution.
 When an authorized host tool supplies an actual readback of the current scheduled invocation,
 pass it with `daily start --host-execution FILE`. Its exact fields are `schema:
 kpopper.host-execution/v1`, `trigger: scheduled`, `host`, `id`, `executed_at`, `observed_at`,
-and `evidence`. The owner must match the active binding, execution must follow that binding's
-readback, and the report must describe an invocation within ten minutes, with ordered current
+and `evidence`. The owner must match the active binding, execution must follow the binding identity epoch, and the report must describe an invocation within ten minutes, with ordered current
 timestamps. Manual and host-execution flags cannot be combined. A matching completed receipt
-can establish host-attested execution; the attestation is not host authentication, future
-scheduler availability, source truth or semantic acceptance. This command changes no host job.
+records `scheduled_execution_reported`: caller-supplied execution information, not authenticated
+host proof. A local binding epoch separates owner/configuration changes from repeat readbacks;
+refreshing the same owner does not discard the current report. Reports have their own finite
+liveness window and establish no future scheduler availability, source truth or semantic
+acceptance. This command changes no host job.
+
+
+Routine shown, decline, snooze and authorization choices live in private first-use state,
+including the actual unexpired snooze time. A routine acknowledgement does not upgrade an
+ordinary ledger. Actual maintenance capture or an execution-mode choice remains a version2
+boundary; do not lower an existing ledger version to make rollback appear supported.
+
+A received authorized native wake may run due catchup work even when phase readback is old,
+unknown or incompatible. Its packet preserves the unknown/repair status; this does not select
+a daily fallback, acknowledge empty-run cost, change the owner or rewrite a schedule. Phase
+compatibility describes calendar phase only, not action capacity, maximum source age, host
+authentication or guaranteed execution. Ordinary obligations require their own compatibility.
+
+Calendar recurrence starts from the admitted periodic claim's local day. On a DST overlap,
+the check uses the earliest valid instant; in a gap it uses the next valid instant. The declared
+policy time and timezone stay intact. Closed obligations remain visible as history but do not
+create ongoing degradation or repeated health fingerprints.
+
+No-policy or no-success snapshots describe local maintenance assurance as unknown; they do
+not prove that recorded facts are invalid. Relevant ongoing clock/source work needs a scoped
+proposal before closing the response, with unresolved choices explicit. Material current use
+must disclose actual failure reasons and known last successful observation and due timestamps.
+Stable, historical, closed or unrelated answers stay quiet, and saved suppression never becomes
+permission or evidence of freshness.
+
+A missing required attempt-history segment makes the validated ledger unavailable across
+ledger-backed followups. Startup keeps its workspace and ordinary guidance and reports that
+scope honestly. Restore the required retained segments or reconcile an intact backup; never
+fabricate missing history or claim unrelated ledger rows were validated.

@@ -214,7 +214,10 @@ fn actual_current_matching_host_attestation_is_distinct_from_manual_completion()
             file.to_str().unwrap(),
         ],
     );
-    assert_eq!(started["claim"]["execution_origin"], "host_attested");
+    assert_eq!(
+        started["claim"]["execution_origin"],
+        "self_reported_scheduled"
+    );
     assert_eq!(started["claim"]["host_execution"], report);
     run(
         &w,
@@ -230,10 +233,13 @@ fn actual_current_matching_host_attestation_is_distinct_from_manual_completion()
         ],
     );
     let status = run(&w, t.path(), &["followups", "daily", "status"]);
-    assert_eq!(status["adoption"]["configuration"], "active_observed");
+    assert_eq!(
+        status["adoption"]["configuration"],
+        "scheduled_execution_reported"
+    );
     assert_eq!(
         status["maintenance_health"]["obligations"][0]["host_state"],
-        "active_observed"
+        "scheduled_execution_reported"
     );
     // A host attestation is explicit evidence; stale or foreign reports cannot admit a lease.
     for (key, value) in [

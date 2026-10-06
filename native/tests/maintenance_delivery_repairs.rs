@@ -99,9 +99,12 @@ fn source_fixture() -> (TempDir, std::path::PathBuf, std::path::PathBuf, Store) 
 }
 
 fn save_first_use_choice(workspace: &Path, state: &Path, choice: Value) {
-    let project = state
-        .join("kpopper/first-use/projects")
-        .join(kpop_native::onboarding::project_key(workspace));
+    let project =
+        state
+            .join("kpopper/first-use/projects")
+            .join(kpop_native::onboarding::project_key(
+                &workspace.canonicalize().unwrap(),
+            ));
     fs::create_dir_all(&project).unwrap();
     fs::write(
         project.join("maintenance-choice.json"),

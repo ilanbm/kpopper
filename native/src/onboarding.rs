@@ -101,10 +101,48 @@ pub(crate) fn maintenance_choice(workspace: &Path) -> Result<Option<Value>> {
     )
 }
 
-pub(crate) fn save_maintenance_choice(workspace: &Path, choice: &Value) -> Result<()> {
+pub(crate) fn maintenance_choice_lock_in_state(
+    workspace: &Path,
+    state_home: &Path,
+) -> Result<fs::File> {
+    let directory = state_home
+        .join("kpopper/first-use/projects")
+        .join(project_key(workspace));
+    private_dir(&directory)?;
+    let lock = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(directory.join("maintenance-choice.lock"))?;
+    fs2::FileExt::lock_exclusive(&lock)?;
+    Ok(lock)
+}
+
+pub(crate) fn maintenance_choice_in_state(
+    workspace: &Path,
+    state_home: &Path,
+) -> Result<Option<Value>> {
+    Ok(read(
+        &state_home
+            .join("kpopper/first-use/projects")
+            .join(project_key(workspace))
+            .join("maintenance-choice.json"),
+    )?
+    .and_then(|state| state.get("choice").cloned()))
+}
+
+pub(crate) fn save_maintenance_choice_in_state(
+    workspace: &Path,
+    state_home: &Path,
+    choice: &Value,
+) -> Result<()> {
     require(choice.is_object(), "Maintenance choice must be an object")?;
     write(
-        &project_dir(workspace)?.join("maintenance-choice.json"),
+        &state_home
+            .join("kpopper/first-use/projects")
+            .join(project_key(workspace))
+            .join("maintenance-choice.json"),
         &json!({"choice":choice}),
     )
 }
@@ -153,7 +191,7 @@ fn saved_choice_allows_promotion(workspace: &Path) -> bool {
 
 pub(crate) fn unavailable_continuity(reason: &str) -> String {
     format!(
-        "Maintenance continuity health is unavailable from local state: {}. Do not report checks as healthy or fresh.",
+        "Maintenance continuity health is unavailable from local state: {}. Ledger validation/linked-history failures affect all ledger-backed followups; restore the required retained segments or reconcile an intact backup. Do not fabricate missing history or report checks as healthy or fresh; the record's factual invalidity is not established.",
         reason
             .split_whitespace()
             .collect::<Vec<_>>()
@@ -173,41 +211,40 @@ pub(crate) fn maintenance_discovery_notice(workspace: &Path, enabled: bool) -> R
         return Ok(String::new());
     }
     let saved = maintenance_choice(&location.workspace)?;
-    let (adoption, local_mode, continuity_error) = match crate::followup_store::Store::open(
-        &location.workspace,
-    )
-    .and_then(|store| {
-        let data = store.load(false)?;
-        match data {
-            Some(_) => Ok(Some(crate::followup_daily::status_with_maintenance(
-                &store,
-            )?)),
-            None => Ok(None),
-        }
-    }) {
-        Ok(Some(status)) => (
-            status["adoption"].clone(),
-            status["wake"]["mode"]
-                .as_str()
-                .filter(|mode| *mode != "existing")
-                .map(str::to_owned),
-            None,
-        ),
-        Ok(None) => (
-            saved.clone().unwrap_or_else(
-                || json!({"choice":"proposed","configuration":"unconfigured","authorized":false}),
+    let (adoption, local_mode, continuity_error) =
+        match crate::followup_store::Store::open(&location.workspace).and_then(|store| {
+            let data = store.load(false)?;
+            match data {
+                Some(_) => Ok(Some(crate::followup_daily::status_with_maintenance(
+                    &store,
+                )?)),
+                None => Ok(None),
+            }
+        }) {
+            Ok(Some(status)) => (
+                status["adoption"].clone(),
+                status["wake"]["mode"]
+                    .as_str()
+                    .filter(|mode| *mode != "existing")
+                    .map(str::to_owned),
+                None,
             ),
-            None,
-            None,
-        ),
-        Err(reason) => (
-            saved.clone().unwrap_or_else(
-                || json!({"choice":"proposed","configuration":"unknown","authorized":false}),
+            Ok(None) => (
+                crate::followup_daily::unconfigured_adoption(
+                    &location.workspace,
+                    chrono::Utc::now(),
+                )?,
+                None,
+                None,
             ),
-            None,
-            Some(reason.to_string()),
-        ),
-    };
+            Err(reason) => (
+                saved.clone().unwrap_or_else(
+                    || json!({"choice":"proposed","configuration":"unknown","authorized":false}),
+                ),
+                None,
+                Some(reason.to_string()),
+            ),
+        };
     let mut adoption = adoption;
     if adoption_choice(Some(&adoption)) == "proposed"
         && let Some(saved_choice) = saved
@@ -219,7 +256,7 @@ pub(crate) fn maintenance_discovery_notice(workspace: &Path, enabled: bool) -> R
     let choice = adoption_choice(Some(&adoption));
     let local_mode = local_mode.as_deref();
     let promotional = promotion_allowed(enabled, &choice, local_mode);
-    let mut preference = json!({"guidance_enabled":enabled,"choice":choice,"configuration":adoption["configuration"],"authorized":adoption["authorized"],"until":adoption["until"],"evidence":adoption["evidence"],"evidence_ref":adoption["evidence_ref"],"authorization_evidence":adoption["authorization_evidence"],"first_use_choice":saved,"promotion_allowed":promotional});
+    let mut preference = json!({"guidance_enabled":enabled,"choice":choice,"configuration":adoption["configuration"],"authorized":adoption["authorized"],"until":adoption["until"],"evidence":adoption["evidence"],"evidence_ref":adoption["evidence_ref"],"authorization_evidence":adoption["authorization_evidence"],"first_use_choice":saved,"continuity_snapshot":adoption["continuity_snapshot"],"promotion_allowed":promotional});
     if let Some(mode) = local_mode {
         preference["local_mode"] = json!(mode);
     }
