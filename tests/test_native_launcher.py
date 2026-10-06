@@ -187,6 +187,77 @@ class NativeShellLaunchers(unittest.TestCase):
         self.assertIn("unsupported native platform", grounded.stderr)
 
 
+    def use_platform(self, system, machine):
+        self.write_executable(self.tools / "uname",
+                              '#!/bin/sh\ncase "$1" in -s) echo %s;; -m) echo %s;; esac\n' % (system, machine))
+
+    def test_linux_and_windows_platforms_select_their_own_runtime(self):
+        for system, machine, target in [
+            ("Linux", "x86_64", "linux-x86_64"),
+            ("Linux", "aarch64", "linux-aarch64"),
+            ("Linux", "arm64", "linux-aarch64"),
+            ("MINGW64_NT-10.0", "x86_64", "windows-x86_64/kpop.exe"),
+            ("MSYS_NT-10.0", "x86_64", "windows-x86_64/kpop.exe"),
+            ("CYGWIN_NT-10.0", "x86_64", "windows-x86_64/kpop.exe"),
+        ]:
+            with self.subTest(system=system, machine=machine):
+                self.use_platform(system, machine)
+                binary = self.plugin / "scripts/runtime" / target
+                if binary.suffix != ".exe":
+                    binary = binary / "kpop"
+                binary.parent.mkdir(parents=True, exist_ok=True)
+                self.write_executable(binary, '#!/bin/sh\nprintf "%s <%%s>\\n" "$@"\n' % target)
+                result = self.invoke("scripts/bin/kpop", ("check",))
+                self.assertEqual((result.returncode, result.stdout), (0, "%s <check>\n" % target), result.stderr)
+                binary.unlink()
+        self.assertFalse(self.python_called.exists())
+
+    def test_a_windows_package_without_its_runtime_offers_the_powershell_installer(self):
+        self.write_executable(self.tools / "cygpath",
+                              '#!/bin/sh\n[ "$1" = -m ] || exit 98\nprintf "C:/Users/me/kpopper plugin\\n"\n')
+        (self.plugin / "VERSION").write_text("0.9.0\n")
+        install = ('Install this active copy: pwsh -NoProfile -File "C:/Users/me/kpopper plugin/install.ps1" '
+                   '-Version "0.9.0" -PluginRoot "C:/Users/me/kpopper plugin"\n')
+        for system in ("MINGW64_NT-10.0", "MSYS_NT-10.0", "CYGWIN_NT-10.0"):
+            with self.subTest(system=system):
+                self.use_platform(system, "x86_64")
+                opened = self.invoke("scripts/session_open.sh", ("--host", "claude"))
+                self.assertEqual((opened.returncode, opened.stderr), (0, ""))
+                self.assertTrue(opened.stdout.startswith(
+                    "kpopper: native runtime is not installed for windows-x86_64 in this package.\n"
+                    + install + "kpopper did not open this session"), opened.stdout)
+                self.assertIn("Offer to run the command above", opened.stdout)
+                self.assertEqual(self.invoke("scripts/bin/kpop").returncode, 1)
+        self.assertFalse(self.python_called.exists())
+
+    def test_a_hosted_package_without_commands_still_opens_the_session(self):
+        # A claude.ai-hosted plugin may ship no scripts/bin, so there is nothing to put on PATH.
+        shutil.rmtree(self.plugin / "scripts/bin")
+        environment = self.root / "session env.sh"
+        result = subprocess.run(["sh", str(self.plugin / "scripts/session_open.sh"), "--host", "claude"],
+                                input="{}", text=True, capture_output=True, timeout=10, cwd=self.root,
+                                env=dict(self.env, CLAUDE_ENV_FILE=str(environment)))
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, "<session-start>\n<--host>\n<claude>\n{}")
+        self.assertFalse(environment.exists())
+
+    def test_an_unknown_hook_name_is_reported_and_never_dispatched(self):
+        dispatched = self.root / "dispatched"
+        self.write_executable(self.binary, '#!/bin/sh\n: > "%s"\n' % dispatched)
+        result = self.invoke("scripts/hook.sh", ("stop_hook.py", "claude"))
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
+        self.assertEqual(result.stderr, "kpopper: unsupported native hook: stop_hook.py\n")
+        self.assertFalse(dispatched.exists())
+
+    def test_the_gate_gives_tool_events_context_and_keeps_stop_silent(self):
+        result = self.invoke("scripts/session_gate.sh", ("--host", "codex", "--context", "PostToolUse"))
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, '<session-context>\n<--event>\n<PostToolUse>\n<--host>\n<codex>\n'
+                         '{"session_id":"test","cwd":"/example"}')
+        stopped = self.invoke("scripts/session_gate.sh", ("--host", "claude", "--context", "Stop"))
+        self.assertEqual((stopped.returncode, stopped.stdout, stopped.stderr), (0, "", ""))
+
+
 class PluginPackage(unittest.TestCase):
     def test_the_package_root_holds_no_bin_directory(self):
         # claude.ai refuses to sync a plugin whose root holds bin/: Claude Code adds that
