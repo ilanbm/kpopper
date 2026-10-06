@@ -992,7 +992,18 @@ fn main() {
         })();
         let (output, error, code) = match result {
             Ok(Some(path)) => (format!("{}\n", path.display()), String::new(), 0),
-            Ok(None) => (String::new(), String::new(), 1),
+            Ok(None) => {
+                // No record here: name where one exists on another branch, if anywhere.
+                let elsewhere = args
+                    .workspace
+                    .clone()
+                    .map(Ok)
+                    .unwrap_or_else(std::env::current_dir)
+                    .ok()
+                    .and_then(|cwd| kpop_native::record_elsewhere::line(&cwd))
+                    .map(|line| line + "\n");
+                (String::new(), elsewhere.unwrap_or_default(), 1)
+            }
             Err(error) => (String::new(), format!("{error}\n"), 1),
         };
         if args.json {

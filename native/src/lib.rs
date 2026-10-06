@@ -168,6 +168,7 @@ pub mod public_pending;
 pub mod public_board;
 pub mod public_update;
 pub mod public_workspace;
+pub mod record_elsewhere;
 pub mod publication_provider;
 mod python_identifiers;
 mod python_text;

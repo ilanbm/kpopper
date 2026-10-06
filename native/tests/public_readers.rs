@@ -2554,3 +2554,137 @@ fn export_and_the_write_commands_tell_the_refusal_in_the_record_s_order() {
         assert_eq!(fs::read_to_string(&entry).unwrap(), record);
     }
 }
+
+/// Two worktrees of one repository on their own branches: `base` on main, `wa` on feat-a
+/// and `wb` on feat-b.
+fn sibling_worktrees(root: &Path) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+    let (base, wa, wb) = (root.join("base"), root.join("wa"), root.join("wb"));
+    fs::create_dir_all(&base).unwrap();
+    git(&base, &["init", "-q", "-b", "main"]);
+    fs::write(base.join("README.md"), "project\n").unwrap();
+    git(&base, &["add", "README.md"]);
+    git(
+        &base,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+    );
+    for (branch, path) in [("feat-a", &wa), ("feat-b", &wb)] {
+        git(&base, &["branch", "-q", branch]);
+        git(
+            &base,
+            &["worktree", "add", "-q", path.to_str().unwrap(), branch],
+        );
+    }
+    (base, wa, wb)
+}
+
+#[test]
+fn where_and_check_name_a_record_another_worktree_holds() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    let (base, wa, wb) = sibling_worktrees(root);
+    let private = root.join("private");
+    let quiet = |args: &[&str]| {
+        let output = cli(&wb, args, &private);
+        assert!(output.stdout.is_empty(), "{args:?}");
+        (
+            output.status.code(),
+            String::from_utf8(output.stderr).unwrap(),
+        )
+    };
+    assert_eq!(quiet(&["where"]), (Some(1), String::new()));
+
+    // The other record is never read: its contents need not even parse.
+    fs::write(wa.join("GROUNDING.yaml"), "known: [unclosed\n").unwrap();
+    let wa_shown = wa.display();
+    assert_eq!(
+        quiet(&["where"]),
+        (
+            Some(1),
+            format!(
+                "No record on this branch; one exists uncommitted in worktree {wa_shown} (branch feat-a). Commit it there and bring it in with `git merge feat-a`, or work in that worktree, rather than starting a second record here.\n"
+            )
+        )
+    );
+
+    commit_record(&wa, "known: [unclosed\n", "record born on feat-a");
+    let on_feat_a = format!(
+        "No record on this branch; one exists on feat-a in worktree {wa_shown}. Bring it in with `git merge feat-a`, or work in that worktree, rather than starting a second record here.\n"
+    );
+    assert_eq!(quiet(&["where"]), (Some(1), on_feat_a.clone()));
+    assert_eq!(
+        quiet(&["check"]),
+        (
+            Some(2),
+            format!(
+                "kpop check: {}{on_feat_a}",
+                no_record_here("GROUNDING.yaml")
+            )
+        )
+    );
+
+    // Once the record reaches the default branch, that is where it is named.
+    git(&base, &["merge", "-q", "--ff-only", "feat-a"]);
+    let output = Command::new("git")
+        .args(["-C", base.to_str().unwrap(), "rev-parse", "--short", "HEAD"])
+        .output()
+        .unwrap();
+    let commit = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        quiet(&["where"]),
+        (
+            Some(1),
+            format!(
+                "No record on this branch; one exists on main at {}. Bring it in with `git merge main`, or check out that branch, rather than starting a second record here.\n",
+                commit.trim()
+            )
+        )
+    );
+    // The probe only reads: the branch without a record stays without one.
+    assert!(!wb.join("GROUNDING.yaml").exists());
+    assert!(!wb.join(".kpopper").exists());
+
+    // Where the record is here, nothing else is said.
+    git(&wb, &["merge", "-q", "--ff-only", "main"]);
+    let found = cli(&wb, &["where"], &private);
+    assert_eq!(found.status.code(), Some(0));
+    assert!(found.stderr.is_empty());
+}
+
+#[test]
+fn where_without_git_or_a_record_elsewhere_stays_silent() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = &temp.path().canonicalize().unwrap();
+    let plain = root.join("plain");
+    fs::create_dir(&plain).unwrap();
+    // A record in a neighbouring directory outside Git is not looked for.
+    fs::create_dir(root.join("neighbour")).unwrap();
+    fs::write(root.join("neighbour/GROUNDING.yaml"), "known: {}\n").unwrap();
+    let (_, _, wb) = sibling_worktrees(&root.join("repo"));
+    for workspace in [&plain, &wb] {
+        let output = cli(workspace, &["where"], &root.join("private"));
+        assert_eq!(output.status.code(), Some(1), "{}", workspace.display());
+        assert!(output.stdout.is_empty());
+        assert!(
+            output.stderr.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let checked =
+            String::from_utf8(cli(workspace, &["check"], &root.join("private")).stderr).unwrap();
+        assert!(
+            checked.ends_with(&no_record_here("GROUNDING.yaml")),
+            "{checked}"
+        );
+    }
+}

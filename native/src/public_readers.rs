@@ -715,7 +715,18 @@ pub fn run(
         source_capture::capture_ordinary_source_with_runtime(&paths, &cwd, mode, None, runtime)
             .map_err(|e| {
                 let named = options.subjects.iter().filter(|s| names_a_file(command, s));
-                explain_missing(e, named.map(String::as_str), &cwd, mode == ReadMode::Live)
+                let unnamed = named.clone().next().is_none();
+                let mut failure =
+                    explain_missing(e, named.map(String::as_str), &cwd, mode == ReadMode::Live);
+                // A check with no record here says where one exists on another branch.
+                if command == "check"
+                    && unnamed
+                    && failure.0.ends_with(NO_RECORD_HERE)
+                    && let Some(line) = crate::record_elsewhere::line(&cwd)
+                {
+                    failure.0.push_str(&format!("\n{line}"));
+                }
+                failure
             })?;
     if let Some(reference) = options.from_ref.as_deref() {
         crate::require(command == "pull", "--from is available only with pull")?;
