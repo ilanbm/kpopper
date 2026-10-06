@@ -143,7 +143,6 @@ fn reseal(bundle: &V, edit: impl FnOnce(&mut Map)) -> V {
 fn subject(capture: &Capture) -> V {
     map(&map(capture.document()).unwrap()["readings"]).unwrap()["p.input"].clone()
 }
-/// Edit one union transaction's action in a copy of a snapshot.
 
 // ---- Synthesized complete legacy histories ----
 

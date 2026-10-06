@@ -243,6 +243,7 @@ impl<'a> Subject<'a> {
             .filter(|id| string_is(&self.objects[*id]["kind"], "judgment"))
             .collect())
     }
+    #[allow(clippy::type_complexity)]
     fn origins(&mut self, head: usize) -> Result<(BTreeSet<(usize, usize)>, BTreeSet<usize>, BTreeSet<usize>)> {
         let mut origins = BTreeSet::new();
         let mut legacy = BTreeSet::new();

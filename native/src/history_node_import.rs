@@ -158,6 +158,7 @@ fn relocate(raw: &[u8], targets: &Map, place: &BTreeMap<String, PathBuf>) -> Res
 /// Reconstruct the exact original layout, relative to its recorded common root.
 /// Project discovery stops at this directory: a Git repository or project
 /// configuration above the temporary directory is not part of the archived source.
+#[allow(clippy::type_complexity)]
 fn reconstruct(
     archive: &Archive,
 ) -> Result<(

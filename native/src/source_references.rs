@@ -73,10 +73,9 @@ fn tree_blob_status(output: &[u8], path: &str) -> PinnedFileStatus {
         let Some(separator) = entry.iter().position(|byte| *byte == b'\t') else {
             return PinnedFileStatus::Unavailable;
         };
-        let metadata = entry[..separator].split(|byte| byte.is_ascii_whitespace());
+        let mut metadata = entry[..separator].split(|byte| byte.is_ascii_whitespace());
         let kind = metadata
-            .skip(1)
-            .next()
+            .nth(1)
             .filter(|field| !field.is_empty());
         let Some(kind) = kind else {
             return PinnedFileStatus::Unavailable;

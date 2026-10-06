@@ -89,6 +89,7 @@ pub struct CanonicalViewRequest {
 
 /// Build a common graph packet. Every source node is represented exactly once in
 /// `nodes` or `groups`; `navigation_membership` separately retains overlapping paths.
+#[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
 pub fn build(
     project: &str,
     project_identity: J,
@@ -149,6 +150,7 @@ pub fn build(
     let mut out_nodes = Vec::new();
     let mut out_groups = Vec::new();
     let mut frontier_paths = BTreeSet::new();
+    #[allow(clippy::too_many_arguments)]
     fn visit(
         path: &str,
         nodes: &BTreeMap<String, J>,
@@ -734,11 +736,11 @@ pub fn compact(packet: &J, requested_edge_sets: &[String]) -> crate::Result<J> {
 
     let mut links = Vec::new();
     let mut handle_edges = BTreeMap::<String, Vec<J>>::new();
-    let mut edge_set_index = 0usize;
-    for ((from_ref, _rel_key, to_ref, rel_json), exact_edges) in aggregates {
+    for (edge_set_index, ((from_ref, _rel_key, to_ref, rel_json), exact_edges)) in
+        aggregates.into_iter().enumerate()
+    {
         let rel: J = serde_json::from_str(&rel_json)?;
         let alias = format!("e{edge_set_index}");
-        edge_set_index += 1;
         if handle_edges
             .insert(alias.clone(), exact_edges.clone())
             .is_some()

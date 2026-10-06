@@ -356,7 +356,7 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String,
                 "source_ancestry_admission",
             )?;
         }
-        if tx.context.is_some() {
+        if let Some(tx_context) = tx.context.as_ref() {
             let restored = receipt_index(snapshot, op, &index)?;
             let expected = if [
                 crate::history_node_bootstrap::FORMAT,
@@ -364,18 +364,18 @@ pub(crate) fn verify_receipts(snapshot: &P::Snapshot) -> Result<BTreeMap<String,
                 crate::history_node_physical::FORMAT,
             ]
             .iter()
-            .any(|format| crate::history_node_legacy::kind(tx.context.as_ref().unwrap(), format))
+            .any(|format| crate::history_node_legacy::kind(tx_context, format))
             {
-                let context = context(tx.context.as_ref().unwrap())?;
+                let context = context(tx_context)?;
                 field(map(&context["options"])?, "evidence")?.clone()
-            } else if crate::history_node_branch::is_union(tx.context.as_ref().unwrap())?
-                || crate::history_node_clocks::is_clocks(tx.context.as_ref().unwrap())?
+            } else if crate::history_node_branch::is_union(tx_context)?
+                || crate::history_node_clocks::is_clocks(tx_context)?
                 || crate::history_node_legacy::kind(
-                    tx.context.as_ref().unwrap(),
+                    tx_context,
                     crate::history_node_legacy::CHECKPOINT,
                 )
             {
-                crate::history_node_branch::evidence(tx.context.as_ref().unwrap())?
+                crate::history_node_branch::evidence(tx_context)?
             } else {
                 intent(&restored)?
                     .get("evidence")
@@ -735,6 +735,7 @@ fn materialize_ledger(
         capture, action, options, runtime, audit, archive, evidence, true,
     )
 }
+#[allow(clippy::too_many_arguments)]
 fn materialize_mode(
     capture: &Capture,
     action: &V,
@@ -961,6 +962,7 @@ fn materialize_mode(
     )
 }
 /// One physical node transition contains all semantic objects authored for that subject.
+#[allow(clippy::too_many_arguments)]
 fn ledger_materialized(
     capture: &Capture,
     objects: &[V],

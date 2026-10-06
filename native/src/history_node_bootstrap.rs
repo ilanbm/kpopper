@@ -157,6 +157,7 @@ pub struct Plan {
     subjects: usize,
 }
 
+#[allow(clippy::type_complexity)]
 fn source_files(
     root: &Path,
     source: &crate::source_capture::CapturedSource,
@@ -201,6 +202,7 @@ fn source_files(
     Ok((files, paths, extra))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn claim(
     subject: &str,
     collection: &str,

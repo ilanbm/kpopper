@@ -1871,6 +1871,7 @@ mod tests {
     }
 
     thread_local! {
+        #[allow(clippy::type_complexity)]
         static FORGE: std::cell::RefCell<Option<Box<dyn Fn(&mut V, &mut V, &mut V)>>> =
             std::cell::RefCell::new(None);
     }
