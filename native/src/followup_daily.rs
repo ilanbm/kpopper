@@ -99,6 +99,14 @@ fn binding_epoch(old: &Value, new: &Value, now: DateTime<Utc>) -> (Value, Value)
     }
 }
 
+fn phase_observation_for_plain_bind(old: &Value, new_state: &Value) -> Value {
+    if old["state"] == "active" && new_state.as_str() == Some("active") {
+        old.get("phase_observed_at").cloned().unwrap_or_else(|| old["observed_at"].clone())
+    } else {
+        Value::Null
+    }
+}
+
 pub fn bind(store: &Store, report: Value) -> Result<Value> {
     let fields = ["host", "id", "state", "evidence"];
     require(
@@ -141,8 +149,7 @@ pub fn bind(store: &Store, report: Value) -> Result<Value> {
                 }
             }
             // State-only readback refreshes state, but carries the last phase proof.
-            binding.insert("phase_observed_at".into(), old.get("phase_observed_at")
-                .cloned().unwrap_or_else(|| old["observed_at"].clone()));
+            binding.insert("phase_observed_at".into(), phase_observation_for_plain_bind(&old, &report["state"]));
         }
         binding.insert("observed_at".into(), json!(stamp(store.now())));
         let (epoch, started) = binding_epoch(&old, &Value::Object(binding.clone()), store.now());
@@ -164,7 +171,10 @@ fn binding_liveness_days(daily: &Value, binding: &Value) -> u64 {
 }
 
 // Completion of local work is distinct from evidence of a bound scheduled invocation.
-fn reported_host_execution(daily: &Value, binding: &Value, now: DateTime<Utc>) -> bool {
+pub(crate) fn reported_host_execution(daily: &Value, binding: &Value, now: DateTime<Utc>) -> bool {
+    if !binding["binding_epoch"].as_str().is_some_and(|epoch| !epoch.is_empty()) {
+        return false;
+    }
     let window = crate::maintenance_wake::reported_liveness_window(binding_liveness_days(daily, binding));
     daily["receipts"].as_array().is_some_and(|receipts| {
         receipts.iter().any(|receipt| {
@@ -425,6 +435,12 @@ fn active_snooze(adoption: &Map<String, Value>, now: DateTime<Utc>) -> bool {
             .is_some_and(|until| until > now)
 }
 
+fn clear_choice_repair_metadata(adoption: &mut Map<String, Value>) {
+    for key in ["reason", "remediation", "choice", "quarantined_path"] {
+        adoption.remove(key);
+    }
+}
+
 pub fn maintenance_mode(
     store: &Store,
     mode: &str,
@@ -491,8 +507,7 @@ pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Resu
         }
         _ => unreachable!(),
     }
-    adoption.remove("reason");
-    adoption.remove("remediation");
+    clear_choice_repair_metadata(&mut adoption);
     let adoption = Value::Object(adoption);
     crate::onboarding::save_maintenance_choice_in_state(
         store.workspace(),
@@ -1201,7 +1216,8 @@ fn default_watch_request(workspace: &Path) -> Result<Option<Value>> {
 
 #[cfg(test)]
 mod daily_repair_tests {
-    use super::{active_snooze, adoption_status, binding_epoch, maintenance_health, reported_host_execution};
+    use super::{active_snooze, adoption_status, binding_epoch, clear_choice_repair_metadata,
+        maintenance_health, phase_observation_for_plain_bind, reported_host_execution};
     use chrono::{TimeZone, Utc};
     use serde_json::json;
 
@@ -1217,6 +1233,27 @@ mod daily_repair_tests {
         changed["time"] = json!("10:00");
         assert_ne!(binding_epoch(&old, &changed, now).0, "old");
         assert_eq!(binding_epoch(&old, &old, now).0, "old");
+    }
+
+    #[test]
+    fn plain_reactivation_cannot_reuse_phase_observation() {
+        let active = json!({"state":"active","observed_at":"2026-10-06T11:00:00Z",
+            "phase_observed_at":"2026-10-05T09:00:00Z"});
+        let missing = json!({"state":"missing","observed_at":"2026-10-06T11:00:00Z",
+            "phase_observed_at":"2026-10-05T09:00:00Z"});
+        assert_eq!(phase_observation_for_plain_bind(&active, &json!("active")), "2026-10-05T09:00:00Z");
+        assert!(phase_observation_for_plain_bind(&missing, &json!("active")).is_null());
+    }
+
+    #[test]
+    fn fresh_choice_drops_quarantine_metadata() {
+        let mut choice = json!({"state":"declined","choice":"unknown","reason":"first_use_choice_unreadable",
+            "remediation":"inspect","quarantined_path":"retained-copy"}).as_object().unwrap().clone();
+        clear_choice_repair_metadata(&mut choice);
+        assert_eq!(choice.get("state"), Some(&json!("declined")));
+        for key in ["choice", "reason", "remediation", "quarantined_path"] {
+            assert!(!choice.contains_key(key));
+        }
     }
 
     #[test]
@@ -1239,7 +1276,7 @@ mod daily_repair_tests {
         let daily = json!({"maintenance_mode":{"mode":"native","native_readback":{
             "host":"host","id":"schedule","cadence_days":7}},"receipts":[{"outcome":"complete",
             "execution_origin":"self_reported_scheduled","binding_epoch":"epoch",
-            "started_at":"2026-10-05T11:00:00Z","finished_at":"2026-10-05T11:05:00Z",
+            "started_at":"2026-10-05T11:02:00Z","finished_at":"2026-10-05T11:05:00Z",
             "host_execution":{"schema":"kpopper.host-execution/v1","trigger":"scheduled",
                 "host":"host","id":"schedule","executed_at":"2026-10-05T11:00:00Z",
                 "observed_at":"2026-10-05T11:00:00Z","evidence":"receipt"}}]});

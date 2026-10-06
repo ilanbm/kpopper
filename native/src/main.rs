@@ -1421,9 +1421,13 @@ fn main() {
                 && options.profile.is_none()
                 && cwd.join(".kpopper/native-feasibility.json").is_file()
             {
-                return Ok(kpop_native::public_core_readers::Output {
-                    text: Store::open(&cwd)?.to_string() + "\n",
-                    code: 0,
+                return Ok(kpop_native::public_readers::ReadResult {
+                    output: kpop_native::public_core_readers::Output {
+                        text: Store::open(&cwd)?.to_string() + "\n",
+                        code: 0,
+                    },
+                    continuity: None,
+                    discovery: None,
                 });
             }
             let mode =
@@ -1437,10 +1441,10 @@ fn main() {
             } else {
                 kpop_native::public_readers::Reply::Text
             };
-            kpop_native::public_readers::run_auto(command, options, &cwd, mode, reply)
+            kpop_native::public_readers::run_auto_with_continuity(command, options, &cwd, mode, reply)
         })();
-        let (output, error, code) = match result {
-            Ok(output) => (output.text, String::new(), output.code),
+        let (output, error, code, continuity, discovery) = match result {
+            Ok(read) => (read.output.text, String::new(), read.output.code, read.continuity, read.discovery),
             Err(error) => {
                 let (text, code) = kpop_native::public_readers::failure(command, options, &error);
                 if command == "open" && args.json {
@@ -1449,10 +1453,10 @@ fn main() {
                     (
                         serde_json::to_string_pretty(&object).unwrap() + "\n",
                         String::new(),
-                        code,
+                        code, None, None,
                     )
                 } else {
-                    (String::new(), text, code)
+                    (String::new(), text, code, None, None)
                 }
             }
         };
@@ -1465,6 +1469,13 @@ fn main() {
                 eprint!("{output}");
             }
             eprint!("{error}");
+            std::process::exit(code);
+        }
+        if args.json && (continuity.is_some() || discovery.is_some()) {
+            let mut packet = json!({"command":command,"exit_code":code,"output":output,"error":error});
+            if let Some(continuity) = continuity { packet["maintenance_continuity"] = continuity; }
+            if let Some(discovery) = discovery { packet["maintenance_discovery"] = discovery; }
+            println!("{packet}");
             std::process::exit(code);
         }
         emit(command, args.json, &output, &error, code);

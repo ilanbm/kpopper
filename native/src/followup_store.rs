@@ -38,6 +38,88 @@ struct Graph {
     record_identity: String,
 }
 
+/// One immutable continuity capture shared by a reader's presentation passes.
+pub(crate) struct ReadContinuity {
+    nodes: BTreeMap<String, crate::maintenance_assessment::Node>,
+    obligations: Vec<Value>,
+    captured_identity: String,
+    live_identity: String,
+    assessed_at: String,
+}
+impl ReadContinuity {
+    pub(crate) fn for_subjects(&self, subjects: &[String]) -> Option<Value> {
+        if subjects.is_empty() { return None; }
+        let mut closure: BTreeSet<String> = subjects.iter().cloned().collect();
+        let mut pending = subjects.to_vec();
+        let mut complete = true;
+        while let Some(subject) = pending.pop() {
+            if closure.len() >= 1000 { complete = false; break; }
+            if let Some(node) = self.nodes.get(&subject) {
+                for dependency in &node.dependencies {
+                    if closure.insert(dependency.clone()) { pending.push(dependency.clone()); }
+                }
+            }
+        }
+        let rows = self.obligations.iter().filter(|row| row["related"].as_array().is_some_and(|ids|
+            ids.iter().filter_map(Value::as_str).any(|id| closure.contains(id)))).cloned().collect::<Vec<_>>();
+        if rows.is_empty() && complete { return None; }
+        let matches = self.live_identity == self.captured_identity;
+        Some(json!({"schema":"kpopper.scoped-read-continuity/v1", "subjects":subjects,"assessed_at":self.assessed_at,
+            "captured_record_identity":self.captured_identity,"live_record_identity":self.live_identity,
+            "record_identity_match":matches,"declared_closure_complete":complete,
+            "scope_issue":if complete {Value::Null} else {json!("declared_closure_limit")},
+            "current_use_adequacy":"unassessed",
+            "captured_record_current_health":if !matches {"unknown_record_identity_mismatch"} else if !complete {"unknown_declared_closure"} else {"unassessed"},
+            "obligations":rows,"disclosure":"For every answer about these covered subjects, including recorded values, disclose the actual failed check or overdue/due state and known failure, observed_at and due_at. Preserve historical recorded values. Live continuity does not refresh or bless the captured record; current adequacy, source truth and authority remain separate."}))
+    }
+}
+
+/// Advisory decision data; never a declaration, consent or an invalidity verdict.
+pub(crate) struct ReadDiscovery {
+    declared: BTreeSet<String>,
+    nodes: BTreeMap<String, crate::maintenance_assessment::Node>,
+    captured_identity: String,
+    input: PathBuf,
+}
+impl ReadDiscovery {
+    pub(crate) fn for_subjects(&self, subjects: &[String]) -> Option<Value> {
+        let mut uncovered = Vec::new();
+        for subject in subjects {
+            let mut closure = BTreeSet::from([subject.clone()]);
+            let mut pending = vec![subject.clone()];
+            let mut complete = true;
+            while let Some(id) = pending.pop() {
+                if closure.len() >= 1000 {complete = false; break;}
+                if let Some(node) = self.nodes.get(&id) {
+                    if node.dependency_error.is_some() {complete = false; break;}
+                    for dependency in &node.dependencies {
+                        if closure.insert(dependency.clone()) {pending.push(dependency.clone());}
+                    }
+                }
+            }
+            // Unknown coverage and retired policies must not become a new offer.
+            if complete && closure.is_disjoint(&self.declared) {uncovered.push(subject.clone());}
+        }
+        if uncovered.is_empty() {return None;}
+        Some(json!({"schema":"kpopper.scoped-maintenance-discovery/v1",
+            "state":"advisory_gap_decision","subjects":uncovered,"captured_record_identity":self.captured_identity,
+            "record_input":self.input,"record_refs":uncovered.iter().map(|id|format!("node:{id}#")).collect::<Vec<_>>(),
+            "provenance":"actual delivered record_refs; inspect authored source fields there, no source provenance is invented",
+            "kind":"unestablished","applicability":"agent_task_assessment_required",
+            "policy_coverage":"no_applicable_local_native_declared_or_retired_policy_in_captured_subject_scope",
+            "unresolved":["matching_subject_and_input_scope","kind","cadence","timezone_and_date_semantics","use_policy","evidence_requirement","recurring_authority"],
+            "response_obligation":{"decision":"resolve_applicability_before_finishing",
+                "ongoing_scope":"represented_work_or_future_validity_of_produced_or_updated_knowledge_not_completion_of_this_reply_or_file_edit",
+                "when":"The represented work is unfinished/continuing, or the future validity of the knowledge produced or updated remains dependent on a pending clock/deadline or a changing named source actually read or used this turn. Finishing this reply or brief/file update does not close the represented work or remove its future dependencies.",
+                "then":"Explicitly propose a concrete matching scoped maintenance check in the final response, identifying the actual subject/date or named source just used. Saying no check exists is not a proposal. Leave unresolved choices visible; do not invent them.",
+                "matching_kind":{"pending_clock":"clock-only time reevaluation using native time; do not invent a source or source fetch, and do not substitute a source-check offer",
+                    "changing_named_source":"actual named-source inspection for the input used; a time-only reminder is not a substitute"},
+                "otherwise":"Keep stable/historical knowledge, closed work, genuine one-off tasks, unrelated subjects and saved suppression quiet. Do not infer a need, volatility, policy or authority merely from entry names or source prose."},
+            "declaration":"none","consent":"none","execution":"none","record_invalidity":"not_established",
+            "boundary":"This is advisory decision data beside an actual read, not executable policy, source truth, permission or a claim that the recorded fact is invalid. Propose only; do not add, schedule or activate without actual user authorization."}))
+    }
+}
+
 pub struct Store {
     location: Location,
     pub root: PathBuf,
@@ -2116,30 +2198,51 @@ impl Store {
 
     /// Live continuity scoped to the bodies actually delivered by a captured reader.
     /// It does not establish adequacy or refresh that reader's record identity.
-    pub(crate) fn scoped_read_continuity(&self, subjects: &[String], captured_identity: &str) -> Result<Option<Value>> {
+    pub(crate) fn read_continuity_snapshot(&self, captured_identity: &str, input: &Path) -> Result<Option<ReadContinuity>> {
         let Some(data) = self.load(false)? else { return Ok(None); };
+        let configured = PathBuf::from(data["config"]["record"].as_str().ok_or_else(|| error("Continuity record identity is unavailable"))?);
+        if input.canonicalize()? != configured.canonicalize()? { return Ok(None); }
+        let active = data["items"].as_object().into_iter().flatten().any(|(_, item)|
+            item["spec"]["maintenance"].is_object() && !matches!(item["state"].as_str(), Some("done" | "cancelled")));
+        if !active { return Ok(None); }
         let graph = self.graph(&data)?;
-        let mut closure: BTreeSet<String> = subjects.iter().cloned().collect();
-        let mut pending = subjects.to_vec();
-        while let Some(subject) = pending.pop() {
-            if closure.len() >= 1000 { break; }
-            if let Some(node) = graph.nodes.get(&subject) {
-                for dependency in &node.dependencies {
-                    if closure.insert(dependency.clone()) { pending.push(dependency.clone()); }
+        let health = crate::followup_daily::maintenance_health(&data, self.now())?;
+        let obligations = health["obligations"].as_array().unwrap().iter()
+            .filter(|row| row["check_state"] != "closed").cloned().collect();
+        Ok(Some(ReadContinuity {nodes:graph.nodes, obligations, captured_identity:captured_identity.into(),
+            live_identity:graph.record_identity, assessed_at:triggers::stamp(self.now())}))
+    }
+
+    pub(crate) fn scoped_read_continuity(&self, subjects: &[String], captured_identity: &str, input: &Path) -> Result<Option<Value>> {
+        Ok(self.read_continuity_snapshot(captured_identity, input)?.and_then(|snapshot| snapshot.for_subjects(subjects)))
+    }
+
+    pub(crate) fn read_discovery_snapshot(&self, captured_identity: &str, input: &Path) -> Result<Option<ReadDiscovery>> {
+        let location = crate::public_workspace::locate(input.parent().unwrap_or(self.workspace()), ReadMode::Live)?;
+        if location.status != "found" || location.record.canonicalize()? != input.canonicalize()? {return Ok(None);}
+        let loaded = self.load(false)?;
+        let data = loaded.as_ref().filter(|data| data["config"]["record"].as_str()
+            .and_then(|record| Path::new(record).canonicalize().ok()).as_ref() == input.canonicalize().ok().as_ref());
+        let mode = data.and_then(|data| data["daily"]["maintenance_mode"]["mode"].as_str());
+        if !crate::onboarding::read_discovery_allowed(&location.workspace, mode) {return Ok(None);}
+        let mut declared = BTreeSet::new();
+        let mut nodes = BTreeMap::new();
+        if let Some(data) = data {
+            for (_, item) in data["items"].as_object().into_iter().flatten() {
+                if item["spec"]["maintenance"].is_object() {
+                    declared.extend(item["spec"]["related"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned));
                 }
             }
+            if !declared.is_empty() {
+                let graph = self.graph(data)?;
+                if graph.record_identity != captured_identity {return Ok(None);}
+                nodes = graph.nodes;
+            }
         }
-        let mut health = crate::followup_daily::maintenance_health(&data, self.now())?;
-        let rows = health["obligations"].as_array_mut().unwrap();
-        rows.retain(|row| row["check_state"] != "closed" && row["related"].as_array().is_some_and(|ids|
-            ids.iter().filter_map(Value::as_str).any(|id| closure.contains(id))));
-        if rows.is_empty() { return Ok(None); }
-        let matches = graph.record_identity == captured_identity;
-        Ok(Some(json!({"schema":"kpopper.scoped-read-continuity/v1", "subjects":subjects,"assessed_at":triggers::stamp(self.now()),
-            "captured_record_identity":captured_identity,"live_record_identity":graph.record_identity,
-            "record_identity_match":matches,"current_use_adequacy":"unassessed",
-            "captured_record_current_health":if matches {"unassessed"} else {"unknown_record_identity_mismatch"},
-            "obligations":rows,"disclosure":"For every answer about these covered subjects, including recorded values, disclose the actual failed check or overdue/due state and known failure, observed_at and due_at. Preserve the validity of historical recorded values. Live continuity does not refresh or bless the captured record; current adequacy, source truth and authority remain separate."})))
+        Ok(Some(ReadDiscovery {declared,nodes,captured_identity:captured_identity.into(),input:input.to_owned()}))
+    }
+    pub(crate) fn scoped_read_discovery(&self, subjects: &[String], captured_identity: &str, input: &Path) -> Result<Option<Value>> {
+        Ok(self.read_discovery_snapshot(captured_identity, input)?.and_then(|snapshot| snapshot.for_subjects(subjects)))
     }
 
     pub fn assess_use(&self, subjects: &[String], claim_tokens: &[String]) -> Result<Value> {
@@ -2782,6 +2885,17 @@ mod scoped_continuity_tests {
     use super::*;
     use chrono::TimeZone;
     #[test]
+    fn closure_limit_is_explicit_unknown_even_when_a_policy_cannot_be_reached() {
+        let dependencies = (0..1001).map(|i| format!("fact.{i}")).collect::<Vec<_>>();
+        let snapshot = ReadContinuity {nodes:BTreeMap::from([("consumer".into(), crate::maintenance_assessment::Node {dependencies, ..Default::default()})]),
+            obligations:vec![],captured_identity:"record".into(),live_identity:"record".into(),assessed_at:"2026-10-06T12:00:00Z".into()};
+        let result = snapshot.for_subjects(&["consumer".into()]).unwrap();
+        assert_eq!(result["declared_closure_complete"], false);
+        assert_eq!(result["scope_issue"], "declared_closure_limit");
+        assert_eq!(result["captured_record_current_health"], "unknown_declared_closure");
+    }
+
+    #[test]
     fn live_health_cannot_bless_an_old_capture_and_unrelated_or_retired_reads_are_quiet() {
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("project");
@@ -2793,13 +2907,13 @@ mod scoped_continuity_tests {
         let declaration = json!({"schema":"kpopper.maintenance-declaration/v1","kind":"clock","id":"clock-check","title":"Clock check","why":"Current clock","how":"Read clock","scope":"Read only","related":["fact.value"],"cadence_days":1,"timezone":"UTC","check_time":"09:00","use_policy":"require_live","evidence_requirement":"trusted_clock","deadline":{"utc":"2026-10-05T09:00:00Z"}});
         store.add(crate::maintenance_contract::compile(&declaration).unwrap()["spec"].clone()).unwrap();
         let captured = store.graph(&store.load(true).unwrap().unwrap()).unwrap().record_identity;
-        assert_eq!(store.scoped_read_continuity(&["fact.value".into()], &captured).unwrap().unwrap()["record_identity_match"], true);
+        assert_eq!(store.scoped_read_continuity(&["fact.value".into()], &captured, &workspace.join("GROUNDING.yaml")).unwrap().unwrap()["record_identity_match"], true);
         fs::write(workspace.join("GROUNDING.yaml"), "meta:\n  name: Continuity scope\nknown:\n  fact.value: {v: 3}\n  fact.other: {v: 2}\n").unwrap();
-        let stale = store.scoped_read_continuity(&["fact.value".into()], &captured).unwrap().unwrap();
+        let stale = store.scoped_read_continuity(&["fact.value".into()], &captured, &workspace.join("GROUNDING.yaml")).unwrap().unwrap();
         assert_eq!(stale["record_identity_match"], false);
         assert_eq!(stale["captured_record_current_health"], "unknown_record_identity_mismatch");
-        assert!(store.scoped_read_continuity(&["fact.other".into()], &captured).unwrap().is_none());
+        assert!(store.scoped_read_continuity(&["fact.other".into()], &captured, &workspace.join("GROUNDING.yaml")).unwrap().is_none());
         store.resolve_with_authority("clock-check", "cancelled", "fixture://closed", Some("fixture://user-closed")).unwrap();
-        assert!(store.scoped_read_continuity(&["fact.value".into()], &captured).unwrap().is_none());
+        assert!(store.scoped_read_continuity(&["fact.value".into()], &captured, &workspace.join("GROUNDING.yaml")).unwrap().is_none());
     }
 }

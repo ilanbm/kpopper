@@ -2465,6 +2465,12 @@ impl Projection<'_> {
     }
 
     pub fn pull(&self, seeds: &[String], budget: i64) -> Result<String> {
+        Ok(self.pull_with_subjects(seeds, budget)?.0)
+    }
+
+    /// Render pull and return IDs whose own lines survived the requested line budget.
+    /// Callers use these IDs to scope live sidecar information to delivered values.
+    pub(crate) fn pull_with_subjects(&self, seeds: &[String], budget: i64) -> Result<(String, Vec<String>)> {
         let (expanded, _) = self.expanded(seeds)?;
         let every = self.every();
         let mut entries = BTreeSet::new();
@@ -2501,7 +2507,9 @@ impl Projection<'_> {
         }
         let mut lines = self.knowledge.clone();
         lines.extend(self.unread.clone());
+        let mut subjects = vec![None; lines.len()];
         for id in entries {
+            let start = lines.len();
             let holders = self.holders(&id);
             if self.base.reader.raw.contains_key(&id) {
                 let (line, shown) = self.base.describe(&id)?;
@@ -2538,8 +2546,10 @@ impl Projection<'_> {
             if self.disputed.contains_key(&id) {
                 lines.push(self.dispute(&id));
             }
+            subjects.extend(std::iter::repeat_n(Some(id), lines.len() - start));
         }
         for id in judgments {
+            let start = lines.len();
             let holders = self
                 .holders(&id)
                 .into_iter()
@@ -2570,6 +2580,7 @@ impl Projection<'_> {
             {
                 lines.push(cut(&format!("    review: {note}"), 110));
             }
+            subjects.extend(std::iter::repeat_n(Some(id), lines.len() - start));
         }
         let keep = if budget < 0 {
             (lines.len() as i64).saturating_add(budget).max(0) as usize
@@ -2578,11 +2589,13 @@ impl Projection<'_> {
         };
         let remaining = (lines.len() as i128 - budget as i128).max(0);
         lines.truncate(keep);
+        subjects.truncate(keep);
+        let delivered = subjects.into_iter().flatten().collect::<BTreeSet<_>>().into_iter().collect();
         if remaining > 0 {
             lines.push(format!("... {remaining} more lines - raise the budget"));
         }
         lines.push("\naffects <entry> shows what a change reaches".into());
-        Ok(lines.join("\n") + "\n")
+        Ok((lines.join("\n") + "\n", delivered))
     }
 }
 

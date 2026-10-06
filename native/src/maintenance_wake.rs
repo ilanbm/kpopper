@@ -34,20 +34,28 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
         return json!({"state":"paused_or_missing","mode":mode,"host_state":binding["state"]});
     }
     if binding["cadence"] == "daily" {
-        let phase_observed = binding["phase_observed_at"]
-            .as_str()
-            .or_else(|| binding["observed_at"].as_str())
-            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-            .map(|v| v.with_timezone(&Utc));
-        if phase_observed.is_none_or(|t| t > now || now.signed_duration_since(t) >= reported_liveness_window(1)) {
-            return json!({"state":"unknown","mode":mode,"reason":"daily_phase_readback_expired_or_missing","reported_liveness_days":1,"grace_hours":2});
-        }
         let phase = binding["time"]
             .as_str()
             .and_then(|v| chrono::NaiveTime::parse_from_str(v, "%H:%M").ok());
         let zone = binding["timezone"]
             .as_str()
             .and_then(|v| v.parse::<chrono_tz::Tz>().ok());
+        // A present null marker means a state transition deliberately invalidated
+        // the former phase readback. Only legacy bindings lack the field entirely.
+        let phase_timestamp = binding.get("phase_observed_at")
+            .and_then(Value::as_str)
+            .or_else(|| if binding.get("phase_observed_at").is_none() {
+                binding["observed_at"].as_str()
+            } else { None });
+        let phase_observed = phase_timestamp
+            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|v| v.with_timezone(&Utc));
+        let inspection_recent = phase_observed.is_some_and(|t| t <= now && now.signed_duration_since(t) < reported_liveness_window(1));
+        let execution_recent = phase.is_some() && zone.is_some()
+            && crate::followup_daily::reported_host_execution(daily, binding, now);
+        if !inspection_recent && !execution_recent {
+            return json!({"state":"unknown","mode":mode,"reason":"daily_phase_readback_expired_or_missing","reported_liveness_days":1,"grace_hours":2});
+        }
         let mut reasons = Vec::new();
         let mut unproven = false;
         let mut maintenance_phases = serde_json::Map::new();
@@ -84,7 +92,8 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             }
         }
         return json!({"state":if reasons.is_empty(){"compatible"}else if unproven{"unknown"}else{"incompatible"},
-            "mode":mode,"basis":"daily_recurring_phase","reasons":reasons,"maintenance_phases":maintenance_phases,"reported_liveness_days":1,"grace_hours":2,
+            "mode":mode,"basis":"daily_recurring_phase","phase_liveness_basis":if inspection_recent{"reported_schedule_readback"}else{"self_reported_scheduled_execution"},
+            "reasons":reasons,"maintenance_phases":maintenance_phases,"reported_liveness_days":1,"grace_hours":2,
             "required_choice":if reasons.is_empty(){json!([])}else{json!(["repair_daily_phase_with_authorization","manual"])},
             "execution":"unestablished_by_configuration","host_mutation":"none"});
     }
@@ -284,5 +293,38 @@ mod tests {
         let result = assess(&data, now);
         assert_eq!(result["maintenance_phases"]["good"], "compatible");
         assert_eq!(result["maintenance_phases"]["bad"], "incompatible");
+    }
+
+    #[test]
+    fn daily_phase_can_use_recent_same_epoch_scheduled_report() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let data = json!({"daily":{"binding":{"host":"host","id":"schedule","state":"active",
+            "cadence":"daily","time":"09:00","timezone":"UTC","observed_at":"2026-10-06T11:00:00Z",
+            "phase_observed_at":"2026-10-05T01:00:00Z","binding_epoch":"epoch",
+            "epoch_started_at":"2026-10-01T00:00:00Z"},
+            "receipts":[{"outcome":"complete","execution_origin":"self_reported_scheduled",
+                "binding_epoch":"epoch","started_at":"2026-10-06T10:00:00Z","finished_at":"2026-10-06T10:05:00Z",
+                "host_execution":{"schema":"kpopper.host-execution/v1","trigger":"scheduled",
+                    "host":"host","id":"schedule","executed_at":"2026-10-06T09:58:00Z",
+                    "observed_at":"2026-10-06T09:59:00Z","evidence":"run"}}]},
+            "items":{"check":{"id":"check","state":"waiting","spec":{"maintenance":{
+                "timezone":"UTC","check_time":"08:00"}}}}});
+        let result = assess(&data, now);
+        assert_eq!(result["state"], "compatible");
+        assert_eq!(result["phase_liveness_basis"], "self_reported_scheduled_execution");
+        let mut prior_epoch = data.clone();
+        prior_epoch["daily"]["receipts"][0]["binding_epoch"] = json!("old");
+        assert_eq!(assess(&prior_epoch, now)["state"], "unknown");
+    }
+
+    #[test]
+    fn state_only_reactivation_with_null_phase_proof_is_unknown() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let data = json!({"daily":{"binding":{"host":"host","id":"schedule","state":"active",
+            "cadence":"daily","time":"09:00","timezone":"UTC","observed_at":"2026-10-06T11:00:00Z",
+            "phase_observed_at":null,"binding_epoch":"new","epoch_started_at":"2026-10-06T11:00:00Z"}},
+            "items":{"check":{"id":"check","state":"waiting","spec":{"maintenance":{
+                "timezone":"UTC","check_time":"08:00"}}}}});
+        assert_eq!(assess(&data, now)["state"], "unknown");
     }
 }

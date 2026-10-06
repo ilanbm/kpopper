@@ -468,6 +468,16 @@ pub enum Reply {
     Json,
     View,
 }
+pub struct ReadResult {
+    pub output: C::Output,
+    pub continuity: Option<J>,
+    pub discovery: Option<J>,
+}
+
+fn plain(output: C::Output) -> ReadResult {
+    ReadResult { output, continuity: None, discovery: None }
+}
+
 pub fn run_auto(
     command: &str,
     options: &Options,
@@ -475,16 +485,26 @@ pub fn run_auto(
     mode: ReadMode,
     reply: Reply,
 ) -> Result<C::Output> {
+    Ok(run_auto_with_continuity(command, options, cwd, mode, reply)?.output)
+}
+
+pub fn run_auto_with_continuity(
+    command: &str,
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    reply: Reply,
+) -> Result<ReadResult> {
     let mut taken = None;
     let mut read = || {
         let cwd = cwd.canonicalize()?;
         let runtime =
             |paths: &[PathBuf]| W::runtime_for_paths(paths, &cwd, options.profile.as_deref());
-        run(command, options, &cwd, mode, reply, &runtime, &mut taken)
+        run_with_continuity(command, options, &cwd, mode, reply, &runtime, &mut taken)
     };
     match read() {
         Err(error) if command == "open" && reply == Reply::Json => {
-            unopened(options, cwd, mode, &error, taken.as_deref())
+            unopened(options, cwd, mode, &error, taken.as_deref()).map(plain)
         }
         result => result,
     }
@@ -658,6 +678,18 @@ pub fn run(
     load_runtime: &dyn Fn(&[PathBuf]) -> Result<Option<Runtime>>,
     taken: &mut Option<String>,
 ) -> Result<C::Output> {
+    Ok(run_with_continuity(command, options, cwd, mode, reply, load_runtime, taken)?.output)
+}
+
+fn run_with_continuity(
+    command: &str,
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    reply: Reply,
+    load_runtime: &dyn Fn(&[PathBuf]) -> Result<Option<Runtime>>,
+    taken: &mut Option<String>,
+) -> Result<ReadResult> {
     let as_json = reply == Reply::Json;
     let cwd = cwd.canonicalize()?;
     let location = W::locate(&cwd, mode)?;
@@ -701,14 +733,14 @@ pub fn run(
                 W::locate(&cwd, mode)? == location,
                 "workspace changed while opening it; retry",
             )?;
-            return Ok(C::Output {
+            return Ok(plain(C::Output {
                 text: if as_json {
                     serde_json::to_string_pretty(&data)? + "\n"
                 } else {
                     message + "\n"
                 },
                 code: i32::from(unavailable),
-            });
+            }));
         }
         // `open --json` names the entry bytes it reads. They are taken before the read and
         // verified with everything else after it, so a write that carries the digest back
@@ -744,7 +776,7 @@ pub fn run(
             W::locate(&cwd, mode)? == location,
             "workspace changed while reading it; retry",
         )?;
-        return Ok(output);
+        return Ok(plain(output));
     }
     let capabilities = crate::ordinary_fields::capabilities(
         capture.ordinary_document(),
@@ -787,6 +819,7 @@ pub fn run(
         )?
         .with_history_review(capture.history_projection())?;
         let prefix_order = prefix_order(capture.source());
+        let mut delivered = Vec::new();
         let mut output = match command {
             "open" => {
                 // A caller that names no files or budgets of its own gets the slot a
@@ -824,11 +857,12 @@ pub fn run(
                     W::locate(&cwd, mode)? == location,
                     "workspace changed while reading it; retry",
                 )?;
-                return Ok(C::Output { text, code });
+                return Ok(plain(C::Output { text, code }));
             }
             "pull" => {
                 if options.history {
-                    let base = projection.pull(&seeds, options.budget.unwrap_or(40))?;
+                    let (base, subjects) = projection.pull_with_subjects(&seeds, options.budget.unwrap_or(40))?;
+                    delivered = subjects;
                     let captured_history = capture.node_history_capture().is_some()
                         || capture.history_capture().is_some();
                     let imported_archive = imported_replaced_archive(&capture)?;
@@ -875,25 +909,24 @@ pub fn run(
                         format!("{base}\n{history_text}")
                     }
                 } else {
-                    projection.pull(&seeds, options.budget.unwrap_or(40))?
+                    let (text, subjects) = projection.pull_with_subjects(&seeds, options.budget.unwrap_or(40))?;
+                    delivered = subjects;
+                    text
                 }
             }
             "affects" => projection.affects(&seeds)?,
             _ => return Err(error("unknown ordinary reader command")),
         };
-        if command == "pull" && !seeds.is_empty() {
-            let scoped = (|| -> Result<Option<J>> {
-                let identity = crate::followup_store::digest(&crate::followup_store::typed_json(&capture.ordinary_document().try_typed()?)?)?;
-                crate::followup_store::Store::open(&location.workspace)?.scoped_read_continuity(&seeds, &identity)
-            })();
-            if let Ok(Some(continuity)) = scoped {
-                if as_json {
-                    // Historical JSON already has an output envelope; retain it.
-                    if let Ok(mut packet) = serde_json::from_str::<J>(&output) {
-                        if packet.is_object() { packet["maintenance_continuity"] = continuity; output = serde_json::to_string_pretty(&packet)? + "\n"; }
-                    } else { output = serde_json::to_string_pretty(&json!({"output":output,"maintenance_continuity":continuity}))? + "\n"; }
-                } else { output.push_str(&format!("\nKPOPPER_SCOPED_CONTINUITY {}\n", serde_json::to_string(&continuity)?)); }
-            }
+        let (continuity, discovery) = if command == "pull" && !delivered.is_empty() {
+            let identity = crate::followup_store::digest(&crate::followup_store::typed_json(&capture.ordinary_document().try_typed()?)?)?;
+            (scoped_pull_continuity(&location.workspace, &paths[0], &delivered, &identity),
+                (mode == ReadMode::Live).then(|| scoped_pull_discovery(&location.workspace, &paths[0], &delivered, &identity)).flatten())
+        } else { (None, None) };
+        if !as_json && let Some(ref continuity) = continuity {
+            output.push_str(&format!("\nKPOPPER_SCOPED_CONTINUITY {}\n", serde_json::to_string(continuity)?));
+        }
+        if !as_json && let Some(ref discovery) = discovery {
+            output.push_str(&format!("\nKPOPPER_MAINTENANCE_DISCOVERY {}\n", serde_json::to_string(discovery)?));
         }
         capture.verify()?;
         inventory.verify()?;
@@ -902,12 +935,9 @@ pub fn run(
             "workspace changed while reading it; retry",
         )?;
         if command == "open" {
-            return opened(data, output, taken.clone(), &location.workspace, reply);
+            return opened(data, output, taken.clone(), &location.workspace, reply).map(plain);
         }
-        return Ok(C::Output {
-            text: output,
-            code: 0,
-        });
+        return Ok(ReadResult { output: C::Output { text: output, code: 0 }, continuity, discovery });
     }
     let unsupported = [
         ("--history", options.history && command != "pull"),
@@ -940,6 +970,7 @@ pub fn run(
         OperationalBounds::default(),
         None,
     )?;
+    let mut core_delivered = Vec::new();
     let output = match command {
         "open" => {
             let (data, output) = C::opening(
@@ -961,6 +992,11 @@ pub fn run(
         }
         "pull" => {
             let mut output = C::pull(&context, &seeds)?;
+            if output.code == 0 {
+                let payload: J = serde_json::from_str(output.text.trim())?;
+                core_delivered = payload["selection"].as_array().ok_or_else(|| error("core_pull_selection_missing"))?
+                    .iter().filter_map(J::as_str).map(str::to_owned).collect();
+            }
             if options.history && output.code == 0 {
                 let imported_archive = imported_replaced_archive(&capture)?;
                 let history = crate::public_history_read::render(
@@ -996,13 +1032,51 @@ pub fn run(
         }
         _ => return Err(error("unknown read command")),
     };
+    let (continuity, discovery) = if command == "pull" && output.code == 0 && !core_delivered.is_empty() {
+        let identity = capture.snapshot()?.snapshot_id().to_owned();
+        (scoped_pull_continuity(&location.workspace, &paths[0], &core_delivered, &identity),
+            (mode == ReadMode::Live).then(|| scoped_pull_discovery(&location.workspace, &paths[0], &core_delivered, &identity)).flatten())
+    } else { (None, None) };
+    let mut output = output;
+    if !as_json && (continuity.is_some() || discovery.is_some()) {
+        if let Ok(mut packet) = serde_json::from_str::<J>(output.text.trim()) {
+            if packet.is_object() {
+                if let Some(ref continuity) = continuity { packet["maintenance_continuity"] = continuity.clone(); }
+                if let Some(ref discovery) = discovery { packet["maintenance_discovery"] = discovery.clone(); }
+                output.text = serde_json::to_string(&packet)? + "\n";
+            }
+        } else {
+            if let Some(ref continuity) = continuity {
+                output.text.push_str(&format!("\nKPOPPER_SCOPED_CONTINUITY {}\n", serde_json::to_string(continuity)?));
+            }
+            if let Some(ref discovery) = discovery {
+                output.text.push_str(&format!("\nKPOPPER_MAINTENANCE_DISCOVERY {}\n", serde_json::to_string(discovery)?));
+            }
+        }
+    }
     capture.verify()?;
     inventory.verify()?;
     crate::require(
         W::locate(&cwd, mode)? == location,
         "workspace changed while reading it; retry",
     )?;
-    Ok(output)
+    Ok(ReadResult { output, continuity, discovery })
+}
+
+fn scoped_pull_continuity(workspace: &Path, input_path: &Path, subjects: &[String], captured_identity: &str) -> Option<J> {
+    match crate::followup_store::Store::open(workspace)
+        .and_then(|store| store.scoped_read_continuity(subjects, captured_identity, input_path)) {
+        Ok(value) => value,
+        Err(reason) => Some(json!({"subjects":subjects,
+            "captured_record_identity":captured_identity,"state":"unknown",
+            "reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"})),
+    }
+}
+
+fn scoped_pull_discovery(workspace: &Path, input_path: &Path, subjects: &[String], captured_identity: &str) -> Option<J> {
+    crate::followup_store::Store::open(workspace)
+        .and_then(|store| store.scoped_read_discovery(subjects, captured_identity, input_path))
+        .ok().flatten()
 }
 
 #[cfg(test)]

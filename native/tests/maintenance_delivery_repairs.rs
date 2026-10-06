@@ -282,7 +282,7 @@ fn corrupt_choice_is_scoped_unknown_and_can_be_declined() {
     fs::write(project.join("maintenance-choice.json"), "{").unwrap();
     let status = followup_daily::status_with_maintenance(&store).unwrap();
     assert_eq!(status["adoption"]["choice"], "unknown");
-    assert!(status["adoption"]["reason"].as_str().unwrap().contains("first-use"));
+    assert_eq!(status["adoption"]["reason"], "first_use_choice_unreadable");
     assert!(store.scan(3).is_ok());
     assert_eq!(followup_daily::record_adoption(&store, "declined", None).unwrap()["choice"], "declined");
     assert!(fs::read_dir(project).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with("maintenance-choice.corrupt-")));
@@ -354,4 +354,118 @@ fn actual_selected_session_view_delivers_failed_check_and_subject_identity_in_al
     store.resolve_with_authority("source-check", "cancelled", "fixture://retired", Some("fixture://user-retired")).unwrap();
     let closed = session_packet(&workspace, &state, "facts.count", "json");
     assert!(closed.get("maintenance_continuity").is_none());
+}
+
+fn reader_command(workspace: &Path, state: &Path, operation: &str, revision: Option<&str>, extra: &[&str]) -> Output {
+    let mut args = vec!["--workspace", workspace.to_str().unwrap(), "session", operation, "--no-settings", "--input", "PROVENANCE.yaml", "--project", "maintenance-reader", "--state", "reader-state"];
+    if let Some(revision) = revision {args.extend(["--revision", revision]);}
+    args.extend_from_slice(extra);
+    command(workspace, state, &args, None)
+}
+
+#[test]
+fn constrained_view_allocates_continuity_and_exact_read_and_hook_view_have_no_bypass() {
+    let (_temp, workspace, state, store) = source_fixture();
+    let item = store.show("source-check").unwrap();
+    store.record_maintenance_attempt(json!({"id":"source-check","policy_digest":item["spec"]["maintenance"]["policy_digest"],"source_ref":item["spec"]["maintenance"]["source_ref"],"reason":"provider unavailable","evidence":"fixture://failure"})).unwrap();
+    let initial = session_packet(&workspace, &state, "facts.count", "json");
+    let revision = initial["revision"].as_str().unwrap();
+    let full_tokens = kpop_native::tokenizer::Encoding::O200kBase.count(&(serde_json::to_string(&initial).unwrap() + "\n"));
+    let constrained = full_tokens.saturating_sub(1);
+    let budget = constrained.to_string();
+    let viewed = reader_command(&workspace, &state, "view", Some(revision), &["--id", "facts.count", "--tokens", &budget, "--view-format", "json"]);
+    if viewed.status.success() {
+        let view: Value = serde_json::from_slice(&viewed.stdout).unwrap();
+        assert!(view["maintenance_continuity"]["obligations"].is_array());
+        assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&String::from_utf8(viewed.stdout).unwrap()) <= constrained);
+    } else {
+        // When mandatory evidence cannot fit, refuse explicitly. The advertised
+        // exact reader below must still carry the same required continuity.
+        assert!(String::from_utf8_lossy(&viewed.stderr).contains("token budget"));
+    }
+    let insufficient = reader_command(&workspace, &state, "view", Some(revision), &["--id", "facts.count", "--tokens", "64", "--view-format", "json"]);
+    assert!(!insufficient.status.success());
+    assert!(String::from_utf8_lossy(&insufficient.stderr).contains("token budget"));
+    let read = reader_command(&workspace, &state, "read", Some(revision), &["--ref", "node:facts.count", "--tokens", "1200"]);
+    assert!(read.status.success(), "{}", String::from_utf8_lossy(&read.stderr));
+    let read: Value = serde_json::from_slice(&read.stdout).unwrap();
+    assert_eq!(read["value"]["body"]["v"], 1);
+    assert_eq!(read["maintenance_continuity"]["obligations"][0]["failure"], "provider unavailable");
+    let hook = reader_command(&workspace, &state, "hook-view", None, &["--tokens", "16000", "--view-format", "json"]);
+    assert!(hook.status.success(), "{}", String::from_utf8_lossy(&hook.stderr));
+    let text = String::from_utf8(hook.stdout).unwrap();
+    assert!(text.contains("maintenance_continuity") && text.contains("provider unavailable"), "{text}");
+}
+
+#[test]
+fn future_choice_schema_and_absent_read_only_state_are_preserved_on_reads() {
+    let (_temp, workspace, state, store) = source_fixture();
+    let project = state.join("kpopper/first-use/projects").join(kpop_native::onboarding::project_key(&workspace.canonicalize().unwrap()));
+    fs::create_dir_all(&project).unwrap();
+    let path = project.join("maintenance-choice.json");
+    let future = json!({"schema":2,"choice":{"state":"future"}}).to_string();
+    fs::write(&path, &future).unwrap();
+    assert_eq!(followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["reason"], "first_use_choice_unsupported_schema");
+    assert_eq!(fs::read_to_string(&path).unwrap(), future);
+    assert_eq!(fs::read_dir(project).unwrap().count(), 1);
+    let empty_state = workspace.join("empty-readonly-state");
+    fs::create_dir(&empty_state).unwrap();
+    #[cfg(unix)] {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&empty_state, fs::Permissions::from_mode(0o500)).unwrap();
+    }
+    let output = command(&workspace, &empty_state, &["_hook", "followups", "codex"], Some(&json!({"cwd":workspace,"session_id":"readonly-choice"})));
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("KPOPPER_MAINTENANCE_CHOICE"), "{text}");
+    assert!(!text.contains("restore the required retained segments"), "{text}");
+    assert_eq!(fs::read_dir(&empty_state).unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn explicit_choice_recovers_unreadable_current_state_and_clears_unknown_metadata() {
+    use std::os::unix::fs::PermissionsExt;
+    let (_temp, workspace, state, store) = source_fixture();
+    save_first_use_choice(&workspace, &state, json!({"state":"shown"}));
+    let project = state.join("kpopper/first-use/projects").join(kpop_native::onboarding::project_key(&workspace.canonicalize().unwrap()));
+    let path = project.join("maintenance-choice.json");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    assert_eq!(followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["reason"], "first_use_choice_unreadable");
+    assert_eq!(followup_daily::record_adoption(&store, "declined", None).unwrap()["choice"], "declined");
+    let current: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    assert!(current["choice"].get("choice").is_none());
+    assert!(current["choice"].get("quarantined_path").is_none());
+    assert!(fs::read_dir(project).unwrap().flatten().any(|entry| entry.file_name().to_string_lossy().starts_with("maintenance-choice.retained-")));
+}
+
+#[test]
+fn actual_uncovered_session_reads_deliver_conditional_decision_without_a_policy() {
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("project");
+    let state = temp.path().join("state");
+    fs::create_dir(&workspace).unwrap(); fs::create_dir(&state).unwrap();
+    record(&workspace, &state);
+    let before = fs::read(workspace.join("PROVENANCE.yaml")).unwrap();
+    let packet = session_packet(&workspace, &state, "facts.count", "checked-text-tagged");
+    let discovery = &packet["maintenance_discovery"];
+    assert_eq!(discovery["subjects"], json!(["facts.count"]));
+    assert_eq!(discovery["kind"], "unestablished");
+    assert_eq!(discovery["applicability"], "agent_task_assessment_required");
+    assert_eq!(discovery["record_refs"], json!(["node:facts.count#"]));
+    assert_eq!(discovery["declaration"], "none"); assert_eq!(discovery["consent"], "none");
+    assert!(discovery["response_obligation"]["matching_kind"]["pending_clock"].as_str().unwrap().contains("clock-only"));
+    assert!(discovery["response_obligation"]["matching_kind"]["changing_named_source"].as_str().unwrap().contains("named-source"));
+    assert!(discovery["response_obligation"]["ongoing_scope"].as_str().unwrap().contains("future_validity"));
+    let revision = packet["revision"].as_str().unwrap();
+    let read = reader_command(&workspace, &state, "read", Some(revision), &["--ref", "node:facts.count", "--tokens", "2000"]);
+    assert!(read.status.success(), "{}", String::from_utf8_lossy(&read.stderr));
+    let read: Value = serde_json::from_slice(&read.stdout).unwrap();
+    assert_eq!(read["maintenance_discovery"]["subjects"], json!(["facts.count"]));
+    assert_eq!(fs::read(workspace.join("PROVENANCE.yaml")).unwrap(), before);
+    assert!(!state.join("kpopper/followups").exists());
+    let store = Store::at_in_state(&workspace, &state, Utc.with_ymd_and_hms(2026,10,6,12,0,0).unwrap()).unwrap();
+    followup_daily::record_adoption(&store, "declined", None).unwrap();
+    let suppressed = session_packet(&workspace, &state, "facts.count", "json");
+    assert!(suppressed.get("maintenance_discovery").is_none());
 }

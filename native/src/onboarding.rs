@@ -63,6 +63,9 @@ fn private_dir(path: &Path) -> Result<()> {
 }
 pub fn write(path: &Path, fields: &Value) -> Result<()> {
     read(path)?;
+    replace_state(path, fields)
+}
+fn replace_state(path: &Path, fields: &Value) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| Error("invalid state path".into()))?;
@@ -117,54 +120,72 @@ pub(crate) fn maintenance_choice_lock_in_state(
     Ok(lock)
 }
 
-pub(crate) fn maintenance_choice_in_state(
-    workspace: &Path,
-    state_home: &Path,
-) -> Result<Option<Value>> {
-    let _lock = maintenance_choice_lock_in_state(workspace, state_home)?;
-    maintenance_choice_in_state_unlocked(workspace, state_home)
+fn choice_path(workspace: &Path, state_home: &Path) -> PathBuf {
+    state_home.join("kpopper/first-use/projects").join(project_key(workspace)).join("maintenance-choice.json")
 }
-
-pub(crate) fn maintenance_choice_in_state_unlocked(
-    workspace: &Path,
-    state_home: &Path,
-) -> Result<Option<Value>> {
-    let path = state_home.join("kpopper/first-use/projects")
-        .join(project_key(workspace)).join("maintenance-choice.json");
-    let loaded = read(&path);
-    let invalid = match &loaded {
-        Ok(Some(value)) => !value["choice"].is_object() ||
-            (value["choice"]["state"] == "snoozed" &&
-             value["choice"]["until"].as_str().and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok()).is_none()),
-        Err(reason) => reason.to_string().starts_with("Invalid first-use state"),
-        _ => false,
+fn choice_unknown(reason: &str, remediation: &str) -> Value {
+    json!({"state":"unknown","authorized":false,"reason":reason,"remediation":remediation})
+}
+// Atomic writers make ordinary reads coherent without creating any bookkeeping.
+// Only malformed supported state requires a lock and quarantine.
+fn inspect_choice(path: &Path) -> Result<std::result::Result<Option<Value>, ()>> {
+    let raw = match fs::read(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Ok(None)),
+        Err(_) => return Ok(Ok(Some(choice_unknown("first_use_choice_unreadable", "Inspect the private first-use choice; a fresh acknowledgement can preserve and replace it.")))),
     };
-    if invalid {
-        let quarantine = path.with_file_name(format!("maintenance-choice.corrupt-{}.json", uuid::Uuid::new_v4().simple()));
-        fs::rename(&path, &quarantine)?;
-        let unknown = json!({"state":"unknown","choice":"unknown","authorized":false,
-            "reason":"Unreadable maintenance first-use choice; ordinary followup history remains available",
-            "remediation":"Inspect quarantined first-use choice and acknowledge shown, declined, snoozed or authorized again",
-            "quarantined_path":quarantine});
-        write(&path, &json!({"choice":unknown}))?;
-        return Ok(Some(unknown));
+    let value: Value = match serde_json::from_slice(&raw) {Ok(value) => value, Err(_) => return Ok(Err(()))};
+    if value.get("schema").is_some_and(|schema| schema != &json!(1)) {
+        return Ok(Ok(Some(choice_unknown("first_use_choice_unsupported_schema", "Use a runtime supporting this private choice schema; the saved file was preserved."))));
     }
-    Ok(loaded?.and_then(|state| state.get("choice").cloned()))
+    let choice = &value["choice"];
+    let state = choice["state"].as_str().or_else(|| choice["choice"].as_str());
+    if value["schema"] != 1 || !choice.is_object() ||
+        !matches!(state, Some("proposed" | "shown" | "declined" | "snoozed" | "authorized_uninstalled" | "unknown")) ||
+        (state == Some("snoozed") && choice["until"].as_str().and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok()).is_none()) {
+        return Ok(Err(()));
+    }
+    let mut choice = choice.clone();
+    if choice.get("state").is_none() {choice["state"] = json!(state);}
+    Ok(Ok(Some(choice)))
 }
-
-pub(crate) fn save_maintenance_choice_in_state(
-    workspace: &Path,
-    state_home: &Path,
-    choice: &Value,
-) -> Result<()> {
+pub(crate) fn maintenance_choice_in_state(workspace: &Path, state_home: &Path) -> Result<Option<Value>> {
+    match inspect_choice(&choice_path(workspace, state_home))? {
+        Ok(choice) => Ok(choice),
+        Err(()) if state_home.metadata().is_ok_and(|meta| meta.permissions().readonly())
+            || choice_path(workspace, state_home).parent().is_some_and(|parent| parent.metadata().is_ok_and(|meta| meta.permissions().readonly())) =>
+            Ok(Some(choice_unknown("first_use_choice_unreadable", "The private choice state is read-only; it was preserved. A fresh acknowledgement requires writable private state."))),
+        Err(()) => match maintenance_choice_lock_in_state(workspace, state_home) {
+            Ok(_lock) => maintenance_choice_in_state_unlocked(workspace, state_home),
+            Err(_) => Ok(Some(choice_unknown("first_use_choice_unreadable", "Inspect or acknowledge the private first-use choice again; ordinary ledger history is separate."))),
+        },
+    }
+}
+pub(crate) fn maintenance_choice_in_state_unlocked(workspace: &Path, state_home: &Path) -> Result<Option<Value>> {
+    let path = choice_path(workspace, state_home);
+    match inspect_choice(&path)? {
+        Ok(choice) => Ok(choice),
+        Err(()) => {
+            let quarantine = path.with_file_name(format!("maintenance-choice.corrupt-{}.json", uuid::Uuid::new_v4().simple()));
+            if fs::rename(&path, &quarantine).is_err() {
+                return Ok(Some(choice_unknown("first_use_choice_unreadable", "Inspect or acknowledge the private first-use choice again; ordinary ledger history is separate.")));
+            }
+            let mut unknown = choice_unknown("first_use_choice_unreadable", "Inspect quarantined first-use choice and acknowledge shown, declined, snoozed or authorized again");
+            unknown["quarantined_path"] = json!(quarantine);
+            replace_state(&path, &json!({"choice":unknown}))?;
+            Ok(Some(unknown))
+        }
+    }
+}
+pub(crate) fn save_maintenance_choice_in_state(workspace: &Path, state_home: &Path, choice: &Value) -> Result<()> {
     require(choice.is_object(), "Maintenance choice must be an object")?;
-    write(
-        &state_home
-            .join("kpopper/first-use/projects")
-            .join(project_key(workspace))
-            .join("maintenance-choice.json"),
-        &json!({"choice":choice}),
-    )
+    let path = choice_path(workspace, state_home);
+    // A fresh explicit acknowledgement can replace unreadable state without
+    // granting its contents authority; preserve that state for inspection.
+    if path.exists() && read(&path).is_err() {
+        fs::rename(&path, path.with_file_name(format!("maintenance-choice.retained-{}.json", uuid::Uuid::new_v4().simple())))?;
+    }
+    replace_state(&path, &json!({"choice":choice}))
 }
 
 fn adoption_choice(saved: Option<&Value>) -> String {
@@ -199,6 +220,11 @@ fn promotion_allowed(enabled: bool, choice: &str, local_mode: Option<&str>) -> b
             choice,
             "declined" | "snoozed" | "shown" | "authorized_uninstalled" | "unknown"
         )
+}
+
+pub(crate) fn read_discovery_allowed(workspace: &Path, mode: Option<&str>) -> bool {
+    guidance().unwrap_or(false) && maintenance_choice(workspace).is_ok_and(|choice|
+        promotion_allowed(true, &adoption_choice(choice.as_ref()), mode))
 }
 
 fn saved_choice_allows_promotion(workspace: &Path) -> bool {
