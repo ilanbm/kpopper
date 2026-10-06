@@ -70,7 +70,7 @@ impl ReadContinuity {
             "scope_issue":if complete {Value::Null} else {json!("declared_closure_limit")},
             "current_use_adequacy":"unassessed",
             "captured_record_current_health":if !matches {"unknown_record_identity_mismatch"} else if !complete {"unknown_declared_closure"} else {"unassessed"},
-            "obligations":rows,"disclosure":"For every answer about these covered subjects, including recorded values, disclose the actual failed check or overdue/due state and known failure, observed_at and due_at. Preserve historical recorded values. Live continuity does not refresh or bless the captured record; current adequacy, source truth and authority remain separate."}))
+            "obligations":rows,"disclosure":"For every answer about these covered subjects, including recorded values, disclose the actual failed check or overdue/due state and known failure. Name last_successful_observation_at as the preserved successful source observation; latest_attempt_at/failure_at are reported inspection times and may be unknown; latest_attempt_recorded_at/failure_recorded_at are local receipt times, not source observation or inspection proof. next_check_due_at is cadence due, while evidence_expires_at is the independent evidence age limit. Never date a failed check from observed_at or call cadence due the evidence expiry. Preserve historical recorded values. Live continuity does not refresh or bless the captured record; current adequacy, source truth and authority remain separate."}))
     }
 }
 
@@ -111,7 +111,8 @@ impl ReadDiscovery {
             "response_obligation":{"decision":"resolve_applicability_before_finishing",
                 "ongoing_scope":"represented_work_or_future_validity_of_produced_or_updated_knowledge_not_completion_of_this_reply_or_file_edit",
                 "when":"The represented work is unfinished/continuing, or the future validity of the knowledge produced or updated remains dependent on a pending clock/deadline or a changing named source actually read or used this turn. Finishing this reply or brief/file update does not close the represented work or remove its future dependencies.",
-                "then":"Explicitly propose a concrete matching scoped maintenance check in the final response, identifying the actual subject/date or named source just used. Saying no check exists is not a proposal. Leave unresolved choices visible; do not invent them.",
+                "assessment_scope":"Assess applicability by reasoning over the actual task and evidence already supplied or read within its authorized scope. Preserve the original user request: a read/analysis request remains read-only. This advisory does not authorize mapping, capture, investigation/report workflows, artifact creation, choice bookkeeping or additional knowledge writes merely to resolve these unknowns. Unresolved future-maintenance choices stay questions in a proposal, not a reason to expand the current task. Perform only the writes/actions already explicitly requested for the original deliverable.",
+                "then":"After completing the original authorized work, explicitly propose a concrete matching scoped maintenance check in the final response, identifying the actual subject/date or named source just used. Saying no check exists is not a proposal. Leave unresolved choices visible; do not invent them. Do not create a map, report, capture artifact or new policy as part of this advisory assessment.",
                 "matching_kind":{"pending_clock":"clock-only time reevaluation using native time; do not invent a source or source fetch, and do not substitute a source-check offer",
                     "changing_named_source":"actual named-source inspection for the input used; a time-only reminder is not a substitute"},
                 "otherwise":"Keep stable/historical knowledge, closed work, genuine one-off tasks, unrelated subjects and saved suppression quiet. Do not infer a need, volatility, policy or authority merely from entry names or source prose."},
@@ -2223,8 +2224,10 @@ impl Store {
         let loaded = self.load(false)?;
         let data = loaded.as_ref().filter(|data| data["config"]["record"].as_str()
             .and_then(|record| Path::new(record).canonicalize().ok()).as_ref() == input.canonicalize().ok().as_ref());
-        let mode = data.and_then(|data| data["daily"]["maintenance_mode"]["mode"].as_str());
-        if !crate::onboarding::read_discovery_allowed(&location.workspace, mode) {return Ok(None);}
+        // Preference/mode ownership is the same as followups write commands.
+        // Canonical input equality gates policy coverage, not suppression.
+        let mode = loaded.as_ref().and_then(|data| data["daily"]["maintenance_mode"]["mode"].as_str());
+        if !crate::onboarding::read_discovery_allowed(self.workspace(), mode) {return Ok(None);}
         let mut declared = BTreeSet::new();
         let mut nodes = BTreeMap::new();
         if let Some(data) = data {

@@ -200,3 +200,34 @@ fn unrelated_nested_record_with_same_id_stays_quiet() {
     assert!(result["output"].as_str().unwrap().contains("facts.count: 99"));
     assert!(result.get("maintenance_continuity").is_none());
 }
+
+#[test]
+fn nested_followup_owner_choices_and_modes_suppress_other_record_discovery() {
+    let fixture=Fixture::new(false); let other=fixture.workspace.join("other"); fs::create_dir(&other).unwrap();
+    fs::write(other.join("PROVENANCE.yaml"),"meta:\n  name: Other record\nknown:\n  facts.count: {v: 99}\n").unwrap();
+    let initial=packet(&other,&fixture.state,&["--json","pull","facts.count"]); assert!(initial.get("maintenance_discovery").is_some());
+    let declined=run(&other,&fixture.state,&["followups","daily","adoption","declined"]); assert!(declined.status.success(),"{}",String::from_utf8_lossy(&declined.stderr));
+    assert!(packet(&other,&fixture.state,&["--json","pull","facts.count"]).get("maintenance_discovery").is_none());
+    let manual_fixture=Fixture::new(false); let manual_other=manual_fixture.workspace.join("other"); fs::create_dir(&manual_other).unwrap();
+    fs::write(manual_other.join("PROVENANCE.yaml"),"meta:\n  name: Other record\nknown:\n  facts.count: {v: 99}\n").unwrap();
+    assert!(packet(&manual_other,&manual_fixture.state,&["--json","pull","facts.count"]).get("maintenance_discovery").is_some());
+    let manual=run(&manual_other,&manual_fixture.state,&["followups","daily","mode","manual","--authorization-evidence","fixture://manual-choice"]);
+    assert!(manual.status.success(),"{}",String::from_utf8_lossy(&manual.stderr));
+    assert!(packet(&manual_other,&manual_fixture.state,&["--json","pull","facts.count"]).get("maintenance_discovery").is_none());
+}
+
+#[test]
+fn core_bare_and_conditions_refs_resolve_actual_covered_members() {
+    let fixture=Fixture::new(true);
+    let base=["session","open","--no-settings","--input","PROVENANCE.yaml","--project","core-reader","--state","reader-state","--assessment-profile","core/v1","--tokens","16000"];
+    let opened=run(&fixture.workspace,&fixture.state,&base); assert!(opened.status.success(),"{}",String::from_utf8_lossy(&opened.stderr));
+    let text=String::from_utf8(opened.stdout).unwrap(); let revision=text.lines().find_map(|line|line.strip_prefix("project=core-reader revision=")).unwrap();
+    for reference in ["facts.count","node:facts.count","conditions:/"] {
+        let out=run(&fixture.workspace,&fixture.state,&["session","read","--no-settings","--input","PROVENANCE.yaml","--project","core-reader","--state","reader-state","--assessment-profile","core/v1","--revision",revision,"--ref",reference,"--tokens","4000"]);
+        assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
+        let read:Value=serde_json::from_slice(&out.stdout).unwrap();
+        assert!(read["maintenance_continuity"]["subjects"].as_array().unwrap().contains(&json!("facts.count")));
+        assert!(!read["maintenance_continuity"]["subjects"].as_array().unwrap().contains(&json!("/")));
+        assert_eq!(read["maintenance_continuity"]["obligations"][0]["failure"],"provider refused selected read");
+    }
+}

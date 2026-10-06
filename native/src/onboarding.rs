@@ -190,7 +190,7 @@ pub(crate) fn save_maintenance_choice_in_state(workspace: &Path, state_home: &Pa
 
 fn adoption_choice(saved: Option<&Value>) -> String {
     let choice = saved
-        .and_then(|value| value.get("choice").or_else(|| value.get("state")))
+        .and_then(|value| value.get("state").or_else(|| value.get("choice")))
         .and_then(Value::as_str)
         .unwrap_or("proposed");
     if choice == "snoozed" {
@@ -502,9 +502,7 @@ pub fn mark(workspace: &Path, event: &str) -> Result<Value> {
     }
     if event == "followups" {
         if let Ok(store) = crate::followup_store::Store::open(workspace) {
-            if store.load(false)?.is_some() {
-                crate::followup_daily::record_adoption(&store, "shown", None)?;
-            }
+            crate::followup_daily::record_adoption(&store, "shown", None)?;
         }
     }
     status(
@@ -543,9 +541,7 @@ pub fn mark_key(
     }
     if event == "followups" {
         if let Ok(store) = crate::followup_store::Store::open(workspace) {
-            if store.load(false)?.is_some() {
-                crate::followup_daily::record_adoption(&store, "shown", None)?;
-            }
+            crate::followup_daily::record_adoption(&store, "shown", None)?;
         }
     }
     status_at(workspace, key, record, status_value, "")

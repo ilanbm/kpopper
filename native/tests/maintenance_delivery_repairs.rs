@@ -469,3 +469,56 @@ fn actual_uncovered_session_reads_deliver_conditional_decision_without_a_policy(
     let suppressed = session_packet(&workspace, &state, "facts.count", "json");
     assert!(suppressed.get("maintenance_discovery").is_none());
 }
+
+#[test]
+fn optional_discovery_never_blocks_small_reads_or_replaces_hook_evidence() {
+    let temp = tempfile::tempdir().unwrap(); let workspace=temp.path().join("project"); let state=temp.path().join("state");
+    fs::create_dir(&workspace).unwrap(); fs::create_dir(&state).unwrap(); record(&workspace,&state);
+    let initial=session_packet(&workspace,&state,"facts.count","json"); let revision=initial["revision"].as_str().unwrap();
+    for tokens in ["64","600"] {
+        let out=reader_command(&workspace,&state,"read",Some(revision), &["--ref","facts.count","--tokens",tokens]);
+        assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
+        assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&String::from_utf8(out.stdout).unwrap())<=tokens.parse::<usize>().unwrap());
+    }
+    let proposed=reader_command(&workspace,&state,"hook-view",None,&["--tokens","1200","--view-format","json"]);
+    assert!(proposed.status.success(),"{}",String::from_utf8_lossy(&proposed.stderr));
+    let graph=String::from_utf8(proposed.stdout).unwrap().lines().find_map(|line|line.strip_prefix("KPOPPER_CANONICAL_GRAPH_VIEW ").map(str::to_owned)).unwrap();
+    let proposed:Value=serde_json::from_str(&graph).unwrap(); assert!(proposed["coverage"]["direct_count"].as_u64().unwrap()>0);
+    let store=Store::at_in_state(&workspace,&state,Utc.with_ymd_and_hms(2026,10,6,12,0,0).unwrap()).unwrap();
+    followup_daily::record_adoption(&store,"declined",None).unwrap();
+    let declined=reader_command(&workspace,&state,"hook-view",None,&["--tokens","1200","--view-format","json"]);
+    let graph=String::from_utf8(declined.stdout).unwrap().lines().find_map(|line|line.strip_prefix("KPOPPER_CANONICAL_GRAPH_VIEW ").map(str::to_owned)).unwrap();
+    let declined:Value=serde_json::from_str(&graph).unwrap();
+    assert_eq!(proposed["coverage"]["direct_count"],declined["coverage"]["direct_count"]);
+}
+
+#[test]
+fn bare_and_group_exact_refs_preserve_required_health_without_invented_subjects() {
+    let (_temp,workspace,state,store)=source_fixture(); let item=store.show("source-check").unwrap();
+    store.record_maintenance_attempt(json!({"id":"source-check","policy_digest":item["spec"]["maintenance"]["policy_digest"],"source_ref":item["spec"]["maintenance"]["source_ref"],"reason":"provider unavailable","evidence":"fixture://failure"})).unwrap();
+    let initial=session_packet(&workspace,&state,"facts.count","json"); let revision=initial["revision"].as_str().unwrap();
+    for reference in ["facts.count","node:facts.count","conditions:/","/"] {
+        let out=reader_command(&workspace,&state,"read",Some(revision),&["--ref",reference,"--tokens","4000"]);
+        assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
+        let packet:Value=serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(packet["maintenance_continuity"]["subjects"],json!(["facts.count"]));
+        assert_eq!(packet["maintenance_continuity"]["obligations"][0]["failure"],"provider unavailable");
+    }
+    let out=reader_command(&workspace,&state,"read",Some(revision),&["--ref","source:record","--tokens","4000"]);
+    assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
+    let packet:Value=serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(packet["maintenance_continuity"]["state"],"unknown");
+    assert_eq!(packet["maintenance_continuity"]["reason"],"body_bearing_reference_scope_unresolved");
+}
+
+#[test]
+fn ledgerless_documented_shown_ack_and_state_precedence_suppress_discovery() {
+    let temp=tempfile::tempdir().unwrap(); let workspace=temp.path().join("project"); let state=temp.path().join("state");
+    fs::create_dir(&workspace).unwrap(); fs::create_dir(&state).unwrap(); record(&workspace,&state);
+    let first=session_packet(&workspace,&state,"facts.count","json"); assert!(first.get("maintenance_discovery").is_some());
+    let ack=command(&workspace,&state,&["_agent","shown","followups"],None); assert!(ack.status.success(),"{}",String::from_utf8_lossy(&ack.stderr));
+    assert!(!state.join("kpopper/followups").exists());
+    assert!(session_packet(&workspace,&state,"facts.count","json").get("maintenance_discovery").is_none());
+    save_first_use_choice(&workspace,&state,json!({"state":"declined","choice":"proposed"}));
+    assert!(session_packet(&workspace,&state,"facts.count","json").get("maintenance_discovery").is_none());
+}

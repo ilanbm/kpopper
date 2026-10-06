@@ -723,9 +723,6 @@ impl Service {
                 .and_then(|store| store.read_discovery_snapshot(identity, &self.input)).ok().flatten()) } else {None};
             let attach = |packet: &mut J| -> Result<()> {
                 let subjects = Self::delivered_view_subjects(packet);
-                if let Some(ref discovery) = discovery && let Some(candidate) = discovery.for_subjects(&subjects) {
-                    packet["maintenance_discovery"] = candidate;
-                }
                 if !subjects.is_empty() && let Some(ref continuity) = continuity {
                     match continuity {
                         Ok(Some(snapshot)) => if let Some(value) = snapshot.for_subjects(&subjects) {packet["maintenance_continuity"] = value;},
@@ -737,7 +734,7 @@ impl Service {
                 Ok(())
             };
             let mut expand = vec!["group:/".to_owned()];
-            let packet = match self.render_selected_view(&full, build, &[], &expand, &[], &[], None, "", Some(budget), &[], &attach) {
+            let mut packet = match self.render_selected_view(&full, build, &[], &expand, &[], &[], None, "", Some(budget), &[], &attach) {
                 Ok(packet) => packet,
                 Err(error) if error.0.contains("exceed") && error.0.contains("budget") => {
                     expand.clear();
@@ -745,6 +742,8 @@ impl Service {
                 },
                 Err(error) => return Err(error),
             };
+            let candidate = discovery.as_ref().and_then(|snapshot| snapshot.for_subjects(&Self::delivered_view_subjects(&packet)));
+            self.attach_optional_discovery(&mut packet, candidate, Some(budget), self.view_format)?;
             let text=crate::view_format::render(&packet,self.view_format)?;
             crate::require(self.store.encoding().count(&text) <= budget && self.max_view_bytes.is_none_or(|cap|text.len()<=cap),
                 "canonical opening exceeds token budget even when folded; use the ordinary reader")?;
@@ -967,34 +966,63 @@ impl Service {
         Ok((capture, session, attention))
     }
 
-    fn exact_read_metadata(&self, reference: &str, identity: Option<&str>) -> Option<J> {
-        let identity = identity?;
-        let base = reference.split('#').next().unwrap_or(reference);
-        let id = ["node:", "checked:", "source:", "conditions:"].iter().find_map(|prefix| base.strip_prefix(prefix))?;
-        let subjects = vec![id.to_owned()];
-        let mut metadata = json!({});
-        match crate::followup_store::Store::open(&self.cwd).and_then(|store| store.scoped_read_continuity(&subjects, identity, &self.input)) {
-            Ok(Some(value)) => metadata["maintenance_continuity"] = value,
-            Ok(None) => {},
-            Err(reason) => metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,"state":"unknown",
-                "reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+    fn attach_optional_discovery(&self, packet: &mut J, candidate: Option<J>, tokens: Option<usize>, format: crate::view_format::ViewFormat) -> Result<()> {
+        let Some(candidate) = candidate else {return Ok(());};
+        let compact = json!({"schema":candidate["schema"],"state":"advisory_decision_pointer",
+            "subjects":candidate["subjects"],"record_refs":candidate["record_refs"],
+            "captured_record_identity":candidate["captured_record_identity"],"kind":"unestablished",
+            "applicability":"agent_task_assessment_required","details_omitted_for_budget":true,
+            "obligation":"Reason within the original authorized task only; no mapping/capture/report/extra writes. If represented continuing work or future knowledge validity depends on a pending clock, propose a concrete clock-only native-time check, without source fetch. For a changing named input actually used, propose named-source inspection, not a reminder substitute. Keep stable/historical/closed/oneoff/suppressed quiet. No policy or consent is created."});
+        let marker = json!({"schema":candidate["schema"],"state":"advisory_details_omitted_for_budget"});
+        for value in [candidate, compact, marker] {
+            let mut proposed = packet.clone(); proposed["maintenance_discovery"] = value;
+            let text = crate::view_format::render(&proposed, format)?;
+            if tokens.is_none_or(|budget| self.store.encoding().count(&text) <= budget)
+                && self.max_view_bytes.is_none_or(|cap| text.len() <= cap) { *packet = proposed; break; }
         }
-        if self.mode == ReadMode::Live && let Ok(Some(candidate)) = crate::followup_store::Store::open(&self.cwd)
-            .and_then(|store| store.scoped_read_discovery(&subjects, identity, &self.input)) {
-            metadata["maintenance_discovery"] = candidate;
+        // With no room even for an omission marker, evidence wins unchanged.
+        Ok(())
+    }
+    fn exact_read_metadata(&self, scope: &crate::checked_session::ReadSubjectScope, identity: Option<&str>) -> Option<J> {
+        let identity = identity?;
+        if !scope.body_bearing {return None;}
+        let subjects = &scope.subjects;
+        let mut metadata = json!({});
+        if !scope.complete {
+            metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,
+                "state":"unknown","reason":"body_bearing_reference_scope_unresolved",
+                "scope":"actual_read_scope_incomplete_record_invalidity_not_established"});
+        } else if !subjects.is_empty() {
+            match crate::followup_store::Store::open(&self.cwd).and_then(|store| store.scoped_read_continuity(subjects, identity, &self.input)) {
+                Ok(Some(value)) => metadata["maintenance_continuity"] = value,
+                Ok(None) => {},
+                Err(reason) => metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,"state":"unknown",
+                    "reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+            }
+            if self.mode == ReadMode::Live && let Ok(Some(candidate)) = crate::followup_store::Store::open(&self.cwd)
+                .and_then(|store| store.scoped_read_discovery(subjects, identity, &self.input)) {
+                metadata["maintenance_discovery"] = candidate;
+            }
         }
         (!metadata.as_object().unwrap().is_empty()).then_some(metadata)
     }
-    fn read_with_continuity(&self, continuity: Option<J>, tokens: usize, read: impl FnOnce(usize) -> Result<String>) -> Result<String> {
-        let Some(metadata) = continuity else { return read(tokens); };
-        let overhead = self.store.encoding().count(&serde_json::to_string(&metadata)?) + 8;
+    fn read_with_continuity(&self, metadata: Option<J>, tokens: usize, read: impl FnOnce(usize) -> Result<String>) -> Result<String> {
+        let Some(mut metadata) = metadata else { return read(tokens); };
+        let discovery = metadata.as_object_mut().unwrap().remove("maintenance_discovery");
+        let required = !metadata.as_object().unwrap().is_empty();
+        let overhead = if required {self.store.encoding().count(&serde_json::to_string(&metadata)?) + 8} else {0};
         let remaining = tokens.saturating_sub(overhead);
-        crate::require(remaining >= 64, "exact read evidence and scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
-        let text = read(remaining)?;
-        let mut packet: J = serde_json::from_str(&text)?;
+        crate::require(remaining >= 64, "exact read evidence and required scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
+        let original = read(remaining)?;
+        let mut packet: J = match serde_json::from_str(&original) {
+            Ok(packet) => packet,
+            Err(_) if !required => return Ok(original),
+            Err(_) => json!({"output":original}),
+        };
         packet.as_object_mut().unwrap().extend(metadata.as_object().unwrap().clone());
+        self.attach_optional_discovery(&mut packet, discovery, Some(tokens), crate::view_format::ViewFormat::Json)?;
         let text = serde_json::to_string(&packet)? + "\n";
-        crate::require(self.store.encoding().count(&text) <= tokens, "exact read evidence and scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
+        crate::require(self.store.encoding().count(&text) <= tokens, "exact read evidence and required scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
         Ok(text)
     }
 
@@ -1009,7 +1037,8 @@ impl Service {
         if self.ordinary()? {
             let (capture, _, session) = self.ordinary_session()?;
             let identity = self.continuity_record_identity(&capture, true)?;
-            let continuity = self.exact_read_metadata(reference, identity.as_deref());
+            let scope = session.read_subjects(reference)?;
+            let continuity = self.exact_read_metadata(&scope, identity.as_deref());
             let result = self.read_with_continuity(continuity, tokens, |remaining| session.read(reference, revision, remaining, offset, |s| {
                 self.store.encoding().count(s)
             }))?;
@@ -1039,7 +1068,8 @@ impl Service {
             session
         };
         let identity = capture.snapshot()?.snapshot_id().to_owned();
-        let continuity = self.exact_read_metadata(reference, Some(&identity));
+        let scope = session.read_subjects(reference)?;
+        let continuity = self.exact_read_metadata(&scope, Some(&identity));
         let result = self.read_with_continuity(continuity, tokens, |remaining| session.read(reference, revision, remaining, offset, |s| {
             self.store.encoding().count(s)
         }))?;
@@ -1448,9 +1478,6 @@ impl Service {
                 .and_then(|store| store.read_discovery_snapshot(identity, &self.input)).ok().flatten()) } else {None};
             let attach = |packet: &mut J| -> Result<()> {
                 let subjects = Self::delivered_view_subjects(packet);
-                if let Some(ref discovery) = discovery && let Some(candidate) = discovery.for_subjects(&subjects) {
-                    packet["maintenance_discovery"] = candidate;
-                }
                 if !subjects.is_empty() && let Some(ref continuity) = continuity {
                     match continuity {
                         Ok(Some(snapshot)) => if let Some(value) = snapshot.for_subjects(&subjects) { packet["maintenance_continuity"] = value; },
@@ -1462,7 +1489,9 @@ impl Service {
                 }
                 Ok(())
             };
-            let packet = self.render_selected_view(&full, build, ids, &groups, &edge_sets, &memberships, supplied_index.as_ref(), query, tokens, anchors, &attach)?;
+            let mut packet = self.render_selected_view(&full, build, ids, &groups, &edge_sets, &memberships, supplied_index.as_ref(), query, tokens, anchors, &attach)?;
+            let candidate = discovery.as_ref().and_then(|snapshot| snapshot.for_subjects(&Self::delivered_view_subjects(&packet)));
+            self.attach_optional_discovery(&mut packet, candidate, tokens, self.view_format)?;
             profile_view_phase("selected_compact_view", selected_start);
             Ok(packet)
         };

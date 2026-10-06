@@ -2,6 +2,7 @@
 
 use crate::{
     Error, Result,
+    checked_session::ReadSubjectScope,
     history_contract::{field, map, string_is, text},
     history_view::map_mut,
     identity::sha256,
@@ -802,6 +803,103 @@ impl OrdinarySession {
 
     pub fn validate_reference(&self, reference: &str) -> Result<()> {
         self.read_value(reference).map(|_| ())
+    }
+
+    pub(crate) fn read_subjects(&self, reference: &str) -> Result<ReadSubjectScope> {
+        // Branch maps are accepted by read() before read_value() is called.
+        if reference.starts_with('/') {
+            require(
+                self.groups.contains_key(reference),
+                "unknown branch; read / with this revision to list valid branches",
+            )?;
+            return Ok(ReadSubjectScope::complete(self.groups[reference].iter().cloned(), true));
+        }
+        // Resolve exact references only after read_value has validated them.
+        self.validate_reference(reference)?;
+        let base = reference
+            .split_once('#')
+            .map_or(reference, |(base, _)| base);
+        let nodes = self.graph["nodes"]
+            .as_object()
+            .ok_or_else(|| Error("invalid ordinary session graph".into()))?;
+        if nodes.contains_key(base)
+            && !["orientation", "assessment", "pending", "native"].contains(&base)
+        {
+            return Ok(ReadSubjectScope::complete([base.to_owned()], true));
+        }
+        if let Some(id) = base.strip_prefix("node:") {
+            return Ok(ReadSubjectScope::complete([id.to_owned()], true));
+        }
+        if let Some(id) = base.strip_prefix("checked:") {
+            return Ok(if nodes.contains_key(id) {
+                ReadSubjectScope::complete([id.to_owned()], true)
+            } else {
+                ReadSubjectScope::unresolved_body()
+            });
+        }
+        if let Some(key) = base.strip_prefix("conditions:") {
+            return Ok(ReadSubjectScope::complete(self.members(key)?, true));
+        }
+        if base.starts_with("source:") {
+            // Imported source text can cover several claims and the captured source
+            // map does not carry an authoritative claim-to-source ownership edge.
+            return Ok(ReadSubjectScope::unresolved_body());
+        }
+        if base == "pending" || base == "native" || base.starts_with("proposal:") {
+            return Ok(ReadSubjectScope::unresolved_body());
+        }
+        if let Some(key) = base.strip_prefix("event:") {
+            let event = &self.scan["events"][key];
+            return Ok(self.event_subjects(std::iter::once(event), nodes));
+        }
+        if let Some(key) = base.strip_prefix("events:") {
+            let members = self.members(key)?;
+            let events = self.scan["events"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(_, event)| event)
+                .filter(|event| {
+                    event["affected"].as_array().is_some_and(|affected| {
+                        affected
+                            .iter()
+                            .any(|id| id.as_str().is_some_and(|id| members.contains(id)))
+                    })
+                });
+            return Ok(self.event_subjects(events, nodes));
+        }
+        Ok(ReadSubjectScope::complete([], false))
+    }
+
+    fn event_subjects<'a>(
+        &self,
+        events: impl IntoIterator<Item = &'a J>,
+        nodes: &Map<String, J>,
+    ) -> ReadSubjectScope {
+        let mut subjects = BTreeSet::new();
+        let mut complete = true;
+        for event in events {
+            if let Some(affected) = event["affected"].as_array() {
+                for id in affected {
+                    if let Some(id) = id.as_str() {
+                        if nodes.contains_key(id) {
+                            subjects.insert(id.to_owned());
+                        } else {
+                            complete = false;
+                        }
+                    } else {
+                        complete = false;
+                    }
+                }
+            } else {
+                complete = false;
+            }
+        }
+        ReadSubjectScope {
+            subjects: subjects.into_iter().collect(),
+            complete,
+            body_bearing: true,
+        }
     }
 
     fn assessment(&self, id: &str) -> Option<&J> {

@@ -51,10 +51,26 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
             .map(|v| v.with_timezone(&Utc));
         let inspection_recent = phase_observed.is_some_and(|t| t <= now && now.signed_duration_since(t) < reported_liveness_window(1));
-        let execution_recent = phase.is_some() && zone.is_some()
-            && crate::followup_daily::reported_host_execution(daily, binding, now);
+        let executed = crate::followup_daily::latest_reported_host_execution(daily, binding, now);
+        let execution_day = match (executed.as_ref(), phase.as_ref(), zone.as_ref()) {
+            (Some(executed), Some(phase), Some(zone)) => {
+                let local = executed.with_timezone(zone).naive_local();
+                let same_day = local.date().and_time(*phase);
+                let scheduled = if local < same_day {
+                    local.date().pred_opt().map(|day| day.and_time(*phase))
+                } else { Some(same_day) };
+                scheduled.filter(|scheduled| {
+                    let delay = local.signed_duration_since(*scheduled);
+                    delay >= Duration::zero() && delay <= Duration::hours(2)
+                }).map(|scheduled| scheduled.date())
+            }
+            _ => None,
+        };
+        let execution_recent = execution_day.is_some();
         if !inspection_recent && !execution_recent {
-            return json!({"state":"unknown","mode":mode,"reason":"daily_phase_readback_expired_or_missing","reported_liveness_days":1,"grace_hours":2});
+            return json!({"state":"unknown","mode":mode,
+                "reason":if executed.is_some(){"scheduled_execution_phase_mismatch"}else{"daily_phase_readback_expired_or_missing"},
+                "reported_liveness_days":1,"grace_hours":2});
         }
         let mut reasons = Vec::new();
         let mut unproven = false;
@@ -87,6 +103,14 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             } else if phase.unwrap() < check_time.unwrap() {
                 reasons.push(json!({"id":id,"reason":"daily_wake_precedes_recurring_check_time","check_time":m["check_time"]}));
                 maintenance_phases.insert(id.clone(), json!("incompatible"));
+            } else if !inspection_recent && matches!(
+                (execution_day.as_ref(), executed.as_ref(), zone.as_ref(), check_time.as_ref()),
+                (Some(day), Some(actual), Some(zone), Some(check))
+                    if actual.with_timezone(zone).naive_local() < day.and_time(*check)
+            ) {
+                unproven = true;
+                reasons.push(json!({"id":id,"reason":"scheduled_execution_precedes_check_time","check_time":m["check_time"]}));
+                maintenance_phases.insert(id.clone(), json!("unknown"));
             } else {
                 maintenance_phases.insert(id.clone(), json!("compatible"));
             }
@@ -296,22 +320,30 @@ mod tests {
     }
 
     #[test]
-    fn daily_phase_can_use_recent_same_epoch_scheduled_report() {
+    fn daily_phase_renewal_requires_aligned_current_epoch_execution() {
         let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
         let data = json!({"daily":{"binding":{"host":"host","id":"schedule","state":"active",
             "cadence":"daily","time":"09:00","timezone":"UTC","observed_at":"2026-10-06T11:00:00Z",
             "phase_observed_at":"2026-10-05T01:00:00Z","binding_epoch":"epoch",
             "epoch_started_at":"2026-10-01T00:00:00Z"},
             "receipts":[{"outcome":"complete","execution_origin":"self_reported_scheduled",
-                "binding_epoch":"epoch","started_at":"2026-10-06T10:00:00Z","finished_at":"2026-10-06T10:05:00Z",
+                "binding_epoch":"epoch","started_at":"2026-10-06T09:02:00Z","finished_at":"2026-10-06T09:05:00Z",
                 "host_execution":{"schema":"kpopper.host-execution/v1","trigger":"scheduled",
-                    "host":"host","id":"schedule","executed_at":"2026-10-06T09:58:00Z",
-                    "observed_at":"2026-10-06T09:59:00Z","evidence":"run"}}]},
+                    "host":"host","id":"schedule","executed_at":"2026-10-06T09:00:00Z",
+                    "observed_at":"2026-10-06T09:01:00Z","evidence":"run"}}]},
             "items":{"check":{"id":"check","state":"waiting","spec":{"maintenance":{
-                "timezone":"UTC","check_time":"08:00"}}}}});
+                "timezone":"UTC","check_time":"08:45"}}}}});
         let result = assess(&data, now);
         assert_eq!(result["state"], "compatible");
         assert_eq!(result["phase_liveness_basis"], "self_reported_scheduled_execution");
+        let mut early = data.clone();
+        early["daily"]["receipts"][0]["started_at"] = json!("2026-10-06T08:32:00Z");
+        early["daily"]["receipts"][0]["finished_at"] = json!("2026-10-06T08:35:00Z");
+        early["daily"]["receipts"][0]["host_execution"]["executed_at"] = json!("2026-10-06T08:30:00Z");
+        early["daily"]["receipts"][0]["host_execution"]["observed_at"] = json!("2026-10-06T08:31:00Z");
+        let rejected = assess(&early, now);
+        assert_eq!(rejected["state"], "unknown");
+        assert_eq!(rejected["reason"], "scheduled_execution_phase_mismatch");
         let mut prior_epoch = data.clone();
         prior_epoch["daily"]["receipts"][0]["binding_epoch"] = json!("old");
         assert_eq!(assess(&prior_epoch, now)["state"], "unknown");

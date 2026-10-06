@@ -172,12 +172,22 @@ fn binding_liveness_days(daily: &Value, binding: &Value) -> u64 {
 
 // Completion of local work is distinct from evidence of a bound scheduled invocation.
 pub(crate) fn reported_host_execution(daily: &Value, binding: &Value, now: DateTime<Utc>) -> bool {
+    latest_reported_host_execution(daily, binding, now).is_some()
+}
+
+// Actual executed_at of the newest valid current-epoch caller report, if any.
+// This is reported evidence only; it does not authenticate the host.
+pub(crate) fn latest_reported_host_execution(
+    daily: &Value,
+    binding: &Value,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
     if !binding["binding_epoch"].as_str().is_some_and(|epoch| !epoch.is_empty()) {
-        return false;
+        return None;
     }
     let window = crate::maintenance_wake::reported_liveness_window(binding_liveness_days(daily, binding));
-    daily["receipts"].as_array().is_some_and(|receipts| {
-        receipts.iter().any(|receipt| {
+    daily["receipts"].as_array().into_iter().flatten()
+        .filter_map(|receipt| {
             if receipt["outcome"] != "complete"
                 || !matches!(
                     receipt["execution_origin"].as_str(),
@@ -185,7 +195,7 @@ pub(crate) fn reported_host_execution(daily: &Value, binding: &Value, now: DateT
                 )
                 || receipt["binding_epoch"] != binding["binding_epoch"]
             {
-                return false;
+                return None;
             }
             let started = receipt["started_at"]
                 .as_str()
@@ -197,14 +207,18 @@ pub(crate) fn reported_host_execution(daily: &Value, binding: &Value, now: DateT
                 (Some(started), Some(finished))
                     if started <= finished
                         && finished <= now
-                        && now.signed_duration_since(finished) < window =>
+                        && now.signed_duration_since(finished) < window
+                        && validate_host_execution(&receipt["host_execution"], binding, started).is_ok() =>
                 {
-                    validate_host_execution(&receipt["host_execution"], binding, started).is_ok()
+                    receipt["host_execution"]["executed_at"].as_str()
+                        .and_then(|value| parse_time(value, "UTC").ok())
+                        .map(|executed| (finished, executed))
                 }
-                _ => false,
+                _ => None,
             }
         })
-    })
+        .max_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, executed)| executed)
 }
 
 fn validate_host_execution(report: &Value, binding: &Value, now: DateTime<Utc>) -> Result<()> {
@@ -631,6 +645,20 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
                     .as_str()
                     .unwrap_or("Source check unavailable")
             });
+        let successful_observation_at = observation.and_then(|value| value["observed_at"].as_str());
+        let evidence_expires_at = if maintenance["kind"] == "clock" {None} else {
+            observation.and_then(|value| value["observed_at"].as_str())
+                .and_then(|value| parse_time(value, "UTC").ok())
+                .and_then(|observed| maintenance["max_age_hours"].as_f64().filter(|age| age.is_finite() && *age > 0.0)
+                    .and_then(|age| observed.checked_add_signed(Duration::nanoseconds((age * 3_600_000_000_000.0).round() as i64))))
+                .map(stamp)
+        };
+        let latest_attempt_at = last_attempt.and_then(|attempt| attempt["inspected_at"].as_str());
+        let latest_attempt_recorded_at = last_attempt.and_then(|attempt| attempt["receipt_at"].as_str());
+        let failure_at = last_attempt.filter(|attempt| attempt["outcome"] == "unavailable")
+            .and_then(|attempt| attempt["inspected_at"].as_str());
+        let failure_recorded_at = last_attempt.filter(|attempt| attempt["outcome"] == "unavailable")
+            .and_then(|attempt| attempt["receipt_at"].as_str());
         obligations.push(json!({
             "id":item["id"],"kind":maintenance["kind"],"related":item["spec"]["related"],
             "source_id":maintenance["source_id"],"source_ref":maintenance["source_ref"],"check_state":check_state,
@@ -638,7 +666,19 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
             "current_use_adequacy":"unassessed", "evidence_requirement":maintenance["evidence_requirement"],
             "use_policy":maintenance["use_policy"],
             "failure_state":if attempt_state == "unavailable" {"failed"} else {"none"},
-            "due_at":due_at,"observed_at":observation.and_then(|value| value["observed_at"].as_str()),
+            "due_at":due_at,"next_check_due_at":due_at,"evidence_expires_at":evidence_expires_at,"observed_at":successful_observation_at,
+            "last_successful_observation_at":successful_observation_at,
+            "latest_attempt_at":latest_attempt_at,"latest_attempt_recorded_at":latest_attempt_recorded_at,
+            "failure_at":failure_at,"failure_recorded_at":failure_recorded_at,
+            "timestamp_semantics":{"due_at":"next_check_due_at_not_evidence_expiry",
+                "next_check_due_at":"scheduled_maintenance_check_cadence_due",
+                "evidence_expires_at":"last_successful_observation_plus_declared_max_age_hours_independent_of_check_due",
+                "observed_at":"last_successful_source_observation_at",
+                "last_successful_observation_at":"retained_source_observation_observed_at",
+                "latest_attempt_at":"reported_inspected_at_if_supplied",
+                "latest_attempt_recorded_at":"local_receipt_at",
+                "failure_at":"reported_inspected_at_if_supplied_for_unavailable_attempt",
+                "failure_recorded_at":"local_receipt_at_for_unavailable_attempt"},
             "failure":failure, "wake_state":obligation_wake
         }));
     }
@@ -1305,5 +1345,33 @@ mod daily_repair_tests {
         assert_eq!(good["related"], json!(["fact.good"]));
         assert_eq!(bad["wake_state"], "incompatible");
         assert_eq!(bad["host_state"], "incompatible");
+    }
+
+    #[test]
+    fn health_separates_successful_observation_from_failed_attempt_times() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 23, 12, 0, 0).unwrap();
+        let mut data = json!({"daily":{"binding":null},
+            "observations":{"source-ref":{"observed_at":"2026-09-15T09:00:00Z","value":"old"}},
+            "items":{"source-check":{"id":"source-check","state":"waiting","next_at":"2026-09-25T09:00:00Z",
+                "spec":{"maintenance":{"kind":"source","source_ref":"source-ref","max_age_hours":24}},
+                "attempts":[{"type":"maintenance_inspection","outcome":"unavailable",
+                    "reason":"provider unavailable","receipt_at":"2026-09-22T10:00:00Z","inspected_at":null}]}}});
+        let health = maintenance_health(&data, now).unwrap();
+        let row = &health["obligations"][0];
+        assert_eq!(row["observed_at"], "2026-09-15T09:00:00Z");
+        assert_eq!(row["last_successful_observation_at"], "2026-09-15T09:00:00Z");
+        assert_eq!(row["evidence_expires_at"], "2026-09-16T09:00:00Z");
+        assert_eq!(row["next_check_due_at"], "2026-09-25T09:00:00Z");
+        assert_ne!(row["evidence_expires_at"], row["due_at"]);
+        assert!(row["latest_attempt_at"].is_null());
+        assert!(row["failure_at"].is_null());
+        assert_eq!(row["latest_attempt_recorded_at"], "2026-09-22T10:00:00Z");
+        assert_eq!(row["failure_recorded_at"], "2026-09-22T10:00:00Z");
+        assert_eq!(row["failure"], "provider unavailable");
+        data["items"]["source-check"]["attempts"][0]["inspected_at"] = json!("2026-09-22T09:55:00Z");
+        let inspected = maintenance_health(&data, now).unwrap();
+        assert_eq!(inspected["obligations"][0]["latest_attempt_at"], "2026-09-22T09:55:00Z");
+        assert_eq!(inspected["obligations"][0]["failure_at"], "2026-09-22T09:55:00Z");
+        assert_eq!(inspected["obligations"][0]["observed_at"], "2026-09-15T09:00:00Z");
     }
 }
