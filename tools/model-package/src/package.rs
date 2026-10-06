@@ -5,10 +5,11 @@ use crate::manifest::{
 use crate::Result;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use sha2::{Digest, Sha256};
-use std::fmt;
+use std::{cell::RefCell, fmt};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs::{self, File},
+    io::{Cursor, Read},
     os::unix::fs::MetadataExt,
     path::{Component, Path, PathBuf},
     process::Command,
@@ -87,7 +88,53 @@ fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 fn read(path: &Path) -> Result<Vec<u8>> {
-    Ok(fs::read(path)?)
+    check_cancelled()?;
+    let mut file = File::open(path)?;
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        check_cancelled()?;
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..n]);
+    }
+    Ok(bytes)
+}
+fn check_cancelled() -> Result<()> {
+    if crate::runtime::cancellation_exit_code().is_some() {
+        Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "operation cancelled").into())
+    } else {
+        Ok(())
+    }
+}
+fn hash_reader_with_cancel(
+    mut reader: impl Read,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<String> {
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        check()?;
+        let n = reader.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+fn hash_file_with_cancel(path: &Path, check: &mut impl FnMut() -> Result<()>) -> Result<String> {
+    hash_reader_with_cancel(File::open(path)?, check)
+}
+fn hash_bytes_with_cancel(bytes: &[u8], check: &mut impl FnMut() -> Result<()>) -> Result<String> {
+    let mut hasher = Sha256::new();
+    for chunk in bytes.chunks(65536) {
+        check()?;
+        hasher.update(chunk);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 fn rel(s: &str) -> Result<PathBuf> {
     let p = Path::new(s);
@@ -107,6 +154,7 @@ fn safe_file(root: &Path, relpath: &str) -> Result<PathBuf> {
     let mut cur = root.to_path_buf();
     let parts: Vec<_> = p.components().collect();
     for (i, c) in parts.iter().enumerate() {
+        check_cancelled()?;
         cur.push(c);
         let m = fs::symlink_metadata(&cur)?;
         let last = i + 1 == parts.len();
@@ -120,10 +168,13 @@ fn safe_file(root: &Path, relpath: &str) -> Result<PathBuf> {
     Ok(cur)
 }
 fn identity(p: &Path) -> Result<FileIdentity> {
+    identity_with_cancel(p, &mut check_cancelled)
+}
+fn identity_with_cancel(p: &Path, check: &mut impl FnMut() -> Result<()>) -> Result<FileIdentity> {
+    check()?;
     let m = fs::metadata(p)?;
-    let b = read(p)?;
     Ok(FileIdentity {
-        sha256: hash(&b),
+        sha256: hash_file_with_cancel(p, check)?,
         size: m.len(),
         executable: m.mode() & 0o111 != 0,
     })
@@ -175,6 +226,7 @@ fn committed(source: &Path, relpath: &str) -> Result<Vec<u8>> {
 fn walk(root: &Path) -> Result<Vec<PathBuf>> {
     let mut out = vec![];
     for e in fs::read_dir(root)? {
+        check_cancelled()?;
         let e = e?;
         let p = e.path();
         let m = fs::symlink_metadata(&p)?;
@@ -287,7 +339,9 @@ pub fn build(
         }
     }
     let engine = read(engine_archive)?;
-    if engine.len() as u64 != ENGINE_SIZE || hash(&engine) != ENGINE_SHA256 {
+    if engine.len() as u64 != ENGINE_SIZE
+        || hash_bytes_with_cancel(&engine, &mut check_cancelled)? != ENGINE_SHA256
+    {
         return Err("engine archive identity mismatch".into());
     }
     validate_engine_tar(&engine)?;
@@ -399,6 +453,7 @@ pub fn build(
 }
 
 pub fn verify_bundle(bundle: &Path) -> Result<(Descriptor, PackageLock, String)> {
+    check_cancelled()?;
     let db = read(&bundle.join("model-package.json"))?;
     reject_duplicate_keys(&db)?;
     let d: Descriptor = serde_json::from_slice(&db)?;
@@ -430,20 +485,25 @@ pub fn verify_bundle(bundle: &Path) -> Result<(Descriptor, PackageLock, String)>
         return Err("bundle file closure differs from lock".into());
     }
     for (name, want) in &l.files {
+        check_cancelled()?;
         let p = safe_file(bundle, name)?;
         let got = identity(&p)?;
         if &got != want {
             return Err(format!("bundle member mismatch: {name}").into());
         }
+        if name == "assets/kpopper.tar.gz"
+            && (got.sha256 != ENGINE_SHA256 || got.size != ENGINE_SIZE)
+        {
+            return Err("engine archive bytes do not match pinned identity".into());
+        }
     }
     safe_file(bundle, &d.model)?;
     safe_file(bundle, &d.skill)?;
     let eng = safe_file(bundle, "assets/kpopper.tar.gz")?;
-    let b = read(&eng)?;
-    if b.len() as u64 != ENGINE_SIZE || hash(&b) != ENGINE_SHA256 {
+    if fs::metadata(&eng)?.len() != ENGINE_SIZE {
         return Err("engine archive bytes do not match pinned identity".into());
     }
-    validate_engine_tar(&b)?;
+    validate_engine_tar_file(&eng)?;
     if read(&bundle.join(INVENTORY))? != engine_inventory(&eng)? {
         return Err("engine member inventory differs from archive".into());
     }
@@ -538,6 +598,7 @@ fn canonical_json<T: serde::Serialize>(v: &T) -> Result<Vec<u8>> {
 }
 fn collect_files(root: &Path, dir: &Path, out: &mut BTreeSet<String>) -> Result<()> {
     for e in fs::read_dir(dir)? {
+        check_cancelled()?;
         let p = e?.path();
         let m = fs::symlink_metadata(&p)?;
         if m.file_type().is_symlink() || (m.is_file() && m.nlink() != 1) {
@@ -554,11 +615,29 @@ fn collect_files(root: &Path, dir: &Path, out: &mut BTreeSet<String>) -> Result<
     Ok(())
 }
 pub(crate) fn engine_inventory(path: &Path) -> Result<Vec<u8>> {
-    let f = fs::File::open(path)?;
+    engine_inventory_with_cancel(path, &mut check_cancelled)
+}
+fn engine_inventory_with_cancel(
+    path: &Path,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<Vec<u8>> {
+    let check = RefCell::new(check);
+    engine_inventory_with_hooks(path, &mut || (check.borrow_mut())(), &mut || {
+        (check.borrow_mut())()
+    })
+}
+fn engine_inventory_with_hooks(
+    path: &Path,
+    entry_check: &mut impl FnMut() -> Result<()>,
+    chunk_check: &mut impl FnMut() -> Result<()>,
+) -> Result<Vec<u8>> {
+    entry_check()?;
+    let f = File::open(path)?;
     let dec = flate2::read::GzDecoder::new(f);
     let mut ar = tar::Archive::new(dec);
     let mut v = vec![];
     for e in ar.entries()? {
+        entry_check()?;
         let mut e = e?;
         let p = e.path()?.to_string_lossy().into_owned();
         let ty = e.header().entry_type();
@@ -577,6 +656,7 @@ pub(crate) fn engine_inventory(path: &Path) -> Result<Vec<u8>> {
                     break;
                 }
                 hasher.update(&buffer[..n]);
+                chunk_check()?;
             }
             Some(format!("{:x}", hasher.finalize()))
         } else {
@@ -586,18 +666,34 @@ pub(crate) fn engine_inventory(path: &Path) -> Result<Vec<u8>> {
             "type":if ty.is_file(){"file"}else{"dir"}, "sha256":digest}));
     }
     v.sort_by_key(|x| x["path"].as_str().unwrap_or("").to_owned());
+    let archive_sha256 = hash_file_with_cancel(path, chunk_check)?;
     Ok(serde_json::to_vec_pretty(
-        &serde_json::json!({"archive_sha256":hash(&read(path)?),"members":v}),
+        &serde_json::json!({"archive_sha256":archive_sha256,"members":v}),
     )?)
 }
 fn validate_engine_tar(bytes: &[u8]) -> Result<()> {
-    let dec = flate2::read::GzDecoder::new(bytes);
-    let mut ar = tar::Archive::new(dec);
+    validate_engine_tar_reader(
+        flate2::read::GzDecoder::new(Cursor::new(bytes)),
+        &mut check_cancelled,
+    )
+}
+fn validate_engine_tar_file(path: &Path) -> Result<()> {
+    validate_engine_tar_reader(
+        flate2::read::GzDecoder::new(File::open(path)?),
+        &mut check_cancelled,
+    )
+}
+fn validate_engine_tar_reader(
+    reader: impl Read,
+    check: &mut impl FnMut() -> Result<()>,
+) -> Result<()> {
+    let mut ar = tar::Archive::new(reader);
     let mut paths = BTreeSet::new();
     let mut total = 0u64;
     let mut count = 0usize;
     for e in ar.entries()? {
-        let e = e?;
+        check()?;
+        let mut e = e?;
         let p = e.path()?.to_string_lossy().into_owned();
         if !safe_package_path(&p) || !paths.insert(p.clone()) {
             return Err("unsafe or duplicate engine member".into());
@@ -616,9 +712,84 @@ fn validate_engine_tar(bytes: &[u8]) -> Result<()> {
         if count > 2000 || total > 256 * 1024 * 1024 || n > 128 * 1024 * 1024 {
             return Err("engine archive exceeds observed bounds".into());
         }
+        if ty.is_file() {
+            let mut consumed = 0u64;
+            let mut buffer = [0u8; 65536];
+            loop {
+                check()?;
+                let read = e.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                consumed += read as u64;
+            }
+            if consumed != n {
+                return Err("engine member length differs from archive header".into());
+            }
+        }
     }
     if !paths.contains("kpopper-0.15.1-darwin-arm64/bin/kpop") {
         return Err("engine archive root or executable missing".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+
+    fn cancelled() -> Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "operation cancelled").into())
+    }
+
+    #[test]
+    fn identity_hash_interrupts_after_multiple_file_chunks() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        temp.as_file().set_len(8 * 1024 * 1024).unwrap();
+        let mut checks = 0usize;
+        let result = identity_with_cancel(temp.path(), &mut || {
+            checks += 1;
+            if checks == 5 {
+                cancelled()
+            } else {
+                Ok(())
+            }
+        });
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("operation cancelled"));
+        assert_eq!(checks, 5);
+    }
+
+    #[test]
+    fn engine_inventory_interrupts_during_member_hashing() {
+        let archive = PathBuf::from(
+            std::env::var_os("KPOP_MODEL_ENGINE_ARCHIVE")
+                .expect("set KPOP_MODEL_ENGINE_ARCHIVE to the pinned native release"),
+        );
+        let mut entry_checks = 0usize;
+        let mut chunk_checks = 0usize;
+        let result = engine_inventory_with_hooks(
+            &archive,
+            &mut || {
+                entry_checks += 1;
+                Ok(())
+            },
+            &mut || {
+                chunk_checks += 1;
+                if chunk_checks == 8 {
+                    cancelled()
+                } else {
+                    Ok(())
+                }
+            },
+        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("operation cancelled"));
+        assert!(entry_checks > 0);
+        assert_eq!(chunk_checks, 8);
+    }
 }
