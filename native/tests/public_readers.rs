@@ -896,11 +896,22 @@ fn a_configured_simple_record_that_is_not_there_is_named_in_full() {
     );
 }
 
-/// A repository whose record location cannot be read, in each of the three ways, with the
-/// path and reason every command refuses it with.
-fn unavailable_records() -> Vec<(&'static str, tempfile::TempDir, std::path::PathBuf, String)> {
+/// A repository whose record location cannot be read, in each of the ways a record can be
+/// out of reach, with the reason and the full refusal every command gives for it.
+struct Unavailable {
+    kind: &'static str,
+    _temp: tempfile::TempDir,
+    root: std::path::PathBuf,
+    reason: &'static str,
+    refusal: String,
+}
+fn unavailable_records() -> Vec<Unavailable> {
+    let mut kinds = vec!["directory", "registered", "configured"];
+    if cfg!(unix) {
+        kinds.push("link");
+    }
     let mut cases = vec![];
-    for kind in ["directory", "registered", "configured"] {
+    for kind in kinds {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let git = Command::new("git")
@@ -910,14 +921,17 @@ fn unavailable_records() -> Vec<(&'static str, tempfile::TempDir, std::path::Pat
             .output()
             .unwrap();
         assert!(git.status.success());
+        let entry = "The record path exists but is not an accessible file.";
         let (record, reason) = match kind {
             "directory" => {
                 fs::create_dir(root.join("GROUNDING.yaml")).unwrap();
                 fs::write(root.join("GROUNDING.yaml/x.txt"), "").unwrap();
-                (
-                    root.join("GROUNDING.yaml"),
-                    "The record path exists but is not an accessible file.",
-                )
+                (root.join("GROUNDING.yaml"), entry)
+            }
+            "link" => {
+                #[cfg(unix)]
+                std::os::unix::fs::symlink("gone.yaml", root.join("GROUNDING.yaml")).unwrap();
+                (root.join("GROUNDING.yaml"), entry)
             }
             "registered" => {
                 fs::write(root.join(".git/kpopper-record"), "records/elsewhere.yaml\n").unwrap();
@@ -938,16 +952,57 @@ fn unavailable_records() -> Vec<(&'static str, tempfile::TempDir, std::path::Pat
             }
         };
         let refusal = format!("{reason} {}\n", record.display());
-        cases.push((kind, temp, root, refusal));
+        cases.push(Unavailable {
+            kind,
+            _temp: temp,
+            root,
+            reason,
+            refusal,
+        });
     }
     cases
+}
+/// The repository's files apart from the private state, with each link as its target.
+fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    fn visit(root: &Path, at: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
+        for entry in fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            if name.starts_with("private") {
+                continue;
+            }
+            let kind = fs::symlink_metadata(&path).unwrap().file_type();
+            if kind.is_symlink() {
+                let target = fs::read_link(&path).unwrap();
+                out.insert(name, target.to_string_lossy().into_owned().into_bytes());
+            } else if kind.is_dir() {
+                visit(root, &path, out);
+            } else {
+                out.insert(name, fs::read(&path).unwrap());
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    visit(root, root, &mut out);
+    out
 }
 
 #[test]
 fn an_unavailable_record_is_refused_with_its_path_by_every_command() {
-    for (kind, _temp, root, refusal) in unavailable_records() {
+    for case in unavailable_records() {
+        let Unavailable {
+            kind,
+            ref root,
+            reason,
+            ref refusal,
+            ..
+        } = case;
         let private = root.join("private");
-        let before = image(&root);
+        let before = tree(root);
         for args in [
             vec!["check"],
             vec!["pull", "a.b"],
@@ -958,15 +1013,15 @@ fn an_unavailable_record_is_refused_with_its_path_by_every_command() {
             vec!["set", "a.b", "2"],
             vec!["same", "a.b", "a.c"],
         ] {
-            let output = cli(&root, &args, &private);
+            let output = cli(root, &args, &private);
             assert_eq!(output.status.code(), Some(1), "{kind} {args:?}");
             assert!(output.stdout.is_empty(), "{kind} {args:?}");
             assert_eq!(
                 String::from_utf8(output.stderr).unwrap(),
-                refusal,
+                *refusal,
                 "{kind} {args:?}"
             );
-            let output = cli(&root, &[&["--json"], &args[..]].concat(), &private);
+            let output = cli(root, &[&["--json"], &args[..]].concat(), &private);
             assert_eq!(output.status.code(), Some(1), "{kind} --json {args:?}");
             let envelope: J = serde_json::from_slice(&output.stdout).unwrap();
             assert_eq!(envelope["exit_code"], 1, "{kind} --json {args:?}");
@@ -979,27 +1034,30 @@ fn an_unavailable_record_is_refused_with_its_path_by_every_command() {
         }
         // The context reply has no envelope, so it refuses the same way with --json.
         for args in [&["context", "a.b"][..], &["--json", "context", "a.b"]] {
-            let output = cli(&root, args, &private);
+            let output = cli(root, args, &private);
             assert_eq!(output.status.code(), Some(1), "{kind} {args:?}");
             assert!(output.stdout.is_empty(), "{kind} {args:?}");
             assert_eq!(
                 String::from_utf8(output.stderr).unwrap(),
-                refusal,
+                *refusal,
                 "{kind} {args:?}"
             );
         }
         // The opener keeps the reason alone.
-        let output = cli(&root, &["open"], &private);
+        let output = cli(root, &["open"], &private);
         assert_eq!(output.status.code(), Some(1), "{kind}");
-        let reason = refusal.rsplit_once(' ').unwrap().0;
         assert_eq!(
             String::from_utf8(output.stderr).unwrap().trim_end(),
             reason,
             "{kind}"
         );
-        let mut after = image(&root);
-        after.retain(|name, _| !name.starts_with("private"));
-        assert_eq!(after, before, "{kind}: a refused command wrote");
+        assert_eq!(tree(root), before, "{kind}: a refused command wrote");
+        if kind == "link" {
+            assert!(
+                !root.join("gone.yaml").exists(),
+                "{kind}: the link's target was created"
+            );
+        }
     }
 }
 
