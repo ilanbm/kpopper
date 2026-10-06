@@ -20,7 +20,46 @@ pub(crate) fn assess(data: &Value, now: DateTime<Utc>) -> Value {
         return json!({"state":"paused_or_missing","mode":mode,"host_state":binding["state"]});
     }
     if binding["cadence"] == "daily" {
-        return json!({"state":"compatible","mode":mode,"basis":"existing_daily_wake_serves_due_items","execution":"unestablished_by_configuration"});
+        let phase = binding["time"]
+            .as_str()
+            .and_then(|v| chrono::NaiveTime::parse_from_str(v, "%H:%M").ok());
+        let zone = binding["timezone"]
+            .as_str()
+            .and_then(|v| v.parse::<chrono_tz::Tz>().ok());
+        let mut reasons = Vec::new();
+        let mut unproven = false;
+        for (id, item) in data["items"].as_object().into_iter().flatten() {
+            if matches!(item["state"].as_str(), Some("done" | "cancelled")) {
+                continue;
+            }
+            let Some(m) = item["spec"].get("maintenance") else {
+                continue;
+            };
+            let check_time = m["check_time"]
+                .as_str()
+                .and_then(|v| chrono::NaiveTime::parse_from_str(v, "%H:%M").ok());
+            let policy_zone = m["timezone"]
+                .as_str()
+                .and_then(|v| v.parse::<chrono_tz::Tz>().ok());
+            // Recurrence is calendar N days from the admitted check, at check_time.
+            // first_due_at may have another time and can be caught up once; it is
+            // not proof of the recurring phase. Cross-zone/DST phases need proof.
+            if phase.is_none()
+                || zone.is_none()
+                || check_time.is_none()
+                || policy_zone.is_none()
+                || zone != policy_zone
+            {
+                unproven = true;
+                reasons.push(json!({"id":id,"reason":"daily_recurring_phase_unestablished"}));
+            } else if phase.unwrap() < check_time.unwrap() {
+                reasons.push(json!({"id":id,"reason":"daily_wake_precedes_recurring_check_time","check_time":m["check_time"]}));
+            }
+        }
+        return json!({"state":if reasons.is_empty(){"compatible"}else if unproven{"unknown"}else{"incompatible"},
+            "mode":mode,"basis":"daily_recurring_phase","reasons":reasons,
+            "required_choice":if reasons.is_empty(){json!([])}else{json!(["repair_daily_phase_with_authorization","manual"])},
+            "execution":"unestablished_by_configuration","host_mutation":"none"});
     }
     let descriptor = &selection["native_readback"];
     if descriptor["host"] != binding["host"] || descriptor["id"] != binding["id"] {

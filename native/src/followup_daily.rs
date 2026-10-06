@@ -317,7 +317,7 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
         Some("paused_locally" | "manual" | "incompatible")
     ) {
         wake["state"].as_str().unwrap().to_owned()
-    } else if wake["state"] == "unknown" && data["daily"].get("maintenance_mode").is_some() {
+    } else if wake["state"] == "unknown" {
         "wake_unknown".to_owned()
     } else if binding.is_null() {
         "missing".to_owned()

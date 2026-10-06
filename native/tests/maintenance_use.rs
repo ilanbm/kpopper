@@ -181,3 +181,49 @@ fn manual_live_use_needs_current_claim_inspection_and_reassesses_after_expiry() 
             .any(|r| r["kind"] == "stale")
     );
 }
+
+#[test]
+fn local_source_change_flows_through_ordinary_update_and_invalidates_review_on_rollback() {
+    use std::process::Command;
+    let (temp, w, state, store, item, now) = fixture();
+    let mut initial = fs::read_to_string(w.join("PROVENANCE.yaml")).unwrap();
+    initial.push_str("sources:\n  s.local:\n    name: Selected local source\n    read: 2026-10-06\n");
+    fs::write(w.join("PROVENANCE.yaml"), initial).unwrap();
+    let source = temp.path().join("selected-source.txt");
+    fs::write(&source, "1").unwrap();
+    let read = || fs::read_to_string(&source).unwrap().parse::<i32>().unwrap();
+    inspect(&store, &item, now, read());
+    store.record_model_alignment("source-check", "no_model_change_needed", "fixture://review-source-one", "fixture://review-authority").unwrap();
+    let unchanged = fs::read(w.join("PROVENANCE.yaml")).unwrap();
+    inspect(&store, &item, now, read());
+    assert_eq!(fs::read(w.join("PROVENANCE.yaml")).unwrap(), unchanged);
+    store.record_maintenance_attempt(json!({"id":"source-check", "policy_digest":item["spec"]["maintenance"]["policy_digest"], "source_ref":item["spec"]["maintenance"]["source_ref"], "evidence":"fixture://read-refusal", "reason":"Synthetic selected-file access denied"})).unwrap();
+    assert_eq!(store.assess_use(&["decision.use".into()], &[]).unwrap()["status"], "adequate");
+    fs::write(&source, "2").unwrap();
+    let later = now + Duration::minutes(1);
+    let store = Store::at_in_state(&w, &state, later).unwrap();
+    assert_eq!(inspect(&store, &item, later, read())["outcome"], "observed");
+    assert_eq!(store.assess_use(&["decision.use".into()], &[]).unwrap()["status"], "unknown");
+    let affected = Command::new(env!("CARGO_BIN_EXE_kpop")).current_dir(&w).args(["affects", "fact.input"]).output().unwrap();
+    assert!(affected.status.success());
+    let impact = String::from_utf8_lossy(&affected.stdout);
+    assert!(impact.contains("decision.use") && !impact.contains("decision.untouched"));
+    // The separately reviewed ordinary update is the sole writer of canonical knowledge.
+    let report = temp.path().join("reviewed-update.json");
+    fs::write(&report, serde_json::to_vec(&json!({"event_id":"reviewed-source-change", "date":"2026-10-06", "source_quote":fs::read_to_string(&source).unwrap(), "record_sha256":kpop_native::identity::sha256(&unchanged), "updates":[{"kind":"set", "id":"fact.input", "value":read()}]})).unwrap()).unwrap();
+    let updated = Command::new(env!("CARGO_BIN_EXE_kpop")).current_dir(&w).args(["update", "--file", report.to_str().unwrap(), "--state-dir", w.join("update-state").to_str().unwrap()]).env_remove("KPOPPER_AGENT_SESSION").env_remove("CODEX_THREAD_ID").output().unwrap();
+    assert!(updated.status.success(), "{} {}", String::from_utf8_lossy(&updated.stdout), String::from_utf8_lossy(&updated.stderr));
+    let changed = fs::read(w.join("PROVENANCE.yaml")).unwrap();
+    assert_ne!(changed, unchanged);
+    assert_eq!(store.assess_use(&["decision.use".into()], &[]).unwrap()["status"], "unknown");
+    store.record_model_alignment("source-check", "reviewed_model_update", "fixture://ordinary-update-reviewed", "fixture://review-authority").unwrap();
+    assert_eq!(store.assess_use(&["decision.use".into()], &[]).unwrap()["status"], "adequate");
+    let use_output = Command::new(env!("CARGO_BIN_EXE_kpop")).current_dir(&w).args(["pull", "fact.input"]).output().unwrap();
+    assert!(use_output.status.success());
+    assert!(String::from_utf8_lossy(&use_output.stdout).contains('2'));
+    let attempts = store.show("source-check").unwrap()["attempts"].clone();
+    // Restoring the prior local model does not restore a current-use correlation.
+    fs::write(w.join("PROVENANCE.yaml"), unchanged).unwrap();
+    assert_eq!(store.assess_use(&["decision.use".into()], &[]).unwrap()["status"], "unknown");
+    assert_eq!(store.show("source-check").unwrap()["attempts"], attempts);
+}

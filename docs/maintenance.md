@@ -153,6 +153,11 @@ For N greater than one, a newly selected daily fallback requires `daily mode dai
 --authorization-evidence REF --acknowledge-empty-run-cost`. This records the selection and
 acknowledgement that otherwise empty agent wakes can spend tokens; it installs nothing.
 An already owned daily wake can serve due work alongside its existing authorized tasks.
+Maintenance compatibility requires a read-back daily time in the policy timezone at or after
+the recurring `check_time`. An earlier time is incompatible; absent phase or a different
+timezone is unproven. Repair requires explicit host authorization or select manual mode;
+selection never changes the owner or policy. The first due time can differ and be caught up
+once without proving the recurring phase.
 
 Native mode records an actual normalized host readback with `daily mode native --file FILE
 --authorization-evidence REF`. The file contains host/id, positive whole `cadence_days`,

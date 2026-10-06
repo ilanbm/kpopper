@@ -10,6 +10,19 @@ fn fixture(
     std::path::PathBuf,
     Store,
 ) {
+    fixture_with(now, 7, "09:00", "2026-10-05T09:00:00Z")
+}
+fn fixture_with(
+    now: chrono::DateTime<Utc>,
+    cadence: u64,
+    check_time: &str,
+    due: &str,
+) -> (
+    tempfile::TempDir,
+    std::path::PathBuf,
+    std::path::PathBuf,
+    Store,
+) {
     let temp = tempfile::tempdir().unwrap();
     let work = temp.path().join("work");
     fs::create_dir(&work).unwrap();
@@ -17,7 +30,7 @@ fn fixture(
     let state = temp.path().join("state");
     let store = Store::at_in_state(&work, &state, now).unwrap();
     store.setup(None, "UTC", None, true).unwrap();
-    let d = json!({"schema":"kpopper.maintenance-declaration/v1","kind":"clock","id":"clock-check","title":"Clock check","why":"Check declared time","how":"Read native clock","scope":"Read the declared clock; no publication","related":["deadline.value"],"cadence_days":7,"timezone":"UTC","check_time":"09:00","use_policy":"require_live","evidence_requirement":"trusted_clock","deadline":{"utc":"2026-10-05T09:00:00Z"}});
+    let d = json!({"schema":"kpopper.maintenance-declaration/v1","kind":"clock","id":"clock-check","title":"Clock check","why":"Check declared time","how":"Read native clock","scope":"Read the declared clock; no publication","related":["deadline.value"],"cadence_days":cadence,"timezone":"UTC","check_time":check_time,"use_policy":"require_live","evidence_requirement":"trusted_clock","deadline":{"utc":due}});
     store
         .add(kpop_native::maintenance_contract::compile(&d).unwrap()["spec"].clone())
         .unwrap();
@@ -120,6 +133,92 @@ fn late_tuesday_catchup_exposes_fixed_monday_phase_incompatibility() {
     // Selection records intent; no host schedule has been changed and incompatibility stays visible.
     assert_ne!(
         followup_daily::status(&late).unwrap()["wake"]["state"],
+        "compatible"
+    );
+}
+
+fn bind_daily(store: &Store, time: Option<&str>, zone: Option<&str>) {
+    followup_daily::bind(store,json!({"host":"fixture","id":"daily-owner","state":"active","evidence":"fixture://host-readback"})).unwrap();
+    let mut data = store.load(true).unwrap().unwrap();
+    data["daily"]["binding"]["cadence"] = json!("daily");
+    data["daily"]["binding"]["time"] = json!(time);
+    data["daily"]["binding"]["timezone"] = json!(zone);
+    fs::write(&store.path, serde_json::to_vec(&data).unwrap()).unwrap();
+}
+#[test]
+fn daily_before_recurring_check_time_cannot_claim_calendar_continuity() {
+    let tuesday = Utc.with_ymd_and_hms(2026, 10, 6, 9, 0, 0).unwrap();
+    let (_temp, work, state, store) = fixture_with(tuesday, 1, "12:00", "2026-10-05T12:00:00Z");
+    bind_daily(&store, Some("09:00"), Some("UTC"));
+    assert_eq!(
+        followup_daily::status(&store).unwrap()["wake"]["state"],
+        "incompatible"
+    );
+    // Catching up an overdue first check does not repair the next recurring phase.
+    let daily =
+        followup_daily::start_manual(&store, "manual-catchup", "fixture://user-manual").unwrap();
+    let token = daily["claim"]["token"].as_str().unwrap();
+    let row = store.scan(20).unwrap()["items"][0].clone();
+    let claimed = store
+        .claim(
+            "clock-check",
+            row["occurrence"].as_str().unwrap(),
+            "manual-catchup",
+            Some(token),
+        )
+        .unwrap();
+    store
+        .finish(
+            "clock-check",
+            claimed["claim"]["token"].as_str().unwrap(),
+            "checked",
+            "fixture://current-clock",
+            Some("2026-10-07T12:00:00Z"),
+        )
+        .unwrap();
+    followup_daily::finish(&store, token, "fixture://catchup-complete").unwrap();
+    let wednesday = Store::at_in_state(&work, &state, tuesday + Duration::days(1)).unwrap();
+    assert_eq!(
+        wednesday.scan(20).unwrap()["items"][0]["state"],
+        "waiting"
+    );
+    assert_eq!(
+        followup_daily::status(&wednesday).unwrap()["wake"]["state"],
+        "incompatible"
+    );
+    assert_eq!(
+        wednesday.load(true).unwrap().unwrap()["daily"]["binding"]["time"],
+        "09:00"
+    );
+}
+#[test]
+fn daily_phase_proof_uses_recurring_time_without_rewriting_initial_due_or_ordinary_work() {
+    let now = Utc.with_ymd_and_hms(2026, 10, 6, 9, 0, 0).unwrap();
+    for (time, zone, expected) in [
+        (Some("12:00"), Some("UTC"), "compatible"),
+        (Some("15:00"), Some("UTC"), "compatible"),
+        (None, Some("UTC"), "unknown"),
+        (Some("15:00"), Some("Europe/Prague"), "unknown"),
+    ] {
+        // Initial due can be later than the recurring time: it is caught up once.
+        let (_temp, _work, _state, store) = fixture_with(now, 1, "12:00", "2026-10-06T18:00:00Z");
+        bind_daily(&store, time, zone);
+        assert_eq!(
+            followup_daily::status(&store).unwrap()["wake"]["state"],
+            expected
+        );
+        assert_eq!(
+            store.load(true).unwrap().unwrap()["items"]["clock-check"]["spec"]["maintenance"]["due_at"],
+            "2026-10-06T18:00:00Z"
+        );
+    }
+    let (_temp, _work, _state, store) = fixture(now);
+    let mut data = store.load(true).unwrap().unwrap();
+    data["items"] = json!({});
+    fs::write(&store.path, serde_json::to_vec(&data).unwrap()).unwrap();
+    bind_daily(&store, None, None);
+    assert_eq!(
+        followup_daily::status(&store).unwrap()["wake"]["state"],
         "compatible"
     );
 }
