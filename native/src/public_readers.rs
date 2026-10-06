@@ -722,13 +722,15 @@ pub fn run(
         crate::require(!options.history, "--from cannot be combined with --history")?;
         let notes = draft_notes(mode, &paths, &cwd, &mut inventory)?;
         let output = branch_read::pull(
-            reference,
-            &seeds,
-            options.budget.unwrap_or(40),
+            branch_read::PullQuery {
+                reference,
+                seeds: &seeds,
+                budget: options.budget.unwrap_or(40),
+                notes: &notes,
+            },
             &cwd,
             &paths,
             &capture,
-            notes,
             runtime,
         )?;
         capture.verify()?;

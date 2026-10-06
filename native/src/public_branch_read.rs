@@ -207,10 +207,12 @@ fn semantic_side(subject: &str, state: &V, objects: &Map, snapshot: &V) -> Resul
 }
 
 #[derive(Clone, Copy)]
-struct PullQuery<'a> {
-    reference: &'a str,
-    seeds: &'a [String],
-    budget: i64,
+pub(super) struct PullQuery<'a> {
+    pub(super) reference: &'a str,
+    pub(super) seeds: &'a [String],
+    pub(super) budget: i64,
+    /// Lines about this project that lead an ordinary pull, after the record's own.
+    pub(super) notes: &'a [String],
 }
 
 fn history_pull(
@@ -225,6 +227,7 @@ fn history_pull(
         reference,
         seeds,
         budget,
+        ..
     } = query;
     let observed = crate::history_branch_git::capture(root, oid, relative, None)?;
     let branch = crate::history_branch::validate(&observed.envelope, &observed.files)?;
@@ -444,13 +447,13 @@ fn ordinary_pull(
     oid: &str,
     day: &str,
     current: &OrdinaryCapture,
-    notes: Vec<String>,
     runtime: Option<&Runtime>,
 ) -> Result<C::Output> {
     let PullQuery {
         reference,
         seeds,
         budget,
+        notes,
     } = query;
     let branch =
         crate::source_target::records_ordinary(root, relative, oid, runtime).map_err(|e| {
@@ -515,7 +518,7 @@ fn ordinary_pull(
     let conflicts =
         crate::ordinary_value::map(&crate::ordinary_value::map(&context)?["conflicts"])?;
     let mut knowledge = current.reader_lines()?;
-    knowledge.extend(notes);
+    knowledge.extend(notes.iter().cloned());
     let projection = crate::ordinary_views::Projection::new(
         current.ordinary_document(),
         &hypotheses,
@@ -530,15 +533,15 @@ fn ordinary_pull(
 }
 
 pub(super) fn pull(
-    reference: &str,
-    seeds: &[String],
-    budget: i64,
+    query: PullQuery<'_>,
     cwd: &Path,
     paths: &[PathBuf],
     current: &OrdinaryCapture,
-    notes: Vec<String>,
     runtime: Option<&Runtime>,
 ) -> Result<C::Output> {
+    let PullQuery {
+        reference, budget, ..
+    } = query;
     require((1..=1000).contains(&budget), "invalid_pull_budget")?;
     // A record without history is read as an ordinary reader reads it before any branch is
     // looked for.
@@ -555,11 +558,7 @@ pub(super) fn pull(
     }
     if let Some(capture) = current.node_history_capture() {
         return node_history_pull(
-            PullQuery {
-                reference,
-                seeds,
-                budget,
-            },
+            query,
             &root,
             &relative,
             &oid,
@@ -568,33 +567,9 @@ pub(super) fn pull(
         );
     }
     if current.history_capture().is_some() {
-        history_pull(
-            PullQuery {
-                reference,
-                seeds,
-                budget,
-            },
-            &entry,
-            &root,
-            &relative,
-            &oid,
-            current,
-        )
+        history_pull(query, &entry, &root, &relative, &oid, current)
     } else {
-        ordinary_pull(
-            PullQuery {
-                reference,
-                seeds,
-                budget,
-            },
-            &root,
-            &relative,
-            &oid,
-            &day,
-            current,
-            notes,
-            runtime,
-        )
+        ordinary_pull(query, &root, &relative, &oid, &day, current, runtime)
     }
 }
 
