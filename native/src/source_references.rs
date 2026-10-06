@@ -117,7 +117,7 @@ fn pinned_file_status(root: &Path, revision: &str, path: &str) -> PinnedFileStat
     let pathspec = format!(":(literal){path}");
     match crate::pending_state::git(
         root,
-        &["ls-tree", "--full-tree", "-z", &commit, "--", &pathspec],
+        &["ls-tree", "--full-tree", "-z", commit, "--", &pathspec],
         PIN_PROBE_OUTPUT_LIMIT,
         true,
     ) {

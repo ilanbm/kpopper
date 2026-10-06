@@ -1037,13 +1037,11 @@ fn ledger_materialized(
     let kind = text(field(map(action)?, "kind")?)?;
     if ["same", "distinct", "hypothesis"].contains(&kind)
         && !map(&map(&context)?["result"])?.contains_key("temporal")
-    {
-        if let Some(supplement) = crate::history_node_temporal_recipe::supplement(
+        && let Some(supplement) = crate::history_node_temporal_recipe::supplement(
             capture, objects, &document, runtime, audit,
-        )? {
-            context =
-                crate::history_node_transaction::with_temporal_supplement(context, &supplement)?;
-        }
+        )?
+    {
+        context = crate::history_node_transaction::with_temporal_supplement(context, &supplement)?;
     }
     finish_context(build, document, &options.operation, context)
 }
@@ -1425,7 +1423,7 @@ pub fn verify(root: &Path, prepared: &P::Prepared, runtime: Option<&Runtime>) ->
 }
 
 fn compact_audit(capture: &Capture, context: &V) -> Result<ReplayAudit> {
-    ReplayAudit::from_compact(crate::history_node_transaction::audits(&context)?, || {
+    ReplayAudit::from_compact(crate::history_node_transaction::audits(context)?, || {
         capture
             .snapshot
             .transactions

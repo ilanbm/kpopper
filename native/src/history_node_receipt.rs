@@ -426,10 +426,10 @@ fn assessment(value: &V) -> Result<()> {
                 text(&h["status"])?;
             }
         }
-        if let Some(context) = scope.get("context") {
-            if let Some(conflicts) = map(context)?.get("conflicts") {
-                map(conflicts)?;
-            }
+        if let Some(context) = scope.get("context")
+            && let Some(conflicts) = map(context)?.get("conflicts")
+        {
+            map(conflicts)?;
         }
     }
     Ok(())
@@ -529,22 +529,22 @@ fn components(context: &V) -> Result<BTreeSet<&'static str>> {
     }
     if side.contains_key("assessment") {
         result.insert("assessment");
-        if let Some(report) = side.get("assessment") {
-            if let Some(scope) = map(report).ok().and_then(|m| m.get("scope")) {
-                if map(scope)
-                    .ok()
-                    .is_some_and(|m| m.contains_key("hypotheses"))
-                {
-                    result.insert("hypotheses");
-                }
-                if map(scope)
-                    .ok()
-                    .and_then(|m| m.get("context"))
-                    .and_then(|v| map(v).ok())
-                    .is_some_and(|m| m.contains_key("conflicts"))
-                {
-                    result.insert("conflicts");
-                }
+        if let Some(report) = side.get("assessment")
+            && let Some(scope) = map(report).ok().and_then(|m| m.get("scope"))
+        {
+            if map(scope)
+                .ok()
+                .is_some_and(|m| m.contains_key("hypotheses"))
+            {
+                result.insert("hypotheses");
+            }
+            if map(scope)
+                .ok()
+                .and_then(|m| m.get("context"))
+                .and_then(|v| map(v).ok())
+                .is_some_and(|m| m.contains_key("conflicts"))
+            {
+                result.insert("conflicts");
             }
         }
     }
@@ -757,16 +757,15 @@ impl Side {
             let deps = text(&fields["deps"])?;
             for (collection, members) in F::collections(document)? {
                 for (subject, body) in members {
-                    if let Some(V::List(ids)) = map(&body).ok().and_then(|m| m.get(deps)) {
-                        if let Ok(mut ids) = ids
+                    if let Some(V::List(ids)) = map(&body).ok().and_then(|m| m.get(deps))
+                        && let Ok(mut ids) = ids
                             .iter()
                             .map(|v| text(v).map(str::to_owned))
                             .collect::<Result<Vec<_>>>()
-                        {
-                            ids.sort();
-                            ids.dedup();
-                            declarations.insert(ids);
-                        }
+                    {
+                        ids.sort();
+                        ids.dedup();
+                        declarations.insert(ids);
                     }
                     piece(&mut nodes, &subject)?
                         .insert("document".into(), V::List(vec![s(&collection), body]));
@@ -817,14 +816,14 @@ impl Side {
                         *document = shell;
                     }
                 }
-                if let Some(context) = scope.get_mut("context") {
-                    if let Some(conflicts) = map_mut(context)?.get_mut("conflicts") {
-                        let entries = map(conflicts)?.clone();
-                        for (subject, variants) in entries {
-                            piece(&mut nodes, &subject)?.insert("conflicts".into(), variants);
-                        }
-                        *conflicts = empty();
+                if let Some(context) = scope.get_mut("context")
+                    && let Some(conflicts) = map_mut(context)?.get_mut("conflicts")
+                {
+                    let entries = map(conflicts)?.clone();
+                    for (subject, variants) in entries {
+                        piece(&mut nodes, &subject)?.insert("conflicts".into(), variants);
                     }
+                    *conflicts = empty();
                 }
             }
             let subjects = map(field(report, "nodes")?)?.clone();

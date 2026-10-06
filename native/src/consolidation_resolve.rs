@@ -76,10 +76,10 @@ fn without_filters(cmd: &mut Command, root: &Path, hooks: &Path) -> Result<()> {
         let key = record.split(|b| *b == b'\n').next().unwrap_or_default();
         let key = String::from_utf8(key.to_vec()).map_err(|_| error("resolve_invalid_git_config"))?;
         // `filter.<name>.<variable>`: the name is everything between the two outer dots.
-        if key.get(..7).is_some_and(|prefix| prefix.eq_ignore_ascii_case("filter.")) {
-            if let Some((name, _)) = key[7..].rsplit_once('.') {
-                drivers.insert(name.to_owned());
-            }
+        if key.get(..7).is_some_and(|prefix| prefix.eq_ignore_ascii_case("filter."))
+            && let Some((name, _)) = key[7..].rsplit_once('.')
+        {
+            drivers.insert(name.to_owned());
         }
     }
     for name in drivers {

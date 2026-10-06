@@ -98,7 +98,7 @@ fn edge_handles_survive_navigation_text_detail_but_not_source_changes() {
         .replace("{edge_set_ref}",broad["links"][0][4].as_str().unwrap());
     let mut labels = original.clone();
     for group in labels["groups"].as_array_mut().unwrap() { group.as_object_mut().unwrap().remove("description"); }
-    let expanded = canonical_view::compact(&labels, &[handle.clone()]).unwrap();
+    let expanded = canonical_view::compact(&labels, std::slice::from_ref(&handle)).unwrap();
     assert_eq!(expanded["view_id"], broad["view_id"]);
     assert_eq!(expanded["expanded_edges"].as_array().unwrap().len(),1);
     labels["revision"] = json!("changed-source");

@@ -740,7 +740,7 @@ fn incoming(capture: &Capture, closure: Closure) -> Result<Incoming> {
         "incompatible_domain_profiles",
     )?;
     let graph = closure.graph()?;
-    for (path, _) in &closure.clocks {
+    for path in closure.clocks.keys() {
         let id = Clock::path_id(path).ok_or_else(|| error("source_ancestry_path"))?;
         let held = capture.clocks.parents_of(id);
         require(
@@ -1772,8 +1772,7 @@ mod tests {
         assert!(accepted(&accepted_capture, &bundle, &files, &Files::new()).unwrap());
         let refuse = |snapshot: P::Snapshot, code: &str| {
             let error = Capture::from_snapshot(snapshot)
-                .err()
-                .expect("tampered import accepted")
+                .expect_err("tampered import accepted")
                 .0;
             assert!(
                 error.starts_with("contribution_import_binding") && error.ends_with(code),
@@ -1965,12 +1964,11 @@ mod tests {
                 roles(original.document()),
                 "{deps}"
             );
-            assert_eq!(
+            assert!(
                 entries(captured.document())
                     .unwrap()
                     .digest_eq(&entries(original.document()).unwrap())
-                    .unwrap(),
-                true
+                    .unwrap()
             );
         }
         // Legacy v3 oracle bundles in both profiles.

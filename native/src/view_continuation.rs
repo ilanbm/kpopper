@@ -586,16 +586,15 @@ fn context_texts(path: &Path, session: &str) -> Result<Vec<String>> {
         if v["type"] == "response_item"
             && v["payload"]["type"] == "message"
             && v["payload"]["role"] == "developer"
+            && let Some(content) = v["payload"]["content"].as_array()
         {
-            if let Some(content) = v["payload"]["content"].as_array() {
-                for item in content {
-                    if item["type"] == "input_text"
-                        && let Some(text) = item["text"].as_str()
-                    {
-                        total += text.len();
-                        crate::require(total <= MAX_TAIL as usize, "context scan exceeds limit")?;
-                        found.push(text.to_owned());
-                    }
+            for item in content {
+                if item["type"] == "input_text"
+                    && let Some(text) = item["text"].as_str()
+                {
+                    total += text.len();
+                    crate::require(total <= MAX_TAIL as usize, "context scan exceeds limit")?;
+                    found.push(text.to_owned());
                 }
             }
         }

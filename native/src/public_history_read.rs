@@ -430,13 +430,15 @@ fn clip_history(rows: &[J], archive: &[J], requested: usize) -> (Vec<J>, usize, 
     let kept = rows
         .iter()
         .zip(keep)
-        .filter_map(|(row, selected)| selected.then(|| row.clone()))
+        .filter(|(_, selected)| *selected)
+        .map(|(row, _)| row.clone())
         .collect::<Vec<_>>();
     let omitted = rows.len() - kept.len();
     let kept_archive = archive
         .iter()
         .zip(keep_archive)
-        .filter_map(|(row, selected)| selected.then(|| row.clone()))
+        .filter(|(_, selected)| *selected)
+        .map(|(row, _)| row.clone())
         .collect::<Vec<_>>();
     let omitted_archive = archive.len() - kept_archive.len();
     (kept, omitted, kept_archive, omitted_archive)
@@ -446,6 +448,87 @@ fn clip_history(rows: &[J], archive: &[J], requested: usize) -> (Vec<J>, usize, 
 fn clip_recent_and_heads(rows: &[J], requested: usize) -> (Vec<J>, usize) {
     let (kept, omitted, _, _) = clip_history(rows, &[], requested);
     (kept, omitted)
+}
+
+pub(crate) fn render(
+    node: Option<&crate::history_node_capture::Capture>,
+    legacy: Option<&crate::history_capture::Capture>,
+    imported_archive: Option<&crate::history_node_capture::ReplacedArchive>,
+    prefixes: &[String],
+    chars: Option<i64>,
+    as_json: bool,
+) -> Result<String> {
+    if prefixes.is_empty() {
+        return Ok(String::new());
+    }
+    let (rows, event_parents, archive_rows) = if let Some(capture) = node {
+        let archive = capture.archived_replaced_yaml()?;
+        (
+            node_rows(capture, prefixes)?,
+            capture.historical_event_parents(),
+            legacy_archive_rows(archive.as_ref(), prefixes)?,
+        )
+    } else if let Some(capture) = legacy {
+        let parents = legacy_event_parents(capture)?;
+        let explanations = legacy_explanations(capture, prefixes)?;
+        (
+            legacy_rows(capture, prefixes, &parents, &explanations)?,
+            parents,
+            legacy_archive_rows(imported_archive, prefixes)?,
+        )
+    } else {
+        (vec![], BTreeMap::new(), vec![])
+    };
+    let rows = causal_order(rows, event_parents)?;
+    let requested = chars.unwrap_or(12000).max(1) as usize;
+    // Keep current heads, archived source evidence and recent causal rows within one budget.
+    let (kept, omitted, kept_archive, omitted_archive) =
+        clip_history(&rows, &archive_rows, requested);
+    if as_json {
+        Ok(serde_json::to_string_pretty(
+            &json!({"schema_version":1,"historical_section":{"source":"captured_committed_history","version_ordering":"verified_storage_parent_order","legacy_archive_ordering":"archive source sequence only; no causal order inferred","fresh_observation":false,"complete":omitted==0 && omitted_archive==0,"versions":kept,"omitted_versions":omitted,"legacy_archive_evidence":kept_archive,"omitted_legacy_archive_entries":omitted_archive,"expand_with":"increase --chars or --budget"}}),
+        )? + "\n")
+    } else {
+        let mut out = String::from(
+            "HISTORICAL SECTION (captured committed source; provenance display, not a fresh observation or computation pin)\n",
+        );
+        for row in kept {
+            out.push_str(&human_row(&row)?);
+            out.push('\n');
+        }
+        if !kept_archive.is_empty() {
+            out.push_str("LEGACY ARCHIVE EVIDENCE (verified archived source data; no semantic IDs or event order)\n");
+            for row in kept_archive {
+                let subject = row
+                    .get("subject")
+                    .and_then(J::as_str)
+                    .unwrap_or("unknown subject");
+                let path = row
+                    .get("archive_member")
+                    .and_then(J::as_str)
+                    .unwrap_or("unknown archive member");
+                let digest = row
+                    .get("member_sha256")
+                    .and_then(J::as_str)
+                    .unwrap_or("unknown digest");
+                let entry = row
+                    .get("entry")
+                    .map(serde_json::to_string)
+                    .transpose()?
+                    .unwrap_or_default();
+                out.push_str(&format!(
+                    "{subject} · archived legacy entry from {path} member sha256 {digest} · {entry}\n"
+                ));
+            }
+        }
+        if omitted > 0 {
+            out.push_str(&format!("PARTIAL: {omitted} retained versions omitted; increase --chars or --budget to expand.\n"));
+        }
+        if omitted_archive > 0 {
+            out.push_str(&format!("PARTIAL: {omitted_archive} legacy archive entries omitted; increase --chars or --budget to expand.\n"));
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
@@ -560,86 +643,5 @@ mod tests {
         assert_eq!(rows[1]["current_head"], true);
         assert!(rows[2].get("current_head").is_none());
         assert!(rows[3].get("current_head").is_none());
-    }
-}
-
-pub(crate) fn render(
-    node: Option<&crate::history_node_capture::Capture>,
-    legacy: Option<&crate::history_capture::Capture>,
-    imported_archive: Option<&crate::history_node_capture::ReplacedArchive>,
-    prefixes: &[String],
-    chars: Option<i64>,
-    as_json: bool,
-) -> Result<String> {
-    if prefixes.is_empty() {
-        return Ok(String::new());
-    }
-    let (rows, event_parents, archive_rows) = if let Some(capture) = node {
-        let archive = capture.archived_replaced_yaml()?;
-        (
-            node_rows(capture, prefixes)?,
-            capture.historical_event_parents(),
-            legacy_archive_rows(archive.as_ref(), prefixes)?,
-        )
-    } else if let Some(capture) = legacy {
-        let parents = legacy_event_parents(capture)?;
-        let explanations = legacy_explanations(capture, prefixes)?;
-        (
-            legacy_rows(capture, prefixes, &parents, &explanations)?,
-            parents,
-            legacy_archive_rows(imported_archive, prefixes)?,
-        )
-    } else {
-        (vec![], BTreeMap::new(), vec![])
-    };
-    let rows = causal_order(rows, event_parents)?;
-    let requested = chars.unwrap_or(12000).max(1) as usize;
-    // Keep current heads, archived source evidence and recent causal rows within one budget.
-    let (kept, omitted, kept_archive, omitted_archive) =
-        clip_history(&rows, &archive_rows, requested);
-    if as_json {
-        Ok(serde_json::to_string_pretty(
-            &json!({"schema_version":1,"historical_section":{"source":"captured_committed_history","version_ordering":"verified_storage_parent_order","legacy_archive_ordering":"archive source sequence only; no causal order inferred","fresh_observation":false,"complete":omitted==0 && omitted_archive==0,"versions":kept,"omitted_versions":omitted,"legacy_archive_evidence":kept_archive,"omitted_legacy_archive_entries":omitted_archive,"expand_with":"increase --chars or --budget"}}),
-        )? + "\n")
-    } else {
-        let mut out = String::from(
-            "HISTORICAL SECTION (captured committed source; provenance display, not a fresh observation or computation pin)\n",
-        );
-        for row in kept {
-            out.push_str(&human_row(&row)?);
-            out.push('\n');
-        }
-        if !kept_archive.is_empty() {
-            out.push_str("LEGACY ARCHIVE EVIDENCE (verified archived source data; no semantic IDs or event order)\n");
-            for row in kept_archive {
-                let subject = row
-                    .get("subject")
-                    .and_then(J::as_str)
-                    .unwrap_or("unknown subject");
-                let path = row
-                    .get("archive_member")
-                    .and_then(J::as_str)
-                    .unwrap_or("unknown archive member");
-                let digest = row
-                    .get("member_sha256")
-                    .and_then(J::as_str)
-                    .unwrap_or("unknown digest");
-                let entry = row
-                    .get("entry")
-                    .map(serde_json::to_string)
-                    .transpose()?
-                    .unwrap_or_default();
-                out.push_str(&format!(
-                    "{subject} · archived legacy entry from {path} member sha256 {digest} · {entry}\n"
-                ));
-            }
-        }
-        if omitted > 0 {
-            out.push_str(&format!("PARTIAL: {omitted} retained versions omitted; increase --chars or --budget to expand.\n"));
-        }
-        if omitted_archive > 0 {
-            out.push_str(&format!("PARTIAL: {omitted_archive} legacy archive entries omitted; increase --chars or --budget to expand.\n"));
-        }
-        Ok(out)
     }
 }

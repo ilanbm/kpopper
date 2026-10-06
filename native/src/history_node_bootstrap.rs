@@ -300,7 +300,7 @@ impl Plan {
             !root.join(".kpopper/history.yaml").exists(),
             "bootstrap_existing_history",
         )?;
-        let source = capture_source(&[entry.clone()], &root, ReadMode::Frozen, None)?;
+        let source = capture_source(std::slice::from_ref(&entry), &root, ReadMode::Frozen, None)?;
         require(
             source.history_capture().is_none() && source.node_history_capture().is_none(),
             "bootstrap_existing_history",

@@ -313,11 +313,10 @@ fn ordinary_batch_evidence_cannot_silently_admit_source_clocks() {
     .unwrap_err();
     assert_eq!(error.0, "source_ancestry_admission");
     assert!(
-        target
+        !target
             .path()
             .join("evidence/source-clocks")
             .try_exists()
             .unwrap()
-            == false
     );
 }

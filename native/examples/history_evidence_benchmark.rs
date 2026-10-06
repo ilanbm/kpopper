@@ -29,12 +29,12 @@ fn declarations(v: &V, out: &mut BTreeSet<Vec<String>>) {
     match v {
         V::Map(m) => {
             for (key, value) in m {
-                if ["rests_on", "depends_on", "deps"].contains(&key.as_str()) {
-                    if let Some(mut ids) = strings(value) {
-                        ids.sort();
-                        ids.dedup();
-                        out.insert(ids);
-                    }
+                if ["rests_on", "depends_on", "deps"].contains(&key.as_str())
+                    && let Some(mut ids) = strings(value)
+                {
+                    ids.sort();
+                    ids.dedup();
+                    out.insert(ids);
                 }
                 declarations(value, out);
             }

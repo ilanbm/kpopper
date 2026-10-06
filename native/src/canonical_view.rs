@@ -26,9 +26,7 @@ pub fn add_membership_details(logical: &J, packet: &mut J, requested: &[String])
     let mut dictionary = packet["dictionary"].as_object().cloned().ok_or_else(|| Error("missing membership dictionary".into()))?;
     let mut references = BTreeMap::new();
     for (alias, value) in &dictionary {
-        if value["kind"] == "node" {
-            if let Some(id) = value["original"].as_str() { references.insert(id.to_owned(), alias.clone()); }
-        }
+        if value["kind"] == "node" && let Some(id) = value["original"].as_str() { references.insert(id.to_owned(), alias.clone()); }
     }
     let mut facets = BTreeMap::<String, BTreeSet<String>>::new();
     for row in packet["navigation_facets"]["nodes"].as_array().into_iter().flatten() {
@@ -608,15 +606,14 @@ pub fn compact(packet: &J, requested_edge_sets: &[String]) -> crate::Result<J> {
             if let Some(object) = metadata.as_object_mut() {
                 // Remove copied bodies only when the ordinary JSON value converts
                 // to precisely the same typed body. Missing and null stay distinct.
-                if let Some(source_body) = object.get("body") {
-                    if V::from_json(source_body)
+                if let Some(source_body) = object.get("body")
+                    && V::from_json(source_body)
                         .and_then(|value| value.to_tagged())
                         .ok()
                         .as_ref()
                         == Some(&body)
-                    {
-                        object.remove("body");
-                    }
+                {
+                    object.remove("body");
                 }
                 if object.get("states").is_some()
                     && node.get("uncertainty").is_some()

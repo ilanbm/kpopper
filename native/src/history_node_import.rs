@@ -1184,8 +1184,7 @@ mod restore_tests {
             let output = temp.path().join("restored");
             assert_eq!(
                 restore(&copied, &output)
-                    .err()
-                    .expect("later proposal was silently discarded")
+                    .expect_err("later proposal was silently discarded")
                     .0,
                 "newer_history_not_representable"
             );
