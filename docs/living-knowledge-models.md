@@ -7,6 +7,11 @@ For example, an application can keep its domain model at
 normal kpopper configuration. These are separate records with separate purposes; the model
 does not replace or absorb project knowledge.
 
+To create an installable model plugin, follow [Create a reusable model
+plugin](model-plugins.md) or use the `model` skill. The native companion packages
+the model and its domain skill with a qualified engine. Read/query models need
+no custom adapter; applications that bind private case inputs can supply one.
+
 Treat the model as a complete, versioned bundle: its `GROUNDING.yaml`, its own
 `.gitattributes` file carrying its byte-preservation rules, every retained path covered by those
 rules (including `.kpopper/**`,
@@ -50,9 +55,11 @@ a package registry or an asset-role security boundary.
 The project record is optional. When no project record exists, native project discovery can
 report absence; do not create a blank placeholder or copy the domain model into the project
 record just to make it open. An ordinary configured project record may be external, so a root
-`GROUNDING.yaml` must not be assumed to override configuration. These are application patterns
-using existing explicit APIs, not a new storage mode, automatic migration or general package
-contract. See [project modes](project-modes.md) and [node-history storage](node-history-storage.md).
+`GROUNDING.yaml` must not be assumed to override configuration. These patterns
+use existing explicit APIs, not a new storage mode or automatic migration.
+The optional [model-plugin companion](model-plugins.md) adds a versioned packaging
+and installation contract around them. See [project modes](project-modes.md) and
+[node-history storage](node-history-storage.md).
 
 ## Keep the product and its storage choice distinct
 
@@ -86,7 +93,9 @@ components stay visible as such; they do not establish a conclusion about the ca
 When an application ships a portable bundle, its exporter must select the model closure and
 product files from the exact committed tree and verify their committed bytes. A project record,
 its history and project-only evidence are not part of the model bundle. The application defines
-the portable package contents; this guide does not define a general package format or exporter.
+the portable contents. For native model plugins, use the shared
+[model-plugin builder](model-plugins.md) to validate and package that selected
+closure; a YAML excerpt is not an installable model.
 
 ## Update only from a source review
 
@@ -120,3 +129,7 @@ is missing, the record flags `review_provenance_missing`; an exact review acknow
 without backfilling the author or proving independence. `review` records an assessment and does
 not establish truth. See [consolidation](../skills/consolidate/SKILL.md),
 [write and review](reference.md#write-and-review), and [judgment review semantics](history-contract.md#reviewing-a-changed-judgment).
+
+## Package a reusable model plugin
+
+When people need to install and query a model across projects, keep its native record and complete source/history closure distinct from any project record. Use the [model-plugin authoring guide](model-plugins.md) for the versioned package descriptor, standard read skill, native authoring sequence and prebuilt package builder. A descriptor plus GROUNDING.yaml is still source material, not an installable plugin; the built package must bind its exact model closure, skill and complete engine. Case-specific behavior remains a separately declared application adapter, and personal case values stay outside the canonical model.

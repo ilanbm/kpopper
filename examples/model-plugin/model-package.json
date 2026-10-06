@@ -1,0 +1,21 @@
+{
+  "format": "kpop-model-package/v1",
+  "id": "venue-rates",
+  "version": "0.1.0",
+  "target": "darwin-arm64",
+  "capability": "read",
+  "model": "knowledge/venue-rates/GROUNDING.yaml",
+  "skill": "skills/venue-rates/SKILL.md",
+  "include": [
+    "README.md"
+  ],
+  "engine": {
+    "version": "0.15.1",
+    "sha256": "4b1c3390f4c68f3b8bd50c2e49fee6e5ac5360631ad26dbb5a095b6460d6e1b5",
+    "size": 54947168
+  },
+  "smoke": {
+    "kind": "read",
+    "id": "pricing.standard_hourly_rate"
+  }
+}
