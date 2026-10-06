@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 pub const MAX_BYTES: usize = 8 * 1024 * 1024;
 const OBSERVATION_BYTES: usize = 64 * 1024;
+const MAX_MAINTENANCE_ATTEMPTS_PER_ITEM: usize = 1_000;
 
 #[derive(Clone, Debug)]
 struct Location {
@@ -379,7 +380,7 @@ pub(crate) fn python_json(value: &Value) -> Result<String> {
 
 impl Store {
     pub fn open(workspace: &Path) -> Result<Self> {
-        Self::at(workspace, Utc::now())
+        Self::with_clock(workspace, Utc::now)
     }
 
     pub fn at(workspace: &Path, now: DateTime<Utc>) -> Result<Self> {
@@ -581,7 +582,7 @@ impl Store {
     fn validate_ledger(&self, data: &Value) -> Result<()> {
         let object = data.as_object().ok_or_else(|| error("Unknown or mismatched followups ledger; restore it instead of creating a replacement"))?;
         require(
-            object.get("version") == Some(&json!(1))
+            matches!(object.get("version").and_then(Value::as_u64), Some(1 | 2))
                 && object.get("workspace_key") == Some(&json!(self.location.key)),
             "Unknown or mismatched followups ledger; restore it instead of creating a replacement",
         )?;
@@ -600,6 +601,15 @@ impl Store {
             .unwrap()
             .parse::<chrono_tz::Tz>()
             .map_err(|e| error(format!("invalid time or timezone: {e}")))?;
+        require(
+            object["version"] == 2
+                || !object["items"]
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .any(|item| item["spec"].get("maintenance").is_some()),
+            "Maintenance declarations require the version 2 followup capability boundary",
+        )?;
         for (key, item) in object["items"].as_object().unwrap() {
             let item = item
                 .as_object()
@@ -615,6 +625,42 @@ impl Store {
                 &format!("Invalid followup: {key}"),
             )?;
             self.validate_spec(&item["spec"], data, Some(key))?;
+            for attempt in item["attempts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|attempt| attempt["type"] == "maintenance_inspection")
+            {
+                require(
+                    matches!(
+                        attempt["outcome"].as_str(),
+                        Some("observed" | "unavailable")
+                    ),
+                    "Invalid maintenance attempt outcome",
+                )?;
+                for field in ["policy_digest", "source_ref", "evidence", "attestation"] {
+                    text(attempt.get(field), field)?;
+                }
+                triggers::parse_time(attempt["receipt_at"].as_str().unwrap_or(""), "UTC")?;
+                if let Some(time) = attempt.get("inspected_at").filter(|time| !time.is_null()) {
+                    triggers::parse_time(time.as_str().unwrap_or(""), "UTC")?;
+                }
+                require(
+                    attempt["reason"].as_str().is_some_and(|reason| {
+                        reason.chars().count() <= 2000
+                            && (attempt["outcome"] == "observed" || !reason.is_empty())
+                    }),
+                    "Invalid maintenance attempt reason",
+                )?;
+                if attempt["outcome"] == "observed" {
+                    require(
+                        attempt["observation_digest"].as_str().is_some_and(|hash| {
+                            hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit())
+                        }),
+                        "Invalid maintenance observation digest",
+                    )?;
+                }
+            }
             require(
                 item.get("baseline").is_some_and(Value::is_object),
                 &format!("Invalid followup: {key}"),
@@ -794,7 +840,16 @@ impl Store {
             .as_object()
             .ok_or_else(|| error("A followup specification must be a mapping"))?;
         let allowed = [
-            "id", "title", "why", "how", "task", "related", "when", "scope", "executor",
+            "id",
+            "title",
+            "why",
+            "how",
+            "task",
+            "related",
+            "when",
+            "scope",
+            "executor",
+            "maintenance",
         ];
         let unknown = spec
             .keys()
@@ -838,6 +893,20 @@ impl Store {
             for field in ["title", "why", "how"] {
                 text(spec.get(field), field)?;
             }
+        }
+        if spec.contains_key("maintenance") {
+            crate::maintenance_contract::validate_spec(&Value::Object(spec.clone()))?;
+            let maintenance = &spec["maintenance"];
+            require(
+                maintenance["consent_digest"]
+                    == json!(crate::maintenance_contract::consent_digest(
+                        maintenance["policy_digest"].as_str().unwrap(),
+                        spec["scope"].as_str().unwrap(),
+                        &self.location.key,
+                        data["config"]["record"].as_str().unwrap()
+                    )?),
+                "Maintenance registration belongs to a different workspace, record or scope",
+            )?;
         }
         let references = triggers::referenced_tasks(&spec["when"])?;
         let items = data["items"].as_object().unwrap();
@@ -1014,9 +1083,33 @@ impl Store {
     }
 
     pub fn add(&self, supplied: Value) -> Result<Value> {
-        let supplied = canonical(&supplied)?;
+        let mut supplied = canonical(&supplied)?;
         self.transaction(|data| {
+            if supplied.get("maintenance").is_some() {
+                let scope = supplied
+                    .get("scope")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned();
+                let maintenance = supplied["maintenance"]
+                    .as_object()
+                    .ok_or_else(|| error("maintenance metadata must be a mapping"))?;
+                require(
+                    maintenance
+                        .get("consent_digest")
+                        .is_none_or(Value::is_null),
+                    "Maintenance consent is local and cannot be copied; compile the declaration and explicitly add its proposal",
+                )?;
+                let policy = maintenance
+                    .get("policy_digest")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                supplied["maintenance"]["consent_digest"] = json!(
+                    crate::maintenance_contract::consent_digest(policy, &scope, &self.location.key, data["config"]["record"].as_str().unwrap())?
+                );
+            }
             let executor = self.validate_spec(&supplied, data, None)?;
+            if supplied.get("maintenance").is_some() { data["version"] = json!(2); }
             let key = supplied["id"].as_str().unwrap().to_owned();
             if let Some(existing) = data["items"].get(&key) {
                 if existing["spec"] == supplied {
@@ -1047,11 +1140,14 @@ impl Store {
                     require(root.is_dir(), &format!("The configured task store is unavailable; restore its location: {destination}"))?;
                 }
                 let target = root.join(format!("kp-{key}.md"));
-                let content = format!(
+                let mut content = format!(
                     "# {}\n\n- **When**: {}\n- **Why**: {}\n- **How**: {}\n- **Routine**: Managed by kpop followups {}; use its scan/claim/finish commands.\n",
                     supplied["title"].as_str().unwrap(), python_json(&supplied["when"])? ,
                     supplied["why"].as_str().unwrap(), supplied["how"].as_str().unwrap(), key,
                 );
+                if let Some(maintenance) = supplied.get("maintenance") {
+                    content.push_str(&format!("\n## Maintenance intent snapshot at registration\n\n```json\n{}\n```\n\nRead the claimed ledger specification for current intent. Local registration does not grant source access or host execution permission.\n", serde_json::to_string_pretty(maintenance)?));
+                }
                 if target.exists() {
                     require(
                         target.symlink_metadata()?.file_type().is_file(),
@@ -1374,6 +1470,125 @@ impl Store {
         })
     }
 
+    // Supplied inspection times and selection are host attestations. Receipt time is
+    // generated only inside the local transaction; this path never fetches a source.
+    fn maintenance_report(&self, supplied: Value, allow_value: bool) -> Result<Value> {
+        let report = canonical(&supplied)?;
+        let object = report
+            .as_object()
+            .ok_or_else(|| error("A maintenance inspection report must be a mapping"))?;
+        require(
+            object.keys().all(|key| {
+                [
+                    "id",
+                    "policy_digest",
+                    "source_ref",
+                    "inspected_at",
+                    "inspection",
+                    "evidence",
+                    "reason",
+                    "value",
+                ]
+                .contains(&key.as_str())
+            }),
+            "Unknown maintenance report fields",
+        )?;
+        for field in ["id", "policy_digest", "source_ref", "evidence"] {
+            text(object.get(field), field)?;
+        }
+        require(
+            allow_value || !object.contains_key("value"),
+            "Unavailable maintenance attempts cannot contain a value",
+        )?;
+        let id = object["id"].as_str().unwrap().to_owned();
+        let reason = object
+            .get("reason")
+            .filter(|v| !v.is_null())
+            .map(|v| text(Some(v), "failure reason"))
+            .transpose()?
+            .unwrap_or_default();
+        require(
+            reason.chars().count() <= 2000,
+            "maintenance failure reason exceeds 2000 characters",
+        )?;
+        require(
+            allow_value || !reason.is_empty(),
+            "An unavailable maintenance attempt needs a failure reason",
+        )?;
+        let inspected_at = object
+            .get("inspected_at")
+            .filter(|v| !v.is_null())
+            .map(|v| {
+                let time = v
+                    .as_str()
+                    .filter(|v| v.contains(['T', 't', ' ']))
+                    .ok_or_else(|| error("inspected_at needs a timestamp with explicit offset"))?;
+                triggers::parse_time(time, "UTC")
+            })
+            .transpose()?;
+        self.transaction(|data| {
+            let receipt_at = self.now();
+            let item = Self::item(data, &id)?;
+            let maintenance = &item["spec"]["maintenance"];
+            require(maintenance["kind"] == "source" && maintenance["policy_digest"] == report["policy_digest"] && maintenance["source_ref"] == report["source_ref"], "Maintenance report no longer matches the current policy and source reference")?;
+            require(!matches!(item["state"].as_str(), Some("done" | "cancelled")), "A closed maintenance obligation cannot admit an inspection")?;
+            require(fingerprint(item["task"].as_str().unwrap())?.map(|v| json!(v)).unwrap_or(Value::Null) == item["task_fingerprint"], "Task content changed; explicitly refresh its declaration before inspection")?;
+            let attempts = item["attempts"].as_array().unwrap();
+            require(attempts.len() < MAX_MAINTENANCE_ATTEMPTS_PER_ITEM, "Maintenance attempt history is full; preserve and reconcile the ledger")?;
+            let source_ref = maintenance["source_ref"].as_str().unwrap().to_owned();
+            let usable = report.get("value").is_some_and(|value| match value {
+                Value::Null => false,
+                Value::String(text) => !text.trim().is_empty(),
+                Value::Array(values) => !values.is_empty(),
+                Value::Object(values) => !values.is_empty(),
+                _ => true,
+            });
+            let mut failure = if inspected_at.is_some_and(|time| time > receipt_at) { "Attested inspection time is in the future".into() }
+                else if !allow_value { reason.clone() }
+                else if !reason.is_empty() { reason.clone() }
+                else if !usable { "Inspection did not produce a usable value".into() }
+                else if inspected_at.is_none() { "Inspection supplied no attested inspection time".into() }
+                else if report.get("inspection") != maintenance.get("inspection") { "Attested inspection selection does not match the declared locator/tool semantics".into() }
+                else { String::new() };
+            let evidence = text(report.get("evidence"), "evidence")?;
+            let mut observation = Value::Null;
+            if failure.is_empty() {
+                require(serde_json::to_vec(&report["value"])?.len() <= OBSERVATION_BYTES, "Observation value exceeds 64 KiB")?;
+                let value = json!({"value":report["value"], "observed_at":triggers::stamp(inspected_at.unwrap()), "evidence":evidence});
+                if let Some(old) = data["observations"].get(&source_ref) {
+                    let old_time = triggers::parse_time(old["observed_at"].as_str().unwrap(), "UTC")?;
+                    if old_time > inspected_at.unwrap() || (old_time == inspected_at.unwrap() && old != &value) {
+                        failure = "Observation is older than, or conflicts with, the retained observation".into();
+                    }
+                }
+                if failure.is_empty() {
+                    data["observations"].as_object_mut().unwrap().insert(source_ref.clone(), value.clone());
+                    observation = value;
+                }
+            }
+            let outcome = if failure.is_empty() { "observed" } else { "unavailable" };
+            let attempt = json!({"type":"maintenance_inspection", "outcome":outcome,
+                "policy_digest":report["policy_digest"], "source_ref":source_ref,
+                "receipt_at":triggers::stamp(receipt_at), "inspected_at":inspected_at.map(triggers::stamp),
+                "evidence":evidence, "reason":failure,
+                "observation_digest":if observation.is_null() { Value::Null } else { json!(digest(&observation)?) },
+                "attestation":"host-supplied inspection; no transport/origin authentication"});
+            require(serde_json::to_vec(&attempt)?.len() <= OBSERVATION_BYTES, "Maintenance attempt metadata exceeds 64 KiB")?;
+            data["items"][&id]["attempts"].as_array_mut().unwrap().push(attempt.clone());
+            Ok(json!({"id":id, "outcome":outcome, "attempt":attempt,
+                "policy_digest":report["policy_digest"], "source_ref":source_ref,
+                "receipt_at":triggers::stamp(receipt_at), "observation":observation}))
+        })
+    }
+
+    pub fn record_maintenance_attempt(&self, report: Value) -> Result<Value> {
+        self.maintenance_report(report, false)
+    }
+
+    pub fn inspect_maintenance(&self, report: Value) -> Result<Value> {
+        self.maintenance_report(report, true)
+    }
+
     pub fn claim(
         &self,
         key: &str,
@@ -1492,20 +1707,51 @@ impl Store {
     }
 
     pub fn refresh(&self, key: &str, supplied: Value, evidence: &str) -> Result<Value> {
-        let supplied = canonical(&supplied)?;
+        self.refresh_with_authority(key, supplied, evidence, None)
+    }
+
+    pub fn refresh_with_authority(
+        &self,
+        key: &str,
+        supplied: Value,
+        evidence: &str,
+        authorization_evidence: Option<&str>,
+    ) -> Result<Value> {
+        let mut supplied = canonical(&supplied)?;
+        if let Some(reference) = authorization_evidence {
+            text(
+                Some(&json!(reference)),
+                "existing user authorization reference",
+            )?;
+        }
         text(Some(&json!(evidence)), "reread evidence")?;
         self.transaction(|data|{
             let old=Self::item(data,key)?.clone();
             require(old["claim"].is_null() && !matches!(old["state"].as_str(),Some("done"|"cancelled")),"An active or closed followup cannot be refreshed")?;
             require(supplied["id"]==key,"Refresh must preserve the followup id")?;
+            if supplied.get("maintenance").is_some() {
+                require(supplied["maintenance"].is_object(), "maintenance metadata must be a mapping")?;
+                let same_subjects = |spec: &Value| spec["related"].as_array().map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_owned).collect::<BTreeSet<_>>());
+                let compatible = old["spec"].get("maintenance").is_some()
+                    && old["spec"]["scope"] == supplied["scope"] && same_subjects(&old["spec"]) == same_subjects(&supplied)
+                    && ["kind", "inspection"].iter().all(|field| old["spec"]["maintenance"][*field] == supplied["maintenance"][*field]);
+                require(compatible || authorization_evidence.is_some(), "Inspection scope changed: inspect existing standing user authorization and supply its reference; declaration text is not permission")?;
+                supplied["maintenance"]["consent_digest"] = json!(crate::maintenance_contract::consent_digest(
+                    supplied["maintenance"]["policy_digest"].as_str().unwrap_or(""), supplied["scope"].as_str().unwrap_or(""),
+                    &self.location.key, data["config"]["record"].as_str().unwrap())?);
+            }
+
             let executor=self.validate_spec(&supplied,data,Some(key))?;
+            if supplied.get("maintenance").is_some() { data["version"] = json!(2); }
             let reference=task_reference(supplied.get("task").unwrap_or(&old["task"]).as_str().unwrap_or(""))?;
             require(!data["items"].as_object().unwrap().iter().any(|(other_id,item)|other_id!=key && item["task"]==reference),"This canonical task is already linked")?;
             let graph=self.graph(data)?;
             require(supplied["related"].as_array().unwrap().iter().all(|id|id.as_str().is_some_and(|id|graph.values.contains_key(id))),"Some related graph ids do not exist")?;
             let mut updated=old.clone();
             let item=updated.as_object_mut().unwrap();
-            item["attempts"].as_array_mut().unwrap().push(json!({"outcome":"refreshed","finished_at":triggers::stamp(self.now()),"evidence":evidence,"previous_spec":old["spec"]}));
+            let mut refresh_attempt = json!({"outcome":"refreshed","finished_at":triggers::stamp(self.now()),"evidence":evidence,"previous_spec":old["spec"]});
+            if supplied.get("maintenance").is_some() { refresh_attempt["authorization_reference"] = json!(authorization_evidence); }
+            item["attempts"].as_array_mut().unwrap().push(refresh_attempt);
             item.insert("spec".into(),supplied.clone()); item.insert("executor".into(),json!(executor)); item.insert("task".into(),json!(reference)); item.insert("task_fingerprint".into(),json!(fingerprint(&reference)?)); item.insert("state".into(),json!("waiting")); item.insert("next_at".into(),Value::Null); item.insert("baseline".into(),Self::baseline(&supplied,&graph)); item.insert("baseline_events".into(),Self::event_values(&supplied,data)?); item.insert("generation".into(),json!(old["generation"].as_u64().unwrap()+1));
             Self::mark_core(item,&supplied,&graph);
             data["items"][key]=updated.clone(); Ok(updated)
@@ -1588,6 +1834,21 @@ impl Store {
             );
         data["config"]["record"] = json!(record);
         data["config"]["workspace"] = json!(self.location.workspace);
+        for item in data["items"].as_object_mut().unwrap().values_mut() {
+            if item["spec"].get("maintenance").is_some() {
+                item["spec"]["maintenance"]["consent_digest"] =
+                    json!(crate::maintenance_contract::consent_digest(
+                        item["spec"]["maintenance"]["policy_digest"]
+                            .as_str()
+                            .unwrap(),
+                        item["spec"]["scope"].as_str().unwrap(),
+                        &self.location.key,
+                        record
+                            .to_str()
+                            .ok_or_else(|| error("record path must be UTF-8"))?
+                    )?);
+            }
+        }
         atomic(
             &self.root.join("followups.previous.yaml"),
             &fs::read(&self.path)?,
@@ -1684,5 +1945,67 @@ mod text_contract_tests {
         let value = "日".repeat(12_000);
         assert_eq!(text(Some(&json!(value)), "value").unwrap(), value);
         assert!(text(Some(&json!("日".repeat(12_001))), "value").is_err());
+    }
+}
+
+#[cfg(test)]
+mod fresh_clock_tests {
+    use super::Store;
+    use chrono::{TimeZone, Utc};
+    use serde_json::json;
+    use std::{
+        fs,
+        sync::{Arc, Mutex},
+    };
+
+    #[test]
+    fn production_open_does_not_freeze_the_clock() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join("GROUNDING.yaml"),
+            "meta: {name: Current clock}\nknown: {facts.count: {v: 1}}\n",
+        )
+        .unwrap();
+        let store = Store::open(temp.path()).unwrap();
+        let before = store.now();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert_ne!(
+            store.now(),
+            before,
+            "a retained production store must reread trusted time"
+        );
+    }
+
+    #[test]
+    fn injected_clock_is_reread_for_each_observation() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("project");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(
+            workspace.join("PROVENANCE.yaml"),
+            "meta: {name: Clock fixture, updated: 2026-09-10}\nknown: {facts.count: {v: 1}}\n",
+        )
+        .unwrap();
+        let state = temp.path().join("state");
+        let initial = Utc.with_ymd_and_hms(2026, 9, 10, 12, 0, 0).unwrap();
+        let now = Arc::new(Mutex::new(initial));
+        let injected = now.clone();
+        let store =
+            Store::with_clock_and_state(&workspace, state, move || *injected.lock().unwrap())
+                .unwrap();
+        store.setup(None, "UTC", None, true).unwrap();
+        let report = json!({
+            "ref":"clock-fixture@inspection",
+            "value":{"revision":"current"},
+            "observed_at":"2026-09-10T12:00:01Z",
+            "evidence":"evidence://clock-fixture"
+        });
+        assert!(store.observe(report.clone()).is_err());
+
+        *now.lock().unwrap() = Utc.with_ymd_and_hms(2026, 9, 10, 12, 0, 2).unwrap();
+        assert_eq!(
+            store.observe(report).unwrap()["observed_at"],
+            "2026-09-10T12:00:01Z"
+        );
     }
 }

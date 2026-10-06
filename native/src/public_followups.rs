@@ -39,6 +39,21 @@ pub enum Command {
         #[arg(long)]
         file: String,
     },
+    /// Compile an explicit maintenance declaration into a local proposal.
+    Compile {
+        #[arg(long)]
+        file: String,
+    },
+    /// Record an attested source inspection or retain its unavailable outcome.
+    Inspect {
+        #[arg(long)]
+        file: String,
+    },
+    /// Retain an unavailable source inspection without changing its observation.
+    Attempt {
+        #[arg(long)]
+        file: String,
+    },
     Observe {
         #[arg(long)]
         file: String,
@@ -49,6 +64,9 @@ pub enum Command {
         file: String,
         #[arg(long)]
         evidence: String,
+        /// Reference to existing user authorization for a changed inspection scope.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
     },
     /// Read-only readiness check; never executes a task.
     Scan {
@@ -202,6 +220,13 @@ fn supplied(path: &str) -> Result<Value> {
 }
 
 pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
+    if let Command::Compile { file } = &args.command {
+        let mut proposal = crate::maintenance_contract::compile(&supplied(file)?)?;
+        if file != "-" && proposal["spec"].is_object() {
+            proposal["spec"]["task"] = serde_json::json!(PathBuf::from(file).canonicalize()?);
+        }
+        return Ok(proposal);
+    }
     let store = Store::open(workspace)?;
     match &args.command {
         Command::Setup {
@@ -225,8 +250,21 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
         Command::List => store.list(),
         Command::Show { id } => store.show(id),
         Command::Add { file } => store.add(supplied(file)?),
+        Command::Compile { .. } => unreachable!(),
+        Command::Inspect { file } => store.inspect_maintenance(supplied(file)?),
+        Command::Attempt { file } => store.record_maintenance_attempt(supplied(file)?),
         Command::Observe { file } => store.observe(supplied(file)?),
-        Command::Refresh { id, file, evidence } => store.refresh(id, supplied(file)?, evidence),
+        Command::Refresh {
+            id,
+            file,
+            evidence,
+            authorization_evidence,
+        } => store.refresh_with_authority(
+            id,
+            supplied(file)?,
+            evidence,
+            authorization_evidence.as_deref(),
+        ),
         Command::Scan { limit } => store.scan(*limit),
         Command::Claim {
             id,
