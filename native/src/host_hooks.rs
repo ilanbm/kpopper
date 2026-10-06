@@ -153,25 +153,27 @@ fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
         .as_array()
         .is_some_and(|v| !v.is_empty())
     {
-        json!({
-            "fingerprint":report["maintenance_health"]["fingerprint"],
-            "degraded":report["maintenance_health"]["degraded"],
-            "obligations":report["maintenance_health"]["obligations"].as_array().into_iter().flatten().map(|item|json!({
-                "id":item["id"],"kind":item["kind"],"check_state":item["check_state"],
-                "source_state":item["source_state"],"host_state":item["host_state"],
-                "current_use_adequacy":item["current_use_adequacy"],"use_policy":item["use_policy"],"evidence_requirement":item["evidence_requirement"],
-                "failure_state":item["failure_state"]
-            })).collect::<Vec<_>>()
-        })
+        report["maintenance_health"].clone()
     } else {
         J::Null
     };
     Ok(format!(
-        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission. For material current use, run followups assess over actual requested subject IDs. Disclose failed/expired/unknown evidence explicitly; within_age_window is not current adequacy. Changed observation/model alignment remains pending until actual review. Source truth, applicability, authority and consumer version are separate.",
+        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission. For material current use, run followups assess over the actual requested subject IDs. In the final answer, disclose failed, paused, missing, overdue, stale, or unknown evidence with the actual failure reason and any known observed_at/due_at; do not replace these with a receipt date or invent facts. within_age_window is not current adequacy. Changed observation/model alignment remains pending until actual review. Source truth, applicability, authority and consumer version are separate.",
         serde_json::to_string(
             &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"],"maintenance_health":maintenance_health,"maintenance_omitted":report["maintenance_omitted"],"omitted":report["omitted"],"degraded":report["degraded"]})
         )?
     ))
+}
+fn unavailable_followups(discovery: &str, reason: &str) -> String {
+    if discovery.contains("Maintenance continuity health is unavailable") {
+        discovery.to_owned()
+    } else {
+        format!(
+            "{}\n{}",
+            discovery,
+            crate::onboarding::unavailable_continuity(reason)
+        )
+    }
 }
 fn followups(payload: &J) -> Result<Output> {
     if suppressed(payload) {
@@ -180,61 +182,100 @@ fn followups(payload: &J) -> Result<Output> {
     let Some(owner) = owner(payload) else {
         return Ok(empty());
     };
-    let store = crate::followup_store::Store::open(&cwd(payload)?)?;
-    let discovery = crate::onboarding::maintenance_discovery_notice(
-        &cwd(payload)?,
-        crate::onboarding::guidance().unwrap_or(false),
-    )?;
-    let text = if store.load(false)?.is_none() {
-        discovery
-    } else {
-        let followup = followup_text(&store)?;
-        if followup.is_empty() {
-            discovery
-        } else {
-            format!("{}\n{}", followup, discovery)
-        }
-    };
-    let fingerprint = crate::followup_store::digest(&J::String(text.clone()))?;
-    fs::create_dir_all(&store.root)?;
-    let lock = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(store.root.join("ledger.lock"))?;
-    FileExt::lock_exclusive(&lock)?;
-    let path = store.root.join("delivery.yaml");
-    let mut rows = if path.exists() {
-        crate::history_yaml::decode_source_value(&fs::read(&path)?)?
-            .typed()
-            .to_json()?
-            .as_array()
-            .cloned()
-            .ok_or_else(|| Error("Invalid followup delivery receipts".into()))?
-    } else {
-        vec![]
-    };
-    if rows
-        .iter()
-        .any(|r| r["session"] == owner && r["fingerprint"] == fingerprint)
-    {
+    let requested = cwd(payload)?;
+    let location =
+        crate::public_workspace::locate(&requested, crate::source_capture::ReadMode::Live)?;
+    if location.status != "found" {
         return Ok(empty());
     }
-    rows.retain(|r| r["session"] != owner);
-    if rows.len() > 127 {
-        rows.drain(..rows.len() - 127);
+    let discovery = crate::onboarding::maintenance_discovery_notice(
+        &location.workspace,
+        crate::onboarding::guidance().unwrap_or(false),
+    )
+    .unwrap_or_else(|reason| crate::onboarding::unavailable_continuity(&reason.to_string()));
+    let store = match crate::followup_store::Store::open(&location.workspace) {
+        Ok(store) => store,
+        Err(reason) => {
+            let text = unavailable_followups(&discovery, &reason.to_string());
+            return Ok(Output {
+                stdout: envelope("PostToolUse", &text),
+                ..empty()
+            });
+        }
+    };
+    let text = match store.load(false) {
+        Ok(None) => discovery,
+        Ok(Some(_)) => match followup_text(&store) {
+            Ok(followup) if followup.is_empty() => discovery,
+            Ok(followup) => format!("{}\n{}", followup, discovery),
+            Err(reason) => unavailable_followups(&discovery, &reason.to_string()),
+        },
+        Err(reason) => unavailable_followups(&discovery, &reason.to_string()),
+    };
+    if text.is_empty() {
+        return Ok(empty());
     }
-    rows.push(json!({"session":owner,"fingerprint":fingerprint}));
-    atomic_json(&path, &J::Array(rows))?;
-    Ok(if text.is_empty() {
-        empty()
-    } else {
-        Output {
+    let fingerprint = crate::followup_store::digest(&J::String(text.clone()))?;
+    let already_delivered = (|| -> Result<bool> {
+        fs::create_dir_all(&store.root)?;
+        let lock = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(store.root.join("ledger.lock"))?;
+        FileExt::lock_exclusive(&lock)?;
+        let path = store.root.join("delivery.yaml");
+        let mut rows = if path.exists() {
+            crate::history_yaml::decode_source_value(&fs::read(&path)?)?
+                .typed()
+                .to_json()?
+                .as_array()
+                .cloned()
+                .ok_or_else(|| Error("Invalid followup delivery receipts".into()))?
+        } else {
+            vec![]
+        };
+        if rows
+            .iter()
+            .any(|row| row["session"] == owner && row["fingerprint"] == fingerprint)
+        {
+            return Ok(true);
+        }
+        rows.retain(|row| row["session"] != owner);
+        if rows.len() > 127 {
+            rows.drain(..rows.len() - 127);
+        }
+        rows.push(json!({"session":owner,"fingerprint":fingerprint}));
+        atomic_json(&path, &J::Array(rows))?;
+        Ok(false)
+    })();
+    match already_delivered {
+        Ok(true) => Ok(empty()),
+        Ok(false) => Ok(Output {
             stdout: envelope("PostToolUse", &text),
             ..empty()
+        }),
+        Err(reason) => {
+            let detail = reason
+                .to_string()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(300)
+                .collect::<String>();
+            Ok(Output {
+                stdout: envelope(
+                    "PostToolUse",
+                    &format!(
+                        "{text}\nMaintenance notice delivery state is unavailable: {detail}. The applicable notice is included and may repeat."
+                    ),
+                ),
+                ..empty()
+            })
         }
-    })
+    }
 }
 
 fn watch_text(notice: &J) -> Result<String> {
