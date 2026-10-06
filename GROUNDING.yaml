@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-29
+  updated: 2026-10-06
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -8272,6 +8272,13 @@ sources:
     of: "2026-09-18"
     read: "2026-09-18"
     fidelity: quoted
+  s.release_renumbering:
+    name: "Earlier GitHub releases renumbered into the 0.x series"
+    url: "https://github.com/ilanbm/kpopper/releases"
+    at: "Releases page and remote tags read 2026-10-06: kpopper 0.6.0, 0.7.0, 0.8.0 and 0.8.1 on
+         commits e28bd50, 5acfd0f, f480ea6 and 46368fa, then 0.9.0 through 0.15.1 (Latest); no v1.x
+         tags remain"
+    read: "2026-10-06"
   s.representation_evolution_contract:
     name: "Guarded stored-to-derived representation contract"
     file: "skills/kpopper/EVOLUTION.md"
