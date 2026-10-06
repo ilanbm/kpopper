@@ -379,3 +379,23 @@ fn manual_current_use_release_preserves_periodic_cadence() {
         periodic_next
     );
 }
+
+#[test]
+fn crossed_exact_admitted_cadence_stays_immediately_overdue_without_skipping() {
+    let admitted = Utc.with_ymd_and_hms(2026, 10, 6, 5, 54, 0).unwrap(); // Regina Oct5 23:54
+    let (temp, store, workspace) = fixture(admitted, "America/Regina");
+    let spec = kpop_native::maintenance_contract::compile(&clock_declaration("crossed-check", "America/Regina", "00:20", 1, "2026-10-05T06:20:00Z")).unwrap()["spec"].clone();
+    store.add(spec).unwrap();
+    let row = store.scan(20).unwrap()["items"][0].clone();
+    let claim = store.claim("crossed-check", row["occurrence"].as_str().unwrap(), "reader", None).unwrap();
+    let later = Store::at_in_state(&workspace, &temp.path().join("state"), admitted + chrono::Duration::minutes(34)).unwrap();
+    // A renewal keeps ownership valid across the near-midnight boundary.
+    // Keep the lease live; the boundary tested is next_at, not lease expiry.
+    let mut ledger: Value = serde_json::from_str(&fs::read_to_string(&store.path).unwrap()).unwrap();
+    ledger["items"]["crossed-check"]["claim"]["expires_at"] = json!("2026-10-06T07:00:00Z");
+    fs::write(&store.path, serde_json::to_string(&ledger).unwrap()).unwrap();
+    assert!(later.finish("crossed-check", claim["claim"]["token"].as_str().unwrap(), "checked", "fixture://performed", Some("2026-10-07T06:20:00Z")).is_err());
+    later.finish("crossed-check", claim["claim"]["token"].as_str().unwrap(), "checked", "fixture://performed", Some("2026-10-06T06:20:00Z")).unwrap();
+    assert_eq!(later.show("crossed-check").unwrap()["next_at"], "2026-10-06T06:20:00Z");
+    assert_eq!(later.scan(20).unwrap()["items"][0]["state"], "ready");
+}

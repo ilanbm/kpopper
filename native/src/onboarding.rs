@@ -95,10 +95,8 @@ pub fn guidance() -> Result<bool> {
 }
 
 pub(crate) fn maintenance_choice(workspace: &Path) -> Result<Option<Value>> {
-    Ok(
-        read(&project_dir(workspace)?.join("maintenance-choice.json"))?
-            .and_then(|state| state.get("choice").cloned()),
-    )
+    let state = state_dir()?.parent().and_then(Path::parent).unwrap().to_owned();
+    maintenance_choice_in_state(workspace, &state)
 }
 
 pub(crate) fn maintenance_choice_lock_in_state(
@@ -123,13 +121,35 @@ pub(crate) fn maintenance_choice_in_state(
     workspace: &Path,
     state_home: &Path,
 ) -> Result<Option<Value>> {
-    Ok(read(
-        &state_home
-            .join("kpopper/first-use/projects")
-            .join(project_key(workspace))
-            .join("maintenance-choice.json"),
-    )?
-    .and_then(|state| state.get("choice").cloned()))
+    let _lock = maintenance_choice_lock_in_state(workspace, state_home)?;
+    maintenance_choice_in_state_unlocked(workspace, state_home)
+}
+
+pub(crate) fn maintenance_choice_in_state_unlocked(
+    workspace: &Path,
+    state_home: &Path,
+) -> Result<Option<Value>> {
+    let path = state_home.join("kpopper/first-use/projects")
+        .join(project_key(workspace)).join("maintenance-choice.json");
+    let loaded = read(&path);
+    let invalid = match &loaded {
+        Ok(Some(value)) => !value["choice"].is_object() ||
+            (value["choice"]["state"] == "snoozed" &&
+             value["choice"]["until"].as_str().and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok()).is_none()),
+        Err(reason) => reason.to_string().starts_with("Invalid first-use state"),
+        _ => false,
+    };
+    if invalid {
+        let quarantine = path.with_file_name(format!("maintenance-choice.corrupt-{}.json", uuid::Uuid::new_v4().simple()));
+        fs::rename(&path, &quarantine)?;
+        let unknown = json!({"state":"unknown","choice":"unknown","authorized":false,
+            "reason":"Unreadable maintenance first-use choice; ordinary followup history remains available",
+            "remediation":"Inspect quarantined first-use choice and acknowledge shown, declined, snoozed or authorized again",
+            "quarantined_path":quarantine});
+        write(&path, &json!({"choice":unknown}))?;
+        return Ok(Some(unknown));
+    }
+    Ok(loaded?.and_then(|state| state.get("choice").cloned()))
 }
 
 pub(crate) fn save_maintenance_choice_in_state(
@@ -164,7 +184,7 @@ fn adoption_choice(saved: Option<&Value>) -> String {
     }
     if matches!(
         choice,
-        "shown" | "declined" | "authorized_uninstalled" | "proposed"
+        "shown" | "declined" | "authorized_uninstalled" | "proposed" | "unknown"
     ) {
         choice.into()
     } else {
@@ -177,7 +197,7 @@ fn promotion_allowed(enabled: bool, choice: &str, local_mode: Option<&str>) -> b
         && !matches!(local_mode, Some("paused" | "manual"))
         && !matches!(
             choice,
-            "declined" | "snoozed" | "shown" | "authorized_uninstalled"
+            "declined" | "snoozed" | "shown" | "authorized_uninstalled" | "unknown"
         )
 }
 
@@ -190,6 +210,9 @@ fn saved_choice_allows_promotion(workspace: &Path) -> bool {
 }
 
 pub(crate) fn unavailable_continuity(reason: &str) -> String {
+    if reason.contains("first-use") || reason.contains("adoption snooze") || reason.contains("maintenance-choice") {
+        return format!("Maintenance first-use choice is unknown: {}. Inspect or acknowledge the private maintenance choice again; ordinary ledger history is separate. This choice is not permission or evidence of source refresh.", reason.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(300).collect::<String>());
+    }
     format!(
         "Maintenance continuity health is unavailable from local state: {}. Ledger validation/linked-history failures affect all ledger-backed followups; restore the required retained segments or reconcile an intact backup. Do not fabricate missing history or report checks as healthy or fresh; the record's factual invalidity is not established.",
         reason
@@ -256,12 +279,12 @@ pub(crate) fn maintenance_discovery_notice(workspace: &Path, enabled: bool) -> R
     let choice = adoption_choice(Some(&adoption));
     let local_mode = local_mode.as_deref();
     let promotional = promotion_allowed(enabled, &choice, local_mode);
-    let mut preference = json!({"guidance_enabled":enabled,"choice":choice,"configuration":adoption["configuration"],"authorized":adoption["authorized"],"until":adoption["until"],"evidence":adoption["evidence"],"evidence_ref":adoption["evidence_ref"],"authorization_evidence":adoption["authorization_evidence"],"first_use_choice":saved,"continuity_snapshot":adoption["continuity_snapshot"],"promotion_allowed":promotional});
+    let mut preference = json!({"guidance_enabled":enabled,"choice":choice,"configuration":adoption["configuration"],"authorized":adoption["authorized"],"until":adoption["until"],"evidence":adoption["evidence"],"evidence_ref":adoption["evidence_ref"],"authorization_evidence":adoption["authorization_evidence"],"first_use_choice":saved,"choice_reason":adoption["reason"],"choice_remediation":adoption["remediation"],"continuity_snapshot":adoption["continuity_snapshot"],"promotion_allowed":promotional});
     if let Some(mode) = local_mode {
         preference["local_mode"] = json!(mode);
     }
     let mut notice = format!(
-        "KPOPPER_MAINTENANCE_CHOICE {}. This is a workspace choice, not permission or evidence of refresh. For material current use of declared subjects, assess the actual requested scope and disclose failed, paused, missing, overdue, stale, or unknown evidence in the final answer with the actual failure reason and known observed_at/due_at; never substitute a receipt date or invent facts. Keep unrelated answers quiet. Truthful assessment and disclosure remain active when promotional offers are suppressed. No policy or receipt is created by this notice.",
+        "KPOPPER_MAINTENANCE_CHOICE {}. This is a workspace choice, not permission or evidence of refresh. For any answer about covered declared subjects, including recorded values, assess the actual requested scope when current adequacy matters and disclose failed, paused, missing, overdue, stale, or unknown evidence in the final answer with the actual failure reason and known observed_at/due_at; never substitute a receipt date or invent facts. Keep unrelated answers quiet. Truthful assessment and disclosure remain active when promotional offers are suppressed. No policy or receipt is created by this notice.",
         serde_json::to_string(&preference)?
     );
     if let Some(reason) = continuity_error {
@@ -277,6 +300,11 @@ pub(crate) fn maintenance_discovery_notice(workspace: &Path, enabled: bool) -> R
 }
 
 fn continuity_notice_from_report(report: &Value, include_advisories: bool) -> Option<String> {
+    let mut active_report = report.clone();
+    if let Some(rows) = active_report["maintenance_health"]["obligations"].as_array_mut() {
+        rows.retain(|row| row["check_state"] != "closed");
+    }
+    let report = &active_report;
     let mut lines = Vec::new();
     if report["maintenance_health"]["obligations"]
         .as_array()
@@ -291,7 +319,7 @@ fn continuity_notice_from_report(report: &Value, include_advisories: bool) -> Op
         .as_array()
         .is_some_and(|v| !v.is_empty())
     {
-        lines.push("Before material current use, assess the exact requested subject scope with `kpop followups assess --ids ACTUAL_SUBJECT_IDS`; a read or one-time update alone does not establish future continuity. This recomputes declared closure, native current time, guarded evidence and source/model alignment; age_window alone is not adequacy. Require-live needs a current authorized claim and successful matching inspection, then `--claim-token TOKEN`. The final answer must disclose failed, paused, missing, overdue, stale, or unknown evidence with the actual failure reason and any known observed_at/due_at; do not substitute a receipt date or invent facts. A failed current attempt must be disclosed explicitly; cached policy may retain finite-window evidence with the failure warning. Changed source evidence remains pending until actual ordinary affects/proposal/review/history; `review-source` only correlates an actual review and never accepts a model or grants authority. Domain applicability and consumer artifact/version remain separate.".into());
+        lines.push("Before material current use, assess the exact requested subject scope with `kpop followups assess --ids ACTUAL_SUBJECT_IDS`; a read or one-time update alone does not establish future continuity. This recomputes declared closure, native current time, guarded evidence and source/model alignment; age_window alone is not adequacy. Require-live needs a current authorized claim and successful matching inspection, then `--claim-token TOKEN`. For every covered-subject answer, including recorded values, the final answer must disclose failed, paused, missing, overdue, stale, or unknown evidence with the actual failure reason and any known observed_at/due_at; do not substitute a receipt date or invent facts. A failed current attempt must be disclosed explicitly; cached policy may retain finite-window evidence with the failure warning. Changed source evidence remains pending until actual ordinary affects/proposal/review/history; `review-source` only correlates an actual review and never accepts a model or grants authority. Domain applicability and consumer artifact/version remain separate.".into());
     }
     if include_advisories {
         for row in report["items"]

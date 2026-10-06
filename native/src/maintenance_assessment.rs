@@ -93,6 +93,9 @@ pub(crate) fn assess(
         .as_object()
         .ok_or_else(|| Error("Invalid assessment items".into()))?
     {
+        if matches!(item["state"].as_str(), Some("done" | "cancelled")) {
+            continue;
+        }
         let Some(m) = item["spec"].get("maintenance") else {
             continue;
         };
@@ -121,10 +124,6 @@ pub(crate) fn assess(
         let mut unknown = false;
         let mut stale = false;
         let mut warn = Vec::new();
-        if matches!(item["state"].as_str(), Some("done" | "cancelled")) {
-            unknown = true;
-            policy_reasons.push("maintenance_closed");
-        }
         if !task_current.contains(id) {
             unknown = true;
             policy_reasons.push("task_changed_or_unavailable");

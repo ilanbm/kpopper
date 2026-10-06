@@ -787,7 +787,7 @@ pub fn run(
         )?
         .with_history_review(capture.history_projection())?;
         let prefix_order = prefix_order(capture.source());
-        let output = match command {
+        let mut output = match command {
             "open" => {
                 // A caller that names no files or budgets of its own gets the slot a
                 // session hook fills; one that names any gets exactly what it named.
@@ -881,6 +881,20 @@ pub fn run(
             "affects" => projection.affects(&seeds)?,
             _ => return Err(error("unknown ordinary reader command")),
         };
+        if command == "pull" && !seeds.is_empty() {
+            let scoped = (|| -> Result<Option<J>> {
+                let identity = crate::followup_store::digest(&crate::followup_store::typed_json(&capture.ordinary_document().try_typed()?)?)?;
+                crate::followup_store::Store::open(&location.workspace)?.scoped_read_continuity(&seeds, &identity)
+            })();
+            if let Ok(Some(continuity)) = scoped {
+                if as_json {
+                    // Historical JSON already has an output envelope; retain it.
+                    if let Ok(mut packet) = serde_json::from_str::<J>(&output) {
+                        if packet.is_object() { packet["maintenance_continuity"] = continuity; output = serde_json::to_string_pretty(&packet)? + "\n"; }
+                    } else { output = serde_json::to_string_pretty(&json!({"output":output,"maintenance_continuity":continuity}))? + "\n"; }
+                } else { output.push_str(&format!("\nKPOPPER_SCOPED_CONTINUITY {}\n", serde_json::to_string(&continuity)?)); }
+            }
+        }
         capture.verify()?;
         inventory.verify()?;
         crate::require(

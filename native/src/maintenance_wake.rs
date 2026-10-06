@@ -1,6 +1,12 @@
 //! Local wake compatibility; host readback is attested data, never execution or permission.
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::{Value, json};
+
+// A report can remain live through one scheduled interval and a two-hour delay.
+// This is only freshness of caller-supplied evidence, not host authentication.
+pub(crate) fn reported_liveness_window(days: u64) -> Duration {
+    Duration::days(days.min(36500) as i64) + Duration::hours(2)
+}
 
 pub(crate) fn assess(data: &Value, now: DateTime<Utc>) -> Value {
     let mut result = assess_phase(data, now);
@@ -28,6 +34,14 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
         return json!({"state":"paused_or_missing","mode":mode,"host_state":binding["state"]});
     }
     if binding["cadence"] == "daily" {
+        let phase_observed = binding["phase_observed_at"]
+            .as_str()
+            .or_else(|| binding["observed_at"].as_str())
+            .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+            .map(|v| v.with_timezone(&Utc));
+        if phase_observed.is_none_or(|t| t > now || now.signed_duration_since(t) >= reported_liveness_window(1)) {
+            return json!({"state":"unknown","mode":mode,"reason":"daily_phase_readback_expired_or_missing","reported_liveness_days":1,"grace_hours":2});
+        }
         let phase = binding["time"]
             .as_str()
             .and_then(|v| chrono::NaiveTime::parse_from_str(v, "%H:%M").ok());
@@ -36,6 +50,7 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             .and_then(|v| v.parse::<chrono_tz::Tz>().ok());
         let mut reasons = Vec::new();
         let mut unproven = false;
+        let mut maintenance_phases = serde_json::Map::new();
         for (id, item) in data["items"].as_object().into_iter().flatten() {
             if matches!(item["state"].as_str(), Some("done" | "cancelled")) {
                 continue;
@@ -60,12 +75,16 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             {
                 unproven = true;
                 reasons.push(json!({"id":id,"reason":"daily_recurring_phase_unestablished"}));
+                maintenance_phases.insert(id.clone(), json!("unknown"));
             } else if phase.unwrap() < check_time.unwrap() {
                 reasons.push(json!({"id":id,"reason":"daily_wake_precedes_recurring_check_time","check_time":m["check_time"]}));
+                maintenance_phases.insert(id.clone(), json!("incompatible"));
+            } else {
+                maintenance_phases.insert(id.clone(), json!("compatible"));
             }
         }
         return json!({"state":if reasons.is_empty(){"compatible"}else if unproven{"unknown"}else{"incompatible"},
-            "mode":mode,"basis":"daily_recurring_phase","reasons":reasons,
+            "mode":mode,"basis":"daily_recurring_phase","reasons":reasons,"maintenance_phases":maintenance_phases,"reported_liveness_days":1,"grace_hours":2,
             "required_choice":if reasons.is_empty(){json!([])}else{json!(["repair_daily_phase_with_authorization","manual"])},
             "execution":"unestablished_by_configuration","host_mutation":"none"});
     }
@@ -73,24 +92,24 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
     if descriptor["host"] != binding["host"] || descriptor["id"] != binding["id"] {
         return json!({"state":"unknown","mode":mode,"reason":"native_phase_readback_unestablished","required_choice":["daily_fallback","manual"]});
     }
-    let observed = descriptor["observed_at"]
-        .as_str()
-        .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
-        .map(|v| v.with_timezone(&Utc));
-    if observed
-        .is_none_or(|t| t > now || now.signed_duration_since(t) >= chrono::Duration::hours(24))
-    {
-        return json!({"state":"unknown","mode":mode,"reason":"native_phase_readback_expired_or_missing","required_choice":["daily_fallback","manual"]});
-    }
-    if descriptor["interval_semantics"] != "calendar_days" {
-        return json!({"state":"unknown","mode":mode,"reason":"native_calendar_semantics_unestablished","required_choice":["daily_fallback","manual"]});
-    }
     let Some(days) = descriptor["cadence_days"]
         .as_u64()
         .filter(|n| *n > 0 && *n <= 36500)
     else {
         return json!({"state":"unknown","mode":mode,"reason":"native_interval_unestablished","required_choice":["daily_fallback","manual"]});
     };
+    let observed = descriptor["observed_at"]
+        .as_str()
+        .and_then(|v| DateTime::parse_from_rfc3339(v).ok())
+        .map(|v| v.with_timezone(&Utc));
+    if observed
+        .is_none_or(|t| t > now || now.signed_duration_since(t) >= reported_liveness_window(days))
+    {
+        return json!({"state":"unknown","mode":mode,"reason":"native_phase_readback_expired_or_missing","required_choice":["daily_fallback","manual"],"reported_liveness_days":days,"grace_hours":2});
+    }
+    if descriptor["interval_semantics"] != "calendar_days" {
+        return json!({"state":"unknown","mode":mode,"reason":"native_calendar_semantics_unestablished","required_choice":["daily_fallback","manual"]});
+    }
     let timezone = descriptor["timezone"]
         .as_str()
         .and_then(|v| v.parse::<chrono_tz::Tz>().ok());
@@ -104,6 +123,7 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
     let mut reasons = Vec::new();
     let mut ordinary_unknown = false;
     let mut maintenance_incompatible = false;
+    let mut maintenance_phases = serde_json::Map::new();
     for (id, item) in data["items"].as_object().into_iter().flatten() {
         if matches!(item["state"].as_str(), Some("done" | "cancelled")) {
             continue;
@@ -138,9 +158,12 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             maintenance_incompatible = true;
             reasons.push(json!({"id":id,"reason":"fixed_native_phase_cannot_serve_next_calendar_check","next_at":next.map(|v|v.to_rfc3339())}));
         }
+        maintenance_phases.insert(id.clone(), json!(if compatible { "compatible" } else { "incompatible" }));
     }
-    json!({"state":if maintenance_incompatible{"incompatible"}else if ordinary_unknown{"unknown"}else{"compatible"},"mode":mode,"reasons":reasons,"assessed_at":now.to_rfc3339(),
-        "required_choice":if reasons.is_empty(){json!([])}else{json!(["daily_fallback","manual"])},
+    json!({"state":if maintenance_incompatible{"incompatible"}else{"compatible"},"mode":mode,"reasons":reasons,"maintenance_phases":maintenance_phases,
+        "ordinary_compatibility":if ordinary_unknown{"unknown"}else{"not_applicable_or_separate"},"assessed_at":now.to_rfc3339(),
+        "reported_liveness_days":days,"grace_hours":2,
+        "required_choice":if maintenance_incompatible{json!(["daily_fallback","manual"])}else{json!([])},
         "execution":"unestablished_by_attested_configuration","host_mutation":"none"})
 }
 
@@ -222,4 +245,44 @@ pub(crate) fn select(
             "attestation":"host-supplied normalized phase; no configuration/execution authentication"});
         Ok(json!({"selection":data["daily"]["maintenance_mode"],"wake":assess(data,store.now()),"host_mutation":"none"}))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{assess, reported_liveness_window};
+    use chrono::{Duration, TimeZone, Utc};
+    use serde_json::json;
+
+    #[test]
+    fn weekly_phase_survives_one_day_and_ordinary_items_stay_separate() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let data = json!({"daily":{"binding":{"host":"host","id":"schedule","state":"active"},
+            "maintenance_mode":{"mode":"native","native_readback":{"host":"host","id":"schedule",
+                "observed_at":"2026-10-05T11:00:00Z","cadence_days":7,"interval_semantics":"calendar_days",
+                "timezone":"UTC","anchor_at":"2026-10-06T09:00:00Z"}}},
+            "items":{"weekly":{"id":"weekly","state":"waiting","next_at":"2026-10-13T09:00:00Z",
+                "spec":{"maintenance":{"timezone":"UTC","cadence_days":7}}},
+                "ordinary":{"id":"ordinary","state":"waiting","spec":{"when":{"at":"2027-01-01T00:00:00Z"}}}}});
+        let result = assess(&data, now);
+        assert_eq!(result["state"], "compatible");
+        assert_eq!(result["maintenance_phases"]["weekly"], "compatible");
+        assert_eq!(result["ordinary_compatibility"], "unknown");
+        assert_eq!(reported_liveness_window(7), Duration::days(7) + Duration::hours(2));
+    }
+
+    #[test]
+    fn one_incompatible_maintenance_phase_does_not_change_another() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let data = json!({"daily":{"binding":{"host":"host","id":"schedule","state":"active"},
+            "maintenance_mode":{"mode":"native","native_readback":{"host":"host","id":"schedule",
+                "observed_at":"2026-10-06T10:00:00Z","cadence_days":7,"interval_semantics":"calendar_days",
+                "timezone":"UTC","anchor_at":"2026-10-06T09:00:00Z"}}},
+            "items":{"good":{"id":"good","state":"waiting","next_at":"2026-10-13T09:00:00Z",
+                "spec":{"maintenance":{"timezone":"UTC","cadence_days":7}}},
+                "bad":{"id":"bad","state":"waiting","next_at":"2026-10-13T10:00:00Z",
+                "spec":{"maintenance":{"timezone":"UTC","cadence_days":7}}}}});
+        let result = assess(&data, now);
+        assert_eq!(result["maintenance_phases"]["good"], "compatible");
+        assert_eq!(result["maintenance_phases"]["bad"], "incompatible");
+    }
 }

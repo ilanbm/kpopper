@@ -1374,7 +1374,7 @@ impl Service {
             Ok(packet)
         };
         let ordinary = self.ordinary()?;
-        let (packet, refresh_fingerprint, capture) = if ordinary {
+        let (mut packet, refresh_fingerprint, capture) = if ordinary {
             // Keep the established ordinary recapture and assessment contract.
             let (capture, _, session) = self.ordinary_session()?;
             let full_start = std::time::Instant::now();
@@ -1398,6 +1398,26 @@ impl Service {
             let fingerprint = refresh_enabled.then(|| self.refresh_fingerprint_from_capture(&capture)).transpose()?;
             (packet, fingerprint, capture)
         };
+        if !describe && let SessionCapture::Record(ref record) = capture {
+            let subjects = packet["nodes"].as_array().into_iter().flatten().filter_map(|row| {
+                row["source_id"].as_str().or_else(|| row[0].as_str()
+                    .and_then(|alias| packet["dictionary"][alias]["original"].as_str()))
+                    .map(str::to_owned)
+            }).collect::<Vec<_>>();
+            if !subjects.is_empty() {
+                let captured_identity = if ordinary {
+                    crate::followup_store::digest(&crate::followup_store::typed_json(record.ordinary_document())?)?
+                } else { record.snapshot()?.snapshot_id().to_owned() };
+                match crate::followup_store::Store::open(&self.cwd)
+                    .and_then(|store| store.scoped_read_continuity(&subjects, &captured_identity)) {
+                    Ok(Some(continuity)) => packet["maintenance_continuity"] = continuity,
+                    Ok(None) => {},
+                    Err(reason) => packet["maintenance_continuity"] = json!({"subjects":subjects,
+                        "captured_record_identity":captured_identity,"state":"unknown",
+                        "reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+                }
+            }
+        }
         let serialization_start = std::time::Instant::now();
         let text = if describe { serde_json::to_string(&packet)?+"\n" }
                    else { crate::view_format::render(&packet,self.view_format)? };

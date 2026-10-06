@@ -129,7 +129,10 @@ fn state_path(sid: &str) -> PathBuf {
 }
 
 fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
-    let report = store.scan(3)?;
+    let mut report = store.scan(3)?;
+    if let Some(rows) = report["maintenance_health"]["obligations"].as_array_mut() {
+        rows.retain(|row| row["check_state"] != "closed");
+    }
     let visible=report["items"].as_array().cloned().unwrap_or_default().into_iter().filter(|r|!matches!(r["state"].as_str(),Some("waiting"|"done"|"cancelled"))).map(|r|json!({"id":r["id"],"state":r["state"],"title":r["title"],"reasons":r["reasons"].as_array().into_iter().flatten().take(2).map(|x|J::String(x.as_str().unwrap_or("").chars().take(240).collect())).collect::<Vec<_>>()})).collect::<Vec<_>>();
     if visible.is_empty()
         && report["graph_error"].is_null()
@@ -158,7 +161,7 @@ fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
         J::Null
     };
     Ok(format!(
-        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission. For material current use, run `kpop followups assess --ids ACTUAL_SUBJECT_IDS` over the actual requested subject IDs. In the final answer, disclose failed, paused, missing, overdue, stale, or unknown evidence with the actual failure reason and any known observed_at/due_at; do not replace these with a receipt date or invent facts. within_age_window is not current adequacy. Changed observation/model alignment remains pending until actual review. Source truth, applicability, authority and consumer version are separate.",
+        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission. For material current use, run `kpop followups assess --ids ACTUAL_SUBJECT_IDS` over the actual requested subject IDs. For any answer about a covered subject, including its recorded value, disclose failed, paused, missing, overdue, stale, or unknown evidence with the actual failure reason and any known observed_at/due_at; do not replace these with a receipt date or invent facts. within_age_window is not current adequacy. Changed observation/model alignment remains pending until actual review. Source truth, applicability, authority and consumer version are separate.",
         serde_json::to_string(
             &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"],"maintenance_health":maintenance_health,"maintenance_omitted":report["maintenance_omitted"],"omitted":report["omitted"],"degraded":report["degraded"]})
         )?
@@ -227,12 +230,19 @@ fn followups(payload: &J) -> Result<Output> {
         FileExt::lock_exclusive(&lock)?;
         let path = store.root.join("delivery.yaml");
         let mut rows = if path.exists() {
-            crate::history_yaml::decode_source_value(&fs::read(&path)?)?
-                .typed()
-                .to_json()?
-                .as_array()
-                .cloned()
-                .ok_or_else(|| Error("Invalid followup delivery receipts".into()))?
+            let decoded = (|| -> Result<Vec<J>> {
+                crate::history_yaml::decode_source_value(&fs::read(&path)?)?
+                    .typed().to_json()?.as_array().cloned()
+                    .filter(|rows| rows.iter().all(|row| row["session"].is_string() && row["fingerprint"].is_string()))
+                    .ok_or_else(|| Error("Invalid followup delivery receipts".into()))
+            })();
+            match decoded {
+                Ok(rows) => rows,
+                Err(_) => {
+                    fs::rename(&path, store.root.join(format!("delivery.corrupt-{}.yaml", uuid::Uuid::new_v4().simple())))?;
+                    vec![]
+                }
+            }
         } else {
             vec![]
         };

@@ -33,7 +33,7 @@ fn stale_native_phase_and_ordinary_items_do_not_block_received_catchup() {
     let (_t, store) = fixture(now);
     clock(&store);
     binding(&store);
-    native(&store, now - Duration::hours(25));
+    native(&store, now - Duration::days(8));
     assert_eq!(
         followup_daily::status(&store).unwrap()["wake"]["state"],
         "unknown"
@@ -49,10 +49,9 @@ fn stale_native_phase_and_ordinary_items_do_not_block_received_catchup() {
     .unwrap();
     native(&store, now);
     store.add(json!({"id":"future-task","title":"Future ordinary work","why":"Future work","how":"Read","scope":"Read only","related":["facts.count"],"when":{"at":"2027-01-01T00:00:00Z"}})).unwrap();
-    assert_eq!(
-        followup_daily::status(&store).unwrap()["wake"]["state"],
-        "unknown"
-    );
+    let wake = followup_daily::status(&store).unwrap()["wake"].clone();
+    assert_eq!(wake["state"], "compatible");
+    assert_eq!(wake["ordinary_compatibility"], "unknown");
 }
 #[test]
 fn routine_shown_choice_keeps_zero_maintenance_ledger_v1() {

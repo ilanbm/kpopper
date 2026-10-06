@@ -31,7 +31,8 @@ fn record(workspace: &Path, state: &Path) {
 }
 
 fn command(workspace: &Path, state: &Path, args: &[&str], input: Option<&Value>) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
+    let mut request = Command::new(env!("CARGO_BIN_EXE_kpop"));
+    request
         .args(args)
         .current_dir(workspace)
         .env("XDG_STATE_HOME", state)
@@ -42,9 +43,12 @@ fn command(workspace: &Path, state: &Path, args: &[&str], input: Option<&Value>)
         .env_remove("KPOPPER_SESSION_DISABLE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+        .stderr(Stdio::piped());
+    if workspace.join("resources").exists() {
+        request.env("KPOPPER_NATIVE_RESOURCES", workspace.join("resources"))
+            .env("KPOPPER_NATIVE_CACHE", state.join("cache"));
+    }
+    let mut child = request.spawn().unwrap();
     if let Some(input) = input {
         child
             .stdin
@@ -235,7 +239,11 @@ fn corrupt_delivery_receipt_does_not_drop_the_applicable_notice() {
         .as_str()
         .unwrap();
     assert!(context.contains("source-check"));
-    assert!(context.contains("Maintenance notice delivery state is unavailable"));
+    assert!(fs::read_dir(&store.root).unwrap().flatten().any(|entry| entry.file_name().to_string_lossy().starts_with("delivery.corrupt-")));
+    let repeat = command(&workspace, &state, &["_hook", "followups", "codex"],
+        Some(&json!({"cwd":workspace,"session_id":"delivery-error-session"})));
+    assert!(repeat.status.success());
+    assert!(repeat.stdout.is_empty(), "Recovered delivery state must deduplicate");
 }
 
 #[test]
@@ -264,4 +272,86 @@ fn corrupt_ledger_does_not_replace_start_context_with_an_error() {
         context.contains("Maintenance continuity health is unavailable from local state"),
         "{context}"
     );
+}
+
+#[test]
+fn corrupt_choice_is_scoped_unknown_and_can_be_declined() {
+    let (_temp, workspace, state, store) = source_fixture();
+    save_first_use_choice(&workspace, &state, json!({"state":"shown"}));
+    let project = state.join("kpopper/first-use/projects").join(kpop_native::onboarding::project_key(&workspace.canonicalize().unwrap()));
+    fs::write(project.join("maintenance-choice.json"), "{").unwrap();
+    let status = followup_daily::status_with_maintenance(&store).unwrap();
+    assert_eq!(status["adoption"]["choice"], "unknown");
+    assert!(status["adoption"]["reason"].as_str().unwrap().contains("first-use"));
+    assert!(store.scan(3).is_ok());
+    assert_eq!(followup_daily::record_adoption(&store, "declined", None).unwrap()["choice"], "declined");
+    assert!(fs::read_dir(project).unwrap().flatten().any(|e| e.file_name().to_string_lossy().starts_with("maintenance-choice.corrupt-")));
+}
+
+#[test]
+fn malformed_snooze_is_unknown_without_breaking_status() {
+    let (_temp, workspace, state, store) = source_fixture();
+    save_first_use_choice(&workspace, &state, json!({"state":"snoozed"}));
+    assert_eq!(followup_daily::status_with_maintenance(&store).unwrap()["adoption"]["choice"], "unknown");
+    assert_eq!(followup_daily::record_adoption(&store, "shown", None).unwrap()["choice"], "shown");
+}
+
+#[test]
+fn closed_policy_stays_quiet_in_hook_payload() {
+    let (_temp, workspace, state, store) = source_fixture();
+    store.resolve_with_authority("source-check", "cancelled", "fixture://retired", Some("fixture://user-retired")).unwrap();
+    let output = command(&workspace, &state, &["_hook", "followups", "codex"], Some(&json!({"cwd":workspace,"session_id":"retired-session"})));
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(!text.contains("KPOPPER_FOLLOWUPS"), "{text}");
+    assert!(!text.contains("source-check"), "{text}");
+    let assessment = store.assess_use(&["facts.count".into()], &[]).unwrap();
+    assert!(!assessment.to_string().contains("maintenance_closed"));
+}
+
+fn session_packet(workspace: &Path, state: &Path, subject: &str, format: &str) -> Value {
+    let target = kpop_native::reasoning_runtime::target_name().unwrap();
+    let resources = workspace.join("resources");
+    if !resources.exists() {
+        fs::create_dir_all(resources.join("reasoning")).unwrap();
+        fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/reasoning/native").join(format!("{target}.kpopper-runtime")), resources.join("reasoning").join(format!("{target}.zip"))).unwrap();
+        let ordinary = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM").map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join(".cache/kpopper/lean").join(&target).join(env!("KPOP_ORDINARY_SOURCE_SHA256")));
+        fs::create_dir_all(resources.join("ordinary").join(&target)).unwrap();
+        for name in ["build.json", "epistemic-core"] { fs::copy(ordinary.join(name), resources.join("ordinary").join(&target).join(name)).unwrap(); }
+    }
+    let base = ["--workspace", workspace.to_str().unwrap(), "session", "open", "--no-settings", "--input", "PROVENANCE.yaml", "--project", "maintenance-reader", "--state", "reader-state", "--tokens", "16000"];
+    let opened = command(workspace, state, &base, None);
+    assert!(opened.status.success(), "{}", String::from_utf8_lossy(&opened.stderr));
+    let open_text = String::from_utf8(opened.stdout).unwrap();
+    let revision = open_text.lines().find_map(|line| line.strip_prefix("project=maintenance-reader revision=")).unwrap();
+    let viewed = command(workspace, state, &["--workspace", workspace.to_str().unwrap(), "session", "view", "--no-settings", "--input", "PROVENANCE.yaml", "--project", "maintenance-reader", "--state", "reader-state", "--revision", revision, "--id", subject, "--tokens", "16000", "--view-format", format], None);
+    assert!(viewed.status.success(), "{}", String::from_utf8_lossy(&viewed.stderr));
+    let text = String::from_utf8(viewed.stdout).unwrap();
+    if format == "json" { serde_json::from_str(&text).unwrap() }
+    else { kpop_native::view_format::decode_checked_text(&text).unwrap() }
+}
+
+#[test]
+fn actual_selected_session_view_delivers_failed_check_and_subject_identity_in_all_encodings() {
+    let (_temp, workspace, state, store) = source_fixture();
+    let item = store.show("source-check").unwrap();
+    store.record_maintenance_attempt(json!({"id":"source-check","policy_digest":item["spec"]["maintenance"]["policy_digest"],"source_ref":item["spec"]["maintenance"]["source_ref"],"reason":"provider refused selected read","evidence":"fixture://failure"})).unwrap();
+    for format in ["json", "checked-text-tagged"] {
+        let packet = session_packet(&workspace, &state, "facts.count", format);
+        let continuity = &packet["maintenance_continuity"];
+        assert_eq!(continuity["subjects"], json!(["facts.count"]));
+        assert_eq!(continuity["record_identity_match"], true);
+        assert_eq!(continuity["obligations"][0]["failure"], "provider refused selected read");
+        assert_eq!(continuity["obligations"][0]["source_id"], "fixture-source");
+        assert_eq!(continuity["obligations"][0]["related"], json!(["facts.count"]));
+        assert!(continuity["obligations"][0]["due_at"].is_string());
+        assert!(continuity["disclosure"].as_str().unwrap().contains("recorded values"));
+    }
+    fs::write(workspace.join("PROVENANCE.yaml"), "meta:\n  name: Delivery fixture\nknown:\n  facts.count: {v: 1}\n  facts.other: {v: 2}\n").unwrap();
+    let unrelated = session_packet(&workspace, &state, "facts.other", "json");
+    assert!(unrelated.get("maintenance_continuity").is_none());
+    store.resolve_with_authority("source-check", "cancelled", "fixture://retired", Some("fixture://user-retired")).unwrap();
+    let closed = session_packet(&workspace, &state, "facts.count", "json");
+    assert!(closed.get("maintenance_continuity").is_none());
 }

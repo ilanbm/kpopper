@@ -2114,6 +2114,34 @@ impl Store {
         })
     }
 
+    /// Live continuity scoped to the bodies actually delivered by a captured reader.
+    /// It does not establish adequacy or refresh that reader's record identity.
+    pub(crate) fn scoped_read_continuity(&self, subjects: &[String], captured_identity: &str) -> Result<Option<Value>> {
+        let Some(data) = self.load(false)? else { return Ok(None); };
+        let graph = self.graph(&data)?;
+        let mut closure: BTreeSet<String> = subjects.iter().cloned().collect();
+        let mut pending = subjects.to_vec();
+        while let Some(subject) = pending.pop() {
+            if closure.len() >= 1000 { break; }
+            if let Some(node) = graph.nodes.get(&subject) {
+                for dependency in &node.dependencies {
+                    if closure.insert(dependency.clone()) { pending.push(dependency.clone()); }
+                }
+            }
+        }
+        let mut health = crate::followup_daily::maintenance_health(&data, self.now())?;
+        let rows = health["obligations"].as_array_mut().unwrap();
+        rows.retain(|row| row["check_state"] != "closed" && row["related"].as_array().is_some_and(|ids|
+            ids.iter().filter_map(Value::as_str).any(|id| closure.contains(id))));
+        if rows.is_empty() { return Ok(None); }
+        let matches = graph.record_identity == captured_identity;
+        Ok(Some(json!({"schema":"kpopper.scoped-read-continuity/v1", "subjects":subjects,"assessed_at":triggers::stamp(self.now()),
+            "captured_record_identity":captured_identity,"live_record_identity":graph.record_identity,
+            "record_identity_match":matches,"current_use_adequacy":"unassessed",
+            "captured_record_current_health":if matches {"unassessed"} else {"unknown_record_identity_mismatch"},
+            "obligations":rows,"disclosure":"For every answer about these covered subjects, including recorded values, disclose the actual failed check or overdue/due state and known failure, observed_at and due_at. Preserve the validity of historical recorded values. Live continuity does not refresh or bless the captured record; current adequacy, source truth and authority remain separate."})))
+    }
+
     pub fn assess_use(&self, subjects: &[String], claim_tokens: &[String]) -> Result<Value> {
         let data = self.load(true)?.unwrap();
         let graph = self.graph(&data)?;
@@ -2304,7 +2332,6 @@ impl Store {
             let normalized_next=if outcome=="checked" {
                 let next=next_at.ok_or_else(||error("A completed check needs a justified future next_at"))?;
                 let parsed=triggers::parse_time(next,data["config"]["timezone"].as_str().unwrap())?;
-                require(parsed>self.now(),"A completed check needs a justified future next_at")?;
                 if let Some(maintenance) = item["spec"].get("maintenance") {
                     let days = maintenance["cadence_days"].as_u64().ok_or_else(|| error("Maintenance cadence is unavailable"))?;
                     let timezone = maintenance["timezone"].as_str().unwrap_or("").parse::<chrono_tz::Tz>().map_err(|e| error(format!("invalid maintenance timezone: {e}")))?;
@@ -2317,6 +2344,9 @@ impl Store {
                     let expected = maintenance_local_instant(&timezone, local)
                         .ok_or_else(|| error("Maintenance next check time cannot be resolved"))?;
                     require(parsed == expected, "Maintenance next_at must be cadence_days calendar days after this admitted check at check_time")?;
+                }
+                if item["spec"].get("maintenance").is_none() {
+                    require(parsed>self.now(),"A completed check needs a justified future next_at")?;
                 }
                 Some(triggers::stamp(parsed))
             } else { require(next_at.is_none(),"Only checked outcomes take next_at")?; None };
@@ -2744,5 +2774,32 @@ mod maintenance_calendar_tests {
             maintenance_retry_at(gap_eve, "Europe/Prague", "02:30").as_deref(),
             Some("2026-03-29T01:00:00Z")
         );
+    }
+}
+
+#[cfg(test)]
+mod scoped_continuity_tests {
+    use super::*;
+    use chrono::TimeZone;
+    #[test]
+    fn live_health_cannot_bless_an_old_capture_and_unrelated_or_retired_reads_are_quiet() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("project");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("GROUNDING.yaml"), "meta:\n  name: Continuity scope\nknown:\n  fact.value: {v: 1}\n  fact.other: {v: 2}\n").unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let store = Store::at_in_state(&workspace, &temp.path().join("state"), now).unwrap();
+        store.setup(None, "UTC", None, true).unwrap();
+        let declaration = json!({"schema":"kpopper.maintenance-declaration/v1","kind":"clock","id":"clock-check","title":"Clock check","why":"Current clock","how":"Read clock","scope":"Read only","related":["fact.value"],"cadence_days":1,"timezone":"UTC","check_time":"09:00","use_policy":"require_live","evidence_requirement":"trusted_clock","deadline":{"utc":"2026-10-05T09:00:00Z"}});
+        store.add(crate::maintenance_contract::compile(&declaration).unwrap()["spec"].clone()).unwrap();
+        let captured = store.graph(&store.load(true).unwrap().unwrap()).unwrap().record_identity;
+        assert_eq!(store.scoped_read_continuity(&["fact.value".into()], &captured).unwrap().unwrap()["record_identity_match"], true);
+        fs::write(workspace.join("GROUNDING.yaml"), "meta:\n  name: Continuity scope\nknown:\n  fact.value: {v: 3}\n  fact.other: {v: 2}\n").unwrap();
+        let stale = store.scoped_read_continuity(&["fact.value".into()], &captured).unwrap().unwrap();
+        assert_eq!(stale["record_identity_match"], false);
+        assert_eq!(stale["captured_record_current_health"], "unknown_record_identity_mismatch");
+        assert!(store.scoped_read_continuity(&["fact.other".into()], &captured).unwrap().is_none());
+        store.resolve_with_authority("clock-check", "cancelled", "fixture://closed", Some("fixture://user-closed")).unwrap();
+        assert!(store.scoped_read_continuity(&["fact.value".into()], &captured).unwrap().is_none());
     }
 }
