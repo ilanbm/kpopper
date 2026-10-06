@@ -1,0 +1,4 @@
+interface:
+  display_name: "kpopper"
+  short_description: "Keep a checkable record of what is known and why"
+  default_prompt: "Use $kpopper to choose the right way to keep this project's knowledge record."

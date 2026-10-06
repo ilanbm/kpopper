@@ -1,0 +1,4 @@
+interface:
+  display_name: "kpop annotated documents"
+  short_description: "Share a standalone HTML document backed by its evidence"
+  default_prompt: "Use $annotated-doc to write a standalone HTML document with its evidence."

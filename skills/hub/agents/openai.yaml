@@ -1,0 +1,4 @@
+interface:
+  display_name: "kpop hub"
+  short_description: "Explore the knowledge record in its visual home"
+  default_prompt: "Use $hub to build and open the visual home of this project's knowledge record."
