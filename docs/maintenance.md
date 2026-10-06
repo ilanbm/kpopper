@@ -97,7 +97,10 @@ observation is retained by digest in `observation-history/`; its attempt names t
 history directories together for backup, relocation of state, or recovery. To recover missing
 or damaged history, restore the exact digest-named segment from that backup; never delete or
 rewrite an archive reference to bypass the failure. Completed request idempotence includes
-retained segments. Local retention needs available disk space; a write/storage failure is an
+retained segments. Retention writes use atomic replacement. An interrupted or damaged
+unreferenced file can be reconstructed from complete retained/report evidence; damaged bytes
+are preserved in a `.corrupt-...json` file first. Referenced history that cannot be reconstructed
+still requires the exact backup; a missing receipt is never invented. Local retention needs available disk space; a write/storage failure is an
 explicit failure, not a successful refresh. No cumulative attempt cap disables an obligation.
 
 Authorized edits within the existing inspection scope use `followups refresh --evidence ...`.

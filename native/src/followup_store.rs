@@ -854,29 +854,7 @@ impl Store {
             let segment = json!({"schema":"kpopper.followup-attempts/v1", "workspace_key":self.location.key,
                 "id":id, "previous":item.get("attempt_archive").cloned().unwrap_or(Value::Null),
                 "attempts":archived.into_iter().map(|(_, a)|a.clone()).collect::<Vec<_>>()});
-            let hash = digest(&segment)?;
-            let directory = self.root.join("attempt-history");
-            fs::create_dir_all(&directory)?;
-            require(
-                directory.symlink_metadata()?.file_type().is_dir(),
-                "Attempt history must not be a symlink",
-            )?;
-            let path = directory.join(format!("{hash}.json"));
-            let raw = serialized_value(&segment)?;
-            match OpenOptions::new().write(true).create_new(true).open(&path) {
-                Ok(mut file) => {
-                    file.write_all(&raw)?;
-                    file.sync_all()?;
-                    File::open(&directory)?.sync_all()?;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    require(
-                        path.symlink_metadata()?.file_type().is_file() && fs::read(&path)? == raw,
-                        "Retained attempt segment is corrupt; preserve and restore its exact evidence",
-                    )?;
-                }
-                Err(e) => return Err(e.into()),
-            }
+            let hash = self.retain_digest_value("attempt-history", &segment)?;
             let hot = hot.into_iter().map(|(_, a)| a.clone()).collect::<Vec<_>>();
             item["attempts"] = json!(hot);
             item["attempt_archive"] = json!(hash);
@@ -884,31 +862,41 @@ impl Store {
         Ok(())
     }
 
-    fn retain_observation(&self, observation: &Value) -> Result<()> {
-        let hash = digest(observation)?;
-        let directory = self.root.join("observation-history");
+    fn retain_digest_value(&self, directory_name: &str, value: &Value) -> Result<String> {
+        let hash = digest(value)?;
+        let directory = self.root.join(directory_name);
         fs::create_dir_all(&directory)?;
         require(
             directory.symlink_metadata()?.file_type().is_dir(),
-            "Observation history must not be a symlink",
+            "Retained evidence directory must not be a symlink",
         )?;
         let path = directory.join(format!("{hash}.json"));
-        let raw = serialized_value(observation)?;
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(mut file) => {
-                file.write_all(&raw)?;
-                file.sync_all()?;
-                File::open(&directory)?.sync_all()?;
+        let raw = serialized_value(value)?;
+        if let Ok(metadata) = path.symlink_metadata() {
+            require(
+                metadata.file_type().is_file() && metadata.len() <= MAX_BYTES as u64,
+                "Retained evidence is not a bounded regular file; preserve and restore its exact evidence",
+            )?;
+            let prior = fs::read(&path)?;
+            if parse_input(&prior).is_ok_and(|old| digest(&old).is_ok_and(|actual| actual == hash))
+            {
+                return Ok(hash);
             }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                require(
-                    path.symlink_metadata()?.file_type().is_file() && fs::read(&path)? == raw,
-                    "Retained observation is corrupt; preserve and restore its exact evidence",
-                )?;
-            }
-            Err(e) => return Err(e.into()),
+            // A previous interrupted write or damaged, unreferenced file may be
+            // reconstructed from the complete value still held by the ledger/report.
+            // Preserve every damaged byte before restoring the exact named digest.
+            atomic(
+                &directory.join(format!("{hash}.corrupt-{}.json", Uuid::new_v4())),
+                &prior,
+            )?;
         }
-        Ok(())
+        atomic(&path, &raw)?;
+        Ok(hash)
+    }
+
+    fn retain_observation(&self, observation: &Value) -> Result<()> {
+        self.retain_digest_value("observation-history", observation)
+            .map(|_| ())
     }
 
     fn has_recorded_request(&self, item: &Value, request: &Value) -> Result<bool> {
