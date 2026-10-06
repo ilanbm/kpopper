@@ -446,10 +446,15 @@ fn orientation(source: &crate::ordinary_source::Source) -> Vec<String> {
 }
 /// Whether a failure is the reader's account of a record it cannot read: one whose field
 /// roles it cannot take, one that is not there, or one whose file does not parse. Commands
-/// print it as it stands, with exit status 1, as the Python reader does.
+/// print it as it stands, with exit status 1, as the Python reader does. A record that is
+/// not there may be followed by a line naming where one exists on another branch.
 pub fn unreadable_record(failure: &crate::Error) -> bool {
     crate::ordinary_fields::explains_unreadable(failure)
-        || failure.0.ends_with(NO_RECORD_HERE)
+        || failure
+            .0
+            .lines()
+            .next()
+            .is_some_and(|first| first.ends_with(NO_RECORD_HERE))
         || crate::ordinary_yaml_diagnostic::explains_record(failure)
 }
 /// Whether a failure is the ordinary reader's refusal of a record, or of a layer read with

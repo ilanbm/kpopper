@@ -2622,18 +2622,34 @@ fn where_and_check_name_a_record_another_worktree_holds() {
         "No record on this branch; one exists on feat-a in worktree {wa_shown}. Bring it in with `git merge feat-a`, or work in that worktree, rather than starting a second record here.\n"
     );
     assert_eq!(quiet(&["where"]), (Some(1), on_feat_a.clone()));
-    assert_eq!(
-        quiet(&["check"]),
-        (
-            Some(2),
-            format!(
-                "kpop check: {}{on_feat_a}",
-                no_record_here("GROUNDING.yaml")
-            )
-        )
-    );
+    // check keeps its refusal and exit status, and adds the same line.
+    let refusal = format!("{}{on_feat_a}", no_record_here("GROUNDING.yaml"));
+    assert_eq!(quiet(&["check"]), (Some(1), refusal.clone()));
+    let output = cli(&wb, &["--json", "check"], &private);
+    assert_eq!(output.status.code(), Some(1));
+    let result: J = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["exit_code"], 1);
+    assert_eq!(result["error"], refusal);
 
-    // Once the record reaches the default branch, that is where it is named.
+    // Once the record reaches the default branch, that is where it is named, even before
+    // the remote's copy of that branch has it.
+    let output = Command::new("git")
+        .args(["-C", base.to_str().unwrap(), "rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    let pushed = String::from_utf8(output.stdout).unwrap();
+    git(
+        &base,
+        &["update-ref", "refs/remotes/origin/main", pushed.trim()],
+    );
+    git(
+        &base,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
     git(&base, &["merge", "-q", "--ff-only", "feat-a"]);
     let output = Command::new("git")
         .args(["-C", base.to_str().unwrap(), "rev-parse", "--short", "HEAD"])

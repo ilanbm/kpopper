@@ -12,8 +12,9 @@ use std::{
 const ENTRIES: [&str; 2] = ["GROUNDING.yaml", "PROVENANCE.yaml"];
 
 /// One line naming where a record exists for a workspace that has none, with how to
-/// bring it in. A branch read needs a record of its own here, so the way in is a merge. None outside Git, for a configured or registered record, or when no
-/// other branch or worktree holds one.
+/// bring it in. The way in is a merge: reading another branch needs a record here first.
+/// None outside Git, for a configured or registered record, or when no other branch or
+/// worktree holds one.
 pub fn line(cwd: &Path) -> Option<String> {
     let project = Project::open(cwd).ok()?;
     let common = project.common.as_ref()?;
@@ -28,17 +29,18 @@ pub fn line(cwd: &Path) -> Option<String> {
         return None;
     }
     let current = text(root, &["symbolic-ref", "-q", "--short", "HEAD"]);
-    if let Some(default) = default_branch(root)
-        && current.as_deref() != Some(default.as_str())
-        && committed(root, &default)
-        && let Some(commit) = text(
-            root,
-            &["rev-parse", "--short", &format!("{default}^{{commit}}")],
-        )
-    {
-        return Some(format!(
-            "No record on this branch; one exists on {default} at {commit}. Bring it in with `git merge {default}`, or check out that branch, rather than starting a second record here."
-        ));
+    for default in default_branches(root) {
+        if current.as_deref() != Some(default.as_str())
+            && committed(root, &default)
+            && let Some(commit) = text(
+                root,
+                &["rev-parse", "--short", &format!("{default}^{{commit}}")],
+            )
+        {
+            return Some(format!(
+                "No record on this branch; one exists on {default} at {commit}. Bring it in with `git merge {default}`, or check out that branch, rather than starting a second record here."
+            ));
+        }
     }
     let own = root.canonicalize().ok()?;
     for (path, branch) in worktrees(root) {
@@ -63,29 +65,38 @@ pub fn line(cwd: &Path) -> Option<String> {
     None
 }
 
-/// The remote's default branch when one is known, else a local main or master.
-fn default_branch(root: &Path) -> Option<String> {
+/// The default branch, local first: the branch the remote's HEAD names, then the remote
+/// branch itself, or a local main or master when the remote names none.
+fn default_branches(root: &Path) -> Vec<String> {
+    let local = |name: &str| {
+        text(
+            root,
+            &[
+                "rev-parse",
+                "--verify",
+                "-q",
+                &format!("refs/heads/{name}^{{commit}}"),
+            ],
+        )
+        .is_some()
+    };
     if let Some(remote) = text(
         root,
         &["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"],
     ) {
-        return Some(remote);
+        let name = remote.strip_prefix("origin/").unwrap_or(&remote).to_owned();
+        return if local(&name) {
+            vec![name, remote]
+        } else {
+            vec![remote]
+        };
     }
     ["main", "master"]
         .into_iter()
+        .filter(|name| local(name))
+        .take(1)
         .map(str::to_owned)
-        .find(|name| {
-            text(
-                root,
-                &[
-                    "rev-parse",
-                    "--verify",
-                    "-q",
-                    &format!("refs/heads/{name}^{{commit}}"),
-                ],
-            )
-            .is_some()
-        })
+        .collect()
 }
 
 /// Whether the ref's tree holds a record entry at the repository's root.
