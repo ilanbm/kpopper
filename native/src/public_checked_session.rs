@@ -971,9 +971,10 @@ impl Service {
         let compact = json!({"schema":candidate["schema"],"state":"advisory_decision_pointer",
             "subjects":candidate["subjects"],"record_refs":candidate["record_refs"],
             "captured_record_identity":candidate["captured_record_identity"],"kind":"unestablished",
-            "applicability":"agent_task_assessment_required","details_omitted_for_budget":true,
-            "obligation":"Reason within the original authorized task only; no mapping/capture/report/extra writes. If represented continuing work or future knowledge validity depends on a pending clock, propose a concrete clock-only native-time check, without source fetch. For a changing named input actually used, propose named-source inspection, not a reminder substitute. Keep stable/historical/closed/oneoff/suppressed quiet. No policy or consent is created."});
-        let marker = json!({"schema":candidate["schema"],"state":"advisory_details_omitted_for_budget"});
+            "applicability":"agent_task_assessment_required","details_omitted_for_budget":true,"retrieval_hint":"Repeat the same validated read/view with larger --tokens for complete advisory details; record_refs refer to source evidence only.",
+            "obligation":"Reason within the original authorized task only; no mapping/capture/report/extra writes. Do not infer need, volatility, policy or authority from names or source prose. If represented continuing work or future knowledge validity depends on a pending clock, propose a concrete clock-only native-time check, without source fetch. For a changing named input actually used, propose named-source inspection, not a reminder substitute. Keep stable/historical/closed/oneoff/unrelated/suppressed quiet. No policy or consent is created."});
+        let marker = json!({"schema":candidate["schema"],"state":"advisory_details_omitted_for_budget",
+            "subjects":candidate["subjects"],"retrieval_hint":"Repeat same read with larger --tokens for advisory details"});
         for value in [candidate, compact, marker] {
             let mut proposed = packet.clone(); proposed["maintenance_discovery"] = value;
             let text = crate::view_format::render(&proposed, format)?;
@@ -989,9 +990,14 @@ impl Service {
         let subjects = &scope.subjects;
         let mut metadata = json!({});
         if !scope.complete {
-            metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,
-                "state":"unknown","reason":"body_bearing_reference_scope_unresolved",
-                "scope":"actual_read_scope_incomplete_record_invalidity_not_established"});
+            match crate::followup_store::Store::open(&self.cwd).and_then(|store| store.read_continuity_snapshot(identity, &self.input)) {
+                Ok(None) => {}, // No active obligation for this captured record: quiet.
+                Ok(Some(_)) => metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,
+                    "state":"unknown","reason":"body_bearing_reference_scope_unresolved",
+                    "scope":"actual_read_scope_incomplete_record_invalidity_not_established"}),
+                Err(reason) => metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,
+                    "state":"unknown","reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+            }
         } else if !subjects.is_empty() {
             match crate::followup_store::Store::open(&self.cwd).and_then(|store| store.scoped_read_continuity(subjects, identity, &self.input)) {
                 Ok(Some(value)) => metadata["maintenance_continuity"] = value,
@@ -1016,8 +1022,20 @@ impl Service {
         let original = read(remaining)?;
         let mut packet: J = match serde_json::from_str(&original) {
             Ok(packet) => packet,
-            Err(_) if !required => return Ok(original),
-            Err(_) => json!({"output":original}),
+            Err(_) => {
+                // Established branch/map readers remain plain text in both states.
+                let mut text = original;
+                if let Some(continuity) = metadata.get("maintenance_continuity") {
+                    text.push_str(&format!("\nKPOPPER_SCOPED_CONTINUITY {}\n", serde_json::to_string(continuity)?));
+                }
+                crate::require(self.store.encoding().count(&text) <= tokens, "branch evidence and required scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
+                // Optional advice cannot change this representation or displace evidence.
+                if let Some(candidate) = discovery {
+                    let footer = format!("\nKPOPPER_MAINTENANCE_DISCOVERY {}\n",serde_json::to_string(&candidate)?);
+                    if self.store.encoding().count(&(text.clone()+&footer)) <= tokens {text.push_str(&footer);}
+                }
+                return Ok(text);
+            },
         };
         packet.as_object_mut().unwrap().extend(metadata.as_object().unwrap().clone());
         self.attach_optional_discovery(&mut packet, discovery, Some(tokens), crate::view_format::ViewFormat::Json)?;

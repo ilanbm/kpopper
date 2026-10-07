@@ -103,14 +103,6 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             } else if phase.unwrap() < check_time.unwrap() {
                 reasons.push(json!({"id":id,"reason":"daily_wake_precedes_recurring_check_time","check_time":m["check_time"]}));
                 maintenance_phases.insert(id.clone(), json!("incompatible"));
-            } else if !inspection_recent && matches!(
-                (execution_day.as_ref(), executed.as_ref(), zone.as_ref(), check_time.as_ref()),
-                (Some(day), Some(actual), Some(zone), Some(check))
-                    if actual.with_timezone(zone).naive_local() < day.and_time(*check)
-            ) {
-                unproven = true;
-                reasons.push(json!({"id":id,"reason":"scheduled_execution_precedes_check_time","check_time":m["check_time"]}));
-                maintenance_phases.insert(id.clone(), json!("unknown"));
             } else {
                 maintenance_phases.insert(id.clone(), json!("compatible"));
             }

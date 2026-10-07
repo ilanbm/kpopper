@@ -650,7 +650,14 @@ pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Val
             observation.and_then(|value| value["observed_at"].as_str())
                 .and_then(|value| parse_time(value, "UTC").ok())
                 .and_then(|observed| maintenance["max_age_hours"].as_f64().filter(|age| age.is_finite() && *age > 0.0)
-                    .and_then(|age| observed.checked_add_signed(Duration::nanoseconds((age * 3_600_000_000_000.0).round() as i64))))
+                    .and_then(|age| {
+                        let seconds = age * 3600.0;
+                        if !seconds.is_finite() || seconds >= i64::MAX as f64 {return None;}
+                        let whole = seconds.floor() as i64;
+                        let nanos = ((seconds - seconds.floor()) * 1_000_000_000.0).round() as i64;
+                        Duration::try_seconds(whole).and_then(|duration| duration.checked_add(&Duration::nanoseconds(nanos)))
+                            .and_then(|duration| observed.checked_add_signed(duration))
+                    }))
                 .map(stamp)
         };
         let latest_attempt_at = last_attempt.and_then(|attempt| attempt["inspected_at"].as_str());
@@ -1257,8 +1264,8 @@ fn default_watch_request(workspace: &Path) -> Result<Option<Value>> {
 #[cfg(test)]
 mod daily_repair_tests {
     use super::{active_snooze, adoption_status, binding_epoch, clear_choice_repair_metadata,
-        maintenance_health, phase_observation_for_plain_bind, reported_host_execution};
-    use chrono::{TimeZone, Utc};
+        maintenance_health, phase_observation_for_plain_bind, reported_host_execution, stamp};
+    use chrono::{Duration, TimeZone, Utc};
     use serde_json::json;
 
     #[test]
@@ -1374,4 +1381,17 @@ mod daily_repair_tests {
         assert_eq!(inspected["obligations"][0]["failure_at"], "2026-09-22T09:55:00Z");
         assert_eq!(inspected["obligations"][0]["observed_at"], "2026-09-15T09:00:00Z");
     }
+    #[test]
+    fn evidence_expiry_handles_large_accepted_age_without_nanosecond_saturation() {
+        let observed=Utc.with_ymd_and_hms(2026,10,7,0,0,0).unwrap();
+        for age in [24u64,10_000_000,23_999_999_999] {
+            let data=json!({"daily":{"binding":null},"observations":{"source-ref":{"observed_at":stamp(observed),"value":"retained"}},
+                "items":{"check":{"id":"check","state":"waiting","next_at":"2030-01-01T00:00:00Z","spec":{"maintenance":{"kind":"source","source_ref":"source-ref","max_age_hours":age}},"attempts":[]}}});
+            let health=maintenance_health(&data,observed).unwrap();
+            let expected=observed.checked_add_signed(Duration::hours(age as i64)).map(stamp);
+            assert_eq!(health["obligations"][0]["evidence_expires_at"],json!(expected));
+            assert_eq!(health["obligations"][0]["source_state"],"within_age_window");
+        }
+    }
+
 }

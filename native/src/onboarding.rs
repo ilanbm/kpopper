@@ -500,7 +500,7 @@ pub fn mark(workspace: &Path, event: &str) -> Result<Value> {
             &json!({"shown":true}),
         )?;
     }
-    if event == "followups" {
+    if event == "followups" && crate::public_workspace::locate(workspace, crate::source_capture::ReadMode::Live).is_ok_and(|location| location.status == "found") {
         if let Ok(store) = crate::followup_store::Store::open(workspace) {
             crate::followup_daily::record_adoption(&store, "shown", None)?;
         }
@@ -539,7 +539,7 @@ pub fn mark_key(
             &json!({"shown":true}),
         )?;
     }
-    if event == "followups" {
+    if event == "followups" && crate::public_workspace::locate(workspace, crate::source_capture::ReadMode::Live).is_ok_and(|location| location.status == "found") {
         if let Ok(store) = crate::followup_store::Store::open(workspace) {
             crate::followup_daily::record_adoption(&store, "shown", None)?;
         }

@@ -500,9 +500,13 @@ fn bare_and_group_exact_refs_preserve_required_health_without_invented_subjects(
     for reference in ["facts.count","node:facts.count","conditions:/","/"] {
         let out=reader_command(&workspace,&state,"read",Some(revision),&["--ref",reference,"--tokens","4000"]);
         assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
-        let packet:Value=serde_json::from_slice(&out.stdout).unwrap();
-        assert_eq!(packet["maintenance_continuity"]["subjects"],json!(["facts.count"]));
-        assert_eq!(packet["maintenance_continuity"]["obligations"][0]["failure"],"provider unavailable");
+        let continuity = if reference == "/" {
+            let text=String::from_utf8(out.stdout).unwrap(); assert!(text.starts_with("revision="));
+            let row=text.lines().find_map(|line|line.strip_prefix("KPOPPER_SCOPED_CONTINUITY ")).unwrap();
+            serde_json::from_str::<Value>(row).unwrap()
+        } else {serde_json::from_slice::<Value>(&out.stdout).unwrap()["maintenance_continuity"].clone()};
+        assert_eq!(continuity["subjects"],json!(["facts.count"]));
+        assert_eq!(continuity["obligations"][0]["failure"],"provider unavailable");
     }
     let out=reader_command(&workspace,&state,"read",Some(revision),&["--ref","source:record","--tokens","4000"]);
     assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
@@ -521,4 +525,42 @@ fn ledgerless_documented_shown_ack_and_state_precedence_suppress_discovery() {
     assert!(session_packet(&workspace,&state,"facts.count","json").get("maintenance_discovery").is_none());
     save_first_use_choice(&workspace,&state,json!({"state":"declined","choice":"proposed"}));
     assert!(session_packet(&workspace,&state,"facts.count","json").get("maintenance_discovery").is_none());
+}
+
+#[test]
+fn unresolved_refs_without_active_maintenance_are_quiet_at_small_budgets() {
+    let temp=tempfile::tempdir().unwrap(); let workspace=temp.path().join("project"); let state=temp.path().join("state");
+    fs::create_dir(&workspace).unwrap(); fs::create_dir(&state).unwrap(); record(&workspace,&state);
+    let initial=session_packet(&workspace,&state,"facts.count","json"); let revision=initial["revision"].as_str().unwrap();
+    for reference in ["source:record","source:record#/sha256","pending","native"] {
+        let out=reader_command(&workspace,&state,"read",Some(revision),&["--ref",reference,"--tokens","100"]);
+        assert!(out.status.success(),"{reference}: {}",String::from_utf8_lossy(&out.stderr));
+        let packet:Value=serde_json::from_slice(&out.stdout).unwrap();
+        assert!(packet.get("maintenance_continuity").is_none(),"{reference}: {packet}");
+    }
+}
+
+#[test]
+fn pre_record_shown_ack_does_not_suppress_a_later_record() {
+    let temp=tempfile::tempdir().unwrap(); let workspace=temp.path().join("project"); let state=temp.path().join("state");
+    fs::create_dir(&workspace).unwrap(); fs::create_dir(&state).unwrap();
+    let ack=command(&workspace,&state,&["_agent","shown","followups"],None); assert!(ack.status.success());
+    record(&workspace,&state);
+    let packet=session_packet(&workspace,&state,"facts.count","json");
+    assert!(packet.get("maintenance_discovery").is_some());
+}
+
+#[test]
+fn compact_discovery_retains_scope_and_inference_guards_and_recovery_hint() {
+    let temp=tempfile::tempdir().unwrap(); let workspace=temp.path().join("project"); let state=temp.path().join("state");
+    fs::create_dir(&workspace).unwrap(); fs::create_dir(&state).unwrap(); record(&workspace,&state);
+    let initial=session_packet(&workspace,&state,"facts.count","json"); let revision=initial["revision"].as_str().unwrap();
+    let out=reader_command(&workspace,&state,"read",Some(revision),&["--ref","facts.count","--tokens","600"]); assert!(out.status.success());
+    let packet:Value=serde_json::from_slice(&out.stdout).unwrap(); let discovery=&packet["maintenance_discovery"];
+    assert_eq!(discovery["subjects"],json!(["facts.count"]));
+    if discovery["state"]=="advisory_decision_pointer" {
+        let obligation=discovery["obligation"].as_str().unwrap();
+        assert!(obligation.contains("names or source prose") && obligation.contains("unrelated"));
+    }
+    assert!(discovery["retrieval_hint"].as_str().is_some_and(|hint|hint.contains("--tokens")));
 }

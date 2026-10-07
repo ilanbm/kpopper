@@ -841,6 +841,10 @@ impl OrdinarySession {
             return Ok(ReadSubjectScope::complete(self.members(key)?, true));
         }
         if base.starts_with("source:") {
+            let pointer = reference.split_once('#').map(|(_, pointer)| pointer).unwrap_or("");
+            if ["/sha256", "/path", "/encoding", "/read_mode"].contains(&pointer) {
+                return Ok(ReadSubjectScope::complete([], false));
+            }
             // Imported source text can cover several claims and the captured source
             // map does not carry an authoritative claim-to-source ownership edge.
             return Ok(ReadSubjectScope::unresolved_body());
