@@ -1,6 +1,6 @@
 //! A pre-commit formatter can reflow the record file on commit. A rewrite of a
 //! history-backed record then reads as an unresolved hand edit, so `check` says
-//! when the workspace configures one and its ignore file leaves the record exposed.
+//! when the workspace configures one and its ignore rules do not establish an exclusion.
 use std::path::{Path, PathBuf};
 
 /// The note `check` prints for the record at `record`, if any. The record's
@@ -61,9 +61,9 @@ fn package_key(root: &Path) -> Option<String> {
         .map(|key| format!("the {key} key in package.json"))
 }
 
-/// Whether `.prettierignore` in `root` excludes the record, read with gitignore
-/// rules: the last matching line decides, `!` re-includes, and nothing under an
-/// excluded directory can be re-included.
+/// Whether understood `.prettierignore` rules prove that the record is excluded.
+/// The last matching line decides, `!` re-includes, and nothing under an excluded
+/// directory can be re-included. Unsupported negations retain the warning.
 fn ignored(root: &Path, record: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(root.join(".prettierignore")) else {
         return false;
@@ -78,11 +78,16 @@ fn ignored(root: &Path, record: &Path) -> bool {
     };
     let rules = text.lines().filter_map(rule).collect::<Vec<_>>();
     let excluded = |path: &[&str], directory: bool| {
-        rules
-            .iter()
-            .rev()
-            .find(|rule| rule.matches(path, directory))
-            .is_some_and(|rule| !rule.negated)
+        for rule in rules.iter().rev() {
+            match rule.matches(path, directory) {
+                Some(true) => return !rule.negated,
+                // A negation outside this matcher's supported syntax may re-include
+                // the record. A positive unknown rule cannot undo an older exclusion.
+                None if rule.negated => return false,
+                _ => {}
+            }
+        }
+        false
     };
     let segments = relative.split('/').collect::<Vec<_>>();
     (1..segments.len()).any(|end| excluded(&segments[..end], true)) || excluded(&segments, false)
@@ -92,6 +97,7 @@ struct Rule<'a> {
     negated: bool,
     directory_only: bool,
     anchored: bool,
+    supported: bool,
     segments: Vec<&'a str>,
 }
 
@@ -109,25 +115,30 @@ fn rule(line: &str) -> Option<Rule<'_>> {
         None => (false, line),
     };
     let anchored = line.contains('/');
+    let supported = !line.contains('[') && !line.contains('\\');
     let segments = line.trim_start_matches('/').split('/').collect::<Vec<_>>();
     (!segments.iter().all(|s| s.is_empty())).then_some(Rule {
         negated,
         directory_only,
         anchored,
+        supported,
         segments,
     })
 }
 
 impl Rule<'_> {
-    fn matches(&self, path: &[&str], directory: bool) -> bool {
+    fn matches(&self, path: &[&str], directory: bool) -> Option<bool> {
         if self.directory_only && !directory {
-            return false;
+            return Some(false);
         }
-        if self.anchored {
+        if !self.supported {
+            return None;
+        }
+        Some(if self.anchored {
             segments(&self.segments, path)
         } else {
             path.last().is_some_and(|last| glob(self.segments[0], last))
-        }
+        })
     }
 }
 
@@ -255,6 +266,23 @@ mod tests {
         assert_eq!(notice(&record), None);
         ignore("docs/\n!docs/GROUNDING.yaml\n");
         assert_eq!(notice(&nested), None);
+    }
+
+    #[test]
+    fn unsupported_negations_cannot_prove_the_record_is_excluded() {
+        let root = workspace(&[(".prettierrc", "{}")]);
+        let record = root.path().join("GROUNDING.yaml");
+        let ignore = root.path().join(".prettierignore");
+        for negation in ["!GROUNDING.[y]aml", r"!GROUN\DING.yaml"] {
+            fs::write(&ignore, format!("*.yaml\n{negation}\n")).unwrap();
+            assert!(notice(&record).is_some(), "{negation}");
+            fs::write(&ignore, format!("*.yaml\n{negation}\nGROUNDING.yaml\n")).unwrap();
+            assert_eq!(notice(&record), None, "{negation}");
+        }
+        fs::write(&ignore, "GROUNDING.[y]aml\n").unwrap();
+        assert!(notice(&record).is_some());
+        fs::write(&ignore, "*.yaml\nGROUNDING.[y]aml\n").unwrap();
+        assert_eq!(notice(&record), None);
     }
 
     #[test]
