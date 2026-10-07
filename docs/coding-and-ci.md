@@ -34,10 +34,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install kpopper
+        env:
+          KPOPPER_VERSION: 0.15.1
         run: |
           curl -fsSL -o install.sh \
-            https://github.com/ilanbm/kpopper/releases/download/v0.10.0/install.sh
-          sh install.sh --version 0.10.0 --prefix "$HOME/.local"
+            "https://github.com/ilanbm/kpopper/releases/download/v$KPOPPER_VERSION/install.sh"
+          sh install.sh --version "$KPOPPER_VERSION" --prefix "$HOME/.local"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: kpop check
       - run: kpop consolidate --dry-run
@@ -45,8 +47,8 @@ jobs:
 
 The installer downloads the archive matching the runner's platform and verifies its
 SHA-256; nothing is built on the runner. Choose the version deliberately when updating
-this workflow, and pin it so a new release cannot change a check's meaning without a
-commit. The ordinary
+this workflow, and pin it in `KPOPPER_VERSION` so a new release cannot change a check's
+meaning without a commit. The ordinary
 `pull_request` checkout uses
 [GitHub's proposed merge result](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#how-the-merge-branch-affects-your-workflow);
 keep that behavior when the purpose is to test the combined record. A push check also checks the resulting `main`
