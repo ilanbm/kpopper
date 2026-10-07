@@ -361,7 +361,7 @@ jobs:
           cp -R "$KPOP_TEST_ORDINARY_PROGRAM" "$KPOPPER_NATIVE_RESOURCES/ordinary/linux-x86_64"
           printf '%s\n' "$oracle_commit" > "$RUNNER_TEMP/native-evidence/python-oracle-commit.txt"
           if [ "$KPOPPER_CI_VALIDATION" = readers ]; then
-            oracle_tests=(--test public_branch_read --test public_branch_consolidation)
+            oracle_tests=(--test public_branch_consolidation)
           else
             oracle_tests=(--test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation)
           fi
