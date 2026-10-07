@@ -842,7 +842,7 @@ impl OrdinarySession {
         }
         if base.starts_with("source:") {
             let pointer = reference.split_once('#').map(|(_, pointer)| pointer).unwrap_or("");
-            if ["/sha256", "/path", "/encoding", "/read_mode"].contains(&pointer) {
+            if ["/sha256"].contains(&pointer) {
                 return Ok(ReadSubjectScope::complete([], false));
             }
             // Imported source text can cover several claims and the captured source

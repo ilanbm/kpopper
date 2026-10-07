@@ -1029,11 +1029,8 @@ impl Service {
                     text.push_str(&format!("\nKPOPPER_SCOPED_CONTINUITY {}\n", serde_json::to_string(continuity)?));
                 }
                 crate::require(self.store.encoding().count(&text) <= tokens, "branch evidence and required scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
-                // Optional advice cannot change this representation or displace evidence.
-                if let Some(candidate) = discovery {
-                    let footer = format!("\nKPOPPER_MAINTENANCE_DISCOVERY {}\n",serde_json::to_string(&candidate)?);
-                    if self.store.encoding().count(&(text.clone()+&footer)) <= tokens {text.push_str(&footer);}
-                }
+                // Names-only branch maps are navigation, not delivered evidence
+                // bodies for a new promotional applicability assessment.
                 return Ok(text);
             },
         };

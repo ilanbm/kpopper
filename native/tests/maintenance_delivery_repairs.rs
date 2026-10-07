@@ -538,6 +538,12 @@ fn unresolved_refs_without_active_maintenance_are_quiet_at_small_budgets() {
         let packet:Value=serde_json::from_slice(&out.stdout).unwrap();
         assert!(packet.get("maintenance_continuity").is_none(),"{reference}: {packet}");
     }
+    let branch=reader_command(&workspace,&state,"read",Some(revision),&["--ref","/","--tokens","4000"]);
+    assert!(branch.status.success());
+    let text=String::from_utf8(branch.stdout).unwrap();
+    assert!(text.starts_with("revision="));
+    assert!(!text.contains("KPOPPER_MAINTENANCE_DISCOVERY"));
+
 }
 
 #[test]
@@ -558,9 +564,8 @@ fn compact_discovery_retains_scope_and_inference_guards_and_recovery_hint() {
     let out=reader_command(&workspace,&state,"read",Some(revision),&["--ref","facts.count","--tokens","600"]); assert!(out.status.success());
     let packet:Value=serde_json::from_slice(&out.stdout).unwrap(); let discovery=&packet["maintenance_discovery"];
     assert_eq!(discovery["subjects"],json!(["facts.count"]));
-    if discovery["state"]=="advisory_decision_pointer" {
-        let obligation=discovery["obligation"].as_str().unwrap();
-        assert!(obligation.contains("names or source prose") && obligation.contains("unrelated"));
-    }
+    assert_eq!(discovery["state"],"advisory_decision_pointer");
+    let obligation=discovery["obligation"].as_str().unwrap();
+    assert!(obligation.contains("names or source prose") && obligation.contains("unrelated"));
     assert!(discovery["retrieval_hint"].as_str().is_some_and(|hint|hint.contains("--tokens")));
 }
