@@ -720,18 +720,18 @@ pub fn run(
     if let Some(reference) = options.from_ref.as_deref() {
         crate::require(command == "pull", "--from is available only with pull")?;
         crate::require(!options.history, "--from cannot be combined with --history")?;
-        let notes = draft_notes(mode, &paths, &cwd, &mut inventory)?;
         let output = branch_read::pull(
             branch_read::PullQuery {
                 reference,
                 seeds: &seeds,
                 budget: options.budget.unwrap_or(40),
-                notes: &notes,
+                notes: &[],
             },
             &cwd,
             &paths,
             &capture,
             runtime,
+            || draft_notes(mode, &paths, &cwd, &mut inventory),
         )?;
         capture.verify()?;
         inventory.verify()?;

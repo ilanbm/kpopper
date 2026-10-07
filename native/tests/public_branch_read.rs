@@ -1,5 +1,7 @@
 //! Immutable Python/native CLI parity for committed branch reads. Every case
 //! compares complete streams, exit status, and repository bytes.
+mod support;
+
 use std::{
     collections::BTreeMap,
     fs,
@@ -183,13 +185,19 @@ fn invoke(program: &Path, oracle: Option<&Path>, root: &Path, args: &[&str]) -> 
     if let Some(oracle) = oracle {
         command.arg(oracle.join("scripts/cli.py"));
     }
+    let resources = root.parent().unwrap().join("resources");
+    if oracle.is_none() && resources.is_dir() {
+        command.env("KPOPPER_NATIVE_RESOURCES", resources);
+    }
     command
         .current_dir(root)
         .args(args)
         .env("KPOPPER_SESSION_DISABLE", "1")
         .env("KPOPPER_NO_CACHE", "1")
+        .env_remove("KPOPPER_READ_MODE")
         .env("XDG_STATE_HOME", root.join("state"))
         .env("KPOPPER_PRIVATE_HOME", private_home(root))
+        .env("KPOPPER_NATIVE_CACHE", root.parent().unwrap().join("cache"))
         .output()
         .unwrap()
 }
@@ -343,6 +351,87 @@ fn branch_pull_leads_with_the_records_pending_lines() {
     assert_eq!(image(&root), before);
 }
 
+fn without_private_home(root: &Path, args: &[&str]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+    let resources = root.parent().unwrap().join("resources");
+    if resources.is_dir() {
+        command.env("KPOPPER_NATIVE_RESOURCES", resources);
+    }
+    command
+        .current_dir(root)
+        .args(args)
+        .env_remove("HOME")
+        .env_remove("KPOPPER_PRIVATE_HOME")
+        .env_remove("KPOPPER_READ_MODE")
+        .env("KPOPPER_SESSION_DISABLE", "1")
+        .env("KPOPPER_NO_CACHE", "1")
+        .env("XDG_STATE_HOME", root.join("state"))
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("KPOPPER_NATIVE_CACHE", root.parent().unwrap().join("cache"))
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn invalid_branch_budgets_are_refused_before_private_drafts_are_read() {
+    let (_temp, root, _) = fixture();
+    let output = without_private_home(
+        &root,
+        &[
+            "pull",
+            "p.value",
+            "--from",
+            "source-branch",
+            "--budget",
+            "0",
+        ],
+    );
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("invalid_pull_budget"), "{error}");
+    assert!(!error.contains("home_directory_unavailable"), "{error}");
+}
+
+#[test]
+fn native_history_profile_refusal_precedes_private_draft_access() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    fs::create_dir(&root).unwrap();
+    let resources = temp.path().join("resources/reasoning");
+    fs::create_dir_all(&resources).unwrap();
+    let target = kpop_native::reasoning_runtime::target_name().unwrap();
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(format!("{target}.kpopper-runtime")),
+        resources.join(format!("{target}.kpopper-runtime")),
+    )
+    .unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    let added = run(&root, &["add", "p.value", "v=1"]);
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    assert!(root.join(".kpopper/history.yaml").is_file());
+    commit(&root, "source");
+    git(&root, &["branch", "source-branch"]);
+    assert!(run(&root, &["set", "p.value", "2"]).status.success());
+    commit(&root, "current");
+    let before = image(&root);
+    let output = without_private_home(&root, &["pull", "p.value", "--from", "source-branch"]);
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("unsupported_capability: use core/v1 consumer"),
+        "{error}"
+    );
+    assert!(!error.contains("home_directory_unavailable"), "{error}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(image(&root), before);
+}
+
 #[test]
 fn branch_pull_counts_the_pending_lines_toward_the_budget() {
     let (_temp, root) = pending_fixture();
@@ -385,6 +474,51 @@ fn branch_pull_names_private_drafts_only_in_a_live_read() {
     let frozen = stdout(&root, &["--frozen", "pull", "--from", "other", "a.one"]);
     assert!(!frozen.contains("private drafts"), "{frozen}");
     assert!(!stdout(&root, &["--frozen", "pull", "a.one"]).contains("private drafts"));
+}
+
+#[test]
+fn branch_pull_preserves_conflict_and_unverified_target_warnings() {
+    let fixtures: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/pending-state.json")).unwrap();
+    for (name, warning) in [
+        ("two", "CONFLICT api.limit:"),
+        (
+            "target_core",
+            "TARGET UNVERIFIED: unsupported_capability: use core/v1 consumer",
+        ),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("repo");
+        fs::create_dir(&root).unwrap();
+        let case = fixtures
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["name"] == name)
+            .unwrap();
+        support::pending::fixture(&root, case);
+        commit(&root, "branch snapshot");
+        let plain = stdout(&root, &["pull", "local.one"]);
+        assert!(plain.contains(warning), "{name}: {plain}");
+        let before = image(&root);
+        let branch = stdout(&root, &["pull", "local.one", "--from", "HEAD"]);
+        assert!(
+            branch.find(warning).unwrap() < branch.find("local.one:").unwrap(),
+            "{name}: {branch}"
+        );
+        let prefix = plain.split("local.one:").next().unwrap();
+        assert!(branch.starts_with(prefix), "{name}: {branch}");
+        let limited = stdout(
+            &root,
+            &["pull", "local.one", "--from", "HEAD", "--budget", "1"],
+        );
+        assert!(
+            limited.starts_with(plain.lines().next().unwrap()),
+            "{name}: {limited}"
+        );
+        assert!(!limited.contains("local.one:"), "{name}: {limited}");
+        assert_eq!(image(&root), before, "{name}: branch read wrote");
+    }
 }
 
 #[test]

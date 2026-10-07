@@ -538,6 +538,7 @@ pub(super) fn pull(
     paths: &[PathBuf],
     current: &OrdinaryCapture,
     runtime: Option<&Runtime>,
+    load_notes: impl FnOnce() -> Result<Vec<String>>,
 ) -> Result<C::Output> {
     let PullQuery {
         reference, budget, ..
@@ -569,7 +570,21 @@ pub(super) fn pull(
     if current.history_capture().is_some() {
         history_pull(query, &entry, &root, &relative, &oid, current)
     } else {
-        ordinary_pull(query, &root, &relative, &oid, &day, current, runtime)
+        // Only ordinary comparisons display draft notes. Validate the request and
+        // select that reader before looking at unrelated private draft storage.
+        let notes = load_notes()?;
+        ordinary_pull(
+            PullQuery {
+                notes: &notes,
+                ..query
+            },
+            &root,
+            &relative,
+            &oid,
+            &day,
+            current,
+            runtime,
+        )
     }
 }
 
