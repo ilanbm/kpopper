@@ -102,6 +102,19 @@ PLATFORM_INPUTS = (
 )
 PLATFORM_SCOPES = ("linux-x86_64", "linux-windows", "linux-macos", "all")
 
+# A maintainer may request the reader profile for a reviewed series. Dependencies,
+# packaging, unknown inputs and release candidates retain full validation.
+READER_INPUTS = tuple("native/src/" + name + ".rs" for name in (
+    "main", "lib", "public_readers", "public_branch_read", "public_workspace",
+    "public_identity", "public_assessment", "ordinary_document", "ordinary_yaml_diagnostic",
+    "public_node_history", "formatter_notice", "ordinary_views", "public_ordinary_readers",
+)) + tuple("native/tests/" + name + ".rs" for name in (
+    "cli", "public_readers", "public_json", "public_identity", "public_assessment",
+    "public_branch_read", "public_branch_consolidation", "ordinary_core_gate",
+    "consolidation_resolve", "public_hub", "check_notes", "record_conflict_markers",
+)) + (".github/workflows/check.yml", ".github/workflows/native-rust.yml",
+     ".github/scripts/ci_selection.py")
+
 _release_spec = importlib.util.spec_from_file_location("release", Path(__file__).with_name("release.py"))
 _release = importlib.util.module_from_spec(_release_spec)
 _release_spec.loader.exec_module(_release)
@@ -442,6 +455,13 @@ def required_failures(needs, pull_request=True):
         failures.append("missing or invalid release selection")
     if release == "true" and not all(selected.values()):
         failures.append("release requires native distribution builds")
+    validation = outputs.get("validation")
+    if validation not in ("full", "readers"):
+        failures.append("missing or invalid native validation")
+    if validation == "readers" and scope != "linux-x86_64":
+        failures.append("reader validation requires Linux-only scope")
+    if release == "true" and validation != "full":
+        failures.append("release requires full native validation")
     if promotion and (pull_request or release == "true" or any(selected.values())):
         failures.append("promotion must reuse the published candidate without native jobs")
     for job, lanes in JOB_LANES.items():
@@ -452,6 +472,20 @@ def required_failures(needs, pull_request=True):
     return failures
 
 
+def validation_scope(changes, requested="full", full=False, push=False, release=False):
+    if requested != "readers" or full or push or release or not changes:
+        return "full"
+    for _, path in normalized(changes):
+        if path in READER_INPUTS:
+            continue
+        if (matches(path, UNREAD + RECORD_JOB)
+                and not matches(path, PLATFORM_INPUTS)
+                and not any(lane_reads(lane, path) for lane in LANES.values())):
+            continue
+        return "full"
+    return "readers"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="")
@@ -459,6 +493,7 @@ def main():
     parser.add_argument("--push", action="store_true")
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--release", action="store_true")
+    parser.add_argument("--validation", choices=("full", "readers"), default="full")
     parser.add_argument("--required", action="store_true")
     args = parser.parse_args()
     if args.release and args.push:
@@ -481,13 +516,19 @@ def main():
         except (OSError, subprocess.CalledProcessError):
             base = ""
     scope = platforms(changes, full=args.full, push=args.push, release=args.release, base=base, head=args.head)
-    print(json.dumps({"changes": changes, "selected": selected, "platforms": scope, "release": args.release}, indent=2))
+    validation = validation_scope(changes, requested=args.validation, full=args.full,
+                                  push=args.push, release=args.release)
+    if validation == "readers":
+        scope = "linux-x86_64"
+    print(json.dumps({"changes": changes, "selected": selected, "platforms": scope,
+                      "release": args.release, "validation": validation}, indent=2))
     if os.environ.get("GITHUB_OUTPUT"):
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
             for lane, enabled in selected.items():
                 stream.write("%s=%s\n" % (lane, str(enabled).lower()))
             stream.write("platforms=" + scope + "\n")
             stream.write("release=" + str(args.release).lower() + "\n")
+            stream.write("validation=" + validation + "\n")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
             stream.write("| CI lane | Selected |\n|---|---|\n")
@@ -495,6 +536,7 @@ def main():
                 stream.write("| %s | %s |\n" % (lane, "yes" if enabled else "no"))
             stream.write("\nRecord, skill/release contracts and CI selection tests always run.\n")
             stream.write("\nPlatforms: " + scope + ".\n")
+            stream.write("\nNative validation: " + validation + ".\n")
     return 0
 
 

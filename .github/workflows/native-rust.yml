@@ -33,6 +33,7 @@ on:
           - final-fixes
           - hooks
           - distribution
+          - readers
       target:
         description: Platform matrix target to run
         required: false
@@ -65,7 +66,9 @@ jobs:
       fail-fast: false
       matrix:
         include: >-
-          ${{ fromJSON(inputs.target == 'darwin-x86_64'
+          ${{ fromJSON(inputs.validation == 'readers'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
+            || inputs.target == 'darwin-x86_64'
             && '[{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
             || inputs.target == 'linux-x86_64'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
@@ -88,6 +91,11 @@ jobs:
       # Match the UTF-8 contract exported by the actual shell hook launcher.
       PYTHONIOENCODING: utf-8
     steps:
+      - name: A focused reader run cannot publish release artifacts
+        if: inputs.publish && inputs.validation == 'readers'
+        run: |
+          echo "::error::Publication requires full native validation."
+          exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.source_ref || github.sha }}
@@ -272,6 +280,16 @@ jobs:
               hooks)
                 cargo nextest run --locked --no-fail-fast --profile ci --test host_hooks --test cli_alias
                 ;;
+              readers)
+                reader_tests=(--test cli --test public_readers --test public_json
+                  --test public_identity --test public_assessment --test public_branch_read
+                  --test public_branch_consolidation --test ordinary_core_gate
+                  --test consolidation_resolve --test public_hub --test check_notes)
+                if [ -f tests/record_conflict_markers.rs ]; then
+                  reader_tests+=(--test record_conflict_markers)
+                fi
+                cargo nextest run --locked --no-fail-fast --profile ci --lib "${reader_tests[@]}"
+                ;;
               final-fixes)
                 # Name filters match as substrings, as cargo test's do.
                 # Each run rewrites the JUnit report, so the earlier two are kept under their own names.
@@ -324,7 +342,7 @@ jobs:
         shell: bash
         run: python ci/nextest_listing.py --locked
       - name: Compare ingestion and branch commands with the pinned Python reference
-        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && inputs.validation != 'final-fixes' && inputs.validation != 'distribution' && inputs.validation != 'hooks' }}
+        if: ${{ !cancelled() && matrix.target == 'linux-x86_64' && (env.KPOPPER_CI_VALIDATION == 'full' || env.KPOPPER_CI_VALIDATION == 'readers') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -342,9 +360,13 @@ jobs:
           cp scripts/reasoning/native/linux-x86_64.kpopper-runtime "$KPOPPER_NATIVE_RESOURCES/reasoning/"
           cp -R "$KPOP_TEST_ORDINARY_PROGRAM" "$KPOPPER_NATIVE_RESOURCES/ordinary/linux-x86_64"
           printf '%s\n' "$oracle_commit" > "$RUNNER_TEMP/native-evidence/python-oracle-commit.txt"
+          if [ "$KPOPPER_CI_VALIDATION" = readers ]; then
+            oracle_tests=(--test public_branch_read --test public_branch_consolidation)
+          else
+            oracle_tests=(--test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation)
+          fi
           cargo test --manifest-path native/Cargo.toml --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' \
-            --test ingestion_target_oracle --test ingestion_cli_oracle --test public_branch_consolidation \
-            -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
+            "${oracle_tests[@]}" -- --ignored 2>&1 | tee "$RUNNER_TEMP/native-evidence/python-oracles.log"
       - name: Retain test diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -389,9 +411,9 @@ jobs:
             native/target/debug
           key: ${{ steps.test-cache.outputs.cache-primary-key }}
 
-  # Every validation runs this job; hooks builds no release, so of its release steps only the
-  # license notices run.
+  # Focused reader validation needs no distribution. Hooks runs license notices only.
   release:
+    if: inputs.validation != 'readers'
     # A cold Intel macOS build can take 41 minutes before acceptance and packaging.
     timeout-minutes: ${{ matrix.target == 'darwin-x86_64' && 60 || 45 }}
     # Tests and release acceptance use the same selected targets. The older manual
@@ -659,8 +681,8 @@ jobs:
             native/target/release
           key: ${{ steps.release-cache.outputs.cache-primary-key }}
 
-  # A skipped job does not fail the workflow that calls this one. The verdict fails unless the
-  # release succeeded and the tests succeeded, or were skipped for a distribution.
+  # A skipped job does not fail the caller by itself. Require the exact outcomes for
+  # full, distribution-only and focused-reader validation.
   verdict:
     timeout-minutes: 5
     needs: [tests, release]
@@ -677,10 +699,14 @@ jobs:
           echo "tests: $KPOPPER_CI_TESTS"
           echo "release: $KPOPPER_CI_RELEASE"
           tests=success
+          release=success
           if [ "$KPOPPER_CI_VALIDATION" = distribution ]; then
             tests=skipped
           fi
-          if [ "$KPOPPER_CI_TESTS" != "$tests" ] || [ "$KPOPPER_CI_RELEASE" != success ]; then
-            echo "::error::The $KPOPPER_CI_VALIDATION validation requires tests $tests and release success."
+          if [ "$KPOPPER_CI_VALIDATION" = readers ]; then
+            release=skipped
+          fi
+          if [ "$KPOPPER_CI_TESTS" != "$tests" ] || [ "$KPOPPER_CI_RELEASE" != "$release" ]; then
+            echo "::error::The $KPOPPER_CI_VALIDATION validation requires tests $tests and release $release."
             exit 1
           fi
