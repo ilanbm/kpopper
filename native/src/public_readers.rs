@@ -437,11 +437,13 @@ pub fn unreadable_record(failure: &crate::Error) -> bool {
         || crate::ordinary_yaml_diagnostic::explains_record(failure)
 }
 /// Whether a failure is the ordinary reader's refusal of a record, or of a layer read with
-/// it, that only a core/v1 consumer reads, or whose reasoning declaration it cannot read.
-/// Commands print it as it stands, with exit status 1, as the Python reader does.
+/// it, that only a core/v1 consumer reads, or whose reasoning declaration it cannot read,
+/// or of a record whose location is no readable file. Commands print it as it stands,
+/// with exit status 1, as the Python reader does.
 pub fn core_consumer_refusal(failure: &crate::Error) -> bool {
     failure.0 == crate::source_capture::CORE_CONSUMER
         || crate::ordinary_fields::refuses_declaration(failure)
+        || W::refuses_unavailable(failure)
 }
 /// What a read command prints on stderr when it fails, and its exit status. With
 /// --json the same text travels: wrapped for check, pull and affects, as open's `error`.

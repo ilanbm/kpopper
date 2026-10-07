@@ -68,7 +68,7 @@ fn dispatch(request: Request, cwd: &Path) -> CommandOutput {
             stderr: String::new(),
             code: 0,
         },
-        Err(error) if ordinary => CommandOutput {
+        Err(error) if ordinary || public_workspace::refuses_unavailable(&error) => CommandOutput {
             stdout: String::new(),
             stderr: format!("{error}\n"),
             code: 1,
