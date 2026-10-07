@@ -908,7 +908,7 @@ struct Unavailable {
 fn unavailable_records() -> Vec<Unavailable> {
     let mut kinds = vec!["directory", "registered", "configured"];
     if cfg!(unix) {
-        kinds.push("link");
+        kinds.extend(["link", "configured-link"]);
     }
     let mut cases = vec![];
     for kind in kinds {
@@ -943,12 +943,20 @@ fn unavailable_records() -> Vec<Unavailable> {
             _ => {
                 fs::create_dir_all(root.join(".git/kpopper/project")).unwrap();
                 fs::create_dir_all(root.join("notes")).unwrap();
+                let configured = if kind == "configured-link" {
+                    #[cfg(unix)]
+                    std::os::unix::fs::symlink("gone.yaml", root.join("notes/record.yaml")).unwrap();
+                    "notes/record.yaml"
+                } else {
+                    "notes"
+                };
                 fs::write(
                     root.join(".git/kpopper/project/project.json"),
-                    r#"{"version": 1, "mode": "simple", "record": "notes", "publication": null, "generation": 0}"#,
+                    serde_json::json!({"version": 1, "mode": "simple", "record": configured,
+                        "publication": null, "generation": 0}).to_string(),
                 )
                 .unwrap();
-                (root.join("notes"), "The configured record is unavailable.")
+                (root.join(configured), "The configured record is unavailable.")
             }
         };
         let refusal = format!("{reason} {}\n", record.display());
@@ -1007,11 +1015,17 @@ fn an_unavailable_record_is_refused_with_its_path_by_every_command() {
             vec!["check"],
             vec!["pull", "a.b"],
             vec!["affects", "a.b"],
+            vec!["assess", "a.b"],
+            vec!["context", "a.b"],
             vec!["export", "a.b"],
             vec!["where"],
             vec!["add", "a.b", "v=2"],
             vec!["set", "a.b", "2"],
+            vec!["review", "a.b"],
+            vec!["answer", "q.x", "a.b"],
+            vec!["correct", "a.b", "2"],
             vec!["same", "a.b", "a.c"],
+            vec!["distinct", "a.b", "a.c", "separate observations"],
         ] {
             let output = cli(root, &args, &private);
             assert_eq!(output.status.code(), Some(1), "{kind} {args:?}");
@@ -1024,6 +1038,8 @@ fn an_unavailable_record_is_refused_with_its_path_by_every_command() {
             let output = cli(root, &[&["--json"], &args[..]].concat(), &private);
             assert_eq!(output.status.code(), Some(1), "{kind} --json {args:?}");
             let envelope: J = serde_json::from_slice(&output.stdout).unwrap();
+            assert!(output.stderr.is_empty(), "{kind} --json {args:?}");
+            assert_eq!(envelope["command"], args[0], "{kind} --json {args:?}");
             assert_eq!(envelope["exit_code"], 1, "{kind} --json {args:?}");
             assert_eq!(
                 envelope["error"],
@@ -1031,17 +1047,6 @@ fn an_unavailable_record_is_refused_with_its_path_by_every_command() {
                 "{kind} --json {args:?}"
             );
             assert_eq!(envelope["output"], "", "{kind} --json {args:?}");
-        }
-        // The context reply has no envelope, so it refuses the same way with --json.
-        for args in [&["context", "a.b"][..], &["--json", "context", "a.b"]] {
-            let output = cli(root, args, &private);
-            assert_eq!(output.status.code(), Some(1), "{kind} {args:?}");
-            assert!(output.stdout.is_empty(), "{kind} {args:?}");
-            assert_eq!(
-                String::from_utf8(output.stderr).unwrap(),
-                *refusal,
-                "{kind} {args:?}"
-            );
         }
         // The opener keeps the reason alone.
         let output = cli(root, &["open"], &private);
