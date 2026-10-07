@@ -1,0 +1,4 @@
+interface:
+  display_name: "Record"
+  short_description: "Write what the work found into the knowledge record"
+  default_prompt: "Use $record to write what this work found into the knowledge record."

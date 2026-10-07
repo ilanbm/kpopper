@@ -1,0 +1,4 @@
+interface:
+  display_name: "Consolidate"
+  short_description: "Settle hypotheses and merge branch records into one"
+  default_prompt: "Use $consolidate to settle open hypotheses and merge branch records into this one."
