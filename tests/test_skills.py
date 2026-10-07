@@ -407,25 +407,36 @@ def code_segments(text):
         yield command
 
 
-def without_comment(code):
-    """Code up to a shell comment: a # at the start or after a space, outside quotes."""
+def shell_syntax(code):
+    """Mask quoted and escaped text at its original offsets, stopping at a comment."""
+    visible = list(code)
     quote = None
+    escaped = False
     for index, char in enumerate(code):
-        if quote:
+        if escaped:
+            visible[index] = " "
+            escaped = False
+        elif char == "\\" and quote != "'":
+            visible[index] = " "
+            escaped = True
+        elif quote:
+            visible[index] = " "
             quote = None if char == quote else quote
         elif char in "'\"":
+            visible[index] = " "
             quote = char
         elif char == "#" and (index == 0 or code[index - 1].isspace()):
-            return code[:index]
-    return code
+            return "".join(visible[:index])
+    return "".join(visible)
 
 
 def invocation_words(code):
     """The words after each kpop or kpopper in a piece of code, one list per invocation."""
-    code = without_comment(code)
-    for match in INVOCATION.finditer(code):
-        rest = code[match.end():]
-        rest = re.split(r"\s(?:\||&&|\|\||;|>|2>)\s|[;`]", rest)[0]
+    syntax = shell_syntax(code)
+    for match in INVOCATION.finditer(syntax):
+        end = re.search(r"\s(?:\||&&|\|\||;|>|2>)\s|[;`]", syntax[match.end():])
+        stop = match.end() + end.start() if end else len(syntax)
+        rest = code[match.end():stop]
         try:
             words = shlex.split(rest)
         except ValueError:
@@ -535,6 +546,41 @@ class CommandReferences(unittest.TestCase):
         for code, error in bad.items():
             with self.subTest(code=code):
                 self.assertEqual([e for p, w in invocation_words(code) for e in invocation_errors(p, w, surface)], [error])
+
+    def test_quoted_arguments_are_not_additional_commands(self):
+        surface = self.surface()
+        for code in [
+            'kpop search "kpop --version"',
+            "kpop search 'kpop frobnicate'",
+            'kpopper search "how to use kpop pull --bogus"',
+            r'kpop search "say \"kpop frobnicate\""',
+            'kpop search "text; kpop bogus | more && text > output"',
+            'kpop search "kpop --version" # kpop bogus',
+            'echo "kpop bogus"',
+        ]:
+            with self.subTest(code=code):
+                self.assertEqual([e for p, w in invocation_words(code)
+                                  for e in invocation_errors(p, w, surface)], [])
+
+    def test_quoted_text_does_not_hide_real_command_errors(self):
+        surface = self.surface()
+        bad = {
+            'kpop search "kpop --version" --bogus': 'kpop search has no option --bogus',
+            'kpop search "text; kpop bogus | more && text > output" --bogus':
+                'kpop search has no option --bogus',
+            r'kpop search "say \"kpop --version\"" --bogus': 'kpop search has no option --bogus',
+            'kpop search "kpop --version";kpop pull x --bogus': 'kpop pull has no option --bogus',
+            'kpop search "kpop --version" && kpop bogus': 'kpop has no command bogus',
+            'echo "kpop --version" | kpop pull x --bogus': 'kpop pull has no option --bogus',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            doc = root / "query.md"
+            for code, error in bad.items():
+                with self.subTest(code=code):
+                    doc.write_text("# Search\n\n```sh\n%s\n```\n" % code, encoding="utf-8")
+                    self.assertEqual(command_reference_errors([doc], surface, root),
+                                     ["query.md:4: " + error])
 
     def test_drift_in_a_skill_names_the_file_and_line(self):
         with tempfile.TemporaryDirectory() as directory:
