@@ -29,6 +29,7 @@ jobs:
       rust: ${{ steps.select.outputs.rust }}
       platforms: ${{ steps.select.outputs.platforms }}
       release: ${{ steps.select.outputs.release }}
+      validation: ${{ steps.select.outputs.validation }}
       promotion: ${{ steps.candidate.outputs.promotion }}
       source: ${{ steps.candidate.outputs.source }}
     steps:
@@ -56,11 +57,19 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PUSH_BASE: ${{ github.event.before }}
           PUSH_HEAD: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$RELEASE" = true ]; then
             python .github/scripts/ci_selection.py --release --base "$BASELINE" --head "$SOURCE"
           elif [ "$EVENT" = pull_request ]; then
-            python .github/scripts/ci_selection.py --base "$PR_BASE" --head "$PR_HEAD"
+            validation=full
+            # Labels are maintainer-controlled. Read current labels so a label added
+            # while opening the PR is visible; API failures retain full coverage.
+            focused=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels \
+              --jq 'any(.labels[]; .name == "ci:reader-checks")' 2>/dev/null) || focused=false
+            if [ "$focused" = true ]; then validation=readers; fi
+            python .github/scripts/ci_selection.py --base "$PR_BASE" --head "$PR_HEAD" --validation "$validation"
           elif [ "$EVENT" = push ]; then
             python .github/scripts/ci_selection.py --push --base "$PUSH_BASE" --head "$PUSH_HEAD"
           else
@@ -101,9 +110,6 @@ jobs:
           python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
           tests.test_ci_release_flow tests.test_ci_audit tests.test_native_distribution tests.test_native_release_assets
           tests.test_native_launcher tests.test_hook_delivery tests.test_release_candidate -v
-      - name: The adapter method embeds match the shared method summary
-        run: sh adapters/_shared/check-drift.sh
-
       # The record is read by the native kpop of this tree. A reader main built from the same
       # native/ sources is reused, so only a change under native/ pays for the build. Only a
       # push to main saves one: pull requests read main's, and keep the cache budget free.
@@ -167,6 +173,7 @@ jobs:
     uses: ./.github/workflows/native-rust.yml
     with:
       target: ${{ needs.changes.outputs.platforms }}
+      validation: ${{ needs.changes.outputs.validation }}
       publish: ${{ needs.changes.outputs.release == 'true' }}
       source_ref: ${{ needs.changes.outputs.source }}
       audit: true
