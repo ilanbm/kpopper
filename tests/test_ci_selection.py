@@ -189,7 +189,7 @@ class RequiredResults(unittest.TestCase):
         scope = CI.platforms(changes)
         return {"changes": {"result": "success", "outputs": {
                     **{k: str(v).lower() for k, v in selected.items()},
-                    "platforms": scope, "release": "false"}},
+                    "platforms": scope, "release": "false", "validation": "full"}},
                 "record": {"result": "success"},
                 **{job: {"result": "success" if any(selected[lane] for lane in lanes) else "skipped"}
                    for job, lanes in CI.JOB_LANES.items()}}
@@ -215,7 +215,7 @@ class RequiredResults(unittest.TestCase):
         needs = self.results(["README.md"])
         needs["changes"]["result"] = "failure"
         self.assertTrue(CI.required_failures(needs))
-        for output in list(CI.LANE_NAMES) + ["platforms", "release"]:
+        for output in list(CI.LANE_NAMES) + ["platforms", "release", "validation"]:
             with self.subTest(output=output):
                 needs = self.results(["native/src/main.rs"])
                 del needs["changes"]["outputs"][output]
@@ -229,12 +229,90 @@ class RequiredResults(unittest.TestCase):
         needs["native-cli"]["result"] = "skipped"
         self.assertTrue(CI.required_failures(needs))
 
+    def test_a_release_cannot_accept_focused_reader_validation(self):
+        needs = self.results(["native/src/public_readers.rs"])
+        needs["changes"]["outputs"].update(release="true", validation="readers")
+        self.assertIn("release requires full native validation", CI.required_failures(needs))
+
+    def test_reader_validation_cannot_claim_other_platforms(self):
+        needs = self.results(["native/src/public_readers.rs"])
+        needs["changes"]["outputs"].update(platforms="all", validation="readers")
+        self.assertIn("reader validation requires Linux-only scope", CI.required_failures(needs))
+
     def test_main_promotion_checks_identity_without_repeating_candidate_checks(self):
         needs = self.results(["README.md"])
         needs["changes"]["outputs"]["promotion"] = "true"
         needs["record"]["result"] = "skipped"
         self.assertEqual(CI.required_failures(needs, pull_request=False), [])
         self.assertTrue(CI.required_failures(needs, pull_request=True))
+
+
+class FocusedReaders(unittest.TestCase):
+    def workflow(self):
+        return yaml.load((ROOT / ".github/workflows/native-rust.yml").read_text(), Loader=yaml.BaseLoader)
+
+    def test_reader_validation_is_explicit_and_scope_limited(self):
+        changes = ["native/src/public_readers.rs", "native/tests/public_readers.rs", "README.md"]
+        self.assertEqual(CI.validation_scope(changes), "full")
+        self.assertEqual(CI.validation_scope(changes, requested="readers"), "readers")
+        for options in ({"release": True}, {"push": True}, {"full": True}):
+            self.assertEqual(CI.validation_scope(changes, requested="readers", **options), "full")
+        for protected in ("native/Cargo.toml", "native/build.rs", "native/src/history_node_writer.rs",
+                          "scripts/install_native.sh", "native/ci/platform_acceptance.py", "unknown/new.file"):
+            with self.subTest(path=protected):
+                self.assertEqual(CI.validation_scope(changes + [protected], requested="readers"), "full")
+        self.assertEqual(CI.validation_scope([], requested="readers"), "full")
+
+    @unittest.skipIf(os.name == "nt", "the workflow shell contract runs on Linux")
+    def test_reader_command_keeps_required_suites_and_selects_new_marker_tests(self):
+        script = next(step["run"] for step in self.workflow()["jobs"]["tests"]["steps"]
+                      if step.get("id") == "native-tests")
+        required = {"cli", "public_readers", "public_json", "public_identity", "public_assessment",
+                    "public_branch_read", "public_branch_consolidation", "ordinary_core_gate",
+                    "consolidation_resolve", "public_hub", "check_notes"}
+        for marker in (False, True):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                (root / "bin").mkdir()
+                (root / "tests").mkdir()
+                (root / "native-evidence").mkdir()
+                cargo = root / "bin/cargo"
+                cargo.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURED_ARGS"\n')
+                cargo.chmod(0o755)
+                if marker:
+                    (root / "tests/record_conflict_markers.rs").touch()
+                captured = root / "args.txt"
+                result = subprocess.run(["bash", "-c", script], cwd=root, text=True, capture_output=True,
+                                        env=dict(os.environ, PATH=str(root / "bin") + os.pathsep + os.environ["PATH"],
+                                                 CAPTURED_ARGS=str(captured), RUNNER_OS="Linux", RUNNER_TEMP=str(root),
+                                                 KPOPPER_CI_VALIDATION="readers"))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                args = captured.read_text().splitlines()
+                self.assertEqual(args[:2], ["nextest", "run"])
+                self.assertIn("--lib", args)
+                suites = {args[i + 1] for i, value in enumerate(args[:-1]) if value == "--test"}
+                self.assertEqual(suites, required | ({"record_conflict_markers"} if marker else set()))
+
+    @unittest.skipIf(os.name == "nt", "the workflow shell contract runs on Linux")
+    def test_verdict_requires_the_selected_tests_and_distribution_outcomes(self):
+        workflow = self.workflow()
+        verdict = workflow["jobs"]["verdict"]["steps"][0]["run"]
+        for validation, tests, release, succeeds in (
+            ("full", "success", "success", True), ("full", "success", "skipped", False),
+            ("distribution", "skipped", "success", True),
+            ("readers", "success", "skipped", True), ("readers", "failure", "skipped", False),
+            ("readers", "skipped", "skipped", False), ("readers", "success", "success", False),
+            ("readers", "success", "cancelled", False),
+        ):
+            with self.subTest(validation=validation, tests=tests, release=release):
+                result = subprocess.run(["bash", "-c", verdict], capture_output=True, text=True,
+                                        env=dict(os.environ, KPOPPER_CI_VALIDATION=validation,
+                                                 KPOPPER_CI_TESTS=tests, KPOPPER_CI_RELEASE=release))
+                self.assertEqual(result.returncode == 0, succeeds, result.stdout + result.stderr)
+        self.assertEqual(workflow["jobs"]["release"]["if"], "inputs.validation != 'readers'")
+        guard = workflow["jobs"]["tests"]["steps"][0]
+        self.assertEqual(guard["if"], "inputs.publish && inputs.validation == 'readers'")
+        self.assertNotEqual(subprocess.run(["bash", "-c", guard["run"]], capture_output=True).returncode, 0)
 
 
 class NativeDocumentUI(unittest.TestCase):
@@ -267,7 +345,7 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual(set(jobs["candidate-checked"]["needs"]), set(jobs) - {"candidate-checked", "ci-required"})
         self.assertEqual(set(jobs["ci-required"]["needs"]), {"candidate-checked", "changes"})
         self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"candidate-checked", "ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms", "release", "promotion", "source"})
+        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms", "release", "promotion", "source", "validation"})
         self.assertEqual({lane for lanes in CI.JOB_LANES.values() for lane in lanes}, ALL)
 
     def test_native_targets_follow_the_selector_and_start_without_waiting_for_record(self):
@@ -275,6 +353,7 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual(job["needs"], "changes")
         self.assertEqual(job["if"], "needs.changes.outputs.rust == 'true'")
         self.assertEqual(job["with"]["target"], "${{ needs.changes.outputs.platforms }}")
+        self.assertEqual(job["with"]["validation"], "${{ needs.changes.outputs.validation }}")
         self.assertEqual(job["with"]["publish"], "${{ needs.changes.outputs.release == 'true' }}")
 
     def test_committed_bundles_are_rejected_before_the_lane_that_reads_them(self):
@@ -348,8 +427,8 @@ class NativeTestPool(unittest.TestCase):
     def test_every_validation_tests_through_nextest_and_full_runs_the_whole_suite(self):
         steps = self.jobs()["tests"]["steps"]
         commands = self.commands(steps[self.only(steps, lambda step: step.get("id") == "native-tests")]["run"])
-        self.assertEqual(set(commands), {"full", "hooks", "final-fixes", "*"})
-        for mode in ("full", "hooks", "final-fixes"):
+        self.assertEqual(set(commands), {"full", "hooks", "readers", "final-fixes", "*"})
+        for mode in ("full", "hooks", "readers", "final-fixes"):
             self.assertTrue(commands[mode], mode)
             for command in commands[mode]:
                 with self.subTest(mode=mode, command=command):
