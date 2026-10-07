@@ -1,0 +1,143 @@
+# Generated from kpop --help by native/tests/cli_surface.rs; do not edit.
+# One line per command path, then its long options; `=` marks an option that takes a value.
+# The first line holds the global options, which every other line leaves out.
+kpop --frozen --help --json --no-cache --version --workspace=
+kpop _agent
+kpop _agent accept --request=
+kpop _agent complete --report= --request=
+kpop _agent fail --reason= --request=
+kpop _agent guide
+kpop _agent shown
+kpop _agent status
+kpop _agent task
+kpop add --as-of= --at= --by= --commit= --contribution-id= --disclose-locator= --drop= --environment= --event-id= --evidence-root= --expected-record-sha256= --expected-revision= --hypothesis= --in= --on= --operation= --profile= --reframe --scope= --shareability= --source= --value= --why=
+kpop affects --budget= --chars= --from= --history --profile=
+kpop answer --as-of= --dropped= --why=
+kpop assess --as-of= --attention-only --history --policy= --profile= --record=
+kpop board
+kpop board connect --generation= --grant --remote= --repository= --target=
+kpop board illustration
+kpop board inspect --remote= --target=
+kpop board local
+kpop board status
+kpop check --budget= --chars= --from= --history --profile=
+kpop config --check --expected-generation= --guidance= --migration-receipt= --mode= --record= --rollback
+kpop consolidate --as-of= --as= --by= --choose= --drop= --dry-run --from= --refute= --resolve --source-revision= --take=
+kpop context --assessment-profile= --depth= --direction= --encoding= --input= --max-nodes= --no-settings --normalized --profile= --project= --revision= --state= --tokens=
+kpop correct --unset= --why=
+kpop distinct --as-of=
+kpop document
+kpop document build --html= --manifest= --out= --overwrite --root=
+kpop document guide
+kpop document inspect
+kpop document refresh --out= --overwrite --root= --sources=
+kpop experimental
+kpop experimental annotated-doc
+kpop experimental annotated-doc build --html= --manifest= --out= --overwrite --root=
+kpop experimental annotated-doc guide
+kpop experimental annotated-doc inspect
+kpop experimental annotated-doc refresh --out= --overwrite --root= --sources=
+kpop experimental hub --brief= --checks --open --out= --profile= --tree --verify
+kpop export --depth= --details --direction= --format= --max-nodes= --profile= --record=
+kpop expressions
+kpop expressions convert --predicate --readable
+kpop expressions migrate --apply --destination= --profile= --readable --record=
+kpop followups
+kpop followups add --file=
+kpop followups claim --daily-token= --occurrence= --owner=
+kpop followups daily
+kpop followups daily bind --file=
+kpop followups daily finish --evidence= --token=
+kpop followups daily install --check --fail= --inspect= --owner= --private --reconcile= --result= --resume --store= --time= --timezone= --token= --unchanged
+kpop followups daily plan --time=
+kpop followups daily recover --evidence=
+kpop followups daily renew --token=
+kpop followups daily start --owner=
+kpop followups daily status
+kpop followups finish --evidence= --next-at= --outcome= --token=
+kpop followups list
+kpop followups observe --file=
+kpop followups recover --evidence=
+kpop followups refresh --evidence= --file=
+kpop followups release --evidence= --token=
+kpop followups relocate --evidence= --record=
+kpop followups renew --token=
+kpop followups resolve --evidence= --outcome=
+kpop followups restore --backup= --evidence=
+kpop followups resume --evidence=
+kpop followups scan --limit=
+kpop followups setup --private --record= --store= --timezone=
+kpop followups show
+kpop followups status
+kpop gate --host= --nudged-at= --session= --turns=
+kpop history --baseline= --because= --by= --choose= --node-history --nonce= --of= --over= --preview --proposal-subject= --read-mode= --record-proposals --record= --revision= --subject= --to=
+kpop history-capture
+kpop history-codec --typed
+kpop history-envelope --typed
+kpop history-validate --closure --typed
+kpop identity --object --typed --yaml
+kpop ingest
+kpop ingest acknowledge --record= --state-dir=
+kpop ingest capture --file= --no-start --notify-task= --record= --state-dir=
+kpop ingest complete-delivery --claim-token= --outcome= --record= --state-dir=
+kpop ingest pending --include-handled --record= --state-dir=
+kpop ingest process --event-id= --max-events= --record= --state-dir=
+kpop ingest status --event-id= --record= --state-dir=
+kpop ingest wait-delivery --record= --state-dir= --timeout=
+kpop ingestion-hook --record= --state-dir= --wait-seconds=
+kpop init --record-id=
+kpop knowledge
+kpop knowledge import --environment= --event-id= --evidence= --scope= --shareability=
+kpop knowledge materialize --out= --ref=
+kpop knowledge status
+kpop map --deep
+kpop mark --host= --nudged-at= --session= --turns=
+kpop open --budget= --chars= --from= --history --profile=
+kpop page --brief= --checks --open --out= --profile= --tree --verify
+kpop pending
+kpop pending configure --branch= --grant --remote= --revoke --target=
+kpop pending pause --reason=
+kpop pending publish --authorize --retry
+kpop pending reject --reason=
+kpop pending resume --reason=
+kpop pending retry --reason=
+kpop pending status --verify
+kpop pending supersede --reason= --replacement=
+kpop pending withdraw --reason=
+kpop pull --budget= --chars= --from= --history --profile=
+kpop recover --record= --rollback
+kpop remeasure --run
+kpop review --as-of= --at= --by= --commit= --contribution-id= --disclose-locator= --drop= --environment= --event-id= --evidence-root= --expected-record-sha256= --expected-revision= --hypothesis= --in= --on= --operation= --profile= --reframe --scope= --shareability= --source= --value= --why=
+kpop same --as-of= --keep=
+kpop search --chars= --length= --limit= --offset= --profile= --read= --record= --revision= --source-root= --state-dir=
+kpop session --anchor= --assessment-profile= --basis= --branch= --context-session= --cursor= --depth= --description-cache= --description-style= --direction= --embedding-dir= --encoding= --expand= --global --id= --input= --kind= --limit= --max-nodes= --max-view-bytes= --no-auto-anchors --no-settings --normalized --offset= --profile= --project= --query= --rebuild --ref= --revision= --revisit= --search-mode= --state= --text= --tokens= --view-format= --view-transport=
+kpop session context
+kpop session describe
+kpop session disable
+kpop session enable
+kpop session hook-open
+kpop session hook-view
+kpop session open
+kpop session propose
+kpop session read
+kpop session search
+kpop session serve
+kpop session setup
+kpop session status
+kpop session view
+kpop session-context --event= --host=
+kpop session-start --copilot --cursor --gemini --host=
+kpop session-stop --event= --host=
+kpop set --as-of= --at= --by= --commit= --contribution-id= --disclose-locator= --drop= --environment= --event-id= --evidence-root= --expected-record-sha256= --expected-revision= --hypothesis= --in= --on= --operation= --profile= --reframe --scope= --shareability= --source= --value= --why=
+kpop update --file= --record= --state-dir=
+kpop watch
+kpop watch complete-delivery --outcome= --token=
+kpop watch pause
+kpop watch resolve --evidence=
+kpop watch scan --all --notify-task=
+kpop watch setup --base-ref= --shared-private --shared-record=
+kpop watch share --file= --notify-task=
+kpop watch shared
+kpop watch status
+kpop watch wait-delivery --timeout=
+kpop where
