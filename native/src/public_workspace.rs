@@ -39,7 +39,7 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     let project = Project::open(&cwd)?;
     if project.config_path.exists() {
         let record = project.record(None)?;
-        if record.exists() && !record.is_file() {
+        if record.symlink_metadata().is_ok() && !record.is_file() {
             return Err(unavailable(UNAVAILABLE_CONFIGURED, &record));
         }
         return Ok(vec![record]);
@@ -311,7 +311,7 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
         let path = project.record(Some(&config))?;
         status = if path.is_file() {
             "found"
-        } else if path.exists() {
+        } else if path.symlink_metadata().is_ok() {
             "unavailable"
         } else {
             "missing"
