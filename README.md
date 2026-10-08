@@ -61,10 +61,6 @@ Python or compiler.
 **[Create and package a model](docs/model-plugins.md#try-the-complete-example)** ·
 [Use a model plugin](docs/model-plugins.md#use-a-model-plugin)
 
-Initial support is **local Codex on macOS ARM64**. The packaging tool is currently a source
-candidate; a public prebuilt companion has not been released. Authors need a qualified
-prebuilt candidate from a maintainer. See [requirements](docs/model-plugins.md#what-you-need).
-
 Agent reasoning costs time and tokens. kpopper runs calculations and dependency checks
 deterministically, aiming to turn seconds of model work into milliseconds of
 computation—and focus the agent on decisions that need judgment.
@@ -968,7 +964,7 @@ See the [command reference](docs/reference.md), [history commands](docs/history-
 | `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Finds relevant IDs, then prefers `kpop context <id>` for records with dependencies and checks.<br>Uses `pull` for concise readings or when the checked reader is unavailable, and `affects` for changed inputs. |
 | `/kpopper:record` | [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. |
 | `/kpopper:map` | [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. |
-| Codex: `$model` | [model](skills/model/SKILL.md) | Authors and packages a reusable model with the separate `kpop-model` companion.<br>Requires a qualified prebuilt toolchain; [initial support and walkthrough](docs/model-plugins.md). |
+| Codex: `$model` | [model](skills/model/SKILL.md) | Authors and packages a reusable model with the separate `kpop-model` companion.<br>[Creation and packaging guide](docs/model-plugins.md). |
 | `/kpopper:consolidate` | [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. |
 | `/kpopper:watch` | [watch](skills/watch/SKILL.md) | Inspects branch checks and shared findings; configures background checks or daily review when requested.<br>May use `kpop watch status`, `kpop watch setup`, `kpop watch shared` or `kpop followups daily install`, plus the host's scheduler. |
 
@@ -1638,7 +1634,7 @@ read-only assessment and the packaged Windows reasoning runtime remain available
 | Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
-| Integration | Source candidate; local Codex on macOS ARM64 | [Reusable model plugins](docs/model-plugins.md): a creator skill and native package/installation companion. Public prebuilt companion release pending. |
+| Integration | [See setup requirements](docs/model-plugins.md#what-you-need) | [Reusable model plugins](docs/model-plugins.md): a creator skill and native package/installation companion. |
 | Core | Default for new records | [Deterministic `core/v1` assessment](docs/reasoning-core.md) and [immutable history](docs/history-contract.md), with a packaged arithmetic runtime and automatic reader selection. Existing legacy records require explicit adoption. |
 | Integration | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
 | Integration | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
