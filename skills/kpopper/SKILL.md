@@ -24,10 +24,10 @@ is never confirmed, only left standing.
 
 That makes the record **self-evolving**, in one exact sense worth being precise about: nothing
 here rewrites your conclusions or refreshes external sources. It re-checks judgments
-against what it was last checked against, and put the ones that no longer hold in front of you.
+against what they were last checked against, and puts the ones that no longer hold in front of you.
 Nobody maintains a list of what went stale. Staleness is derived, so it cannot be forgotten,
 cleared by accident, or survive a revert; the page's sections fill themselves from that derivation. Keep where each piece came from without changing the user's deliverable.
-If the user explicitly chooses a reusable knowledge model as the product, see
+If the user chooses a reusable knowledge model as the product, use the [model skill](../model/SKILL.md). See
 [living knowledge models](../../docs/living-knowledge-models.md) for keeping its complete bundle
 separate from optional project knowledge and case data.
 

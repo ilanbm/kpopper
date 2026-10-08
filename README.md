@@ -49,6 +49,18 @@ share the model itself—for example, a model of policy conditions or software c
 Both paths use living knowledge models and the same kpopper runtime. One project can do both,
 with the reusable model kept as its own record. Individual cases stay in private copies.
 
+#### Package or install a model plugin
+
+The optional **[model skill](skills/model/SKILL.md)** guides authors through packaging a
+reusable model with its domain skill, source history and pinned engine. Read/query models
+use the shared native reader; applications that bind private case inputs can add an adapter.
+Users install the resulting domain plugin and ask its skill questions from any project.
+The generated plugin includes its engine, so users need no separate kpopper installation,
+Python or compiler.
+
+**[Create and package a model](docs/model-plugins.md#try-the-complete-example)** ·
+[Use a model plugin](docs/model-plugins.md#use-a-model-plugin)
+
 Agent reasoning costs time and tokens. kpopper runs calculations and dependency checks
 deterministically, aiming to turn seconds of model work into milliseconds of
 computation—and focus the agent on decisions that need judgment.
@@ -87,6 +99,7 @@ computation—and focus the agent on decisions that need judgment.
 - [Two ways to use kpopper](#two-ways-to-use-kpopper)
   - [Use it in your project](#use-kpopper-in-your-project)
   - [Build a reusable model](#build-a-reusable-knowledge-model)
+  - [Package or install a model plugin](#package-or-install-a-model-plugin)
 - [Project workflows](#project-workflows)
   - [Coding agents](#user-content-example-1-coding-agent)
   - [Claude Cowork / ChatGPT Work](#user-content-example-2-claude-cowork-and-chatgpt-work)
@@ -951,11 +964,16 @@ See the [command reference](docs/reference.md), [history commands](docs/history-
 | `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Finds relevant IDs, then prefers `kpop context <id>` for records with dependencies and checks.<br>Uses `pull` for concise readings or when the checked reader is unavailable, and `affects` for changed inputs. |
 | `/kpopper:record` | [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. |
 | `/kpopper:map` | [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. |
+| Codex: `$model` | [model](skills/model/SKILL.md) | Authors and packages a reusable model with the separate `kpop-model` companion.<br>[Creation and packaging guide](docs/model-plugins.md). |
 | `/kpopper:consolidate` | [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. |
 | `/kpopper:watch` | [watch](skills/watch/SKILL.md) | Inspects branch checks and shared findings; configures background checks or daily review when requested.<br>May use `kpop watch status`, `kpop watch setup`, `kpop watch shared` or `kpop followups daily install`, plus the host's scheduler. |
 
 The agent chooses the calls for the task and the record's state, using its
 source-reading tools as needed.
+
+For a generated model plugin, use its domain skill and bundled `kpop-model` launcher.
+Its [setup, read and version commands](docs/model-plugins.md#use-a-model-plugin) are separate
+from the project-scoped `kpop` commands above.
 
 For example, `/kpopper:ground workshop.ingredient_plan` asks the agent to retrieve that plan and
 its basis. **`ground` is a skill; the CLI reads use `open`, `pull`, `affects` and `check`.**
@@ -1616,6 +1634,7 @@ read-only assessment and the packaged Windows reasoning runtime remain available
 | Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
+| Integration | [See setup requirements](docs/model-plugins.md#what-you-need) | [Reusable model plugins](docs/model-plugins.md): a creator skill and native package/installation companion. |
 | Core | Default for new records | [Deterministic `core/v1` assessment](docs/reasoning-core.md) and [immutable history](docs/history-contract.md), with a packaged arithmetic runtime and automatic reader selection. Existing legacy records require explicit adoption. |
 | Integration | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
 | Integration | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |

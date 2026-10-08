@@ -1,0 +1,5 @@
+# Node history and retained evidence bind exact bytes.
+/GROUNDING.yaml -text
+/.kpopper/** -text
+/evidence/** -text
+/.kpopper-history-migration/** -text

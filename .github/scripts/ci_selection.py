@@ -71,6 +71,9 @@ UNREAD = (
     "adapters/*", "hooks/*", "scripts/bin/*",
     ".claude-plugin/*", ".codex-plugin/*", "package.json",
     ".gitignore", "*/.gitignore", ".gitattributes",
+    # Separate companion crate; the core native lane does not exercise it. Its release
+    # tests run through the model-plugin gate documented in docs/model-plugins.md.
+    "tools/model-package/*", ".github/workflows/model-plugins.yml",
 )
 
 # Run by the record job alone, on every pull request; no lane reads them.
