@@ -161,12 +161,33 @@ def validate_run(run, workflow, repo, expected_path, *, success):
             "wrong evidence workflow")
     for field in ("repository", "head_repository"):
         require((run.get(field) or {}).get("full_name") == repo, "foreign evidence repository")
-    require(run.get("event") == "workflow_dispatch" and run.get("status") == "completed"
+    events = {"workflow_dispatch"}
+    if not success and expected_path == ".github/workflows/check.yml":
+        events.add("pull_request")
+    require(run.get("event") in events and run.get("status") == "completed"
             and run.get("conclusion") == ("success" if success else "failure"),
             "evidence run has wrong event or outcome")
     require(sha(run.get("head_sha")) and re.fullmatch(r"release/[0-9]+\.[0-9]+\.[0-9]+",
                                                      run.get("head_branch", "")),
             "evidence run is not a release source")
+
+
+def baseline_workflow_source(run, repo):
+    path = repo + "/.github/workflows/native-rust.yml"
+    matches = [item for item in run.get("referenced_workflows", [])
+               if item.get("path", "").split("@", 1)[0] == path]
+    require(len(matches) == 1 and sha(matches[0].get("sha")), "missing immutable native workflow reference")
+    return matches[0]["sha"]
+
+
+def validate_executed_workflows(repository, baseline, workflow_source):
+    # PR runs execute workflows from the historical merge commit, which can differ
+    # from the head checked out by the tests. Use Actions' immutable workflow SHA,
+    # never the mutable pull_requests[].head/base metadata on an old run.
+    head, executed = repository.tree(baseline), repository.tree(workflow_source)
+    for path in (".github/workflows/check.yml", ".github/workflows/native-rust.yml"):
+        require(path in head and head[path] == executed.get(path),
+                "executed baseline workflow differs from its evidence source: " + path)
 
 
 def rust_structure(text):
@@ -298,6 +319,14 @@ def validate_sources(repository, baseline, windows, source, failures):
             before, after = repository.read(baseline, path), repository.read(source, path)
             if path == "native/.config/nextest.toml":
                 validate_nextest(before, after, {(binary, name) for binary, names in fixtures.items() for name in names})
+            elif path == ".github/workflows/native-rust.yml":
+                # More time for the complete Windows job changes neither the tests
+                # nor any inherited platform's commands or timeout. No other workflow
+                # change, including per-test deadlines or retries, is recoverable.
+                old_timeout = b"    timeout-minutes: ${{ matrix.target == 'darwin-x86_64' && 120 || 75 }}"
+                new_timeout = b"    timeout-minutes: ${{ (matrix.target == 'darwin-x86_64' || matrix.target == 'windows-x86_64') && 120 || 75 }}"
+                require(before.count(old_timeout) == 1 and after == before.replace(old_timeout, new_timeout, 1),
+                        "native workflow changed beyond the Windows job timeout")
             else:
                 binary = path.removeprefix("native/tests/").removesuffix(".rs")
                 require(path == f"native/tests/{binary}.rs" and binary in fixtures,
@@ -372,8 +401,10 @@ def recover(repo, baseline_id, windows_id, source):
         (validate_windows_jobs if success else validate_baseline_jobs)(jobs)
         runs.append(run)
     baseline, windows = runs
-    subprocess.run(["git", "fetch", "--no-tags", "origin", baseline["head_sha"], windows["head_sha"], source], check=True)
+    workflow_source = baseline_workflow_source(baseline, repo)
+    subprocess.run(["git", "fetch", "--no-tags", "origin", baseline["head_sha"], windows["head_sha"], source, workflow_source], check=True)
     repository = GitRepository()
+    validate_executed_workflows(repository, baseline["head_sha"], workflow_source)
     version = repository.read(source, "VERSION").decode().strip()
     require(re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
             and all(run["head_branch"] == "release/" + version for run in runs), "release version mismatch")
@@ -389,7 +420,8 @@ def recover(repo, baseline_id, windows_id, source):
     def receipt(run, artifacts):
         return {"run_id": run["id"], "attempt": run["run_attempt"], "source": run["head_sha"], "artifacts": artifacts}
     return {"schema": 1, "source": source, "version": version, "repository": repo,
-            "input_tree_sha256": fingerprint, "baseline": receipt(baseline, baseline_artifacts),
+            "input_tree_sha256": fingerprint,
+            "baseline": {**receipt(baseline, baseline_artifacts), "workflow_source": workflow_source},
             "windows": receipt(windows, windows_artifacts), "recovered_failures": sorted(failures),
             "inherited_targets": sorted(set(TARGETS) - {WINDOWS}),
             "current_validation": "fresh distributions, acceptance and crate; full tests inherited as recorded"}
