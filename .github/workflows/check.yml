@@ -29,13 +29,14 @@ jobs:
       rust: ${{ steps.select.outputs.rust }}
       platforms: ${{ steps.select.outputs.platforms }}
       release: ${{ steps.select.outputs.release }}
+      validation: ${{ steps.select.outputs.validation }}
       promotion: ${{ steps.candidate.outputs.promotion }}
       source: ${{ steps.candidate.outputs.source }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.13"
       - name: Install the workflow reader for platform selection
@@ -56,11 +57,19 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PUSH_BASE: ${{ github.event.before }}
           PUSH_HEAD: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$RELEASE" = true ]; then
             python .github/scripts/ci_selection.py --release --base "$BASELINE" --head "$SOURCE"
           elif [ "$EVENT" = pull_request ]; then
-            python .github/scripts/ci_selection.py --base "$PR_BASE" --head "$PR_HEAD"
+            validation=full
+            # Labels are maintainer-controlled. Read current labels so a label added
+            # while opening the PR is visible; API failures retain full coverage.
+            focused=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels \
+              --jq 'any(.labels[]; .name == "ci:reader-checks")' 2>/dev/null) || focused=false
+            if [ "$focused" = true ]; then validation=readers; fi
+            python .github/scripts/ci_selection.py --base "$PR_BASE" --head "$PR_HEAD" --validation "$validation"
           elif [ "$EVENT" = push ]; then
             python .github/scripts/ci_selection.py --push --base "$PUSH_BASE" --head "$PUSH_HEAD"
           else
@@ -76,10 +85,10 @@ jobs:
     timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.changes.outputs.source }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.13"
       - name: The pull request declares its bump
@@ -101,13 +110,12 @@ jobs:
           python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
           tests.test_ci_release_flow tests.test_ci_audit tests.test_native_distribution tests.test_native_release_assets
           tests.test_native_launcher tests.test_hook_delivery tests.test_release_candidate -v
-
       # The record is read by the native kpop of this tree. A reader main built from the same
       # native/ sources is reused, so only a change under native/ pays for the build. Only a
       # push to main saves one: pull requests read main's, and keep the cache budget free.
       - name: Reuse the native reader built from these sources
         id: reader
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/kpopper-record-reader
           key: record-reader-${{ runner.os }}-${{ hashFiles('native/**') }}
@@ -124,7 +132,7 @@ jobs:
           cp target/debug/kpop ~/.cache/kpopper-record-reader/kpop
       - name: Keep main's native reader for the pull requests that follow
         if: github.event_name == 'push' && steps.reader.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/kpopper-record-reader
           key: ${{ steps.reader.outputs.cache-primary-key }}
@@ -165,6 +173,7 @@ jobs:
     uses: ./.github/workflows/native-rust.yml
     with:
       target: ${{ needs.changes.outputs.platforms }}
+      validation: ${{ needs.changes.outputs.validation }}
       publish: ${{ needs.changes.outputs.release == 'true' }}
       source_ref: ${{ needs.changes.outputs.source }}
       audit: true
@@ -175,8 +184,8 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.13"
       - name: Require every selected check to succeed
@@ -191,10 +200,10 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.13'
       - name: Require successful candidate checks

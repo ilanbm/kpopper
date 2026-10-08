@@ -337,6 +337,7 @@ pub struct Projection<'a> {
     pub(crate) disputed: BTreeMap<String, Vec<(String, V)>>,
     pub(crate) knowledge: Vec<String>,
     history_review: Option<BTreeMap<String, String>>,
+    formatter: Option<String>,
 }
 
 /// Stable data needed by the session stop gate.  This deliberately excludes
@@ -362,7 +363,7 @@ impl<'a> Projection<'a> {
             unread: checked.unread.clone(), unread_failures: vec![],
             disputed: checked.disputed.iter().map(|(id, variants)| (id.clone(),
                 variants.iter().map(|(name, value)| (name.clone(), V::from_typed(value))).collect())).collect(),
-            knowledge: checked.knowledge.clone(), history_review: None,
+            knowledge: checked.knowledge.clone(), history_review: None, formatter: None,
         }.with_history_review(history)?;
         let doc = map(&projection.base.reader.document)?;
         let mut asked = BTreeMap::new();
@@ -470,7 +471,14 @@ impl<'a> Projection<'a> {
             disputed,
             knowledge,
             history_review: None,
+            formatter: None,
         })
+    }
+
+    /// Carry the workspace's formatter warning for the record at `record` into `check`.
+    pub(crate) fn with_formatter_notice(mut self, record: &std::path::Path) -> Self {
+        self.formatter = crate::formatter_notice::notice(record);
+        self
     }
 
     pub(crate) fn with_history_review(
@@ -2366,6 +2374,7 @@ impl Projection<'_> {
                 }
             }
         }
+        note.extend(self.formatter.clone());
         fail.extend(self.unread_failures.clone());
         let mut lines = vec![];
         lines.extend(note.iter().map(|line| format!("NOTE {line}")));

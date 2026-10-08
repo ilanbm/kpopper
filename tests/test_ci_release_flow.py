@@ -222,6 +222,25 @@ class PublishBoundary(unittest.TestCase):
         script = (ROOT / ".github/scripts/release.py").read_text()
         self.assertIn('"workflow", "run", "check.yml", "--ref", branch', script)
 
+    def test_trusted_workflows_pin_every_action_to_a_commit(self):
+        # A tag can be moved to other code; a commit cannot. reasoning-runtime.yml and
+        # reasoning-target.yml are left out: their bytes are recorded inside
+        # scripts/reasoning/native/gmp-source-and-build.tar.gz, so changing them means
+        # regenerating that archive.
+        pinned = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}")
+        local = re.compile(r"\./\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml")
+        for name in ("check.yml", "release.yml", "publish.yml", "native-rust.yml"):
+            uses = []
+            for job_id, job in self.workflow(name)["jobs"].items():
+                if "uses" in job:
+                    uses.append((job_id, job["uses"]))
+                uses.extend((job_id, step["uses"]) for step in job.get("steps", []) if "uses" in step)
+            self.assertTrue(uses, name)
+            for job_id, use in uses:
+                with self.subTest(workflow=name, job=job_id, uses=use):
+                    self.assertTrue(pinned.fullmatch(use) or local.fullmatch(use),
+                                    f"{name} job {job_id} uses {use!r}, not a commit pin")
+
     def test_downloads_are_bound_to_checked_run_and_publisher_is_trusted(self):
         workflow = self.workflow("publish.yml")
         for job in workflow["jobs"].values():

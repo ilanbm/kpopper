@@ -207,6 +207,22 @@ fn private_draft_count(paths: &[PathBuf], cwd: &Path, inventory: &mut Inventory)
     }
     Ok(count)
 }
+/// A live read says how many private drafts this project retains; a frozen read says nothing.
+fn draft_notes(
+    mode: ReadMode,
+    paths: &[PathBuf],
+    cwd: &Path,
+    inventory: &mut Inventory,
+) -> Result<Vec<String>> {
+    if mode != ReadMode::Live {
+        return Ok(vec![]);
+    }
+    let drafts = private_draft_count(paths, cwd, inventory)?;
+    Ok((drafts > 0)
+        .then(|| format!("{drafts} private drafts retained; inspect `kpop knowledge status`"))
+        .into_iter()
+        .collect())
+}
 fn has_brief(paths: &[PathBuf], inventory: &mut Inventory) -> Result<bool> {
     let first = paths.first().ok_or_else(|| error("record_required"))?;
     let layout = crate::history_transaction::Layout::for_entry(
@@ -437,11 +453,13 @@ pub fn unreadable_record(failure: &crate::Error) -> bool {
         || crate::ordinary_yaml_diagnostic::explains_record(failure)
 }
 /// Whether a failure is the ordinary reader's refusal of a record, or of a layer read with
-/// it, that only a core/v1 consumer reads, or whose reasoning declaration it cannot read.
-/// Commands print it as it stands, with exit status 1, as the Python reader does.
+/// it, that only a core/v1 consumer reads, or whose reasoning declaration it cannot read,
+/// or of a record whose location is no readable file. Commands print it as it stands,
+/// with exit status 1, as the Python reader does.
 pub fn core_consumer_refusal(failure: &crate::Error) -> bool {
     failure.0 == crate::source_capture::CORE_CONSUMER
         || crate::ordinary_fields::refuses_declaration(failure)
+        || W::refuses_unavailable(failure)
 }
 /// What a read command prints on stderr when it fails, and its exit status. With
 /// --json the same text travels: wrapped for check, pull and affects, as open's `error`.
@@ -703,13 +721,17 @@ pub fn run(
         crate::require(command == "pull", "--from is available only with pull")?;
         crate::require(!options.history, "--from cannot be combined with --history")?;
         let output = branch_read::pull(
-            reference,
-            &seeds,
-            options.budget.unwrap_or(40),
+            branch_read::PullQuery {
+                reference,
+                seeds: &seeds,
+                budget: options.budget.unwrap_or(40),
+                notes: &[],
+            },
             &cwd,
             &paths,
             &capture,
             runtime,
+            || draft_notes(mode, &paths, &cwd, &mut inventory),
         )?;
         capture.verify()?;
         inventory.verify()?;
@@ -743,14 +765,7 @@ pub fn run(
         )?;
         let mut knowledge = capture.reader_lines()?;
         knowledge.extend(file_notes.iter().cloned());
-        if mode == ReadMode::Live {
-            let drafts = private_draft_count(&paths, &cwd, &mut inventory)?;
-            if drafts > 0 {
-                knowledge.push(format!(
-                    "{drafts} private drafts retained; inspect `kpop knowledge status`"
-                ));
-            }
-        }
+        knowledge.extend(draft_notes(mode, &paths, &cwd, &mut inventory)?);
         let projection = crate::ordinary_views::Projection::new(
             capture.ordinary_document(),
             crate::ordinary_value::map(capture.hypotheses())?,
@@ -781,6 +796,10 @@ pub fn run(
                 })?
             }
             "check" => {
+                let projection = match paths.first() {
+                    Some(record) => projection.with_formatter_notice(record),
+                    None => projection,
+                };
                 let (mut text, code) = projection.check(None)?;
                 if has_brief(&paths, &mut inventory)? {
                     text.insert_str(0, C::LAYOUT_NOTICE);

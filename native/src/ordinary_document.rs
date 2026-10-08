@@ -343,7 +343,8 @@ pub(crate) fn load(
             "node_history_entry_unsupported",
         )?;
         let root = first.parent().unwrap();
-        let capture = crate::history_node_capture::Capture::read(root)?;
+        let capture = crate::history_node_capture::Capture::read(root)
+            .map_err(|e| crate::ordinary_yaml_diagnostic::history_error(first, e))?;
         let adapted = crate::history_node_projection::capture(&capture)?;
         let retained = crate::history_sources::capture(root, "GROUNDING.yaml", adapted.document())?;
         for (path, raw) in retained.files() {
