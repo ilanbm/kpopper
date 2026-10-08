@@ -64,6 +64,9 @@
 
 ### Fixed
 
+- `set` preserves long text values when adding their first `of` date. The date
+  follows the complete wrapped value instead of interrupting it and causing
+  `invalid_history_yaml`; existing dates, source citations and comments are preserved.
 - Skill guidance uses **kpopper** in ordinary conversation. Fully qualified skill
   names such as `kpopper:ground` are reserved for invocation instructions,
   technical documentation, debugging and explanations of a specific skill.
