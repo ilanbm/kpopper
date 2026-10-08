@@ -12,6 +12,14 @@ slow-timeout = { period = "60s", terminate-after = 10, on-timeout = "fail" }
 # Print a failing test's output when it fails, and again in the summary at the end.
 failure-output = "immediate-final"
 
+# This Windows fixture deliberately holds a DELETE handle for 80 ms while the
+# reader uses a bounded retry window. Keep other test processes from starving
+# its closer thread; the read assertions and production retry budget stay intact.
+[[profile.ci.overrides]]
+filter = 'binary(=checked_session_store) & test(=proposal_reader_waits_for_transient_publisher_delete_handle)'
+platform = 'cfg(windows)'
+threads-required = "num-test-threads"
+
 # The wide union fixture reconstructs hundreds of immutable originals across
 # six branches, including durable file and directory syncs. Reserve the runner
 # so concurrent history fixtures do not compete for its disk and CPU.
