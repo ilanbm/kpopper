@@ -628,9 +628,16 @@ mod tests {
     fn sealed_inventory_uses_portable_relative_names() {
         let temp = tempfile::tempdir().unwrap();
         fs::create_dir(temp.path().join("nested")).unwrap();
-        fs::write(temp.path().join("nested").join("reading.yaml"), b"known: {}\n").unwrap();
+        fs::write(
+            temp.path().join("nested").join("reading.yaml"),
+            b"known: {}\n",
+        )
+        .unwrap();
         let files = inventory(temp.path()).unwrap();
-        assert_eq!(files, A::Files::from([("nested/reading.yaml".into(), b"known: {}\n".to_vec())]));
+        assert_eq!(
+            files,
+            A::Files::from([("nested/reading.yaml".into(), b"known: {}\n".to_vec())])
+        );
     }
 
     #[test]

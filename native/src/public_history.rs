@@ -124,7 +124,9 @@ fn status(entry: &Path) -> Result<Value> {
 }
 
 /// Compact views are bound to their manifest; a mismatch is an unaccepted edit.
-fn node_view(entry: &Path) -> Result<std::result::Result<crate::history_node_capture::Capture, crate::Error>> {
+fn node_view(
+    entry: &Path,
+) -> Result<std::result::Result<crate::history_node_capture::Capture, crate::Error>> {
     let root = entry.parent().ok_or_else(|| error("invalid_path"))?;
     match crate::history_node_capture::Capture::read(root) {
         Ok(capture) => Ok(Ok(capture)),
@@ -176,8 +178,10 @@ fn node_rebuild(entry: &Path) -> Result<Value> {
         .map(|(subject, _)| subject.clone())
         .collect::<Vec<_>>();
     capture.verify_current(root)?;
-    Ok(json!({"state":"rebuilt", "record":entry, "revision":capture.revision(),
-        "unresolved_subjects":unresolved}))
+    Ok(
+        json!({"state":"rebuilt", "record":entry, "revision":capture.revision(),
+        "unresolved_subjects":unresolved}),
+    )
 }
 
 pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
@@ -233,8 +237,18 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let node = crate::history_node_publication::selected(entry)?;
     require(
         !node
-            || ["status", "accept", "refute", "correct", "propose", "retire", "adopt",
-                "reconcile", "rebuild"].contains(&operation),
+            || [
+                "status",
+                "accept",
+                "refute",
+                "correct",
+                "propose",
+                "retire",
+                "adopt",
+                "reconcile",
+                "rebuild",
+            ]
+            .contains(&operation),
         "node_history_operation_unsupported",
     )?;
     require(
@@ -269,7 +283,12 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
                 "kind":operation, "id":options.subject, "of":options.target,
                 "over":options.over, "because":options.because,
             }))?;
-            json_value(&crate::direct_history::act_as(&original, &cwd, &action, options.by.as_deref())?)?
+            json_value(&crate::direct_history::act_as(
+                &original,
+                &cwd,
+                &action,
+                options.by.as_deref(),
+            )?)?
         }
         "reconcile" if options.record_proposals => {
             let because = options
@@ -333,8 +352,9 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             json!({"state":"rebuilt", "record":entry,
                 "baseline":captured.baseline.to_json()?, "unresolved_subjects":unresolved})
         }
-        "migrate" if crate::legacy_authoring::authority_route(entry)?
-            == crate::legacy_authoring::AuthorityRoute::History =>
+        "migrate"
+            if crate::legacy_authoring::authority_route(entry)?
+                == crate::legacy_authoring::AuthorityRoute::History =>
         {
             // An active legacy history converts with its original semantic IDs.
             let plan = crate::history_node_migration::Plan::prepare(entry)?;

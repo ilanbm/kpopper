@@ -145,8 +145,12 @@ impl Plan {
 // Domain-profile support is a separate capability; a scoped import must not
 // discard a declared contract when its package cannot be interpreted here.
 pub(crate) fn has_domain_profile(document: &V) -> Result<bool> {
-    let Some(meta) = map(document)?.get("meta") else { return Ok(false); };
-    Ok(map(meta)?.get("domain_profile").is_some_and(|v| *v != V::Null))
+    let Some(meta) = map(document)?.get("meta") else {
+        return Ok(false);
+    };
+    Ok(map(meta)?
+        .get("domain_profile")
+        .is_some_and(|v| *v != V::Null))
 }
 
 /// Select the dependency closure of `roots` from the compact candidate that includes the
@@ -735,8 +739,7 @@ fn incoming(capture: &Capture, closure: Closure) -> Result<Incoming> {
         }
     }
     require(
-        !has_domain_profile(capture.document())?
-            && !has_domain_profile(&closure.document)?,
+        !has_domain_profile(capture.document())? && !has_domain_profile(&closure.document)?,
         "incompatible_domain_profiles",
     )?;
     let graph = closure.graph()?;

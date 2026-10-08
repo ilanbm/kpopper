@@ -506,9 +506,16 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("asset");
         std::fs::write(&path, b"abc").unwrap();
-        let digest = std::thread::Builder::new().stack_size(128 * 1024)
-            .spawn(move || sha256(&path).unwrap()).unwrap().join().unwrap();
-        assert_eq!(digest, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        let digest = std::thread::Builder::new()
+            .stack_size(128 * 1024)
+            .spawn(move || sha256(&path).unwrap())
+            .unwrap()
+            .join()
+            .unwrap();
+        assert_eq!(
+            digest,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 
     struct Fake {

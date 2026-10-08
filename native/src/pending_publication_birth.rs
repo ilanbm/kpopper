@@ -21,7 +21,9 @@ const ENTRY: &str = "GROUNDING.yaml";
 /// The record directory relative to the repository, with a trailing separator.
 fn prefix(record: &str) -> Result<String> {
     require(
-        Path::new(record).file_name().is_some_and(|name| name == ENTRY),
+        Path::new(record)
+            .file_name()
+            .is_some_and(|name| name == ENTRY),
         &format!(
             "compact_publication_entry_unsupported: {record}; a new compact record is born only as {ENTRY}. Configure {ENTRY} or create the record locally first"
         ),
@@ -40,16 +42,35 @@ fn record_storage(relative: &str) -> Result<bool> {
     };
     for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
         let layout = crate::history_transaction::Layout::for_entry(name)?;
-        for path in [layout.entry, layout.authority, layout.objects, layout.commits,
-            layout.cancellations, layout.retained, layout.hypotheses, layout.replaced,
-            layout.view, layout.journal]
-        {
-            if within(&path) { return Ok(true); }
+        for path in [
+            layout.entry,
+            layout.authority,
+            layout.objects,
+            layout.commits,
+            layout.cancellations,
+            layout.retained,
+            layout.hypotheses,
+            layout.replaced,
+            layout.view,
+            layout.journal,
+        ] {
+            if within(&path) {
+                return Ok(true);
+            }
         }
     }
-    Ok(["PROVENANCE.d", ".kpopper/.history-node-publication.json",
-        "evidence/legacy", "evidence/migration", "evidence/bootstrap", "evidence/reports",
-        "evidence/view-edits", ".kpopper/evidence/domain"].iter().any(|path| within(path)))
+    Ok([
+        "PROVENANCE.d",
+        ".kpopper/.history-node-publication.json",
+        "evidence/legacy",
+        "evidence/migration",
+        "evidence/bootstrap",
+        "evidence/reports",
+        "evidence/view-edits",
+        ".kpopper/evidence/domain",
+    ]
+    .iter()
+    .any(|path| within(path)))
 }
 
 /// Discovery stops at this private tree: an unusable gitfile ends Git discovery and

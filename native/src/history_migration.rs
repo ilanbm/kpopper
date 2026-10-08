@@ -674,14 +674,7 @@ impl ImportPlan {
                     .get(collection)
                     .and_then(|m| m.get(&subject))
                     .ok_or_else(|| error("unresolved_import_origin"))?;
-                let location = locator(
-                    origin,
-                    collection,
-                    &subject,
-                    &mapping,
-                    exact,
-                    &options,
-                )?;
+                let location = locator(origin, collection, &subject, &mapping, exact, &options)?;
                 let claim = claim(
                     &subject,
                     collection,

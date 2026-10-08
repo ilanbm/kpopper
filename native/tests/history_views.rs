@@ -23,8 +23,12 @@ fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
                 walk(root, &p, out);
             } else {
                 out.insert(
-                    p.strip_prefix(root).unwrap().iter()
-                        .map(|part| part.to_str().unwrap()).collect::<Vec<_>>().join("/"),
+                    p.strip_prefix(root)
+                        .unwrap()
+                        .iter()
+                        .map(|part| part.to_str().unwrap())
+                        .collect::<Vec<_>>()
+                        .join("/"),
                     fs::read(p).unwrap(),
                 );
             }

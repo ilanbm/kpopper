@@ -294,16 +294,29 @@ impl CheckedSession {
         let mut ids = BTreeSet::new();
         let mut cursor = None;
         loop {
-            let text = self.search(revision, &SearchRequest {
-                query: query.into(), ids: None, tokens: 65_536, limit: 32,
-                branch: None, mode: SearchMode::Lexical, cursor: cursor.clone(),
-            }, |s| crate::tokenizer::Encoding::O200kBase.count(s))?;
+            let text = self.search(
+                revision,
+                &SearchRequest {
+                    query: query.into(),
+                    ids: None,
+                    tokens: 65_536,
+                    limit: 32,
+                    branch: None,
+                    mode: SearchMode::Lexical,
+                    cursor: cursor.clone(),
+                },
+                |s| crate::tokenizer::Encoding::O200kBase.count(s),
+            )?;
             let response: J = serde_json::from_str(&text)?;
             for hit in response["hits"].as_array().into_iter().flatten() {
-                if let Some(id) = hit["id"].as_str() { ids.insert(id.to_owned()); }
+                if let Some(id) = hit["id"].as_str() {
+                    ids.insert(id.to_owned());
+                }
             }
             let next = response["next_cursor"].as_str().map(str::to_owned);
-            if next.is_none() { break; }
+            if next.is_none() {
+                break;
+            }
             require(next != cursor, "search pagination made no progress")?;
             cursor = next;
         }
@@ -311,7 +324,10 @@ impl CheckedSession {
         let seeds = ids.clone();
         for edge in &self.edges {
             if edge["from"].as_str().is_some_and(|id| seeds.contains(id)) {
-                if let Some(id) = edge["to"].as_str().filter(|id| self.nodes.contains_key(*id)) {
+                if let Some(id) = edge["to"]
+                    .as_str()
+                    .filter(|id| self.nodes.contains_key(*id))
+                {
                     ids.insert(id.to_owned());
                 }
             }

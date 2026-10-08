@@ -281,7 +281,11 @@ fn message(notices: &[J], record: &Path) -> String {
                 .collect::<String>()
         };
         let quote = compact(&notice["source_quote"], 500);
-        let reason = if notice.get("question").and_then(J::as_str).is_some_and(|s| !s.is_empty()) {
+        let reason = if notice
+            .get("question")
+            .and_then(J::as_str)
+            .is_some_and(|s| !s.is_empty())
+        {
             compact(&notice["question"], 900)
         } else {
             compact(&notice["reason"], 900)
@@ -303,8 +307,14 @@ fn message(notices: &[J], record: &Path) -> String {
             .chars()
             .take(MAX_TARGET_CHARS)
             .collect::<String>();
-        let mut affected = affected.chars().take(MAX_AFFECTED_CHARS).collect::<String>();
-        if notice["affected_judgments"].as_array().is_some_and(|items| items.len() > 16) {
+        let mut affected = affected
+            .chars()
+            .take(MAX_AFFECTED_CHARS)
+            .collect::<String>();
+        if notice["affected_judgments"]
+            .as_array()
+            .is_some_and(|items| items.len() > 16)
+        {
             affected.push_str(" (more in ingest pending)");
         }
         lines.push(format!(
@@ -608,7 +618,9 @@ pub fn hook_visible(layout: &S::Layout, to: &str, notices: Vec<J>, epoch: &str) 
         };
         let id = job_id(to, event);
         // A corrupt job cannot establish ownership of an otherwise valid notice.
-        let job = S::read_json(&job_path(layout, &id)).ok().flatten()
+        let job = S::read_json(&job_path(layout, &id))
+            .ok()
+            .flatten()
             .and_then(|value| validated_job(value, Some(&id)).ok());
         let hidden = job.as_ref().is_some_and(|job| {
             if job["recipient"] != to || job["event_id"] != event {

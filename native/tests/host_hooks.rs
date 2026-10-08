@@ -52,11 +52,7 @@ fn fixture() -> TempDir {
         "PROVENANCE.view.yaml",
         "PROVENANCE.measure.yaml",
     ] {
-        fs::copy(
-            fixtures().join("page").join(name),
-            dir.path().join(name),
-        )
-        .unwrap();
+        fs::copy(fixtures().join("page").join(name), dir.path().join(name)).unwrap();
     }
     dir
 }

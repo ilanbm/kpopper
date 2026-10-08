@@ -13,15 +13,29 @@ fn platform_expected(mut value: V, case: &serde_json::Value) -> V {
     // exact synthetic, rooted-without-drive head string unchanged on Windows.
     // No source bytes, other metadata or runtime identities are normalized.
     kpop_native::reasoning_snapshot::Snapshot::from_snapshot(&value).unwrap();
-    let V::Map(top) = &mut value else { panic!("snapshot map") };
-    let V::Map(hypotheses) = top.get_mut("hypotheses").unwrap() else { panic!("hypotheses") };
-    let V::Map(idea) = hypotheses.get_mut("idea").unwrap() else { panic!("idea") };
-    let V::Map(head) = idea.get_mut("head").unwrap() else { panic!("head") };
-    assert_eq!(head["claim"], V::Text("external:12a7a06e1a109026c0f33a1e/head".into()));
+    let V::Map(top) = &mut value else {
+        panic!("snapshot map")
+    };
+    let V::Map(hypotheses) = top.get_mut("hypotheses").unwrap() else {
+        panic!("hypotheses")
+    };
+    let V::Map(idea) = hypotheses.get_mut("idea").unwrap() else {
+        panic!("idea")
+    };
+    let V::Map(head) = idea.get_mut("head").unwrap() else {
+        panic!("head")
+    };
+    assert_eq!(
+        head["claim"],
+        V::Text("external:12a7a06e1a109026c0f33a1e/head".into())
+    );
     head.insert("claim".into(), V::Text("/authored/head".into()));
-    let preimage = V::Map(top.iter()
-        .filter(|(key, _)| !["snapshot_id", "authored_revision"].contains(&key.as_str()))
-        .map(|(key, value)| (key.clone(), value.clone())).collect());
+    let preimage = V::Map(
+        top.iter()
+            .filter(|(key, _)| !["snapshot_id", "authored_revision"].contains(&key.as_str()))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    );
     top.insert("snapshot_id".into(), V::Text(preimage.digest().unwrap()));
     kpop_native::reasoning_snapshot::Snapshot::from_snapshot(&value).unwrap();
     value

@@ -20,22 +20,56 @@ fn real_pending_findings_are_offered_once_per_epoch_in_bounded_batches() {
     let receipts = ingestion::process(Some(&record), Some(&state), root, None, 32).unwrap();
     assert_eq!(receipts.len(), 9);
     assert!(receipts.iter().all(|r| r["state"] == "needs_primary"));
-    let options = Options { host:"codex".into(), mode:"start".into(),
-        record:Some(record), state_dir:Some("state".into()), wait_seconds:0.0 };
-    let first = run(&options, json!({"session_id":"fixture","agent_id":null}), root).unwrap();
+    let options = Options {
+        host: "codex".into(),
+        mode: "start".into(),
+        record: Some(record),
+        state_dir: Some("state".into()),
+        wait_seconds: 0.0,
+    };
+    let first = run(
+        &options,
+        json!({"session_id":"fixture","agent_id":null}),
+        root,
+    )
+    .unwrap();
     assert_eq!(first.code, 0);
     let packet: serde_json::Value = serde_json::from_str(&first.stdout).unwrap();
-    let context = packet["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+    let context = packet["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
     assert!(context.contains("More findings remain"));
-    let notices: serde_json::Value = serde_json::from_str(context.lines().next().unwrap()
-        .strip_prefix("KPOPPER_ATTENTION ").unwrap()).unwrap();
+    let notices: serde_json::Value = serde_json::from_str(
+        context
+            .lines()
+            .next()
+            .unwrap()
+            .strip_prefix("KPOPPER_ATTENTION ")
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(notices.as_array().unwrap().len(), 8);
-    let second = run(&options, json!({"session_id":"fixture","source":"compact"}), root).unwrap();
+    let second = run(
+        &options,
+        json!({"session_id":"fixture","source":"compact"}),
+        root,
+    )
+    .unwrap();
     assert!(second.stdout.contains("KPOPPER_ATTENTION"));
     assert!(!second.stdout.contains("More findings remain"));
-    let third = run(&options, json!({"session_id":"fixture","source":"compact"}), root).unwrap();
+    let third = run(
+        &options,
+        json!({"session_id":"fixture","source":"compact"}),
+        root,
+    )
+    .unwrap();
     assert!(third.stdout.is_empty() && third.stderr.is_empty());
-    let resumed = run(&options, json!({"session_id":"fixture","source":"resume"}), root).unwrap();
+    let resumed = run(
+        &options,
+        json!({"session_id":"fixture","source":"resume"}),
+        root,
+    )
+    .unwrap();
     assert!(resumed.stdout.contains("More findings remain"));
 }
 
@@ -49,17 +83,38 @@ fn live_reservation_suppresses_fallback_but_corrupt_job_does_not_hide_attention(
     std::fs::write(&record, "known: {p.value: {v: 1}}\n").unwrap();
     let envelope = serde_json::to_vec(&json!({"event_id":"attention", "kind":"report",
         "source_quote":"Captured fixture", "target":"p.missing", "value":4,
-        "date":"2026-09-20"})).unwrap();
-    let captured = delivery::capture(&envelope, "fixture", Some(&record), Some(&state), root, false).unwrap();
+        "date":"2026-09-20"}))
+    .unwrap();
+    let captured = delivery::capture(
+        &envelope,
+        "fixture",
+        Some(&record),
+        Some(&state),
+        root,
+        false,
+    )
+    .unwrap();
     ingestion::process(Some(&record), Some(&state), root, None, 32).unwrap();
-    let options = Options { host:"codex".into(), mode:"start".into(),
-        record:Some(record), state_dir:Some(state.clone()), wait_seconds:0.0 };
+    let options = Options {
+        host: "codex".into(),
+        mode: "start".into(),
+        record: Some(record),
+        state_dir: Some(state.clone()),
+        wait_seconds: 0.0,
+    };
     let suppressed = run(&options, json!({"session_id":"fixture"}), root).unwrap();
     assert!(suppressed.stdout.is_empty());
-    let job = state.join("delivery-jobs").join(format!("{}.json",
-        captured["delivery_job"]["id"].as_str().unwrap()));
+    let job = state.join("delivery-jobs").join(format!(
+        "{}.json",
+        captured["delivery_job"]["id"].as_str().unwrap()
+    ));
     std::fs::write(job, "{").unwrap();
-    let visible = run(&options, json!({"session_id":"fixture","source":"compact"}), root).unwrap();
+    let visible = run(
+        &options,
+        json!({"session_id":"fixture","source":"compact"}),
+        root,
+    )
+    .unwrap();
     assert_eq!(visible.code, 0);
     assert!(visible.stdout.contains("KPOPPER_ATTENTION"));
 }
@@ -71,11 +126,23 @@ fn native_cli_hook_consumes_payload_cwd_without_python() {
     let temp = tempfile::tempdir().unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["ingestion-hook", "codex", "start"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().unwrap();
-    child.stdin.take().unwrap().write_all(serde_json::to_string(&json!({
-        "session_id":"fixture", "cwd":temp.path()
-    })).unwrap().as_bytes()).unwrap();
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            serde_json::to_string(&json!({
+                "session_id":"fixture", "cwd":temp.path()
+            }))
+            .unwrap()
+            .as_bytes(),
+        )
+        .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
     assert!(output.stdout.is_empty() && output.stderr.is_empty());
@@ -90,7 +157,19 @@ fn malformed_or_child_payloads_are_silent_success() {
         state_dir: None,
         wait_seconds: 0.0,
     };
-    let silent = Output { stdout: String::new(), stderr: String::new(), code: 0 };
+    let silent = Output {
+        stdout: String::new(),
+        stderr: String::new(),
+        code: 0,
+    };
     assert_eq!(run(&options, json!(null), Path::new(".")).unwrap(), silent);
-    assert_eq!(run(&options, json!({"session_id":"s","agent_id":"child"}), Path::new(".")).unwrap(), silent);
+    assert_eq!(
+        run(
+            &options,
+            json!({"session_id":"s","agent_id":"child"}),
+            Path::new(".")
+        )
+        .unwrap(),
+        silent
+    );
 }

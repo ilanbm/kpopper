@@ -113,10 +113,7 @@ fn unpack(
     require(
         string_is(field(&object, "subject")?, subject)
             && string_is(field(&object, "id")?, &observation.id)
-            && members.contains(
-                version.operation(),
-                text(field(&object, "op")?)?,
-            )?,
+            && members.contains(version.operation(), text(field(&object, "op")?)?)?,
         "node_semantic_binding",
     )?;
     if !string_is(field(&object, "kind")?, "act") {
@@ -260,35 +257,67 @@ impl Capture {
     pub(crate) fn archived_replaced_yaml(&self) -> Result<Option<ReplacedArchive>> {
         let mut found: Option<ReplacedArchive> = None;
         for transaction in self.snapshot.transactions.values() {
-            let Some(context) = transaction.context.as_ref() else { continue };
+            let Some(context) = transaction.context.as_ref() else {
+                continue;
+            };
             let context = map(context)?;
             if let Some(archived) =
                 crate::history_node_import::retained_replaced(&self.snapshot, transaction)?
             {
                 if let Some(previous) = &found {
-                    require(previous.bytes == archived.bytes, "history_archive_ambiguous")?;
+                    require(
+                        previous.bytes == archived.bytes,
+                        "history_archive_ambiguous",
+                    )?;
                 } else {
                     found = Some(archived);
                 }
                 continue;
             }
-            let (paths, source) = if context.get("format")
-                .is_some_and(|v| string_is(v, crate::history_node_bootstrap::FORMAT)) {
+            let (paths, source) = if context
+                .get("format")
+                .is_some_and(|v| string_is(v, crate::history_node_bootstrap::FORMAT))
+            {
                 let options = map(field(context, "options")?)?;
-                (vec![text(field(options, "archive")?)?], "verified_bootstrap_archive")
-            } else if context.get("format")
-                .is_some_and(|v| string_is(v, crate::history_node_legacy::CHECKPOINT)) {
-                (transaction.evidence.keys().filter(|p| p.starts_with(crate::history_node_legacy::PREFIX)
-                    && p.ends_with(".zip")).map(String::as_str).collect(), "verified_legacy_archive")
-            } else { continue };
+                (
+                    vec![text(field(options, "archive")?)?],
+                    "verified_bootstrap_archive",
+                )
+            } else if context
+                .get("format")
+                .is_some_and(|v| string_is(v, crate::history_node_legacy::CHECKPOINT))
+            {
+                (
+                    transaction
+                        .evidence
+                        .keys()
+                        .filter(|p| {
+                            p.starts_with(crate::history_node_legacy::PREFIX) && p.ends_with(".zip")
+                        })
+                        .map(String::as_str)
+                        .collect(),
+                    "verified_legacy_archive",
+                )
+            } else {
+                continue;
+            };
             for path in paths {
-                let raw = self.snapshot.raw_evidence.get(path)
+                let raw = self
+                    .snapshot
+                    .raw_evidence
+                    .get(path)
                     .ok_or_else(|| error("history_archive_missing"))?;
-                require(transaction.evidence.get(path)
-                    .is_some_and(|hash| hash == &crate::identity::sha256(raw.as_slice())),
-                    "history_archive_hash")?;
+                require(
+                    transaction
+                        .evidence
+                        .get(path)
+                        .is_some_and(|hash| hash == &crate::identity::sha256(raw.as_slice())),
+                    "history_archive_hash",
+                )?;
                 let archive = crate::history_node_archive::Archive::decode(raw)?;
-                let Some(replaced) = archive.files().get(".kpopper/replaced.yaml") else { continue };
+                let Some(replaced) = archive.files().get(".kpopper/replaced.yaml") else {
+                    continue;
+                };
                 if source == "verified_legacy_archive"
                     && !legacy_import_binds_replaced(&archive, replaced)
                 {
@@ -385,10 +414,7 @@ impl Capture {
                         let o = map(&object)?;
                         require(
                             string_is(&o["subject"], subject)
-                                && members.contains(
-                                    version.operation(),
-                                    text(&o["op"])?,
-                                )?,
+                                && members.contains(version.operation(), text(&o["op"])?)?,
                             "node_semantic_binding",
                         )?;
                         require(
@@ -671,9 +697,15 @@ fn legacy_import_binds_replaced(
     };
     let replaced_hash = crate::identity::sha256(replaced);
     members.iter().any(|member| {
-        let Ok(member) = map(member) else { return false };
-        member.get("role").is_some_and(|role| string_is(role, "replaced"))
-            && member.get("path").is_some_and(|path| string_is(path, ".kpopper/replaced.yaml"))
+        let Ok(member) = map(member) else {
+            return false;
+        };
+        member
+            .get("role")
+            .is_some_and(|role| string_is(role, "replaced"))
+            && member
+                .get("path")
+                .is_some_and(|path| string_is(path, ".kpopper/replaced.yaml"))
             && member
                 .get("sha256")
                 .is_some_and(|hash| string_is(hash, replaced_hash.as_str()))

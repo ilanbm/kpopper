@@ -1,8 +1,8 @@
 use kpop_native::view_descriptions::{
-    attach, build_for_groups, build_for_view, build_index, generate, generate_with_style, serve,
-    DescriptionStyle, DESCRIPTION_SCHEMA, INDEX_SCHEMA,
+    DESCRIPTION_SCHEMA, DescriptionStyle, INDEX_SCHEMA, attach, build_for_groups, build_for_view,
+    build_index, generate, generate_with_style, serve,
 };
-use serde_json::{json, Value as J};
+use serde_json::{Value as J, json};
 fn view() -> J {
     json!({"schema":"kpopper.canonical-graph-view/v1","revision":"r1","scope":"allowed", "project_identity":{"project":"test"},
         "groups":[],"nodes":[{"source_id":"a","body":["map",[["value",["text","Reported deadline is Friday"]]]]}],
@@ -14,7 +14,10 @@ fn cached_member_count_cannot_disagree_with_its_current_basis() {
     let graph = view();
     let mut description = generate(&graph, "group:/schedule").unwrap();
     description["member_count"] = json!(99);
-    assert_eq!(serve(&graph,"group:/schedule",&description).unwrap()["status"],"stale");
+    assert_eq!(
+        serve(&graph, "group:/schedule", &description).unwrap()["status"],
+        "stale"
+    );
 }
 #[test]
 fn query_blind_description_is_derived_and_current() {
@@ -98,10 +101,12 @@ fn routing_style_is_distinct_query_blind_and_marked_derived() {
     assert!(routing["text"].as_str().unwrap().contains("judgment"));
     assert!(routing["text"].as_str().unwrap().contains("conflict"));
     assert_ne!(routing["text"], labels["text"]);
-    assert!(!routing["text"]
-        .as_str()
-        .unwrap()
-        .contains("Reported deadline is Friday"));
+    assert!(
+        !routing["text"]
+            .as_str()
+            .unwrap()
+            .contains("Reported deadline is Friday")
+    );
 }
 
 #[test]
@@ -181,8 +186,10 @@ fn residual_group_description_uses_residual_members_only() {
     let mut mismatched = packet.clone();
     assert!(attach(&mut mismatched, &full, &full_index).is_err());
     attach(&mut packet, &full, &residual_index).unwrap();
-    assert!(!packet["groups"][0]["description"]["description"]["text"]
-        .as_str()
-        .unwrap()
-        .contains("Rare comet"));
+    assert!(
+        !packet["groups"][0]["description"]["description"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Rare comet")
+    );
 }

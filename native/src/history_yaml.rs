@@ -26,12 +26,19 @@ pub(crate) fn with_decoded_documents<T>(read: impl FnOnce() -> Result<T>) -> Res
     struct Guard(bool);
     impl Drop for Guard {
         fn drop(&mut self) {
-            if self.0 { DECODED_DOCUMENTS.with(|slot| *slot.borrow_mut() = None); }
+            if self.0 {
+                DECODED_DOCUMENTS.with(|slot| *slot.borrow_mut() = None);
+            }
         }
     }
     let owned = DECODED_DOCUMENTS.with(|slot| {
         let mut slot = slot.borrow_mut();
-        if slot.is_some() { false } else { *slot = Some(DecodedDocuments::default()); true }
+        if slot.is_some() {
+            false
+        } else {
+            *slot = Some(DecodedDocuments::default());
+            true
+        }
     });
     let _guard = Guard(owned);
     read()
@@ -56,7 +63,9 @@ mod decoded_document_cache_tests {
         let error = decode_document(invalid).unwrap_err().0;
         with_decoded_documents(|| {
             let mut changed = decode_document(raw)?;
-            if let TypedValue::Map(fields) = &mut changed { fields.clear(); }
+            if let TypedValue::Map(fields) = &mut changed {
+                fields.clear();
+            }
             assert_eq!(decode_document(raw)?, expected);
             assert_eq!(decode_document(invalid).unwrap_err().0, error);
             assert_eq!(decode_document(invalid).unwrap_err().0, error);
@@ -64,10 +73,12 @@ mod decoded_document_cache_tests {
                 assert_eq!(decode_document(raw)?, expected);
                 Ok(())
             })?;
-            DECODED_DOCUMENTS.with(|slot| assert_eq!(slot.borrow().as_ref().unwrap().values.len(), 1));
+            DECODED_DOCUMENTS
+                .with(|slot| assert_eq!(slot.borrow().as_ref().unwrap().values.len(), 1));
             assert_ne!(decode_document(b"known: {p.a: {v: 2}}\n")?, expected);
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         DECODED_DOCUMENTS.with(|slot| assert!(slot.borrow().is_none()));
         assert_eq!(decode_document(raw).unwrap(), expected);
     }
@@ -77,7 +88,8 @@ mod decoded_document_cache_tests {
             decode_document(b"a: 1\n")?;
             DECODED_DOCUMENTS.with(|slot| slot.borrow_mut().as_mut().unwrap().nodes = 1_000_000);
             decode_document(b"a: 2\n")?;
-            DECODED_DOCUMENTS.with(|slot| assert_eq!(slot.borrow().as_ref().unwrap().values.len(), 1));
+            DECODED_DOCUMENTS
+                .with(|slot| assert_eq!(slot.borrow().as_ref().unwrap().values.len(), 1));
             Err(Error("test failure".into()))
         });
         assert!(result.is_err());
@@ -933,13 +945,16 @@ fn source_for_parser(raw: &[u8]) -> Result<Vec<u8>> {
 }
 
 pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
-    let key = DECODED_DOCUMENTS.with(|slot| {
-        slot.borrow().as_ref().map(|_| crate::identity::sha256(raw))
-    });
+    let key =
+        DECODED_DOCUMENTS.with(|slot| slot.borrow().as_ref().map(|_| crate::identity::sha256(raw)));
     if let Some(key) = &key {
         if let Some(value) = DECODED_DOCUMENTS.with(|slot| {
-            slot.borrow().as_ref().and_then(|cache| cache.values.get(key).cloned())
-        }) { return Ok(value); }
+            slot.borrow()
+                .as_ref()
+                .and_then(|cache| cache.values.get(key).cloned())
+        }) {
+            return Ok(value);
+        }
     }
     let value = decode_source_document(raw)?.typed();
     if let Some(key) = key {

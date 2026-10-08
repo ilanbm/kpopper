@@ -1,7 +1,7 @@
 use kpop_native::{history_node_archive::Archive, value::TypedValue};
 use serde_json::json;
 use std::{collections::BTreeMap, fs, io::Write};
-use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipWriter};
+use zip::{CompressionMethod, DateTime, ZipWriter, write::SimpleFileOptions};
 
 fn wrapped_json(bytes: &[u8]) -> Vec<u8> {
     let options = SimpleFileOptions::default()
@@ -112,17 +112,21 @@ fn rejects_unsafe_paths_and_size_limits() {
         assert!(Archive::new(BTreeMap::from([(path.into(), vec![1])]), TypedValue::Null).is_err());
     }
 
-    assert!(Archive::new(
-        BTreeMap::from([("parent".into(), vec![1]), ("parent/child".into(), vec![2])]),
-        TypedValue::Null
-    )
-    .is_err());
+    assert!(
+        Archive::new(
+            BTreeMap::from([("parent".into(), vec![1]), ("parent/child".into(), vec![2])]),
+            TypedValue::Null
+        )
+        .is_err()
+    );
 
-    assert!(Archive::new(
-        BTreeMap::from([("large.bin".into(), vec![0; 16 * 1024 * 1024 + 1])]),
-        TypedValue::Null
-    )
-    .is_err());
+    assert!(
+        Archive::new(
+            BTreeMap::from([("large.bin".into(), vec![0; 16 * 1024 * 1024 + 1])]),
+            TypedValue::Null
+        )
+        .is_err()
+    );
 
     let aggregate = (0..4)
         .map(|index| (format!("{index}.bin"), vec![0; 16 * 1024 * 1024]))
@@ -135,11 +139,13 @@ fn rejects_unsafe_paths_and_size_limits() {
         .collect();
     assert!(Archive::new(too_many, TypedValue::Null).is_err());
 
-    assert!(Archive::new(
-        BTreeMap::new(),
-        TypedValue::Text("x".repeat(1024 * 1024 + 1))
-    )
-    .is_err());
+    assert!(
+        Archive::new(
+            BTreeMap::new(),
+            TypedValue::Text("x".repeat(1024 * 1024 + 1))
+        )
+        .is_err()
+    );
 
     let mut too_deep = TypedValue::Null;
     for _ in 0..=kpop_native::value::MAX_DEPTH {

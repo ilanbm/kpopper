@@ -6,10 +6,10 @@ use crate::{
     Result,
     history_contract::{error, field, map, text},
     history_transaction::{self as T, FileImage, PreparedMutation},
+    history_yaml::SourceValue as Source,
     legacy_authoring::{self as A, Preparation, Prepared},
     project_modes::WriteRoute,
     source_inventory::Inventory,
-    history_yaml::SourceValue as Source,
     value::TypedValue as V,
 };
 use std::{collections::BTreeMap, path::Path};
@@ -31,7 +31,10 @@ fn with_batch_context(
     value.insert(
         "batch".into(),
         V::Map(BTreeMap::from([
-            ("version".into(), V::Integer(crate::value::Integer::new("1")?)),
+            (
+                "version".into(),
+                V::Integer(crate::value::Integer::new("1")?),
+            ),
             ("context".into(), context.clone()),
             ("actions".into(), V::List(actions.to_vec())),
             ("steps".into(), V::List(steps.to_vec())),
@@ -49,17 +52,22 @@ fn satisfied(action: &V, route: &WriteRoute, inventory: &mut Inventory) -> Resul
     let entries = crate::reasoning_snapshot::entries(&document.source.projected())?;
     let action = map(action)?;
     let id = text(field(action, "id")?)?;
-    let Some((_, body)) = entries.get(id) else { return Ok(false) };
+    let Some((_, body)) = entries.get(id) else {
+        return Ok(false);
+    };
     let kind = text(field(action, "kind")?)?;
     if kind == "set" {
         let body = map(body)?;
         let actual = body.get("v").or_else(|| body.get("quoted"));
-        if actual != Some(field(action, "value")?) { return Ok(false) }
+        if actual != Some(field(action, "value")?) {
+            return Ok(false);
+        }
         for (action_field, body_field) in [("source", "from"), ("at", "at"), ("as_of", "of")] {
             if let Some(expected) = action.get(action_field).filter(|v| **v != V::Null)
-                && body.get(body_field).map(V::to_json).transpose()?
-                    != Some(expected.to_json()?)
-            { return Ok(false) }
+                && body.get(body_field).map(V::to_json).transpose()? != Some(expected.to_json()?)
+            {
+                return Ok(false);
+            }
         }
         return Ok(true);
     }
@@ -68,7 +76,9 @@ fn satisfied(action: &V, route: &WriteRoute, inventory: &mut Inventory) -> Resul
         if let Some(value) = wanted.get("v").or_else(|| wanted.get("quoted")) {
             let body = map(body)?;
             return Ok(body.get("v").or_else(|| body.get("quoted")) == Some(value)
-                && wanted.get("from").is_none_or(|v| body.get("from") == Some(v)));
+                && wanted
+                    .get("from")
+                    .is_none_or(|v| body.get("from") == Some(v)));
         }
         return Ok(matches!(body, V::Map(_)));
     }
@@ -102,12 +112,22 @@ fn prepare_mode(
             A::prepare_with_inventory
         };
         let prepared = match prepare(
-            action, route, source_bodies.get(index).and_then(Option::as_ref), inventory, page.clone(),
+            action,
+            route,
+            source_bodies.get(index).and_then(Option::as_ref),
+            inventory,
+            page.clone(),
         )
-            .map_err(|e| error(&format!("batch action {index}: {e}")))? {
-            Preparation::Draft { output, inventory: mut staged } => {
-                crate::require(satisfied(action, route, &mut staged)?,
-                    "report operation was not applied")?;
+        .map_err(|e| error(&format!("batch action {index}: {e}")))?
+        {
+            Preparation::Draft {
+                output,
+                inventory: mut staged,
+            } => {
+                crate::require(
+                    satisfied(action, route, &mut staged)?,
+                    "report operation was not applied",
+                )?;
                 outputs.push(output.trim_end().to_owned());
                 inventory = staged;
                 continue;
@@ -121,7 +141,10 @@ fn prepare_mode(
             journal = Some(prepared.journal.clone());
         }
         let batch_root = root.as_ref().ok_or_else(|| error("invalid_batch"))?;
-        crate::require(prepared.root == *batch_root, "batch_transaction_root_changed")?;
+        crate::require(
+            prepared.root == *batch_root,
+            "batch_transaction_root_changed",
+        )?;
         receipts.push(field(map(&data)?, "receipt")?.clone());
         outputs.push(prepared.output.trim_end().to_owned());
         subjects.push(prepared.subject);
@@ -152,17 +175,27 @@ fn prepare_mode(
         baseline.insert(
             "arrangement_inputs".into(),
             crate::legacy_authoring::legacy_arrangement::recovery_guard(
-                root.as_ref().ok_or_else(|| error("invalid_batch"))?, page,
+                root.as_ref().ok_or_else(|| error("invalid_batch"))?,
+                page,
             )?,
         );
-        let inputs = baseline.entry("input_files".into()).or_insert_with(|| V::Map(BTreeMap::new()));
-        let inputs = match inputs { V::Map(inputs) => inputs, _ => return Err(error("invalid_batch")) };
+        let inputs = baseline
+            .entry("input_files".into())
+            .or_insert_with(|| V::Map(BTreeMap::new()));
+        let inputs = match inputs {
+            V::Map(inputs) => inputs,
+            _ => return Err(error("invalid_batch")),
+        };
         inputs.insert(
             super::legacy_authoring::relative(
-                root.as_ref().ok_or_else(|| error("invalid_batch"))?, &page.view_path,
+                root.as_ref().ok_or_else(|| error("invalid_batch"))?,
+                &page.view_path,
             )?,
-            page.view_before.as_deref().map(crate::identity::sha256)
-                .map(V::Text).unwrap_or(V::Null),
+            page.view_before
+                .as_deref()
+                .map(crate::identity::sha256)
+                .map(V::Text)
+                .unwrap_or(V::Null),
         );
     }
     let first_receipt = map(receipts.first().ok_or_else(|| error("invalid_batch"))?)?;
@@ -190,10 +223,7 @@ fn prepare_mode(
             "before".into(),
             field(first_receipt, "capabilities")?.clone(),
         ),
-        (
-            "after".into(),
-            field(last_receipt, "capabilities")?.clone(),
-        ),
+        ("after".into(), field(last_receipt, "capabilities")?.clone()),
     ]));
     let receipt = T::semantic_receipt(
         text(field(last_receipt, "profile")?)?,
@@ -230,7 +260,15 @@ pub(crate) fn prepare(
     page: Option<crate::ordinary_page_capture::PageCapture>,
     source_bodies: &[Option<Source>],
 ) -> Result<Prepared> {
-    prepare_mode(actions, route, options, inventory, page, source_bodies, false)
+    prepare_mode(
+        actions,
+        route,
+        options,
+        inventory,
+        page,
+        source_bodies,
+        false,
+    )
 }
 
 pub(crate) struct PendingPrepared {
@@ -249,7 +287,15 @@ pub(crate) fn prepare_pending(
     page: Option<crate::ordinary_page_capture::PageCapture>,
     source_bodies: &[Option<Source>],
 ) -> Result<PendingPrepared> {
-    let prepared = prepare_mode(actions, route, options, inventory, page, source_bodies, true)?;
+    let prepared = prepare_mode(
+        actions,
+        route,
+        options,
+        inventory,
+        page,
+        source_bodies,
+        true,
+    )?;
     let mut inventory = prepared.inventory;
     for image in prepared.mutation.files() {
         inventory.stage(&prepared.root.join(&image.path), image.after.clone())?;
@@ -270,7 +316,15 @@ pub(crate) fn prepare_advanced_local(
     page: Option<crate::ordinary_page_capture::PageCapture>,
     source_bodies: &[Option<Source>],
 ) -> Result<Prepared> {
-    prepare_mode(actions, route, options, inventory, page, source_bodies, true)
+    prepare_mode(
+        actions,
+        route,
+        options,
+        inventory,
+        page,
+        source_bodies,
+        true,
+    )
 }
 
 #[cfg(test)]
@@ -282,15 +336,28 @@ mod tests {
     fn prepared() -> (tempfile::TempDir, std::path::PathBuf, WriteRoute, Prepared) {
         let temp = tempfile::tempdir().unwrap();
         let entry = temp.path().join("GROUNDING.yaml");
-        fs::write(&entry, include_str!("../tests/fixtures/legacy-review/supersede-before.yaml")).unwrap();
+        fs::write(
+            &entry,
+            include_str!("../tests/fixtures/legacy-review/supersede-before.yaml"),
+        )
+        .unwrap();
         let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
         let actions = [
             V::from_json(&serde_json::json!({"kind":"set","id":"p.alpha","value":3,"as_of":"2026-09-20"})).unwrap(),
             V::from_json(&serde_json::json!({"kind":"add","id":"d.keep","body":{"verdict":"stop","rests_on":["p.alpha","p.beta"],"wrong_if":"p.alpha > 9","because":"new evidence"},"as_of":"2026-09-20"})).unwrap(),
         ];
-        let prepared = prepare(&actions, &route, &Options {
-            operation: "report-recovery".into(), context: V::Map(BTreeMap::new()),
-        }, Inventory::default(), None, &[None, None]).unwrap();
+        let prepared = prepare(
+            &actions,
+            &route,
+            &Options {
+                operation: "report-recovery".into(),
+                context: V::Map(BTreeMap::new()),
+            },
+            Inventory::default(),
+            None,
+            &[None, None],
+        )
+        .unwrap();
         assert_eq!(prepared.mutation.files().len(), 2);
         (temp, entry, route, prepared)
     }
@@ -300,11 +367,27 @@ mod tests {
         for before in [false, true] {
             let (temp, entry, route, prepared) = prepared();
             let images = prepared.mutation.files().to_vec();
-            let mut verify = |_: &V| { route.verify()?; prepared.inventory.verify() };
+            let mut verify = |_: &V| {
+                route.verify()?;
+                prepared.inventory.verify()
+            };
             let mut stop = |_: &V| Err(error("retained_after_write"));
-            assert_eq!(F::publish_legacy(&prepared.root, &prepared.journal, &prepared.mutation,
-                &mut verify, Some(&mut stop)).unwrap_err().0, "retained_after_write");
-            let side = images.iter().find(|image| image.role == "replaced").unwrap();
+            assert_eq!(
+                F::publish_legacy(
+                    &prepared.root,
+                    &prepared.journal,
+                    &prepared.mutation,
+                    &mut verify,
+                    Some(&mut stop)
+                )
+                .unwrap_err()
+                .0,
+                "retained_after_write"
+            );
+            let side = images
+                .iter()
+                .find(|image| image.role == "replaced")
+                .unwrap();
             let side_path = prepared.root.join(&side.path);
             match &side.before {
                 Some(raw) => fs::write(&side_path, raw).unwrap(),
@@ -313,8 +396,10 @@ mod tests {
             drop(route);
             A::recover(std::slice::from_ref(&entry), temp.path(), before).unwrap();
             for image in images {
-                assert_eq!(F::read(&prepared.root.join(&image.path)).unwrap(),
-                    if before { image.before } else { image.after });
+                assert_eq!(
+                    F::read(&prepared.root.join(&image.path)).unwrap(),
+                    if before { image.before } else { image.after }
+                );
             }
         }
     }
@@ -329,12 +414,24 @@ mod tests {
             V::from_json(&serde_json::json!({"kind":"add","id":"s.report","into":"sources","body":{"file":"report.txt","read":"2026-09-20"},"as_of":"2026-09-20"})).unwrap(),
             V::from_json(&serde_json::json!({"kind":"set","id":"p.x","value":1})).unwrap(),
         ];
-        let prepared = prepare(&actions, &route, &Options {
-            operation: "report-noop".into(), context: V::Map(BTreeMap::new()),
-        }, Inventory::default(), None, &[None, None]).unwrap();
+        let prepared = prepare(
+            &actions,
+            &route,
+            &Options {
+                operation: "report-noop".into(),
+                context: V::Map(BTreeMap::new()),
+            },
+            Inventory::default(),
+            None,
+            &[None, None],
+        )
+        .unwrap();
         assert_eq!(prepared.mutation.files().len(), 1);
         assert!(prepared.output.contains("nothing written"));
-        assert!(String::from_utf8(prepared.mutation.files()[0].after.clone().unwrap())
-            .unwrap().contains("s.report:"));
+        assert!(
+            String::from_utf8(prepared.mutation.files()[0].after.clone().unwrap())
+                .unwrap()
+                .contains("s.report:")
+        );
     }
 }

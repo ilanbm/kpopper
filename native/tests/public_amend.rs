@@ -185,7 +185,10 @@ fn born(root: &Path) {
     ] {
         success(run(root, &args));
     }
-    let document = kpop_native::history_yaml::decode_document(record(root).as_bytes()).unwrap().to_json().unwrap();
+    let document = kpop_native::history_yaml::decode_document(record(root).as_bytes())
+        .unwrap()
+        .to_json()
+        .unwrap();
     assert!(document["meta"].get("node_history").is_some());
 }
 
@@ -619,14 +622,26 @@ fn history_records_mark_the_corrected_version_and_pin_the_answer() {
             "the rating settles it",
         ],
     ));
-    let captured: serde_json::Value = serde_json::from_str(&success(run(&root, &["history-capture", "GROUNDING.yaml", "--json"]))).unwrap();
-    let evidence = kpop_native::value::TypedValue::from_tagged(&captured["evidence"]).unwrap().to_json().unwrap();
+    let captured: serde_json::Value = serde_json::from_str(&success(run(
+        &root,
+        &["history-capture", "GROUNDING.yaml", "--json"],
+    )))
+    .unwrap();
+    let evidence = kpop_native::value::TypedValue::from_tagged(&captured["evidence"])
+        .unwrap()
+        .to_json()
+        .unwrap();
     let answer = &evidence["state"]["subjects"]["d.one_boiler"]["head"];
-    let pins = evidence["objects"].as_object().unwrap().values().any(|object| {
-        object["subject"] == "q.second_boiler" && object["kind"] == "act"
-            && object["body"]["act"] == "accept"
-            && &object["body"]["read"]["d.one_boiler"] == answer
-    });
+    let pins = evidence["objects"]
+        .as_object()
+        .unwrap()
+        .values()
+        .any(|object| {
+            object["subject"] == "q.second_boiler"
+                && object["kind"] == "act"
+                && object["body"]["act"] == "accept"
+                && &object["body"]["read"]["d.one_boiler"] == answer
+        });
     assert!(pins, "no accept act pins the answer's version");
     let pulled = success(run(&root, &["--json", "pull", "q.second_boiler"]));
     assert!(pulled.contains("answered"), "{pulled}");

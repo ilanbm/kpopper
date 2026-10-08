@@ -401,12 +401,13 @@ pub(crate) fn apply(
             "unsupported_contribution_version",
         )?;
         if is_int(&manifest["version"], "4") {
-            let closure =
-                crate::history_node_contribution::validate(&bundle.value, &bundle.files)?;
+            let closure = crate::history_node_contribution::validate(&bundle.value, &bundle.files)?;
             body = V::from_typed(&closure.document);
             source = Some(
-                C::map(C::field(C::map(C::field(C::map(&bundle.value)?, "manifest")?)?, "source")?)?
-                    ["authority"]
+                C::map(C::field(
+                    C::map(C::field(C::map(&bundle.value)?, "manifest")?)?,
+                    "source",
+                )?)?["authority"]
                     .clone(),
             );
         }

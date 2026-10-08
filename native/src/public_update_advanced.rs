@@ -524,11 +524,16 @@ pub(crate) enum CaptureFailure {
 impl CaptureFailure {
     #[cfg(test)]
     fn message(&self) -> &str {
-        match self { Self::NeedsPrimary(reason) => reason, Self::Error(error) => &error.0 }
+        match self {
+            Self::NeedsPrimary(reason) => reason,
+            Self::Error(error) => &error.0,
+        }
     }
 }
 impl From<Error> for CaptureFailure {
-    fn from(error: Error) -> Self { Self::Error(error) }
+    fn from(error: Error) -> Self {
+        Self::Error(error)
+    }
 }
 
 pub(crate) fn capture(
@@ -552,10 +557,14 @@ pub(crate) fn capture(
         false,
     )?;
     if captured.members != [context.record.to_path_buf()] {
-        return Err(CaptureFailure::NeedsPrimary("multi-file and pointer records require primary review"));
+        return Err(CaptureFailure::NeedsPrimary(
+            "multi-file and pointer records require primary review",
+        ));
     }
     if !map(&captured.hypotheses)?.is_empty() {
-        return Err(CaptureFailure::NeedsPrimary("a record with hypothesis context requires primary review"));
+        return Err(CaptureFailure::NeedsPrimary(
+            "a record with hypothesis context requires primary review",
+        ));
     }
     let document = captured.source.projected();
     super::verify_captured_target(
@@ -908,7 +917,8 @@ mod tests {
                     after_capture: &mut stop,
                 },
             )
-            .unwrap_err().message(),
+            .unwrap_err()
+            .message(),
             "stop after capture"
         );
         assert_eq!(fs::read(&record).unwrap(), before);

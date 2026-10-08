@@ -414,9 +414,9 @@ fn validate_history(document: &V, context: &V, hypotheses: &V) -> Result<()> {
             .cloned()
             .unwrap_or(V::Null);
         require(
-            ["1", "2", "3", "4"]
-                .iter()
-                .any(|v| crate::source_clock::python_equal(&version, &V::Integer(Integer::new(v).unwrap()))),
+            ["1", "2", "3", "4"].iter().any(|v| {
+                crate::source_clock::python_equal(&version, &V::Integer(Integer::new(v).unwrap()))
+            }),
             "unsupported_contribution_version",
         )?;
         if !crate::source_clock::python_equal(&version, &V::Integer(Integer::new("4").unwrap())) {

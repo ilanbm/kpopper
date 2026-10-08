@@ -350,7 +350,10 @@ impl<'a> Projection<'a> {
     ) -> Result<serde_json::Value> {
         let started = std::time::Instant::now();
         let convert = |values: &BTreeMap<String, crate::value::TypedValue>| -> Map {
-            values.iter().map(|(id, value)| (id.clone(), V::from_typed(value))).collect()
+            values
+                .iter()
+                .map(|(id, value)| (id.clone(), V::from_typed(value)))
+                .collect()
         };
         let base = World {
             reader: checked.base.reader.ordinary(),
@@ -358,28 +361,57 @@ impl<'a> Projection<'a> {
             states: convert(&checked.base.states),
         };
         let projection = Self {
-            base, layers: BTreeMap::new(), hypotheses: convert(&checked.hypotheses),
-            unread: checked.unread.clone(), unread_failures: vec![],
-            disputed: checked.disputed.iter().map(|(id, variants)| (id.clone(),
-                variants.iter().map(|(name, value)| (name.clone(), V::from_typed(value))).collect())).collect(),
-            knowledge: checked.knowledge.clone(), history_review: None,
-        }.with_history_review(history)?;
+            base,
+            layers: BTreeMap::new(),
+            hypotheses: convert(&checked.hypotheses),
+            unread: checked.unread.clone(),
+            unread_failures: vec![],
+            disputed: checked
+                .disputed
+                .iter()
+                .map(|(id, variants)| {
+                    (
+                        id.clone(),
+                        variants
+                            .iter()
+                            .map(|(name, value)| (name.clone(), V::from_typed(value)))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            knowledge: checked.knowledge.clone(),
+            history_review: None,
+        }
+        .with_history_review(history)?;
         let doc = map(&projection.base.reader.document)?;
         let mut asked = BTreeMap::new();
         for key in ["open", "questions"] {
             if let Some(values) = doc.get(key).and_then(|value| map(value).ok()) {
-                asked.extend(values.iter().filter(|(_, value)| !crate::public_amend::settled_value(value))
-                    .map(|(id, value)| (id.as_str(), value)));
+                asked.extend(
+                    values
+                        .iter()
+                        .filter(|(_, value)| !crate::public_amend::settled_value(value))
+                        .map(|(id, value)| (id.as_str(), value)),
+                );
             }
         }
-        let items = projection.needs_a_person(&asked)?.into_iter()
-            .map(|(_, id, reason)| serde_json::json!({"id":id,"reason":reason})).collect::<Vec<_>>();
-        let waiting = projection.hypotheses.values()
-            .filter(|h| map(h).is_ok_and(|h| !string_is(get(h, "kind"), "contribution"))).count();
+        let items = projection
+            .needs_a_person(&asked)?
+            .into_iter()
+            .map(|(_, id, reason)| serde_json::json!({"id":id,"reason":reason}))
+            .collect::<Vec<_>>();
+        let waiting = projection
+            .hypotheses
+            .values()
+            .filter(|h| map(h).is_ok_and(|h| !string_is(get(h, "kind"), "contribution")))
+            .count();
         if std::env::var_os("KPOPPER_PROFILE_VIEW").is_some() {
-            eprintln!("KPOPPER_VIEW_PROFILE {}", serde_json::json!({
-                "phase":"opening_attention", "seconds":started.elapsed().as_secs_f64()
-            }));
+            eprintln!(
+                "KPOPPER_VIEW_PROFILE {}",
+                serde_json::json!({
+                    "phase":"opening_attention", "seconds":started.elapsed().as_secs_f64()
+                })
+            );
         }
         Ok(serde_json::json!({"items":items,"pending_hypotheses":waiting}))
     }

@@ -30,7 +30,8 @@ fn command(root: &Path, args: &[&str], zone: &str) -> Output {
         Vec::new(),
         std::time::Duration::from_secs(90),
         2 * 1024 * 1024,
-    ).unwrap_or_else(|error| panic!("{zone} {args:?}: {error}"))
+    )
+    .unwrap_or_else(|error| panic!("{zone} {args:?}: {error}"))
 }
 
 #[test]

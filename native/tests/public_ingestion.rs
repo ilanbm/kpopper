@@ -109,8 +109,13 @@ fn permanent_write_failure_becomes_terminal_without_automatic_retries() {
     let record = temp.path().join("PROVENANCE.yaml");
     let before = fs::read(&record).unwrap();
     let captured = ingestion::capture(
-        &envelope("readonly", json!(4)), Some(&record), Some(state.path()), temp.path(), false,
-    ).unwrap();
+        &envelope("readonly", json!(4)),
+        Some(&record),
+        Some(state.path()),
+        temp.path(),
+        false,
+    )
+    .unwrap();
     let permissions = fs::metadata(temp.path()).unwrap().permissions();
     fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o500)).unwrap();
     let processed = ingestion::process(Some(&record), Some(state.path()), temp.path(), None, 32);
@@ -119,13 +124,30 @@ fn permanent_write_failure_becomes_terminal_without_automatic_retries() {
     assert_eq!(processed.len(), 1);
     assert_eq!(processed[0]["state"], "needs_primary", "{}", processed[0]);
     assert_eq!(fs::read(&record).unwrap(), before);
-    assert!(ingestion::process(Some(&record), Some(state.path()), temp.path(), None, 32)
-        .unwrap().is_empty());
-    let stored = ingestion::status(captured["event_id"].as_str(), Some(&record),
-        Some(state.path()), temp.path()).unwrap().unwrap();
+    assert!(
+        ingestion::process(Some(&record), Some(state.path()), temp.path(), None, 32)
+            .unwrap()
+            .is_empty()
+    );
+    let stored = ingestion::status(
+        captured["event_id"].as_str(),
+        Some(&record),
+        Some(state.path()),
+        temp.path(),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(stored["state"], "needs_primary");
-    let event: J = serde_json::from_slice(&fs::read(state.path().join("events")
-        .join(format!("{}.json", captured["event_id"].as_str().unwrap()))).unwrap()).unwrap();
+    let event: J = serde_json::from_slice(
+        &fs::read(
+            state
+                .path()
+                .join("events")
+                .join(format!("{}.json", captured["event_id"].as_str().unwrap())),
+        )
+        .unwrap(),
+    )
+    .unwrap();
     assert_eq!(event["attempts"], 1);
 }
 
@@ -134,8 +156,14 @@ fn acknowledgement_uses_workspace_state_and_preserves_the_first_handled_time() {
     let temp = fixture(false);
     let record = temp.path().join("PROVENANCE.yaml");
     let state = temp.path().join("relstate");
-    ingestion::capture(&custom_envelope("ack", "missing", json!(4), "2026-09-20"),
-        Some(&record), Some(&state), temp.path(), false).unwrap();
+    ingestion::capture(
+        &custom_envelope("ack", "missing", json!(4), "2026-09-20"),
+        Some(&record),
+        Some(&state),
+        temp.path(),
+        false,
+    )
+    .unwrap();
     ingestion::process(Some(&record), Some(&state), temp.path(), None, 32).unwrap();
     let notices = ingestion::pending(Some(&record), Some(&state), temp.path(), false).unwrap();
     let signal = notices[0]["id"].as_str().unwrap();
@@ -143,10 +171,24 @@ fn acknowledgement_uses_workspace_state_and_preserves_the_first_handled_time() {
     let acknowledge = || {
         let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(elsewhere.path())
-            .arg("--workspace").arg(temp.path())
-            .args(["ingest", "acknowledge", "--record", "PROVENANCE.yaml", "--state-dir", "relstate", signal])
-            .output().unwrap();
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            .arg("--workspace")
+            .arg(temp.path())
+            .args([
+                "ingest",
+                "acknowledge",
+                "--record",
+                "PROVENANCE.yaml",
+                "--state-dir",
+                "relstate",
+                signal,
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         serde_json::from_slice::<J>(&output.stdout).unwrap()
     };
     let first = acknowledge();

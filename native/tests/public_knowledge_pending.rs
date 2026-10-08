@@ -64,8 +64,8 @@ fn expected(entry: &Value, replacements: &[(&str, &Path)]) -> Value {
             Value::Null | Value::Bool(_) | Value::Number(_) => {}
         }
     }
-    let mut expected: Value = serde_json::from_str(entry["actual"]["stdout"].as_str().unwrap())
-        .unwrap();
+    let mut expected: Value =
+        serde_json::from_str(entry["actual"]["stdout"].as_str().unwrap()).unwrap();
     let replacements = replacements
         .iter()
         .map(|(token, path)| (*token, resolved(path)))

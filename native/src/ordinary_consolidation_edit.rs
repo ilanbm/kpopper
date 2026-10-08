@@ -425,9 +425,12 @@ fn encoded_sources(
     texts
         .iter()
         .map(|(path, lines)| {
-            let source = std::str::from_utf8(&originals[path])
-                .map_err(|_| error("invalid_utf8"))?;
-            Ok((path.clone(), lines.join(source_newline(source)).into_bytes()))
+            let source =
+                std::str::from_utf8(&originals[path]).map_err(|_| error("invalid_utf8"))?;
+            Ok((
+                path.clone(),
+                lines.join(source_newline(source)).into_bytes(),
+            ))
         })
         .collect()
 }
@@ -1046,8 +1049,7 @@ pub(super) fn refute(
             Ok((
                 p.clone(),
                 source_lines(
-                    std::str::from_utf8(&capture.files()[p])
-                        .map_err(|_| error("invalid_utf8"))?,
+                    std::str::from_utf8(&capture.files()[p]).map_err(|_| error("invalid_utf8"))?,
                 ),
             ))
         })

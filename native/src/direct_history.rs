@@ -71,7 +71,9 @@ fn decode(raw: &[u8]) -> Result<(PreparedMutation, V)> {
     Ok((mutation, fields["routing"].clone()))
 }
 pub(crate) fn actor() -> V {
-    crate::public_amend::session().map(|id| s(&format!("session:{id}"))).unwrap_or(V::Null)
+    crate::public_amend::session()
+        .map(|id| s(&format!("session:{id}")))
+        .unwrap_or(V::Null)
 }
 pub(crate) fn options(prefix: &str, by: V) -> Result<A::Options> {
     let now = chrono::Utc::now();
@@ -95,22 +97,25 @@ enum ReceiptFamily {
 }
 type RecoveryProbe<'a> = Option<&'a mut dyn FnMut(&str) -> Result<()>>;
 
-fn verify_report_route(
-    route: &WriteRoute,
-    expected: &PreparedMutation,
-) -> Result<()> {
+fn verify_report_route(route: &WriteRoute, expected: &PreparedMutation) -> Result<()> {
     let data = expected.to_data();
     let receipt = map(&map(&data)?["receipt"])?;
     let before = map(&receipt["before"])?;
-    let authoring = map(before.get("authoring").ok_or_else(|| error("invalid report journal"))?)?;
-    let context = map(authoring.get("context").ok_or_else(|| error("invalid report journal"))?)?;
-    require(context.get("policy") == Some(route.config()),
-        "report_preparation_stale: project policy changed")?;
-    let routing = crate::source_capture::routing_observation(
-        route.paths(), &route.project().root,
+    let authoring = map(before
+        .get("authoring")
+        .ok_or_else(|| error("invalid report journal"))?)?;
+    let context = map(authoring
+        .get("context")
+        .ok_or_else(|| error("invalid report journal"))?)?;
+    require(
+        context.get("policy") == Some(route.config()),
+        "report_preparation_stale: project policy changed",
     )?;
-    require(context.get("routing") == Some(&routing),
-        "report_preparation_stale: project routing changed")
+    let routing = crate::source_capture::routing_observation(route.paths(), &route.project().root)?;
+    require(
+        context.get("routing") == Some(&routing),
+        "report_preparation_stale: project routing changed",
+    )
 }
 fn receipt_family(mutation: &PreparedMutation) -> Result<ReceiptFamily> {
     let data = mutation.to_data();
@@ -139,7 +144,10 @@ fn verify_mutation(
         ReceiptFamily::Hypothesis => HA::verify_prepared(store, mutation, runtime),
         ReceiptFamily::Identity => I::verify_prepared(store, mutation, runtime),
         ReceiptFamily::Branch => crate::history_branch_adoption::verify(
-            &store.capture()?, mutation, &crate::history_branch_adoption::live_evidence(store, mutation)?),
+            &store.capture()?,
+            mutation,
+            &crate::history_branch_adoption::live_evidence(store, mutation)?,
+        ),
         ReceiptFamily::Authoring => A::verify_prepared(store, mutation, runtime),
     }
 }
@@ -256,10 +264,25 @@ fn act_with_probe(
     act_with_actor(original, cwd, action, V::Null, probe)
 }
 pub fn act_as(original: &[PathBuf], cwd: &Path, action: &V, actor: Option<&str>) -> Result<V> {
-    require(actor.is_none_or(|a| !a.trim().is_empty() && a.len() <= 200), "--by must be non-empty recorded actor text, at most 200 bytes")?;
-    act_with_actor(original, cwd, action, actor.map(s).unwrap_or(V::Null), &mut |_| Ok(()))
+    require(
+        actor.is_none_or(|a| !a.trim().is_empty() && a.len() <= 200),
+        "--by must be non-empty recorded actor text, at most 200 bytes",
+    )?;
+    act_with_actor(
+        original,
+        cwd,
+        action,
+        actor.map(s).unwrap_or(V::Null),
+        &mut |_| Ok(()),
+    )
 }
-fn act_with_actor(original: &[PathBuf], cwd: &Path, action: &V, by: V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<V> {
+fn act_with_actor(
+    original: &[PathBuf],
+    cwd: &Path,
+    action: &V,
+    by: V,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<V> {
     let a = schema(action, &["kind", "id", "of", "over", "because"], &[])?;
     require(
         ["accept", "refute", "correct", "propose", "retire"].contains(&text(&a["kind"])?),
@@ -274,7 +297,8 @@ fn act_with_actor(original: &[PathBuf], cwd: &Path, action: &V, by: V, probe: &m
         "recovery_required",
     )?;
     if crate::history_node_publication::selected(&store.entry)? {
-        let (result, _) = crate::public_node_history::write_as(&route, original, action, probe, by)?;
+        let (result, _) =
+            crate::public_node_history::write_as(&route, original, action, probe, by)?;
         if !map(&result)?
             .get("state")
             .is_some_and(|v| string_is(v, "committed"))
@@ -356,7 +380,12 @@ pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<(V, String)
 /// Read against the document the write was prepared from, with the hypothesis
 /// groups beside it when the write goes into one. The note is advisory: it never
 /// changes the write, and whatever keeps it from being read leaves none.
-pub(crate) fn nearest_existing(document: &V, groups: &Map, action: &V, runtime: Option<&Runtime>) -> String {
+pub(crate) fn nearest_existing(
+    document: &V,
+    groups: &Map,
+    action: &V,
+    runtime: Option<&Runtime>,
+) -> String {
     let note = || -> Result<String> {
         let mut world = crate::history_authoring_reader::AuthoringReader::new(document, runtime)?;
         let (action, _) = world.normalize(action)?;
@@ -372,10 +401,27 @@ fn write_with_probe(
 ) -> Result<(V, String)> {
     write_with_actor(original, cwd, action, V::Null, probe)
 }
-pub fn write_as(original: &[PathBuf], cwd: &Path, action: &V, actor: Option<&str>) -> Result<(V, String)> {
-    write_with_actor(original, cwd, action, actor.map(s).unwrap_or(V::Null), &mut |_| Ok(()))
+pub fn write_as(
+    original: &[PathBuf],
+    cwd: &Path,
+    action: &V,
+    actor: Option<&str>,
+) -> Result<(V, String)> {
+    write_with_actor(
+        original,
+        cwd,
+        action,
+        actor.map(s).unwrap_or(V::Null),
+        &mut |_| Ok(()),
+    )
 }
-fn write_with_actor(original: &[PathBuf], cwd: &Path, action: &V, by: V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<(V, String)> {
+fn write_with_actor(
+    original: &[PathBuf],
+    cwd: &Path,
+    action: &V,
+    by: V,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<(V, String)> {
     let a = map(action)?;
     let kind = text(field(a, "kind")?)?;
     require(
@@ -614,11 +660,17 @@ fn recover_inner(
     let store = Store::new(&route.paths()[0])?;
     let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
     if crate::history_node_publication::selected(&store.entry)? {
-        require(expected.is_none(), "node_history_report_recovery_unsupported")?;
+        require(
+            expected.is_none(),
+            "node_history_report_recovery_unsupported",
+        )?;
         return crate::public_node_history::recover(&route, original, before, runtime_override);
     }
     if let Some(raw) = F::read(&F::target(&store.root, &store.layout.journal)?)? {
-        require(expected.is_none(), "history report recovery journal mismatch")?;
+        require(
+            expected.is_none(),
+            "history report recovery journal mismatch",
+        )?;
         let mutation = PreparedMutation::from_bytes(&raw)?;
         let data = mutation.to_data();
         let baseline = map(&map(&data)?["baseline"])?;
@@ -658,10 +710,15 @@ fn recover_inner(
         let expected = expected.ok_or_else(|| error("no_recovery_pending"))?;
         let data = expected.to_data();
         let operation = text(&map(&data)?["operation"])?;
-        let capture = store.capture()
+        let capture = store
+            .capture()
             .map_err(|e| error(&format!("report_preparation_stale: {e}")))?;
-        let manifest = expected.files().iter().find(|file| file.role == "history_commit")
-            .and_then(|file| file.after.as_ref()).ok_or_else(|| error("invalid_history_journal"))?;
+        let manifest = expected
+            .files()
+            .iter()
+            .find(|file| file.role == "history_commit")
+            .and_then(|file| file.after.as_ref())
+            .ok_or_else(|| error("invalid_history_journal"))?;
         let mut completed = capture.commits.get(operation) == Some(manifest);
         if completed {
             for file in expected.files() {
@@ -694,10 +751,16 @@ fn recover_inner(
             };
             verify_mutation(&store, expected, runtime)
                 .map_err(|e| error(&format!("report_preparation_stale: {e}")))?;
-            for file in expected.files().iter().filter(|file| file.role == "history_object") {
+            for file in expected
+                .files()
+                .iter()
+                .filter(|file| file.role == "history_object")
+            {
                 require(
                     !Privacy::private_marker(&history_yaml::decode_document(
-                        file.after.as_ref().ok_or_else(|| error("invalid_history_journal"))?,
+                        file.after
+                            .as_ref()
+                            .ok_or_else(|| error("invalid_history_journal"))?,
                     )?),
                     "report_preparation_stale: private_proposal_requires_draft",
                 )?;
@@ -719,13 +782,18 @@ fn recover_inner(
         .get("kind")
         .is_some_and(|kind| string_is(kind, crate::public_history_adopt::KIND))
     {
-        require(expected.is_none(), "history report recovery journal mismatch")?;
+        require(
+            expected.is_none(),
+            "history report recovery journal mismatch",
+        )?;
         return crate::public_history_adopt::recover(&store, &route, original, &path, &raw, before);
     }
     let (mutation, retained) = decode(&raw)?;
     if let Some(expected) = expected {
-        require(mutation.to_bytes()? == expected.to_bytes()?,
-            "history report recovery journal mismatch")?;
+        require(
+            mutation.to_bytes()? == expected.to_bytes()?,
+            "history report recovery journal mismatch",
+        )?;
     }
     require(
         routing(&route, original)? == retained,
@@ -1043,9 +1111,17 @@ mod tests {
             });
             let error = result.unwrap_err().0;
             assert!(error.starts_with("concurrent_edit:"));
-            let reported = error.split_once("recovery journal retained at ").unwrap().1
-                .split_once(". Preserve conflicting edits").unwrap().0;
-            assert_eq!(Path::new(reported).canonicalize().unwrap(), path.canonicalize().unwrap());
+            let reported = error
+                .split_once("recovery journal retained at ")
+                .unwrap()
+                .1
+                .split_once(". Preserve conflicting edits")
+                .unwrap()
+                .0;
+            assert_eq!(
+                Path::new(reported).canonicalize().unwrap(),
+                path.canonicalize().unwrap()
+            );
             assert_eq!(fs::read(&path).unwrap(), expected);
             assert!(recover(std::slice::from_ref(&entry), cwd, false).is_err());
             assert_eq!(fs::read(&path).unwrap(), expected);

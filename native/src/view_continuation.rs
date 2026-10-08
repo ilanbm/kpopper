@@ -405,7 +405,9 @@ fn read_state(root: &Path, session: &str) -> Result<State> {
 }
 
 pub fn has_pending_replacement(root: &Path, session: &str) -> Result<bool> {
-    let Some((_, state)) = pinned_state(session)? else { return Ok(false); };
+    let Some((_, state)) = pinned_state(session)? else {
+        return Ok(false);
+    };
     validate_state_root(&state, root)?;
     Ok(state.enabled && state.replacement_route.is_some())
 }
@@ -446,18 +448,25 @@ pub fn session_start_root(cwd: &Path, session: &str) -> Result<Option<PathBuf>> 
     let root = PathBuf::from(&state.root);
     // A reused session ID outside its prior workspace is a fresh opening,
     // including when that old disposable workspace no longer exists.
-    if !cwd.canonicalize()?.starts_with(&root) { return Ok(None); }
+    if !cwd.canonicalize()?.starts_with(&root) {
+        return Ok(None);
+    }
     validate_state_root(&state, &root)?;
     Ok(Some(root))
 }
 
 pub fn initialize_for_start(root: &Path, session: &str, managed: bool) -> Result<()> {
-    let prior = read_state(root, session).is_ok_and(|state|
-        state.freshness.is_some() || state.reader.is_some() || state.refresh_error.is_some());
+    let prior = read_state(root, session).is_ok_and(|state| {
+        state.freshness.is_some() || state.reader.is_some() || state.refresh_error.is_some()
+    });
     let mut inputs = crate::source_inventory::Inventory::default();
-    let enabled = !setting("KPOPPER_SESSION_DISABLE", false) && setting("KPOPPER_CANONICAL_VIEW", true)
+    let enabled = !setting("KPOPPER_SESSION_DISABLE", false)
+        && setting("KPOPPER_CANONICAL_VIEW", true)
         && !crate::session_settings::current_for_hook(&mut inputs, root, root)
-            .and_then(|settings| { inputs.verify()?; Ok(settings["enabled"] == false) })
+            .and_then(|settings| {
+                inputs.verify()?;
+                Ok(settings["enabled"] == false)
+            })
             .unwrap_or(false);
     initialize(root, session, enabled && (managed || prior))
 }
@@ -558,7 +567,9 @@ fn context_texts(path: &Path, session: &str) -> Result<Vec<String>> {
         if n > MAX_LINE {
             // The row may contain a history rewrite. Invalidate older frames,
             // drain it without allocating its body, then allow a new checkpoint.
-            if !line.ends_with(b"\n") { reader.skip_until(b'\n')?; }
+            if !line.ends_with(b"\n") {
+                reader.skip_until(b'\n')?;
+            }
             found.clear();
             total = 0;
             continue;
@@ -568,14 +579,34 @@ fn context_texts(path: &Path, session: &str) -> Result<Vec<String>> {
         // silently turn append-only disk history into proof of active context.
         let benign = match v["type"].as_str() {
             Some("session_meta" | "world_state" | "turn_context" | "token_usage_record") => true,
-            Some("event_msg") => matches!(v["payload"]["type"].as_str(),
-                Some("task_started" | "task_complete" | "item_completed" | "token_count"
-                    | "thread_settings_applied" | "agent_message" | "agent_reasoning"
-                    | "agent_reasoning_raw_content" | "user_message")),
-            Some("response_item") => matches!(v["payload"]["type"].as_str(),
-                Some("message" | "reasoning" | "function_call" | "function_call_output"
-                    | "custom_tool_call" | "custom_tool_call_output" | "web_search_call"
-                    | "image_generation_call" | "local_shell_call")),
+            Some("event_msg") => matches!(
+                v["payload"]["type"].as_str(),
+                Some(
+                    "task_started"
+                        | "task_complete"
+                        | "item_completed"
+                        | "token_count"
+                        | "thread_settings_applied"
+                        | "agent_message"
+                        | "agent_reasoning"
+                        | "agent_reasoning_raw_content"
+                        | "user_message"
+                )
+            ),
+            Some("response_item") => matches!(
+                v["payload"]["type"].as_str(),
+                Some(
+                    "message"
+                        | "reasoning"
+                        | "function_call"
+                        | "function_call_output"
+                        | "custom_tool_call"
+                        | "custom_tool_call_output"
+                        | "web_search_call"
+                        | "image_generation_call"
+                        | "local_shell_call"
+                )
+            ),
             _ => false,
         };
         if !benign {
@@ -628,24 +659,40 @@ fn received(state: &State, seen: &BTreeSet<String>, key: &str) -> BTreeSet<Strin
 }
 fn acknowledged_freshness(state: &State) -> Result<Option<Freshness>> {
     let (Some(reader), Some(base), Some(transcript)) =
-        (&state.reader, &state.base, state.transcript.as_deref()) else { return Ok(None); };
+        (&state.reader, &state.base, state.transcript.as_deref())
+    else {
+        return Ok(None);
+    };
     let texts = context_texts(Path::new(transcript), &state.session)?;
     let seen = visible(state, &texts);
     crate::require(available(base, &seen), "old context receipt is unavailable")?;
     let value = base.materialize(&state.frames)?;
-    crate::require(value.packet()["revision"].as_str() == Some(reader.revision.as_str())
-        && value.packet()["scope"].as_str() == Some(reader.scope.as_str()),
-        "old context reader does not match its received frame")?;
+    crate::require(
+        value.packet()["revision"].as_str() == Some(reader.revision.as_str())
+            && value.packet()["scope"].as_str() == Some(reader.scope.as_str()),
+        "old context reader does not match its received frame",
+    )?;
     let ids = received(state, &seen, &scope(value.packet())?);
     crate::require(!ids.is_empty(), "old context has no received source IDs")?;
-    Ok(Some(Freshness { reader: reader.clone(), ids }))
+    Ok(Some(Freshness {
+        reader: reader.clone(),
+        ids,
+    }))
 }
 fn migrate_freshness(state: &mut State) -> Result<()> {
     if state.freshness.is_none() && state.reader.is_some() {
         match acknowledged_freshness(state) {
             Ok(Some(freshness)) => state.freshness = Some(freshness),
-            _ => state.refresh_error = Some(refresh_notice("unknown", None, &[],
-                Some("prior context receipt could not be verified; reopen and read current evidence"))?),
+            _ => {
+                state.refresh_error = Some(refresh_notice(
+                    "unknown",
+                    None,
+                    &[],
+                    Some(
+                        "prior context receipt could not be verified; reopen and read current evidence",
+                    ),
+                )?)
+            }
         }
     }
     Ok(())
@@ -657,7 +704,9 @@ pub fn initialize(root: &Path, session: &str, enabled: bool) -> Result<()> {
     }
     update(root, session, true, |s| {
         let same_root = s.root == root_key(root)? && s.session == session;
-        if same_root { migrate_freshness(s)?; }
+        if same_root {
+            migrate_freshness(s)?;
+        }
         let retained = s.freshness.take();
         let control_reader = s.reader.clone();
         let warning = s.refresh_error.clone();
@@ -715,23 +764,50 @@ pub fn automatic_anchors(root: &Path, session: Option<&str>, revision: &str) -> 
 /// Hex revisions retain the existing exact-match behavior; truncated hashes
 /// and unknown references are never guessed or repaired.
 pub fn resolve_revision(root: &Path, session: Option<&str>, revision: &str) -> Result<String> {
-    if !revision.starts_with("view:") { return Ok(revision.into()); }
+    if !revision.starts_with("view:") {
+        return Ok(revision.into());
+    }
     let bound = binding(root, session)?;
     let state = load(root, &bound.session, &bound.directory.join("state.json"))?;
-    crate::require(state.enabled && state.epoch == bound.epoch, "expired context binding")?;
-    crate::require(revision.starts_with(&format!("view:{}:", state.epoch)),
-        "unknown or expired revision reference; use a received frame or reopen")?;
-    let reference = state.references.get(revision)
-        .ok_or_else(|| Error("unknown or expired revision reference; use a received frame or reopen".into()))?;
+    crate::require(
+        state.enabled && state.epoch == bound.epoch,
+        "expired context binding",
+    )?;
+    crate::require(
+        revision.starts_with(&format!("view:{}:", state.epoch)),
+        "unknown or expired revision reference; use a received frame or reopen",
+    )?;
+    let reference = state.references.get(revision).ok_or_else(|| {
+        Error("unknown or expired revision reference; use a received frame or reopen".into())
+    })?;
     let materialized = reference.chain.materialize(&state.frames)?;
-    crate::require(materialized.packet()["revision"] == reference.revision
-        && scope(materialized.packet())? == reference.scope, "revision reference binding changed")?;
-    let head = reference.chain.frames.last().ok_or_else(|| Error("revision reference lacks frame".into()))?;
+    crate::require(
+        materialized.packet()["revision"] == reference.revision
+            && scope(materialized.packet())? == reference.scope,
+        "revision reference binding changed",
+    )?;
+    let head = reference
+        .chain
+        .frames
+        .last()
+        .ok_or_else(|| Error("revision reference lacks frame".into()))?;
     let (header, _) = parse_frame(head, &state.frames[head])?;
-    crate::require(header.revision_ref.as_deref() == Some(revision), "revision reference frame mismatch")?;
-    let transcript = state.transcript.as_deref().ok_or_else(|| Error("revision reference has no receipt".into()))?;
-    let seen = visible(&state, &context_texts(Path::new(transcript), &bound.session)?);
-    crate::require(available(&reference.chain, &seen), "revision reference is no longer retained; reopen")?;
+    crate::require(
+        header.revision_ref.as_deref() == Some(revision),
+        "revision reference frame mismatch",
+    )?;
+    let transcript = state
+        .transcript
+        .as_deref()
+        .ok_or_else(|| Error("revision reference has no receipt".into()))?;
+    let seen = visible(
+        &state,
+        &context_texts(Path::new(transcript), &bound.session)?,
+    );
+    crate::require(
+        available(&reference.chain, &seen),
+        "revision reference is no longer retained; reopen",
+    )?;
     Ok(reference.revision.clone())
 }
 
@@ -808,12 +884,19 @@ pub(crate) fn prepare_output_with_refresh(
     }
 }
 
-fn refresh_notice(previous: &str, current: Option<&str>, removed: &[String], error: Option<&str>) -> Result<String> {
+fn refresh_notice(
+    previous: &str,
+    current: Option<&str>,
+    removed: &[String],
+    error: Option<&str>,
+) -> Result<String> {
     let notice = json!({"schema":"kpopper.source-refresh/v1","previous_revision":previous,
         "revision":current,"removed_ids":removed,"status":if error.is_some(){"unavailable"}else{"refreshed"},
         "reason":error});
-    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nEarlier reads are historical snapshots. A newly verified complete read of the required source supersedes this notice, even when exact source restoration reuses an earlier revision. Use the complete current evidence below; removed entries no longer support a current claim. For answer revision metadata or a follow-up session view, use the current frame's revision_ref with the same --context-session, replacing the prior --revision argument. Original source IDs remain the citations. If refresh is unavailable, reopen and read the required current evidence before relying on it. This notice is not a source body or permission.\n",
-        serde_json::to_string(&notice)?))
+    Ok(format!(
+        "KPOPPER_SOURCE_REFRESH {}\nEarlier reads are historical snapshots. A newly verified complete read of the required source supersedes this notice, even when exact source restoration reuses an earlier revision. Use the complete current evidence below; removed entries no longer support a current claim. For answer revision metadata or a follow-up session view, use the current frame's revision_ref with the same --context-session, replacing the prior --revision argument. Original source IDs remain the citations. If refresh is unavailable, reopen and read the required current evidence before relying on it. This notice is not a source body or permission.\n",
+        serde_json::to_string(&notice)?
+    ))
 }
 
 fn replacement_notice(previous: &str, selected_source: &J) -> Result<String> {
@@ -821,8 +904,10 @@ fn replacement_notice(previous: &str, selected_source: &J) -> Result<String> {
         "revision":null,"removed_ids":[],"status":"unavailable",
         "reason":"the selected source has not yet been completely read",
         "selected_source":selected_source});
-    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nWith tools available, read selected_source before answering. Use the latest KPOPPER_CANONICAL_VIEW_ROUTE with its source and mode flags, preserving --context-session. If its revision is stale, run session open with the same source and mode flags, then read at the new revision. A complete current read through that binding supplies the answer and its revision_ref. Complete or newly delivered frames from a previous source do not satisfy this selection. If tools are unavailable or the selected source cannot be read, report its current answer as unavailable; do not substitute another source's value or revision_ref. A new session opening can select another source if needed. This notice is not a source body or permission.\n",
-        serde_json::to_string(&notice)?))
+    Ok(format!(
+        "KPOPPER_SOURCE_REFRESH {}\nWith tools available, read selected_source before answering. Use the latest KPOPPER_CANONICAL_VIEW_ROUTE with its source and mode flags, preserving --context-session. If its revision is stale, run session open with the same source and mode flags, then read at the new revision. A complete current read through that binding supplies the answer and its revision_ref. Complete or newly delivered frames from a previous source do not satisfy this selection. If tools are unavailable or the selected source cannot be read, report its current answer as unavailable; do not substitute another source's value or revision_ref. A new session opening can select another source if needed. This notice is not a source body or permission.\n",
+        serde_json::to_string(&notice)?
+    ))
 }
 
 fn short_replacement_notice(previous: &str) -> Result<String> {
@@ -830,21 +915,40 @@ fn short_replacement_notice(previous: &str) -> Result<String> {
         "revision":null,"removed_ids":[],"status":"unavailable",
         "reason":"the selected source has not yet been completely read",
         "selected_source_in":"opening_route"});
-    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nWith tools available, read the complete source selected by the route above, retaining its source/mode flags and --context-session. Reopen that same source on a stale revision. Other-source reads do not establish this selection. If it cannot be read, report unavailability. The prompt notice supplies the full selected_source binding. This notice is not source data or permission.\n", serde_json::to_string(&notice)?))
+    Ok(format!(
+        "KPOPPER_SOURCE_REFRESH {}\nWith tools available, read the complete source selected by the route above, retaining its source/mode flags and --context-session. Reopen that same source on a stale revision. Other-source reads do not establish this selection. If it cannot be read, report unavailability. The prompt notice supplies the full selected_source binding. This notice is not source data or permission.\n",
+        serde_json::to_string(&notice)?
+    ))
 }
 
 /// Refresh is a read before the next turn, not a Stop gate or a model request.
 fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<String>> {
     let state = read_state(root, session)?;
-    if !state.enabled || setting("KPOPPER_SESSION_DISABLE", false) || !setting("KPOPPER_CANONICAL_VIEW", true) {
+    if !state.enabled
+        || setting("KPOPPER_SESSION_DISABLE", false)
+        || !setting("KPOPPER_CANONICAL_VIEW", true)
+    {
         return Ok(None);
     }
-    if let Some(reader) = state.freshness.as_ref().map(|f| &f.reader).or(state.reader.as_ref()) {
+    if let Some(reader) = state
+        .freshness
+        .as_ref()
+        .map(|f| &f.reader)
+        .or(state.reader.as_ref())
+    {
         match reader.enabled(root) {
             Ok(false) => return Ok(None),
             Ok(true) => (),
-            Err(_) => return Ok(Some(refresh_notice(&reader.revision, None, &[],
-                Some("session controls could not be checked; reopen before relying on current evidence"))?)),
+            Err(_) => {
+                return Ok(Some(refresh_notice(
+                    &reader.revision,
+                    None,
+                    &[],
+                    Some(
+                        "session controls could not be checked; reopen before relying on current evidence",
+                    ),
+                )?));
+            }
         }
     } else if state.refresh_error.is_some() {
         // Pre-Freshness private state may have lost its reader while retaining
@@ -853,30 +957,45 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
         // A failed settings read never proves opt-out or clears the warning.
         let mut inventory = crate::source_inventory::Inventory::default();
         if let Ok(settings) = crate::session_settings::current_for_hook(&mut inventory, root, root)
-            .and_then(|settings| { inventory.verify()?; Ok(settings) })
-            && settings["enabled"] == false {
+            .and_then(|settings| {
+                inventory.verify()?;
+                Ok(settings)
+            })
+            && settings["enabled"] == false
+        {
             return Ok(None);
         }
     }
     if let Some(route) = &state.replacement_route {
         // Render from the persisted binding so an existing pending handover
         // also receives the current, source-specific recovery contract.
-        let previous = state.freshness.as_ref().map_or("unknown", |f| f.reader.revision.as_str());
+        let previous = state
+            .freshness
+            .as_ref()
+            .map_or("unknown", |f| f.reader.revision.as_str());
         return Ok(Some(replacement_notice(previous, route)?));
     }
-    let Some(freshness) = &state.freshness else { return Ok(state.refresh_error.clone()); };
+    let Some(freshness) = &state.freshness else {
+        return Ok(state.refresh_error.clone());
+    };
     let reader = &freshness.reader;
     let ids = freshness.ids.iter().cloned().collect::<Vec<_>>();
-    if ids.is_empty() { return Ok(state.refresh_error.clone()); }
+    if ids.is_empty() {
+        return Ok(state.refresh_error.clone());
+    }
     let refreshed = reader.refresh(root, &ids);
     // A failed delivery is retried against source on every enabled prompt.
     // Only a completed, retained developer frame may clear its warning.
     if matches!(&refreshed, Ok(None)) {
         if state.refresh_error.is_some() && !state.unacknowledged_refresh {
             update(root, session, false, |s| {
-                crate::require(s.epoch == state.epoch
-                    && s.freshness.as_ref().is_some_and(|f| f.reader.revision == reader.revision),
-                    "managed context changed during source recovery")?;
+                crate::require(
+                    s.epoch == state.epoch
+                        && s.freshness
+                            .as_ref()
+                            .is_some_and(|f| f.reader.revision == reader.revision),
+                    "managed context changed during source recovery",
+                )?;
                 s.refresh_error = None;
                 Ok(())
             })?;
@@ -884,14 +1003,25 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
         }
         return Ok(state.refresh_error.clone());
     }
-    let transcript = payload["transcript_path"].as_str().or(state.transcript.as_deref());
+    let transcript = payload["transcript_path"]
+        .as_str()
+        .or(state.transcript.as_deref());
     let Some(transcript) = transcript else {
-        return Ok(Some(refresh_notice(&reader.revision, None, &[],
-            Some("current context transcript is unavailable; reopen and read current evidence"))?));
+        return Ok(Some(refresh_notice(
+            &reader.revision,
+            None,
+            &[],
+            Some("current context transcript is unavailable; reopen and read current evidence"),
+        )?));
     };
     update(root, session, false, |s| {
-        crate::require(s.epoch == state.epoch && s.freshness.as_ref().is_some_and(|f| f.reader.revision == reader.revision),
-            "managed context changed during source refresh")?;
+        crate::require(
+            s.epoch == state.epoch
+                && s.freshness
+                    .as_ref()
+                    .is_some_and(|f| f.reader.revision == reader.revision),
+            "managed context changed during source refresh",
+        )?;
         // Old frames remain historical transcript data, never a new base or anchor.
         s.base = None;
         s.history.clear();
@@ -900,31 +1030,75 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
         // that its old evidence is current. Only an acknowledged base grants that.
         s.references.clear();
         let delivered = (|| -> Result<String> {
-            let Some(fresh) = refreshed? else { unreachable!() };
-            let notice = refresh_notice(&reader.revision, Some(&fresh.reader.revision), &fresh.removed, None)?;
-            s.counter = s.counter.checked_add(1).ok_or_else(|| Error("context sequence exhausted".into()))?;
+            let Some(fresh) = refreshed? else {
+                unreachable!()
+            };
+            let notice = refresh_notice(
+                &reader.revision,
+                Some(&fresh.reader.revision),
+                &fresh.removed,
+                None,
+            )?;
+            s.counter = s
+                .counter
+                .checked_add(1)
+                .ok_or_else(|| Error("context sequence exhausted".into()))?;
             let id = sha256(format!("{}:{}:{}", s.epoch, s.counter, now()).as_bytes());
             let reference = format!("view:{}:{}", s.epoch, s.counter);
-            let chosen = view_delta::choose(None, &fresh.packet, format(&reader.view_format)?,
-                |kind, wire| frame_with_reference(&id, None, kind, wire, Some(&reference)))?;
+            let chosen = view_delta::choose(
+                None,
+                &fresh.packet,
+                format(&reader.view_format)?,
+                |kind, wire| frame_with_reference(&id, None, kind, wire, Some(&reference)),
+            )?;
             let output = notice + &chosen.wire;
             reader.validate_refresh_output(&output)?;
-            crate::require(output.len() <= MAX_WIRE && Encoding::O200kBase.count(&output) <= 16000,
-                "complete source refresh exceeds context budget; reopen and read exact IDs")?;
-            let chain = Chain { frames: vec![id.clone()], target: chosen.target_sha256 };
+            crate::require(
+                output.len() <= MAX_WIRE && Encoding::O200kBase.count(&output) <= 16000,
+                "complete source refresh exceeds context budget; reopen and read exact IDs",
+            )?;
+            let chain = Chain {
+                frames: vec![id.clone()],
+                target: chosen.target_sha256,
+            };
             s.frames.insert(id.clone(), Frame { text: chosen.wire });
             chain.materialize(&s.frames)?;
-            s.references.insert(reference.clone(), RevisionReference { revision: fresh.reader.revision.clone(),
-                scope: scope(&fresh.packet)?, chain: chain.clone() });
-            s.pending.insert(id, Pending { packet: fresh.packet, format: reader.view_format.clone(),
-                epoch: s.epoch.clone(), turn: payload["turn_id"].as_str().map(str::to_owned),
-                chain: Some(chain), prompt: true, reader: Some(fresh.reader), reference });
+            s.references.insert(
+                reference.clone(),
+                RevisionReference {
+                    revision: fresh.reader.revision.clone(),
+                    scope: scope(&fresh.packet)?,
+                    chain: chain.clone(),
+                },
+            );
+            s.pending.insert(
+                id,
+                Pending {
+                    packet: fresh.packet,
+                    format: reader.view_format.clone(),
+                    epoch: s.epoch.clone(),
+                    turn: payload["turn_id"].as_str().map(str::to_owned),
+                    chain: Some(chain),
+                    prompt: true,
+                    reader: Some(fresh.reader),
+                    reference,
+                },
+            );
             s.transcript = Some(transcript.into());
-            s.refresh_error = Some(refresh_notice(&reader.revision, None, &[],
-                Some("current refresh has not been acknowledged by a completed turn; read current evidence"))?);
+            s.refresh_error = Some(refresh_notice(
+                &reader.revision,
+                None,
+                &[],
+                Some(
+                    "current refresh has not been acknowledged by a completed turn; read current evidence",
+                ),
+            )?);
             s.unacknowledged_refresh = true;
             trim(s);
-            crate::require(s.frames.len() <= MAX_FRAMES, "context frame cache exhausted")?;
+            crate::require(
+                s.frames.len() <= MAX_FRAMES,
+                "context frame cache exhausted",
+            )?;
             Ok(output)
         })();
         match delivered {
@@ -940,9 +1114,18 @@ fn refresh_prompt(root: &Path, session: &str, payload: &J) -> Result<Option<Stri
     })
 }
 
-fn frame_with_reference(id: &str, parent: Option<&str>, kind: &str, payload: &str, reference: Option<&str>) -> Result<String> {
-    let mut header = json!({"schema":SCHEMA,"id":id,"base":if kind=="delta"{parent}else{None},"mode":kind});
-    if let Some(reference) = reference { header["revision_ref"] = json!(reference); }
+fn frame_with_reference(
+    id: &str,
+    parent: Option<&str>,
+    kind: &str,
+    payload: &str,
+    reference: Option<&str>,
+) -> Result<String> {
+    let mut header =
+        json!({"schema":SCHEMA,"id":id,"base":if kind=="delta"{parent}else{None},"mode":kind});
+    if let Some(reference) = reference {
+        header["revision_ref"] = json!(reference);
+    }
     let header = serde_json::to_string(&header)?;
     let body = format!("KPOPPER_CONTEXT_FRAME {header}\n{FRAME_RULE}{payload}");
     Ok(format!(
@@ -1034,7 +1217,8 @@ fn trim(s: &mut State) {
             s.frames.remove(&id);
         }
     }
-    s.references.retain(|_, r| r.chain.frames.iter().all(|id| s.frames.contains_key(id)));
+    s.references
+        .retain(|_, r| r.chain.frames.iter().all(|id| s.frames.contains_key(id)));
 }
 
 /// Called only by the dedicated Codex handler. Returned text goes through one
@@ -1112,7 +1296,9 @@ fn hook_with_delta(
         if markers.is_empty() {
             return Ok(None);
         }
-        let texts = transcript.and_then(|path| context_texts(Path::new(path), session).ok()).unwrap_or_default();
+        let texts = transcript
+            .and_then(|path| context_texts(Path::new(path), session).ok())
+            .unwrap_or_default();
         return update(root, session, false, |s| {
             if !s.enabled {
                 return Ok(None);
@@ -1140,7 +1326,10 @@ fn hook_with_delta(
                     continue;
                 }
                 if pending.reference.is_empty() {
-                    s.counter = s.counter.checked_add(1).ok_or_else(|| Error("context sequence exhausted".into()))?;
+                    s.counter = s
+                        .counter
+                        .checked_add(1)
+                        .ok_or_else(|| Error("context sequence exhausted".into()))?;
                     pending.reference = format!("view:{}:{}", s.epoch, s.counter);
                 }
                 crate::require(
@@ -1161,14 +1350,18 @@ fn hook_with_delta(
                     retained.as_ref(),
                     &pending.packet,
                     format(&pending.format)?,
-                    |kind, wire| frame_with_reference(id, parent, kind, wire, Some(&pending.reference)),
+                    |kind, wire| {
+                        frame_with_reference(id, parent, kind, wire, Some(&pending.reference))
+                    },
                 )?;
                 if delivered.kind == view_delta::DeliveryKind::Delta {
                     let full = view_delta::choose(
                         None,
                         &pending.packet,
                         format(&pending.format)?,
-                        |kind, wire| frame_with_reference(id, None, kind, wire, Some(&pending.reference)),
+                        |kind, wire| {
+                            frame_with_reference(id, None, kind, wire, Some(&pending.reference))
+                        },
                     )?;
                     if Encoding::O200kBase.count(&delivered.wire)
                         >= Encoding::O200kBase.count(&full.wire)
@@ -1208,10 +1401,17 @@ fn hook_with_delta(
                     },
                 );
                 chain.materialize(&s.frames)?;
-                s.references.insert(pending.reference.clone(), RevisionReference {
-                    revision: pending.packet["revision"].as_str().ok_or_else(|| Error("view lacks revision".into()))?.into(),
-                    scope: scope(&pending.packet)?, chain: chain.clone(),
-                });
+                s.references.insert(
+                    pending.reference.clone(),
+                    RevisionReference {
+                        revision: pending.packet["revision"]
+                            .as_str()
+                            .ok_or_else(|| Error("view lacks revision".into()))?
+                            .into(),
+                        scope: scope(&pending.packet)?,
+                        chain: chain.clone(),
+                    },
+                );
                 pending.turn = turn.map(str::to_owned);
                 pending.chain = Some(chain);
                 s.pending.insert(id.into(), pending);
@@ -1271,8 +1471,12 @@ fn hook_with_delta(
                 s.history.clear();
                 s.reader = None;
                 if s.pending.values().any(|p| p.prompt) {
-                    s.refresh_error = Some(refresh_notice("unknown", None, &[],
-                        Some("current evidence was not retained; reopen and read it"))?);
+                    s.refresh_error = Some(refresh_notice(
+                        "unknown",
+                        None,
+                        &[],
+                        Some("current evidence was not retained; reopen and read it"),
+                    )?);
                 }
             }
             // Use transcript order, not parallel hook completion order, to
@@ -1282,7 +1486,9 @@ fn hook_with_delta(
                 let mut heads = s
                     .pending
                     .iter()
-                    .filter(|(_, p)| p.turn.as_deref() == Some(turn) || (p.prompt && p.turn.is_none()))
+                    .filter(|(_, p)| {
+                        p.turn.as_deref() == Some(turn) || (p.prompt && p.turn.is_none())
+                    })
                     .filter_map(|(id, p)| p.chain.as_ref().map(|c| (id, c)))
                     .filter(|(id, c)| {
                         available(c, &seen)
@@ -1293,33 +1499,60 @@ fn hook_with_delta(
                 for (id, chain) in heads {
                     s.base = Some(chain.clone());
                     s.reader = s.pending[id].reader.clone();
-                    acknowledged_heads.push((chain.clone(), s.reader.clone(), s.pending[id].prompt));
+                    acknowledged_heads.push((
+                        chain.clone(),
+                        s.reader.clone(),
+                        s.pending[id].prompt,
+                    ));
                 }
             }
             // Process each retained head in transcript order. A partial read
             // after a complete refresh neither cancels that receipt nor grants
             // coverage at a newer source revision.
             for (chain, reader, prompt) in acknowledged_heads {
-                let Some(reader) = reader else { continue; };
+                let Some(reader) = reader else {
+                    continue;
+                };
                 let value = chain.materialize(&s.frames)?;
                 let packet = value.packet();
                 let key = scope(packet)?;
                 let eligible = received(s, &seen, &key);
                 let head_ids = value.received().keys().cloned().collect::<BTreeSet<_>>();
-                let source_changed = s.freshness.as_ref().is_some_and(|prior|
-                    prior.reader.fingerprint != reader.fingerprint);
-                let coverage = if s.refresh_error.is_some() || source_changed { &head_ids } else { &eligible };
-                let covers_prior = s.freshness.as_ref().is_none_or(|prior| prior.ids.is_subset(coverage));
-                let same_source = s.freshness.as_ref().is_none_or(|prior| prior.reader.same_source(&reader));
+                let source_changed = s
+                    .freshness
+                    .as_ref()
+                    .is_some_and(|prior| prior.reader.fingerprint != reader.fingerprint);
+                let coverage = if s.refresh_error.is_some() || source_changed {
+                    &head_ids
+                } else {
+                    &eligible
+                };
+                let covers_prior = s
+                    .freshness
+                    .as_ref()
+                    .is_none_or(|prior| prior.ids.is_subset(coverage));
+                let same_source = s
+                    .freshness
+                    .as_ref()
+                    .is_none_or(|prior| prior.reader.same_source(&reader));
                 // Only the source issued by the latest opening may replace
                 // the tracked source, after its whole record is received.
                 let replaces_routed_source = s.refresh_error.is_some()
-                    && s.replacement_route.as_ref().is_some_and(|route| reader.matches_opening_route(route))
-                    && !head_ids.is_empty() && packet["coverage"]["folded_count"].as_u64() == Some(0);
+                    && s.replacement_route
+                        .as_ref()
+                        .is_some_and(|route| reader.matches_opening_route(route))
+                    && !head_ids.is_empty()
+                    && packet["coverage"]["folded_count"].as_u64() == Some(0);
                 let matches_packet = packet["revision"].as_str() == Some(reader.revision.as_str())
                     && packet["scope"].as_str() == Some(reader.scope.as_str());
-                if matches_packet && ((s.replacement_route.is_none() && same_source && (prompt || covers_prior)) || replaces_routed_source) {
-                    s.freshness = Some(Freshness { reader, ids: coverage.clone() });
+                if matches_packet
+                    && ((s.replacement_route.is_none() && same_source && (prompt || covers_prior))
+                        || replaces_routed_source)
+                {
+                    s.freshness = Some(Freshness {
+                        reader,
+                        ids: coverage.clone(),
+                    });
                     s.refresh_error = None;
                     s.unacknowledged_refresh = false;
                     s.replacement_route = None;
@@ -1370,25 +1603,37 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
         .position(|v| v == "--workspace")
         .and_then(|i| args.get(i + 1))
         .and_then(J::as_str)
-        .ok_or_else(|| Error("canonical route lacks workspace".into()))?.to_owned();
-    let argument = |name: &str| args.iter().position(|v| v == name)
-        .and_then(|i| args.get(i + 1)).and_then(J::as_str).map(str::to_owned);
+        .ok_or_else(|| Error("canonical route lacks workspace".into()))?
+        .to_owned();
+    let argument = |name: &str| {
+        args.iter()
+            .position(|v| v == name)
+            .and_then(|i| args.get(i + 1))
+            .and_then(J::as_str)
+            .map(str::to_owned)
+    };
     let replacement = json!({"input":argument("--input"),"state":argument("--state"),
         "project":argument("--project"),"profile":argument("--profile"),
         "assessment_profile":argument("--assessment-profile"),
         "frozen":args.iter().any(|arg| arg == "--frozen"),
         "normalized":args.iter().any(|arg| arg == "--normalized")});
     let (warning, previous) = update(Path::new(&workspace), session, false, |s| {
-        if !s.enabled { return Ok((String::new(), None)); }
-        let changed = s.freshness.as_ref().is_some_and(|prior|
-            prior.reader.input_missing() || !prior.reader.matches_opening_route(&replacement));
+        if !s.enabled {
+            return Ok((String::new(), None));
+        }
+        let changed = s.freshness.as_ref().is_some_and(|prior| {
+            prior.reader.input_missing() || !prior.reader.matches_opening_route(&replacement)
+        });
         if changed {
             let previous = s.freshness.as_ref().unwrap().reader.revision.clone();
             let notice = replacement_notice(&previous, &replacement)?;
             s.replacement_route = Some(replacement.clone());
             s.refresh_error = Some(notice.clone());
             Ok((notice, Some(previous)))
-        } else { s.replacement_route = None; Ok((String::new(), None)) }
+        } else {
+            s.replacement_route = None;
+            Ok((String::new(), None))
+        }
     })?;
     let binding = context_binding(Path::new(&workspace), session)?;
     args.extend([json!("--context-session"), json!(binding)]);
@@ -1398,25 +1643,46 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
     // The ordinary opener may already have folded the graph; folding that
     // text again must not require graph bodies that are intentionally absent.
     let fit = |warning: &str| -> Result<String> {
-        let allowance = 7000usize.checked_sub(warning.len() + guidance.len())
-            .ok_or_else(|| Error("selected source metadata exceeds the opening allowance".into()))?;
+        let allowance = 7000usize
+            .checked_sub(warning.len() + guidance.len())
+            .ok_or_else(|| {
+                Error("selected source metadata exceeds the opening allowance".into())
+            })?;
         let mut route = route.clone();
-        let opening = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\n{rest}\n", serde_json::to_string(&route)?);
+        let opening = format!(
+            "KPOPPER_CANONICAL_VIEW_ROUTE {}\n{rest}\n",
+            serde_json::to_string(&route)?
+        );
         let mut bound = if opening.len() <= allowance {
             opening
         } else if route["complete_graph_in_hook"] == false {
             route["inline_byte_limit"] = json!(allowance);
-            let attention = rest.lines().find_map(|line| line.strip_prefix("KPOPPER_OPENING_ATTENTION "))
+            let attention = rest
+                .lines()
+                .find_map(|line| line.strip_prefix("KPOPPER_OPENING_ATTENTION "))
                 .map(|raw| -> Result<String> {
                     let mut value: J = serde_json::from_str(raw)?;
                     let omitted = value["omitted_items"].as_u64().unwrap_or(0)
-                        + value["items"].as_array().map_or(0, |items| items.len() as u64);
+                        + value["items"]
+                            .as_array()
+                            .map_or(0, |items| items.len() as u64);
                     value["items"] = json!([]);
                     value["omitted_items"] = json!(omitted);
-                    Ok(format!("KPOPPER_OPENING_ATTENTION {}\n", serde_json::to_string(&value)?))
-                }).transpose()?.unwrap_or_default();
-            let compact = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\nGraph bodies and opening attention are omitted to retain the source route and warning. Run the view with its max_output_tokens before answering.\n{attention}", serde_json::to_string(&route)?);
-            crate::require(compact.len() <= allowance, "selected source route exceeds the opening allowance")?;
+                    Ok(format!(
+                        "KPOPPER_OPENING_ATTENTION {}\n",
+                        serde_json::to_string(&value)?
+                    ))
+                })
+                .transpose()?
+                .unwrap_or_default();
+            let compact = format!(
+                "KPOPPER_CANONICAL_VIEW_ROUTE {}\nGraph bodies and opening attention are omitted to retain the source route and warning. Run the view with its max_output_tokens before answering.\n{attention}",
+                serde_json::to_string(&route)?
+            );
+            crate::require(
+                compact.len() <= allowance,
+                "selected source route exceeds the opening allowance",
+            )?;
             compact
         } else {
             crate::session_admin::canonical_hook_delivery(&opening, allowance)?
@@ -1427,7 +1693,9 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
     };
     match fit(&warning) {
         Ok(bound) => Ok(bound),
-        Err(_) if previous.is_some() => fit(&short_replacement_notice(previous.as_deref().unwrap())?),
+        Err(_) if previous.is_some() => {
+            fit(&short_replacement_notice(previous.as_deref().unwrap())?)
+        }
         Err(error) => Err(error),
     }
 }
@@ -1534,12 +1802,26 @@ mod tests {
             p.context(&full);
             p.stop("one", r#"{"citations":["chain.00"]}"#);
             p.append(barrier);
-            assert!(automatic_anchors(p.root.path(), Some(&p.session), value["revision"].as_str().unwrap()).is_empty());
+            assert!(
+                automatic_anchors(
+                    p.root.path(),
+                    Some(&p.session),
+                    value["revision"].as_str().unwrap()
+                )
+                .is_empty()
+            );
             let next = p.emit("two", &p.queue(&value));
             assert!(next.contains("\"mode\":\"full_checkpoint\""));
             p.context(&next);
             p.stop("two", r#"{"citations":["chain.01"]}"#);
-            assert_eq!(automatic_anchors(p.root.path(), Some(&p.session), value["revision"].as_str().unwrap()), vec!["chain.01"]);
+            assert_eq!(
+                automatic_anchors(
+                    p.root.path(),
+                    Some(&p.session),
+                    value["revision"].as_str().unwrap()
+                ),
+                vec!["chain.01"]
+            );
         }
     }
     #[test]
@@ -1554,7 +1836,14 @@ mod tests {
         assert!(next.contains("\"mode\":\"full_checkpoint\""));
         p.context(&next);
         p.stop("two", r#"{"citations":["chain.01"]}"#);
-        assert_eq!(automatic_anchors(p.root.path(), Some(&p.session), value["revision"].as_str().unwrap()), vec!["chain.01"]);
+        assert_eq!(
+            automatic_anchors(
+                p.root.path(),
+                Some(&p.session),
+                value["revision"].as_str().unwrap()
+            ),
+            vec!["chain.01"]
+        );
     }
     #[test]
     fn tail_seek_inside_large_row_drains_to_boundary_before_new_checkpoint() {
@@ -1563,13 +1852,18 @@ mod tests {
         for _ in 0..30 {
             p.append(json!({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"y".repeat(500_000)}]}}));
         }
-        let value=packet();
-        let full=p.emit("one", &p.queue(&value));
+        let value = packet();
+        let full = p.emit("one", &p.queue(&value));
         p.context(&full);
-        let offset=fs::metadata(&p.transcript).unwrap().len()-MAX_TAIL;
+        let offset = fs::metadata(&p.transcript).unwrap().len() - MAX_TAIL;
         assert!(offset > 100 && offset < MAX_LINE as u64);
         p.stop("one", r#"{"citations":["chain.00"]}"#);
-        assert!(read_state(p.root.path(), &p.session).unwrap().base.is_some());
+        assert!(
+            read_state(p.root.path(), &p.session)
+                .unwrap()
+                .base
+                .is_some()
+        );
     }
     #[test]
     fn missing_hook_metadata_delivers_full_without_committing() {
@@ -1582,10 +1876,20 @@ mod tests {
             let mut payload = p.payload("two");
             payload["tool_response"] = json!(p.queue(&value));
             payload.as_object_mut().unwrap().remove(missing);
-            let next = hook_with_delta(p.root.path(), "PostToolUse", &payload, true).unwrap().unwrap();
+            let next = hook_with_delta(p.root.path(), "PostToolUse", &payload, true)
+                .unwrap()
+                .unwrap();
             assert!(next.contains("\"mode\":\"full_checkpoint\""));
             // No Stop receipt has been fabricated or base committed by emission.
-            assert_eq!(read_state(p.root.path(), &p.session).unwrap().base.unwrap().frames.len(), 1);
+            assert_eq!(
+                read_state(p.root.path(), &p.session)
+                    .unwrap()
+                    .base
+                    .unwrap()
+                    .frames
+                    .len(),
+                1
+            );
         }
     }
     #[test]
@@ -1596,12 +1900,33 @@ mod tests {
         p.context(&full);
         p.stop("one", r#"{"citations":["chain.00"]}"#);
         let text = view_format::render(&value, ViewFormat::CheckedTextTagged).unwrap();
-        assert_eq!(prepare_output(p.root.path(), None, &value, &text, ViewFormat::CheckedTextTagged, ViewTransport::Auto).unwrap(), text);
-        assert!(automatic_anchors(p.root.path(), None, value["revision"].as_str().unwrap()).is_empty());
+        assert_eq!(
+            prepare_output(
+                p.root.path(),
+                None,
+                &value,
+                &text,
+                ViewFormat::CheckedTextTagged,
+                ViewTransport::Auto
+            )
+            .unwrap(),
+            text
+        );
+        assert!(
+            automatic_anchors(p.root.path(), None, value["revision"].as_str().unwrap()).is_empty()
+        );
         let _not_issued_to_this_turn = p.queue(&value);
         p.stop("two", r#"{"citations":["chain.01"]}"#);
-        assert!(read_state(p.root.path(), &p.session).unwrap().base.is_some());
-        assert!(p.emit("three", &p.queue(&value)).contains("\"mode\":\"delta\""));
+        assert!(
+            read_state(p.root.path(), &p.session)
+                .unwrap()
+                .base
+                .is_some()
+        );
+        assert!(
+            p.emit("three", &p.queue(&value))
+                .contains("\"mode\":\"delta\"")
+        );
     }
     #[test]
     fn actual_context_not_tool_success_acknowledges_base_and_anchors() {

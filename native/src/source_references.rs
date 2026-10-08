@@ -59,25 +59,28 @@ fn repo_relative_pin_path(
     if !target.starts_with(project_root) {
         return Ok(None);
     }
-    Ok(resolved_path.strip_prefix(project_root).ok().map(|relative| {
-        relative
-            .components()
-            .map(|component| component.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/")
-    }))
+    Ok(resolved_path
+        .strip_prefix(project_root)
+        .ok()
+        .map(|relative| {
+            relative
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/")
+        }))
 }
 
 fn tree_blob_status(output: &[u8], path: &str) -> PinnedFileStatus {
-    for entry in output.split(|byte| *byte == 0).filter(|entry| !entry.is_empty()) {
+    for entry in output
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
         let Some(separator) = entry.iter().position(|byte| *byte == b'\t') else {
             return PinnedFileStatus::Unavailable;
         };
         let metadata = entry[..separator].split(|byte| byte.is_ascii_whitespace());
-        let kind = metadata
-            .skip(1)
-            .next()
-            .filter(|field| !field.is_empty());
+        let kind = metadata.skip(1).next().filter(|field| !field.is_empty());
         let Some(kind) = kind else {
             return PinnedFileStatus::Unavailable;
         };

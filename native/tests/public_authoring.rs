@@ -206,15 +206,20 @@ fn legacy_history_record(root: &Path) {
             "{}.kpopper-runtime",
             kpop_native::reasoning_runtime::target_name().unwrap()
         ));
-    let runtime =
-        Runtime::open(&archive, &root.join(".test-cache"), OperationalBounds::default()).unwrap();
+    let runtime = Runtime::open(
+        &archive,
+        &root.join(".test-cache"),
+        OperationalBounds::default(),
+    )
+    .unwrap();
     let policy = kpop_native::project_modes::Project::open(root)
         .unwrap()
         .config()
         .unwrap();
-    let action =
-        V::from_json(&serde_json::json!({"kind":"add","id":"p.base","body":{"v":1},"as_of":"2026-09-19"}))
-            .unwrap();
+    let action = V::from_json(
+        &serde_json::json!({"kind":"add","id":"p.base","body":{"v":1},"as_of":"2026-09-19"}),
+    )
+    .unwrap();
     let mutation = B::prepare(
         &entry,
         &action,
@@ -340,12 +345,23 @@ fn advanced_local_scopes_are_written_and_project_review_is_refused() {
 
 #[test]
 fn advanced_scoped_flow_set_matches_python_field_order() {
-    let (_temp, root) = advanced_ordinary(
-        "known:\n  p.base: {name: Package count, v: 1, at: line 2}\n",
-    );
+    let (_temp, root) =
+        advanced_ordinary("known:\n  p.base: {name: Package count, v: 1, at: line 2}\n");
     success(run_unbundled(
         &root,
-        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
+        &[
+            "set",
+            "p.base",
+            "5",
+            "--shareability",
+            "project",
+            "--scope",
+            "feature",
+            "--environment",
+            "x",
+            "--as-of",
+            "2026-09-20",
+        ],
     ));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
@@ -360,7 +376,19 @@ fn advanced_scoped_block_set_quotes_multiword_name_like_python() {
     );
     success(run_unbundled(
         &root,
-        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
+        &[
+            "set",
+            "p.base",
+            "5",
+            "--shareability",
+            "project",
+            "--scope",
+            "feature",
+            "--environment",
+            "x",
+            "--as-of",
+            "2026-09-20",
+        ],
     ));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
@@ -370,12 +398,23 @@ fn advanced_scoped_block_set_quotes_multiword_name_like_python() {
 
 #[test]
 fn advanced_scoped_block_set_quotes_multiword_at_like_python() {
-    let (_temp, root) = advanced_ordinary(
-        "known:\n  p.base:\n    v: 1\n    of: \"2026-09-01\"\n    at: line 2\n",
-    );
+    let (_temp, root) =
+        advanced_ordinary("known:\n  p.base:\n    v: 1\n    of: \"2026-09-01\"\n    at: line 2\n");
     success(run_unbundled(
         &root,
-        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
+        &[
+            "set",
+            "p.base",
+            "5",
+            "--shareability",
+            "project",
+            "--scope",
+            "feature",
+            "--environment",
+            "x",
+            "--as-of",
+            "2026-09-20",
+        ],
     ));
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
@@ -445,7 +484,10 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
         ],
     ));
     let (notice, receipt) = judgment_output.trim_end().rsplit_once('\n').unwrap();
-    assert_eq!(notice, "nearest existing:\n  d.old: rests on p.base too - verdicts differ, a pair to judge\n  one subject: same <id> d.new folds it in · two: distinct d.new <id> \"why\" keeps them apart");
+    assert_eq!(
+        notice,
+        "nearest existing:\n  d.old: rests on p.base too - verdicts differ, a pair to judge\n  one subject: same <id> d.new folds it in · two: distinct d.new <id> \"why\" keeps them apart"
+    );
     let judgment: Value = serde_json::from_str(receipt).unwrap();
     let manifest = pending_manifest(&root, judgment["revision"].as_str().unwrap());
     let V::Map(manifest) = manifest else {
@@ -584,9 +626,15 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     assert!(first.contains("born with its first entry"));
     let before: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     assert_eq!(before["authority"]["profile"], "node-history/v1");
-    let first_view = kpop_native::history_yaml::decode_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
-    let kpop_native::value::TypedValue::Map(first_view) = first_view else { panic!("record mapping") };
-    let kpop_native::value::TypedValue::Map(meta) = &first_view["meta"] else { panic!("record metadata") };
+    let first_view =
+        kpop_native::history_yaml::decode_document(&fs::read(root.join("GROUNDING.yaml")).unwrap())
+            .unwrap();
+    let kpop_native::value::TypedValue::Map(first_view) = first_view else {
+        panic!("record mapping")
+    };
+    let kpop_native::value::TypedValue::Map(meta) = &first_view["meta"] else {
+        panic!("record metadata")
+    };
     assert!(meta.contains_key("node_history"));
     assert!(!meta.contains_key("history"));
     let old = before["subjects"]["p.x"]["heads"][0].clone();
@@ -612,9 +660,15 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     assert_eq!(after["commits"], 2);
     assert_ne!(after["subjects"]["p.x"]["heads"][0], old);
     let current = kpop_native::history_node_capture::Capture::read(&root).unwrap();
-    let kpop_native::value::TypedValue::Map(document) = current.document() else { panic!("record mapping") };
-    let kpop_native::value::TypedValue::Map(known) = &document["known"] else { panic!("known mapping") };
-    let kpop_native::value::TypedValue::Map(body) = &known["p.x"] else { panic!("reading body") };
+    let kpop_native::value::TypedValue::Map(document) = current.document() else {
+        panic!("record mapping")
+    };
+    let kpop_native::value::TypedValue::Map(known) = &document["known"] else {
+        panic!("known mapping")
+    };
+    let kpop_native::value::TypedValue::Map(body) = &known["p.x"] else {
+        panic!("reading body")
+    };
     assert_eq!(body["v"].to_json().unwrap(), serde_json::json!(2));
     success(run(
         &root,
@@ -643,16 +697,49 @@ fn default_git_project_uses_compact_history_for_normal_local_work() {
     fs::write(root.join(".gitattributes"), "user.txt text\n").unwrap();
     success(run(&root, &["add", "p.x", "v=1", "--as-of", "2026-01-01"]));
     success(run(&root, &["add", "p.y", "v=2"]));
-    success(run(&root, &["set", "p.x", "2", "--as-of", "2026-01-02", "--why", "new observation"]));
-    success(run(&root, &["add", "d.small", "verdict=small", "rests_on=[p.x]", "wrong_if=p.x > 3"]));
-    success(run(&root, &["review", "d.small", "--why", "checked source"]));
-    success(run(&root, &["add", "p.alternative", "v=3", "--hypothesis", "alternative"]));
+    success(run(
+        &root,
+        &[
+            "set",
+            "p.x",
+            "2",
+            "--as-of",
+            "2026-01-02",
+            "--why",
+            "new observation",
+        ],
+    ));
+    success(run(
+        &root,
+        &[
+            "add",
+            "d.small",
+            "verdict=small",
+            "rests_on=[p.x]",
+            "wrong_if=p.x > 3",
+        ],
+    ));
+    success(run(
+        &root,
+        &["review", "d.small", "--why", "checked source"],
+    ));
+    success(run(
+        &root,
+        &["add", "p.alternative", "v=3", "--hypothesis", "alternative"],
+    ));
     success(run(&root, &["consolidate", "alternative", "--dry-run"]));
     success(run(&root, &["consolidate", "alternative"]));
     let status: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     assert_eq!(status["authority"]["profile"], "node-history/v1");
-    assert_eq!(status["subjects"]["p.alternative"]["acceptance"], "accepted");
-    assert!(fs::read_to_string(root.join(".gitattributes")).unwrap().starts_with("user.txt text\n"));
+    assert_eq!(
+        status["subjects"]["p.alternative"]["acceptance"],
+        "accepted"
+    );
+    assert!(
+        fs::read_to_string(root.join(".gitattributes"))
+            .unwrap()
+            .starts_with("user.txt text\n")
+    );
     assert!(!root.join("evidence/legacy").exists());
 }
 
@@ -694,9 +781,15 @@ fn history_add_names_the_nearest_existing_entries_once_before_the_commit() {
         "nearest existing:\n  p.hours: same from (src.c)\n  one subject: same <id> p.rate folds it in · two: distinct p.rate <id> \"why\" keeps them apart\n"
     );
     assert!(committed.ends_with(" (add p.rate)\n"), "{output}");
-    let record = kpop_native::history_yaml::decode_source_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
+    let record = kpop_native::history_yaml::decode_source_document(
+        &fs::read(root.join("GROUNDING.yaml")).unwrap(),
+    )
+    .unwrap();
     let body = record.get("known").unwrap().get("p.rate").unwrap().typed();
-    assert_eq!(body.to_json().unwrap(), serde_json::json!({"from":"src.c","v":50}));
+    assert_eq!(
+        body.to_json().unwrap(),
+        serde_json::json!({"from":"src.c","v":50})
+    );
 
     // Judgments read the record's dependency field: shared premises make a pair.
     let fine = [
@@ -1081,13 +1174,27 @@ fn explicit_core_acts_and_proposals_need_only_the_core_program() {
         assert_eq!(result["state"], "committed");
     }
     let record = root.join("GROUNDING.yaml");
-    let mut document = kpop_native::history_yaml::decode_document(&fs::read(&record).unwrap()).unwrap();
-    let kpop_native::value::TypedValue::Map(doc) = &mut document else { panic!("record") };
-    let kpop_native::value::TypedValue::Map(known) = doc.get_mut("known").unwrap() else { panic!("known") };
-    let kpop_native::value::TypedValue::Map(body) = known.get_mut("p.x").unwrap() else { panic!("body") };
+    let mut document =
+        kpop_native::history_yaml::decode_document(&fs::read(&record).unwrap()).unwrap();
+    let kpop_native::value::TypedValue::Map(doc) = &mut document else {
+        panic!("record")
+    };
+    let kpop_native::value::TypedValue::Map(known) = doc.get_mut("known").unwrap() else {
+        panic!("known")
+    };
+    let kpop_native::value::TypedValue::Map(body) = known.get_mut("p.x").unwrap() else {
+        panic!("body")
+    };
     assert_eq!(body["v"].to_json().unwrap(), serde_json::json!(1));
-    body.insert("v".into(), kpop_native::value::TypedValue::from_json(&serde_json::json!(8)).unwrap());
-    fs::write(&record, kpop_native::history_yaml::encode_document(&document).unwrap()).unwrap();
+    body.insert(
+        "v".into(),
+        kpop_native::value::TypedValue::from_json(&serde_json::json!(8)).unwrap(),
+    );
+    fs::write(
+        &record,
+        kpop_native::history_yaml::encode_document(&document).unwrap(),
+    )
+    .unwrap();
     let result: Value = serde_json::from_str(&success(run(
         &root,
         &[

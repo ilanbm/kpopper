@@ -311,18 +311,32 @@ fn optional_trace_shrinks_before_mandatory_evidence_is_refused() {
     for _ in 0..16 {
         let text = ok(cli(root.path(), "view")
             .args([
-                "--revision", &revision, "--id", "p.big", "--query", "orchard",
-                "--anchor", "p.other", "--tokens", &budget.to_string(),
+                "--revision",
+                &revision,
+                "--id",
+                "p.big",
+                "--query",
+                "orchard",
+                "--anchor",
+                "p.other",
+                "--tokens",
+                &budget.to_string(),
             ])
-            .output().unwrap());
+            .output()
+            .unwrap());
         let used = Encoding::O200kBase.count(&text);
         assert!(used <= budget);
         let packet: Value = serde_json::from_str(&text).unwrap();
         let received = TypedValue::from_tagged(body(&packet, "p.big").unwrap())
-            .unwrap().to_json().unwrap();
+            .unwrap()
+            .to_json()
+            .unwrap();
         assert_eq!(received["v"], "orchard ".repeat(300));
         if packet["selection"]["anchor_ranking"]["omitted_affected_rows"]
-            .as_u64().unwrap() > 0 {
+            .as_u64()
+            .unwrap()
+            > 0
+        {
             return;
         }
         budget = used - 1;

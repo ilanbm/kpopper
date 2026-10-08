@@ -900,7 +900,10 @@ impl Plan {
             for item in fs::read_dir(path)? {
                 let path = item?.path();
                 if path.is_symlink() || path.is_file() {
-                    out.insert(crate::history_migration_source::posix(path.strip_prefix(root).unwrap())?, path);
+                    out.insert(
+                        crate::history_migration_source::posix(path.strip_prefix(root).unwrap())?,
+                        path,
+                    );
                 } else if path.is_dir() {
                     walk(root, &path, out)?;
                 }
@@ -1161,7 +1164,10 @@ pub(super) fn validate_configuration_transition(
             for item in fs::read_dir(path)? {
                 let path = item?.path();
                 if path.is_symlink() || path.is_file() {
-                    out.insert(crate::history_migration_source::posix(path.strip_prefix(root).unwrap())?, path);
+                    out.insert(
+                        crate::history_migration_source::posix(path.strip_prefix(root).unwrap())?,
+                        path,
+                    );
                 } else if path.is_dir() {
                     walk(root, &path, out)?;
                 }

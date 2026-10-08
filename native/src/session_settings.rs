@@ -60,7 +60,11 @@ pub(crate) fn paths(directory: &Path, cwd: &Path) -> Result<Paths> {
 pub(crate) fn read(inventory: &mut Inventory, path: &Path) -> Result<Option<Value>> {
     read_with_budget(inventory, path, true)
 }
-fn read_with_budget(inventory: &mut Inventory, path: &Path, validate_budget: bool) -> Result<Option<Value>> {
+fn read_with_budget(
+    inventory: &mut Inventory,
+    path: &Path,
+    validate_budget: bool,
+) -> Result<Option<Value>> {
     if !inventory.exists(path)? {
         return Ok(None);
     }
@@ -87,12 +91,14 @@ fn read_with_budget(inventory: &mut Inventory, path: &Path, validate_budget: boo
                 "session settings need an absolute Python executable"
             },
         )?;
-        if validate_budget { require(
-            value["tokens"]
-                .as_u64()
-                .is_some_and(|n| (64..=65536).contains(&n)),
-            "session token budget must be 64..65536",
-        )?; }
+        if validate_budget {
+            require(
+                value["tokens"]
+                    .as_u64()
+                    .is_some_and(|n| (64..=65536).contains(&n)),
+                "session token budget must be 64..65536",
+            )?;
+        }
     }
     Ok(Some(value))
 }
@@ -101,17 +107,28 @@ pub(crate) fn current(inventory: &mut Inventory, directory: &Path, cwd: &Path) -
 }
 /// Startup chooses explicit error versus scope-preserving fallback for an invalid
 /// budget. Every other settings consumer keeps the strict validation above.
-pub(crate) fn current_for_hook(inventory: &mut Inventory, directory: &Path, cwd: &Path) -> Result<Value> {
+pub(crate) fn current_for_hook(
+    inventory: &mut Inventory,
+    directory: &Path,
+    cwd: &Path,
+) -> Result<Value> {
     let value = current_with_budget(inventory, directory, cwd, false)?;
     for key in ["project", "state", "profile"] {
         if let Some(field) = value.get(key) {
-            require(field.as_str().is_some_and(|s| !s.is_empty()),
-                &format!("invalid checked-session {key}; no safe ordinary fallback"))?;
+            require(
+                field.as_str().is_some_and(|s| !s.is_empty()),
+                &format!("invalid checked-session {key}; no safe ordinary fallback"),
+            )?;
         }
     }
     Ok(value)
 }
-fn current_with_budget(inventory: &mut Inventory, directory: &Path, cwd: &Path, validate_budget: bool) -> Result<Value> {
+fn current_with_budget(
+    inventory: &mut Inventory,
+    directory: &Path,
+    cwd: &Path,
+    validate_budget: bool,
+) -> Result<Value> {
     if std::env::var("KPOPPER_SESSION_DISABLE").as_deref() == Ok("1") {
         return Ok(json!({"enabled":false}));
     }

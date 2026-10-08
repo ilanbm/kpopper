@@ -422,10 +422,7 @@ pub(crate) fn derive_receipt(snapshot: &P::Snapshot, operation: &str) -> Result<
             if crate::history_node_ledger::is_ledger(state) {
                 for (object, _) in crate::history_node_ledger::unpack(state)? {
                     require(
-                        members.contains(
-                            operation,
-                            text(field(map(&object)?, "op")?)?,
-                        )?,
+                        members.contains(operation, text(field(map(&object)?, "op")?)?)?,
                         "node_receipt_operation",
                     )?;
                     ids.insert(text(field(map(&object)?, "id")?)?.to_owned());

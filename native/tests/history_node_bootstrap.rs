@@ -35,12 +35,22 @@ fn public_capture_reads_compact_semantic_objects_and_refuses_changed_view() {
     let run = || {
         std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(tmp.path())
-            .args(["--workspace", destination.to_str().unwrap(), "history-capture", "GROUNDING.yaml", "--json"])
+            .args([
+                "--workspace",
+                destination.to_str().unwrap(),
+                "history-capture",
+                "GROUNDING.yaml",
+                "--json",
+            ])
             .output()
             .unwrap()
     };
     let result = run();
-    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
     let result: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(result["status"], "captured");
     assert_eq!(result["semantic_assessment"], "not_performed");
@@ -53,9 +63,23 @@ fn public_capture_reads_compact_semantic_objects_and_refuses_changed_view() {
     let head = text(&map(subject)["head"]);
     let object = &map(&evidence["objects"])[head];
     assert_eq!(text(&map(object)["subject"]), "p.a");
-    assert_eq!(map(object)["body"], map(&map(&evidence["document"])["known"])["p.a"]);
-    assert_eq!(fs::read(destination.join("GROUNDING.yaml")).unwrap(), before);
-    fs::write(destination.join("GROUNDING.yaml"), before.iter().copied().chain(b"\nknown: {}\n".iter().copied()).collect::<Vec<_>>()).unwrap();
+    assert_eq!(
+        map(object)["body"],
+        map(&map(&evidence["document"])["known"])["p.a"]
+    );
+    assert_eq!(
+        fs::read(destination.join("GROUNDING.yaml")).unwrap(),
+        before
+    );
+    fs::write(
+        destination.join("GROUNDING.yaml"),
+        before
+            .iter()
+            .copied()
+            .chain(b"\nknown: {}\n".iter().copied())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
     assert!(!run().status.success());
 }
 

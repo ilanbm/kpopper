@@ -19,12 +19,12 @@ use std::{
     sync::LazyLock,
 };
 
+#[path = "legacy_arrangement.rs"]
+pub(crate) mod legacy_arrangement;
 #[path = "legacy_named.rs"]
 mod legacy_named;
 #[path = "legacy_replaced.rs"]
 pub(crate) mod legacy_replaced;
-#[path = "legacy_arrangement.rs"]
-pub(crate) mod legacy_arrangement;
 
 static TOP: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*):(?: |$)").unwrap());
@@ -83,7 +83,9 @@ fn entry_layout(entry: &Path) -> Result<Layout> {
 /// Resolve only from durable policy and authority state. Invalid or interrupted
 /// authority must never fall through to the ordinary writer.
 pub(crate) fn authority_route(entry: &Path) -> Result<AuthorityRoute> {
-    if crate::history_node_publication::selected(entry)? { return Ok(AuthorityRoute::History); }
+    if crate::history_node_publication::selected(entry)? {
+        return Ok(AuthorityRoute::History);
+    }
     let layout = entry_layout(entry)?;
     let authority_path = entry
         .parent()
@@ -1587,10 +1589,8 @@ pub(crate) fn relative(root: &Path, path: &Path) -> Result<String> {
     let path = absolute(path)?;
     // Resolve directory aliases (including macOS /var) without resolving a
     // final file symlink, which publication must still reject.
-    let path = crate::project_modes::resolved(
-        path.parent().ok_or_else(|| error("invalid_path"))?,
-    )?
-    .join(path.file_name().ok_or_else(|| error("invalid_path"))?);
+    let path = crate::project_modes::resolved(path.parent().ok_or_else(|| error("invalid_path"))?)?
+        .join(path.file_name().ok_or_else(|| error("invalid_path"))?);
     let root = crate::project_modes::resolved(root)?;
     let relative = path
         .strip_prefix(&root)
@@ -1637,7 +1637,10 @@ pub(crate) struct Prepared {
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Preparation {
-    Draft { output: String, inventory: Inventory },
+    Draft {
+        output: String,
+        inventory: Inventory,
+    },
     Mutation(Prepared),
 }
 
@@ -1729,27 +1732,41 @@ fn prepare_with_inventory_mode(
     let stamp = action_stamp(&action);
     let initial_entries = crate::reasoning_snapshot::entries(&source)?;
     let arrangement_write = text(field(&action, "kind")?)? == "add"
-        && map(field(&action, "body")?).is_ok_and(|body| body.contains_key(text(&reader.fields()["deps"]).unwrap_or("")))
+        && map(field(&action, "body")?)
+            .is_ok_and(|body| body.contains_key(text(&reader.fields()["deps"]).unwrap_or("")))
         && (crate::reasoning_authoring_guards::arrangement(&reader, field(&action, "body")?)
-            || initial_entries.get(text(field(&action, "id")?)?).is_some_and(|(_, old)|
-                crate::reasoning_authoring_guards::arrangement(&reader, old)));
+            || initial_entries
+                .get(text(field(&action, "id")?)?)
+                .is_some_and(|(_, old)| {
+                    crate::reasoning_authoring_guards::arrangement(&reader, old)
+                }));
     let page = if arrangement_write {
         Some(match supplied_page {
             Some(page) => page,
             None => crate::ordinary_page_capture::PageCapture::capture(
-                route.paths(), &route.project().root, Some(s(&stamp)), runtime.as_ref(),
+                route.paths(),
+                &route.project().root,
+                Some(s(&stamp)),
+                runtime.as_ref(),
             )?,
         })
-    } else { None };
+    } else {
+        None
+    };
     let page_facts = if let Some(page) = &page {
         let (facts, values) = page.facts_for_document(&source, runtime.as_ref())?;
         for (id, value) in values {
-            let body = reader.raw.entry(id.clone()).or_insert_with(|| V::Map(Map::new()));
+            let body = reader
+                .raw
+                .entry(id.clone())
+                .or_insert_with(|| V::Map(Map::new()));
             map_mut(body)?.insert("v".into(), value);
             reader.ids.insert(id);
         }
         Some(facts)
-    } else { None };
+    } else {
+        None
+    };
     // The clock is captured once for guards and the candidate. Keep the original
     // absence of --as-of for no-op and private-draft behavior.
     let mut dated_action = action.clone();
@@ -1764,7 +1781,9 @@ fn prepare_with_inventory_mode(
     if let Some(page_facts) = &page_facts {
         let ordinary = crate::reasoning_authoring_guards::validate(&mut reader, &dated_action)?;
         let page_aware = crate::reasoning_authoring_guards::validate_with_page(
-            &mut reader, &dated_action, Some(page_facts),
+            &mut reader,
+            &dated_action,
+            Some(page_facts),
         )?;
         for refusal in ordinary {
             if let Some(index) = refusals.iter().position(|item| *item == refusal) {
@@ -1815,28 +1834,39 @@ fn prepare_with_inventory_mode(
             && map(field(&action, "body")?).is_ok_and(|body| body.contains_key(deps))
         {
             let old_arrangement = crate::reasoning_authoring_guards::arrangement(&reader, old);
-            let new_arrangement = crate::reasoning_authoring_guards::arrangement(
-                &reader, field(&action, "body")?,
-            );
+            let new_arrangement =
+                crate::reasoning_authoring_guards::arrangement(&reader, field(&action, "body")?);
             let decision = crate::reasoning_authoring_guards::may_supersede(
-                &reader, &id, old, field(&action, "body")?, Some(&stamp),
-                page_facts.as_ref(), false,
+                &reader,
+                &id,
+                old,
+                field(&action, "body")?,
+                Some(&stamp),
+                page_facts.as_ref(),
+                false,
             )?;
             if decision.allowed {
                 supersede = true;
                 supersede_ended = Some(decision.reason);
                 supersede_old = Some(old.clone());
                 let mut renewed = if old_arrangement && new_arrangement {
-                    let stood = page_facts.as_ref().and_then(|facts| map(facts).ok())
-                        .and_then(|facts| facts.get(&id)).and_then(|facts| map(facts).ok())
+                    let stood = page_facts
+                        .as_ref()
+                        .and_then(|facts| map(facts).ok())
+                        .and_then(|facts| facts.get(&id))
+                        .and_then(|facts| map(facts).ok())
                         .and_then(|facts| facts.get("stood"));
                     legacy_arrangement::renewal(
-                        old, field(&action, "body")?, supersede_ended.as_deref().unwrap(),
-                        &stamp, stood,
+                        old,
+                        field(&action, "body")?,
+                        supersede_ended.as_deref().unwrap(),
+                        &stamp,
+                        stood,
                     )?
                 } else {
                     legacy_replaced::judgment_renewal(
-                        old, field(&action, "body")?,
+                        old,
+                        field(&action, "body")?,
                         &format!("{} on {}", supersede_ended.as_deref().unwrap(), stamp),
                     )?
                 };
@@ -2004,7 +2034,8 @@ fn prepare_with_inventory_mode(
                         Some(written) => written.clone(),
                         None => ordered_scope(scope)?,
                     };
-                    if let Some((_, value)) = fields.iter_mut().find(|(field, _)| field == "scope") {
+                    if let Some((_, value)) = fields.iter_mut().find(|(field, _)| field == "scope")
+                    {
                         *value = scope;
                     } else {
                         fields.push(("scope".into(), scope));
@@ -2328,13 +2359,20 @@ fn prepare_with_inventory_mode(
         .inputs
         .iter()
         .map(|(path, digest)| {
-            Ok((relative(&root, path)?, digest.as_deref().map(s).unwrap_or(V::Null)))
+            Ok((
+                relative(&root, path)?,
+                digest.as_deref().map(s).unwrap_or(V::Null),
+            ))
         })
         .collect::<Result<Map>>()?;
     if let Some(page) = &page {
         input_files.insert(
             relative(&root, &page.view_path)?,
-            page.view_before.as_deref().map(crate::identity::sha256).map(|v| s(&v)).unwrap_or(V::Null),
+            page.view_before
+                .as_deref()
+                .map(crate::identity::sha256)
+                .map(|v| s(&v))
+                .unwrap_or(V::Null),
         );
     }
     let mut baseline = object([
@@ -2342,10 +2380,7 @@ fn prepare_with_inventory_mode(
         ("transaction_root", s(name(&absolute(&root)?)?)),
         ("record_members", V::Map(record_members)),
         ("policy", route.config().clone()),
-        (
-            "input_files",
-            V::Map(input_files),
-        ),
+        ("input_files", V::Map(input_files)),
     ]);
     if let Some(page) = &page {
         map_mut(&mut baseline)?.insert("routing".into(), page.routing.clone());
@@ -2440,14 +2475,7 @@ pub(crate) fn prepare_pending_with_inventory(
     inventory: Inventory,
     supplied_page: Option<crate::ordinary_page_capture::PageCapture>,
 ) -> Result<Preparation> {
-    prepare_with_inventory_mode(
-        action,
-        route,
-        source_body,
-        inventory,
-        supplied_page,
-        true,
-    )
+    prepare_with_inventory_mode(action, route, source_body, inventory, supplied_page, true)
 }
 
 fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Result<Preparation> {
@@ -2576,15 +2604,21 @@ fn verify_report_route(route: &WriteRoute, mutation: &PreparedMutation) -> Resul
     let data = mutation.to_data();
     let receipt = map(field(map(&data)?, "receipt")?)?;
     let before = map(field(receipt, "before")?)?;
-    let batch = map(before.get("batch").ok_or_else(|| error("invalid report journal"))?)?;
-    let context = map(batch.get("context").ok_or_else(|| error("invalid report journal"))?)?;
-    require(context.get("policy") == Some(route.config()),
-        "report_preparation_stale: project policy changed")?;
-    let routing = crate::source_capture::routing_observation(
-        route.paths(), &route.project().root,
+    let batch = map(before
+        .get("batch")
+        .ok_or_else(|| error("invalid report journal"))?)?;
+    let context = map(batch
+        .get("context")
+        .ok_or_else(|| error("invalid report journal"))?)?;
+    require(
+        context.get("policy") == Some(route.config()),
+        "report_preparation_stale: project policy changed",
     )?;
-    require(context.get("routing") == Some(&routing),
-        "report_preparation_stale: project routing changed")
+    let routing = crate::source_capture::routing_observation(route.paths(), &route.project().root)?;
+    require(
+        context.get("routing") == Some(&routing),
+        "report_preparation_stale: project routing changed",
+    )
 }
 
 fn entry_path(root: &Path, mutation: &PreparedMutation) -> Result<PathBuf> {
@@ -2721,8 +2755,10 @@ fn recover_inner(
     let raw = F::read(&local_journal)?.ok_or_else(|| error("no_recovery_pending"))?;
     let mutation = PreparedMutation::from_bytes(&raw)?;
     if let Some(expected) = expected {
-        require(mutation.to_bytes()? == expected.to_bytes()?,
-            "report recovery journal mismatch")?;
+        require(
+            mutation.to_bytes()? == expected.to_bytes()?,
+            "report recovery journal mismatch",
+        )?;
         verify_report_route(&route, expected)?;
     }
     let data = mutation.to_data();
@@ -2779,7 +2815,10 @@ pub(crate) fn write_advanced_local(
     route: &WriteRoute,
     source_body: Option<&Source>,
 ) -> Result<String> {
-    require(route.pending_required()?, "legacy_authoring_requires_advanced_project")?;
+    require(
+        route.pending_required()?,
+        "legacy_authoring_requires_advanced_project",
+    )?;
     let prepared = if map(action)?
         .get("hypothesis")
         .is_some_and(|v| *v != V::Null)
@@ -2844,13 +2883,19 @@ mod tests {
 
     fn page_arrangement_replacement() -> (tempfile::TempDir, PathBuf, WriteRoute, Prepared) {
         let temp = tempfile::tempdir().unwrap();
-        let cases: serde_json::Value = serde_json::from_slice(include_bytes!(
-            "../tests/fixtures/ordinary-page-facts.json"
-        )).unwrap();
-        let case = cases.as_array().unwrap().iter()
-            .find(|case| case["name"] == "page-arrangement-fired-dry").unwrap();
+        let cases: serde_json::Value =
+            serde_json::from_slice(include_bytes!("../tests/fixtures/ordinary-page-facts.json"))
+                .unwrap();
+        let case = cases
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["name"] == "page-arrangement-fired-dry")
+            .unwrap();
         for (relative, raw) in case["files"].as_object().unwrap() {
-            if relative.contains("hypotheses/") { continue }
+            if relative.contains("hypotheses/") {
+                continue;
+            }
             let path = temp.path().join(relative);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, raw.as_str().unwrap()).unwrap();
@@ -2858,14 +2903,22 @@ mod tests {
         let entry = temp.path().join("GROUNDING.yaml");
         let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
         let action = object([
-            ("kind", s("add")), ("id", s("v.layout")),
-            ("body", object([
-                ("verdict", s("re-decided")),
-                ("rests_on", V::List(vec![s("s.now"), s("page.unserved")])),
-                ("wrong_if", s("page.unserved > 0")),
-            ])),
-            ("as_of", s("2026-09-20")), ("why", V::Null), ("into", V::Null),
-            ("hypothesis", V::Null), ("source", V::Null), ("at", V::Null),
+            ("kind", s("add")),
+            ("id", s("v.layout")),
+            (
+                "body",
+                object([
+                    ("verdict", s("re-decided")),
+                    ("rests_on", V::List(vec![s("s.now"), s("page.unserved")])),
+                    ("wrong_if", s("page.unserved > 0")),
+                ]),
+            ),
+            ("as_of", s("2026-09-20")),
+            ("why", V::Null),
+            ("into", V::Null),
+            ("hypothesis", V::Null),
+            ("source", V::Null),
+            ("at", V::Null),
         ]);
         let Preparation::Mutation(prepared) = prepare(&action, &route, None).unwrap() else {
             panic!("expected page arrangement replacement")
@@ -2941,9 +2994,18 @@ mod tests {
         let (temp, entry, route, prepared) = page_arrangement_replacement();
         let mut verify = |_: &V| verify_prepared(&prepared, &route, &prepared.inventory);
         let mut stop = |_: &V| Err(error("retained_after_write"));
-        assert_eq!(F::publish_legacy(&prepared.root, &prepared.journal,
-            &prepared.mutation, &mut verify, Some(&mut stop)).unwrap_err().0,
-            "retained_after_write");
+        assert_eq!(
+            F::publish_legacy(
+                &prepared.root,
+                &prepared.journal,
+                &prepared.mutation,
+                &mut verify,
+                Some(&mut stop)
+            )
+            .unwrap_err()
+            .0,
+            "retained_after_write"
+        );
         fs::write(temp.path().join(".kpopper/view.yaml"), "tabs: []\n").unwrap();
         drop(route);
         assert!(recover(std::slice::from_ref(&entry), temp.path(), false).is_err());
@@ -2954,10 +3016,22 @@ mod tests {
             let images = prepared.mutation.files().to_vec();
             let mut verify = |_: &V| verify_prepared(&prepared, &route, &prepared.inventory);
             let mut stop = |_: &V| Err(error("retained_after_write"));
-            assert_eq!(F::publish_legacy(&prepared.root, &prepared.journal,
-                &prepared.mutation, &mut verify, Some(&mut stop)).unwrap_err().0,
-                "retained_after_write");
-            let partial = images.iter().find(|image| image.role == "replaced").unwrap();
+            assert_eq!(
+                F::publish_legacy(
+                    &prepared.root,
+                    &prepared.journal,
+                    &prepared.mutation,
+                    &mut verify,
+                    Some(&mut stop)
+                )
+                .unwrap_err()
+                .0,
+                "retained_after_write"
+            );
+            let partial = images
+                .iter()
+                .find(|image| image.role == "replaced")
+                .unwrap();
             let path = prepared.root.join(&partial.path);
             match &partial.before {
                 Some(raw) => fs::write(&path, raw).unwrap(),
@@ -2966,8 +3040,10 @@ mod tests {
             drop(route);
             recover(std::slice::from_ref(&entry), temp.path(), rollback).unwrap();
             for image in images {
-                assert_eq!(F::read(&prepared.root.join(&image.path)).unwrap(),
-                    if rollback { image.before } else { image.after });
+                assert_eq!(
+                    F::read(&prepared.root.join(&image.path)).unwrap(),
+                    if rollback { image.before } else { image.after }
+                );
             }
         }
     }
@@ -2993,21 +3069,38 @@ mod tests {
     fn advanced_mode_recovers_policy_bound_direct_journals_without_granting_writes() {
         fn configured(mode: &str) -> (tempfile::TempDir, PathBuf, WriteRoute, Prepared) {
             let temp = tempfile::tempdir().unwrap();
-            assert!(std::process::Command::new("git").args(["init", "-q"])
-                .current_dir(temp.path()).status().unwrap().success());
+            assert!(
+                std::process::Command::new("git")
+                    .args(["init", "-q"])
+                    .current_dir(temp.path())
+                    .status()
+                    .unwrap()
+                    .success()
+            );
             let entry = temp.path().join("GROUNDING.yaml");
             fs::write(&entry, "known:\n  p.a: {v: 1}\n").unwrap();
             let project = crate::project_modes::Project::open(temp.path()).unwrap();
             fs::create_dir_all(project.config_path.parent().unwrap()).unwrap();
-            fs::write(&project.config_path,
-                format!(r#"{{"version":1,"mode":"{mode}","generation":1,"record":"GROUNDING.yaml"}}"#)).unwrap();
+            fs::write(
+                &project.config_path,
+                format!(
+                    r#"{{"version":1,"mode":"{mode}","generation":1,"record":"GROUNDING.yaml"}}"#
+                ),
+            )
+            .unwrap();
             let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
             let action = object([
-                ("kind", s("set")), ("id", s("p.a")), ("value", n("2")),
-                ("as_of", s("2026-09-20")), ("why", V::Null), ("source", V::Null), ("at", V::Null),
+                ("kind", s("set")),
+                ("id", s("p.a")),
+                ("value", n("2")),
+                ("as_of", s("2026-09-20")),
+                ("why", V::Null),
+                ("source", V::Null),
+                ("at", V::Null),
             ]);
-            let Preparation::Mutation(prepared) = prepare(
-                &action, &route, None).unwrap() else { panic!() };
+            let Preparation::Mutation(prepared) = prepare(&action, &route, None).unwrap() else {
+                panic!()
+            };
             (temp, entry, route, prepared)
         }
 
@@ -3016,23 +3109,37 @@ mod tests {
         let (temp, entry, simple, prepared) = configured("simple");
         let project = crate::project_modes::Project::open(temp.path()).unwrap();
         drop(simple);
-        fs::write(&project.config_path,
-            r#"{"version":1,"mode":"advanced","generation":2,"record":"GROUNDING.yaml"}"#).unwrap();
+        fs::write(
+            &project.config_path,
+            r#"{"version":1,"mode":"advanced","generation":2,"record":"GROUNDING.yaml"}"#,
+        )
+        .unwrap();
         let advanced = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
-        assert_eq!(route(&entry, advanced.config()).unwrap_err().0,
-            "legacy_authoring_requires_simple_project");
+        assert_eq!(
+            route(&entry, advanced.config()).unwrap_err().0,
+            "legacy_authoring_requires_simple_project"
+        );
         let data = prepared.mutation.to_data();
         let mut baseline = map(&map(&data).unwrap()["baseline"]).unwrap().clone();
         baseline.insert("policy".into(), advanced.config().clone());
         let mutation = PreparedMutation::prepare(
             text(&map(&data).unwrap()["operation"]).unwrap(),
-            &map(&data).unwrap()["authority"], &V::Map(baseline),
-            prepared.mutation.files().to_vec(), &map(&data).unwrap()["receipt"],
-            text(&map(&data).unwrap()["entry"]).unwrap(), None).unwrap();
+            &map(&data).unwrap()["authority"],
+            &V::Map(baseline),
+            prepared.mutation.files().to_vec(),
+            &map(&data).unwrap()["receipt"],
+            text(&map(&data).unwrap()["entry"]).unwrap(),
+            None,
+        )
+        .unwrap();
         let journal = prepared.root.join(&prepared.journal);
         fs::create_dir_all(journal.parent().unwrap()).unwrap();
         fs::write(&journal, mutation.to_bytes().unwrap()).unwrap();
-        let image = mutation.files().iter().find(|image| image.role == "record").unwrap();
+        let image = mutation
+            .files()
+            .iter()
+            .find(|image| image.role == "record")
+            .unwrap();
         fs::write(&entry, image.after.as_ref().unwrap()).unwrap();
         drop(advanced);
         assert!(recovery_pending(std::slice::from_ref(&entry), temp.path()).unwrap());
@@ -3044,15 +3151,27 @@ mod tests {
         let journal = prepared.root.join(&prepared.journal);
         fs::create_dir_all(journal.parent().unwrap()).unwrap();
         fs::write(&journal, prepared.mutation.to_bytes().unwrap()).unwrap();
-        let image = prepared.mutation.files().iter().find(|image| image.role == "record").unwrap();
+        let image = prepared
+            .mutation
+            .files()
+            .iter()
+            .find(|image| image.role == "record")
+            .unwrap();
         fs::write(&entry, image.after.as_ref().unwrap()).unwrap();
         let project = crate::project_modes::Project::open(temp.path()).unwrap();
-        fs::write(&project.config_path,
-            r#"{"version":1,"mode":"advanced","generation":2,"record":"GROUNDING.yaml"}"#).unwrap();
+        fs::write(
+            &project.config_path,
+            r#"{"version":1,"mode":"advanced","generation":2,"record":"GROUNDING.yaml"}"#,
+        )
+        .unwrap();
         drop(route);
         assert!(recovery_pending(std::slice::from_ref(&entry), temp.path()).unwrap());
-        assert_eq!(recover(std::slice::from_ref(&entry), temp.path(), false).unwrap_err().0,
-            "project_route_changed");
+        assert_eq!(
+            recover(std::slice::from_ref(&entry), temp.path(), false)
+                .unwrap_err()
+                .0,
+            "project_route_changed"
+        );
     }
 
     #[test]
@@ -3094,10 +3213,7 @@ mod tests {
             panic!("expected mutation")
         };
         fs::write(&entry, "known:\n  p.a: {v: 7}\n").unwrap();
-        assert_eq!(
-            publish(prepared, &route).unwrap_err().0,
-            "concurrent_edit"
-        );
+        assert_eq!(publish(prepared, &route).unwrap_err().0, "concurrent_edit");
         assert_eq!(
             fs::read_to_string(entry).unwrap(),
             "known:\n  p.a: {v: 7}\n"
@@ -3180,8 +3296,18 @@ mod tests {
             let inventory = legacy_named::prepare_directories(&prepared).unwrap();
             let mut verify = |_: &V| verify_prepared(&prepared, &route, &inventory);
             let mut stop = |_: &V| Err(error("retained_after_write"));
-            assert_eq!(F::publish_legacy(&prepared.root, &prepared.journal, &prepared.mutation,
-                &mut verify, Some(&mut stop)).unwrap_err().0, "retained_after_write");
+            assert_eq!(
+                F::publish_legacy(
+                    &prepared.root,
+                    &prepared.journal,
+                    &prepared.mutation,
+                    &mut verify,
+                    Some(&mut stop)
+                )
+                .unwrap_err()
+                .0,
+                "retained_after_write"
+            );
             drop(route);
             let aliases = tempfile::tempdir().unwrap();
             let directory = aliases.path().join("project-alias");
@@ -3189,8 +3315,14 @@ mod tests {
             let alias_entry = directory.join(entry.file_name().unwrap());
             recover(&[alias_entry], &directory, rollback).unwrap();
             for image in prepared.mutation.files() {
-                assert_eq!(F::read(&prepared.root.join(&image.path)).unwrap(),
-                    if rollback { image.before.clone() } else { image.after.clone() });
+                assert_eq!(
+                    F::read(&prepared.root.join(&image.path)).unwrap(),
+                    if rollback {
+                        image.before.clone()
+                    } else {
+                        image.after.clone()
+                    }
+                );
             }
             let file_alias = temp.path().join("alias.yaml");
             std::os::unix::fs::symlink(&entry, &file_alias).unwrap();

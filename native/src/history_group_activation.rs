@@ -160,7 +160,9 @@ pub fn journal_for(group: &GroupPrepared) -> Result<PathBuf> {
     ] {
         FS::journal_path(
             root,
-            &crate::history_migration_source::posix(path.strip_prefix(root).map_err(|_| error("invalid_path"))?)?,
+            &crate::history_migration_source::posix(
+                path.strip_prefix(root).map_err(|_| error("invalid_path"))?,
+            )?,
             mutation,
         )?;
     }
@@ -172,7 +174,9 @@ fn raw(value: &V) -> Result<Vec<u8>> {
 fn publish_path(root: &Path, path: &Path, bytes: &[u8]) -> Result<()> {
     FS::publish_immutable(
         root,
-        &crate::history_migration_source::posix(path.strip_prefix(root).map_err(|_| error("invalid_path"))?)?,
+        &crate::history_migration_source::posix(
+            path.strip_prefix(root).map_err(|_| error("invalid_path"))?,
+        )?,
         bytes,
     )
 }

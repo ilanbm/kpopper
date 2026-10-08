@@ -6,14 +6,17 @@
 
 use crate::{
     Result,
-    history_contract::{error, map, text, Map},
+    history_contract::{Map, error, map, text},
     history_transaction::PreparedMutation,
     ordinary_page_capture::PageCapture,
     require,
     source_inventory::{Inventory, Observation},
     value::TypedValue as V,
 };
-use std::{collections::BTreeSet, path::{Path, PathBuf}};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
 
 fn s(value: &str) -> V {
     V::Text(value.into())
@@ -82,8 +85,12 @@ fn observation(value: &Observation, root: &Path) -> Result<V> {
         Observation::File(value) => V::Map(Map::from([("file".into(), V::Bool(*value))])),
         Observation::Glob(paths) => V::Map(Map::from([(
             "glob".into(),
-            V::List(paths.iter().map(|path| super::relative(root, path).map(|v| s(&v)))
-                .collect::<Result<Vec<_>>>()?),
+            V::List(
+                paths
+                    .iter()
+                    .map(|path| super::relative(root, path).map(|v| s(&v)))
+                    .collect::<Result<Vec<_>>>()?,
+            ),
         )])),
     })
 }
@@ -99,7 +106,10 @@ pub(crate) fn recovery_guard(root: &Path, page: &PageCapture) -> Result<V> {
         }
     }
     Ok(V::Map(Map::from([
-        ("version".into(), V::Integer(crate::value::Integer::new("1")?)),
+        (
+            "version".into(),
+            V::Integer(crate::value::Integer::new("1")?),
+        ),
         ("observations".into(), V::Map(items)),
     ])))
 }
@@ -130,37 +140,67 @@ fn expected(value: &V, root: &Path) -> Result<Observation> {
     Ok(match kind.as_str() {
         "bytes" => Observation::Bytes(text(value)?.into()),
         "unreadable" => Observation::Unreadable(text(value)?.into()),
-        "exists" => Observation::Exists(match value { V::Bool(value) => *value, _ => return Err(error("invalid_arrangement_guard")) }),
-        "directory" => Observation::Directory(match value { V::Bool(value) => *value, _ => return Err(error("invalid_arrangement_guard")) }),
-        "file" => Observation::File(match value { V::Bool(value) => *value, _ => return Err(error("invalid_arrangement_guard")) }),
-        "glob" => Observation::Glob(crate::history_view::list(value)?.iter()
-            .map(|value| Ok(root.join(text(value)?))).collect::<Result<Vec<_>>>()?),
+        "exists" => Observation::Exists(match value {
+            V::Bool(value) => *value,
+            _ => return Err(error("invalid_arrangement_guard")),
+        }),
+        "directory" => Observation::Directory(match value {
+            V::Bool(value) => *value,
+            _ => return Err(error("invalid_arrangement_guard")),
+        }),
+        "file" => Observation::File(match value {
+            V::Bool(value) => *value,
+            _ => return Err(error("invalid_arrangement_guard")),
+        }),
+        "glob" => Observation::Glob(
+            crate::history_view::list(value)?
+                .iter()
+                .map(|value| Ok(root.join(text(value)?)))
+                .collect::<Result<Vec<_>>>()?,
+        ),
         _ => return Err(error("invalid_arrangement_guard")),
     })
 }
 
-pub(crate) fn verify_recovery(
-    root: &Path,
-    mutation: &PreparedMutation,
-    guard: &V,
-) -> Result<()> {
+pub(crate) fn verify_recovery(root: &Path, mutation: &PreparedMutation, guard: &V) -> Result<()> {
     let guard = map(guard)?;
-    require(guard.get("version") == Some(&V::Integer(crate::value::Integer::new("1")?)),
-        "invalid_arrangement_guard")?;
-    let changed = mutation.files().iter().map(|file| file.path.clone()).collect::<BTreeSet<_>>();
-    for (key, encoded) in map(guard.get("observations").ok_or_else(|| error("invalid_arrangement_guard"))?)? {
-        let (kind, relative) = key.split_once('\0').ok_or_else(|| error("invalid_arrangement_guard"))?;
+    require(
+        guard.get("version") == Some(&V::Integer(crate::value::Integer::new("1")?)),
+        "invalid_arrangement_guard",
+    )?;
+    let changed = mutation
+        .files()
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<BTreeSet<_>>();
+    for (key, encoded) in map(guard
+        .get("observations")
+        .ok_or_else(|| error("invalid_arrangement_guard"))?)?
+    {
+        let (kind, relative) = key
+            .split_once('\0')
+            .ok_or_else(|| error("invalid_arrangement_guard"))?;
         crate::history_authority::relative_path(relative)?;
         let path = root.join(relative);
         let expected = expected(encoded, root)?;
         let actual = current(kind, &path)?;
         if let (Observation::Glob(expected), Observation::Glob(actual)) = (&expected, &actual) {
-            let keep = |path: &PathBuf| super::relative(root, path).is_ok_and(|path| !changed.contains(&path));
-            require(expected.iter().filter(|p| keep(p)).eq(actual.iter().filter(|p| keep(p))),
-                "project_route_changed")?;
+            let keep = |path: &PathBuf| {
+                super::relative(root, path).is_ok_and(|path| !changed.contains(&path))
+            };
+            require(
+                expected
+                    .iter()
+                    .filter(|p| keep(p))
+                    .eq(actual.iter().filter(|p| keep(p))),
+                "project_route_changed",
+            )?;
         } else if let Some(image) = mutation.files().iter().find(|file| file.path == relative) {
             let bytes = crate::history_transaction_fs::read(&path)?;
-            require(bytes == image.before || bytes == image.after, "concurrent_edit")?;
+            require(
+                bytes == image.before || bytes == image.after,
+                "concurrent_edit",
+            )?;
         } else {
             require(actual == expected, "project_route_changed")?;
         }

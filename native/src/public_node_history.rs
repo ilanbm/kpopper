@@ -12,10 +12,7 @@ use crate::{
 };
 use std::path::{Path, PathBuf};
 pub(crate) fn scope(route: &WriteRoute) -> Result<()> {
-    require(
-        route.paths().len() == 1,
-        "choose one logical record entry",
-    )?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
     require(
         P::selected(&route.paths()[0])?,
         "node_publication_authority_required",
@@ -112,7 +109,12 @@ fn private_targets(capture: &Capture, action: &V) -> Result<bool> {
     Ok(false)
 }
 #[cfg(test)]
-pub(crate) fn write(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>) -> Result<(V, String)> {
+pub(crate) fn write(
+    route: &WriteRoute,
+    original: &[PathBuf],
+    action: &V,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<(V, String)> {
     write_with_runtime(route, original, action, probe, None)
 }
 fn privacy_action(action: &V) -> Result<V> {
@@ -181,10 +183,23 @@ pub(crate) fn write_with_runtime(
 ) -> Result<(V, String)> {
     write_inner(route, original, action, probe, runtime_override, V::Null)
 }
-pub(crate) fn write_as(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, by: V) -> Result<(V, String)> {
+pub(crate) fn write_as(
+    route: &WriteRoute,
+    original: &[PathBuf],
+    action: &V,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+    by: V,
+) -> Result<(V, String)> {
     write_inner(route, original, action, probe, None, by)
 }
-pub(crate) fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, probe: &mut dyn FnMut(&str) -> Result<()>, runtime_override: Option<&crate::reasoning_runtime::Runtime>, by: V) -> Result<(V, String)> {
+pub(crate) fn write_inner(
+    route: &WriteRoute,
+    original: &[PathBuf],
+    action: &V,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+    runtime_override: Option<&crate::reasoning_runtime::Runtime>,
+    by: V,
+) -> Result<(V, String)> {
     scope(route)?;
     let root = route.paths()[0].parent().unwrap();
     let before = Capture::read(root)?;
@@ -255,13 +270,8 @@ pub(crate) fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, 
         // there is no accepted prior world from which to manufacture `seen`.
         options.receipt_version = Some(1);
     }
-    let prepared = W::prepare(
-        root,
-        &request,
-        &options,
-        runtime,
-    )?
-    .with_guard(&guard(route, original)?)?;
+    let prepared =
+        W::prepare(root, &request, &options, runtime)?.with_guard(&guard(route, original)?)?;
     let (_, after, _, objects) = candidate(root, &prepared)?;
     if let Some(draft) = Privacy::candidate_draft(route.project(), &selection, after.document())? {
         return Ok((draft, String::new()));
@@ -332,12 +342,19 @@ pub(crate) fn write_inner(route: &WriteRoute, original: &[PathBuf], action: &V, 
     let notice = if string_is(&map(action)?["kind"], "add")
         && !map(action)?.get("amend").is_some_and(|v| *v != V::Null)
     {
-        if map(action)?.get("hypothesis").is_some_and(|v| *v != V::Null) {
+        if map(action)?
+            .get("hypothesis")
+            .is_some_and(|v| *v != V::Null)
+        {
             let context = crate::history_node_hypothesis::context(&before)?;
             let name = text(&map(action)?["hypothesis"])?;
             let groups = map(&context.groups)?;
             let document = if groups.contains_key(name) {
-                crate::history_hypothesis_authoring::layer(&context.base, &context.groups, &[name.into()])?
+                crate::history_hypothesis_authoring::layer(
+                    &context.base,
+                    &context.groups,
+                    &[name.into()],
+                )?
             } else {
                 context.base
             };

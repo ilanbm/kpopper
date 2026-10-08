@@ -212,7 +212,8 @@ pub(crate) fn prepare_subset(
             map_mut(&mut template)?
                 .entry(text(&map(&m["authored"])?["collection"])?.into())
                 .or_insert_with(|| V::Map(Map::new()));
-            if let Some(scope) = map(&m["body"]).ok()
+            if let Some(scope) = map(&m["body"])
+                .ok()
                 .and_then(|body| body.get("collection_scope"))
                 .and_then(|scope| map(scope).ok())
             {

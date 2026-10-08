@@ -1,7 +1,7 @@
 //! Query-blind derived navigation aids. They never become source evidence.
-use crate::{identity::sha256, value::TypedValue as V, Error, Result};
+use crate::{Error, Result, identity::sha256, value::TypedValue as V};
 use serde::Serialize;
-use serde_json::{json, Map, Value as J};
+use serde_json::{Map, Value as J, json};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const GENERATOR: &str = "source-labels/v1";

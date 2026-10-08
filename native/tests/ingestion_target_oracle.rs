@@ -70,7 +70,11 @@ fn parity_case(name: &str, record: &Path, envelope: &J) {
             ("native-direct.json", &decoded),
             ("native-public.json", &public),
         ] {
-            fs::write(directory.join(file), serde_json::to_vec_pretty(value).unwrap()).unwrap();
+            fs::write(
+                directory.join(file),
+                serde_json::to_vec_pretty(value).unwrap(),
+            )
+            .unwrap();
         }
     }
     println!(

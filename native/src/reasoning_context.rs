@@ -137,9 +137,14 @@ impl CapturedAssessment {
                         && !reasons.is_empty()
                         && reasons.iter().all(|r| {
                             map(r).is_ok_and(|r| {
-                                ["historical_counterexample", "historical_evidence_unknown", "reversal_unreviewed", "review_provenance_missing"]
-                                    .iter()
-                                    .any(|code| string_is(&r["code"], code))
+                                [
+                                    "historical_counterexample",
+                                    "historical_evidence_unknown",
+                                    "reversal_unreviewed",
+                                    "review_provenance_missing",
+                                ]
+                                .iter()
+                                .any(|code| string_is(&r["code"], code))
                             })
                         }))
                 });
