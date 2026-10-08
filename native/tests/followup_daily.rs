@@ -598,3 +598,21 @@ fn daily_owner_validation_uses_raw_unicode_character_limits_and_python_whitespac
     let started = followup_daily::start(&store, &owner).unwrap();
     assert_eq!(started["claim"]["owner"], owner);
 }
+
+#[test]
+fn unconfigured_daily_status_is_read_only_and_does_not_grant_authority() {
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("project");
+    let state = temp.path().join("state");
+    fs::create_dir(&workspace).unwrap();
+    fs::write(workspace.join("GROUNDING.yaml"), "known: {fact.one: {v: 1}}\n").unwrap();
+    let store = Store::at_in_state(&workspace, &state, Utc::now()).unwrap();
+    let result = followup_daily::status_with_maintenance(&store).unwrap();
+    assert_eq!(result["configured"], false);
+    assert_eq!(result["current_continuity"], "unknown");
+    assert_eq!(result["adoption"]["authorized"], false);
+    assert_eq!(result["adoption"]["configuration"], "unconfigured");
+    assert!(result["binding"].is_null());
+    assert!(!state.exists());
+    assert!(!store.path.exists());
+}

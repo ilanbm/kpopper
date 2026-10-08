@@ -73,35 +73,34 @@ fn assert_wraps(command: &str, plain: &Output, structured: &Output) {
     });
     let mut expected = wrapped(command, plain);
     let mut actual = value.clone();
-    // Typed maintenance additions accompany the established reader output.
+    let mut extensions = serde_json::Map::new();
     let plain_output = text(&plain.stdout);
     let mut record_output = plain_output.clone();
-    if let Some((record, raw)) = plain_output.split_once("\nKPOPPER_MAINTENANCE_DISCOVERY ") {
-        let discovery: J = serde_json::from_str(raw.trim()).unwrap();
-        assert_eq!(actual["maintenance_discovery"], discovery);
-        assert_eq!(discovery["schema"], "kpopper.scoped-maintenance-discovery/v1");
-        record_output = record.to_owned();
+    // Derive the expected output solely from the plain response, never actual.
+    let markers = [("\nKPOPPER_SCOPED_CONTINUITY ", "maintenance_continuity"),
+        ("\nKPOPPER_MAINTENANCE_DISCOVERY ", "maintenance_discovery")];
+    if let Some(cut) = markers.iter().filter_map(|(marker, _)| plain_output.find(marker)).min() {
+        record_output = plain_output[..cut].to_owned();
+        for line in plain_output[cut..].lines().filter(|line| !line.is_empty()) {
+            let (marker, field) = markers.iter().find(|(marker, _)| line.starts_with(marker.trim_start())).unwrap();
+            let metadata: J = serde_json::from_str(line.strip_prefix(marker.trim_start()).unwrap()).unwrap();
+            assert!(extensions.insert((*field).into(), metadata).is_none());
+        }
     } else if let Ok(mut record) = serde_json::from_str::<J>(&plain_output) {
         for field in ["maintenance_continuity", "maintenance_discovery"] {
             if let Some(metadata) = record.as_object_mut().and_then(|object| object.remove(field)) {
-                assert_eq!(actual[field], metadata);
+                extensions.insert(field.into(), metadata);
             }
         }
-        if actual.get("maintenance_discovery").is_some() || actual.get("maintenance_continuity").is_some() {
-            let mut structured_record: J = serde_json::from_str(actual["output"].as_str().unwrap()).unwrap();
-            for field in ["maintenance_continuity", "maintenance_discovery"] {
-                if let Some(metadata) = structured_record.as_object_mut().and_then(|object| object.remove(field)) {
-                    assert_eq!(actual[field], metadata);
-                }
-            }
-            assert_eq!(structured_record, record);
-            record_output = actual["output"].as_str().unwrap().to_owned();
+        if !extensions.is_empty() {
+            record_output = serde_json::to_string(&record).unwrap() + "\n";
         }
     }
-    expected["output"] = json!(record_output);
     for field in ["maintenance_continuity", "maintenance_discovery"] {
+        assert_eq!(actual.get(field), extensions.get(field), "{command}: unexpected or mismatched {field}");
         actual.as_object_mut().unwrap().remove(field);
     }
+    expected["output"] = json!(record_output);
     assert_eq!(actual, expected, "{command}");
     assert_eq!(structured.status.code(), plain.status.code(), "{command}");
     assert!(

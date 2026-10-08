@@ -155,10 +155,10 @@ fn applicable_source_health_is_delivered_with_scope_assessment_guidance() {
         .as_str()
         .unwrap();
     assert!(context.contains("source-check"), "{context}");
-    assert!(context.contains("propose the relevant scoped clock/source check"));
+    assert!(context.contains(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY));
     assert!(context.contains("kpop followups assess --ids ACTUAL_SUBJECT_IDS"));
-    assert!(context.contains("actual failure reason"));
-    assert!(context.contains("observed_at/due_at"));
+    assert!(context.contains(kpop_native::onboarding::MAINTENANCE_DISCLOSURE_POLICY));
+    assert!(context.contains("\"last_successful_observation_at\"") && context.contains("\"next_check_due_at\""));
 }
 
 #[test]
@@ -183,8 +183,8 @@ fn declined_offer_keeps_truthful_continuity_assurance() {
     assert!(context.contains("\"choice\":\"declined\""));
     assert!(context.contains("\"promotion_allowed\":false"));
     assert!(context.contains("assess the actual requested scope"));
-    assert!(context.contains("failed, paused, missing, overdue, stale, or unknown evidence"));
-    assert!(!context.contains("propose the relevant scoped clock/source check"));
+    assert!(context.contains(kpop_native::onboarding::MAINTENANCE_DISCLOSURE_POLICY));
+    assert!(!context.contains(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY));
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn snoozed_offer_keeps_its_until_without_suppressing_continuity() {
     assert!(context.contains("fixture://saved-choice"));
     assert!(context.contains("\"promotion_allowed\":false"));
     assert!(context.contains("assess the actual requested scope"));
-    assert!(!context.contains("propose the relevant scoped clock/source check"));
+    assert!(!context.contains(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY));
 }
 
 #[test]

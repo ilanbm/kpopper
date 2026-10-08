@@ -410,34 +410,47 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
         // A failed opening keeps the prior source obligation active on resume.
         // An intentional route opt-out remains inactive.
-        match kpop_native::view_continuation::initialize_for_start(&root, sid, managed) {
-            Ok(()) if managed => {
-                let sibling_bytes: usize = output.iter()
-                    .filter(|text| !text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "))
-                    .map(|text| text.len() + 1).sum();
-                let allowance = 7000usize.saturating_sub(sibling_bytes);
-                for text in &mut output {
-                    if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
-                        match kpop_native::view_continuation::bind_opening_with_allowance(text, sid, allowance) {
-                            Ok(bound) => { *text = bound; },
+        let initialized = kpop_native::view_continuation::initialize_for_start(&root, sid, managed);
+        if let Err(error) = &initialized {
+            eprintln!("kpopper continuation state unavailable: {error}");
+        }
+        if managed {
+                let fit = |route: &str, allowance| {
+                    if initialized.is_ok() {
+                        kpop_native::view_continuation::bind_opening_with_allowance(route, sid, allowance)
+                    } else {
+                        kpop_native::view_continuation::unbound_opening_with_allowance(route, sid, allowance)
+                    }
+                };
+                let index = output.iter().position(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ")).unwrap();
+                let route = output[index].clone();
+                let siblings: Vec<_> = output.iter().enumerate().filter(|(i, _)| *i != index)
+                    .map(|(_, text)| text.clone()).collect();
+                let sibling_bytes: usize = siblings.iter().map(|text| text.len() + 1).sum();
+                let initial = fit(&route, 7000usize.saturating_sub(sibling_bytes));
+                match initial {
+                    Ok(bound) => output[index] = bound,
+                    Err(_) => {
+                        let reduced = kpop_native::onboarding::canonical_context_without_promotions(&siblings.join("\n"));
+                        if let Ok(bound) = fit(&route, 7000usize.saturating_sub(reduced.len() + 1)) {
+                            output = vec![bound, reduced];
+                        } else {
+                        // Route and source safety take precedence. Detailed health
+                        // remains in native status; this bounded card requires it.
+                        let summary = kpop_native::onboarding::bounded_canonical_context(&siblings.join("\n"));
+                        let allowance = 7000usize.saturating_sub(summary.len() + 1);
+                        match fit(&route, allowance) {
+                            Ok(bound) => output = vec![bound, summary],
                             Err(error) => {
-                                if matches!(kpop_native::view_continuation::has_pending_replacement(&root, sid), Ok(false)) {
-                                    // An inactive binding still permits the unbound
-                                    // canonical opening requested by the user.
-                                    let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
-                                } else {
-                                    // Never erase a recorded replacement, or an
-                                    // obligation whose state cannot be checked.
-                                    *text = format!("Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source.");
-                                }
+                                // Never turn a failed representation into a saved
+                                // replacement or silently disable continuation.
+                                output = vec![format!("Managed source opening unavailable: {error}. Current source evidence is unknown; reopen before answering."), summary];
                                 eprintln!("kpopper managed view route unavailable: {error}");
-                            },
+                            }
+                        }
                         }
                     }
                 }
-            },
-            Ok(()) => (),
-            Err(error) => eprintln!("kpopper continuation state unavailable: {error}"),
         }
     }
     let environment = sid

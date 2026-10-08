@@ -274,7 +274,9 @@ fn validate_host_execution(report: &Value, binding: &Value, now: DateTime<Utc>) 
 }
 
 pub fn status(store: &Store) -> Result<Value> {
-    let data = store.load(true)?.unwrap();
+    let Some(data) = store.load(false)? else {
+        return status_with_maintenance(store);
+    };
     let mut result = status_with_maintenance(store)?;
     if data["version"] == 1 {
         for key in ["adoption", "maintenance_health", "wake"] {
@@ -337,7 +339,13 @@ pub(crate) fn unconfigured_adoption(workspace: &Path, now: DateTime<Utc>) -> Res
 }
 
 pub fn status_with_maintenance(store: &Store) -> Result<Value> {
-    let data = data_with_choice(store, store.load(true)?.unwrap())?;
+    let loaded = store.load(false)?;
+    let configured = loaded.is_some();
+    // Reading a saved adoption choice never requires creating a ledger or host.
+    let data = data_with_choice(store, loaded.unwrap_or_else(|| json!({
+        "config":{},"items":{},"observations":{},
+        "daily":{"binding":null,"claim":null,"receipts":[]}
+    })))?;
     let daily = &data["daily"];
     let binding = daily["binding"].clone();
     let state = if binding.is_null() {
@@ -366,11 +374,15 @@ pub fn status_with_maintenance(store: &Store) -> Result<Value> {
     let mut adoption = adoption_status(&data, store.now())?;
     adoption["continuity_snapshot"] = continuity_snapshot(&data);
     let maintenance_health = maintenance_health(&data, store.now())?;
-    Ok(
-        json!({"state":state,"binding":binding,"run":run,"claim":claim,
+    let mut result = json!({"state":state,"binding":binding,"run":run,"claim":claim,
         "last_review":daily["receipts"].as_array().and_then(|rows|rows.last()).cloned(),
-        "timezone":data["config"]["timezone"],"adoption":adoption,"maintenance_health":maintenance_health,"wake":crate::maintenance_wake::assess(&data,store.now())}),
-    )
+        "timezone":data["config"]["timezone"],"adoption":adoption,"maintenance_health":maintenance_health,"wake":crate::maintenance_wake::assess(&data,store.now())});
+    if !configured {
+        result["configured"] = json!(false);
+        result["state"] = json!("unconfigured");
+        result["current_continuity"] = json!("unknown");
+    }
+    Ok(result)
 }
 
 fn adoption_status(data: &Value, now: DateTime<Utc>) -> Result<Value> {

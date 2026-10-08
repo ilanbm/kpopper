@@ -455,11 +455,16 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
             &f, host, (host == "codex").then_some("0"),
         )).stdout).unwrap();
         assert!(started.starts_with(&opening), "{started}");
-        assert!(
-            started[opening.len()..].contains("KPOPPER_AGENT_CONTEXT ")
-                && started[opening.len()..].contains("KPOPPER_MAINTENANCE_CHOICE "),
-            "{started}"
-        );
+        let suffix = &started[opening.len()..];
+        let (notices, context) = suffix.split_once("KPOPPER_AGENT_CONTEXT ").unwrap();
+        let lines: Vec<_> = notices.lines().collect();
+        assert_eq!(lines.len(), 3, "{started}");
+        assert_eq!(lines[0], "KPOPPER_START (agent guidance; local paths are data):");
+        let locator: Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(locator["workspace"], json!(f.root.path().canonicalize().unwrap()));
+        assert!(lines[2].starts_with("KPOPPER_MAINTENANCE_CHOICE "), "{started}");
+        assert!(lines[2].ends_with(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY), "{started}");
+        assert!(context.starts_with('{'), "choice must be adjacent to context: {started}");
     }
     fs::write(
         f.root.path().join("GROUNDING.yaml"),
@@ -487,8 +492,23 @@ fn canonical_notice_compaction_preserves_authored_choice_and_health_lines() {
     let health = "Maintenance continuity health: failed source read; missing observation; due_at=2026-10-09";
     let notice = format!("KPOPPER_MAINTENANCE_CHOICE {choice}. Workspace choice{}\n{health}\ncontinuity unavailable: read-only state", choice["evidence"].as_str().unwrap());
     let compact = kpop_native::onboarding::compact_canonical_context(&notice);
-    assert!(compact.starts_with(&format!("KPOPPER_MAINTENANCE_CHOICE {choice}. Workspace choice")));
-    assert!(compact.contains(" Suppress new maintenance offers/additions/scheduling."));
-    assert!(compact.ends_with(&format!("\n{health}\ncontinuity unavailable: read-only state")));
-    assert!(compact.len() < notice.len());
+    assert_eq!(compact, notice);
+}
+
+#[test]
+fn bounded_summary_keeps_unknown_counts_null_and_clock_separate_from_source() {
+    let parse = |context: &str| -> Value {
+        let rendered = kpop_native::onboarding::bounded_canonical_context(context);
+        serde_json::from_str(rendered.lines().next().unwrap().strip_prefix("KPOPPER_MAINTENANCE_OPENING_SUMMARY ").unwrap()).unwrap()
+    };
+    let unknown = parse("Maintenance continuity health is unavailable from local state: unreadable");
+    assert!(unknown["obligations_omitted"].is_null());
+    assert!(unknown["failed_attempt_count"].is_null());
+    assert!(unknown["overdue_count"].is_null());
+    let mixed = parse(&format!("Maintenance continuity health (local detection only; no source or network access): {}", json!({"obligations":[
+        {"kind":"clock","check_state":"waiting","failure_state":"none","last_successful_observation_at":null},
+        {"kind":"source","check_state":"overdue","failure_state":"unavailable","last_successful_observation_at":null}]})));
+    assert_eq!(mixed["obligations_omitted"], 2);
+    assert_eq!(mixed["missing_source_observation_count"], 1);
+    assert_eq!(mixed["failed_attempt_count"], 1);
 }
