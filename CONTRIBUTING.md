@@ -94,6 +94,14 @@ Read the measurement recipes before running `kpop --frozen remeasure --run`; the
 Optional runtimes may skip tests locally. Changes to them need their documented setup and
 the corresponding CI job; skips are not proof that the integration passes.
 
+For a reviewed series confined to public reader behavior, a maintainer can apply the
+`ci:reader-checks` PR label before pushing. This keeps the record and tooling contracts,
+runs native unit and reader integration tests plus branch-reference parity on Linux, and
+skips distribution builds. Unknown files, dependencies and packaging changes retain full
+validation. The label does not reduce release-candidate checks or a manual full diagnostic
+run. Run the complete combined change through full validation before release; the focused
+profile is not platform or distribution acceptance.
+
 For changes to the checked session, follow the full [checked-session setup](docs/checked-sessions.md)
 and use the toolchain pinned in `scripts/session/lean/lean-toolchain`. Without a matching
 cached kernel the integration tests skip; having Lean on `PATH` alone does not enable them.

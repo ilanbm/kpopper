@@ -8,6 +8,8 @@ import hashlib
 import json
 import pathlib
 import re
+import shlex
+import subprocess
 import tempfile
 import unicodedata
 import unittest
@@ -345,6 +347,258 @@ class Community(unittest.TestCase):
         for form in invalid:
             with self.subTest(form=form):
                 self.assertTrue(issue_form_errors(form))
+
+
+# Every `kpop ...` (and `kpopper ...`) invocation cited in code, checked against the command
+# surface native/tests/cli_surface.rs renders from `kpop --help`.
+CLI_SURFACE = ROOT / "native" / "tests" / "fixtures" / "cli-surface.txt"
+REFERENCE_DOCS = ("README.md", "CONTRIBUTING.md", "native/README.md")
+REFERENCE_TREES = ("skills", "docs", "adapters")
+REFERENCE_SUFFIXES = (".md", ".mdc", ".snippet")
+INVOCATION = re.compile(r"(?:^|(?<=[\s(`'\"$|&;/]))(kpop|kpopper)(?=\s|$)")
+# Compatibility aliases kpop accepts but does not list in its help.
+HIDDEN_ALIASES = {("experimental", "page"): ("experimental", "hub"),
+                  ("experimental", "document"): ("experimental", "annotated-doc")}
+
+
+def cli_surface(text):
+    """Map each command path (a tuple of words) to its long options; `=` marks a value."""
+    surface = {}
+    for line in text.splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        words = line.split()[1:]
+        path = tuple(w for w in words if not w.startswith("--"))
+        surface[path] = {w.rstrip("="): w.endswith("=") for w in words if w.startswith("--")}
+    return surface
+
+
+def code_segments(text):
+    """(line number, code) for every fenced command and every inline code span.
+
+    A fenced line ending in a backslash continues on the next; a span may wrap within its
+    paragraph. Each is numbered by the line it starts on.
+    """
+    fence, command, paragraph = None, None, []
+    for number, line in enumerate(text.splitlines() + [""], 1):
+        match = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if fence and match and match[1][0] == fence[0] and len(match[1]) >= len(fence) and not match[2].strip():
+            fence = None
+            if command:
+                yield command
+            command = None
+        elif fence:
+            command = (command[0], command[1] + " " + line) if command else (number, line)
+            if command[1].rstrip().endswith("\\"):
+                command = (command[0], command[1].rstrip()[:-1])
+            else:
+                yield command
+                command = None
+        elif match or not line.strip():
+            joined = "\n".join(text for _, text in paragraph)
+            for span in re.finditer(r"(`+)(.+?)\1(?!`)", joined, re.S):
+                yield paragraph[0][0] + joined.count("\n", 0, span.start(2)), span[2].replace("\n", " ")
+            paragraph = []
+            if match:
+                fence = match[1]
+        else:
+            paragraph.append((number, line))
+    if command:
+        yield command
+
+
+def shell_syntax(code):
+    """Mask quoted and escaped text at its original offsets, stopping at a comment."""
+    visible = list(code)
+    quote = None
+    escaped = False
+    for index, char in enumerate(code):
+        if escaped:
+            visible[index] = " "
+            escaped = False
+        elif char == "\\" and quote != "'":
+            visible[index] = " "
+            escaped = True
+        elif quote:
+            visible[index] = " "
+            quote = None if char == quote else quote
+        elif char in "'\"":
+            visible[index] = " "
+            quote = char
+        elif char == "#" and (index == 0 or code[index - 1].isspace()):
+            return "".join(visible[:index])
+    return "".join(visible)
+
+
+def invocation_words(code):
+    """The words after each kpop or kpopper in a piece of code, one list per invocation."""
+    syntax = shell_syntax(code)
+    for match in INVOCATION.finditer(syntax):
+        end = re.search(r"\s(?:\||&&|\|\||;|>|2>)\s|[;`]", syntax[match.end():])
+        stop = match.end() + end.start() if end else len(syntax)
+        rest = code[match.end():stop]
+        try:
+            words = shlex.split(rest)
+        except ValueError:
+            words = rest.split()
+        cleaned = []
+        for word in words:
+            while word != (stripped := word.strip("[]{}()").rstrip(".,;:!?")):
+                word = stripped
+            if word.startswith("--"):
+                word = word.split("=", 1)[0] + ("=" if "=" in word else "")
+            if word:
+                cleaned.append(word)
+        yield match[1], cleaned
+
+
+def placeholder(word):
+    return (word.startswith(("<", "\"", "'", "$", "…", "...")) or word.endswith(("…", "..."))
+            or (word.isupper() and len(word) > 1) or "|" in word)
+
+
+def invocation_errors(program, words, surface):
+    """Unknown commands and options in one invocation; an empty list when it is not a command."""
+    path, allowed, positional, errors = (), dict(surface[()]), False, []
+    index = 0
+    while index < len(words):
+        word = words[index]
+        index += 1
+        if word.startswith("--"):
+            name, attached = word.rstrip("="), word.endswith("=")
+            if name not in allowed:
+                errors.append("%s has no option %s" % (" ".join(("kpop",) + path), name))
+            elif allowed[name] and not attached and index < len(words) and not words[index].startswith("-"):
+                index += 1
+        elif word.startswith("-") or positional:
+            continue
+        elif not path and word == "help" and program == "kpop":
+            continue
+        elif path + (word,) in surface or path + (word,) in HIDDEN_ALIASES:
+            path = HIDDEN_ALIASES.get(path + (word,), path + (word,))
+            allowed.pop("--version", None)    # the one root option subcommands do not inherit
+            allowed.update(surface[path])
+        elif placeholder(word):
+            if not path:
+                return errors    # `kpop <command> ...` names no command to check against
+            positional = True
+        elif not path:
+            return [] if program == "kpopper" else errors + ["kpop has no command %s" % word]
+        elif any(len(other) == len(path) + 1 and other[:len(path)] == path for other in surface):
+            return errors + ["%s has no subcommand %s" % (" ".join(("kpop",) + path), word)]
+        else:
+            positional = True
+    if program == "kpopper" and not path:
+        return []
+    return errors
+
+
+def command_reference_errors(paths, surface, root=ROOT):
+    errors = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        for number, code in code_segments(text):
+            for program, words in invocation_words(code):
+                for error in invocation_errors(program, words, surface):
+                    errors.append("%s:%d: %s" % (path.relative_to(root), number, error))
+    return errors
+
+
+def reference_files(root=ROOT):
+    files = [root / name for name in REFERENCE_DOCS if (root / name).is_file()]
+    for tree in REFERENCE_TREES:
+        files += sorted(p for p in (root / tree).rglob("*") if p.is_file() and p.suffix in REFERENCE_SUFFIXES)
+    return files
+
+
+class CommandReferences(unittest.TestCase):
+    def surface(self):
+        return cli_surface(CLI_SURFACE.read_text(encoding="utf-8"))
+
+    def test_cited_commands_and_options_exist(self):
+        files = reference_files()
+        self.assertGreater(len(files), 30)
+        self.assertEqual(command_reference_errors(files, self.surface()), [])
+
+    def test_the_check_reads_invocations_like_a_shell(self):
+        surface = self.surface()
+        good = ["kpop --workspace DIR pull <id> --from origin/main",
+                "$ kpop session view --view-format json  # a comment with --not-a-flag",
+                "kpop pull [--from <ref>].", "kpop set key value --why=\"a reason\"",
+                "kpop experimental hub --verify", "kpop <command> --help", "kpopper keeps a record",
+                "kpopper _agent guide", "kpop check && git diff --exit-code",
+                "kpop --workspace=DIR pull --from x", "kpop --version", "kpop pull [--history].",
+                "kpop pull x # kpop nonexistent", "# kpop nonexistent", "kpop help pull",
+                "kpop experimental page --verify", "<plugin>/scripts/bin/kpop open", "kpop session <OPERATION>"]
+        for code in good:
+            with self.subTest(code=code):
+                self.assertEqual([e for p, w in invocation_words(code) for e in invocation_errors(p, w, surface)], [])
+        bad = {"kpop pull x --bogus": "kpop pull has no option --bogus", "kpop pul x": "kpop has no command pul",
+               "kpop --workspace DIR pull --bogus": "kpop pull has no option --bogus",
+               "kpopper pull --bogus": "kpop pull has no option --bogus",
+               "kpop --workspace=DIR bogus": "kpop has no command bogus",
+               "kpop pull --version": "kpop pull has no option --version",
+               "kpop session bogus": "kpop session has no subcommand bogus",
+               "kpop experimental bogus": "kpop experimental has no subcommand bogus",
+               "kpop followups dialy status": "kpop followups has no subcommand dialy",
+               "kpop pull x '# quoted' --bogus": "kpop pull has no option --bogus",
+               "<plugin>/scripts/bin/kpop open --bogus": "kpop open has no option --bogus"}
+        for code, error in bad.items():
+            with self.subTest(code=code):
+                self.assertEqual([e for p, w in invocation_words(code) for e in invocation_errors(p, w, surface)], [error])
+
+    def test_quoted_arguments_are_not_additional_commands(self):
+        surface = self.surface()
+        for code in [
+            'kpop search "kpop --version"',
+            "kpop search 'kpop frobnicate'",
+            'kpopper search "how to use kpop pull --bogus"',
+            r'kpop search "say \"kpop frobnicate\""',
+            'kpop search "text; kpop bogus | more && text > output"',
+            'kpop search "kpop --version" # kpop bogus',
+            'echo "kpop bogus"',
+        ]:
+            with self.subTest(code=code):
+                self.assertEqual([e for p, w in invocation_words(code)
+                                  for e in invocation_errors(p, w, surface)], [])
+
+    def test_quoted_text_does_not_hide_real_command_errors(self):
+        surface = self.surface()
+        bad = {
+            'kpop search "kpop --version" --bogus': 'kpop search has no option --bogus',
+            'kpop search "text; kpop bogus | more && text > output" --bogus':
+                'kpop search has no option --bogus',
+            r'kpop search "say \"kpop --version\"" --bogus': 'kpop search has no option --bogus',
+            'kpop search "kpop --version";kpop pull x --bogus': 'kpop pull has no option --bogus',
+            'kpop search "kpop --version" && kpop bogus': 'kpop has no command bogus',
+            'echo "kpop --version" | kpop pull x --bogus': 'kpop pull has no option --bogus',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            doc = root / "query.md"
+            for code, error in bad.items():
+                with self.subTest(code=code):
+                    doc.write_text("# Search\n\n```sh\n%s\n```\n" % code, encoding="utf-8")
+                    self.assertEqual(command_reference_errors([doc], surface, root),
+                                     ["query.md:4: " + error])
+
+    def test_drift_in_a_skill_names_the_file_and_line(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            skill = root / "skills" / "probe" / "SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text("# Probe\n\nRun `kpop pull x`.\n\n```sh\nkpop pull x --bogus\n```\n"
+                             "\n```sh\nkpop session --no-settings \\\n  --bogus-flag open\n```\n"
+                             "\nA wrapped `kpop pull\nx --wrapped` span.\n", encoding="utf-8")
+            self.assertEqual(command_reference_errors(reference_files(root), self.surface(), root),
+                             ["skills/probe/SKILL.md:6: kpop pull has no option --bogus",
+                              "skills/probe/SKILL.md:10: kpop session has no option --bogus-flag",
+                              "skills/probe/SKILL.md:14: kpop pull has no option --wrapped"])
+
+    def test_adapter_method_summaries_match_their_source(self):
+        result = subprocess.run(["sh", str(ROOT / "adapters" / "_shared" / "check-drift.sh")],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

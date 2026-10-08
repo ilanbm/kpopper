@@ -23,11 +23,11 @@ jobs:
     timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.13"
 
@@ -36,7 +36,7 @@ jobs:
       # the entry is shared with the reader the record job of a check run builds.
       - name: Reuse the native reader built from these sources
         id: reader
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/kpopper-record-reader
           key: record-reader-${{ runner.os }}-${{ hashFiles('native/**') }}
@@ -54,7 +54,7 @@ jobs:
       - name: Keep this native reader for the pull requests that follow
         if: steps.reader.outputs.cache-hit != 'true'
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/kpopper-record-reader
           key: ${{ steps.reader.outputs.cache-primary-key }}

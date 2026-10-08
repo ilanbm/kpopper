@@ -19,6 +19,10 @@
 
 ### Documentation
 
+- The README separates using knowledge to support project work from building a
+  reusable knowledge model as the product. Both paths share installation and link
+  to their next steps; the guide defines a living knowledge model and distinguishes
+  complete models from reading excerpts.
 - Expanded the [living knowledge model guide](docs/living-knowledge-models.md) to
   cover an application-owned model bundle alongside an optional project record,
   explicit project/model selection and ephemeral case data. It describes an

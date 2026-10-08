@@ -7,7 +7,9 @@ description: Create or maintain a source-grounded kpopper knowledge model as a v
 
 Use this skill for a reusable, source-backed model that people should install and query across projects. An ordinary project record, a one-off answer, or a case adapter alone is a different task.
 
-Read the authoring guide at ../../docs/model-plugins.md and use the small read-model template at ../../examples/model-plugin/ as a format example. Define the scope, source closure, unknowns, independently expected questions and plugin descriptor before packaging.
+The generated plugin and packaging workflow are currently qualified for local Codex on macOS ARM64. This skill's presence in another host does not establish support there. The companion is an unreleased source candidate; use a maintainer-supplied qualified prebuilt toolchain.
+
+Read the [authoring guide](../../docs/model-plugins.md#create-your-own-model). The [complete example](../../docs/model-plugins.md#try-the-complete-example) is a separate packaging walkthrough; do not copy its record or history over a model you have authored. Define the scope, source closure, unknowns, independently expected questions and plugin descriptor before packaging.
 
 Author records with the native kpop commands. Do not hand-edit generated GROUNDING.yaml or history. Preserve a person's case in a disposable workspace, never in the reusable model. Use the release-qualified prebuilt kpop-model build tool and bundled engine when they are available; model authors should not compile Rust or install another language runtime. If either artifact is missing, save the authored model and report the missing packaging prerequisite.
 

@@ -1,84 +1,202 @@
-# Create a reusable model plugin
+# Create and use a reusable model plugin
 
-A model plugin is for a reusable, sourced knowledge model that people can install and query from different projects. It is separate from an ordinary project record, a personal case, and an application adapter. Start with a dedicated native record and keep its source and history closure intact. The minimal read-model source fixture shows the descriptor and skill shape; its source is synthetic.
+A model plugin contains a versioned knowledge model, its sources and native history,
+a domain skill, and a pinned native engine. It can be used from different projects.
+The reusable model stays separate from project records and private case data.
 
-Initial support is local Codex on macOS ARM64. The companion is currently a source
+Initial support is **local Codex on macOS ARM64**. The companion is currently a source
 candidate; a public prebuilt companion download has not been released. The author
-flow below requires a qualified prebuilt candidate supplied by a maintainer.
+walkthrough requires a qualified prebuilt candidate supplied by a maintainer.
 
-## Decide what the model covers
+## What you need
 
-Write down the questions the model is meant to answer, the source edition or retrieval date, the facts and rules it can support, and the boundaries it leaves unknown or outside scope. Make each claim traceable to a source passage. When a rule can be represented, record the rule and its inputs instead of only a computed result.
+| Your task | Requirements |
+| --- | --- |
+| Use a model plugin | Codex and a complete generated plugin from its publisher. The engine is included; no separate kpopper, Python or compiler installation. |
+| Create and package a model | Git, a qualified prebuilt `kpop-model` companion and the complete pinned engine archive. Authoring a new record also uses the qualified native `kpop` executable. |
+| Maintain the companion or a custom case adapter | Rust and the component's tests. This is the maintainer's build task; read/query model authors need no custom Rust adapter. |
 
-Derive expected questions and answers independently from the source, then use them to check the authored model. Keep these maintenance tests in the source repository; they are not evidence for a claim and need not ship in the consumer plugin.
+If you only want to ask questions, go to [Use a model plugin](#use-a-model-plugin).
+To create your own model, the [model skill](../skills/model/SKILL.md) guides the work.
+The walkthrough below first packages a complete synthetic example, so its commands
+can be followed without authoring a record or inventing a descriptor.
 
-## Author the native record
+## Try the complete example
 
-Use a dedicated model root. For a model that is also kept inside a larger project repository, create the record first in a fresh private directory outside all Git repositories, then copy its complete authored closure into the dedicated model directory. This prevents the first kpop add from resolving to the repository's ordinary project record: --workspace binds a project context and does not by itself select a nested model entry.
+Use a checkout containing [examples/model-plugin](../examples/model-plugin/README.md),
+the prebuilt companion, and the public [kpopper 0.15.1 macOS ARM64 engine archive](https://github.com/ilanbm/kpopper/releases/download/v0.15.1/kpopper-0.15.1-darwin-arm64.tar.gz)
+named by the [descriptor](../examples/model-plugin/model-package.json). The builder
+verifies the archive's SHA-256. Git must have your author identity configured.
 
-Put cited local source files beneath the model root. In an empty private model directory, make the first native add with --workspace set to that same directory. It creates GROUNDING.yaml at the workspace root. Do not use kpop init for an ordinary model; that initializes a different native feasibility store. Once the record exists, use the explicit absolute GROUNDING.yaml selector on each applicable authoring command.
+Set these four absolute paths. `MODEL_WORK` must be a new directory in a writable
+location outside any existing Git repository. Keep these variables in the same shell
+for the following steps.
 
-Set `XDG_CACHE_HOME` to a separate private directory that the task can already
-write. Native execution needs its runtime cache even with `--no-cache`; a
-sandboxed task may not be allowed to create the default `$HOME/.cache`.
-Keep the cache outside the model directory and source export. This is a
-task-local environment setting, not a global permission or installation change.
+```sh
+KPOPPER_SOURCE="/ABS/PATH/TO/kpopper"
+KPOP_MODEL="/ABS/PATH/TO/kpop-model"
+ENGINE_ARCHIVE="/ABS/PATH/TO/kpopper-0.15.1-darwin-arm64.tar.gz"
+MODEL_WORK="/ABS/WRITABLE/new-model-example"
+```
 
-For example, with a fictional quoted rate:
+Create a source repository from the complete example, including its hidden native
+history and attributes. The model is already authored; do not recreate or edit its
+`GROUNDING.yaml` or history by hand.
 
-    export XDG_CACHE_HOME=/ABS/WRITABLE/model-authoring-cache
-    mkdir -p "$XDG_CACHE_HOME"
-    mkdir -p "$MODEL_ROOT/sources"
-    cp /ABS/SOURCE/rate-quote.md "$MODEL_ROOT/sources/rate-quote.md"
+```sh
+mkdir "$MODEL_WORK"
+MODEL_SOURCE="$MODEL_WORK/source"
+MODEL_PLUGIN="$MODEL_WORK/venue-rates-0.1.0"
+MODEL_CACHE="$MODEL_WORK/cache"
+mkdir "$MODEL_SOURCE"
+cp -R "$KPOPPER_SOURCE/examples/model-plugin/." "$MODEL_SOURCE/"
+git -C "$MODEL_SOURCE" init
+git -C "$MODEL_SOURCE" add -- .
+git -C "$MODEL_SOURCE" commit -m "Add the synthetic venue-rates model"
+```
 
-    kpop --workspace "$MODEL_ROOT" add source.rate_quote '{"name":"Venue rate quote","file":"sources/rate-quote.md","read":"2026-10-06","at":"quoted rate sentence","fidelity":"direct quotation","v":"The standard meeting room costs $10 per hour. This quote states no weekend rate or weekend surcharge."}' --json
+Build into the absent output directory. The builder checks the committed source
+bytes and validates the native model before producing the plugin.
 
-    kpop --workspace "$MODEL_ROOT" add pricing.hourly_rate v=10 from=source.rate_quote 'at=quoted hourly rate' --as-of 2026-10-06 "$MODEL_ROOT/GROUNDING.yaml" --json
+```sh
+"$KPOP_MODEL" build --source "$MODEL_SOURCE" --descriptor model-package.json \
+  --engine-archive "$ENGINE_ARCHIVE" --output "$MODEL_PLUGIN"
+```
 
-The source mapping should name a local file or URL, a read date, and a specific location; preserve enough quoted material to support the claim. A fact uses v, from and at; add a meaningful --as-of date. When available, pass the actual host-provided KPOPPER_AGENT_SESSION identity to native authoring commands. Do not invent identity values.
+Read through the generated plugin's own launcher, using a private cache:
 
-Run native kpop check and kpop history-capture against the authored entry. Read the source and model back through the native readers. A clean check establishes record structure and declared conditions; it does not verify the source's truth or prove model completeness.
+```sh
+"$MODEL_PLUGIN/bin/kpop-model" --bundle "$MODEL_PLUGIN" verify
+"$MODEL_PLUGIN/bin/kpop-model" --bundle "$MODEL_PLUGIN" --cache "$MODEL_CACHE" setup
+"$MODEL_PLUGIN/bin/kpop-model" --bundle "$MODEL_PLUGIN" --cache "$MODEL_CACHE" \
+  pull pricing.standard_hourly_rate pricing.weekend_rate_status
+```
 
-Keep the whole model directory together: GROUNDING.yaml, its generated .gitattributes, compact native history and required history members, and every cited local source file. Do not hand-edit generated history. Exclude transient .kpopper/project.lock and .kpopper/.history-local/ from the committed or packaged model. Do not copy a project record or project-only evidence into it.
+The source states USD 10 per hour for the standard room and leaves weekend pricing
+unspecified. Read the returned source references and keep that unknown visible.
+The same entry IDs appear in the model, descriptor, example README and commands.
+This small fixture exercises packaging and installation; it is not a demonstration
+of usefulness at scale or comparative model performance.
 
-## Describe and package the model
+## Use a model plugin
 
-Add a domain skill that tells the consumer how to ask in-scope questions, read the model and source, cite results, and preserve unknowns. Keep the descriptor's model and skill paths inside committed source files. Use model-package.json with format kpop-model-package/v1; keep the ID and version explicit, declare capability read for models using only the standard reader, include exact target and engine identity, and choose a source-backed smoke entry. See the example descriptor for the full field shape.
+Obtain a complete generated plugin and its version/marketplace instructions from
+the publisher. A source checkout or a copied skill does not contain the built
+launcher and engine. Review the plugin's coverage and sources before using its answers.
 
-Copy the complete examples/model-plugin directory contents, including hidden native history and attributes, into the root of a dedicated Git source repository. The descriptor's model and skill paths are relative to that repository root. Commit the source closure before building; the builder refuses selected files that are not committed or whose bytes differ from HEAD.
+In local Codex, add the publisher's marketplace and install the named plugin. These
+forms are supported by Codex CLI 0.153.3; use `codex plugin --help` for your version.
+The publisher supplies the marketplace source, plugin name and marketplace name.
 
-Build from that exact source tree with the release-qualified prebuilt common kpop-model tool and complete engine archive:
+```sh
+codex plugin marketplace add /ABS/PUBLISHER-MARKETPLACE
+codex plugin add PLUGIN-NAME@MARKETPLACE-NAME
+```
 
-    kpop-model build --source /ABS/SOURCE_REPO --descriptor model-package.json --engine-archive /ABS/kpopper-0.15.1-darwin-arm64.tar.gz --output /ABSENT/OUTPUT_DIR
+Start a new Codex task and ask the installed domain skill a question. For the example:
 
-The output must be absent. The builder verifies committed source bytes, the model closure and declared engine before producing the generated lock, launcher, bundled engine, Codex plugin manifest and skill. Do not hand-create generated lock data, copy only GROUNDING.yaml, or label a descriptor and model source folder an installable plugin. The release-qualified common tool and engine are supplied to authors as prebuilt artifacts; model authors do not need Rust/Cargo, Python, Node or another runtime. If the qualified builder or complete engine archive is unavailable, keep the authored source as a candidate and report that it is not a runnable bundle.
+> Use venue-rates to explain the standard room rate and whether weekend pricing is
+> known. Cite the source and identify the model version.
 
-Verify and prepare the generated bundle in an isolated package cache, then read through its bundled native reader:
+The domain skill locates its installed bundle and runs the bundled launcher. First
+use runs `setup` to validate and activate a private generation; later reads use that
+installation. The creator's `model` skill is for building models, not for answering
+questions from an installed domain plugin.
 
-    kpop-model --bundle /ABS/BUNDLE verify
-    kpop-model --bundle /ABS/BUNDLE --cache /ABS/PRIVATE-CACHE setup
-    kpop-model --bundle /ABS/BUNDLE --cache /ABS/PRIVATE-CACHE pull pricing.hourly_rate
+For direct use, set `MODEL_PLUGIN` to the actual installed bundle directory and
+`MODEL_CACHE` to a private writable cache. Use the same explicit selection on every call:
 
-Install only a generated plugin using Codex's supported plugin route. The local Codex layout uses `.codex-plugin/plugin.json` in the plugin directory and `.claude-plugin/marketplace.json` in the marketplace root. Installing plugin code still requires the user's host trust decision. After installation, test the domain skill in a fresh task and confirm that it invokes the installed native reader.
+```sh
+"$MODEL_PLUGIN/bin/kpop-model" --bundle "$MODEL_PLUGIN" --cache "$MODEL_CACHE" doctor
+"$MODEL_PLUGIN/bin/kpop-model" --bundle "$MODEL_PLUGIN" --cache "$MODEL_CACHE" \
+  pull pricing.standard_hourly_rate
+"$MODEL_PLUGIN/bin/kpop-model" --bundle "$MODEL_PLUGIN" --cache "$MODEL_CACHE" versions
+```
 
-## Keep application behavior separate
+The entry above belongs to the example; other plugins declare their own IDs and
+instructions. Install an update explicitly and run its setup. When a new bundle
+replaces an earlier version at the same path, `activate --digest DIGEST` can select
+a retained generation. When Codex installs versions at different paths, select the
+older plugin through the host. The selected version remains visible in results.
 
-A read model uses the common native reader and needs no custom Rust code. Existing native rules can derive values from recorded inputs without a custom adapter. If an application additionally supplies case-specific inputs, private binding or domain output projection, declare capability application and maintain its adapter, independent cases, build, compatibility and release separately. Do not put domain-specific case fields into the generic descriptor or write case data into the reusable model.
+### Install the local example
 
-For case adapters, bind each case in a disposable copy of the complete model; keep personal inputs outside the canonical model and project. A failed model component or missing field is unknown for that component, not an overall denial. Publishing, remote marketplace setup and consumer-machine installation are separate decisions beyond building a local candidate.
+For the example built above, create a local marketplace **beside** the generated
+bundle. This file is host configuration and must not be added inside the locked bundle.
+The commands below install the example into your Codex configuration.
+
+```sh
+mkdir -p "$MODEL_WORK/.agents/plugins"
+cat > "$MODEL_WORK/.agents/plugins/marketplace.json" <<'JSON'
+{
+  "name": "local-model-example",
+  "plugins": [{
+    "name": "venue-rates",
+    "source": {"source": "local", "path": "./venue-rates-0.1.0"},
+    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+    "category": "Productivity"
+  }]
+}
+JSON
+codex plugin marketplace add "$MODEL_WORK"
+codex plugin add venue-rates@local-model-example
+```
+
+Generated bundles use the supported `.codex-plugin/plugin.json` compatibility
+manifest. See [OpenAI's plugin packaging documentation](https://developers.openai.com/plugins/build/plugins)
+for local marketplace setup and host differences. These commands do not publish a
+plugin to a public directory or install generic project-record hooks.
+
+## Create your own model
+
+Choose a bounded subject, sources and the questions the model should answer. State
+its source edition, assumptions, coverage and unknowns. Derive expected answers
+independently from the sources and keep maintenance tests in the source repository.
+They need not ship in the consumer plugin.
+
+Author a new native record in a fresh private directory outside Git, with cited local
+source files beneath that root. A first `kpop add` inside a repository can resolve to
+its project record; `--workspace` alone does not select a separate nested model.
+Set `XDG_CACHE_HOME` to a writable private directory outside the model, within the
+task's existing allowed paths. The native engine needs its cache even with `--no-cache`.
+
+Use the qualified native engine and the [native authoring reference](../skills/model/references/authoring.md).
+Record sources before claims that cite them. After the first add creates the record,
+select its absolute `GROUNDING.yaml` path for each applicable authoring command.
+Run `kpop check` and `kpop history-capture` against it. A clean check establishes
+structure and declared conditions, not source truth or completeness.
+
+Copy the complete authored model into its chosen source directory: `GROUNDING.yaml`,
+`.gitattributes`, native history and all cited local files. Exclude transient
+`.kpopper/project.lock` and `.kpopper/.history-local/`. Do not copy the example's model
+or history over your own record. Use its descriptor and skill only as format examples:
+set your own ID/version, model path, skill path, product-file allowlist and smoke entry.
+Every smoke/read ID must exist in your model. Commit that selected closure before
+running `build` as above. Generated bundles and caches stay outside the source tree.
+
+A read/query model uses the common native reader, including native rules over
+recorded inputs. An application that binds private case inputs or projects results
+into a domain-specific format declares `capability: application` and supplies a
+separately tested native adapter. Its publisher owns the adapter's compatibility and
+build. Case binding uses disposable model copies; personal values never enter the
+canonical model or project record. Missing inputs and failed components remain
+visible and do not imply a conclusion about every part of a case.
 
 ## Maintain the native companion
 
-The companion in `tools/model-package` is a separate Rust crate. The core engine's
-CI lane does not test it. Maintainers must run its own native package gate on the
-supported target with the complete archive pinned in the example descriptor:
+The companion in `tools/model-package` is a separate Rust crate. Its dedicated
+[Native model plugins workflow](../.github/workflows/model-plugins.yml) tests and
+builds it on macOS ARM64 with the pinned complete engine archive. The core engine's
+CI lane does not exercise this crate. Maintainers can run the same gate locally:
 
 ```sh
 export KPOP_MODEL_ENGINE_ARCHIVE=/ABS/kpopper-0.15.1-darwin-arm64.tar.gz
+cargo +1.98.1 fmt --check --manifest-path tools/model-package/Cargo.toml
 cargo +1.98.1 test --release --locked --manifest-path tools/model-package/Cargo.toml
 cargo +1.98.1 clippy --locked --manifest-path tools/model-package/Cargo.toml --all-targets -- -D warnings
 cargo +1.98.1 build --release --locked --manifest-path tools/model-package/Cargo.toml
 ```
 
 The gate exercises actual package creation, installation, native reads, updates,
-rollback and failure recovery. A build alone does not qualify an artifact.
+rollback and failure recovery. Its candidate executable is an artifact for review;
+a successful build does not publish or qualify a public release.

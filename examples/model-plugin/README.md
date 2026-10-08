@@ -1,6 +1,20 @@
-# Minimal read-model source repository
+# Venue-rates model example
 
-This is a source fixture for the kpop-model package contract. Copy the complete directory contents, including hidden native history and attributes, into a dedicated Git repository before building. It is not itself an installable plugin: it has no generated package lock, common launcher, engine archive or Codex plugin manifest. The release-qualified prebuilt kpop-model builder creates those.
+**If this README is inside a generated plugin** with `model-package.lock.json` and
+`bin/kpop-model`, the package is ready to install. It includes its engine and
+venue-rates skill. After installation, ask that skill for the standard room rate
+and whether weekend pricing is known. No separate kpopper or compiler is needed.
+
+**In the source checkout**, this directory is a fixture for the package contract.
+It has no generated lock, launcher, engine archive or plugin manifest yet. Copy its
+complete contents, including hidden native history and attributes, into a dedicated
+Git repository before building with the qualified prebuilt `kpop-model` tool.
+
+Follow the [complete walkthrough](https://github.com/ilanbm/kpopper/blob/main/docs/model-plugins.md#try-the-complete-example)
+for source creation, packaging and local Codex installation. Initial support is
+macOS ARM64; the prebuilt companion currently comes from a maintainer and has not
+been publicly released. Use this fixture in a fresh source directory, separately
+from any model you have authored yourself.
 
 The dedicated native model records a fictional venue's quoted standard rate and that the quote leaves weekend pricing unspecified. The exact synthetic quote is under knowledge/venue-rates/sources/. The GROUNDING.yaml and native history were created with kpop 0.15.1; generated history must not be edited by hand.
 

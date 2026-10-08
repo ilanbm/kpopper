@@ -1,7 +1,65 @@
 # Living knowledge models
 
-This guide covers an application that treats a sourced knowledge model as a product. The model
-can live in its own repository or in a subdirectory beside an optional ordinary project record.
+In kpopper, a living knowledge model is a structured, versioned record of facts, assumptions,
+rules and judgments, with their sources and dependencies. Its checks can expose affected conclusions when recorded
+premises change. "Living" describes a model that can be maintained and checked over time;
+external sources still need review. It does not mean a trained language model or automatic
+source synchronization.
+
+An ordinary project record is also a living knowledge model. This guide covers the other
+purpose: **knowledge as the product**, maintained for reuse across questions or applications.
+Both purposes use the same kpopper runtime and record format.
+
+## Start with a model
+
+Choose whether you are creating a model or using one supplied by a publisher.
+An author needs a native authoring toolchain. A generated model plugin already
+contains its engine and domain skill; its users do not install kpopper separately.
+
+### Build a model
+
+For an installable model, start with the [model skill](../skills/model/SKILL.md)
+and the [complete packaging example](model-plugins.md#try-the-complete-example).
+That guide identifies the prebuilt tools authors need and the current availability
+limits. If you are maintaining an unbundled model directly, use the
+[ordinary kpopper installation](../README.md#get-started) and explicit model selectors.
+
+1. Choose a bounded subject and its sources. State what the model will answer and what
+   remains outside its coverage.
+2. Author its facts, rules and judgments using the existing
+   [record commands](reference.md#write-and-review), keeping the complete model together.
+3. For rules that need case inputs, provide an application-owned adapter or test harness:
+   it makes a disposable complete copy, writes synthetic inputs through native commands,
+   and runs the [assessment](assessment.md). Compare the results with independently
+   expected outcomes. A shape check alone does not establish that a rule is correct.
+4. Version the model with its sources, tests and usage instructions. Explain how another
+   person or agent supplies inputs and interprets results, including unknowns and scope.
+   Read/query plugins use the shared native reader without custom application code;
+   case-specific input binding remains an application adapter's responsibility.
+
+### Use an existing model
+
+For a generated model plugin, follow [plugin installation and use](model-plugins.md#use-a-model-plugin).
+Select the publisher's version, install the complete plugin, and ask its domain skill
+questions. Its bundled native launcher prepares and verifies the model and engine.
+Reading such a plugin requires no separate kpopper, Python or compiler installation.
+
+For an unbundled model, obtain its complete record, history, sources and publisher's
+setup instructions, including any runtime or adapter dependencies. A copied skill
+or YAML excerpt is not an installable model plugin. To evaluate a private case, use
+the model's documented adapter or input interface. kpopper supplies no universal
+domain case adapter; personal inputs stay out of the reusable model.
+
+The [synthetic model-plugin example](../examples/model-plugin/README.md) can be packaged
+with the qualified prebuilt tools. It checks the packaging path, not usefulness at scale.
+The [flight-refund example](../examples/living-travel-rights/README.md) shows a sourced
+rule and captured baseline/hypothetical results. It is a read-only excerpt from a private
+repository, not a public runnable starter. The remaining sections describe any model's
+contents, explicit selection, private case data and maintenance.
+
+## Keep the complete model together
+
+The model can live in its own repository or in a subdirectory beside an optional ordinary project record.
 For example, an application can keep its domain model at
 `knowledge/us-flight-refunds/GROUNDING.yaml` while the project uses the record selected by its
 normal kpopper configuration. These are separate records with separate purposes; the model
@@ -36,8 +94,6 @@ unmodeled cases as unknowns. A passing `kpop check` reports on recorded conditio
 structure; it does not establish that the sources are true or that the model is complete.
 See the [record shape](../skills/kpopper/references/shape.md), [reasoning core](reasoning-core.md)
 and [command reference](reference.md).
-
-See the [travel-rights application example](../examples/living-travel-rights/README.md).
 
 ## Select project and model explicitly
 
