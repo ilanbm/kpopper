@@ -23,11 +23,11 @@ invalidates everything downstream of it; what this adds is Popper's asymmetry, t
 is never confirmed, only left standing.
 
 That makes the record **self-evolving**, in one exact sense worth being precise about: nothing
-here rewrites your conclusions. What the record does on its own is re-check every judgment
+here rewrites your conclusions or refreshes external sources. It re-checks judgments
 against what it was last checked against, and put the ones that no longer hold in front of you.
 Nobody maintains a list of what went stale. Staleness is derived, so it cannot be forgotten,
 cleared by accident, or survive a revert; the page's sections fill themselves from that derivation. Keep where each piece came from without changing the user's deliverable.
-If the user explicitly chooses the record itself as the product, see
+If the user explicitly chooses a reusable knowledge model as the product, see
 [living knowledge models](../../docs/living-knowledge-models.md) for keeping its complete bundle
 separate from optional project knowledge and case data.
 
@@ -99,7 +99,7 @@ Each is recognizable while you are doing it. If you catch yourself, stop.
 - Building something general when only two specific cases exist.
 - Recording anything a person would have to maintain by hand afterwards. That is the definition of bureaucracy, and it is how this fails.
 - **Asking the user how to structure their data.** That is your job, not theirs, and asking makes the method cost them something on the very first turn.
-- Spending a whole turn on the record when nobody asked for it. It is a byproduct of the work; if it becomes the work, something has gone wrong.
+- Making the record the work without the user's request. Keep it a byproduct unless the user explicitly chose a knowledge model as the deliverable.
 - Repairing the project inside the turn that records it, without saying so first. Record, say what you found, then fix — as work the person can see.
 - Presenting your reading of a source as the source's own words.
 - Inventing a number, a date or a threshold so that something becomes computable.
