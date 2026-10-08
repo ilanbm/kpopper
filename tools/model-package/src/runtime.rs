@@ -442,16 +442,21 @@ fn ensure_generation(
     } else {
         None
     };
-    if let Err(rename_error) = fs::rename(stage.path(), &dest) {
-        if let Some(old) = &quarantine {
-            fs::rename(old, &dest)?;
-        }
-        return Err(rename_error.into());
-    }
-    #[cfg(unix)]
+    if let Err(rename_error) =
+        rename_managed_directory(stage.path(), &dest, "activate staged generation")
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&dest, fs::Permissions::from_mode(0o555))?;
+        if let Some(old) = &quarantine {
+            rename_managed_directory(old, &dest, "restore quarantined generation").map_err(
+                |restore_error| {
+                    err(&format!(
+                        "{rename_error}; additionally failed to restore {} to {}: {restore_error}",
+                        old.display(),
+                        dest.display()
+                    ))
+                },
+            )?;
+        }
+        return Err(rename_error);
     }
     Ok(dest)
 }
@@ -512,8 +517,96 @@ fn quarantine_generation(base: &Path, generation: &Path, digest: &str) -> Result
         .tempdir_in(base)?;
     let target = reservation.path().to_path_buf();
     reservation.close()?;
-    fs::rename(generation, &target)?;
+    rename_managed_directory(generation, &target, "quarantine damaged generation")?;
     Ok(target)
+}
+
+fn rename_managed_directory(from: &Path, to: &Path, action: &str) -> Result<()> {
+    rename_managed_directory_with(from, to, action, |source, destination| {
+        fs::rename(source, destination)
+    })
+}
+
+#[cfg(unix)]
+fn rename_managed_directory_with(
+    from: &Path,
+    to: &Path,
+    action: &str,
+    rename: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let meta = fs::symlink_metadata(from).map_err(|e| {
+        err(&format!(
+            "{action}: cannot inspect source directory {}: {e}",
+            from.display()
+        ))
+    })?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err(err(&format!(
+            "{action}: refusing non-directory or symlink source {}",
+            from.display()
+        )));
+    }
+    let original_mode = meta.permissions().mode() & 0o777;
+    fs::set_permissions(from, fs::Permissions::from_mode(original_mode | 0o200)).map_err(|e| {
+        err(&format!(
+            "{action}: cannot temporarily enable owner write on {}: {e}",
+            from.display()
+        ))
+    })?;
+
+    if let Err(rename_error) = rename(from, to) {
+        return match fs::set_permissions(from, fs::Permissions::from_mode(original_mode)) {
+            Ok(()) => Err(err(&format!("{action}: rename {} to {} failed: {rename_error}", from.display(), to.display()))),
+            Err(restore_error) => Err(err(&format!("{action}: rename {} to {} failed: {rename_error}; restoring source permissions also failed: {restore_error}", from.display(), to.display()))),
+        };
+    }
+
+    let destination = fs::symlink_metadata(to).map_err(|e| {
+        err(&format!(
+            "{action}: renamed destination {} cannot be inspected: {e}",
+            to.display()
+        ))
+    })?;
+    if destination.file_type().is_symlink() || !destination.is_dir() {
+        return Err(err(&format!(
+            "{action}: renamed destination {} is not a managed directory",
+            to.display()
+        )));
+    }
+    fs::set_permissions(to, fs::Permissions::from_mode(original_mode)).map_err(|e| {
+        err(&format!("{action}: rename {} to {} succeeded, but restoring destination permissions failed: {e}", from.display(), to.display()))
+    })?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn rename_managed_directory_with(
+    from: &Path,
+    to: &Path,
+    action: &str,
+    rename: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> Result<()> {
+    let meta = fs::symlink_metadata(from).map_err(|e| {
+        err(&format!(
+            "{action}: cannot inspect source directory {}: {e}",
+            from.display()
+        ))
+    })?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err(err(&format!(
+            "{action}: refusing non-directory or symlink source {}",
+            from.display()
+        )));
+    }
+    rename(from, to).map_err(|e| {
+        err(&format!(
+            "{action}: rename {} to {} failed: {e}",
+            from.display(),
+            to.display()
+        ))
+    })
 }
 
 fn validate_model_sources(
@@ -1874,6 +1967,132 @@ mod tests {
         assert_eq!(
             std::fs::read(generation.join("user-data")).unwrap(),
             b"keep"
+        );
+    }
+    #[cfg(unix)]
+    #[test]
+    fn managed_rename_temporarily_enables_only_root_and_restores_permissions_on_failure() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let t = tempfile::tempdir().unwrap();
+        let source = t.path().join("stage");
+        let nested = source.join("payload");
+        std::fs::create_dir_all(&nested).unwrap();
+        let file = nested.join("read-only.txt");
+        std::fs::write(&file, b"preserve me").unwrap();
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o500)).unwrap();
+        std::fs::set_permissions(&nested, std::fs::Permissions::from_mode(0o500)).unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o400)).unwrap();
+        let destination = t.path().join("generation");
+        std::fs::create_dir(&destination).unwrap();
+        std::fs::write(destination.join("existing"), b"keep").unwrap();
+        let mut observed_writable_root = false;
+        let mut reached_injected_collision = false;
+
+        let error =
+            rename_managed_directory_with(&source, &destination, "test rename", |from, to| {
+                let mode = std::fs::symlink_metadata(from)?.permissions().mode();
+                if mode & 0o200 == 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "HFS-style rename rejection for read-only source root",
+                    ));
+                }
+                observed_writable_root = true;
+                if to.exists() {
+                    reached_injected_collision = true;
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        "injected destination collision",
+                    ));
+                }
+                std::fs::rename(from, to)
+            })
+            .unwrap_err()
+            .to_string();
+
+        assert!(observed_writable_root);
+        assert!(reached_injected_collision);
+        assert!(error.contains("test rename"));
+        assert!(error.contains(&source.display().to_string()));
+        assert!(error.contains(&destination.display().to_string()));
+        assert_eq!(
+            std::fs::symlink_metadata(&source)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o500
+        );
+        assert_eq!(
+            std::fs::symlink_metadata(&nested)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o500
+        );
+        assert_eq!(
+            std::fs::symlink_metadata(&file)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o400
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), b"preserve me");
+        assert_eq!(
+            std::fs::read(destination.join("existing")).unwrap(),
+            b"keep"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn managed_rename_succeeds_and_restores_read_only_tree_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let t = tempfile::tempdir().unwrap();
+        let source = t.path().join("quarantine");
+        let nested = source.join("payload");
+        std::fs::create_dir_all(&nested).unwrap();
+        let file = nested.join("read-only.txt");
+        std::fs::write(&file, b"preserve me").unwrap();
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o500)).unwrap();
+        std::fs::set_permissions(&nested, std::fs::Permissions::from_mode(0o500)).unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o400)).unwrap();
+        let destination = t.path().join("renamed");
+
+        rename_managed_directory(&source, &destination, "test rename").unwrap();
+
+        assert!(!source.exists());
+        assert_eq!(
+            std::fs::symlink_metadata(&destination)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o500
+        );
+        assert_eq!(
+            std::fs::symlink_metadata(destination.join("payload"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o500
+        );
+        assert_eq!(
+            std::fs::symlink_metadata(destination.join("payload/read-only.txt"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o400
+        );
+        assert_eq!(
+            std::fs::read(destination.join("payload/read-only.txt")).unwrap(),
+            b"preserve me"
         );
     }
     #[test]
