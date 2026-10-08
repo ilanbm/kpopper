@@ -2,10 +2,17 @@
 import importlib.util
 import hashlib
 import io
+import json
+import os
 import pathlib
+import sys
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import warnings
 import zipfile
+from contextlib import redirect_stdout, redirect_stderr
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -106,6 +113,42 @@ class EvidenceZip(unittest.TestCase):
         for name in ("../junit.xml", "/commit.txt"):
             with self.subTest(name=name), self.assertRaises(RECOVERY.RecoveryError):
                 RECOVERY.parse_evidence_zip(evidence_zip(extra={name: b"x"}), "a" * 40)
+
+
+class AdmissionOutputs(unittest.TestCase):
+    def test_gate_outputs_are_bound_to_the_saved_receipt_after_success(self):
+        source = "a" * 40
+        candidate = SimpleNamespace(fetch_pr=lambda _: {"head": {"sha": source}})
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            env = {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_SHA": source,
+                   "GITHUB_REPOSITORY": "ilanbm/kpopper", "GITHUB_OUTPUT": str(root / "outputs")}
+            args = ["--baseline-run", "1", "--windows-run", "2", "--source", source,
+                    "--pr", "3", "--receipt", str(root / "receipt.json")]
+            result = {"source": source, "version": "0.16.0"}
+            with patch.dict(os.environ, env, clear=True), patch.dict(sys.modules, {"release_candidate": candidate}), \
+                    patch.object(RECOVERY, "recover", return_value=result), redirect_stdout(io.StringIO()):
+                self.assertEqual(RECOVERY.main(args), 0)
+            receipt = (root / "receipt.json").read_bytes()
+            self.assertEqual(json.loads(receipt), result)
+            self.assertEqual((root / "outputs").read_text(), "validation=distribution\nplatforms=all\n"
+                             + "evidence_sha256=" + hashlib.sha256(receipt).hexdigest() + "\n")
+
+    def test_failed_admission_never_emits_a_receipt_or_gate_outputs(self):
+        source = "a" * 40
+        candidate = SimpleNamespace(fetch_pr=lambda _: {"head": {"sha": source}})
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            env = {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_SHA": source,
+                   "GITHUB_REPOSITORY": "ilanbm/kpopper", "GITHUB_OUTPUT": str(root / "outputs")}
+            args = ["--baseline-run", "1", "--windows-run", "2", "--source", source,
+                    "--pr", "3", "--receipt", str(root / "receipt.json")]
+            with patch.dict(os.environ, env, clear=True), patch.dict(sys.modules, {"release_candidate": candidate}), \
+                    patch.object(RECOVERY, "recover", side_effect=RECOVERY.RecoveryError("stale evidence")), \
+                    redirect_stderr(io.StringIO()):
+                self.assertEqual(RECOVERY.main(args), 1)
+            self.assertFalse((root / "outputs").exists())
+            self.assertFalse((root / "receipt.json").exists())
 
 
 class JobAdmission(unittest.TestCase):

@@ -461,7 +461,7 @@ def required_failures(needs, pull_request=True):
         failures.append("release requires native distribution builds")
     validation = outputs.get("validation")
     recovery = outputs.get("recovery", "")
-    verified_recovery = (validation == "distribution" and release == "true" and not promotion
+    verified_recovery = (validation == "distribution" and release == "true" and scope == "all" and not promotion
                          and not pull_request and isinstance(recovery, str)
                          and re.fullmatch(r"[0-9a-f]{64}", recovery))
     if recovery and not verified_recovery:

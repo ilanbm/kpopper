@@ -421,6 +421,7 @@ def main(argv=None):
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as output:
                 output.write("validation=distribution\n")
+                output.write("platforms=all\n")
                 output.write("evidence_sha256=" + hashlib.sha256(receipt.encode()).hexdigest() + "\n")
         if os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:

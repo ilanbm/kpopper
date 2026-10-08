@@ -23,7 +23,6 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  actions: read
 
 # Superseded PRs cancel; a later main push must not cancel a release being validated.
 concurrency:
@@ -34,9 +33,13 @@ jobs:
   changes:
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
     outputs:
       rust: ${{ steps.select.outputs.rust }}
-      platforms: ${{ steps.select.outputs.platforms }}
+      platforms: ${{ steps.recovery.outputs.platforms || steps.select.outputs.platforms }}
       release: ${{ steps.select.outputs.release }}
       validation: ${{ steps.recovery.outputs.validation || steps.select.outputs.validation }}
       recovery: ${{ steps.recovery.outputs.evidence_sha256 }}

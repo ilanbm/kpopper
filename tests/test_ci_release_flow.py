@@ -99,7 +99,7 @@ class ReleaseSelection(unittest.TestCase):
         self.assertEqual(CI.required_failures(needs, pull_request=False), [])
         self.assertTrue(CI.required_failures(needs, pull_request=True))
         for key, value in (("recovery", ""), ("recovery", "forged"), ("release", "false"),
-                           ("validation", "full"), ("promotion", "true")):
+                           ("validation", "full"), ("promotion", "true"), ("platforms", "linux-x86_64")):
             with self.subTest(key=key), patch.dict(needs["changes"]["outputs"], {key: value}):
                 self.assertTrue(CI.required_failures(needs, pull_request=False))
         with patch.dict(needs["changes"], {"result": "failure"}):
@@ -245,6 +245,8 @@ class PublishBoundary(unittest.TestCase):
         self.assertEqual(changes["outputs"]["validation"],
                          "${{ steps.recovery.outputs.validation || steps.select.outputs.validation }}")
         self.assertEqual(changes["outputs"]["recovery"], "${{ steps.recovery.outputs.evidence_sha256 }}")
+        self.assertEqual(changes["outputs"]["platforms"],
+                         "${{ steps.recovery.outputs.platforms || steps.select.outputs.platforms }}")
         guard = next(step for step in changes["steps"] if step.get("name") ==
                      "Validate recovery inputs before selecting checks")
         for condition in ('test "$GITHUB_EVENT_NAME" = workflow_dispatch', 'test "$RELEASE" = true',
@@ -253,7 +255,8 @@ class PublishBoundary(unittest.TestCase):
         recovery = next(step for step in changes["steps"] if step.get("id") == "recovery")
         self.assertIn("release_recovery.py", recovery["run"])
         self.assertIn('--source "$SOURCE"', recovery["run"])
-        self.assertEqual(workflow["permissions"]["actions"], "read")
+        self.assertNotIn("actions", workflow["permissions"])
+        self.assertEqual(changes["permissions"]["actions"], "read")
         self.assertIn("tests.test_release_recovery", str(workflow["jobs"]["record"]))
         native = workflow["jobs"]["native-cli"]
         self.assertEqual(native["with"]["publish"], "${{ needs.changes.outputs.release == 'true' }}")
