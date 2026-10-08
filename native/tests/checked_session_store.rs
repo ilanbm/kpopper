@@ -409,13 +409,35 @@ fn proposal_reader_waits_for_transient_publisher_delete_handle() {
         .share_mode(0x0000_0001 | 0x0000_0002 | 0x0000_0004)
         .open(&path)
         .unwrap();
+    let blocked = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0x0000_0001 | 0x0000_0002) // reader denies FILE_SHARE_DELETE
+        .open(&path)
+        .unwrap_err();
+    assert_eq!(blocked.raw_os_error(), Some(32));
+    // Wait for the closer thread to exist before starting the bounded read.
+    // This excludes thread creation from the race; CI also reserves the runner.
+    let ready = Arc::new(std::sync::Barrier::new(2));
+    let closer_ready = ready.clone();
     let closer = std::thread::spawn(move || {
+        closer_ready.wait();
         std::thread::sleep(std::time::Duration::from_millis(80));
         drop(publisher);
+        std::time::Instant::now()
     });
+    ready.wait();
+    let read_started = std::time::Instant::now();
     let result = store.propose(&revision, &fresh, &input);
-    closer.join().unwrap();
-    assert_eq!(result.unwrap(), expected);
+    let read_elapsed = read_started.elapsed();
+    let released = closer.join().unwrap();
+    let held_during_read = released.saturating_duration_since(read_started);
+    eprintln!("transient publisher: read={read_elapsed:?}, release_offset={held_during_read:?}");
+    assert_eq!(
+        result.unwrap_or_else(|error| panic!(
+            "reader failed after {read_elapsed:?}; publisher released after {held_during_read:?}: {error:?}"
+        )),
+        expected
+    );
     assert_eq!(store.proposals().unwrap().len(), 1);
 }
 
