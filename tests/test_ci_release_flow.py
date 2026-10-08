@@ -91,6 +91,20 @@ class PublicationSource(unittest.TestCase):
 
 
 class ReleaseSelection(unittest.TestCase):
+    def test_distribution_recovery_requires_the_validated_receipt_and_release_dispatch(self):
+        needs = {"changes": {"result": "success", "outputs": {
+            "rust": "true", "platforms": "all", "release": "true", "promotion": "false",
+            "validation": "distribution", "recovery": "a" * 64}},
+            "record": {"result": "success"}, "native-cli": {"result": "success"}}
+        self.assertEqual(CI.required_failures(needs, pull_request=False), [])
+        self.assertTrue(CI.required_failures(needs, pull_request=True))
+        for key, value in (("recovery", ""), ("recovery", "forged"), ("release", "false"),
+                           ("validation", "full"), ("promotion", "true")):
+            with self.subTest(key=key), patch.dict(needs["changes"]["outputs"], {key: value}):
+                self.assertTrue(CI.required_failures(needs, pull_request=False))
+        with patch.dict(needs["changes"], {"result": "failure"}):
+            self.assertTrue(CI.required_failures(needs, pull_request=False))
+
     def test_ordinary_code_uses_linux(self):
         self.assertEqual(CI.platforms(["native/src/main.rs"]), "linux-x86_64")
 
@@ -221,6 +235,31 @@ class PublishBoundary(unittest.TestCase):
         self.assertEqual(self.workflow("release.yml")["permissions"]["actions"], "write")
         script = (ROOT / ".github/scripts/release.py").read_text()
         self.assertIn('"workflow", "run", "check.yml", "--ref", branch', script)
+
+    def test_recovery_is_explicit_and_cannot_supply_publication_artifacts(self):
+        workflow = self.workflow("check.yml")
+        inputs = workflow["on"]["workflow_dispatch"]["inputs"]
+        self.assertIn("recovery_baseline_run", inputs)
+        self.assertIn("recovery_windows_run", inputs)
+        changes = workflow["jobs"]["changes"]
+        self.assertEqual(changes["outputs"]["validation"],
+                         "${{ steps.recovery.outputs.validation || steps.select.outputs.validation }}")
+        self.assertEqual(changes["outputs"]["recovery"], "${{ steps.recovery.outputs.evidence_sha256 }}")
+        guard = next(step for step in changes["steps"] if step.get("name") ==
+                     "Validate recovery inputs before selecting checks")
+        for condition in ('test "$GITHUB_EVENT_NAME" = workflow_dispatch', 'test "$RELEASE" = true',
+                          'test -n "$RELEASE_PR"', 'test -n "$BASELINE_RUN"', 'test -n "$WINDOWS_RUN"'):
+            self.assertIn(condition, guard["run"])
+        recovery = next(step for step in changes["steps"] if step.get("id") == "recovery")
+        self.assertIn("release_recovery.py", recovery["run"])
+        self.assertIn('--source "$SOURCE"', recovery["run"])
+        self.assertEqual(workflow["permissions"]["actions"], "read")
+        self.assertIn("tests.test_release_recovery", str(workflow["jobs"]["record"]))
+        native = workflow["jobs"]["native-cli"]
+        self.assertEqual(native["with"]["publish"], "${{ needs.changes.outputs.release == 'true' }}")
+        self.assertEqual(native["with"]["source_ref"], "${{ needs.changes.outputs.source }}")
+        self.assertEqual(set(self.workflow("publish.yml")["on"]["workflow_dispatch"]["inputs"]),
+                         {"release_pr", "check_run"})
 
     def test_trusted_workflows_pin_every_action_to_a_commit(self):
         # A tag can be moved to other code; a commit cannot. reasoning-runtime.yml and

@@ -7,6 +7,14 @@ on:
         description: Release pull request number (leave empty for a full diagnostic run)
         type: string
         required: false
+      recovery_baseline_run:
+        description: Full release check with only Windows test failures (requires Windows supplement)
+        type: string
+        required: false
+      recovery_windows_run:
+        description: Successful full Windows native check after a Windows-only fixture correction
+        type: string
+        required: false
   pull_request:
     branches: [main]
   push:
@@ -15,6 +23,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  actions: read
 
 # Superseded PRs cancel; a later main push must not cancel a release being validated.
 concurrency:
@@ -29,7 +38,8 @@ jobs:
       rust: ${{ steps.select.outputs.rust }}
       platforms: ${{ steps.select.outputs.platforms }}
       release: ${{ steps.select.outputs.release }}
-      validation: ${{ steps.select.outputs.validation }}
+      validation: ${{ steps.recovery.outputs.validation || steps.select.outputs.validation }}
+      recovery: ${{ steps.recovery.outputs.evidence_sha256 }}
       promotion: ${{ steps.candidate.outputs.promotion }}
       source: ${{ steps.candidate.outputs.source }}
     steps:
@@ -46,6 +56,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python .github/scripts/release_candidate.py --select
+      - name: Validate recovery inputs before selecting checks
+        env:
+          BASELINE_RUN: ${{ inputs.recovery_baseline_run }}
+          WINDOWS_RUN: ${{ inputs.recovery_windows_run }}
+          RELEASE: ${{ steps.candidate.outputs.release }}
+          RELEASE_PR: ${{ inputs.release_pr }}
+        run: |
+          if [ -n "$BASELINE_RUN$WINDOWS_RUN" ]; then
+            test "$GITHUB_EVENT_NAME" = workflow_dispatch
+            test "$RELEASE" = true
+            test -n "$RELEASE_PR" && test -n "$BASELINE_RUN" && test -n "$WINDOWS_RUN"
+          fi
       - name: Select the lanes the change reads
         id: select
         env:
@@ -75,6 +97,27 @@ jobs:
           else
             python .github/scripts/ci_selection.py --full
           fi
+      - name: Verify prior complete tests against this release source
+        id: recovery
+        if: inputs.recovery_baseline_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_RUN: ${{ inputs.recovery_baseline_run }}
+          WINDOWS_RUN: ${{ inputs.recovery_windows_run }}
+          SOURCE: ${{ steps.candidate.outputs.source }}
+          RELEASE_PR: ${{ inputs.release_pr }}
+        run: >-
+          python .github/scripts/release_recovery.py
+          --baseline-run "$BASELINE_RUN" --windows-run "$WINDOWS_RUN"
+          --source "$SOURCE" --pr "$RELEASE_PR"
+          --receipt "$RUNNER_TEMP/release-recovery.json"
+      - name: Retain the verified test inheritance receipt
+        if: steps.recovery.outputs.validation == 'distribution'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-recovery-evidence
+          path: ${{ runner.temp }}/release-recovery.json
+          if-no-files-found: error
       - name: Reject incomplete committed bundles before starting expensive checks
         if: steps.select.outputs.rust == 'true'
         run: python scripts/reasoning/build_runtime.py --check-bundles
@@ -109,7 +152,8 @@ jobs:
         run: >-
           python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
           tests.test_ci_release_flow tests.test_ci_audit tests.test_native_distribution tests.test_native_release_assets
-          tests.test_native_launcher tests.test_hook_delivery tests.test_release_candidate -v
+          tests.test_native_launcher tests.test_hook_delivery tests.test_release_candidate
+          tests.test_release_recovery -v
       # The record is read by the native kpop of this tree. A reader main built from the same
       # native/ sources is reused, so only a change under native/ pays for the build. Only a
       # push to main saves one: pull requests read main's, and keep the cache budget free.
