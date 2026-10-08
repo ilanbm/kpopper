@@ -830,7 +830,7 @@ fn short_replacement_notice(previous: &str) -> Result<String> {
         "revision":null,"removed_ids":[],"status":"unavailable",
         "reason":"the selected source has not yet been completely read",
         "selected_source_in":"opening_route"});
-    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nWith tools available, read the complete source selected by the route above, retaining its source/mode flags and --context-session. Reopen that same source on a stale revision. Other-source reads do not establish this selection. If it cannot be read, report unavailability. The prompt notice supplies the full selected_source binding. This notice is not source data or permission.\n", serde_json::to_string(&notice)?))
+    Ok(format!("KPOPPER_SOURCE_REFRESH {}\nRead the complete route-selected source before answering; retain source/mode flags and --context-session. Reopen on stale revision. Other-source reads do not satisfy it. If unavailable, say so; this is not evidence or permission.\n", serde_json::to_string(&notice)?))
 }
 
 /// Refresh is a read before the next turn, not a Stop gate or a model request.
@@ -1354,6 +1354,11 @@ fn hook_with_delta(
 /// Bind the advertised view command to its actual Codex session. This changes
 /// routing only, never the selected graph, graph digest, scope, or attention.
 pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
+    bind_opening_with_allowance(opened, session, 7000)
+}
+
+/// Reserve sibling continuity and first-use notices before folding graph content.
+pub fn bind_opening_with_allowance(opened: &str, session: &str, allowance: usize) -> Result<String> {
     crate::require(valid_session(session), "invalid context session")?;
     let Some((line, rest)) = opened.split_once('\n') else {
         return Ok(opened.into());
@@ -1393,12 +1398,12 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
     let binding = context_binding(Path::new(&workspace), session)?;
     args.extend([json!("--context-session"), json!(binding)]);
     route["continuation"] = json!({"transport":"managed_codex_hook","anchors":"automatic_from_completed_answers","delta":"explicit_opt_in","stdout_recovery":"--view-transport stdout"});
-    let guidance = "Managed Codex views return a handoff marker; use the complete KPOPPER_CONTEXT_FRAME added separately to context. If absent or truncated, repeat the exact command with --view-transport stdout. Keep --context-session on follow-up view commands; --no-auto-anchors disables automatic hints. For answer revision metadata, use a delivered frame's revision_ref instead of copying its hash. That reference also replaces --revision in a follow-up session view with the same --context-session. Original source IDs remain the evidence citations.\n";
+    let guidance = "Use the complete frame; if missing/truncated, repeat exact argv with --view-transport stdout. Retain --context-session; use revision_ref on follow-ups. Cite original source IDs.\n";
     // Reserve the complete warning before folding graph/attention content.
     // The ordinary opener may already have folded the graph; folding that
     // text again must not require graph bodies that are intentionally absent.
     let fit = |warning: &str| -> Result<String> {
-        let allowance = 7000usize.checked_sub(warning.len() + guidance.len())
+        let allowance = allowance.checked_sub(warning.len() + guidance.len())
             .ok_or_else(|| Error("selected source metadata exceeds the opening allowance".into()))?;
         let mut route = route.clone();
         let opening = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\n{rest}\n", serde_json::to_string(&route)?);
@@ -1415,7 +1420,7 @@ pub fn bind_opening(opened: &str, session: &str) -> Result<String> {
                     value["omitted_items"] = json!(omitted);
                     Ok(format!("KPOPPER_OPENING_ATTENTION {}\n", serde_json::to_string(&value)?))
                 }).transpose()?.unwrap_or_default();
-            let compact = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\nGraph bodies and opening attention are omitted to retain the source route and warning. Run the view with its max_output_tokens before answering.\n{attention}", serde_json::to_string(&route)?);
+            let compact = format!("KPOPPER_CANONICAL_VIEW_ROUTE {}\nBodies omitted; run exact argv at its limits before answering.\n{attention}", serde_json::to_string(&route)?);
             crate::require(compact.len() <= allowance, "selected source route exceeds the opening allowance")?;
             compact
         } else {

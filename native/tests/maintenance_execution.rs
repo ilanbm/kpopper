@@ -80,7 +80,7 @@ fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
         &["followups", "add", "--file", spec.to_str().unwrap()],
     );
     let phase = t.path().join("phase.json");
-    fs::write(&phase,serde_json::to_vec(&json!({"host":"fixture","id":"bound-job","cadence_days":1,"anchor_at":due.to_rfc3339(),"timezone":"UTC","interval_semantics":"calendar_days","observed_at":Utc::now().to_rfc3339(),"evidence":"fixture://normalized-phase"})).unwrap()).unwrap();
+    fs::write(&phase,serde_json::to_vec(&json!({"host":"fixture","id":"bound-job","cadence_days":1,"anchor_at":due.to_rfc3339(),"timezone":"UTC","interval_semantics":"calendar_days","observed_at":Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true),"evidence":"fixture://normalized-phase"})).unwrap()).unwrap();
     run(
         &work,
         t.path(),

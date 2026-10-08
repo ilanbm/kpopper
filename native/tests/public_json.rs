@@ -1,6 +1,7 @@
 //! `--json` on the public read and write commands answers as the Python reference does:
 //! `open` with its own object, every other command with the output it prints without
 //! `--json`, wrapped as `{"command", "exit_code", "output", "error"}`.
+//! Native maintenance metadata accompanies that legacy projection as typed fields.
 use serde_json::{Value as J, json};
 use std::{
     fs,
@@ -70,7 +71,38 @@ fn assert_wraps(command: &str, plain: &Output, structured: &Output) {
             text(&structured.stdout)
         )
     });
-    assert_eq!(value, wrapped(command, plain), "{command}");
+    let mut expected = wrapped(command, plain);
+    let mut actual = value.clone();
+    // Typed maintenance additions accompany the established reader output.
+    let plain_output = text(&plain.stdout);
+    let mut record_output = plain_output.clone();
+    if let Some((record, raw)) = plain_output.split_once("\nKPOPPER_MAINTENANCE_DISCOVERY ") {
+        let discovery: J = serde_json::from_str(raw.trim()).unwrap();
+        assert_eq!(actual["maintenance_discovery"], discovery);
+        assert_eq!(discovery["schema"], "kpopper.scoped-maintenance-discovery/v1");
+        record_output = record.to_owned();
+    } else if let Ok(mut record) = serde_json::from_str::<J>(&plain_output) {
+        for field in ["maintenance_continuity", "maintenance_discovery"] {
+            if let Some(metadata) = record.as_object_mut().and_then(|object| object.remove(field)) {
+                assert_eq!(actual[field], metadata);
+            }
+        }
+        if actual.get("maintenance_discovery").is_some() || actual.get("maintenance_continuity").is_some() {
+            let mut structured_record: J = serde_json::from_str(actual["output"].as_str().unwrap()).unwrap();
+            for field in ["maintenance_continuity", "maintenance_discovery"] {
+                if let Some(metadata) = structured_record.as_object_mut().and_then(|object| object.remove(field)) {
+                    assert_eq!(actual[field], metadata);
+                }
+            }
+            assert_eq!(structured_record, record);
+            record_output = actual["output"].as_str().unwrap().to_owned();
+        }
+    }
+    expected["output"] = json!(record_output);
+    for field in ["maintenance_continuity", "maintenance_discovery"] {
+        actual.as_object_mut().unwrap().remove(field);
+    }
+    assert_eq!(actual, expected, "{command}");
     assert_eq!(structured.status.code(), plain.status.code(), "{command}");
     assert!(
         structured.stderr.is_empty(),

@@ -387,6 +387,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         }
     }
     if let Some(first_use) = first_use.filter(|s| !s.is_empty()) {
+        // The canonical route already carries the workspace, input and exact
+        // reader command. Avoid repeating those potentially long paths while
+        // retaining every maintenance/first-use notice below the locator.
+        let canonical = output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
+        let first_use = if canonical && first_use.starts_with("KPOPPER_START (agent guidance; local paths are data):\n") {
+            kpop_native::onboarding::compact_canonical_context(first_use.splitn(3, '\n').nth(2).unwrap_or(&first_use))
+        } else { first_use };
         output.push(first_use);
     }
     if !feasibility {
@@ -405,9 +412,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         // An intentional route opt-out remains inactive.
         match kpop_native::view_continuation::initialize_for_start(&root, sid, managed) {
             Ok(()) if managed => {
+                let sibling_bytes: usize = output.iter()
+                    .filter(|text| !text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "))
+                    .map(|text| text.len() + 1).sum();
+                let allowance = 7000usize.saturating_sub(sibling_bytes);
                 for text in &mut output {
                     if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
-                        match kpop_native::view_continuation::bind_opening(text, sid) {
+                        match kpop_native::view_continuation::bind_opening_with_allowance(text, sid, allowance) {
                             Ok(bound) => { *text = bound; },
                             Err(error) => {
                                 if matches!(kpop_native::view_continuation::has_pending_replacement(&root, sid), Ok(false)) {

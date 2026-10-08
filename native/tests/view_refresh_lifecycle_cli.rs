@@ -389,6 +389,8 @@ fn a_folded_opening_keeps_its_handover_warning_and_binding() {
     let opened = p.session_start();
     assert!(opened.contains("KPOPPER_SOURCE_REFRESH"), "{opened}");
     assert!(opened.contains("--context-session"), "{opened}");
+    assert!(opened.contains("--view-transport stdout"), "{opened}");
+    assert!(opened.contains("before answering"), "{opened}");
     assert!(opened.split("\nKPOPPER_AGENT_CONTEXT").next().unwrap().len() <= 7000);
     let notice = p.hook("UserPromptSubmit", Some("after-opening"), json!({}), false);
     assert!(notice.contains("\"status\":\"unavailable\""), "{notice}");

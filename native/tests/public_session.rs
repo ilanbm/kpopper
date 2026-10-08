@@ -299,7 +299,12 @@ fn an_unreadable_record_keeps_the_session_context_and_leaves_no_baseline() {
     let opened = success(f.hook("session-start", json!({})));
     let stdout = String::from_utf8(opened.stdout).unwrap();
     let stderr = String::from_utf8(opened.stderr).unwrap();
-    let lines = stdout.lines().collect::<Vec<_>>();
+    let choice = stdout.lines().find_map(|line| line.strip_prefix("KPOPPER_MAINTENANCE_CHOICE ")).unwrap();
+    let mut decoder = serde_json::Deserializer::from_str(choice);
+    let choice: Value = serde::Deserialize::deserialize(&mut decoder).unwrap();
+    assert_eq!(choice["authorized"], false);
+    assert_eq!(choice["continuity_snapshot"]["current_continuity"], "unknown");
+    let lines = stdout.lines().filter(|line| !line.starts_with("KPOPPER_START") && !line.starts_with("{\"workspace\"") && !line.starts_with("KPOPPER_MAINTENANCE_CHOICE ")).collect::<Vec<_>>();
     assert_eq!(lines.len(), 3, "stdout={stdout} stderr={stderr}");
     assert_eq!(
         lines[0],
@@ -451,7 +456,8 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         )).stdout).unwrap();
         assert!(started.starts_with(&opening), "{started}");
         assert!(
-            started[opening.len()..].starts_with("KPOPPER_AGENT_CONTEXT "),
+            started[opening.len()..].contains("KPOPPER_AGENT_CONTEXT ")
+                && started[opening.len()..].contains("KPOPPER_MAINTENANCE_CHOICE "),
             "{started}"
         );
     }
@@ -472,4 +478,17 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         String::from_utf8_lossy(&refused.stderr),
         "core_profile_option_unsupported: --host\n"
     );
+}
+
+#[test]
+fn canonical_notice_compaction_preserves_authored_choice_and_health_lines() {
+    let choice = json!({"choice":"declined", "authorized":false,
+        "evidence":" Suppress new recurring promotional offers under this saved choice, guidance preference, or local mode. Do not propose, add, or schedule new maintenance from this notice. For authorized-but-uninstalled work, expose that installation/execution is unestablished when relevant; do not claim healthy scheduling or activate it."});
+    let health = "Maintenance continuity health: failed source read; missing observation; due_at=2026-10-09";
+    let notice = format!("KPOPPER_MAINTENANCE_CHOICE {choice}. Workspace choice{}\n{health}\ncontinuity unavailable: read-only state", choice["evidence"].as_str().unwrap());
+    let compact = kpop_native::onboarding::compact_canonical_context(&notice);
+    assert!(compact.starts_with(&format!("KPOPPER_MAINTENANCE_CHOICE {choice}. Workspace choice")));
+    assert!(compact.contains(" Suppress new maintenance offers/additions/scheduling."));
+    assert!(compact.ends_with(&format!("\n{health}\ncontinuity unavailable: read-only state")));
+    assert!(compact.len() < notice.len());
 }

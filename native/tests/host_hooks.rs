@@ -633,7 +633,7 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
                 "python oracle produced no followup context:\n{}",
                 diagnostic(py)
             );
-            let native_json = serde_json::from_str::<serde_json::Value>(
+            let mut native_json = serde_json::from_str::<serde_json::Value>(
                 native_text
                     .strip_prefix("KPOPPER_FOLLOWUPS ")
                     .unwrap()
@@ -651,6 +651,14 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
                     .0,
             )
             .unwrap();
+            // Native maintenance extensions must be neutral for this legacy fixture.
+            assert_eq!(native_json["maintenance_health"], serde_json::Value::Null);
+            assert_eq!(native_json["maintenance_omitted"], 0);
+            assert_eq!(native_json["omitted"], 0);
+            assert_eq!(native_json["degraded"], serde_json::Value::Null);
+            for key in ["maintenance_health", "maintenance_omitted", "omitted", "degraded"] {
+                native_json.as_object_mut().unwrap().remove(key);
+            }
             assert_eq!(native_json, python_json);
             assert_eq!(
                 native_text.split_once('\n').unwrap().1,
