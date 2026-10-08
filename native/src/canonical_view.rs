@@ -89,6 +89,8 @@ pub struct CanonicalViewRequest {
 
 /// Build a common graph packet. Every source node is represented exactly once in
 /// `nodes` or `groups`; `navigation_membership` separately retains overlapping paths.
+// `only_used_in_recursion` fires on the nested `visit` but honours only this
+// enclosing item's level, so the allow cannot move onto `visit`.
 #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
 pub fn build(
     project: &str,
