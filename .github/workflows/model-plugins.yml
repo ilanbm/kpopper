@@ -1,0 +1,59 @@
+name: Native model plugins
+
+on:
+  pull_request:
+    paths:
+      - tools/model-package/**
+      - examples/model-plugin/**
+      - skills/model/**
+      - docs/model-plugins.md
+      - .github/workflows/model-plugins.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: model-plugins-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  darwin-arm64:
+    runs-on: macos-14
+    timeout-minutes: 25
+    env:
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Select the qualified Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal --component clippy --component rustfmt
+      - name: Acquire the pinned native engine fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/kpopper-0.15.1-darwin-arm64.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$asset" \
+            https://github.com/ilanbm/kpopper/releases/download/v0.15.1/kpopper-0.15.1-darwin-arm64.tar.gz
+          expected=4b1c3390f4c68f3b8bd50c2e49fee6e5ac5360631ad26dbb5a095b6460d6e1b5
+          actual=$(shasum -a 256 "$asset" | awk '{print $1}')
+          test "$actual" = "$expected"
+          echo "KPOP_MODEL_ENGINE_ARCHIVE=$asset" >> "$GITHUB_ENV"
+      - name: Check formatting and lint the companion
+        run: |
+          cargo +1.98.1 fmt --check --manifest-path tools/model-package/Cargo.toml
+          cargo +1.98.1 clippy --locked --manifest-path tools/model-package/Cargo.toml --all-targets -- -D warnings
+      - name: Test the package and installation boundaries
+        run: cargo +1.98.1 test --release --locked --manifest-path tools/model-package/Cargo.toml
+      - name: Build the native companion
+        run: cargo +1.98.1 build --locked --release --manifest-path tools/model-package/Cargo.toml
+      - name: Preserve executable permissions in the candidate artifact
+        run: tar -czf "$RUNNER_TEMP/kpop-model-darwin-arm64.tar.gz" -C tools/model-package/target/release kpop-model
+      - name: Keep the candidate executable
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: kpop-model-darwin-arm64
+          path: ${{ runner.temp }}/kpop-model-darwin-arm64.tar.gz
+          if-no-files-found: error

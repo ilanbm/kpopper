@@ -19,6 +19,7 @@ mod followup_core;
 pub mod followup_store;
 pub mod followup_triggers;
 pub mod maintenance_contract;
+mod formatter_notice;
 pub mod history_activation;
 mod history_activation_verify;
 pub mod history_adapter;

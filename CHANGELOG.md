@@ -2,13 +2,32 @@
 
 ## Unreleased
 
+### Native model plugins
+
+- Added an opt-in `model` skill and native `kpop-model` companion for packaging
+  a committed knowledge model, its source/history closure and domain skill as
+  an installable plugin. Read/query models use the shared reader without custom
+  application code; dated case applications can provide a native adapter.
+- Generated bundles include a pinned complete engine, validate the model before
+  publishing the output directory, and prepare private verified generations on
+  explicit setup. Updates, rollback and damaged-cache recovery preserve model
+  identity and keep case writes out of the canonical model and project record.
+- Initial support is local Codex on macOS ARM64 with kpopper 0.15.1. Consumers
+  need no Python or compiler. Source checkouts still need the qualified prebuilt
+  companion and engine to generate a bundle; project storage and hooks remain
+  unchanged. See [Create a reusable model plugin](docs/model-plugins.md).
+
 ### Documentation
 
+- The README separates using knowledge to support project work from building a
+  reusable knowledge model as the product. Both paths share installation and link
+  to their next steps; the guide defines a living knowledge model and distinguishes
+  complete models from reading excerpts.
 - Expanded the [living knowledge model guide](docs/living-knowledge-models.md) to
   cover an application-owned model bundle alongside an optional project record,
   explicit project/model selection and ephemeral case data. It describes an
-  application pattern using existing operations, not a general package or runtime
-  security contract. The flight example is a reading excerpt with synthetic
+  application pattern using existing operations, with the optional native plugin
+  companion providing packaging. The public flight example is a reading excerpt with synthetic
   results; it is not a standalone runnable model or a complete account of rights.
 
 ### Conversation freshness

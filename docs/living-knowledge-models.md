@@ -1,11 +1,74 @@
 # Living knowledge models
 
-This guide covers an application that treats a sourced knowledge model as a product. The model
-can live in its own repository or in a subdirectory beside an optional ordinary project record.
+In kpopper, a living knowledge model is a structured, versioned record of facts, assumptions,
+rules and judgments, with their sources and dependencies. Its checks can expose affected conclusions when recorded
+premises change. "Living" describes a model that can be maintained and checked over time;
+external sources still need review. It does not mean a trained language model or automatic
+source synchronization.
+
+An ordinary project record is also a living knowledge model. This guide covers the other
+purpose: **knowledge as the product**, maintained for reuse across questions or applications.
+Both purposes use the same kpopper runtime and record format.
+
+## Start with a model
+
+Choose whether you are creating a model or using one supplied by a publisher.
+An author needs a native authoring toolchain. A generated model plugin already
+contains its engine and domain skill; its users do not install kpopper separately.
+
+### Build a model
+
+For an installable model, start with the [model skill](../skills/model/SKILL.md)
+and the [complete packaging example](model-plugins.md#try-the-complete-example).
+That guide identifies the prebuilt tools authors need and the current availability
+limits. If you are maintaining an unbundled model directly, use the
+[ordinary kpopper installation](../README.md#get-started) and explicit model selectors.
+
+1. Choose a bounded subject and its sources. State what the model will answer and what
+   remains outside its coverage.
+2. Author its facts, rules and judgments using the existing
+   [record commands](reference.md#write-and-review), keeping the complete model together.
+3. For rules that need case inputs, provide an application-owned adapter or test harness:
+   it makes a disposable complete copy, writes synthetic inputs through native commands,
+   and runs the [assessment](assessment.md). Compare the results with independently
+   expected outcomes. A shape check alone does not establish that a rule is correct.
+4. Version the model with its sources, tests and usage instructions. Explain how another
+   person or agent supplies inputs and interprets results, including unknowns and scope.
+   Read/query plugins use the shared native reader without custom application code;
+   case-specific input binding remains an application adapter's responsibility.
+
+### Use an existing model
+
+For a generated model plugin, follow [plugin installation and use](model-plugins.md#use-a-model-plugin).
+Select the publisher's version, install the complete plugin, and ask its domain skill
+questions. Its bundled native launcher prepares and verifies the model and engine.
+Reading such a plugin requires no separate kpopper, Python or compiler installation.
+
+For an unbundled model, obtain its complete record, history, sources and publisher's
+setup instructions, including any runtime or adapter dependencies. A copied skill
+or YAML excerpt is not an installable model plugin. To evaluate a private case, use
+the model's documented adapter or input interface. kpopper supplies no universal
+domain case adapter; personal inputs stay out of the reusable model.
+
+The [synthetic model-plugin example](../examples/model-plugin/README.md) can be packaged
+with the qualified prebuilt tools. It checks the packaging path, not usefulness at scale.
+The [flight-refund example](../examples/living-travel-rights/README.md) shows a sourced
+rule and captured baseline/hypothetical results. It is a read-only excerpt from a private
+repository, not a public runnable starter. The remaining sections describe any model's
+contents, explicit selection, private case data and maintenance.
+
+## Keep the complete model together
+
+The model can live in its own repository or in a subdirectory beside an optional ordinary project record.
 For example, an application can keep its domain model at
 `knowledge/us-flight-refunds/GROUNDING.yaml` while the project uses the record selected by its
 normal kpopper configuration. These are separate records with separate purposes; the model
 does not replace or absorb project knowledge.
+
+To create an installable model plugin, follow [Create a reusable model
+plugin](model-plugins.md) or use the `model` skill. The native companion packages
+the model and its domain skill with a qualified engine. Read/query models need
+no custom adapter; applications that bind private case inputs can supply one.
 
 Treat the model as a complete, versioned bundle: its `GROUNDING.yaml`, its own
 `.gitattributes` file carrying its byte-preservation rules, every retained path covered by those
@@ -32,8 +95,6 @@ structure; it does not establish that the sources are true or that the model is 
 See the [record shape](../skills/kpopper/references/shape.md), [reasoning core](reasoning-core.md)
 and [command reference](reference.md).
 
-See the [travel-rights application example](../examples/living-travel-rights/README.md).
-
 ## Select project and model explicitly
 
 Use the explicit record path for commands that accept one. For example, a project-scoped pull
@@ -50,9 +111,11 @@ a package registry or an asset-role security boundary.
 The project record is optional. When no project record exists, native project discovery can
 report absence; do not create a blank placeholder or copy the domain model into the project
 record just to make it open. An ordinary configured project record may be external, so a root
-`GROUNDING.yaml` must not be assumed to override configuration. These are application patterns
-using existing explicit APIs, not a new storage mode, automatic migration or general package
-contract. See [project modes](project-modes.md) and [node-history storage](node-history-storage.md).
+`GROUNDING.yaml` must not be assumed to override configuration. These patterns
+use existing explicit APIs, not a new storage mode or automatic migration.
+The optional [model-plugin companion](model-plugins.md) adds a versioned packaging
+and installation contract around them. See [project modes](project-modes.md) and
+[node-history storage](node-history-storage.md).
 
 ## Keep the product and its storage choice distinct
 
@@ -86,7 +149,9 @@ components stay visible as such; they do not establish a conclusion about the ca
 When an application ships a portable bundle, its exporter must select the model closure and
 product files from the exact committed tree and verify their committed bytes. A project record,
 its history and project-only evidence are not part of the model bundle. The application defines
-the portable package contents; this guide does not define a general package format or exporter.
+the portable contents. For native model plugins, use the shared
+[model-plugin builder](model-plugins.md) to validate and package that selected
+closure; a YAML excerpt is not an installable model.
 
 ## Update only from a source review
 
@@ -120,3 +185,7 @@ is missing, the record flags `review_provenance_missing`; an exact review acknow
 without backfilling the author or proving independence. `review` records an assessment and does
 not establish truth. See [consolidation](../skills/consolidate/SKILL.md),
 [write and review](reference.md#write-and-review), and [judgment review semantics](history-contract.md#reviewing-a-changed-judgment).
+
+## Package a reusable model plugin
+
+When people need to install and query a model across projects, keep its native record and complete source/history closure distinct from any project record. Use the [model-plugin authoring guide](model-plugins.md) for the versioned package descriptor, standard read skill, native authoring sequence and prebuilt package builder. A descriptor plus GROUNDING.yaml is still source material, not an installable plugin; the built package must bind its exact model closure, skill and complete engine. Case-specific behavior remains a separately declared application adapter, and personal case values stay outside the canonical model.

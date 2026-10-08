@@ -1074,6 +1074,12 @@ fn main() {
                     std::process::exit(output.code);
                 }
             }
+            Err(error)
+                if matches!(&args.command, Command::Context(_))
+                    && kpop_native::public_workspace::refuses_unavailable(&error) =>
+            {
+                emit("context", args.json, "", &format!("{error}\n"), 1);
+            }
             Err(error) if kpop_native::public_readers::core_consumer_refusal(&error) => {
                 eprintln!("{error}");
                 std::process::exit(1);
@@ -1497,6 +1503,9 @@ fn main() {
         })();
         match result {
             Ok(text) => println!("{text}"),
+            Err(error) if kpop_native::public_workspace::refuses_unavailable(&error) => {
+                emit("assess", args.json, "", &format!("{error}\n"), 1);
+            }
             Err(error)
                 if kpop_native::public_readers::unreadable_record(&error)
                     || kpop_native::public_readers::core_consumer_refusal(&error) =>
