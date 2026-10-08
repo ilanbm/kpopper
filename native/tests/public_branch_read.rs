@@ -435,6 +435,15 @@ fn native_history_profile_refusal_precedes_private_draft_access() {
 #[test]
 fn branch_pull_counts_the_pending_lines_toward_the_budget() {
     let (_temp, root) = pending_fixture();
+    // Default advice is a sidecar: it must not displace the pending or record lines.
+    for (budget, expected) in [
+        ("2", format!("{PENDING}a.one: 1 <- s.base\n{HINT}")),
+        ("1", format!("{PENDING}... 1 more lines - raise the budget\n{HINT}")),
+    ] {
+        let rendered = stdout(&root, &["pull", "a.one", "--budget", budget]);
+        let record_lines = rendered.split("\nKPOPPER_MAINTENANCE_DISCOVERY ").next().unwrap();
+        assert_eq!(record_lines, expected);
+    }
     // Isolate the record-line budget from optional first-use advice.
     let guidance = root.join("state/kpopper/first-use");
     fs::create_dir_all(&guidance).unwrap();
