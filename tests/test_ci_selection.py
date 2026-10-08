@@ -475,7 +475,7 @@ class NativeTestPool(unittest.TestCase):
             budgets = [job_timeout]
         else:
             per_target = re.fullmatch(
-                r"\$\{\{ matrix.target == 'darwin-x86_64' && (\d+) \|\| (\d+) \}\}", job_timeout)
+                r"\$\{\{ \(matrix.target == 'darwin-x86_64' \|\| matrix.target == 'windows-x86_64'\) && (\d+) \|\| (\d+) \}\}", job_timeout)
             self.assertIsNotNone(per_target, job_timeout)
             budgets = [int(value) for value in per_target.groups()]
         for job in budgets:

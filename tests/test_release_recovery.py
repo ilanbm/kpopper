@@ -263,8 +263,13 @@ class RunIdentity(unittest.TestCase):
 
     def test_accepts_failed_baseline_and_successful_windows_run_on_matching_release(self):
         RECOVERY.validate_run(self.run, self.workflow, self.repo, self.path, success=False)
+        RECOVERY.validate_run(dict(self.run, event="pull_request"), self.workflow,
+                              self.repo, self.path, success=False)
         successful = dict(self.run, id=30, conclusion="success")
         RECOVERY.validate_run(successful, self.workflow, self.repo, self.path, success=True)
+        with self.assertRaises(RECOVERY.RecoveryError):
+            RECOVERY.validate_run(dict(successful, event="pull_request"), self.workflow,
+                                  self.repo, self.path, success=True)
 
     def test_rejects_run_from_wrong_repo_workflow_head_event_branch_or_state(self):
         changes = [
@@ -294,6 +299,27 @@ class MemoryRepository:
 
     def read(self, ref, path):
         return self.files[ref][path]
+
+
+class ExecutedWorkflow(unittest.TestCase):
+    def test_uses_immutable_workflow_reference_instead_of_moved_pr_metadata(self):
+        run = {"referenced_workflows": [{"path": "ilanbm/kpopper/.github/workflows/native-rust.yml@refs/pull/1/merge",
+                                        "sha": "b" * 40}],
+               "pull_requests": [{"head": {"sha": "c" * 40}}]}
+        self.assertEqual(RECOVERY.baseline_workflow_source(run, "ilanbm/kpopper"), "b" * 40)
+        for references in ([], run["referenced_workflows"] * 2,
+                           [{"path": "other/repo/.github/workflows/native-rust.yml", "sha": "b" * 40}]):
+            with self.subTest(references=references), self.assertRaises(RECOVERY.RecoveryError):
+                RECOVERY.baseline_workflow_source(dict(run, referenced_workflows=references), "ilanbm/kpopper")
+
+    def test_merge_commit_must_have_executed_the_same_workflows(self):
+        files = {".github/workflows/check.yml": b"caller", ".github/workflows/native-rust.yml": b"native"}
+        repo = MemoryRepository({"a" * 40: dict(files), "b" * 40: dict(files)})
+        RECOVERY.validate_executed_workflows(repo, "a" * 40, "b" * 40)
+        for path in files:
+            repo.files["b" * 40] = dict(files, **{path: b"changed workflow"})
+            with self.subTest(path=path), self.assertRaises(RECOVERY.RecoveryError):
+                RECOVERY.validate_executed_workflows(repo, "a" * 40, "b" * 40)
 
 
 class SourceBoundary(unittest.TestCase):
@@ -347,6 +373,27 @@ class SourceBoundary(unittest.TestCase):
                          windows_test=corrected_test, windows_config=corrected_config)
         fingerprint = self.validate(repo)
         self.assertRegex(fingerprint, r"^[0-9a-f]{64}$")
+
+    def test_admits_only_exact_windows_job_timeout_extension(self):
+        path = ".github/workflows/native-rust.yml"
+        before = b"jobs:\n  tests:\n    timeout-minutes: ${{ matrix.target == 'darwin-x86_64' && 120 || 75 }}\n    steps: [unchanged]\n"
+        after = before.replace(b"matrix.target == 'darwin-x86_64'",
+                               b"(matrix.target == 'darwin-x86_64' || matrix.target == 'windows-x86_64')")
+        repo = self.repo()
+        repo.files[self.baseline_ref][path] = before
+        repo.files[self.windows_ref][path] = after
+        repo.files[self.source_ref][path] = after
+        self.validate(repo)
+        for altered in (after.replace(b"120", b"180"), after.replace(b"75", b"90"),
+                        after.replace(b"steps: [unchanged]", b"steps: [skipped]")):
+            repo.files[self.windows_ref][path] = altered
+            repo.files[self.source_ref][path] = altered
+            with self.subTest(altered=altered), self.assertRaises(RECOVERY.RecoveryError):
+                self.validate(repo)
+        repo.files[self.windows_ref][path] = before
+        repo.files[self.source_ref][path] = after
+        with self.assertRaises(RECOVERY.RecoveryError):
+            self.validate(repo)
 
     def test_rejects_changed_attributes_outside_function_and_non_windows_or_nested_function(self):
         base = self.rust_source()
