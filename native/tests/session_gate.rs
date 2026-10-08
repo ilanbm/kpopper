@@ -164,6 +164,7 @@ fn unattributed_entries_are_told_an_intent_id_the_record_accepts() {
             .unwrap_or_else(|| panic!("no suggested id in {text:?}"));
         rest.split_whitespace().next().unwrap().to_string()
     };
+    assert!(!result.issues.is_empty());
     let mut texts = vec![result.text.clone()];
     texts.extend(result.issues.iter().map(|issue| issue.text.clone()));
     let id = suggested(&result.text);

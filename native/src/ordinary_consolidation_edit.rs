@@ -953,7 +953,7 @@ pub(super) fn refute(
         )?;
         src.into()
     } else {
-        world.reader.raw.iter().filter(|(id,b)|world.reader.ids.contains(*id)&&!crate::reasoning_fields::BUILTINS.contains(&id.as_str())&&truth(get(b,"asked"))).map(|(id,b)|(G::read_on(b,&world.reader).unwrap_or("0001-01-01".into()),id.clone())).max().map(|(_,id)|id).ok_or_else(||error("refused - a finding is from a session, and this record holds no session source: add s.2026_10_05_slug asked=\"...\" name=\"...\" first (the id takes underscores, not hyphens), or name one with --as"))?
+        world.reader.raw.iter().filter(|(id,b)|world.reader.ids.contains(*id)&&!crate::reasoning_fields::BUILTINS.contains(&id.as_str())&&truth(get(b,"asked"))).map(|(id,b)|(G::read_on(b,&world.reader).unwrap_or("0001-01-01".into()),id.clone())).max().map(|(_,id)|id).ok_or_else(||error("refused - a finding is from a session, and this record holds no session source: add s.<date>_<slug> asked=\"...\" name=\"...\" first, or name one with --as"))?
     };
     super::privacy(
         capture,
