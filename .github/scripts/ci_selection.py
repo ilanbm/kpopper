@@ -84,6 +84,7 @@ RECORD_JOB = (
     ".github/scripts/release.py", ".github/scripts/publish_release.py",
     ".github/scripts/publish_crate.py", ".github/scripts/native_assets.py",
     ".github/scripts/release_candidate.py", ".github/scripts/publish_source.py", "tests/test_release_candidate.py",
+    ".github/scripts/release_recovery.py", "tests/test_release_recovery.py",
 )
 
 # Exercise CI selection and auditing on Linux. Their routing logic is platform-independent;
@@ -459,11 +460,17 @@ def required_failures(needs, pull_request=True):
     if release == "true" and not all(selected.values()):
         failures.append("release requires native distribution builds")
     validation = outputs.get("validation")
-    if validation not in ("full", "readers"):
+    recovery = outputs.get("recovery", "")
+    verified_recovery = (validation == "distribution" and release == "true" and scope == "all" and not promotion
+                         and not pull_request and isinstance(recovery, str)
+                         and re.fullmatch(r"[0-9a-f]{64}", recovery))
+    if recovery and not verified_recovery:
+        failures.append("recovery receipt requires a release recovery dispatch")
+    if validation not in ("full", "readers") and not verified_recovery:
         failures.append("missing or invalid native validation")
     if validation == "readers" and scope != "linux-x86_64":
         failures.append("reader validation requires Linux-only scope")
-    if release == "true" and validation != "full":
+    if release == "true" and validation != "full" and not verified_recovery:
         failures.append("release requires full native validation")
     if promotion and (pull_request or release == "true" or any(selected.values())):
         failures.append("promotion must reuse the published candidate without native jobs")
