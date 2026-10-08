@@ -548,8 +548,12 @@ fn rename_managed_directory_with(
             from.display()
         )));
     }
-    let original_mode = meta.permissions().mode() & 0o777;
-    fs::set_permissions(from, fs::Permissions::from_mode(original_mode | 0o200)).map_err(|e| {
+    let original_permissions = meta.permissions();
+    fs::set_permissions(
+        from,
+        fs::Permissions::from_mode(original_permissions.mode() | 0o200),
+    )
+    .map_err(|e| {
         err(&format!(
             "{action}: cannot temporarily enable owner write on {}: {e}",
             from.display()
@@ -557,7 +561,7 @@ fn rename_managed_directory_with(
     })?;
 
     if let Err(rename_error) = rename(from, to) {
-        return match fs::set_permissions(from, fs::Permissions::from_mode(original_mode)) {
+        return match fs::set_permissions(from, original_permissions) {
             Ok(()) => Err(err(&format!("{action}: rename {} to {} failed: {rename_error}", from.display(), to.display()))),
             Err(restore_error) => Err(err(&format!("{action}: rename {} to {} failed: {rename_error}; restoring source permissions also failed: {restore_error}", from.display(), to.display()))),
         };
@@ -575,7 +579,7 @@ fn rename_managed_directory_with(
             to.display()
         )));
     }
-    fs::set_permissions(to, fs::Permissions::from_mode(original_mode)).map_err(|e| {
+    fs::set_permissions(to, original_permissions).map_err(|e| {
         err(&format!("{action}: rename {} to {} succeeded, but restoring destination permissions failed: {e}", from.display(), to.display()))
     })?;
     Ok(())
@@ -2045,6 +2049,8 @@ mod tests {
             std::fs::read(destination.join("existing")).unwrap(),
             b"keep"
         );
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(&nested, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 
     #[cfg(unix)]
@@ -2094,6 +2100,12 @@ mod tests {
             std::fs::read(destination.join("payload/read-only.txt")).unwrap(),
             b"preserve me"
         );
+        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(
+            destination.join("payload"),
+            std::fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
     }
     #[test]
     fn shared_archive_inventory_validates_after_extraction() {

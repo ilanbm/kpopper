@@ -21,6 +21,8 @@ jobs:
   darwin-arm64:
     runs-on: macos-14
     timeout-minutes: 25
+    env:
+      RUST_BACKTRACE: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

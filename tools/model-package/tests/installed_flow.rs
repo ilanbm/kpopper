@@ -61,7 +61,9 @@ fn run(binary: &Path, cwd: &Path, arguments: &[&str], succeeds: bool) -> Value {
     assert_eq!(
         output.status.success(),
         succeeds,
-        "stdout={} stderr={}",
+        "binary={} cwd={} arguments={arguments:?} stdout={} stderr={}",
+        binary.display(),
+        cwd.display(),
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
