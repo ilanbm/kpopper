@@ -1055,3 +1055,19 @@ fn exhausted_route_budget_reports_actual_last_error_on_stderr() {
     assert!(reason.contains("opening allowance"), "{err}");
     assert!(out.starts_with(&format!("Managed source opening unavailable: {reason}.")), "{out}");
 }
+
+#[test]
+fn normal_path_large_record_folds_graph_and_preserves_full_proposal_policy() {
+    let p = Probe::new();
+    let mut record = fs::read_to_string(p.root.path().join("GROUNDING.yaml")).unwrap();
+    let entries = (0..120).map(|i| format!("  fact.item{i}: {{v: {i}, name: '{}'}}\n", "Recorded input description ".repeat(4))).collect::<String>();
+    record = record.replacen("computed:\n", &(entries + "computed:\n"), 1);
+    fs::write(p.root.path().join("GROUNDING.yaml"), record).unwrap();
+    let opened = p.session_start();
+    let prefix = opened.split("\nKPOPPER_AGENT_CONTEXT").next().unwrap();
+    assert!(prefix.len() <= 7000, "{opened}");
+    let route: Value = serde_json::from_str(opened.lines().next().unwrap().strip_prefix("KPOPPER_CANONICAL_VIEW_ROUTE ").unwrap()).unwrap();
+    assert_eq!(route["complete_graph_in_hook"], false);
+    assert!(opened.contains(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY), "{opened}");
+    assert!(!opened.contains("this_opening_budget_only"), "{opened}");
+}
