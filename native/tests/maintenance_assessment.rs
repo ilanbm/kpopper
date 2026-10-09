@@ -240,3 +240,42 @@ fn declaration_dates_source_and_effective_next_are_preserved() {
     assert_eq!(p["declared_choices"]["source_id"], "provider-input");
     assert_eq!(p["effective_next_at"], "2026-12-31T09:00:00Z");
 }
+
+#[test]
+fn known_direct_declaration_survives_incomplete_and_cyclic_scope() {
+    for cyclic in [false, true] {
+        let (mut nodes, mut items, observations, current, now) = inputs();
+        items["policy"]["spec"]["related"] = json!(["d.use"]);
+        if cyclic {
+            nodes.get_mut("s.source").unwrap().dependencies.push("d.use".into());
+        } else {
+            nodes.get_mut("d.use").unwrap().dependencies.push("missing.input".into());
+        }
+        let r = assess(&["d.use".into()], &nodes, &items, &observations, &current, &BTreeMap::new(), now, "record").unwrap();
+        assert_eq!(r["covered_subjects"], json!(["d.use"]));
+        assert_eq!(r["unresolved_subjects"], json!(["d.use"]));
+        assert_eq!(r["uncovered_subjects"], json!([]));
+        assert_eq!(r["status"], "unknown");
+        assert_eq!(r["authority"], "not_established");
+        assert_eq!(r["policies"][0]["id"], "policy");
+    }
+}
+
+#[test]
+fn input_context_and_leaf_reason_are_invariant_under_mixed_request() {
+    let (nodes, mut items, observations, current, now) = inputs();
+    items["policy"]["spec"]["related"] = json!(["d.use"]);
+    items["policy"]["model_alignment"]["scope_identity"] = json!(maintenance_assessment::scope_identity(&items["policy"]["spec"], &nodes).unwrap());
+    let parent = assess(&["d.use".into()], &nodes, &items, &observations, &current, &BTreeMap::new(), now, "record").unwrap();
+    assert_eq!(parent["status"], "adequate");
+    assert!(!parent["reasons"].as_array().unwrap().iter().any(|reason| reason["reason"] == "required_leaf_has_no_maintenance_policy"));
+    let alone = assess(&["s.source".into()], &nodes, &items, &observations, &current, &BTreeMap::new(), now, "record").unwrap();
+    let mixed = assess(&["s.source".into(), "d.use".into()], &nodes, &items, &observations, &current, &BTreeMap::new(), now, "record").unwrap();
+    assert_eq!(mixed["related_check_context"], alone["related_check_context"]);
+    assert_eq!(mixed["covered_subjects"], json!(["d.use"]));
+    assert_eq!(mixed["uncovered_subjects"], alone["uncovered_subjects"]);
+    for r in [&alone, &mixed] {
+        assert!(r["reasons"].as_array().unwrap().iter().any(|reason| reason["subject"] == "s.source" && reason["reason"] == "required_leaf_has_no_maintenance_policy"));
+        assert_eq!(r["authority"], "not_established");
+    }
+}

@@ -63,6 +63,18 @@ fn visit(
     active.remove(id);
 }
 
+// Resolution uncertainty does not erase a known declaration intersection.
+// Reverse/dependent relationships are context only, never coverage.
+#[derive(PartialEq)]
+enum ScopeRelation { Active, Retired, Uncovered, Unresolved }
+fn scope_relation(scope: &BTreeSet<String>, unresolved: bool, exists: bool,
+    active: &BTreeSet<String>, retired: &BTreeSet<String>) -> ScopeRelation {
+    if exists && !scope.is_disjoint(active) { ScopeRelation::Active }
+    else if unresolved { ScopeRelation::Unresolved }
+    else if !scope.is_disjoint(retired) { ScopeRelation::Retired }
+    else { ScopeRelation::Uncovered }
+}
+
 pub(crate) fn assess(
     subjects: &[String],
     nodes: &BTreeMap<String, Node>,
@@ -92,7 +104,8 @@ pub(crate) fn assess(
     // are useful context, never proof of coverage or authority for an input use.
     let mut subject_closures = BTreeMap::new();
     let mut unresolved = BTreeSet::new();
-    for subject in subjects {
+    for subject in closure.iter().chain(subjects.iter()) {
+        if subject_closures.contains_key(subject) { continue; }
         let mut scope = BTreeSet::new();
         let mut errors = Vec::new();
         visit(subject, nodes, &mut BTreeSet::new(), &mut scope, &mut errors);
@@ -113,25 +126,32 @@ pub(crate) fn assess(
         if retired && !related.is_disjoint(&closure) {
             retired_policies.push(json!({"id":id,"state":item["state"],"subjects":related,"source_ref":m["source_ref"],"scope":"retired_history_not_active_coverage_or_new_offer"}));
         }
-        if related.is_disjoint(&closure) {
-            let mut dependent_closure = BTreeSet::new();
-            for subject in &related { visit(subject,nodes,&mut BTreeSet::new(),&mut dependent_closure,&mut Vec::new()); }
-            let inputs = subjects.iter().filter(|subject| dependent_closure.contains(*subject) && nodes.contains_key(*subject)).collect::<Vec<_>>();
-            if !inputs.is_empty() {
-                related_checks.push(json!({"id":id,"state":item["state"],"declared_subjects":related,"requested_inputs":inputs,
-                    "source_ref":m["source_ref"],"source_id":m["source_id"],"inspection":m["inspection"],
-                    "coverage":"informational_only","adequacy":"unassessed","authority":"not_established"}));
-            }
+    }
+    let relation = |id: &String| scope_relation(&subject_closures[id], unresolved.contains(id),
+        nodes.contains_key(id), &active_related, &retired_related);
+    let requested_with = |kind| subjects.iter().collect::<BTreeSet<_>>().into_iter()
+        .filter(|id| relation(id) == kind).cloned().collect::<Vec<_>>();
+    let covered_subjects = requested_with(ScopeRelation::Active);
+    let retired_subjects = requested_with(ScopeRelation::Retired);
+    let uncovered_subjects = requested_with(ScopeRelation::Uncovered);
+    // Context is per requested input, so requesting its dependent alongside it
+    // cannot remove the same informational check or upgrade its coverage.
+    for (id, item) in items.as_object().unwrap() {
+        let Some(m) = item["spec"].get("maintenance") else { continue; };
+        let related = item["spec"]["related"].as_array().into_iter().flatten().filter_map(Value::as_str)
+            .map(str::to_owned).collect::<BTreeSet<_>>();
+        let mut dependent_closure = BTreeSet::new();
+        for subject in &related { visit(subject,nodes,&mut BTreeSet::new(),&mut dependent_closure,&mut Vec::new()); }
+        let inputs = subjects.iter().collect::<BTreeSet<_>>().into_iter()
+            .filter(|subject| relation(subject) != ScopeRelation::Active && dependent_closure.contains(*subject) && nodes.contains_key(*subject))
+            .collect::<Vec<_>>();
+        if !inputs.is_empty() {
+            related_checks.push(json!({"id":id,"state":item["state"],"declared_subjects":related,"requested_inputs":inputs,
+                "source_ref":m["source_ref"],"source_id":m["source_id"],"inspection":m["inspection"],
+                "coverage":"informational_only","adequacy":"unassessed","authority":"not_established"}));
         }
     }
-    let covered_subjects = subject_closures.iter().filter(|(id,scope)| !unresolved.contains(*id) && !scope.is_disjoint(&active_related))
-        .map(|(id,_)|id.clone()).collect::<Vec<_>>();
-    let retired_subjects = subject_closures.iter().filter(|(id,scope)| !unresolved.contains(*id) && scope.is_disjoint(&active_related) && !scope.is_disjoint(&retired_related))
-        .map(|(id,_)|id.clone()).collect::<Vec<_>>();
-    let uncovered_subjects = subject_closures.iter().filter(|(id,scope)| !unresolved.contains(*id) && scope.is_disjoint(&active_related) && scope.is_disjoint(&retired_related))
-        .map(|(id,_)|id.clone()).collect::<Vec<_>>();
     let mut policies = Vec::new();
-    let mut covered = BTreeSet::new();
     for (id, item) in items
         .as_object()
         .ok_or_else(|| Error("Invalid assessment items".into()))?
@@ -152,17 +172,6 @@ pub(crate) fn assess(
         if related.is_empty() {
             continue;
         }
-        let mut policy_closure = BTreeSet::new();
-        for id in &related {
-            visit(
-                id,
-                nodes,
-                &mut BTreeSet::new(),
-                &mut policy_closure,
-                &mut Vec::new(),
-            );
-        }
-        covered.extend(policy_closure);
         let mut policy_reasons = Vec::new();
         let mut unknown = false;
         let mut stale = false;
@@ -301,10 +310,16 @@ pub(crate) fn assess(
                 "check_time":m["check_time"],"use_policy":m["use_policy"],"evidence_requirement":m["evidence_requirement"],
                 "max_age_hours":m["max_age_hours"],"inspection":m["inspection"]}}));
     }
-    // A declared leaf with no applicable check remains unknown; stable knowledge
-    // is not automatically enrolled into maintenance by this explicit-use query.
+    // Preserve the established adequacy treatment of implicit inputs inspected
+    // through an applicable check. Explicit input use is assessed independently:
+    // dependent context does not turn that requested input into covered scope.
+    let implicit_check_context = active_related.iter().filter(|id| closure.contains(*id))
+        .filter_map(|id| subject_closures.get(id)).flatten().cloned().collect::<BTreeSet<_>>();
+    // A leaf without either direct coverage or implicit applicable-check context
+    // stays unknown; this query does not automatically enroll stable knowledge.
     for id in &closure {
-        if nodes.get(id).is_some_and(|n| n.dependencies.is_empty()) && !covered.contains(id) {
+        if nodes.get(id).is_some_and(|n| n.dependencies.is_empty()) && relation(id) != ScopeRelation::Active
+            && (subjects.contains(id) || !implicit_check_context.contains(id)) {
             reasons.push(json!({"subject":id,"kind":"unknown","reason":"required_leaf_has_no_maintenance_policy"}));
         }
     }
@@ -318,7 +333,7 @@ pub(crate) fn assess(
     Ok(
         json!({"status":status,"subjects":subjects,"declared_closure":closure,"policies":policies,"reasons":reasons,
         "covered_subjects":covered_subjects,"uncovered_subjects":uncovered_subjects,
-        "retired_subjects":retired_subjects,"unresolved_subjects":unresolved,
+        "retired_subjects":retired_subjects,"unresolved_subjects":subjects.iter().filter(|id|unresolved.contains(*id)).collect::<BTreeSet<_>>(),
         "retired_policies":retired_policies,"related_check_context":related_checks,
         "response_obligation":{
             "covered_scope":{"action":"use_existing_declaration","duplicate_declaration":"do_not_propose",
