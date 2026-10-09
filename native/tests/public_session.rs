@@ -464,6 +464,10 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         assert_eq!(locator["workspace"], json!(f.root.path().canonicalize().unwrap()));
         assert!(lines[2].starts_with("KPOPPER_MAINTENANCE_CHOICE "), "{started}");
         assert!(lines[2].ends_with(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY), "{started}");
+        for obligation in ["Before finishing", "in your reply", "Show the USER missing cadence", "acceptable source-evidence age (source only)",
+            "visibly state approval is needed before compile/add/schedule", "authorization already covers this scope, do not ask again"] {
+            assert!(lines[2].contains(obligation), "missing visible proposal obligation {obligation}: {started}");
+        }
         assert!(context.starts_with('{'), "choice must be adjacent to context: {started}");
     }
     fs::write(
