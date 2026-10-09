@@ -192,3 +192,51 @@ fn closure_cycles_missing_policy_and_origin_adequacy_are_independent_unknowns() 
     .unwrap();
     assert_eq!(missing["status"], "unknown");
 }
+
+#[test]
+fn requested_consumer_coverage_uses_forward_declared_closure() {
+    let (mut nodes, items, observations, current, now) = inputs();
+    nodes.insert("fact.other".into(), Node::default());
+    let r = assess(&["d.use".into(),"fact.other".into(),"typo.missing".into()],&nodes,&items,&observations,&current,&BTreeMap::new(),now,"record").unwrap();
+    assert_eq!(r["covered_subjects"], json!(["d.use"]));
+    assert_eq!(r["uncovered_subjects"], json!(["fact.other"]));
+    assert_eq!(r["unresolved_subjects"], json!(["typo.missing"]));
+    assert_eq!(r["authority"], "not_established");
+}
+
+#[test]
+fn dependent_check_is_information_not_input_coverage_or_authority() {
+    let (nodes, mut items, observations, current, now) = inputs();
+    items["policy"]["spec"]["related"] = json!(["d.use"]);
+    let r=assess(&["s.source".into()],&nodes,&items,&observations,&current,&BTreeMap::new(),now,"record").unwrap();
+    assert_eq!(r["covered_subjects"], json!([]));
+    assert_eq!(r["uncovered_subjects"], json!(["s.source"]));
+    assert_eq!(r["related_check_context"][0]["id"], "policy");
+    assert_eq!(r["related_check_context"][0]["coverage"], "informational_only");
+    assert_eq!(r["related_check_context"][0]["adequacy"], "unassessed");
+    assert_eq!(r["authority"], "not_established");
+}
+
+#[test]
+fn retired_scope_stays_historical_and_not_a_new_offer() {
+    let (nodes, mut items, observations, current, now) = inputs();
+    items["policy"]["state"] = json!("cancelled");
+    let r=assess(&["d.use".into()],&nodes,&items,&observations,&current,&BTreeMap::new(),now,"record").unwrap();
+    assert_eq!(r["covered_subjects"], json!([]));
+    assert_eq!(r["uncovered_subjects"], json!([]));
+    assert_eq!(r["retired_subjects"], json!(["d.use"]));
+    assert_eq!(r["retired_policies"][0]["id"], "policy");
+}
+
+#[test]
+fn declaration_dates_source_and_effective_next_are_preserved() {
+    let (nodes, mut items, observations, current, now) = inputs();
+    items["policy"]["spec"]["maintenance"]["due_at"] = json!("2026-12-24T09:00:00Z");
+    items["policy"]["spec"]["maintenance"]["source_id"] = json!("provider-input");
+    items["policy"]["next_at"] = json!("2026-12-31T09:00:00Z");
+    let r=assess(&["d.use".into()],&nodes,&items,&observations,&current,&BTreeMap::new(),now,"record").unwrap();
+    let p=&r["policies"][0];
+    assert_eq!(p["declared_choices"]["due_at"], "2026-12-24T09:00:00Z");
+    assert_eq!(p["declared_choices"]["source_id"], "provider-input");
+    assert_eq!(p["effective_next_at"], "2026-12-31T09:00:00Z");
+}

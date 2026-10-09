@@ -87,6 +87,49 @@ pub(crate) fn assess(
             &mut reasons,
         );
     }
+    // Coverage follows the same forward relation as read discovery: a requested
+    // subject's closure must reach a policy-related subject. Reverse dependents
+    // are useful context, never proof of coverage or authority for an input use.
+    let mut subject_closures = BTreeMap::new();
+    let mut unresolved = BTreeSet::new();
+    for subject in subjects {
+        let mut scope = BTreeSet::new();
+        let mut errors = Vec::new();
+        visit(subject, nodes, &mut BTreeSet::new(), &mut scope, &mut errors);
+        if !errors.is_empty() { unresolved.insert(subject.clone()); }
+        subject_closures.insert(subject.clone(), scope);
+    }
+    let mut active_related = BTreeSet::new();
+    let mut retired_related = BTreeSet::new();
+    let mut retired_policies = Vec::new();
+    let mut related_checks = Vec::new();
+    for (id, item) in items.as_object().ok_or_else(|| Error("Invalid assessment items".into()))? {
+        let Some(m) = item["spec"].get("maintenance") else { continue; };
+        let related = item["spec"]["related"].as_array().into_iter().flatten().filter_map(Value::as_str)
+            .map(str::to_owned).collect::<BTreeSet<_>>();
+        let retired = matches!(item["state"].as_str(), Some("done" | "cancelled"));
+        if retired { retired_related.extend(related.iter().cloned()); }
+        else { active_related.extend(related.iter().cloned()); }
+        if retired && !related.is_disjoint(&closure) {
+            retired_policies.push(json!({"id":id,"state":item["state"],"subjects":related,"source_ref":m["source_ref"],"scope":"retired_history_not_active_coverage_or_new_offer"}));
+        }
+        if related.is_disjoint(&closure) {
+            let mut dependent_closure = BTreeSet::new();
+            for subject in &related { visit(subject,nodes,&mut BTreeSet::new(),&mut dependent_closure,&mut Vec::new()); }
+            let inputs = subjects.iter().filter(|subject| dependent_closure.contains(*subject) && nodes.contains_key(*subject)).collect::<Vec<_>>();
+            if !inputs.is_empty() {
+                related_checks.push(json!({"id":id,"state":item["state"],"declared_subjects":related,"requested_inputs":inputs,
+                    "source_ref":m["source_ref"],"source_id":m["source_id"],"inspection":m["inspection"],
+                    "coverage":"informational_only","adequacy":"unassessed","authority":"not_established"}));
+            }
+        }
+    }
+    let covered_subjects = subject_closures.iter().filter(|(id,scope)| !unresolved.contains(*id) && !scope.is_disjoint(&active_related))
+        .map(|(id,_)|id.clone()).collect::<Vec<_>>();
+    let retired_subjects = subject_closures.iter().filter(|(id,scope)| !unresolved.contains(*id) && scope.is_disjoint(&active_related) && !scope.is_disjoint(&retired_related))
+        .map(|(id,_)|id.clone()).collect::<Vec<_>>();
+    let uncovered_subjects = subject_closures.iter().filter(|(id,scope)| !unresolved.contains(*id) && scope.is_disjoint(&active_related) && scope.is_disjoint(&retired_related))
+        .map(|(id,_)|id.clone()).collect::<Vec<_>>();
     let mut policies = Vec::new();
     let mut covered = BTreeSet::new();
     for (id, item) in items
@@ -252,7 +295,9 @@ pub(crate) fn assess(
         }
         policies.push(json!({"id":id,"subjects":related,"status":status,"reasons":policy_reasons,"warnings":warn,
             "source_ref":m["source_ref"],"policy_digest":m["policy_digest"],"recording_assurance":"host_attested_or_current_native_clock",
-            "declared_choices":{"kind":m["kind"],"cadence_days":m["cadence_days"],"timezone":m["timezone"],
+            "effective_next_at":item["next_at"].as_str().or_else(||m["due_at"].as_str()),
+            "declared_choices":{"kind":m["kind"],"due_at":m["due_at"],"source_id":m["source_id"],
+                "cadence_days":m["cadence_days"],"timezone":m["timezone"],
                 "check_time":m["check_time"],"use_policy":m["use_policy"],"evidence_requirement":m["evidence_requirement"],
                 "max_age_hours":m["max_age_hours"],"inspection":m["inspection"]}}));
     }
@@ -272,11 +317,16 @@ pub(crate) fn assess(
     };
     Ok(
         json!({"status":status,"subjects":subjects,"declared_closure":closure,"policies":policies,"reasons":reasons,
-        "covered_subjects":subjects.iter().filter(|id|covered.contains(*id)).collect::<Vec<_>>(),
-        "uncovered_subjects":subjects.iter().filter(|id|!covered.contains(*id)).collect::<Vec<_>>(),
+        "covered_subjects":covered_subjects,"uncovered_subjects":uncovered_subjects,
+        "retired_subjects":retired_subjects,"unresolved_subjects":unresolved,
+        "retired_policies":retired_policies,"related_check_context":related_checks,
         "response_obligation":{
             "covered_scope":{"action":"use_existing_declaration","duplicate_declaration":"do_not_propose",
                 "instruction":"For covered use, refer to the existing check by id/source/subjects and preserve its declared cadence, timezone/date semantics, use-policy and evidence age. Do not call those choices unresolved or propose the same check again. Describe the actual observation/alignment or host-execution gap and the next step for that existing check. A declaration is not actual user authority to inspect, add or activate a host; retain unknown permission until actual authorization covers the action."},
+            "retired_scope":{"action":"keep_retired_history_quiet","new_offer":"do_not_propose_from_retirement"},
+            "unresolved_scope":{"action":"resolve_actual_subject_scope","new_offer":"not_established"},
+            "related_check_context":{"action":"inspect_existing_check_scope_before_new_proposal","coverage":"informational_only",
+                "instruction":"A dependent check may be relevant context for an input, not complete coverage or authority for every use of that input. Preserve actual requested scope and unknown adequacy; do not duplicate the existing subject/source check."},
             "uncovered_scope":{"applicability":"agent_task_assessment_required",
                 "instruction":"Assess only genuinely uncovered intended use under the discovery criteria. An uncovered locator/provenance leaf is not proof that a new check is needed for an already-covered subject/source. Do not duplicate a covering check or suppress unrelated uncovered maintenance. Stable/historical/closed/one-off uses remain quiet; unknown choices and actual permission stay separate."}},
         "assessed_at":now.to_rfc3339(),"record_identity":record_identity,
