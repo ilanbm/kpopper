@@ -226,6 +226,18 @@ fn run_routed(
     ordinary: &mut bool,
 ) -> Result<String> {
     let cwd = cwd.canonicalize()?;
+    if let Some(named) = &request.record
+        && !cwd.join(named).is_file()
+    {
+        // A named record that is not there is refused as the readers refuse it, on stderr.
+        *ordinary = true;
+        let named = named.to_string_lossy();
+        return Err(crate::public_readers::no_record_here(
+            [named.as_ref()],
+            &cwd,
+            false,
+        ));
+    }
     let original = request
         .record
         .as_ref()

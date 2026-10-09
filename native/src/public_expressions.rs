@@ -279,7 +279,18 @@ fn migrate(
     _read_mode: Option<&str>,
 ) -> Result<Value> {
     let record = match record {
-        Some(record) => expanded_path(cwd, record)?,
+        Some(named) => {
+            let record = expanded_path(cwd, named)?;
+            if !record.is_file() {
+                let named = named.to_string_lossy();
+                return Err(crate::public_readers::no_record_here(
+                    [named.as_ref()],
+                    cwd,
+                    false,
+                ));
+            }
+            record
+        }
         None => crate::public_workspace::records(cwd)?
             .into_iter()
             .next()
