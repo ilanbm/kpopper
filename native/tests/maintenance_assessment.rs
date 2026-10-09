@@ -279,3 +279,61 @@ fn input_context_and_leaf_reason_are_invariant_under_mixed_request() {
         assert_eq!(r["authority"], "not_established");
     }
 }
+
+#[test]
+fn requested_scope_adequacy_is_monotone_across_shared_input_matrix() {
+    let (mut nodes, mut items, observations, current, now) = inputs();
+    nodes.insert("source.mid".into(), Node { dependencies: vec!["s.source".into()], identity: "shared-consumer".into(), ..Default::default() });
+    nodes.insert("fact.sibling".into(), Node { dependencies: vec!["s.source".into()], identity: "shared-consumer".into(), ..Default::default() });
+    nodes.get_mut("d.use").unwrap().dependencies = vec!["source.mid".into()];
+    items["policy"]["spec"]["related"] = json!(["d.use"]);
+    items["policy"]["model_alignment"]["scope_identity"] = json!(maintenance_assessment::scope_identity(&items["policy"]["spec"], &nodes).unwrap());
+    let assess_ids = |ids: Vec<String>| assess(&ids, &nodes, &items, &observations, &current, &BTreeMap::new(), now, "record").unwrap();
+    assert_eq!(assess_ids(vec!["d.use".into()])["status"], "adequate");
+    let ids = ["s.source", "source.mid", "fact.sibling", "d.use"];
+    // Every nonempty subset and both input orders must retain the original
+    // requested use's unknown leaf verdict; a sibling check cannot bless it.
+    for mask in 1..16 {
+        let request = ids.iter().enumerate().filter(|(i, _)| mask & (1 << i) != 0).map(|(_, id)| (*id).to_owned()).collect::<Vec<_>>();
+        for reverse in [false, true] {
+            let mut request = request.clone();
+            if reverse { request.reverse(); }
+            let r = assess_ids(request.clone());
+            if mask & 7 == 0 { assert_eq!(r["status"], "adequate"); continue; }
+            assert_eq!(r["status"], "unknown", "request {request:?}");
+            assert!(r["reasons"].as_array().unwrap().iter().any(|reason| reason["subject"] == "s.source" && reason["reason"] == "required_leaf_has_no_maintenance_policy"), "request {request:?}");
+            assert_eq!(r["authority"], "not_established");
+            for id in request.iter().filter(|id| id.as_str() != "d.use") {
+                assert!(r["uncovered_subjects"].as_array().unwrap().contains(&json!(id)));
+            }
+        }
+    }
+}
+
+#[test]
+fn retired_direct_subject_is_history_not_its_own_input_context() {
+    let (nodes, mut items, observations, current, now) = inputs();
+    items["policy"]["spec"]["related"] = json!(["d.use"]);
+    items["policy"]["state"] = json!("cancelled");
+    for ids in [vec!["d.use".into()], vec!["d.use".into(), "s.source".into()]] {
+        let r = assess(&ids, &nodes, &items, &observations, &current, &BTreeMap::new(), now, "record").unwrap();
+        assert_eq!(r["retired_subjects"], json!(["d.use"]));
+        for context in r["related_check_context"].as_array().unwrap() {
+            assert!(!context["requested_inputs"].as_array().unwrap().contains(&json!("d.use")));
+        }
+    }
+}
+
+#[test]
+fn deleted_policy_subject_cannot_establish_consumer_coverage() {
+    let (mut nodes, mut items, observations, current, now) = inputs();
+    nodes.get_mut("d.use").unwrap().dependencies.push("fact.gone".into());
+    items["policy"]["spec"]["related"] = json!(["fact.gone"]);
+    for ids in [vec!["d.use".into()], vec!["fact.gone".into()], vec!["d.use".into(), "fact.gone".into()]] {
+        let r = assess(&ids, &nodes, &items, &observations, &current, &BTreeMap::new(), now, "record").unwrap();
+        assert_eq!(r["covered_subjects"], json!([]));
+        assert_eq!(r["status"], "unknown");
+        assert_eq!(r["unresolved_subjects"].as_array().unwrap().len(), ids.len());
+        assert_eq!(r["authority"], "not_established");
+    }
+}

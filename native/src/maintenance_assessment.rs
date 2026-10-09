@@ -121,8 +121,11 @@ pub(crate) fn assess(
         let related = item["spec"]["related"].as_array().into_iter().flatten().filter_map(Value::as_str)
             .map(str::to_owned).collect::<BTreeSet<_>>();
         let retired = matches!(item["state"].as_str(), Some("done" | "cancelled"));
-        if retired { retired_related.extend(related.iter().cloned()); }
-        else { active_related.extend(related.iter().cloned()); }
+        // A deleted declaration subject is historical data, not a known
+        // intersection establishing coverage for another existing consumer.
+        let existing_related = related.iter().filter(|id| nodes.contains_key(*id)).cloned();
+        if retired { retired_related.extend(existing_related); }
+        else { active_related.extend(existing_related); }
         if retired && !related.is_disjoint(&closure) {
             retired_policies.push(json!({"id":id,"state":item["state"],"subjects":related,"source_ref":m["source_ref"],"scope":"retired_history_not_active_coverage_or_new_offer"}));
         }
@@ -143,7 +146,7 @@ pub(crate) fn assess(
         let mut dependent_closure = BTreeSet::new();
         for subject in &related { visit(subject,nodes,&mut BTreeSet::new(),&mut dependent_closure,&mut Vec::new()); }
         let inputs = subjects.iter().collect::<BTreeSet<_>>().into_iter()
-            .filter(|subject| relation(subject) != ScopeRelation::Active && dependent_closure.contains(*subject) && nodes.contains_key(*subject))
+            .filter(|subject| relation(subject) != ScopeRelation::Active && !related.contains(*subject) && dependent_closure.contains(*subject) && nodes.contains_key(*subject))
             .collect::<Vec<_>>();
         if !inputs.is_empty() {
             related_checks.push(json!({"id":id,"state":item["state"],"declared_subjects":related,"requested_inputs":inputs,
@@ -310,18 +313,23 @@ pub(crate) fn assess(
                 "check_time":m["check_time"],"use_policy":m["use_policy"],"evidence_requirement":m["evidence_requirement"],
                 "max_age_hours":m["max_age_hours"],"inspection":m["inspection"]}}));
     }
-    // Preserve the established adequacy treatment of implicit inputs inspected
-    // through an applicable check. Explicit input use is assessed independently:
-    // dependent context does not turn that requested input into covered scope.
-    let implicit_check_context = active_related.iter().filter(|id| closure.contains(*id))
-        .filter_map(|id| subject_closures.get(id)).flatten().cloned().collect::<BTreeSet<_>>();
-    // A leaf without either direct coverage or implicit applicable-check context
-    // stays unknown; this query does not automatically enroll stable knowledge.
-    for id in &closure {
-        if nodes.get(id).is_some_and(|n| n.dependencies.is_empty()) && relation(id) != ScopeRelation::Active
-            && (subjects.contains(id) || !implicit_check_context.contains(id)) {
-            reasons.push(json!({"subject":id,"kind":"unknown","reason":"required_leaf_has_no_maintenance_policy"}));
+    // Adequacy is evaluated independently for each requested use. Applicable
+    // checks retain the established implicit-input treatment within that use,
+    // but another requested parent's context cannot discharge its leaf gaps.
+    let mut unchecked_leaves = BTreeSet::new();
+    for subject in subjects {
+        let scope = &subject_closures[subject];
+        let implicit_check_context = active_related.iter().filter(|id| scope.contains(*id))
+            .filter_map(|id| subject_closures.get(id)).flatten().cloned().collect::<BTreeSet<_>>();
+        for id in scope {
+            if nodes.get(id).is_some_and(|n| n.dependencies.is_empty())
+                && relation(id) != ScopeRelation::Active && !implicit_check_context.contains(id) {
+                unchecked_leaves.insert(id.clone());
+            }
         }
+    }
+    for id in unchecked_leaves {
+        reasons.push(json!({"subject":id,"kind":"unknown","reason":"required_leaf_has_no_maintenance_policy"}));
     }
     let status = if reasons.iter().any(|r| r["kind"] == "unknown") {
         "unknown"
