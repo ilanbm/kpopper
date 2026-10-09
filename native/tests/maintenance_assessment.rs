@@ -337,3 +337,42 @@ fn deleted_policy_subject_cannot_establish_consumer_coverage() {
         assert_eq!(r["authority"], "not_established");
     }
 }
+
+#[test]
+fn combined_depth_and_width_limits_return_unknown_in_either_order() {
+    let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+    for wide in [false, true] {
+        let mut nodes = BTreeMap::new();
+        if wide {
+            for (root, prefix) in [("d.atop", "a"), ("d.btop", "b")] {
+                let leaves = (0..600).map(|i| format!("{prefix}.{i}")).collect::<Vec<_>>();
+                for leaf in &leaves { nodes.insert(leaf.clone(), Node::default()); }
+                nodes.insert(root.into(), Node { dependencies: leaves, ..Default::default() });
+            }
+        } else {
+            nodes.insert("fact.deep".into(), Node::default());
+            let mut next = "fact.deep".to_owned();
+            for i in (1..=9).rev() {
+                let id = format!("x{i:02}");
+                nodes.insert(id.clone(), Node { dependencies: vec![next], ..Default::default() });
+                next = id;
+            }
+            nodes.insert("d.hub".into(), Node { dependencies: vec![next], ..Default::default() });
+            let mut next = "d.hub".to_owned();
+            for i in (1..=61).rev() {
+                let id = format!("c{i:02}");
+                nodes.insert(id.clone(), Node { dependencies: vec![next], ..Default::default() });
+                next = id;
+            }
+            nodes.insert("d.atop".into(), Node { dependencies: vec![next], ..Default::default() });
+            nodes.insert("d.btop".into(), Node { dependencies: vec!["d.hub".into()], ..Default::default() });
+        }
+        for ids in [vec!["d.atop".into(), "d.btop".into()], vec!["d.btop".into(), "d.atop".into()]] {
+            let r = assess(&ids, &nodes, &json!({}), &json!({}), &BTreeSet::new(), &BTreeMap::new(), now, "record").unwrap();
+            assert_eq!(r["status"], "unknown", "wide={wide} ids={ids:?}");
+            assert!(r["reasons"].as_array().unwrap().iter().any(|reason| reason["reason"] == "declared_closure_limit"), "wide={wide} ids={ids:?}");
+            assert_eq!(r["covered_subjects"], json!([]));
+            assert_eq!(r["authority"], "not_established");
+        }
+    }
+}

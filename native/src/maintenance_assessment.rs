@@ -110,6 +110,13 @@ pub(crate) fn assess(
         let mut errors = Vec::new();
         visit(subject, nodes, &mut BTreeSet::new(), &mut scope, &mut errors);
         if !errors.is_empty() { unresolved.insert(subject.clone()); }
+        // A shared traversal may have cached a node before this requested
+        // scope reaches its own limit. Retain its actual diagnostics either way.
+        if subjects.contains(subject) {
+            for error in errors {
+                if !reasons.contains(&error) { reasons.push(error); }
+            }
+        }
         subject_closures.insert(subject.clone(), scope);
     }
     let mut active_related = BTreeSet::new();
@@ -130,8 +137,8 @@ pub(crate) fn assess(
             retired_policies.push(json!({"id":id,"state":item["state"],"subjects":related,"source_ref":m["source_ref"],"scope":"retired_history_not_active_coverage_or_new_offer"}));
         }
     }
-    let relation = |id: &String| scope_relation(&subject_closures[id], unresolved.contains(id),
-        nodes.contains_key(id), &active_related, &retired_related);
+    let relation = |id: &String| subject_closures.get(id).map_or(ScopeRelation::Unresolved, |scope|
+        scope_relation(scope, unresolved.contains(id), nodes.contains_key(id), &active_related, &retired_related));
     let requested_with = |kind| subjects.iter().collect::<BTreeSet<_>>().into_iter()
         .filter(|id| relation(id) == kind).cloned().collect::<Vec<_>>();
     let covered_subjects = requested_with(ScopeRelation::Active);
