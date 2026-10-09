@@ -164,7 +164,6 @@ fn unavailable_computation_and_profile_rejections_remain_explicit() {
     let refusal = public_assessment::report(&opts, root, ReadMode::Frozen, None)
         .unwrap_err()
         .0;
-    assert!(refusal.contains("unknown assessment ID"));
     assert_eq!(
         refusal,
         "unknown assessment ID(s): not.here, also.gone; use open or pull to find an entry"

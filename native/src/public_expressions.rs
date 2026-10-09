@@ -281,12 +281,13 @@ fn migrate(
     let record = match record {
         Some(named) => {
             let record = expanded_path(cwd, named)?;
-            if !record.is_file() {
+            if !crate::project_modes::write_paths(std::slice::from_ref(&record), cwd)?[0].is_file()
+            {
                 let named = named.to_string_lossy();
                 return Err(crate::public_readers::no_record_here(
                     [named.as_ref()],
                     cwd,
-                    false,
+                    true,
                 ));
             }
             record

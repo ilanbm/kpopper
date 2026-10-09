@@ -227,15 +227,16 @@ fn run_routed(
 ) -> Result<String> {
     let cwd = cwd.canonicalize()?;
     if let Some(named) = &request.record
-        && !cwd.join(named).is_file()
+        && !crate::project_modes::write_paths(&[cwd.join(named)], &cwd)?[0].is_file()
     {
-        // A named record that is not there is refused as the readers refuse it, on stderr.
+        // A named record that is not there, after a Simple project's redirect, is refused
+        // as the readers refuse it, on stderr.
         *ordinary = true;
         let named = named.to_string_lossy();
         return Err(crate::public_readers::no_record_here(
             [named.as_ref()],
             &cwd,
-            false,
+            true,
         ));
     }
     let original = request
