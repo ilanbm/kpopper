@@ -96,7 +96,7 @@ pub fn report_value(
     let unknown = options
         .ids
         .iter()
-        .filter(|id| !nodes.contains_key(*id))
+        .filter(|id| !nodes.contains_key(id))
         .map(String::as_str)
         .collect::<Vec<_>>();
     crate::require(
