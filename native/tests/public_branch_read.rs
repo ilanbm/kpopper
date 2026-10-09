@@ -11,6 +11,8 @@ use std::{
 
 fn git(root: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
+        // Fixture commits must not leave maintenance changing bytes during a read.
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .arg("-C")
         .arg(root)
         .args(args)
