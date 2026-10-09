@@ -95,7 +95,9 @@ fn human_notice(output: &str, diagnostics: &[String]) -> String {
     output
         .lines()
         .take_while(|line| {
-            !line.starts_with("add ") && !line.starts_with("set ") && !line.starts_with("review ")
+            !line.starts_with("add ")
+                && !line.starts_with("set ")
+                && !line.starts_with("review ")
         })
         .filter(|line| !line.trim().is_empty() && !diagnostics.iter().any(|item| item == line))
         .collect::<Vec<_>>()
@@ -230,13 +232,7 @@ enum PreRecord {
         observations: BTreeMap<PathBuf, Vec<u8>>,
     },
 }
-fn pre_record(
-    kind: &str,
-    options: &Options,
-    action: &V,
-    scope: &V,
-    route: &WriteRoute,
-) -> Result<PreRecord> {
+fn pre_record(kind: &str, options: &Options, action: &V, scope: &V, route: &WriteRoute) -> Result<PreRecord> {
     require(
         kind == "add" && map(field(map(action)?, "body")?).is_ok(),
         "a project contribution requires a complete add or set, not a review refresh",
@@ -307,12 +303,7 @@ fn load_document(route: &WriteRoute) -> Result<Loaded> {
     }
     let mut inventory = Inventory::default();
     let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
-    Ok((
-        document.source.projected(),
-        inventory,
-        document.history,
-        None,
-    ))
+    Ok((document.source.projected(), inventory, document.history, None))
 }
 
 pub(crate) fn route(
@@ -377,15 +368,14 @@ pub(crate) fn route(
         {
             return Ok(Outcome::Local(action));
         }
-        let (bundle, files, observations) =
-            match pre_record(kind, options, &action, &scope, &route)? {
-                PreRecord::Draft(draft) => return Ok(Outcome::Handled(draft)),
-                PreRecord::Bundle {
-                    bundle,
-                    files,
-                    observations,
-                } => (bundle, files, observations),
-            };
+        let (bundle, files, observations) = match pre_record(kind, options, &action, &scope, &route)? {
+            PreRecord::Draft(draft) => return Ok(Outcome::Handled(draft)),
+            PreRecord::Bundle {
+                bundle,
+                files,
+                observations,
+            } => (bundle, files, observations),
+        };
         let event_id = options
             .event_id
             .clone()
@@ -583,11 +573,9 @@ pub(crate) fn route(
                     "private source locator needs explicit portable evidence reconciliation",
                 )?));
             }
-            let (files, observations) =
-                evidence(&plan.objects(), options.evidence_root.as_deref())?;
-            let (bundle, files) =
-                crate::history_node_contribution::bundle(&plan, &scope, &files)
-                    .map_err(|e| Error(format!("history contribution subset: {e}")))?;
+            let (files, observations) = evidence(&plan.objects(), options.evidence_root.as_deref())?;
+            let (bundle, files) = crate::history_node_contribution::bundle(&plan, &scope, &files)
+                .map_err(|e| Error(format!("history contribution subset: {e}")))?;
             (bundle, files, observations)
         };
         unchanged()?;

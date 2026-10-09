@@ -311,19 +311,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         .map(|l| l.workspace.clone())
         .unwrap_or_else(|| cwd.clone());
     let root = if options.host.as_deref() == Some("codex")
-        && let Some(sid) = payload["session_id"]
-            .as_str()
-            .filter(|s| kpop_native::public_session::valid_session(s))
-    {
+        && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
         kpop_native::view_continuation::session_start_root(&cwd, sid)
             .unwrap_or_else(|error| {
                 eprintln!("kpopper prior continuation unavailable: {error}");
                 None
-            })
-            .unwrap_or(root)
-    } else {
-        root
-    };
+            }).unwrap_or(root)
+    } else { root };
     payload["cwd"] = json!(root);
     let command = std::env::current_exe()?.canonicalize()?;
     let mut output = Vec::<String>::new();
@@ -334,10 +328,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     });
     if location.as_ref().is_some_and(|l| l.status == "unavailable") {
         if options.host.as_deref() == Some("codex")
-            && let Some(sid) = payload["session_id"]
-                .as_str()
-                .filter(|s| kpop_native::public_session::valid_session(s))
-        {
+            && let Some(sid) = payload["session_id"].as_str().filter(|s| kpop_native::public_session::valid_session(s)) {
             let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
         }
         return Ok(first_use.unwrap_or_default());
@@ -346,16 +337,9 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let result = Store::open(&root)?;
         output.push(format!("Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}", result["commits"], serde_json::to_string(&result["document"]["readings"])?));
     } else if let Some(location) = location.as_ref().filter(|l| l.status != "missing") {
-        match retry_session_snapshot(|| {
-            kpop_native::session_admin::hook_opening(&root, mode, options.host.as_deref())
-        }) {
-            Ok(kpop_native::session_admin::HookOpening {
-                text: Some(text),
-                warning,
-            }) => {
-                if let Some(warning) = warning {
-                    output.push(warning);
-                }
+        match retry_session_snapshot(|| kpop_native::session_admin::hook_opening(&root, mode, options.host.as_deref())) {
+            Ok(kpop_native::session_admin::HookOpening { text: Some(text), warning }) => {
+                if let Some(warning) = warning { output.push(warning); }
                 output.push(text.trim_end().into());
                 if let Some(host) = options.host.as_deref() {
                     let (ground, record) = if host == "claude" {
@@ -366,27 +350,20 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                     output.push(format!("next: {ground} <entry|prefix> (values with sources, what a change reaches) · {record} (what this session found) · check"));
                 }
             }
-            Ok(kpop_native::session_admin::HookOpening {
-                text: None,
-                warning,
-            }) => {
-                if let Some(warning) = warning.as_ref() {
-                    output.push(warning.clone());
-                }
+            Ok(kpop_native::session_admin::HookOpening { text: None, warning }) => {
+                if let Some(warning) = warning.as_ref() { output.push(warning.clone()); }
                 let options = kpop_native::public_readers::Options {
                     host: options.host.clone(),
                     from_hook: true,
                     ..Default::default()
                 };
-                match retry_session_snapshot(|| {
-                    kpop_native::public_readers::run_auto(
-                        "open",
-                        &options,
-                        &root,
-                        mode,
-                        kpop_native::public_readers::Reply::View,
-                    )
-                }) {
+                match retry_session_snapshot(|| kpop_native::public_readers::run_auto(
+                    "open",
+                    &options,
+                    &root,
+                    mode,
+                    kpop_native::public_readers::Reply::View,
+                )) {
                     Ok(opening) => {
                         if !opening.text.is_empty() {
                             output.push(opening.text.trim_end().into());
@@ -422,13 +399,8 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     let sid = payload["session_id"]
         .as_str()
         .filter(|s| kpop_native::public_session::valid_session(s));
-    if options.host.as_deref() == Some("codex")
-        && let Some(sid) = sid
-    {
-        let managed = !opening_failed
-            && output
-                .iter()
-                .any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
+    if options.host.as_deref() == Some("codex") && let Some(sid) = sid {
+        let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
         // A failed opening keeps the prior source obligation active on resume.
         // An intentional route opt-out remains inactive.
         match kpop_native::view_continuation::initialize_for_start(&root, sid, managed) {
@@ -436,34 +408,23 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                 for text in &mut output {
                     if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
                         match kpop_native::view_continuation::bind_opening(text, sid) {
-                            Ok(bound) => {
-                                *text = bound;
-                            }
+                            Ok(bound) => { *text = bound; },
                             Err(error) => {
-                                if matches!(
-                                    kpop_native::view_continuation::has_pending_replacement(
-                                        &root, sid
-                                    ),
-                                    Ok(false)
-                                ) {
+                                if matches!(kpop_native::view_continuation::has_pending_replacement(&root, sid), Ok(false)) {
                                     // An inactive binding still permits the unbound
                                     // canonical opening requested by the user.
-                                    let _ = kpop_native::view_continuation::initialize_for_start(
-                                        &root, sid, false,
-                                    );
+                                    let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
                                 } else {
                                     // Never erase a recorded replacement, or an
                                     // obligation whose state cannot be checked.
-                                    *text = format!(
-                                        "Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source."
-                                    );
+                                    *text = format!("Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source.");
                                 }
                                 eprintln!("kpopper managed view route unavailable: {error}");
-                            }
+                            },
                         }
                     }
                 }
-            }
+            },
             Ok(()) => (),
             Err(error) => eprintln!("kpopper continuation state unavailable: {error}"),
         }
@@ -477,9 +438,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         // A baseline that cannot be saved leaves the opening intact; prompt
         // diagnostics then stay silent for this session. A failed opening has
         // already put its diagnostic on stderr, so none is added for the baseline.
-        match retry_session_snapshot(|| {
-            kpop_native::public_session::start_mark(&root, &payload, mode)
-        }) {
+        match retry_session_snapshot(|| kpop_native::public_session::start_mark(&root, &payload, mode)) {
             Err(error) if !opening_failed => {
                 eprintln!("kpop: session baseline was not saved: {error}")
             }
@@ -488,10 +447,8 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
     }
     // Finish every checked read and baseline before a child may change the
     // publication observations those reads pin.
-    if !feasibility
-        && mode == kpop_native::source_capture::ReadMode::Live
-        && let Ok(project) = kpop_native::project_modes::Project::open(&root)
-    {
+    if !feasibility && mode == kpop_native::source_capture::ReadMode::Live
+        && let Ok(project) = kpop_native::project_modes::Project::open(&root) {
         kpop_native::pending_publication::trigger_after_capture(&project);
     }
     Ok(output.join("\n"))
@@ -1198,12 +1155,7 @@ fn main() {
                 } else {
                     kpop_native::source_capture::ReadMode::Live
                 };
-            kpop_native::public_session::context(
-                &payload,
-                options.host.as_deref(),
-                mode,
-                &options.event,
-            )
+            kpop_native::public_session::context(&payload, options.host.as_deref(), mode, &options.event)
         })();
         match result {
             Ok(output) => {

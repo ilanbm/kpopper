@@ -70,22 +70,8 @@ fn feasibility_store_cannot_silently_ignore_reframe() {
     let (_temp, root) = fixture();
     ok(write(&root, "add", "p.input", "true", "first"));
     let before = snapshot(&root);
-    let result = run(
-        &root,
-        &[
-            "set",
-            "p.input",
-            "--value",
-            "false",
-            "--operation",
-            "rewrite",
-            "--source",
-            "fixture",
-            "--on",
-            "2026-09-19T00:00:00Z",
-            "--reframe",
-        ],
-    );
+    let result = run(&root, &["set", "p.input", "--value", "false", "--operation", "rewrite",
+        "--source", "fixture", "--on", "2026-09-19T00:00:00Z", "--reframe"]);
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("reframe is unavailable"));
     assert_eq!(snapshot(&root), before);

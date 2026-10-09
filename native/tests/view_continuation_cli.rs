@@ -1,7 +1,7 @@
-use std::fs;
-use std::io::Write;
 use std::process::Command;
+use std::io::Write;
 use std::process::Stdio;
+use std::fs;
 
 #[test]
 fn session_view_advertises_managed_continuation_controls() {
@@ -34,33 +34,16 @@ fn inactive_continuation_hooks_are_silent_and_errors_never_panic() {
         let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(["_hook", "continuation", "codex"])
             .current_dir(root.path())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let payload =
-            serde_json::json!({"session_id":session,"hook_event_name":"Stop","cwd":root.path()});
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(payload.to_string().as_bytes())
-            .unwrap();
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+            .spawn().unwrap();
+        let payload = serde_json::json!({"session_id":session,"hook_event_name":"Stop","cwd":root.path()});
+        child.stdin.take().unwrap().write_all(payload.to_string().as_bytes()).unwrap();
         let output = child.wait_with_output().unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
         assert!(output.stdout.is_empty());
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(!error.contains("panicked"));
-        assert_eq!(
-            error.contains("context continuation unavailable"),
-            diagnostic,
-            "{error}"
-        );
+        assert_eq!(error.contains("context continuation unavailable"), diagnostic, "{error}");
     }
 }
 
@@ -79,35 +62,19 @@ fn unmanaged_or_disabled_hook_ignores_broken_project_config_without_locating_wor
         let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .args(["_hook", "continuation", "codex"])
             .current_dir(root.path())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+            .spawn().unwrap();
         let payload = serde_json::json!({
             "session_id":session,
             "hook_event_name":"PostToolUse",
             "cwd":root.path(),
             "tool_response":{"output":"no continuation marker"}
         });
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(payload.to_string().as_bytes())
-            .unwrap();
+        child.stdin.take().unwrap().write_all(payload.to_string().as_bytes()).unwrap();
         let output = child.wait_with_output().unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
         assert!(output.stdout.is_empty());
-        assert!(
-            output.stderr.is_empty(),
-            "hook inspected project config: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert!(output.stderr.is_empty(), "hook inspected project config: {}", String::from_utf8_lossy(&output.stderr));
     }
 }
 
@@ -123,32 +90,17 @@ fn malformed_private_continuation_state_is_reported_by_the_dedicated_hook() {
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "continuation", "codex"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
     let payload = serde_json::json!({
         "session_id":session,
         "hook_event_name":"PostToolUse",
         "cwd":root.path(),
         "tool_response":{"output":"KPOPPER_CONTEXT_QUEUED {}"}
     });
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(payload.to_string().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(payload.to_string().as_bytes()).unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert!(output.stdout.is_empty());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("kpopper context continuation unavailable")
-    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("kpopper context continuation unavailable"));
 }

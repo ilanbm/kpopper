@@ -20,14 +20,9 @@ fn membership_is_addressable_without_expanding_or_cropping_bodies() {
     add_membership_details(&logical, &mut view, &["group:/alpha".into()]).unwrap();
     assert_eq!(view["nodes"], nodes);
     assert_eq!(view["coverage"], coverage);
-    let ids = view["dictionary"]
-        .as_object()
-        .unwrap()
-        .values()
-        .filter(|row| row["kind"] == "node")
-        .map(|row| row["original"].as_str().unwrap())
-        .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(ids, std::collections::BTreeSet::from(["a:exact", "ב", "c"]));
+    let ids = view["dictionary"].as_object().unwrap().values().filter(|row| row["kind"] == "node")
+        .map(|row| row["original"].as_str().unwrap()).collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(ids, std::collections::BTreeSet::from(["a:exact","ב","c"]));
     assert_eq!(view["membership_detail"]["additional_bodies_read"], false);
     let once = view.clone();
     add_membership_details(&logical, &mut view, &["group:/alpha".into()]).unwrap();

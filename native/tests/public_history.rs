@@ -30,12 +30,8 @@ fn tree(root: &Path) -> BTreeMap<String, String> {
                 walk(root, &path, out);
             } else {
                 out.insert(
-                    path.strip_prefix(root)
-                        .unwrap()
-                        .iter()
-                        .map(|part| part.to_str().unwrap())
-                        .collect::<Vec<_>>()
-                        .join("/"),
+                    path.strip_prefix(root).unwrap().iter()
+                        .map(|part| part.to_str().unwrap()).collect::<Vec<_>>().join("/"),
                     kpop_native::identity::sha256(&fs::read(path).unwrap()),
                 );
             }
@@ -51,22 +47,12 @@ fn edit_reading(entry: &Path, subject: &str, value: i64) -> i64 {
     use kpop_native::value::TypedValue as V;
     let mut document =
         kpop_native::history_yaml::decode_document(&fs::read(entry).unwrap()).unwrap();
-    let V::Map(fields) = &mut document else {
-        panic!("record mapping")
-    };
-    let V::Map(known) = fields.get_mut("known").unwrap() else {
-        panic!("known mapping")
-    };
-    let V::Map(body) = known.get_mut(subject).unwrap() else {
-        panic!("reading body")
-    };
+    let V::Map(fields) = &mut document else { panic!("record mapping") };
+    let V::Map(known) = fields.get_mut("known").unwrap() else { panic!("known mapping") };
+    let V::Map(body) = known.get_mut(subject).unwrap() else { panic!("reading body") };
     let old = body["v"].to_json().unwrap().as_i64().unwrap();
     body.insert("v".into(), V::from_json(&serde_json::json!(value)).unwrap());
-    fs::write(
-        entry,
-        kpop_native::history_yaml::encode_document(&document).unwrap(),
-    )
-    .unwrap();
+    fs::write(entry, kpop_native::history_yaml::encode_document(&document).unwrap()).unwrap();
     old
 }
 
@@ -82,12 +68,10 @@ fn public_first_write_and_report_update_preserve_dates_and_recovery_checkpoint()
             .join("../scripts/reasoning/native")
             .join(format!("{target}.kpopper-runtime")),
         resources.join("reasoning").join(format!("{target}.zip")),
-    )
-    .unwrap();
+    ).unwrap();
     let command = || {
         let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
-        command
-            .current_dir(&root)
+        command.current_dir(&root)
             .env_remove("KPOPPER_AGENT_SESSION")
             .env_remove("CODEX_THREAD_ID")
             .env("KPOPPER_PRIVATE_HOME", root.join("private"))
@@ -97,38 +81,15 @@ fn public_first_write_and_report_update_preserve_dates_and_recovery_checkpoint()
         command
     };
     for args in [
-        vec![
-            "add",
-            "s.smoke",
-            "name=Installed source",
-            "read=2026-09-01",
-            "--as-of",
-            "2026-09-01",
-        ],
-        vec![
-            "add",
-            "p.hours",
-            "v=10",
-            "from=s.smoke",
-            "--as-of",
-            "2026-09-01",
-        ],
+        vec!["add", "s.smoke", "name=Installed source", "read=2026-09-01", "--as-of", "2026-09-01"],
+        vec!["add", "p.hours", "v=10", "from=s.smoke", "--as-of", "2026-09-01"],
     ] {
         let output = command().args(args).output().unwrap();
-        assert!(
-            output.status.success(),
-            "{} {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert!(output.status.success(), "{} {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     }
     let capture = kpop_native::history_node_capture::Capture::read(&root).unwrap();
-    assert_eq!(
-        capture.document().to_json().unwrap()["known"]["p.hours"]["v"],
-        10
-    );
-    let checkpoint =
-        fs::read(root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap();
+    assert_eq!(capture.document().to_json().unwrap()["known"]["p.hours"]["v"], 10);
+    let checkpoint = fs::read(root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap();
     assert_eq!(checkpoint, fs::read(root.join("GROUNDING.yaml")).unwrap());
     let report = serde_json::json!({
         "event_id":"installed-update", "date":"2026-09-02",
@@ -137,30 +98,20 @@ fn public_first_write_and_report_update_preserve_dates_and_recovery_checkpoint()
         "record_sha256":kpop_native::identity::sha256(&checkpoint),
         "updates":[{"kind":"set", "id":"p.hours", "value":19}]
     });
-    let mut child = command()
-        .args(["update", "--file", "-"])
+    let mut child = command().args(["update", "--file", "-"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
+        .spawn().unwrap();
     use std::io::Write;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(serde_json::to_string(&report).unwrap().as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(serde_json::to_string(&report).unwrap().as_bytes()).unwrap();
     assert_eq!(ok(child.wait_with_output().unwrap())["state"], "applied");
     let capture = kpop_native::history_node_capture::Capture::read(&root).unwrap();
     let document = capture.document().to_json().unwrap();
     assert_eq!(document["meta"]["updated"], "2026-09-02");
     assert_eq!(document["known"]["p.hours"]["v"], 19);
     assert_eq!(document["known"]["p.hours"]["of"], "2026-09-02");
-    assert_eq!(
-        fs::read(root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap(),
-        fs::read(root.join("GROUNDING.yaml")).unwrap()
-    );
+    assert_eq!(fs::read(root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap(), fs::read(root.join("GROUNDING.yaml")).unwrap());
 }
 
 #[test]
@@ -349,10 +300,7 @@ fn explicit_acts_and_edited_view_proposals_retain_old_claims() {
     assert_eq!(status["subjects"]["p.x"]["heads"][0], version);
     // The accepted reading is unchanged and the view verifies again.
     assert_eq!(edit_reading(&entry, "p.x", 1), 1);
-    assert_eq!(
-        ok(run(&copy, &["history", "reconcile"]))["rebuild_safe"],
-        true
-    );
+    assert_eq!(ok(run(&copy, &["history", "reconcile"]))["rebuild_safe"], true);
 }
 
 #[test]

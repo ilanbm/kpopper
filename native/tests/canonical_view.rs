@@ -27,8 +27,7 @@ fn session() -> CheckedSession {
 #[test]
 fn broad_focus_expand_share_lossless_graph_and_revision() {
     let checked = session();
-    let example: J =
-        serde_json::from_str(include_str!("fixtures/canonical-view-example.json")).unwrap();
+    let example: J = serde_json::from_str(include_str!("fixtures/canonical-view-example.json")).unwrap();
     let broad = checked
         .canonical_view(checked.revision(), &CanonicalViewRequest::default())
         .unwrap();
@@ -74,12 +73,7 @@ fn broad_focus_expand_share_lossless_graph_and_revision() {
         .canonical_view(
             checked.revision(),
             &CanonicalViewRequest {
-                focus: example["focus"]["ids"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|id| id.as_str().unwrap().to_owned())
-                    .collect(),
+                focus: example["focus"]["ids"].as_array().unwrap().iter().map(|id| id.as_str().unwrap().to_owned()).collect(),
                 expand: vec![],
                 frontier_depth: None,
             },
@@ -103,21 +97,7 @@ fn broad_focus_expand_share_lossless_graph_and_revision() {
                 || e["source"]["to"] != e["projected_to"])
     );
 
-    let group = broad["groups"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|g| {
-            g["member_source_ids"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|id| id == "p.a")
-        })
-        .unwrap()["group_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let group = broad["groups"].as_array().unwrap().iter().find(|g| g["member_source_ids"].as_array().unwrap().iter().any(|id| id == "p.a")).unwrap()["group_id"].as_str().unwrap().to_owned();
     let expanded = checked
         .canonical_view(
             checked.revision(),
@@ -204,28 +184,14 @@ fn stale_revision_unknown_ids_and_wrong_expand_kind_fail_explicitly() {
     );
 }
 
+
 #[test]
 fn broad_view_keeps_proposal_and_report_navigation_branches_visible() {
     use kpop_native::canonical_view::build;
     use std::collections::{BTreeMap, BTreeSet};
-    let ids = [
-        "known.proposal.pilot",
-        "known.proposal.direction",
-        "known.report.baseline",
-        "known.report.criteria",
-        "known.source_limits",
-        "source.hist",
-    ];
-    let nodes = ids
-        .iter()
-        .map(|id| ((*id).to_owned(), json!({"source_id":id,"body":["map",[]]})))
-        .collect::<BTreeMap<_, _>>();
-    let members = |subset: &[&str]| {
-        subset
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect::<BTreeSet<_>>()
-    };
+    let ids = ["known.proposal.pilot", "known.proposal.direction", "known.report.baseline", "known.report.criteria", "known.source_limits", "source.hist"];
+    let nodes = ids.iter().map(|id| ((*id).to_owned(), json!({"source_id":id,"body":["map",[]]}))).collect::<BTreeMap<_,_>>();
+    let members = |subset: &[&str]| subset.iter().map(|s| (*s).to_owned()).collect::<BTreeSet<_>>();
     let groups = BTreeMap::from([
         ("/".into(), members(&ids)),
         ("/known".into(), members(&ids[..5])),
@@ -240,130 +206,42 @@ fn broad_view_keeps_proposal_and_report_navigation_branches_visible() {
         ("/source/hist".into(), members(&ids[5..])),
     ]);
     let children = BTreeMap::from([
-        (
-            "/".into(),
-            BTreeSet::from(["/known".into(), "/source".into()]),
-        ),
-        (
-            "/known".into(),
-            BTreeSet::from([
-                "/known/proposal".into(),
-                "/known/report".into(),
-                "/known/source_limits".into(),
-            ]),
-        ),
-        (
-            "/known/proposal".into(),
-            BTreeSet::from([
-                "/known/proposal/pilot".into(),
-                "/known/proposal/direction".into(),
-            ]),
-        ),
-        (
-            "/known/report".into(),
-            BTreeSet::from([
-                "/known/report/baseline".into(),
-                "/known/report/criteria".into(),
-            ]),
-        ),
+        ("/".into(), BTreeSet::from(["/known".into(), "/source".into()])),
+        ("/known".into(), BTreeSet::from(["/known/proposal".into(), "/known/report".into(), "/known/source_limits".into()])),
+        ("/known/proposal".into(), BTreeSet::from(["/known/proposal/pilot".into(), "/known/proposal/direction".into()])),
+        ("/known/report".into(), BTreeSet::from(["/known/report/baseline".into(), "/known/report/criteria".into()])),
         ("/source".into(), BTreeSet::from(["/source/hist".into()])),
     ]);
     let direct = BTreeMap::from([
-        (
-            "/known/source_limits".into(),
-            vec!["known.source_limits".into()],
-        ),
+        ("/known/source_limits".into(), vec!["known.source_limits".into()]),
         ("/source/hist".into(), vec!["source.hist".into()]),
     ]);
     let leaves = BTreeMap::new();
-    let packet = build(
-        "fixture",
-        json!({}),
-        "r1",
-        "scope",
-        &nodes,
-        &[],
-        &groups,
-        &children,
-        &direct,
-        &leaves,
-        &CanonicalViewRequest::default(),
-    )
-    .unwrap();
-    let paths = packet["groups"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|g| g["path"].as_str().unwrap())
-        .collect::<BTreeSet<_>>();
+    let packet = build("fixture", json!({}), "r1", "scope", &nodes, &[], &groups, &children, &direct, &leaves, &CanonicalViewRequest::default()).unwrap();
+    let paths = packet["groups"].as_array().unwrap().iter().map(|g| g["path"].as_str().unwrap()).collect::<BTreeSet<_>>();
     assert!(paths.contains("/known/proposal"));
     assert!(paths.contains("/known/report"));
-    assert!(
-        !paths.contains("/known"),
-        "generic parent must not swallow the useful categories"
-    );
-    assert!(
-        packet["nodes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|n| n["source_id"] == "known.source_limits")
-    );
-    assert!(
-        packet["nodes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|n| n["source_id"] == "source.hist")
-    );
+    assert!(!paths.contains("/known"), "generic parent must not swallow the useful categories");
+    assert!(packet["nodes"].as_array().unwrap().iter().any(|n| n["source_id"] == "known.source_limits"));
+    assert!(packet["nodes"].as_array().unwrap().iter().any(|n| n["source_id"] == "source.hist"));
 }
 
 #[test]
 fn question_focus_reuses_bound_search_and_keeps_unmatched_coverage() {
-    let checked = session();
-    let ids = checked
-        .canonical_query_focus(checked.revision(), "p.a")
-        .unwrap();
+    let checked=session();
+    let ids=checked.canonical_query_focus(checked.revision(),"p.a").unwrap();
     assert!(ids.contains(&"p.a".to_string()));
-    let packet = checked
-        .canonical_view(
-            checked.revision(),
-            &CanonicalViewRequest {
-                focus: ids,
-                expand: vec![],
-                frontier_depth: None,
-            },
-        )
-        .unwrap();
-    assert_eq!(packet["coverage"]["count"], 4);
-    assert!(checked.canonical_query_focus("stale", "p.a").is_err());
-    assert!(
-        checked
-            .canonical_query_focus(checked.revision(), "zxqv_nonexistent_topic")
-            .unwrap()
-            .is_empty()
-    );
+    let packet=checked.canonical_view(checked.revision(),&CanonicalViewRequest {focus:ids,expand:vec![], frontier_depth:None}).unwrap();
+    assert_eq!(packet["coverage"]["count"],4);
+    assert!(checked.canonical_query_focus("stale","p.a").is_err());
+    assert!(checked.canonical_query_focus(checked.revision(),"zxqv_nonexistent_topic").unwrap().is_empty());
 }
 
 #[test]
 fn nested_handle_prefixes_are_not_silent_no_ops() {
-    let checked = session();
-    for request in [
-        CanonicalViewRequest {
-            focus: vec!["node:group:/readings".into()],
-            expand: vec![],
-            frontier_depth: None,
-        },
-        CanonicalViewRequest {
-            focus: vec![],
-            expand: vec!["node:group:/readings".into()],
-            frontier_depth: None,
-        },
-    ] {
-        assert!(
-            checked
-                .canonical_view(checked.revision(), &request)
-                .is_err()
-        );
+    let checked=session();
+    for request in [CanonicalViewRequest{focus:vec!["node:group:/readings".into()],expand:vec![], frontier_depth:None},
+        CanonicalViewRequest{focus:vec![],expand:vec!["node:group:/readings".into()], frontier_depth:None}] {
+        assert!(checked.canonical_view(checked.revision(),&request).is_err());
     }
 }

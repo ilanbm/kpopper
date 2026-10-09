@@ -1,8 +1,8 @@
 use kpop_native::view_descriptions::{
-    DescriptionStyle, INDEX_SCHEMA, attach, build_index, build_index_with_style,
-    refresh_for_groups, refresh_for_view, refresh_index,
+    attach, build_index, build_index_with_style, refresh_for_groups, refresh_for_view,
+    refresh_index, DescriptionStyle, INDEX_SCHEMA,
 };
-use serde_json::{Value as J, json};
+use serde_json::{json, Value as J};
 use std::collections::BTreeSet;
 
 fn node(id: &str, title: &str) -> J {
@@ -85,13 +85,11 @@ fn no_op_and_revision_only_refresh_reuse_and_rebind_without_regeneration() {
     assert_eq!(rebound.metrics.generated, 0);
     assert_eq!(rebound.metrics.rebound, 4);
     assert!(rebound.metrics.affected_group_ids.is_empty());
-    assert!(
-        rebound.index["descriptions"]
-            .as_object()
-            .unwrap()
-            .values()
-            .all(|description| description["revision"] == "r2")
-    );
+    assert!(rebound.index["descriptions"]
+        .as_object()
+        .unwrap()
+        .values()
+        .all(|description| description["revision"] == "r2"));
 
     let requested = refresh_for_groups(
         &initial,
@@ -106,11 +104,9 @@ fn no_op_and_revision_only_refresh_reuse_and_rebind_without_regeneration() {
         requested.index["descriptions"].as_object().unwrap().len(),
         1
     );
-    assert!(
-        requested.index["descriptions"]
-            .get("group:/alpha")
-            .is_some()
-    );
+    assert!(requested.index["descriptions"]
+        .get("group:/alpha")
+        .is_some());
 }
 
 #[test]
@@ -295,12 +291,10 @@ fn partial_corrupt_and_legacy_caches_never_supply_old_text() {
     );
     let repaired = refresh_index(&full, &corrupt, DescriptionStyle::SourceLabels).unwrap();
     assert_eq!(repaired.metrics.generated, 1);
-    assert!(
-        !repaired.index["descriptions"]["group:/alpha"]["text"]
-            .as_str()
-            .unwrap()
-            .contains("stale injected")
-    );
+    assert!(!repaired.index["descriptions"]["group:/alpha"]["text"]
+        .as_str()
+        .unwrap()
+        .contains("stale injected"));
 
     let legacy = json!({"schema":"kpopper.derived-description-index/v1","generator":"source-labels/v1",
         "descriptions":{"group:/alpha":{"schema":"kpopper.derived-description/v1","text":"legacy stale text"}}});

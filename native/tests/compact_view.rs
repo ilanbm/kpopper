@@ -1,5 +1,5 @@
 use kpop_native::canonical_view::{self, CanonicalViewRequest};
-use serde_json::{Value as J, json};
+use serde_json::{json, Value as J};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn structural_packet() -> J {
@@ -9,81 +9,24 @@ fn structural_packet() -> J {
 #[test]
 fn allocated_original_ids_with_handle_prefixes_keep_their_identity() {
     let all = ["claim.0", "node:claim.0", "group:/bucket", "other"];
-    let nodes = all
-        .iter()
-        .map(|id| ((*id).to_owned(), json!({"source_id":id,"body":["text",id]})))
-        .collect::<BTreeMap<_, _>>();
-    let members = |ids: &[&str]| {
-        ids.iter()
-            .map(|id| (*id).to_owned())
-            .collect::<BTreeSet<_>>()
-    };
-    let groups = BTreeMap::from([
-        ("/".into(), members(&all)),
-        ("/bucket".into(), members(&["claim.0", "other"])),
-        (
-            "/prefixed".into(),
-            members(&["node:claim.0", "group:/bucket"]),
-        ),
-    ]);
-    let children = BTreeMap::from([(
-        "/".into(),
-        BTreeSet::from(["/bucket".into(), "/prefixed".into()]),
-    )]);
-    let build = |request: CanonicalViewRequest| {
-        canonical_view::build(
-            "prefixes",
-            json!(["map", []]),
-            "r1",
-            "scope",
-            &nodes,
-            &[],
-            &groups,
-            &children,
-            &BTreeMap::new(),
-            &BTreeMap::new(),
-            &request,
-        )
-        .unwrap()
-    };
-    let full = build(CanonicalViewRequest {
-        focus: vec![],
-        expand: vec!["group:/".into()],
-        frontier_depth: None,
-    });
-    for original in ["node:claim.0", "group:/bucket"] {
-        let selected = kpop_native::view_selection::allocate(
-            &full,
-            &[json!({"id":original,"match":"literal_id"})],
-            &[],
-            20_000,
-            |s| s.len(),
-        )
-        .unwrap();
-        assert_eq!(selected.ids, [original]);
-        let view = build(CanonicalViewRequest {
-            focus: selected.ids,
-            expand: vec![],
-            frontier_depth: None,
-        });
-        let direct = view["nodes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|n| n["source_id"].as_str().unwrap())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            direct,
-            [original],
-            "source ID must not become another node/group handle"
-        );
+    let nodes = all.iter().map(|id| ((*id).to_owned(), json!({"source_id":id,"body":["text",id]}))).collect::<BTreeMap<_,_>>();
+    let members = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect::<BTreeSet<_>>();
+    let groups = BTreeMap::from([("/".into(),members(&all)),("/bucket".into(),members(&["claim.0","other"])),
+        ("/prefixed".into(),members(&["node:claim.0","group:/bucket"]))]);
+    let children = BTreeMap::from([("/".into(),BTreeSet::from(["/bucket".into(),"/prefixed".into()]))]);
+    let build = |request: CanonicalViewRequest| canonical_view::build("prefixes",json!(["map",[]]),"r1","scope",
+        &nodes,&[],&groups,&children,&BTreeMap::new(),&BTreeMap::new(),&request).unwrap();
+    let full = build(CanonicalViewRequest {focus:vec![],expand:vec!["group:/".into()], frontier_depth:None});
+    for original in ["node:claim.0","group:/bucket"] {
+        let selected = kpop_native::view_selection::allocate(&full,
+            &[json!({"id":original,"match":"literal_id"})],&[],20_000,|s|s.len()).unwrap();
+        assert_eq!(selected.ids,[original]);
+        let view=build(CanonicalViewRequest {focus:selected.ids,expand:vec![], frontier_depth:None});
+        let direct=view["nodes"].as_array().unwrap().iter().map(|n|n["source_id"].as_str().unwrap()).collect::<Vec<_>>();
+        assert_eq!(direct,[original],"source ID must not become another node/group handle");
     }
-    let explicit_group = build(CanonicalViewRequest {
-        focus: vec![],
-        expand: vec!["group:/bucket".into()],
-        frontier_depth: None,
-    });
-    assert_eq!(explicit_group["nodes"].as_array().unwrap().len(), 2);
+    let explicit_group = build(CanonicalViewRequest {focus:vec![],expand:vec!["group:/bucket".into()], frontier_depth:None});
+    assert_eq!(explicit_group["nodes"].as_array().unwrap().len(),2);
 }
 
 fn ids(packet: &J) -> Vec<String> {
@@ -151,17 +94,13 @@ fn folded_packet() -> J {
 fn edge_handles_survive_navigation_text_detail_but_not_source_changes() {
     let original = folded_packet();
     let broad = canonical_view::compact(&original, &[]).unwrap();
-    let handle = broad["edge_set_handle_template"]
-        .as_str()
-        .unwrap()
-        .replace("{edge_set_ref}", broad["links"][0][4].as_str().unwrap());
+    let handle = broad["edge_set_handle_template"].as_str().unwrap()
+        .replace("{edge_set_ref}",broad["links"][0][4].as_str().unwrap());
     let mut labels = original.clone();
-    for group in labels["groups"].as_array_mut().unwrap() {
-        group.as_object_mut().unwrap().remove("description");
-    }
+    for group in labels["groups"].as_array_mut().unwrap() { group.as_object_mut().unwrap().remove("description"); }
     let expanded = canonical_view::compact(&labels, &[handle.clone()]).unwrap();
     assert_eq!(expanded["view_id"], broad["view_id"]);
-    assert_eq!(expanded["expanded_edges"].as_array().unwrap().len(), 1);
+    assert_eq!(expanded["expanded_edges"].as_array().unwrap().len(),1);
     labels["revision"] = json!("changed-source");
     assert!(canonical_view::compact(&labels, &[handle]).is_err());
 }
@@ -230,13 +169,11 @@ fn compact_roundtrips_typed_edges_and_preserves_unique_metadata() {
     assert_eq!(compact["coverage"]["folded_count"], 0);
     assert!(compact["coverage"]["source_ids_sha256"].as_str().is_some());
     assert!(compact["coverage"]["receipt"].as_str().is_some());
-    assert!(
-        compact["nodes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|row| row.as_array().is_some_and(|row| row.len() == 3))
-    );
+    assert!(compact["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|row| row.as_array().is_some_and(|row| row.len() == 3)));
     assert!(compact["groups"].as_array().unwrap().is_empty());
 
     let null_ref = compact["dictionary"]
@@ -331,20 +268,16 @@ fn compact_roundtrips_typed_edges_and_preserves_unique_metadata() {
     );
     let roundtrip = canonical_view::compact(&packet, &[aggregate_handle]).unwrap();
     let restored = &roundtrip["expanded_edges"][0][1];
-    assert!(
-        restored
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|edge| edge["parallel"] == 1)
-    );
-    assert!(
-        restored
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|edge| edge["parallel"] == 2)
-    );
+    assert!(restored
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|edge| edge["parallel"] == 1));
+    assert!(restored
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|edge| edge["parallel"] == 2));
     assert!(restored.as_array().unwrap().iter().all(|edge| {
         edge.get("unknown_metadata")
             .is_none_or(|value| value == &json!({"x":null}))
@@ -408,22 +341,16 @@ fn folded_projection_keeps_navigation_facets_separate_and_selection_bound() {
     let focused = canonical_view::compact(&focus, &[]).unwrap();
     assert_eq!(focused["coverage"]["direct_count"], 3);
     assert_eq!(focused["coverage"]["folded_count"], 12);
-    assert!(
-        focused["dictionary"]
-            .as_object()
-            .unwrap()
-            .values()
-            .any(|entry| { entry["kind"] == "node" && entry["original"] == "chain.04" })
-    );
-    assert!(
-        focused["dictionary"]
-            .as_object()
-            .unwrap()
-            .values()
-            .any(|entry| {
-                entry["kind"] == "group" && entry["original"] == "group:/support/deep"
-            })
-    );
+    assert!(focused["dictionary"]
+        .as_object()
+        .unwrap()
+        .values()
+        .any(|entry| { entry["kind"] == "node" && entry["original"] == "chain.04" }));
+    assert!(focused["dictionary"]
+        .as_object()
+        .unwrap()
+        .values()
+        .any(|entry| { entry["kind"] == "group" && entry["original"] == "group:/support/deep" }));
     assert_ne!(compact["view_id"], focused["view_id"]);
     assert!(canonical_view::compact(&focus, &[folded_handle]).is_err());
 
@@ -468,25 +395,21 @@ fn more_than_eight_focused_ids_keep_routes_across_multiple_groups() {
         .filter_map(J::as_str)
         .collect::<BTreeSet<_>>();
     assert!(route_refs.len() > 3);
-    assert!(
-        compact["dictionary"]
-            .as_object()
-            .unwrap()
-            .values()
-            .any(|entry| { entry["kind"] == "group" && entry["original"] == "group:/featured" })
-    );
+    assert!(compact["dictionary"]
+        .as_object()
+        .unwrap()
+        .values()
+        .any(|entry| { entry["kind"] == "group" && entry["original"] == "group:/featured" }));
 }
 
 #[test]
 fn empty_selection_and_empty_graph_are_explicit_and_valid() {
     let packet = folded_packet();
     let empty_request = canonical_view::compact(&packet, &[]).unwrap();
-    assert!(
-        empty_request["expanded_edges"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert!(empty_request["expanded_edges"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 
     let mut empty = structural_packet();
     empty["nodes"] = json!([]);
@@ -581,13 +504,11 @@ fn focus_materializes_one_member_and_leaves_a_residual_group() {
         .find(|g| g["path"] == "/support")
         .unwrap();
     assert_eq!(residual["member_source_ids"].as_array().unwrap().len(), 10);
-    assert!(
-        !residual["member_source_ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|id| id == "chain.04")
-    );
+    assert!(!residual["member_source_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == "chain.04"));
 
     let expanded = canonical_view::build(
         "fixture",
@@ -608,66 +529,39 @@ fn focus_materializes_one_member_and_leaves_a_residual_group() {
     )
     .unwrap();
     assert_eq!(expanded["nodes"].as_array().unwrap().len(), 11);
-    assert!(
-        !expanded["groups"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|g| g["path"] == "/support")
-    );
+    assert!(!expanded["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|g| g["path"] == "/support"));
 }
 
 #[test]
 fn unrequested_direct_bodies_fold_into_existing_exact_navigation_routes() {
-    let packet = structural_packet();
-    let id = packet["nodes"][0]["source_id"].as_str().unwrap().to_owned();
-    let folded = canonical_view::fold_unrequested(&packet, std::slice::from_ref(&id), &[]).unwrap();
-    let remaining = folded["nodes"].as_array().unwrap();
-    assert!(remaining.len() < packet["nodes"].as_array().unwrap().len());
-    assert_eq!(
-        remaining.iter().find(|n| n["source_id"] == id).unwrap(),
-        &packet["nodes"][0]
-    );
-    assert_eq!(folded["coverage"], packet["coverage"]);
-    assert_eq!(
-        folded["navigation_membership"],
-        packet["navigation_membership"]
-    );
-    assert_eq!(original_edges(&folded), original_edges(&packet));
-    let compact = canonical_view::compact(&folded, &[]).unwrap();
-    assert_eq!(compact["coverage"]["count"], packet["coverage"]["count"]);
+    let packet=structural_packet();
+    let id=packet["nodes"][0]["source_id"].as_str().unwrap().to_owned();
+    let folded=canonical_view::fold_unrequested(&packet,std::slice::from_ref(&id),&[]).unwrap();
+    let remaining=folded["nodes"].as_array().unwrap();
+    assert!(remaining.len()<packet["nodes"].as_array().unwrap().len());
+    assert_eq!(remaining.iter().find(|n|n["source_id"]==id).unwrap(),&packet["nodes"][0]);
+    assert_eq!(folded["coverage"],packet["coverage"]);
+    assert_eq!(folded["navigation_membership"],packet["navigation_membership"]);
+    assert_eq!(original_edges(&folded),original_edges(&packet));
+    let compact=canonical_view::compact(&folded,&[]).unwrap();
+    assert_eq!(compact["coverage"]["count"],packet["coverage"]["count"]);
     for group in folded["groups"].as_array().unwrap() {
-        let path = group["path"].as_str().unwrap();
-        assert_ne!(path, "/");
+        let path=group["path"].as_str().unwrap();assert_ne!(path,"/");
         for member in group["member_source_ids"].as_array().unwrap() {
-            assert!(
-                packet["navigation_membership"][member.as_str().unwrap()]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!(path))
-            );
+            assert!(packet["navigation_membership"][member.as_str().unwrap()].as_array().unwrap().contains(&json!(path)));
         }
     }
-    let path = packet["navigation_membership"][&id]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(J::as_str)
-        .find(|p| *p != "/")
-        .unwrap();
-    let expanded =
-        canonical_view::fold_unrequested(&packet, &[], &[format!("group:{path}")]).unwrap();
+    let path=packet["navigation_membership"][&id].as_array().unwrap().iter()
+        .filter_map(J::as_str).find(|p|*p!="/").unwrap();
+    let expanded=canonical_view::fold_unrequested(&packet,&[],&[format!("group:{path}")]).unwrap();
     for node in packet["nodes"].as_array().unwrap() {
-        let source = node["source_id"].as_str().unwrap();
-        if packet["navigation_membership"][source]
-            .as_array()
-            .unwrap()
-            .contains(&json!(path))
-        {
-            assert!(
-                expanded["nodes"].as_array().unwrap().contains(node),
-                "explicit expansion must retain {source}"
-            );
+        let source=node["source_id"].as_str().unwrap();
+        if packet["navigation_membership"][source].as_array().unwrap().contains(&json!(path)) {
+            assert!(expanded["nodes"].as_array().unwrap().contains(node),"explicit expansion must retain {source}");
         }
     }
 }

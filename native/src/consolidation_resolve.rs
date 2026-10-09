@@ -1,9 +1,9 @@
 //! Resolve one conflicted record against the staged merge. It never stages the record
 //! or commits; compact history stages only its generated union manifest.
-#[path = "consolidation_node_resolve.rs"]
-mod node_merge;
 #[path = "consolidation_resolve_text.rs"]
 mod text_merge;
+#[path = "consolidation_node_resolve.rs"]
+mod node_merge;
 use super::{CommandOutput, Options};
 use crate::{
     Result,
@@ -74,25 +74,16 @@ fn without_filters(cmd: &mut Command, root: &Path, hooks: &Path) -> Result<()> {
     let mut drivers = std::collections::BTreeSet::new();
     for record in raw.split(|b| *b == 0).filter(|r| !r.is_empty()) {
         let key = record.split(|b| *b == b'\n').next().unwrap_or_default();
-        let key =
-            String::from_utf8(key.to_vec()).map_err(|_| error("resolve_invalid_git_config"))?;
+        let key = String::from_utf8(key.to_vec()).map_err(|_| error("resolve_invalid_git_config"))?;
         // `filter.<name>.<variable>`: the name is everything between the two outer dots.
-        if key
-            .get(..7)
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("filter."))
-        {
+        if key.get(..7).is_some_and(|prefix| prefix.eq_ignore_ascii_case("filter.")) {
             if let Some((name, _)) = key[7..].rsplit_once('.') {
                 drivers.insert(name.to_owned());
             }
         }
     }
     for name in drivers {
-        for (variable, value) in [
-            ("clean", EMPTY),
-            ("smudge", EMPTY),
-            ("process", EMPTY),
-            ("required", FALSE),
-        ] {
+        for (variable, value) in [("clean", EMPTY), ("smudge", EMPTY), ("process", EMPTY), ("required", FALSE)] {
             cmd.arg(format!("--config-env=filter.{name}.{variable}={value}"));
         }
     }
@@ -356,22 +347,14 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
     // Validation belongs to this captured tree, not a project that happens to
     // contain TMPDIR. Preserve any captured local policy; otherwise name this
     // exact record in a private simple project and stop Git discovery here.
-    F::publish_immutable(
-        &scratch,
-        ".git",
-        b"gitdir: .kpopper-resolve-no-repository\n",
-    )?;
+    F::publish_immutable(&scratch, ".git", b"gitdir: .kpopper-resolve-no-repository\n")?;
     let policy = F::target(&scratch, ".kpopper/project.json")?;
     if !policy.exists() {
         fs::create_dir_all(policy.parent().unwrap())?;
-        F::publish_immutable(
-            &scratch,
-            ".kpopper/project.json",
-            &serde_json::to_vec(
-                &serde_json::json!({"version":1, "mode":"simple", "generation":0,
-                "record":relative, "publication":null}),
-            )?,
-        )?;
+        F::publish_immutable(&scratch, ".kpopper/project.json", &serde_json::to_vec(
+            &serde_json::json!({"version":1, "mode":"simple", "generation":0,
+                "record":relative, "publication":null})
+        )?)?;
     }
     // Compact node history is resolved from both pinned merge commits; its staged
     // conflict text is never parsed as a record.
@@ -382,41 +365,38 @@ pub(super) fn run(options: &Options, cwd: &Path) -> Result<CommandOutput> {
     } else {
         None
     };
-    let candidate = match (
-        &node,
-        crate::legacy_authoring::authority_route(&scratch_entry),
-    ) {
+    let candidate = match (&node, crate::legacy_authoring::authority_route(&scratch_entry)) {
         (Some(node), _) => node.view.clone(),
         (None, route) => match route? {
-            crate::legacy_authoring::AuthorityRoute::Legacy => {
-                text_merge::merge(sides[0], sides[1], sides[2])?
-            }
-            crate::legacy_authoring::AuthorityRoute::History => {
-                let store = Store::new(&scratch_entry)?;
-                let mut rebuilt = None;
-                for side in [sides[1], sides[2]] {
-                    fs::write(&scratch_entry, side)?;
-                    let capture = store.capture()?;
+        crate::legacy_authoring::AuthorityRoute::Legacy => {
+            text_merge::merge(sides[0], sides[1], sides[2])?
+        }
+        crate::legacy_authoring::AuthorityRoute::History => {
+            let store = Store::new(&scratch_entry)?;
+            let mut rebuilt = None;
+            for side in [sides[1], sides[2]] {
+                fs::write(&scratch_entry, side)?;
+                let capture = store.capture()?;
+                require(
+                    Store::known_view(&capture)?,
+                    "resolve_history_hand_edit: reconcile authored changes explicitly",
+                )?;
+                for (id, state) in map(&map(&capture.state)?["subjects"])? {
+                    let acceptance = text(&map(state)?["acceptance"])?;
                     require(
-                        Store::known_view(&capture)?,
-                        "resolve_history_hand_edit: reconcile authored changes explicitly",
+                        acceptance != "contested",
+                        &format!("resolve_contested: {id}; history needs an explicit decision"),
                     )?;
-                    for (id, state) in map(&map(&capture.state)?["subjects"])? {
-                        let acceptance = text(&map(state)?["acceptance"])?;
-                        require(
-                            acceptance != "contested",
-                            &format!("resolve_contested: {id}; history needs an explicit decision"),
-                        )?;
-                    }
-                    let raw = store.rebuild(Some(&capture), false, false, &[])?;
-                    require(
-                        rebuilt.as_ref().is_none_or(|old| old == &raw),
-                        "resolve_history_projection_mismatch",
-                    )?;
-                    rebuilt = Some(raw);
                 }
-                rebuilt.unwrap()
+                let raw = store.rebuild(Some(&capture), false, false, &[])?;
+                require(
+                    rebuilt.as_ref().is_none_or(|old| old == &raw),
+                    "resolve_history_projection_mismatch",
+                )?;
+                rebuilt = Some(raw);
             }
+            rebuilt.unwrap()
+        }
         },
     };
     fs::write(&scratch_entry, &candidate)?;

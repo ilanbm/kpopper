@@ -454,34 +454,18 @@ mod tests {
 
     #[test]
     fn legacy_archive_shapes_follow_ordinary_history_tolerance() {
-        for raw in [
-            "",
-            "# no replacements yet\n",
-            "{}",
-            "a note",
-            "d.done: a note\n",
-            "d.done: {verdict: old}\n",
-            "d.done:\n",
-        ] {
+        for raw in ["", "# no replacements yet\n", "{}", "a note", "d.done: a note\n", "d.done: {verdict: old}\n", "d.done:\n"] {
             let archive = crate::history_node_capture::ReplacedArchive {
                 source: "verified",
                 path: ".kpopper/replaced.yaml".into(),
                 member_sha256: crate::identity::sha256(raw.as_bytes()),
                 bytes: raw.as_bytes().to_vec(),
             };
-            assert!(
-                legacy_archive_rows(Some(&archive), &["d.done".into()])
-                    .unwrap()
-                    .is_empty(),
-                "{raw:?}"
-            );
+            assert!(legacy_archive_rows(Some(&archive), &["d.done".into()]).unwrap().is_empty(), "{raw:?}");
         }
         let raw = b"d.note: just a note\nd.done:\n- {verdict: old}\n";
         let archive = crate::history_node_capture::ReplacedArchive {
-            source: "verified",
-            path: ".kpopper/replaced.yaml".into(),
-            member_sha256: crate::identity::sha256(raw),
-            bytes: raw.to_vec(),
+            source: "verified", path: ".kpopper/replaced.yaml".into(), member_sha256: crate::identity::sha256(raw), bytes: raw.to_vec(),
         };
         let rows = legacy_archive_rows(Some(&archive), &["d".into()]).unwrap();
         assert_eq!(rows.len(), 1);
@@ -495,18 +479,10 @@ mod tests {
             json!({"id":"current","current_head":true,"kind":"judgment","body":{"verdict":"after"}}),
             json!({"id":"transition","kind":"act","body":{"because":"new evidence"}}),
         ];
-        let archive = (0..60)
-            .map(|i| json!({"subject":"d.done","entry":{"because":format!("legacy reason {i}")}}))
-            .collect::<Vec<_>>();
-        let budget = rows
-            .iter()
-            .map(|row| serde_json::to_vec(row).unwrap().len() + 1)
-            .sum();
+        let archive = (0..60).map(|i| json!({"subject":"d.done","entry":{"because":format!("legacy reason {i}")}})).collect::<Vec<_>>();
+        let budget = rows.iter().map(|row| serde_json::to_vec(row).unwrap().len()+1).sum();
         let (kept, omitted, _, archive_omitted) = clip_history(&rows, &archive, budget);
-        assert_eq!(
-            kept, rows,
-            "pre-import archives hid the change the review note names"
-        );
+        assert_eq!(kept, rows, "pre-import archives hid the change the review note names");
         assert_eq!(omitted, 0);
         assert_eq!(archive_omitted, archive.len());
     }

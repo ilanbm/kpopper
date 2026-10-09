@@ -137,10 +137,7 @@ fn receipt_id(event: &str) -> String {
 
 fn validated_handled(value: J) -> Result<J> {
     require(value.is_object(), "invalid handled state")?;
-    require(
-        value.get("signals").is_some_and(J::is_object),
-        "invalid handled state",
-    )?;
+    require(value.get("signals").is_some_and(J::is_object), "invalid handled state")?;
     Ok(value)
 }
 fn signal_id(event: &str, question: &str) -> String {
@@ -196,16 +193,15 @@ fn lease_active(value: Option<&J>) -> bool {
     let Some(lease) = value else { return false };
     let now = S::now();
     let Some(pid) = lease.get("pid").and_then(J::as_u64) else {
-        return lease
-            .get("started_at")
-            .and_then(J::as_f64)
+        return lease.get("started_at").and_then(J::as_f64)
             .is_some_and(|started| started.is_finite() && now - started < 5.0);
     };
-    if pid == 0 || pid > i32::MAX as u64 {
-        return false;
-    }
+    if pid == 0 || pid > i32::MAX as u64 { return false; }
     #[cfg(unix)]
-    let alive = match nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None) {
+    let alive = match nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(pid as i32),
+        None,
+    ) {
         Ok(()) => Some(true),
         Err(_) => Some(false),
     };
@@ -213,12 +209,8 @@ fn lease_active(value: Option<&J>) -> bool {
     let alive = windows_process_alive(pid as u32);
     #[cfg(not(any(unix, windows)))]
     let alive = None;
-    alive.unwrap_or_else(|| {
-        lease
-            .get("expires_at")
-            .and_then(J::as_f64)
-            .is_some_and(|deadline| deadline.is_finite() && deadline > now)
-    })
+    alive.unwrap_or_else(|| lease.get("expires_at").and_then(J::as_f64)
+        .is_some_and(|deadline| deadline.is_finite() && deadline > now))
 }
 
 #[cfg(windows)]
@@ -226,17 +218,12 @@ fn windows_process_alive(pid: u32) -> Option<bool> {
     // Keep the crate's safe-Rust boundary and avoid relying on PATH. Query only
     // this PID through the standard Windows utility, under a bounded deadline.
     let executable = PathBuf::from(std::env::var_os("SystemRoot")?)
-        .join("System32")
-        .join("tasklist.exe");
+        .join("System32").join("tasklist.exe");
     let mut command = Command::new(executable);
     command.args(["/FO", "CSV", "/NH", "/FI", &format!("PID eq {pid}")]);
     let output = crate::reasoning_runtime::run_command_capture(
-        &mut command,
-        vec![],
-        Duration::from_secs(2),
-        64 * 1024,
-    )
-    .ok()?;
+        &mut command, vec![], Duration::from_secs(2), 64 * 1024,
+    ).ok()?;
     if !output.status.success() {
         return None;
     }
@@ -246,13 +233,8 @@ fn windows_process_alive(pid: u32) -> Option<bool> {
 #[cfg(any(windows, test))]
 fn tasklist_liveness(output: &str, pid: u32) -> Option<bool> {
     let row = regex::Regex::new(r#"^"(?:[^"]|"")*","([0-9]+)","#).ok()?;
-    let rows = output
-        .lines()
-        .filter_map(|line| {
-            row.captures(line)
-                .and_then(|row| row[1].parse::<u32>().ok())
-        })
-        .collect::<Vec<_>>();
+    let rows = output.lines().filter_map(|line| row.captures(line)
+        .and_then(|row| row[1].parse::<u32>().ok())).collect::<Vec<_>>();
     if !rows.is_empty() {
         return Some(rows.contains(&pid));
     }
@@ -271,9 +253,7 @@ fn record_writer_journal(record: &Path) -> bool {
     }) {
         return true;
     }
-    let Ok(store) = crate::history_store::Store::new(record) else {
-        return false;
-    };
+    let Ok(store) = crate::history_store::Store::new(record) else { return false };
     let primary = store.root.join(&store.layout.journal);
     let shared = store.root.join(crate::direct_history::journal(&store));
     primary.is_file() || shared.is_file()
@@ -281,9 +261,7 @@ fn record_writer_journal(record: &Path) -> bool {
 
 fn retryable_capture_io(layout: &S::Layout, event: &str, error: &crate::Error) -> bool {
     error.0.starts_with("io: ")
-        && S::read_json(&layout.path("journals", event))
-            .ok()
-            .flatten()
+        && S::read_json(&layout.path("journals", event)).ok().flatten()
             .is_some_and(|journal| journal["kind"] == "native-advanced-report/v1")
 }
 
@@ -552,7 +530,8 @@ pub fn pending(
         return Ok(vec![]);
     };
     let handled = validated_handled(
-        S::read_json(&layout.root.join("handled.json"))?.unwrap_or_else(|| json!({"signals":{}})),
+        S::read_json(&layout.root.join("handled.json"))?
+            .unwrap_or_else(|| json!({"signals":{}})),
     )?;
     let mut signals = Vec::new();
     let raw = std::fs::read(&record);
@@ -658,15 +637,13 @@ pub fn acknowledge(
         require(layout.path("signals", id).is_file(), "unknown signal ID")?;
     }
     let path = layout.root.join("handled.json");
-    let mut handled =
-        validated_handled(S::read_json(&path)?.unwrap_or_else(|| json!({"signals":{}})))?;
+    let mut handled = validated_handled(
+        S::read_json(&path)?.unwrap_or_else(|| json!({"signals":{}})),
+    )?;
     let now = S::now();
     for id in ids {
-        handled["signals"]
-            .as_object_mut()
-            .unwrap()
-            .entry(id.clone())
-            .or_insert_with(|| json!(now));
+        handled["signals"].as_object_mut().unwrap()
+            .entry(id.clone()).or_insert_with(|| json!(now));
     }
     S::save_json(&path, &handled)?;
     Ok(handled)
@@ -766,11 +743,7 @@ mod tests {
         let record = temp.path().join("GROUNDING.yaml");
         std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
         let layout = S::Layout::create(&record, Some(&temp.path().join("state"))).unwrap();
-        S::save_json(
-            &layout.path("events", "e"),
-            &json!({"event_id":"e","state":"recovery_required","order":1}),
-        )
-        .unwrap();
+        S::save_json(&layout.path("events", "e"), &json!({"event_id":"e","state":"recovery_required","order":1})).unwrap();
         assert!(!has_work(&layout).unwrap());
     }
 
@@ -783,28 +756,15 @@ mod tests {
     #[test]
     fn live_worker_and_short_spawn_handoff_are_distinct() {
         assert!(lease_active(Some(&json!({"pid": std::process::id()}))));
-        assert!(lease_active(Some(
-            &json!({"pid":null,"started_at":S::now()})
-        )));
-        assert!(!lease_active(Some(
-            &json!({"pid":null,"started_at":S::now()-6.0,
-            "expires_at":S::now()+300.0})
-        )));
+        assert!(lease_active(Some(&json!({"pid":null,"started_at":S::now()}))));
+        assert!(!lease_active(Some(&json!({"pid":null,"started_at":S::now()-6.0,
+            "expires_at":S::now()+300.0}))));
     }
 
     #[test]
     fn windows_tasklist_replies_distinguish_rows_absence_and_unusable_output() {
-        assert_eq!(
-            tasklist_liveness("\"a,b.exe\",\"123\",\"Console\",\"1\",\"1,000 K\"\r\n", 123),
-            Some(true)
-        );
-        assert_eq!(
-            tasklist_liveness(
-                "INFO: No tasks are running which match the specified criteria.\r\n",
-                123
-            ),
-            Some(false)
-        );
+        assert_eq!(tasklist_liveness("\"a,b.exe\",\"123\",\"Console\",\"1\",\"1,000 K\"\r\n", 123), Some(true));
+        assert_eq!(tasklist_liveness("INFO: No tasks are running which match the specified criteria.\r\n", 123), Some(false));
         assert_eq!(tasklist_liveness("", 123), None);
         assert_eq!(tasklist_liveness("query failed or inaccessible", 123), None);
     }
@@ -815,9 +775,7 @@ mod tests {
         if nix::sys::signal::kill(nix::unistd::Pid::from_raw(1), None)
             == Err(nix::errno::Errno::EPERM)
         {
-            assert!(!lease_active(Some(
-                &json!({"pid":1,"started_at":0,"expires_at":0})
-            )));
+            assert!(!lease_active(Some(&json!({"pid":1,"started_at":0,"expires_at":0}))));
         }
     }
 
@@ -828,23 +786,11 @@ mod tests {
         std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
         let layout = S::Layout::create(&record, Some(&temp.path().join("state"))).unwrap();
         let failure = crate::Error("io: Permission denied".into());
-        S::save_json(
-            &layout.path("journals", "event"),
-            &json!({"kind":"ordinary-report"}),
-        )
-        .unwrap();
+        S::save_json(&layout.path("journals", "event"), &json!({"kind":"ordinary-report"})).unwrap();
         assert!(!retryable_capture_io(&layout, "event", &failure));
-        S::save_json(
-            &layout.path("journals", "event"),
-            &json!({"kind":"native-advanced-report/v1"}),
-        )
-        .unwrap();
+        S::save_json(&layout.path("journals", "event"), &json!({"kind":"native-advanced-report/v1"})).unwrap();
         assert!(retryable_capture_io(&layout, "event", &failure));
-        assert!(!retryable_capture_io(
-            &layout,
-            "event",
-            &crate::Error("stale_baseline".into())
-        ));
+        assert!(!retryable_capture_io(&layout, "event", &crate::Error("stale_baseline".into())));
     }
 
     #[test]

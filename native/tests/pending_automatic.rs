@@ -220,7 +220,10 @@ print(json.dumps(result))
             !output.contains("could not be opened") && !output.contains("view unavailable"),
             "{output}"
         );
-        assert!(output.contains("1 entries, 0 judgments"), "{output}");
+        assert!(
+            output.contains("1 entries, 0 judgments"),
+            "{output}"
+        );
     }
     fn proposed(&self) {
         let deadline = Instant::now() + Duration::from_secs(15);

@@ -1,17 +1,18 @@
 //! Deterministic, lossless archive for copy-only history migration.
 use crate::{
-    Error, Result, json_ingress, require,
-    value::{MAX_DEPTH, TypedValue},
+    json_ingress, require,
+    value::{TypedValue, MAX_DEPTH},
+    Error, Result,
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use serde_json::{Map, Value, json};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde_json::{json, Map, Value};
 use std::{
     collections::BTreeMap,
     fs::{self, OpenOptions},
     io::{Cursor, Read, Write},
     path::{Component, Path},
 };
-use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter, write::SimpleFileOptions};
+use zip::{write::SimpleFileOptions, CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
 const MAX_ARCHIVE_BYTES: usize = 100 * 1024 * 1024;
 const MAX_JSON_BYTES: usize = 96 * 1024 * 1024;

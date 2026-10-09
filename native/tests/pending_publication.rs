@@ -848,12 +848,8 @@ fn history_publication_case(compact: bool, case_name: &str) {
         // Exercise the public full-v3 materialization boundary, which must route
         // before generic evidence copying and keep old control bytes archived.
         let bundle = kpop_native::value::TypedValue::from_tagged(&case["bundle"]).unwrap();
-        let kpop_native::value::TypedValue::Map(bundle_fields) = &bundle else {
-            panic!("bundle map")
-        };
-        let kpop_native::value::TypedValue::Text(revision) = &bundle_fields["revision"] else {
-            panic!("revision text")
-        };
+        let kpop_native::value::TypedValue::Map(bundle_fields) = &bundle else { panic!("bundle map") };
+        let kpop_native::value::TypedValue::Text(revision) = &bundle_fields["revision"] else { panic!("revision text") };
         let snapshot = temp.path().join("materialized-full-history");
         let materialized = kpop_native::public_knowledge::materialize(
             &root,
@@ -862,26 +858,15 @@ fn history_publication_case(compact: bool, case_name: &str) {
                 out: snapshot.clone(),
                 reference: None,
             },
-        )
-        .unwrap()
-        .to_json()
-        .unwrap();
+        ).unwrap().to_json().unwrap();
         assert_eq!(materialized["state"], "materialized");
         let captured = kpop_native::history_node_capture::Capture::read(&snapshot).unwrap();
         for (name, raw) in &source_files {
-            if !name.starts_with("history-closure/objects/") {
-                continue;
-            }
+            if !name.starts_with("history-closure/objects/") { continue; }
             let object = kpop_native::history_yaml::decode_document(raw).unwrap();
-            let kpop_native::value::TypedValue::Map(fields) = &object else {
-                panic!("object map")
-            };
-            let kpop_native::value::TypedValue::Text(subject) = &fields["subject"] else {
-                panic!("subject text")
-            };
-            let kpop_native::value::TypedValue::Text(id) = &fields["id"] else {
-                panic!("id text")
-            };
+            let kpop_native::value::TypedValue::Map(fields) = &object else { panic!("object map") };
+            let kpop_native::value::TypedValue::Text(subject) = &fields["subject"] else { panic!("subject text") };
+            let kpop_native::value::TypedValue::Text(id) = &fields["id"] else { panic!("id text") };
             assert_eq!(captured.object(subject, id).unwrap(), object);
         }
     }
@@ -1227,51 +1212,24 @@ fn first_compact_publication_is_identical_when_retried_against_the_same_target()
 fn first_core_contribution_keeps_its_profile_in_a_new_compact_record() {
     use kpop_native::{history_authority::Files, value::TypedValue as V};
     let (temp, project, mut provider, _) = setup_target(TargetRecord::Absent);
-    let scope =
-        V::from_json(&serde_json::json!({"kind":"project", "environment":"fixture"})).unwrap();
+    let scope = V::from_json(&serde_json::json!({"kind":"project", "environment":"fixture"})).unwrap();
     let document = V::from_json(&serde_json::json!({
         "meta":{"reasoning":{"version":2,"profile":"core/v1","requires":["arithmetic/v1"]}},
         "known":{"p.first":{"v":7,"scope":{"kind":"project","environment":"fixture"}}}
-    }))
-    .unwrap();
-    let bundle = kpop_native::pending_bundle::prepare(
-        &document,
-        &["p.first".into()],
-        &scope,
-        "project",
-        &Files::new(),
-    )
-    .unwrap();
+    })).unwrap();
+    let bundle = kpop_native::pending_bundle::prepare(&document, &["p.first".into()], &scope, "project", &Files::new()).unwrap();
     install_pending_bundle(&project.root, &bundle.to_tagged().unwrap(), &Files::new());
     let result = Publisher::with_clock(project.clone(), &mut provider, || 123.5)
-        .run(false, true)
-        .unwrap()
-        .to_json()
-        .unwrap();
+        .run(false, true).unwrap().to_json().unwrap();
     assert_eq!(result["outcome"], "proposed", "{result}");
     let proposal = temp.path().join("core-proposal");
-    git(
-        temp.path(),
-        &[
-            "clone",
-            "-q",
-            "--branch",
-            "pending_grounding",
-            provider.remote.to_str().unwrap(),
-            proposal.to_str().unwrap(),
-        ],
-        None,
-    );
+    git(temp.path(), &["clone", "-q", "--branch", "pending_grounding", provider.remote.to_str().unwrap(), proposal.to_str().unwrap()], None);
     let captured = kpop_native::history_node_capture::Capture::read(&proposal).unwrap();
     let view = captured.document().to_json().unwrap();
     assert_eq!(view["meta"]["reasoning"]["profile"], "core/v1");
     assert_eq!(view["known"]["p.first"]["v"], 7);
     land(&mut provider);
-    let proof = Publisher::with_clock(project, &mut provider, || 123.5)
-        .verify()
-        .unwrap()
-        .to_json()
-        .unwrap();
+    let proof = Publisher::with_clock(project, &mut provider, || 123.5).verify().unwrap().to_json().unwrap();
     assert_eq!(proof["unresolved"], serde_json::json!([]), "{proof}");
 }
 

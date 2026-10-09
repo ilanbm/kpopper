@@ -1,5 +1,5 @@
 //! Experimental lossless graph view over an already captured checked session.
-use serde_json::{Value as J, json};
+use serde_json::{json, Value as J};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[path = "canonical_frontier.rs"]
@@ -11,143 +11,68 @@ pub const COMPACT_SCHEMA: &str = "kpopper.canonical-graph-view/v3";
 /// Original IDs take precedence over optional display-handle syntax. This keeps
 /// an issued source ID byte-exact when it happens to begin with a reserved prefix.
 pub(crate) fn exact_node_id<T>(nodes: &BTreeMap<String, T>, value: &str) -> Option<String> {
-    if nodes.contains_key(value) {
-        Some(value.to_owned())
-    } else {
-        value
-            .strip_prefix("node:")
-            .filter(|id| nodes.contains_key(*id))
-            .map(str::to_owned)
-    }
+    if nodes.contains_key(value) { Some(value.to_owned()) }
+    else { value.strip_prefix("node:").filter(|id| nodes.contains_key(*id)).map(str::to_owned) }
 }
 
 /// Reveal exact membership without requiring all member bodies to fit at once.
 /// The node rows/coverage partition remain unchanged; additional dictionary IDs
 /// are navigation references, not read claims. Scope comes only from `logical`.
-pub fn add_membership_details(
-    logical: &J,
-    packet: &mut J,
-    requested: &[String],
-) -> crate::Result<()> {
+pub fn add_membership_details(logical: &J, packet: &mut J, requested: &[String]) -> crate::Result<()> {
     use crate::Error;
-    if requested.is_empty() {
-        return Ok(());
-    }
-    crate::require(
-        logical["revision"] == packet["revision"] && logical["scope"] == packet["scope"],
-        "membership revision/scope mismatch",
-    )?;
-    let mut dictionary = packet["dictionary"]
-        .as_object()
-        .cloned()
-        .ok_or_else(|| Error("missing membership dictionary".into()))?;
+    if requested.is_empty() { return Ok(()) }
+    crate::require(logical["revision"] == packet["revision"] && logical["scope"] == packet["scope"],
+        "membership revision/scope mismatch")?;
+    let mut dictionary = packet["dictionary"].as_object().cloned().ok_or_else(|| Error("missing membership dictionary".into()))?;
     let mut references = BTreeMap::new();
     for (alias, value) in &dictionary {
         if value["kind"] == "node" {
-            if let Some(id) = value["original"].as_str() {
-                references.insert(id.to_owned(), alias.clone());
-            }
+            if let Some(id) = value["original"].as_str() { references.insert(id.to_owned(), alias.clone()); }
         }
     }
     let mut facets = BTreeMap::<String, BTreeSet<String>>::new();
-    for row in packet["navigation_facets"]["nodes"]
-        .as_array()
-        .into_iter()
-        .flatten()
-    {
+    for row in packet["navigation_facets"]["nodes"].as_array().into_iter().flatten() {
         if let Some(id) = row[0].as_str() {
-            facets.entry(id.into()).or_default().extend(
-                row[1]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(J::as_str)
-                    .map(str::to_owned),
-            );
+            facets.entry(id.into()).or_default().extend(row[1].as_array().into_iter().flatten().filter_map(J::as_str).map(str::to_owned));
         }
     }
     let mut sequence = 0usize;
     for handle in requested {
-        let path = handle
-            .strip_prefix("group:")
-            .ok_or_else(|| Error("membership requires group:/path".into()))?;
-        let group_ref = if let Some((alias, _)) = dictionary
-            .iter()
-            .find(|(_, value)| value["kind"] == "group" && value["original"] == *handle)
-        {
+        let path = handle.strip_prefix("group:").ok_or_else(|| Error("membership requires group:/path".into()))?;
+        let group_ref = if let Some((alias,_))=dictionary.iter().find(|(_, value)| value["kind"] == "group" && value["original"] == *handle) {
             alias.clone()
         } else {
             // A coarse frontier can hide this route's alias, never its exact
             // captured membership. Explicit membership requests restore it.
-            let known = logical["navigation_membership"]
-                .as_object()
-                .into_iter()
-                .flat_map(|nav| nav.values())
-                .any(|paths| {
-                    paths
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .any(|value| value.as_str() == Some(path))
-                });
-            crate::require(known, &format!("unknown membership group: {handle}"))?;
-            while dictionary.contains_key(&format!("m{sequence}")) {
-                sequence += 1;
-            }
-            let alias = format!("m{sequence}");
-            sequence += 1;
-            dictionary.insert(alias.clone(), json!({"kind":"group","original":handle}));
+            let known=logical["navigation_membership"].as_object().into_iter().flat_map(|nav|nav.values())
+                .any(|paths|paths.as_array().into_iter().flatten().any(|value|value.as_str()==Some(path)));
+            crate::require(known,&format!("unknown membership group: {handle}"))?;
+            while dictionary.contains_key(&format!("m{sequence}")) { sequence+=1; }
+            let alias=format!("m{sequence}"); sequence+=1;
+            dictionary.insert(alias.clone(),json!({"kind":"group","original":handle}));
             alias
         };
-        let visible = logical["groups"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|group| group["group_id"] == *handle);
+        let visible = logical["groups"].as_array().into_iter().flatten().find(|group| group["group_id"] == *handle);
         let members = if let Some(group) = visible {
-            group["member_source_ids"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(J::as_str)
-                .map(str::to_owned)
-                .collect::<BTreeSet<_>>()
+            group["member_source_ids"].as_array().into_iter().flatten().filter_map(J::as_str).map(str::to_owned).collect::<BTreeSet<_>>()
         } else {
-            logical["navigation_membership"]
-                .as_object()
-                .ok_or_else(|| Error("missing navigation membership".into()))?
-                .iter()
-                .filter(|(_, paths)| {
-                    paths
-                        .as_array()
-                        .is_some_and(|p| p.iter().any(|v| v.as_str() == Some(path)))
-                })
-                .map(|(id, _)| id.clone())
-                .collect::<BTreeSet<_>>()
+            logical["navigation_membership"].as_object().ok_or_else(|| Error("missing navigation membership".into()))?
+                .iter().filter(|(_, paths)| paths.as_array().is_some_and(|p| p.iter().any(|v| v.as_str() == Some(path))))
+                .map(|(id, _)| id.clone()).collect::<BTreeSet<_>>()
         };
         for id in members {
-            let alias = if let Some(existing) = references.get(&id) {
-                existing.clone()
-            } else {
-                while dictionary.contains_key(&format!("m{sequence}")) {
-                    sequence += 1;
-                }
-                let alias = format!("m{sequence}");
-                sequence += 1;
-                dictionary.insert(alias.clone(), json!({"kind":"node","original":id}));
-                references.insert(id, alias.clone());
-                alias
-            };
+            let alias = if let Some(existing) = references.get(&id) { existing.clone() }
+                else {
+                    while dictionary.contains_key(&format!("m{sequence}")) { sequence += 1; }
+                    let alias = format!("m{sequence}"); sequence += 1;
+                    dictionary.insert(alias.clone(), json!({"kind":"node","original":id}));
+                    references.insert(id, alias.clone()); alias
+                };
             facets.entry(alias).or_default().insert(group_ref.clone());
         }
     }
     packet["dictionary"] = J::Object(dictionary);
-    packet["navigation_facets"]["nodes"] = json!(
-        facets
-            .into_iter()
-            .map(|(id, groups)| json!([id, groups]))
-            .collect::<Vec<_>>()
-    );
+    packet["navigation_facets"]["nodes"] = json!(facets.into_iter().map(|(id, groups)| json!([id,groups])).collect::<Vec<_>>());
     packet["membership_detail"] = json!({"groups":requested,"additional_bodies_read":false,
         "next":"Use dictionary node identities with --id to read exact bodies; listed membership alone is not evidence."});
     Ok(())
@@ -179,23 +104,10 @@ pub fn build(
     leaves: &BTreeMap<String, String>,
     request: &CanonicalViewRequest,
 ) -> crate::Result<J> {
-    crate::require(
-        request.frontier_depth != Some(0),
-        "navigation frontier depth must be positive",
-    )?;
-    let tree = frontier::Tree {
-        revision,
-        scope,
-        groups,
-        children,
-        direct,
-    };
-    let child_details = request
-        .expand
-        .iter()
-        .filter(|id| id.starts_with("children:"))
-        .map(|handle| tree.expand(handle))
-        .collect::<crate::Result<Vec<_>>>()?;
+    crate::require(request.frontier_depth != Some(0), "navigation frontier depth must be positive")?;
+    let tree = frontier::Tree { revision, scope, groups, children, direct };
+    let child_details = request.expand.iter().filter(|id|id.starts_with("children:"))
+        .map(|handle|tree.expand(handle)).collect::<crate::Result<Vec<_>>>()?;
     for id in &request.focus {
         let valid = exact_node_id(nodes, id).is_some()
             || groups.contains_key(id.strip_prefix("group:").unwrap_or(id));
@@ -211,7 +123,7 @@ pub fn build(
     let mut expanded: BTreeSet<_> = request
         .expand
         .iter()
-        .filter(|id| !id.starts_with("children:"))
+        .filter(|id|!id.starts_with("children:"))
         .map(|id| id.strip_prefix("group:").unwrap_or(id).to_owned())
         .collect();
     for id in &request.focus {
@@ -221,16 +133,11 @@ pub fn build(
         }
     }
     for id in &request.expand {
-        if id.starts_with("children:") {
-            continue;
-        }
+        if id.starts_with("children:") { continue; }
         let key = id.strip_prefix("group:").unwrap_or(id);
         if !groups.contains_key(key) {
-            let message = if exact_node_id(nodes, id).is_some() {
-                "expand requires a group handle"
-            } else {
-                "unknown canonical view handle"
-            };
+            let message = if exact_node_id(nodes, id).is_some() { "expand requires a group handle" }
+                else { "unknown canonical view handle" };
             return Err(crate::Error(format!("{message}: {id}")));
         }
     }
@@ -261,16 +168,12 @@ pub fn build(
     ) {
         let ids = groups.get(path).cloned().unwrap_or_default();
         let original_member_count = ids.len();
-        let force_open = expanded.contains(path)
-            || expanded.iter().any(|target| {
-                // Balancing buckets can contain named children outside their string
-                // prefix. Membership is authoritative for keeping those routes open.
-                target.starts_with(&format!("{}/", path.trim_end_matches('/')))
-                    || (frontier_depth.is_some()
-                        && groups
-                            .get(target)
-                            .is_some_and(|members| members.is_subset(&ids)))
-            });
+        let force_open = expanded.contains(path) || expanded.iter().any(|target| {
+            // Balancing buckets can contain named children outside their string
+            // prefix. Membership is authoritative for keeping those routes open.
+            target.starts_with(&format!("{}/", path.trim_end_matches('/')))
+                || (frontier_depth.is_some() && groups.get(target).is_some_and(|members| members.is_subset(&ids)))
+        });
         // Keep structural containers visible as navigation paths. Fold a terminal
         // branch, or a branch whose children are all terminal, so labels like
         // `proposal` and `report` remain visible instead of one generic `known`
@@ -284,26 +187,16 @@ pub fn build(
                 })
             });
         let unowned: BTreeSet<_> = ids.into_iter().filter(|id| !visible.contains(id)).collect();
-        let contains_named_children = child_paths.is_some_and(|paths| {
-            paths
-                .iter()
-                .any(|child| !child.starts_with(&format!("{}/", path.trim_end_matches('/'))))
-        });
+        let contains_named_children = child_paths.is_some_and(|paths| paths.iter()
+            .any(|child|!child.starts_with(&format!("{}/",path.trim_end_matches('/')))));
         let coarse = frontier_depth.is_some_and(|depth| frontier::depth(path) >= depth)
             && !contains_named_children;
-        if frontier_depth.is_some()
-            && path != "/"
-            && original_member_count > 0
-            && (terminal_branch || coarse)
-            && !contains_named_children
-            && !force_open
-        {
+        if frontier_depth.is_some() && path!="/" && original_member_count>0
+            && (terminal_branch || coarse) && !contains_named_children && !force_open {
             frontier_paths.insert(path.to_owned());
             // A completely overlapping facet still has a coarse navigation
             // boundary, even when another route owns all its source rows.
-            if unowned.is_empty() {
-                return;
-            }
+            if unowned.is_empty() { return; }
         }
         if path != "/"
             && (original_member_count > 1 || coarse)
@@ -328,17 +221,15 @@ pub fn build(
             }
             return;
         }
-        let mut folded_direct = Vec::new();
+        let mut folded_direct=Vec::new();
         for id in direct.get(path).into_iter().flatten() {
             if visible.contains(id) {
                 continue;
             }
             let Some(node) = nodes.get(id) else { continue };
-            if frontier_depth.is_some() && path != "/" {
+            if frontier_depth.is_some() && path!="/" {
                 folded_direct.push(id.clone());
-            } else {
-                out_nodes.push(node.clone());
-            }
+            } else { out_nodes.push(node.clone()); }
             visible.insert(id.clone());
         }
         if !folded_direct.is_empty() {
@@ -348,19 +239,8 @@ pub fn build(
         }
         for child in children.get(path).into_iter().flatten() {
             visit(
-                child,
-                nodes,
-                groups,
-                children,
-                direct,
-                leaves,
-                focus,
-                expanded,
-                frontier_depth,
-                visible,
-                out_nodes,
-                out_groups,
-                frontier_paths,
+                child, nodes, groups, children, direct, leaves, focus, expanded, frontier_depth, visible,
+                out_nodes, out_groups, frontier_paths,
             );
         }
     }
@@ -446,7 +326,8 @@ pub fn build(
     } else {
         "broad"
     };
-    let mut packet = json!({"schema":SCHEMA,"project":project,"project_identity":project_identity,"revision":revision,"scope":scope,"mode":mode,
+    let mut packet =
+        json!({"schema":SCHEMA,"project":project,"project_identity":project_identity,"revision":revision,"scope":scope,"mode":mode,
         "nodes":out_nodes,"groups":out_groups,"links":projected_links,"coverage":{"source_ids":coverage,"count":visible.len()},
         "navigation_membership":navigation_membership,"rules":crate::checked_session::CANONICAL_RULES,
         "descriptions":{"kind":"navigation_placeholder","generated_claims":false}});
@@ -454,27 +335,14 @@ pub fn build(
         let folded = packet["groups"].as_array().unwrap();
         // Partial groups owning a mixed bucket's direct rows must not hide its
         // independently named children. Only fully collapsed paths hide routes.
-        let hidden = tree.hidden_descendants(&frontier_paths);
-        frontier_paths.extend(
-            folded
-                .iter()
-                .filter_map(|group| group["path"].as_str())
-                .map(str::to_owned),
-        );
-        let summaries = frontier_paths
-            .iter()
-            .map(|path| {
-                let owner = folded
-                    .iter()
-                    .find(|group| group["path"].as_str() == Some(path));
-                let members = owner
-                    .map(|group| group["member_source_ids"].clone())
-                    .unwrap_or_else(|| json!(groups[path]));
-                let mut summary = tree.summary(path, &members)?;
-                summary["owns_source_rows"] = json!(owner.is_some());
-                Ok(summary)
-            })
-            .collect::<crate::Result<Vec<_>>>()?;
+        let hidden=tree.hidden_descendants(&frontier_paths);
+        frontier_paths.extend(folded.iter().filter_map(|group|group["path"].as_str()).map(str::to_owned));
+        let summaries = frontier_paths.iter().map(|path| {
+            let owner=folded.iter().find(|group|group["path"].as_str()==Some(path));
+            let members=owner.map(|group|group["member_source_ids"].clone()).unwrap_or_else(||json!(groups[path]));
+            let mut summary=tree.summary(path,&members)?;
+            summary["owns_source_rows"]=json!(owner.is_some());Ok(summary)
+        }).collect::<crate::Result<Vec<_>>>()?;
         packet["navigation_hidden_paths"] = json!(hidden);
         packet["navigation_frontier"] = json!({"schema":"kpopper.navigation-frontier/v1",
             "revision":revision,"scope":scope,"depth":request.frontier_depth,
@@ -488,114 +356,54 @@ pub fn build(
 /// group expansions retain their full bodies and every original edge is kept.
 pub fn fold_unrequested(packet: &J, focus: &[String], expand: &[String]) -> crate::Result<J> {
     let mut result = packet.clone();
-    let navigation = packet["navigation_membership"]
-        .as_object()
+    let navigation = packet["navigation_membership"].as_object()
         .ok_or_else(|| crate::Error("view lacks exact navigation membership".into()))?;
-    let all_ids = navigation
-        .keys()
-        .map(|id| (id.clone(), ()))
-        .collect::<BTreeMap<_, _>>();
+    let all_ids = navigation.keys().map(|id|(id.clone(),())).collect::<BTreeMap<_,_>>();
     let mut protected = BTreeSet::new();
-    let mut protected_groups = expand
-        .iter()
-        .map(|s| s.strip_prefix("group:").unwrap_or(s).to_owned())
-        .collect::<BTreeSet<_>>();
+    let mut protected_groups = expand.iter().map(|s|s.strip_prefix("group:").unwrap_or(s).to_owned()).collect::<BTreeSet<_>>();
     for id in focus {
-        if let Some(id) = exact_node_id(&all_ids, id) {
-            protected.insert(id);
-        } else {
-            protected_groups.insert(id.strip_prefix("group:").unwrap_or(id).to_owned());
-        }
+        if let Some(id)=exact_node_id(&all_ids,id) { protected.insert(id); }
+        else { protected_groups.insert(id.strip_prefix("group:").unwrap_or(id).to_owned()); }
     }
-    for (id, paths) in navigation {
-        if paths
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(J::as_str)
-            .any(|p| protected_groups.contains(p))
-        {
+    for (id,paths) in navigation {
+        if paths.as_array().into_iter().flatten().filter_map(J::as_str).any(|p|protected_groups.contains(p)) {
             protected.insert(id.clone());
         }
     }
-    let mut groups = packet["groups"]
-        .as_array()
-        .cloned()
-        .ok_or_else(|| crate::Error("view lacks groups".into()))?;
+    let mut groups = packet["groups"].as_array().cloned().ok_or_else(||crate::Error("view lacks groups".into()))?;
     let mut retained = Vec::new();
     for node in packet["nodes"].as_array().into_iter().flatten() {
-        let id = node["source_id"]
-            .as_str()
-            .ok_or_else(|| crate::Error("view node lacks identity".into()))?;
-        if protected.contains(id) {
-            retained.push(node.clone());
-            continue;
-        }
-        let paths = navigation
-            .get(id)
-            .and_then(J::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(J::as_str)
-            .filter(|path| *path != "/")
-            .collect::<Vec<_>>();
-        let existing = groups
-            .iter()
-            .enumerate()
-            .filter(|(_, group)| paths.contains(&group["path"].as_str().unwrap_or("")))
-            .max_by_key(|(_, group)| group["path"].as_str().unwrap_or("").len())
-            .map(|(index, _)| index);
-        let index = if let Some(index) = existing {
-            index
-        } else {
-            let Some(path) = paths.iter().max_by_key(|path| path.len()) else {
-                retained.push(node.clone());
-                continue;
-            };
+        let id=node["source_id"].as_str().ok_or_else(||crate::Error("view node lacks identity".into()))?;
+        if protected.contains(id) { retained.push(node.clone()); continue; }
+        let paths=navigation.get(id).and_then(J::as_array).into_iter().flatten()
+            .filter_map(J::as_str).filter(|path|*path!="/").collect::<Vec<_>>();
+        let existing=groups.iter().enumerate().filter(|(_,group)|paths.contains(&group["path"].as_str().unwrap_or("")))
+            .max_by_key(|(_,group)|group["path"].as_str().unwrap_or("").len()).map(|(index,_)|index);
+        let index=if let Some(index)=existing {index} else {
+            let Some(path)=paths.iter().max_by_key(|path|path.len()) else {retained.push(node.clone());continue;};
             groups.push(json!({"group_id":format!("group:{path}"),"path":path,
                 "label":path.rsplit('/').next().unwrap_or(path),"member_source_ids":[]}));
-            groups.len() - 1
+            groups.len()-1
         };
-        groups[index]["member_source_ids"]
-            .as_array_mut()
-            .unwrap()
-            .push(json!(id));
+        groups[index]["member_source_ids"].as_array_mut().unwrap().push(json!(id));
     }
-    let mut owners = retained
-        .iter()
-        .filter_map(|node| {
-            node["source_id"]
-                .as_str()
-                .map(|id| (id.to_owned(), id.to_owned()))
-        })
-        .collect::<BTreeMap<_, _>>();
+    let mut owners = retained.iter().filter_map(|node|node["source_id"].as_str().map(|id|(id.to_owned(),id.to_owned())))
+        .collect::<BTreeMap<_,_>>();
     for group in &mut groups {
-        let owner = group["group_id"].as_str().unwrap().to_owned();
-        let members = group["member_source_ids"].as_array_mut().unwrap();
-        members.sort_by(|a, b| a.as_str().cmp(&b.as_str()));
+        let owner=group["group_id"].as_str().unwrap().to_owned();
+        let members=group["member_source_ids"].as_array_mut().unwrap();
+        members.sort_by(|a,b|a.as_str().cmp(&b.as_str()));
         for id in members.iter().filter_map(J::as_str) {
-            crate::require(
-                owners.insert(id.into(), owner.clone()).is_none(),
-                "folded view has duplicate ownership",
-            )?;
+            crate::require(owners.insert(id.into(),owner.clone()).is_none(),"folded view has duplicate ownership")?;
         }
     }
-    crate::require(
-        owners.len() == all_ids.len() && all_ids.keys().all(|id| owners.contains_key(id)),
-        "folded view lost source coverage",
-    )?;
-    groups.sort_by(|a, b| a["group_id"].as_str().cmp(&b["group_id"].as_str()));
-    result["nodes"] = json!(retained);
-    result["groups"] = json!(groups);
+    crate::require(owners.len()==all_ids.len() && all_ids.keys().all(|id|owners.contains_key(id)),"folded view lost source coverage")?;
+    groups.sort_by(|a,b|a["group_id"].as_str().cmp(&b["group_id"].as_str()));
+    result["nodes"]=json!(retained);result["groups"]=json!(groups);
     for link in result["links"].as_array_mut().into_iter().flatten() {
-        for (source, projected) in [("from", "projected_from"), ("to", "projected_to")] {
-            let id = link["source"][source].as_str().unwrap_or("");
-            link[projected] = json!(
-                owners
-                    .get(id)
-                    .cloned()
-                    .unwrap_or_else(|| format!("external:{id}"))
-            );
+        for (source,projected) in [("from","projected_from"),("to","projected_to")] {
+            let id=link["source"][source].as_str().unwrap_or("");
+            link[projected]=json!(owners.get(id).cloned().unwrap_or_else(||format!("external:{id}")));
         }
     }
     Ok(result)
@@ -603,7 +411,7 @@ pub fn fold_unrequested(packet: &J, focus: &[String], expand: &[String]) -> crat
 
 /// Compact a v1 packet with exact source types and selection-bound edge handles.
 pub fn compact(packet: &J, requested_edge_sets: &[String]) -> crate::Result<J> {
-    use crate::{Error, identity::sha256, value::TypedValue as V};
+    use crate::{identity::sha256, value::TypedValue as V, Error};
 
     fn required_str<'a>(value: &'a J, field: &str) -> crate::Result<&'a str> {
         value[field]
@@ -964,41 +772,15 @@ pub fn compact(packet: &J, requested_edge_sets: &[String]) -> crate::Result<J> {
     // carry their route refs. Expanding the whole packet recovers every per-ID route.
     let mut facet_members = BTreeMap::<String, BTreeSet<String>>::new();
     let mut node_facet_paths = BTreeMap::<String, BTreeSet<String>>::new();
-    let hidden_paths = packet["navigation_hidden_paths"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(J::as_str)
-        .collect::<BTreeSet<_>>();
-    let visible_paths = node_ref
-        .keys()
-        .flat_map(|id| {
-            packet["navigation_membership"][id]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(J::as_str)
-        })
-        .collect::<BTreeSet<_>>();
+    let hidden_paths = packet["navigation_hidden_paths"].as_array().into_iter().flatten()
+        .filter_map(J::as_str).collect::<BTreeSet<_>>();
+    let visible_paths = node_ref.keys().flat_map(|id| packet["navigation_membership"][id]
+        .as_array().into_iter().flatten().filter_map(J::as_str)).collect::<BTreeSet<_>>();
     let mut revealed_paths = BTreeSet::new();
-    for expanded in packet["navigation_frontier"]["expanded_children"]
-        .as_array()
-        .into_iter()
-        .flatten()
-    {
-        if let Some(path) = expanded["group"]
-            .as_str()
-            .and_then(|s| s.strip_prefix("group:"))
-        {
-            revealed_paths.insert(path);
-        }
+    for expanded in packet["navigation_frontier"]["expanded_children"].as_array().into_iter().flatten() {
+        if let Some(path)=expanded["group"].as_str().and_then(|s|s.strip_prefix("group:")) { revealed_paths.insert(path); }
         for child in expanded["children"].as_array().into_iter().flatten() {
-            if let Some(path) = child["group"]
-                .as_str()
-                .and_then(|s| s.strip_prefix("group:"))
-            {
-                revealed_paths.insert(path);
-            }
+            if let Some(path)=child["group"].as_str().and_then(|s|s.strip_prefix("group:")) { revealed_paths.insert(path); }
         }
     }
     if let Some(nav) = packet["navigation_membership"].as_object() {
@@ -1010,10 +792,7 @@ pub fn compact(packet: &J, requested_edge_sets: &[String]) -> crate::Result<J> {
                 let path = path
                     .as_str()
                     .ok_or_else(|| Error("invalid compact navigation path".into()))?;
-                if hidden_paths.contains(path)
-                    && !visible_paths.contains(path)
-                    && !revealed_paths.contains(path)
-                {
+                if hidden_paths.contains(path) && !visible_paths.contains(path) && !revealed_paths.contains(path) {
                     continue;
                 }
                 let handle = if path.starts_with("group:") {

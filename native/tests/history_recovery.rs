@@ -28,12 +28,8 @@ fn tree(root: &Path) -> Value {
             } else {
                 let raw = fs::read(&p).unwrap();
                 items.insert(
-                    p.strip_prefix(root)
-                        .unwrap()
-                        .iter()
-                        .map(|part| part.to_str().unwrap())
-                        .collect::<Vec<_>>()
-                        .join("/"),
+                    p.strip_prefix(root).unwrap().iter()
+                        .map(|part| part.to_str().unwrap()).collect::<Vec<_>>().join("/"),
                     raw.iter().map(|b| format!("{b:02x}")).collect(),
                 );
             }

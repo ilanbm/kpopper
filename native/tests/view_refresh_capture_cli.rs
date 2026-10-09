@@ -184,9 +184,7 @@ impl Probe {
                 self.root.path().join("preferences.json"),
             );
         }
-        if !self.config_override {
-            command.env_remove("KPOPPER_SESSION_CONFIG");
-        }
+        if !self.config_override { command.env_remove("KPOPPER_SESSION_CONFIG"); }
         command
     }
 
@@ -215,8 +213,7 @@ impl Probe {
             .unwrap()
             .extend(extra.as_object().unwrap().clone());
         let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
-        command
-            .args(["_hook", "continuation", "codex"])
+        command.args(["_hook", "continuation", "codex"])
             .current_dir(self.root.path())
             .env("XDG_STATE_HOME", self.root.path().join("xdg-state"))
             .env(
@@ -233,9 +230,7 @@ impl Probe {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        if !self.config_override {
-            command.env_remove("KPOPPER_SESSION_CONFIG");
-        }
+        if !self.config_override { command.env_remove("KPOPPER_SESSION_CONFIG"); }
         let mut child = command.spawn().unwrap();
         child
             .stdin
@@ -409,38 +404,17 @@ fn configured_external_record_obeys_workspace_disable_without_config_override() 
     probe.input = path.to_str().unwrap().to_owned();
     probe.config_override = false;
     fs::create_dir(probe.root.path().join(".kpopper")).unwrap();
-    fs::write(
-        probe.root.path().join(".kpopper/project.json"),
-        json!({"version":1,"mode":"simple","generation":0,"record":path}).to_string(),
-    )
-    .unwrap();
+    fs::write(probe.root.path().join(".kpopper/project.json"),
+        json!({"version":1,"mode":"simple","generation":0,"record":path}).to_string()).unwrap();
     probe.read_and_acknowledge();
     let disabled = Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .args([
-            "--workspace",
-            probe.root.path().to_str().unwrap(),
-            "session",
-            "disable",
-        ])
-        .current_dir(probe.root.path())
-        .env("XDG_CONFIG_HOME", probe.root.path().join("config"))
-        .env_remove("KPOPPER_SESSION_CONFIG")
-        .env_remove("KPOPPER_SESSION_DISABLE")
-        .output()
-        .unwrap();
-    assert!(
-        disabled.status.success(),
-        "{}",
-        String::from_utf8_lossy(&disabled.stderr)
-    );
+        .args(["--workspace", probe.root.path().to_str().unwrap(), "session", "disable"])
+        .current_dir(probe.root.path()).env("XDG_CONFIG_HOME", probe.root.path().join("config"))
+        .env_remove("KPOPPER_SESSION_CONFIG").env_remove("KPOPPER_SESSION_DISABLE")
+        .output().unwrap();
+    assert!(disabled.status.success(), "{}", String::from_utf8_lossy(&disabled.stderr));
     let settings: Value = serde_json::from_slice(&disabled.stdout).unwrap();
     assert_eq!(settings["enabled"], false);
-    fs::write(
-        &path,
-        fs::read_to_string(&path)
-            .unwrap()
-            .replace("p.value: {v: 7}", "p.value: {v: 8}"),
-    )
-    .unwrap();
+    fs::write(&path, fs::read_to_string(&path).unwrap().replace("p.value: {v: 7}", "p.value: {v: 8}")).unwrap();
     assert!(probe.hook("UserPromptSubmit", None, json!({})).is_empty());
 }

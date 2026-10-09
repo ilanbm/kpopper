@@ -1,10 +1,10 @@
 //! Public named-hypothesis consolidation over ordinary records and active history.
 #[path = "public_branch_consolidation.rs"]
 mod branch;
-#[path = "ordinary_consolidation_full.rs"]
-mod full;
 #[path = "consolidation_resolve.rs"]
 mod resolve;
+#[path = "ordinary_consolidation_full.rs"]
+mod full;
 pub(crate) use full::branch_differences;
 #[path = "consolidation_preview_facts.rs"]
 mod preview_facts;
@@ -96,17 +96,8 @@ pub struct Options {
 }
 
 fn validate(options: &Options) -> Result<()> {
-    require(
-        !(options.source.is_some() && options.by.is_some()),
-        "--as names a refutation source; --by names an actor - do not conflate them",
-    )?;
-    require(
-        options
-            .by
-            .as_ref()
-            .is_none_or(|a| !a.trim().is_empty() && a.len() <= 200),
-        "--by must name a recorded actor, at most 200 bytes",
-    )?;
+    require(!(options.source.is_some() && options.by.is_some()), "--as names a refutation source; --by names an actor - do not conflate them")?;
+    require(options.by.as_ref().is_none_or(|a| !a.trim().is_empty() && a.len() <= 200), "--by must name a recorded actor, at most 200 bytes")?;
     if let Some(day) = &options.as_of {
         require(
             regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$")
@@ -226,11 +217,7 @@ fn authoring_options(prefix: &str, by: V) -> Result<crate::history_authoring::Op
         operation: fresh_id(prefix)?,
         recorded_at: now.to_rfc3339(),
         recording_day: chrono::Local::now().date_naive().to_string(),
-        by: if by == V::Null {
-            crate::direct_history::actor()
-        } else {
-            by
-        },
+        by: if by == V::Null { crate::direct_history::actor() } else { by },
         strict: true,
         paths: Scheme::Hashed,
         receipt_version: None,
@@ -502,12 +489,7 @@ fn run_with_runtime(
         return node_run(options, &route, &original, runtime_override, probe);
     }
     let captured = store.capture()?;
-    let by = options
-        .source
-        .as_deref()
-        .or(options.by.as_deref())
-        .map(s)
-        .unwrap_or(V::Null);
+    let by = options.source.as_deref().or(options.by.as_deref()).map(s).unwrap_or(V::Null);
     let write_options = authoring_options(
         if options.refute.is_some() {
             "hypothesis-refute"
@@ -636,12 +618,7 @@ fn node_run(
         } else {
             "hypothesis-fold"
         },
-        options
-            .source
-            .as_deref()
-            .or(options.by.as_deref())
-            .map(s)
-            .unwrap_or(V::Null),
+        options.source.as_deref().or(options.by.as_deref()).map(s).unwrap_or(V::Null),
     )?;
     let action = obj([
         (
@@ -1035,18 +1012,11 @@ mod node_tests {
                 names: vec!["alpha".into()],
                 ..Default::default()
             };
-            let interrupted = run_with_runtime(&options, root.path(), Some(&runtime), &mut |at| {
-                if at == phase {
-                    Err(error("crash"))
-                } else {
-                    Ok(())
-                }
-            })
-            .unwrap_err();
-            assert!(
-                interrupted.0.contains("crash"),
-                "failed before injected {phase}: {interrupted}"
-            );
+            let interrupted = run_with_runtime(
+                &options, root.path(), Some(&runtime),
+                &mut |at| if at == phase { Err(error("crash")) } else { Ok(()) }
+            ).unwrap_err();
+            assert!(interrupted.0.contains("crash"), "failed before injected {phase}: {interrupted}");
             let original = vec![root.path().join("GROUNDING.yaml")];
             let route = WriteRoute::capture(&original, root.path()).unwrap();
             let result =

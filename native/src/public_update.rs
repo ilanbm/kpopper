@@ -1436,47 +1436,20 @@ fn run_bound(
                 let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
                 // A retained journal may already describe a durable capture.
                 // Leave its recovery path intact instead of claiming no write.
-                if journal_path.is_file() {
-                    return Err(error);
-                }
+                if journal_path.is_file() { return Err(error); }
                 if let Some(raw) = F::read(&receipt_path)? {
                     let saved: J = serde_json::from_slice(&raw)?;
-                    return Ok(Output {
-                        code: receipt_code(&saved),
-                        text: format!("{saved}\n"),
-                    });
+                    return Ok(Output { code:receipt_code(&saved), text:format!("{saved}\n") });
                 }
-                let (answer, signals) = receipt(
-                    &report,
-                    &record,
-                    &root,
-                    &event,
-                    &source_path,
-                    &envelope_sha,
-                    "needs_primary",
-                    Some(&error.0),
-                    false,
-                    None,
-                    None,
-                    supplied_runtime,
-                )?;
+                let (answer, signals) = receipt(&report, &record, &root, &event,
+                    &source_path, &envelope_sha, "needs_primary", Some(&error.0),
+                    false, None, None, supplied_runtime)?;
                 for signal in &signals {
-                    save(
-                        &root
-                            .join("signals")
-                            .join(format!("{}.json", signal["id"].as_str().unwrap())),
-                        signal,
-                    )?;
+                    save(&root.join("signals").join(format!("{}.json", signal["id"].as_str().unwrap())), signal)?;
                 }
                 save(&receipt_path, &answer)?;
-                save(
-                    &root.join("results").join(format!("{event}.json")),
-                    &json!({"receipt":answer,"signals":signals}),
-                )?;
-                Ok(Output {
-                    text: format!("{answer}\n"),
-                    code: 1,
-                })
+                save(&root.join("results").join(format!("{event}.json")), &json!({"receipt":answer,"signals":signals}))?;
+                Ok(Output { text:format!("{answer}\n"), code:1 })
             }
         };
     }
@@ -1626,13 +1599,8 @@ fn run_bound(
             operation: format!("report-{event}"),
             recorded_at: now.to_rfc3339(),
             recording_day: report.date.clone(),
-            by: report
-                .raw
-                .get("session_id")
-                .and_then(J::as_str)
-                .filter(|id| !id.trim().is_empty())
-                .map(|id| V::Text(format!("session:{id}")))
-                .unwrap_or(V::Null),
+            by: report.raw.get("session_id").and_then(J::as_str).filter(|id| !id.trim().is_empty())
+                        .map(|id| V::Text(format!("session:{id}"))).unwrap_or(V::Null),
             strict: true,
             paths: crate::history_paths::Scheme::Hashed,
             receipt_version: None,

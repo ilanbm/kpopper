@@ -175,11 +175,7 @@ impl Layout {
     pub fn existing(record: &Path, state_dir: Option<&Path>) -> Result<Option<Self>> {
         Self::existing_from(record, state_dir, &std::env::current_dir()?)
     }
-    pub fn existing_from(
-        record: &Path,
-        state_dir: Option<&Path>,
-        cwd: &Path,
-    ) -> Result<Option<Self>> {
+    pub fn existing_from(record: &Path, state_dir: Option<&Path>, cwd: &Path) -> Result<Option<Self>> {
         let record = record.canonicalize()?;
         let root = resolve_root_from(&record, state_dir, cwd)?;
         let root = if root.exists() {

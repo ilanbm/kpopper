@@ -202,9 +202,9 @@ fn findings(context: &CapturedAssessment, page: Option<Result<J>>) -> Result<J> 
         .filter(|(_, node)| node["state"]["falsifier"]["status"] == "holds")
         .map(|(id, _)| id.clone())
         .collect::<BTreeSet<_>>();
-    if let Ok(document) =
-        crate::value::TypedValue::from_json(&json_value(&context.snapshot().to_data())?["document"])
-    {
+    if let Ok(document) = crate::value::TypedValue::from_json(
+        &json_value(&context.snapshot().to_data())?["document"],
+    ) {
         for (id, flag) in crate::public_amend::document_flags(&document, &falsified) {
             notes.push(format!(
                 "{id}: {}",
@@ -286,10 +286,7 @@ pub(crate) fn opening_attention(context: &CapturedAssessment) -> Result<Vec<J>> 
     let report = json_value(context.assessment())?;
     let snapshot = json_value(&context.snapshot().to_data())?;
     let (nodes, answered) = collect_opening_attention(&report, &snapshot);
-    let mut items = nodes
-        .into_iter()
-        .map(|item| json!({"id":item["id"],"reason":item["reasons"]}))
-        .collect::<Vec<_>>();
+    let mut items = nodes.into_iter().map(|item| json!({"id":item["id"],"reason":item["reasons"]})).collect::<Vec<_>>();
     items.extend(answered);
     Ok(items)
 }
@@ -328,14 +325,9 @@ fn collect_opening_attention(report: &J, snapshot: &J) -> (Vec<J>, Vec<J>) {
     let answered = crate::value::TypedValue::from_json(&snapshot["document"])
         .map(|document| crate::public_amend::document_flags(&document, &falsified))
         .unwrap_or_default();
-    let answered = answered
-        .into_iter()
-        .map(|(id, flag)| {
-            json!({
-                "id":id,"reason":flag.text(&|a, b| crate::public_ordinary_readers::apart(a, b, 28))
-            })
-        })
-        .collect();
+    let answered = answered.into_iter().map(|(id, flag)| json!({
+        "id":id,"reason":flag.text(&|a, b| crate::public_ordinary_readers::apart(a, b, 28))
+    })).collect();
     (attention, answered)
 }
 
@@ -379,11 +371,7 @@ pub fn opening(
         })
         .collect::<Vec<_>>();
     attention_lines.extend(answered.iter().map(|item| {
-        format!(
-            "  {}: {}",
-            item["id"].as_str().unwrap(),
-            item["reason"].as_str().unwrap()
-        )
+        format!("  {}: {}", item["id"].as_str().unwrap(), item["reason"].as_str().unwrap())
     }));
     if attention.is_empty() && answered.is_empty() {
         lines.push(format!(

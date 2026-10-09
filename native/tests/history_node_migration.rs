@@ -466,7 +466,9 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
     if !enriched_replaced.ends_with(b"\n") {
         enriched_replaced.push(b'\n');
     }
-    enriched_replaced.extend_from_slice(b"  dropped: {p.old: retired earlier}\n");
+    enriched_replaced.extend_from_slice(
+        b"  dropped: {p.old: retired earlier}\n",
+    );
     fs::write(source.join(".kpopper/replaced.yaml"), &enriched_replaced).unwrap();
     let replaced = fs::read(source.join(".kpopper/replaced.yaml")).unwrap();
     legacy_copy(&source, &v1);
@@ -626,7 +628,10 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
         chained_history_text.contains("no brief"),
         "chained copy omitted the old reason: {chained_history_text}"
     );
-    let chained_json = cli(&node, &["--json", "pull", "d.done", "--history"]);
+    let chained_json = cli(
+        &node,
+        &["--json", "pull", "d.done", "--history"],
+    );
     assert!(chained_json.status.success());
     let wrapper: serde_json::Value = serde_json::from_slice(&chained_json.stdout).unwrap();
     let payload: serde_json::Value =
@@ -642,10 +647,7 @@ fn history_import_replaced_sidecar_is_verified_then_redundant_member_is_dropped(
     assert_eq!(archived["entry"]["day"], generated_day);
     assert_eq!(archived["entry"]["ended"], generated_ended);
     assert_eq!(archived["entry"]["dropped"]["p.old"], "retired earlier");
-    assert!(
-        archived.get("id").is_none(),
-        "archive evidence gained a semantic id: {archived}"
-    );
+    assert!(archived.get("id").is_none(), "archive evidence gained a semantic id: {archived}");
     for args in [
         vec!["set", "p.runs", "3", "--why", "another observed run"],
         vec!["review", "d.done", "--by", "reviewer"],
@@ -722,10 +724,7 @@ fn unbound_replaced_sidecar_in_a_legacy_copy_stays_raw_and_is_not_displayed_as_v
         .unwrap()
         .1;
     let archived = Archive::decode(archive).unwrap();
-    assert_eq!(
-        archived.files().get(".kpopper/replaced.yaml"),
-        Some(&unbound.to_vec())
-    );
+    assert_eq!(archived.files().get(".kpopper/replaced.yaml"), Some(&unbound.to_vec()));
     plan.publish(&node).unwrap();
 
     let pulled = cli(

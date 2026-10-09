@@ -1223,10 +1223,7 @@ impl<'a, P: Provider> Publisher<'a, P> {
                 ("kind", s("compact-publication-birth/v1")),
                 ("target", s(&target.revision)),
                 ("record", s(record)),
-                (
-                    "revisions",
-                    V::List(revisions.iter().map(|r| s(r)).collect()),
-                ),
+                ("revisions", V::List(revisions.iter().map(|r| s(r)).collect())),
             ]);
             let recorded_at = birth::recorded_at(ledger, revisions)?;
             let created =

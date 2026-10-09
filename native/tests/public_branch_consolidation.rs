@@ -99,34 +99,18 @@ fn refreshing_a_source_does_not_reread_every_inherited_value_that_cites_it() {
     fs::write(root.join("GROUNDING.yaml"), base).unwrap();
     commit(root, "old reading cites a source");
     git(root, &["checkout", "-q", "-b", "source"]);
-    fs::write(
-        root.join("GROUNDING.yaml"),
-        base.replace("read: 2026-09-10", "read: 2026-09-12"),
-    )
-    .unwrap();
+    fs::write(root.join("GROUNDING.yaml"), base.replace("read: 2026-09-10", "read: 2026-09-12")).unwrap();
     commit(root, "source is read again without updating the counter");
     git(root, &["checkout", "-q", "main"]);
     let current = base.replace("v: 0, from: s.note", "v: 1, from: s.note, of: 2026-09-12");
     fs::write(root.join("GROUNDING.yaml"), &current).unwrap();
     commit(root, "destination records a new counter reading");
-    let output = public_consolidation::dispatch(
-        &Options {
-            from_refs: vec!["source".into()],
-            dry_run: true,
-            ..Default::default()
-        },
-        root,
-    );
+    let output = public_consolidation::dispatch(&Options {
+        from_refs: vec!["source".into()], dry_run: true, ..Default::default()
+    }, root);
     assert_eq!(output.code, 0, "{}{}", output.stdout, output.stderr);
-    assert!(
-        !output.stdout.contains("p.counter: 1 -> 0"),
-        "{}",
-        output.stdout
-    );
-    assert_eq!(
-        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
-        current
-    );
+    assert!(!output.stdout.contains("p.counter: 1 -> 0"), "{}", output.stdout);
+    assert_eq!(fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(), current);
 }
 
 #[test]
@@ -173,22 +157,14 @@ fn branches_that_created_their_records_after_the_fork_have_an_empty_record_base(
     fs::write(root.join("GROUNDING.yaml"), "known:\n  p.target: {v: 2}\n").unwrap();
     commit(root, "target creates record");
     for dry_run in [true, false] {
-        let output = public_consolidation::dispatch(
-            &Options {
-                from_refs: vec!["source".into()],
-                dry_run,
-                ..Default::default()
-            },
-            root,
-        );
+        let output = public_consolidation::dispatch(&Options {
+            from_refs: vec!["source".into()], dry_run, ..Default::default()
+        }, root);
         assert_eq!(output.code, 0, "{}{}", output.stdout, output.stderr);
         assert!(output.stdout.contains("arrived (1)"), "{}", output.stdout);
     }
     let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
-    assert!(
-        record.contains("p.source:") && record.contains("p.target:"),
-        "{record}"
-    );
+    assert!(record.contains("p.source:") && record.contains("p.target:"), "{record}");
 }
 
 #[test]
@@ -210,14 +186,9 @@ fn an_unavailable_merge_base_record_is_not_treated_as_an_empty_record() {
         fs::write(root.join("GROUNDING.yaml"), "known:\n  p.target: {v: 2}\n").unwrap();
         commit(root, "target writes record");
         let before = image(root);
-        let output = public_consolidation::dispatch(
-            &Options {
-                from_refs: vec!["source".into()],
-                dry_run: true,
-                ..Default::default()
-            },
-            root,
-        );
+        let output = public_consolidation::dispatch(&Options {
+            from_refs: vec!["source".into()], dry_run: true, ..Default::default()
+        }, root);
         assert_eq!(output.code, 1, "{path}: {}{}", output.stdout, output.stderr);
         assert_eq!(image(root), before);
     }
@@ -232,29 +203,16 @@ fn a_branch_without_recorded_snapshots_still_checks_the_proposed_reading() {
     fs::write(root.join("GROUNDING.yaml"), base).unwrap();
     commit(root, "record without a snapshot field");
     git(root, &["checkout", "-q", "-b", "source"]);
-    fs::write(
-        root.join("GROUNDING.yaml"),
-        base.replace("v: 10, of: 2026-09-10", "v: 11, of: 2026-09-12"),
-    )
-    .unwrap();
+    fs::write(root.join("GROUNDING.yaml"), base.replace("v: 10, of: 2026-09-10", "v: 11, of: 2026-09-12")).unwrap();
     commit(root, "new reading breaks the condition");
     git(root, &["checkout", "-q", "main"]);
     let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
-    let output = public_consolidation::dispatch(
-        &Options {
-            from_refs: vec!["source".into()],
-            dry_run: true,
-            ..Default::default()
-        },
-        root,
-    );
+    let output = public_consolidation::dispatch(&Options {
+        from_refs: vec!["source".into()], dry_run: true, ..Default::default()
+    }, root);
     assert_eq!(output.code, 1);
     assert!(output.stderr.is_empty(), "{}", output.stderr);
-    assert!(
-        output.stdout.contains("FALSIFIED d.limit"),
-        "{}",
-        output.stdout
-    );
+    assert!(output.stdout.contains("FALSIFIED d.limit"), "{}", output.stdout);
     assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
 }
 
@@ -389,18 +347,8 @@ fn ordinary_branch_uses_declared_snapshot_field_and_compares_review_values() {
         "{}",
         cannot_take_old_review.stdout
     );
-    assert!(
-        !cannot_take_old_review.stdout.contains("--take"),
-        "{}",
-        cannot_take_old_review.stdout
-    );
-    assert!(
-        cannot_take_old_review
-            .stdout
-            .contains("requiring a new proposal"),
-        "{}",
-        cannot_take_old_review.stdout
-    );
+    assert!(!cannot_take_old_review.stdout.contains("--take"), "{}", cannot_take_old_review.stdout);
+    assert!(cannot_take_old_review.stdout.contains("requiring a new proposal"), "{}", cannot_take_old_review.stdout);
 }
 
 const BRANCHED: &str = "known:\n  local.one: {v: 1}\n  local.two: {v: 2, of: 2026-09-10}\n  local.three: {v: two  words}\njudgments:\n  d.a:\n    verdict: a\n    rests_on: [local.one]\n    seen: {local.one: 1}\n    wrong_if: local.one > 5\n";
@@ -609,51 +557,23 @@ fn an_unrelated_private_entry_in_the_merge_base_does_not_block_a_public_delta() 
     fs::write(root.join("GROUNDING.yaml"), base).unwrap();
     commit(&root, "common record with an unrelated private entry");
     git(&root, &["checkout", "-q", "-b", "public-change"]);
-    fs::write(
-        root.join("GROUNDING.yaml"),
-        base.replace(
-            "p.public: {v: 1, of: 2026-09-10}",
-            "p.public: {v: 2, of: 2026-09-12}",
-        ),
-    )
-    .unwrap();
+    fs::write(root.join("GROUNDING.yaml"), base.replace("p.public: {v: 1, of: 2026-09-10}", "p.public: {v: 2, of: 2026-09-12}")).unwrap();
     commit(&root, "public reading changes");
     git(&root, &["checkout", "-q", "main"]);
     let private = tempfile::tempdir().unwrap();
     for dry_run in [true, false] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
-        command
-            .current_dir(&root)
-            .args(["consolidate", "--from", "public-change"])
+        command.current_dir(&root).args(["consolidate", "--from", "public-change"])
             .env("KPOPPER_PRIVATE_HOME", private.path());
-        if dry_run {
-            command.arg("--dry-run");
-        }
+        if dry_run { command.arg("--dry-run"); }
         let output = command.output().unwrap();
-        assert!(
-            output.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(
-            image(private.path()).is_empty(),
-            "a public-only delta created a private draft"
-        );
+        assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert!(image(private.path()).is_empty(), "a public-only delta created a private draft");
     }
     let after = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
-    assert!(
-        after.contains("p.public: {v: 2, of: 2026-09-12}"),
-        "{after}"
-    );
-    assert!(
-        after.contains("p.secret: {v: 42, of: 2026-09-10, privacy: private}"),
-        "{after}"
-    );
-    assert!(
-        !after.contains("_comparison_base"),
-        "comparison evidence entered the record"
-    );
+    assert!(after.contains("p.public: {v: 2, of: 2026-09-12}"), "{after}");
+    assert!(after.contains("p.secret: {v: 42, of: 2026-09-10, privacy: private}"), "{after}");
+    assert!(!after.contains("_comparison_base"), "comparison evidence entered the record");
 }
 
 #[test]

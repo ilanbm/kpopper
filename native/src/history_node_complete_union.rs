@@ -57,8 +57,7 @@ fn bound_members(source: &crate::history_capture::Capture) -> Result<BTreeMap<St
 fn bound_auxiliary(path: &str) -> Result<bool> {
     for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
         let layout = crate::history_transaction::Layout::for_entry(name)?;
-        if path == layout.view
-            || path == layout.replaced
+        if path == layout.view || path == layout.replaced
             || path.starts_with(&format!("{}/", layout.retained))
             || path.starts_with(&format!("{}/", layout.hypotheses))
         {
@@ -136,10 +135,8 @@ impl Retained {
         }
         let manifest = map(field(map(bundle)?, "manifest")?)?;
         let document = field(manifest, "document")?.clone();
-        require(
-            !crate::history_node_contribution::has_domain_profile(&document)?,
-            "unsupported_domain_profile",
-        )?;
+        require(!crate::history_node_contribution::has_domain_profile(&document)?,
+            "unsupported_domain_profile")?;
         Ok(Self {
             revision: text(field(map(bundle)?, "revision")?)?.to_owned(),
             marker: captured.marker.clone(),
@@ -214,10 +211,8 @@ fn contract(snapshot: &P::Snapshot, template: &V, rules: &V, retained: &Retained
         rules.digest()? == retained.rules.digest()?,
         "complete_union_rules_mismatch",
     )?;
-    require(
-        !crate::history_node_contribution::has_domain_profile(template)?,
-        "unsupported_domain_profile",
-    )?;
+    require(!crate::history_node_contribution::has_domain_profile(template)?,
+        "unsupported_domain_profile")?;
     let (target, incoming) = (reasoning(template), reasoning(&retained.document));
     require(
         target == V::Null || incoming == V::Null || target == incoming,
@@ -405,9 +400,7 @@ pub(crate) fn materialize_complete(root: &Path, bundle: &V, files: &Files) -> Re
         if reserved_evidence(path) {
             // Locator data never becomes history, configuration or a physical layer.
             // Only an original the verified entry binds by digest enters the source.
-            if bound_auxiliary(path)?
-                && bound.get(path).is_some_and(|digest| *digest == sha256(raw))
-            {
+            if bound_auxiliary(path)? && bound.get(path).is_some_and(|digest| *digest == sha256(raw)) {
                 originals.insert(path.clone(), raw.clone());
             }
             external.insert(format!("{ARCHIVE}{revision}/evidence/{path}"), raw.clone());
@@ -419,14 +412,11 @@ pub(crate) fn materialize_complete(root: &Path, bundle: &V, files: &Files) -> Re
     for (path, raw) in &originals {
         crate::history_transaction_fs::publish_immutable(&legacy, path, raw)?;
     }
-    let reconstructed =
-        crate::history_store::Store::new(&legacy.join("GROUNDING.yaml"))?.capture()?;
-    require(
-        reconstructed.commits == source.commits
-            && reconstructed.storage_bytes == source.storage_bytes
-            && reconstructed.cancellation_bytes == source.cancellation_bytes,
-        "complete_materialize_source_membership",
-    )?;
+    let reconstructed = crate::history_store::Store::new(&legacy.join("GROUNDING.yaml"))?.capture()?;
+    require(reconstructed.commits == source.commits
+        && reconstructed.storage_bytes == source.storage_bytes
+        && reconstructed.cancellation_bytes == source.cancellation_bytes,
+        "complete_materialize_source_membership")?;
     let converted = temporary.path().join("compact");
     crate::history_node_migration::Plan::prepare(&legacy.join("GROUNDING.yaml"))?
         .publish(&converted)?;
@@ -458,10 +448,8 @@ pub(crate) fn materialize_complete(root: &Path, bundle: &V, files: &Files) -> Re
             "complete_materialize_object_mismatch",
         )?;
     }
-    require(
-        capture.history.objects().keys().eq(source.objects.keys()),
-        "complete_materialize_object_membership: converted history holds an object outside the verified artifact",
-    )?;
+    require(capture.history.objects().keys().eq(source.objects.keys()),
+        "complete_materialize_object_membership: converted history holds an object outside the verified artifact")?;
     require(
         same_authority(&capture.snapshot.authority, &source.marker)?,
         "complete_union_authority_mismatch",

@@ -852,10 +852,7 @@ fn history_summary(v: &V) -> Result<()> {
         &["capabilities", "review_profile"],
     )?;
     if let Some(profile) = m.get("review_profile") {
-        require(
-            string_is(profile, crate::history_review::PROFILE),
-            "unsupported_review_profile",
-        )?;
+        require(string_is(profile, crate::history_review::PROFILE), "unsupported_review_profile")?;
     }
     if let Some(capabilities) = m.get("capabilities") {
         crate::history_authority::validate_history_requires(capabilities)?;
@@ -1122,9 +1119,7 @@ fn subject_state(p: &Map, subject: &str, version: &str) -> Result<String> {
     let current = map(current)?;
     if names(&current["heads"])?.contains(&version.into()) {
         if string_is(&current["acceptance"], "accepted")
-            && crate::history_review::state(p, subject, version)?
-                == crate::history_review::ReviewState::Unreviewed
-        {
+            && crate::history_review::state(p, subject, version)? == crate::history_review::ReviewState::Unreviewed {
             return Ok("unreviewed".into());
         }
         return Ok(text(&current["acceptance"])?.into());
@@ -1405,25 +1400,14 @@ fn enrich(id: &str, node: &V, projection: Option<&V>, subjects: &Map) -> Result<
         for head in names(&projected["head_ids"])? {
             let code = match crate::history_review::state(projection, id, &head)? {
                 crate::history_review::ReviewState::Unreviewed => Some("reversal_unreviewed"),
-                crate::history_review::ReviewState::ProvenanceMissing => {
-                    Some("review_provenance_missing")
-                }
+                crate::history_review::ReviewState::ProvenanceMissing => Some("review_provenance_missing"),
                 _ => None,
             };
             if let Some(code) = code {
-                let V::List(attention) = n.get_mut("attention").unwrap() else {
-                    return Err(error("invalid attention"));
-                };
-                attention.push(obj([
-                    ("action", s("review")),
-                    (
-                        "reasons",
-                        V::List(vec![obj([
-                            ("code", s(code)),
-                            ("related_ids", V::List(vec![s(&head)])),
-                        ])]),
-                    ),
-                ]));
+                let V::List(attention) = n.get_mut("attention").unwrap() else { return Err(error("invalid attention")) };
+                attention.push(obj([("action", s("review")), ("reasons", V::List(vec![obj([
+                    ("code", s(code)), ("related_ids", V::List(vec![s(&head)])),
+                ])]))]));
             }
         }
     }
@@ -1661,46 +1645,32 @@ pub fn assess(
 /// captured support graph and does not reinterpret their predicates or snapshots.
 pub(crate) fn review_notes(projection: &V) -> Result<BTreeMap<String, String>> {
     history_projection::validate_projection(projection)?;
-    let p = map(projection)?;
-    let g = graph(p)?;
-    let mut budget = H::SupportBudget::default();
-    let mut result = BTreeMap::new();
-    for (subject, value) in map(&p["subjects"])? {
-        let value = map(value)?;
-        if !string_is(&value["acceptance"], "accepted") {
-            continue;
-        }
-        let heads = names(&value["heads"])?;
-        let roots = heads
-            .iter()
-            .map(|id| format!("{subject}@{id}"))
-            .collect::<Vec<_>>();
-        let support = H::reduce_support_graph(&roots, &g, &empty(), H::MAX_VISITS, &mut budget)?;
-        let mut pending = BTreeSet::new();
+    let p=map(projection)?;
+    let g=graph(p)?;
+    let mut budget=H::SupportBudget::default();
+    let mut result=BTreeMap::new();
+    for (subject,value) in map(&p["subjects"])? {
+        let value=map(value)?;
+        if !string_is(&value["acceptance"],"accepted") {continue}
+        let heads=names(&value["heads"])?;
+        let roots=heads.iter().map(|id|format!("{subject}@{id}")).collect::<Vec<_>>();
+        let support=H::reduce_support_graph(&roots,&g,&empty(),H::MAX_VISITS,&mut budget)?;
+        let mut pending=BTreeSet::new();
         for reservation in list(&map(&support)?["reservations"])? {
-            let r = map(reservation)?;
-            if string_is(&r["state"], "unreviewed") {
+            let r=map(reservation)?;
+            if string_is(&r["state"],"unreviewed") {
                 pending.insert(text(&r["subject"])?.to_owned());
             }
         }
         if !pending.is_empty() {
-            let why = if pending.contains(subject) {
-                format!(
-                    "unreviewed change of judgment - a different recorded actor must review it; pull {subject} --history"
-                )
+            let why=if pending.contains(subject) {
+                format!("unreviewed change of judgment - a different recorded actor must review it; pull {subject} --history")
             } else {
-                format!(
-                    "rests on unreviewed {} - review that judgment first",
-                    pending.into_iter().collect::<Vec<_>>().join(", ")
-                )
+                format!("rests on unreviewed {} - review that judgment first",pending.into_iter().collect::<Vec<_>>().join(", "))
             };
-            result.insert(subject.clone(), why);
-        } else if heads
-            .iter()
-            .map(|id| crate::history_review::state(p, subject, id))
-            .collect::<Result<Vec<_>>>()?
-            .contains(&crate::history_review::ReviewState::ProvenanceMissing)
-        {
+            result.insert(subject.clone(),why);
+        } else if heads.iter().map(|id|crate::history_review::state(p,subject,id)).collect::<Result<Vec<_>>>()?
+            .contains(&crate::history_review::ReviewState::ProvenanceMissing) {
             result.insert(subject.clone(),format!("review_provenance_missing - the earlier actor was not recorded; review the exact current judgment, or pull {subject} --history"));
         }
     }

@@ -560,10 +560,7 @@ pub(crate) fn may_supersede(
                     stamp,
                     page,
                     born: map(existing)?.get("born").and_then(day),
-                    predicate: short(
-                        &V::Text(crate::public_ordinary_readers::predicate_text(pred)),
-                        60,
-                    ),
+                    predicate: short(&V::Text(crate::public_ordinary_readers::predicate_text(pred)), 60),
                 })
             },
             || {
@@ -864,33 +861,17 @@ pub(crate) fn validate_with_page(
     if reframe {
         let old = world.raw().get(id).and_then(|v| map(v).ok());
         let stored = old.and_then(|m| m.get("v").or_else(|| m.get("quoted")));
-        if kind != "add"
-            || !world.core()
-            || !known
-            || is_jud
-            || builtin(id)
-            || aimed.is_some()
-            || old.is_some_and(|m| m.contains_key("rule"))
-            || !matches!(
-                stored,
-                Some(V::Bool(_) | V::Text(_) | V::Integer(_) | V::Float(_))
-            )
-        {
+        if kind != "add" || !world.core() || !known || is_jud || builtin(id)
+            || aimed.is_some() || old.is_some_and(|m| m.contains_key("rule"))
+            || !matches!(stored, Some(V::Bool(_) | V::Text(_) | V::Integer(_) | V::Float(_))) {
             out.push("reframe requires an existing stored scalar in an active core/v1 history; it cannot replace judgments, rules or hypotheses".into());
         }
         if !matches!(b.get("rule"), Some(V::Map(_)))
-            || b.keys().any(|k| !["rule", "name"].contains(&k.as_str()))
-        {
+            || b.keys().any(|k| !["rule", "name"].contains(&k.as_str())) {
             out.push("reframe needs only a structured rule and optional name; historical citations and snapshots are preserved by the writer".into());
         }
-        if !a
-            .get("why")
-            .and_then(|v| text(v).ok())
-            .is_some_and(|v| !v.trim().is_empty())
-        {
-            out.push(
-                "reframe requires --why explaining why the rule represents the same subject".into(),
-            );
+        if !a.get("why").and_then(|v| text(v).ok()).is_some_and(|v| !v.trim().is_empty()) {
+            out.push("reframe requires --why explaining why the rule represents the same subject".into());
         }
     }
     // `answer` and `correct` rewrite one existing entry in place; the command decides
@@ -908,28 +889,18 @@ pub(crate) fn validate_with_page(
             m.is_some_and(|m| m.contains_key("answered") || m.contains_key("dropped"))
         };
         if kind != "add" || !known || builtin(id) || aimed.is_some() || reframe {
-            out.push(format!(
-                "{id} is not an entry of the record - {amend} rewrites one that exists"
-            ));
+            out.push(format!("{id} is not an entry of the record - {amend} rewrites one that exists"));
         } else if amend == "answer" {
             let by = a.get("answer_by").filter(|v| **v != V::Null).map(py);
             if !question(id) {
-                out.push(format!(
-                    "{id} is not an open question - answer closes an entry of open:"
-                ));
+                out.push(format!("{id} is not an open question - answer closes an entry of open:"));
             } else if settled(old) {
-                out.push(format!(
-                    "{id} is already answered - its answer is read with pull {id}"
-                ));
+                out.push(format!("{id} is already answered - its answer is read with pull {id}"));
             } else if let Some(by) = &by {
                 if by == id || question(by) {
-                    out.push(format!(
-                        "{by} is a question - an answer is an entry or a judgment of the record"
-                    ));
+                    out.push(format!("{by} is a question - an answer is an entry or a judgment of the record"));
                 } else if !world.raw().contains_key(by) {
-                    out.push(format!(
-                        "{by} is not an entry - record the answer first, then answer {id} {by}"
-                    ));
+                    out.push(format!("{by} is not an entry - record the answer first, then answer {id} {by}"));
                 } else if b
                     .get("answered")
                     .and_then(|v| map(v).ok())
@@ -938,9 +909,7 @@ pub(crate) fn validate_with_page(
                     .as_deref()
                     != Some(by.as_str())
                 {
-                    out.push(
-                        "the answered question names what answered it under answered: by".into(),
-                    );
+                    out.push("the answered question names what answered it under answered: by".into());
                 }
             } else if !b.get("dropped").is_some_and(truth) {
                 out.push(format!("answer {id} needs the entry that answered it, or --dropped with the reason it no longer matters"));
@@ -950,11 +919,7 @@ pub(crate) fn validate_with_page(
                 out.push(format!("{id} is not a judgment - a correction keeps what an entry is; resting it on something is a new decision"));
             }
             let changed = |key: &str| {
-                old.and_then(|m| m.get(key))
-                    .map(V::digest)
-                    .transpose()
-                    .ok()
-                    .flatten()
+                old.and_then(|m| m.get(key)).map(V::digest).transpose().ok().flatten()
                     != b.get(key).map(V::digest).transpose().ok().flatten()
             };
             if ["answered", "dropped"].iter().any(|key| changed(key)) {
@@ -962,9 +927,7 @@ pub(crate) fn validate_with_page(
             }
             for key in ["replaced", "reviewed", "born"] {
                 if changed(key) {
-                    out.push(format!(
-                        "{key} is written by this tool - a correction leaves it as it is"
-                    ));
+                    out.push(format!("{key} is written by this tool - a correction leaves it as it is"));
                 }
             }
             let resting = layers

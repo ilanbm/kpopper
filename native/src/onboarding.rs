@@ -262,8 +262,7 @@ pub fn context_with_mode(
     let mut lines = Vec::new();
     let board = crate::public_board::status(&location.workspace)?;
     if read_mode == crate::source_capture::ReadMode::Live
-        && let Some(offer) = crate::public_board::opening(&board)?
-    {
+        && let Some(offer) = crate::public_board::opening(&board)? {
         lines.push(offer);
     }
     if string("status") == "missing" && board["is_git"] == true {

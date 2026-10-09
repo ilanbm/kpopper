@@ -637,9 +637,7 @@ fn equivalent_with_roles(
             let schema = map_mut(schema)?;
             for role in ["deps", "snapshot", "predicate"] {
                 if expected.is_none_or(|held| !held.contains_key(role))
-                    && schema
-                        .get(role)
-                        .is_some_and(|field| inferred.get(role) == Some(field))
+                    && schema.get(role).is_some_and(|field| inferred.get(role) == Some(field))
                 {
                     schema.remove(role);
                 }
@@ -855,48 +853,20 @@ mod tests {
     #[test]
     fn compact_equivalence_accepts_only_matching_inferred_role_declarations() {
         let scope = obj([("kind", s("project")), ("environment", s("fixture"))]);
-        let document = obj([(
-            "known",
-            obj([("p.value", obj([("v", n("1")), ("scope", scope.clone())]))]),
-        )]);
+        let document = obj([("known", obj([("p.value", obj([
+            ("v", n("1")), ("scope", scope.clone()),
+        ]))]))]);
         let mut explicit = document.clone();
-        map_mut(&mut explicit).unwrap().insert(
-            "schema".into(),
-            V::Map(F::snapshot_fields(&document).unwrap()),
-        );
+        map_mut(&mut explicit).unwrap().insert("schema".into(), V::Map(F::snapshot_fields(&document).unwrap()));
         for version in [1, 2] {
-            let bundle = prepare_version(
-                &document,
-                &["p.value".into()],
-                &scope,
-                &Files::new(),
-                version,
-            )
-            .unwrap();
+            let bundle = prepare_version(&document, &["p.value".into()], &scope, &Files::new(), version).unwrap();
             assert!(!equivalent(&bundle, &Files::new(), &explicit, &Files::new(), None).unwrap());
-            assert!(
-                equivalent_with_roles(&bundle, &Files::new(), &explicit, &Files::new(), None, true)
-                    .unwrap()
-            );
-            for (key, value) in [
-                ("deps", s("different_role")),
-                ("unrelated_metadata", s("added")),
-            ] {
+            assert!(equivalent_with_roles(&bundle, &Files::new(), &explicit, &Files::new(), None, true).unwrap());
+            for (key, value) in [("deps", s("different_role")), ("unrelated_metadata", s("added"))] {
                 let mut changed = explicit.clone();
-                map_mut(map_mut(&mut changed).unwrap().get_mut("schema").unwrap())
-                    .unwrap()
+                map_mut(map_mut(&mut changed).unwrap().get_mut("schema").unwrap()).unwrap()
                     .insert(key.into(), value);
-                assert!(
-                    !equivalent_with_roles(
-                        &bundle,
-                        &Files::new(),
-                        &changed,
-                        &Files::new(),
-                        None,
-                        true
-                    )
-                    .unwrap()
-                );
+                assert!(!equivalent_with_roles(&bundle, &Files::new(), &changed, &Files::new(), None, true).unwrap());
             }
         }
     }

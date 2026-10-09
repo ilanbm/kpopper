@@ -262,8 +262,8 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                             && m.get("rule").is_some_and(|v| map(v).is_ok()))
                 });
             let portable = ["deps", "snapshot", "predicate"]
-                .iter()
-                .all(|k| schema.get(*k).is_some_and(truth))
+                    .iter()
+                    .all(|k| schema.get(*k).is_some_and(truth))
                 && deps.is_empty()
                 && unresolved
                     .iter()
@@ -277,8 +277,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
     }
     let Some(dep) = choose(schema, "deps", &deps)? else {
         if semantic {
-            let header_only =
-                !doc.is_empty() && doc.keys().all(|k| ["meta", "schema"].contains(&k.as_str()));
+            let header_only = !doc.is_empty() && doc.keys().all(|k| ["meta", "schema"].contains(&k.as_str()));
             let core = doc
                 .get("meta")
                 .and_then(|v| map(v).ok())

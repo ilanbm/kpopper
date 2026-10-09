@@ -334,10 +334,7 @@ fn history_merge(competing: bool, corrupt: bool) {
     ok(&root, &["init", "-q", "-b", "main"]);
     commit(&root);
     let marker = fs::read_to_string(root.join(".kpopper/history.yaml")).unwrap();
-    assert!(
-        marker.contains("history/v1") && !marker.contains("node-history"),
-        "{marker}"
-    );
+    assert!(marker.contains("history/v1") && !marker.contains("node-history"), "{marker}");
     ok(&root, &["switch", "-qc", "other"]);
     succeeds(&["add", if competing { "p.a" } else { "p.b" }, "v=2"]);
     commit(&root);
@@ -417,10 +414,7 @@ impl Node {
             .current_dir(&self.root)
             .args(args)
             .env("KPOPPER_NATIVE_RESOURCES", &self.resources)
-            .env(
-                "KPOPPER_NATIVE_CACHE",
-                self.root.parent().unwrap().join("cache"),
-            )
+            .env("KPOPPER_NATIVE_CACHE", self.root.parent().unwrap().join("cache"))
             .env("XDG_STATE_HOME", self.root.parent().unwrap().join("state"))
             .env_remove("KPOPPER_READ_MODE")
             .env_remove("GIT_INDEX_FILE")
@@ -444,17 +438,9 @@ impl Node {
         while let Some(dir) = pending.pop() {
             for entry in fs::read_dir(dir).unwrap() {
                 let path = entry.unwrap().path();
-                let name = path
-                    .strip_prefix(&self.root)
-                    .unwrap()
-                    .iter()
-                    .map(|part| part.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
-                if name == ".git"
-                    || name.starts_with(".kpopper/.history-local")
-                    || name.ends_with(".lock")
-                {
+                let name = path.strip_prefix(&self.root).unwrap().iter()
+                    .map(|part| part.to_string_lossy()).collect::<Vec<_>>().join("/");
+                if name == ".git" || name.starts_with(".kpopper/.history-local") || name.ends_with(".lock") {
                     continue;
                 }
                 if path.is_dir() {
@@ -476,11 +462,7 @@ impl Node {
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_eq!(
-            self.image(),
-            before,
-            "a refused resolution changed files or the index"
-        );
+        assert_eq!(self.image(), before, "a refused resolution changed files or the index");
     }
 }
 fn node_merge(ours: &[&[&str]], theirs: &[&[&str]]) -> Node {
@@ -502,37 +484,18 @@ fn node_merge_at(ours: &[&[&str]], theirs: &[&[&str]], record: &str) -> Node {
             .join(format!("{target}.kpopper-runtime")),
     )
     .unwrap();
-    let node = Node {
-        _temp: temp,
-        root,
-        resources,
-    };
+    let node = Node { _temp: temp, root, resources };
     ok(&node.root, &["init", "-q", "-b", "main"]);
     if record != "GROUNDING.yaml" {
         let config = node.root.join(".git/kpopper/project/project.json");
         fs::create_dir_all(config.parent().unwrap()).unwrap();
         fs::create_dir_all(node.root.join(record).parent().unwrap()).unwrap();
-        fs::write(
-            config,
-            serde_json::to_vec(&serde_json::json!({
-                "version":1, "mode":"simple", "generation":0, "record":record, "publication":null
-            }))
-            .unwrap(),
-        )
-        .unwrap();
+        fs::write(config, serde_json::to_vec(&serde_json::json!({
+            "version":1, "mode":"simple", "generation":0, "record":record, "publication":null
+        })).unwrap()).unwrap();
     }
     node.succeeds(&["add", "p.base", "v=0"]);
-    assert!(
-        fs::read_to_string(
-            node.root
-                .join(record)
-                .parent()
-                .unwrap()
-                .join(".kpopper/history.yaml")
-        )
-        .unwrap()
-        .contains("node-history/v1")
-    );
+    assert!(fs::read_to_string(node.root.join(record).parent().unwrap().join(".kpopper/history.yaml")).unwrap().contains("node-history/v1"));
     commit(&node.root);
     ok(&node.root, &["switch", "-qc", "other"]);
     for args in theirs {
@@ -544,52 +507,29 @@ fn node_merge_at(ours: &[&[&str]], theirs: &[&[&str]], record: &str) -> Node {
         node.succeeds(args);
     }
     commit(&node.root);
-    assert!(
-        !git(&node.root, &["merge", "--no-commit", "other"])
-            .status
-            .success()
-    );
-    assert_eq!(
-        ok(&node.root, &["diff", "--name-only", "--diff-filter=U"]),
-        format!("{record}\n")
-    );
+    assert!(!git(&node.root, &["merge", "--no-commit", "other"]).status.success());
+    assert_eq!(ok(&node.root, &["diff", "--name-only", "--diff-filter=U"]), format!("{record}\n"));
     node
 }
 fn subjects(node: &Node) -> Vec<String> {
     let status: serde_json::Value =
         serde_json::from_str(&node.succeeds(&["history", "status"])).unwrap();
-    let mut names = status["subjects"]
-        .as_object()
-        .unwrap()
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
+    let mut names = status["subjects"].as_object().unwrap().keys().cloned().collect::<Vec<_>>();
     names.sort();
     names
 }
 
 #[test]
 fn compact_nested_record_resolution_names_its_own_manifest() {
-    let node = node_merge_at(
-        &[&["add", "p.a", "v=1"]],
-        &[&["add", "p.b", "v=2"]],
-        "nested/GROUNDING.yaml",
-    );
+    let node = node_merge_at(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]], "nested/GROUNDING.yaml");
     let before = node.image();
     node.succeeds(&["consolidate", "--resolve", "--dry-run"]);
     assert_eq!(node.image(), before);
     let stages = index_lines(&node.root);
     let out = node.succeeds(&["consolidate", "--resolve"]);
-    assert!(
-        out.contains("nested/GROUNDING.yaml")
-            && out.contains("nested/.kpopper/history-commits/resolve-"),
-        "{out}"
-    );
+    assert!(out.contains("nested/GROUNDING.yaml") && out.contains("nested/.kpopper/history-commits/resolve-"), "{out}");
     let added = only_added(&stages, &index_lines(&node.root));
-    assert!(
-        added.ends_with(".json") && added.contains("\tnested/.kpopper/history-commits/resolve-"),
-        "{added}"
-    );
+    assert!(added.ends_with(".json") && added.contains("\tnested/.kpopper/history-commits/resolve-"), "{added}");
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
     node.succeeds(&["--frozen", "check"]);
 }
@@ -600,54 +540,24 @@ fn compact_resolution_ignores_project_configuration_above_tmpdir() {
     let poison = tempfile::tempdir().unwrap();
     ok(poison.path(), &["init", "-q", "-b", "main"]);
     fs::create_dir_all(poison.path().join(".git/kpopper/project")).unwrap();
-    fs::write(
-        poison.path().join(".git/kpopper/project/project.json"),
-        b"broken json",
-    )
-    .unwrap();
+    fs::write(poison.path().join(".git/kpopper/project/project.json"), b"broken json").unwrap();
     let scratch = poison.path().join("tmp");
     fs::create_dir(&scratch).unwrap();
     let before = node.image();
     let out = Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .current_dir(&node.root)
-        .args(["consolidate", "--resolve", "--dry-run"])
-        .env("TMPDIR", &scratch)
-        .env("KPOPPER_NATIVE_RESOURCES", &node.resources)
-        .env(
-            "KPOPPER_NATIVE_CACHE",
-            node.root.parent().unwrap().join("cache"),
-        )
-        .env_remove("KPOPPER_READ_MODE")
-        .env_remove("GIT_INDEX_FILE")
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
+        .current_dir(&node.root).args(["consolidate", "--resolve", "--dry-run"])
+        .env("TMPDIR", &scratch).env("KPOPPER_NATIVE_RESOURCES", &node.resources)
+        .env("KPOPPER_NATIVE_CACHE", node.root.parent().unwrap().join("cache"))
+        .env_remove("KPOPPER_READ_MODE").env_remove("GIT_INDEX_FILE").output().unwrap();
+    assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert_eq!(node.image(), before);
     let stages = index_lines(&node.root);
     let out = Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .current_dir(&node.root)
-        .args(["consolidate", "--resolve"])
-        .env("TMPDIR", &scratch)
-        .env("KPOPPER_NATIVE_RESOURCES", &node.resources)
-        .env(
-            "KPOPPER_NATIVE_CACHE",
-            node.root.parent().unwrap().join("cache"),
-        )
-        .env_remove("KPOPPER_READ_MODE")
-        .env_remove("GIT_INDEX_FILE")
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
+        .current_dir(&node.root).args(["consolidate", "--resolve"])
+        .env("TMPDIR", &scratch).env("KPOPPER_NATIVE_RESOURCES", &node.resources)
+        .env("KPOPPER_NATIVE_CACHE", node.root.parent().unwrap().join("cache"))
+        .env_remove("KPOPPER_READ_MODE").env_remove("GIT_INDEX_FILE").output().unwrap();
+    assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
 }
@@ -659,50 +569,29 @@ fn compact_branches_resolve_to_one_union_binding_staging_only_its_manifest() {
     let stages = index_lines(&node.root);
     let head = ok(&node.root, &["rev-parse", "HEAD"]);
     let preview = node.succeeds(&["consolidate", "--resolve", "--dry-run"]);
-    assert!(
-        preview.contains("would stage only the generated union manifest"),
-        "{preview}"
-    );
+    assert!(preview.contains("would stage only the generated union manifest"), "{preview}");
     assert_eq!(node.image(), (before.clone(), index.clone()));
     let out = node.succeeds(&["consolidate", "--resolve"]);
     let (after, _) = node.image();
     // Exactly one new stage-0 entry; the record keeps its three unmerged stages.
     let added = only_added(&stages, &index_lines(&node.root));
-    assert!(
-        added.starts_with("100644 ") && added.contains(" 0\t.kpopper/history-commits/resolve-"),
-        "{added}"
-    );
-    assert_eq!(
-        ok(&node.root, &["diff", "--name-only", "--diff-filter=U"]),
-        "GROUNDING.yaml\n"
-    );
+    assert!(added.starts_with("100644 ") && added.contains(" 0\t.kpopper/history-commits/resolve-"), "{added}");
+    assert_eq!(ok(&node.root, &["diff", "--name-only", "--diff-filter=U"]), "GROUNDING.yaml\n");
     assert_eq!(ok(&node.root, &["rev-parse", "HEAD"]), head);
     // Every earlier file is byte-identical except the view; one manifest is new.
-    let old = before
-        .into_iter()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let new = after
-        .into_iter()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let added = new
-        .keys()
-        .filter(|p| !old.contains_key(*p))
-        .cloned()
-        .collect::<Vec<_>>();
+    let old = before.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+    let new = after.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+    let added = new.keys().filter(|p| !old.contains_key(*p)).cloned().collect::<Vec<_>>();
     assert_eq!(added.len(), 1, "{added:?}");
-    assert!(
-        added[0].starts_with(".kpopper/history-commits/resolve-") && added[0].ends_with(".json")
-    );
+    assert!(added[0].starts_with(".kpopper/history-commits/resolve-") && added[0].ends_with(".json"));
     for (path, raw) in &old {
         if path != "GROUNDING.yaml" {
             assert_eq!(&new[path], raw, "{path} changed");
         }
     }
     assert!(
-        out.contains(&format!(
-            "Staged only the generated union manifest {:?}",
-            added[0]
-        )) && out.contains("git add -- \"GROUNDING.yaml\""),
+        out.contains(&format!("Staged only the generated union manifest {:?}", added[0]))
+            && out.contains("git add -- \"GROUNDING.yaml\""),
         "{out}"
     );
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
@@ -712,37 +601,20 @@ fn compact_branches_resolve_to_one_union_binding_staging_only_its_manifest() {
     ok(&node.root, &["commit", "-qm", "merged"]);
     assert_eq!(ok(&node.root, &["status", "--porcelain"]), "");
     let clone = node.root.parent().unwrap().join("clone");
-    ok(
-        node.root.parent().unwrap(),
-        &["clone", "-q", "repo", "clone"],
-    );
-    let cloned = Node {
-        _temp: tempfile::tempdir().unwrap(),
-        root: clone,
-        resources: node.resources.clone(),
-    };
+    ok(node.root.parent().unwrap(), &["clone", "-q", "repo", "clone"]);
+    let cloned = Node { _temp: tempfile::tempdir().unwrap(), root: clone, resources: node.resources.clone() };
     assert_eq!(subjects(&cloned), ["p.a", "p.b", "p.base"]);
     node.succeeds(&["add", "p.c", "v=3"]);
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base", "p.c"]);
 }
 
 fn index_lines(root: &Path) -> Vec<String> {
-    ok(root, &["ls-files", "--stage"])
-        .lines()
-        .map(str::to_owned)
-        .collect()
+    ok(root, &["ls-files", "--stage"]).lines().map(str::to_owned).collect()
 }
 /// The one index line added by a resolution, after checking nothing else changed.
 fn only_added(before: &[String], after: &[String]) -> String {
-    let added = after
-        .iter()
-        .filter(|l| !before.contains(l))
-        .cloned()
-        .collect::<Vec<_>>();
-    assert!(
-        before.iter().all(|l| after.contains(l)),
-        "an existing index entry changed"
-    );
+    let added = after.iter().filter(|l| !before.contains(l)).cloned().collect::<Vec<_>>();
+    assert!(before.iter().all(|l| after.contains(l)), "an existing index entry changed");
     assert_eq!(added.len(), 1, "{added:?}");
     added[0].clone()
 }
@@ -761,10 +633,7 @@ fn compact_merge_abort_and_hard_reset_leave_no_orphaned_manifest() {
         node.succeeds(&["consolidate", "--resolve"]);
         assert!(node.root.join(&manifest).exists());
         ok(&node.root, &abort);
-        assert!(
-            !node.root.join(&manifest).exists(),
-            "{abort:?} left {manifest}"
-        );
+        assert!(!node.root.join(&manifest).exists(), "{abort:?} left {manifest}");
         assert_eq!(ok(&node.root, &["status", "--porcelain"]), "");
         assert_eq!(subjects(&node), ["p.a", "p.base"]);
         node.succeeds(&["--frozen", "check"]);
@@ -812,11 +681,7 @@ fn compact_resolution_keeps_user_index_entries_across_a_retry() {
     fs::write(node.root.join("second.txt"), "also user staged\n").unwrap();
     ok(&node.root, &["add", "second.txt"]);
     let retried = index_lines(&node.root);
-    assert_eq!(
-        resolution(&node),
-        manifest,
-        "unrelated staging changed the operation"
-    );
+    assert_eq!(resolution(&node), manifest, "unrelated staging changed the operation");
     node.succeeds(&["consolidate", "--resolve"]);
     assert_eq!(index_lines(&node.root), retried);
     assert_eq!(subjects(&node), ["p.a", "p.b", "p.base"]);
@@ -868,10 +733,7 @@ fn compact_stream_created_on_one_side_is_kept_exactly() {
     let streams = ok(&node.root, &["ls-files", "--stage", ".kpopper/history"]);
     assert!(!streams.is_empty());
     node.succeeds(&["consolidate", "--resolve"]);
-    assert_eq!(
-        ok(&node.root, &["ls-files", "--stage", ".kpopper/history"]),
-        streams
-    );
+    assert_eq!(ok(&node.root, &["ls-files", "--stage", ".kpopper/history"]), streams);
     assert_eq!(subjects(&node), ["p.a", "p.base"]);
     node.succeeds(&["--frozen", "check"]);
 }
@@ -880,14 +742,11 @@ fn compact_stream_created_on_one_side_is_kept_exactly() {
 fn compact_corrupt_or_foreign_history_refuses_before_replacing_the_record() {
     // A staged history file that neither merge commit holds.
     let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
-    let manifest = ok(
-        &node.root,
-        &["diff", "--cached", "--name-only", "--diff-filter=A", "HEAD"],
-    )
-    .lines()
-    .find(|p| p.starts_with(".kpopper/history-commits/"))
-    .unwrap()
-    .to_owned();
+    let manifest = ok(&node.root, &["diff", "--cached", "--name-only", "--diff-filter=A", "HEAD"])
+        .lines()
+        .find(|p| p.starts_with(".kpopper/history-commits/"))
+        .unwrap()
+        .to_owned();
     let path = node.root.join(&manifest);
     let mut raw = fs::read(&path).unwrap();
     raw.insert(raw.len() - 1, b' ');
@@ -904,8 +763,7 @@ fn compact_corrupt_or_foreign_history_refuses_before_replacing_the_record() {
     // An untracked history file that is not this resolution.
     let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
     fs::write(
-        node.root
-            .join(".kpopper/history-commits/resolve-foreign.json"),
+        node.root.join(".kpopper/history-commits/resolve-foreign.json"),
         b"{}\n",
     )
     .unwrap();
@@ -928,28 +786,16 @@ fn compact_hand_edits_are_preserved_for_an_explicit_decision() {
     let entry = temp.root.join("GROUNDING.yaml");
     let mut document =
         kpop_native::history_yaml::decode_document(&fs::read(&entry).unwrap()).unwrap();
-    let kpop_native::value::TypedValue::Map(fields) = &mut document else {
-        panic!()
-    };
-    let kpop_native::value::TypedValue::Map(known) = fields.get_mut("known").unwrap() else {
-        panic!()
-    };
+    let kpop_native::value::TypedValue::Map(fields) = &mut document else { panic!() };
+    let kpop_native::value::TypedValue::Map(known) = fields.get_mut("known").unwrap() else { panic!() };
     known.insert(
         "p.b".into(),
         kpop_native::value::TypedValue::from_json(&serde_json::json!({"v": 7})).unwrap(),
     );
-    fs::write(
-        &entry,
-        kpop_native::history_yaml::encode_document(&document).unwrap(),
-    )
-    .unwrap();
+    fs::write(&entry, kpop_native::history_yaml::encode_document(&document).unwrap()).unwrap();
     commit(&temp.root);
     ok(&temp.root, &["switch", "-q", "main"]);
-    assert!(
-        !git(&temp.root, &["merge", "--no-commit", "other"])
-            .status
-            .success()
-    );
+    assert!(!git(&temp.root, &["merge", "--no-commit", "other"]).status.success());
     temp.refused("resolve_history_side_invalid: MERGE_HEAD");
 }
 
@@ -974,32 +820,16 @@ fn compact_resolution_runs_no_filters_and_keeps_unstaged_edits() {
     // A clean and process filter, a required driver whose name holds '=' and '.',
     // and an attribute naming a driver with no configuration at all.
     let mut attributes = fs::read(node.root.join(".gitattributes")).unwrap();
-    attributes.extend_from_slice(
-        b"*.txt filter=probe\n.kpopper/** filter=odd=x.y\nevidence/** filter=missing\n",
-    );
+    attributes.extend_from_slice(b"*.txt filter=probe\n.kpopper/** filter=odd=x.y\nevidence/** filter=missing\n");
     fs::write(node.root.join(".gitattributes"), attributes).unwrap();
     ok(&node.root, &["config", "filter.probe.clean", &touch]);
-    ok(
-        &node.root,
-        &[
-            "config",
-            "filter.probe.process",
-            &format!("touch '{}'; exit 1", sentinel.display()),
-        ],
-    );
+    ok(&node.root, &["config", "filter.probe.process", &format!("touch '{}'; exit 1", sentinel.display())]);
     ok(&node.root, &["config", "filter.odd=x.y.clean", &touch]);
     ok(&node.root, &["config", "filter.odd=x.y.required", "true"]);
     ok(&node.root, &["config", "--unset", "filter.probe.process"]);
     fs::write(node.root.join("a.txt"), "tracked\n").unwrap();
     ok(&node.root, &["add", "a.txt"]);
-    ok(
-        &node.root,
-        &[
-            "config",
-            "filter.probe.process",
-            &format!("touch '{}'; exit 1", sentinel.display()),
-        ],
-    );
+    ok(&node.root, &["config", "filter.probe.process", &format!("touch '{}'; exit 1", sentinel.display())]);
     fs::write(node.root.join("a.txt"), "tracked\nunstaged user edit\n").unwrap();
     let stages = index_lines(&node.root);
     let _ = fs::remove_file(&sentinel);
@@ -1009,10 +839,7 @@ fn compact_resolution_runs_no_filters_and_keeps_unstaged_edits() {
         .current_dir(&node.root)
         .args(["consolidate", "--resolve"])
         .env("KPOPPER_NATIVE_RESOURCES", &node.resources)
-        .env(
-            "KPOPPER_NATIVE_CACHE",
-            node.root.parent().unwrap().join("cache"),
-        )
+        .env("KPOPPER_NATIVE_CACHE", node.root.parent().unwrap().join("cache"))
         .env("GIT_CONFIG_COUNT", "2")
         .env("GIT_CONFIG_KEY_0", "filter.missing.clean")
         .env("GIT_CONFIG_VALUE_0", &touch)
@@ -1022,28 +849,14 @@ fn compact_resolution_runs_no_filters_and_keeps_unstaged_edits() {
         .env_remove("GIT_INDEX_FILE")
         .output()
         .unwrap();
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     assert!(!sentinel.exists(), "a project filter ran");
     assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
-    assert_eq!(
-        fs::read_to_string(node.root.join("a.txt")).unwrap(),
-        "tracked\nunstaged user edit\n"
-    );
+    assert_eq!(fs::read_to_string(node.root.join("a.txt")).unwrap(), "tracked\nunstaged user edit\n");
     // With the user's filters removed, Git can abandon the merge cleanly.
     ok(&node.root, &["config", "--remove-section", "filter.probe"]);
-    ok(
-        &node.root,
-        &["config", "--remove-section", "filter.odd=x.y"],
-    );
-    let manifest = only_added(&stages, &index_lines(&node.root))
-        .rsplit('\t')
-        .next()
-        .unwrap()
-        .to_owned();
+    ok(&node.root, &["config", "--remove-section", "filter.odd=x.y"]);
+    let manifest = only_added(&stages, &index_lines(&node.root)).rsplit('\t').next().unwrap().to_owned();
     // Git itself refuses to abort over an unstaged edit to a file added in the merge.
     ok(&node.root, &["checkout", "--", "a.txt"]);
     ok(&node.root, &["merge", "--abort"]);
@@ -1056,56 +869,23 @@ fn compact_resolution_in_a_linked_worktree_uses_only_that_worktree_index() {
     let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
     ok(&node.root, &["merge", "--abort"]);
     let linked = node.root.parent().unwrap().join("linked");
-    ok(
-        &node.root,
-        &[
-            "worktree",
-            "add",
-            "-q",
-            "-b",
-            "feature",
-            &git_path::argument(&linked),
-            "main",
-        ],
-    );
+    ok(&node.root, &["worktree", "add", "-q", "-b", "feature", &git_path::argument(&linked), "main"]);
     let primary_index = fs::read(node.root.join(".git/index")).unwrap();
-    let tree = Node {
-        _temp: tempfile::tempdir().unwrap(),
-        root: linked.clone(),
-        resources: node.resources.clone(),
-    };
+    let tree = Node { _temp: tempfile::tempdir().unwrap(), root: linked.clone(), resources: node.resources.clone() };
     tree.succeeds(&["add", "p.c", "v=3"]);
     commit(&linked);
-    assert!(
-        !git(&linked, &["merge", "--no-commit", "other"])
-            .status
-            .success()
-    );
-    let index = ok(
-        &linked,
-        &["rev-parse", "--path-format=absolute", "--git-path", "index"],
-    );
+    assert!(!git(&linked, &["merge", "--no-commit", "other"]).status.success());
+    let index = ok(&linked, &["rev-parse", "--path-format=absolute", "--git-path", "index"]);
     assert!(index.contains("/worktrees/"), "{index}");
     let stages = index_lines(&linked);
     tree.succeeds(&["consolidate", "--resolve"]);
-    let manifest = only_added(&stages, &index_lines(&linked))
-        .rsplit('\t')
-        .next()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        fs::read(node.root.join(".git/index")).unwrap(),
-        primary_index
-    );
+    let manifest = only_added(&stages, &index_lines(&linked)).rsplit('\t').next().unwrap().to_owned();
+    assert_eq!(fs::read(node.root.join(".git/index")).unwrap(), primary_index);
     assert!(!node.root.join(&manifest).exists());
     ok(&linked, &["merge", "--abort"]);
     assert!(!linked.join(&manifest).exists());
     assert_eq!(ok(&linked, &["status", "--porcelain"]), "");
-    assert!(
-        !git(&linked, &["merge", "--no-commit", "other"])
-            .status
-            .success()
-    );
+    assert!(!git(&linked, &["merge", "--no-commit", "other"]).status.success());
     tree.succeeds(&["consolidate", "--resolve"]);
     ok(&linked, &["add", "GROUNDING.yaml"]);
     ok(&linked, &["commit", "-qm", "merged"]);
@@ -1116,8 +896,7 @@ fn compact_resolution_in_a_linked_worktree_uses_only_that_worktree_index() {
 fn compact_manifest_that_attributes_would_convert_is_refused_before_writing() {
     let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
     let mut attributes = fs::read(node.root.join(".gitattributes")).unwrap();
-    attributes
-        .extend_from_slice(b".kpopper/history-commits/*.json working-tree-encoding=UTF-16LE\n");
+    attributes.extend_from_slice(b".kpopper/history-commits/*.json working-tree-encoding=UTF-16LE\n");
     fs::write(node.root.join(".gitattributes"), attributes).unwrap();
     node.refused("resolve_history_manifest_conversion");
 }
@@ -1130,47 +909,26 @@ fn compact_resolution_keeps_racy_unstaged_edits_visible() {
     ok(&node.root, &["config", "core.trustctime", "false"]);
     let path = node.root.join("a.txt");
     let index = node.root.join(".git/index");
-    let second = |path: &Path| {
-        fs::metadata(path)
-            .unwrap()
-            .modified()
-            .unwrap()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-    };
+    let second = |path: &Path| fs::metadata(path).unwrap().modified().unwrap()
+        .duration_since(UNIX_EPOCH).unwrap().as_secs();
     let mut same_second = false;
     for _ in 0..5 {
         let elapsed = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        std::thread::sleep(Duration::from_millis(
-            1050 - u64::from(elapsed.subsec_millis()),
-        ));
+        std::thread::sleep(Duration::from_millis(1050 - u64::from(elapsed.subsec_millis())));
         fs::write(&path, b"AAAA\n").unwrap();
         ok(&node.root, &["add", "a.txt"]);
         fs::write(&path, b"BBBB\n").unwrap();
-        if second(&path) == second(&index) {
-            same_second = true;
-            break;
-        }
+        if second(&path) == second(&index) { same_second = true; break; }
     }
     assert!(same_second, "could not construct a racily clean Git entry");
     // A newer alternate-index timestamp would incorrectly trust the cached stat.
     std::thread::sleep(Duration::from_millis(1500));
     node.succeeds(&["consolidate", "--resolve"]);
-    assert_eq!(
-        ok(&node.root, &["status", "--porcelain", "--", "a.txt"]),
-        "AM a.txt\n"
-    );
-    assert!(
-        !git(&node.root, &["merge", "--abort"]).status.success(),
-        "abort discarded an unstaged edit"
-    );
+    assert_eq!(ok(&node.root, &["status", "--porcelain", "--", "a.txt"]), "AM a.txt\n");
+    assert!(!git(&node.root, &["merge", "--abort"]).status.success(), "abort discarded an unstaged edit");
     assert_eq!(fs::read(&path).unwrap(), b"BBBB\n");
     ok(&node.root, &["add", "GROUNDING.yaml"]);
-    ok(
-        &node.root,
-        &["commit", "-qam", "merge with current working content"],
-    );
+    ok(&node.root, &["commit", "-qam", "merge with current working content"]);
     assert_eq!(ok(&node.root, &["show", "HEAD:a.txt"]), "BBBB\n");
 }
 
@@ -1183,21 +941,14 @@ fn compact_filter_suppression_outranks_inherited_parameters_and_git_context() {
             .current_dir(&node.root)
             .args(["consolidate", "--resolve"])
             .env("KPOPPER_NATIVE_RESOURCES", &node.resources)
-            .env(
-                "KPOPPER_NATIVE_CACHE",
-                node.root.parent().unwrap().join("cache"),
-            )
+            .env("KPOPPER_NATIVE_CACHE", node.root.parent().unwrap().join("cache"))
             .env_remove("KPOPPER_READ_MODE")
             .env_remove("GIT_INDEX_FILE");
         for (name, value) in env {
             command.env(name, value);
         }
         let out = command.output().unwrap();
-        assert!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     };
     let filtered = || {
         let node = node_merge(&[&["add", "p.a", "v=1"]], &[&["add", "p.b", "v=2"]]);
@@ -1217,15 +968,8 @@ fn compact_filter_suppression_outranks_inherited_parameters_and_git_context() {
         &[
             (
                 "GIT_CONFIG_PARAMETERS",
-                [
-                    format!("filter.probe.process={program}"),
-                    format!("filter.probe.clean={program}"),
-                    "safe.directory=*".into(),
-                ]
-                .iter()
-                .map(|parameter| quote(parameter))
-                .collect::<Vec<_>>()
-                .join(" "),
+                [format!("filter.probe.process={program}"), format!("filter.probe.clean={program}"), "safe.directory=*".into()]
+                    .iter().map(|parameter| quote(parameter)).collect::<Vec<_>>().join(" "),
             ),
             ("GIT_CONFIG_COUNT", "1".into()),
             ("GIT_CONFIG_KEY_0", "filter.probe.smudge".into()),
@@ -1242,10 +986,7 @@ fn compact_filter_suppression_outranks_inherited_parameters_and_git_context() {
     fs::create_dir(&foreign).unwrap();
     ok(&foreign, &["init", "-q"]);
     let stages = index_lines(&node.root);
-    run(
-        &node,
-        &[("GIT_DIR", foreign.join(".git").display().to_string())],
-    );
+    run(&node, &[("GIT_DIR", foreign.join(".git").display().to_string())]);
     assert!(!sentinel.exists(), "the checkout's filter ran");
     assert!(only_added(&stages, &index_lines(&node.root)).contains("resolve-"));
     assert_eq!(ok(&foreign, &["ls-files"]), "");

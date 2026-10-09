@@ -163,7 +163,13 @@ fn line_number_citations_and_relative_colon_names_are_not_pins() {
         "sources:\n  s.line: {file: 'sources/original.txt:42'}\n  s.range: {file: 'sources/original.txt:42-45'}\n  s.column: {file: 'sources/original.txt:42:7'}\n  s.pinned_column: {file: 'source-final:sources/original.txt:42:7'}\n  s.trailing: {file: 'docs/guide:'}\nknown:\n  p.line: {v: 1, from: 'sources/original.txt:42'}\n",
     ));
     assert!(!out.contains("pinned file"), "{out}");
-    for id in ["s.line", "s.range", "s.column", "s.pinned_column", "p.line"] {
+    for id in [
+        "s.line",
+        "s.range",
+        "s.column",
+        "s.pinned_column",
+        "p.line",
+    ] {
         assert!(!out.contains(&format!("NOTE {id}:")), "{out}");
     }
 
@@ -219,7 +225,9 @@ fn colon_paths_are_supported_for_local_and_pinned_sources() {
     ]);
     f.git(&["tag", "colon-pins"]);
     fs::remove_file(f.root.path().join("logs/run:1")).unwrap();
-    let pinned = text(f.check("sources:\n  s.colon_pin: {file: 'colon-pins:logs/run:1'}\n"));
+    let pinned = text(f.check(
+        "sources:\n  s.colon_pin: {file: 'colon-pins:logs/run:1'}\n",
+    ));
     assert!(!pinned.contains("NOTE s.colon_pin:"), "{pinned}");
 }
 #[test]
@@ -356,8 +364,9 @@ fn tree_lookup_finds_a_pinned_file_without_its_blob_object() {
         .join(&object[2..]);
     assert!(object_path.is_file(), "{}", object_path.display());
     fs::remove_file(object_path).unwrap();
-    let out =
-        text(f.check("sources:\n  s.blobless: {file: 'source-final:sources/original.txt'}\n"));
+    let out = text(f.check(
+        "sources:\n  s.blobless: {file: 'source-final:sources/original.txt'}\n",
+    ));
     assert!(!out.contains("NOTE s.blobless:"), "{out}");
 }
 #[test]
@@ -502,16 +511,10 @@ fn failed_revision_probes_are_advisory_without_claiming_a_pin_or_absent_file() {
     )
     .unwrap();
     let out = text(command.output().unwrap());
-    assert!(
-        out.contains("NOTE s.slash_pin: could not check locator"),
-        "{out}"
-    );
+    assert!(out.contains("NOTE s.slash_pin: could not check locator"), "{out}");
     assert!(!out.contains("NOTE s.line:"), "{out}");
     assert!(!out.contains("pinned file"), "{out}");
-    assert!(
-        !out.contains("file feature/source-reference:sources/original.txt is absent"),
-        "{out}"
-    );
+    assert!(!out.contains("file feature/source-reference:sources/original.txt is absent"), "{out}");
     assert!(out.contains("0 problems"), "{out}");
 }
 #[test]

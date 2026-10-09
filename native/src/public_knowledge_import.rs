@@ -472,7 +472,12 @@ fn capture_pending_with_hooks(
                     && fields.get("revision") == Some(&s(&revision)),
                 "event ID was already used with different content or target",
             )?;
-            return receipt(project, event, old.as_deref().unwrap(), true);
+            return receipt(
+                project,
+                event,
+                old.as_deref().unwrap(),
+                true,
+            );
         }
         let existing = tree(&project.root, old.as_deref())?;
         let sequence = existing

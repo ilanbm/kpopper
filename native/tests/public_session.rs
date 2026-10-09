@@ -446,10 +446,9 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
             opening.contains(&format!("  ... 14 more - raise --chars\n\n{next}")),
             "{opening}"
         );
-        let started = String::from_utf8(
-            success(session_start(&f, host, (host == "codex").then_some("0"))).stdout,
-        )
-        .unwrap();
+        let started = String::from_utf8(success(session_start(
+            &f, host, (host == "codex").then_some("0"),
+        )).stdout).unwrap();
         assert!(started.starts_with(&opening), "{started}");
         assert!(
             started[opening.len()..].starts_with("KPOPPER_AGENT_CONTEXT "),

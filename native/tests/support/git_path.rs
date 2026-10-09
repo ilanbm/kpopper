@@ -7,9 +7,7 @@ pub fn argument(path: &Path) -> String {
         if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
             format!("//{}", path.replace('\\', "/"))
         } else {
-            path.strip_prefix(r"\\?\")
-                .unwrap_or(path)
-                .replace('\\', "/")
+            path.strip_prefix(r"\\?\").unwrap_or(path).replace('\\', "/")
         }
     }
     #[cfg(not(windows))]

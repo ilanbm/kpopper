@@ -3,10 +3,12 @@
 use super::*;
 use crate::reasoning_runtime::Runtime;
 use crate::{
+    history_authority as Authority, history_node_writer as W,
+};
+use crate::{
     history_authoring::{self as A, strings},
     history_view::list,
 };
-use crate::{history_authority as Authority, history_node_writer as W};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value as J, json};
 use std::collections::BTreeSet;
@@ -1154,7 +1156,9 @@ fn locator_evidence_at_record_control_paths_is_archived_and_never_becomes_histor
         let history = legacy(1, &[step("input", 1, &[], vec![object.clone()], &template)]);
         let evidence = Files::from([(locator.to_owned(), raw.clone())]);
         let (bundle, files) = contribute_with(&history, &evidence);
-        let revision = text(&map(&bundle).unwrap()["revision"]).unwrap().to_owned();
+        let revision = text(&map(&bundle).unwrap()["revision"])
+            .unwrap()
+            .to_owned();
         let out = tempfile::tempdir().unwrap();
         materialize_complete(out.path(), &bundle, &files)
             .unwrap_or_else(|e| panic!("{locator}: {e}"));
@@ -1164,9 +1168,10 @@ fn locator_evidence_at_record_control_paths_is_archived_and_never_becomes_histor
             "{locator} became active"
         );
         assert_eq!(
-            std::fs::read(out.path().join(format!(
-                ".kpopper-contributions/{revision}/evidence/{locator}"
-            )))
+            std::fs::read(
+                out.path()
+                    .join(format!(".kpopper-contributions/{revision}/evidence/{locator}"))
+            )
             .unwrap(),
             raw,
             "{locator}"
@@ -1191,71 +1196,38 @@ fn actual_legacy_import_bound_originals_survive_full_materialization() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("source");
     std::fs::create_dir_all(source.join(".kpopper")).unwrap();
-    std::fs::write(
-        source.join("GROUNDING.yaml"),
-        "known:\n  p.input: {v: 1, scope: {kind: project, environment: fixture}}\n",
-    )
-    .unwrap();
+    std::fs::write(source.join("GROUNDING.yaml"),
+        "known:\n  p.input: {v: 1, scope: {kind: project, environment: fixture}}\n").unwrap();
     std::fs::write(source.join(".kpopper/replaced.yaml"),
         "p.input:\n- {v: 0, scope: {kind: project, environment: fixture}, ended: superseded, day: 2026-09-20}\n").unwrap();
     let original = temporary.path().join("legacy");
-    crate::history_migration::Plan::prepare(
-        &source.join("GROUNDING.yaml"),
-        &source,
+    crate::history_migration::Plan::prepare(&source.join("GROUNDING.yaml"), &source,
         crate::history_migration::Options {
-            operation: "import-originals".into(),
-            recorded_at: AT.into(),
-            record_id: Some("bound-originals".into()),
-            read_mode: crate::source_capture::ReadMode::Frozen,
-            route: false,
-            as_of: None,
-        },
-        None,
-    )
-    .unwrap()
-    .publish(&original)
-    .unwrap();
-    let held = crate::history_store::Store::new(&original.join("GROUNDING.yaml"))
-        .unwrap()
-        .capture()
-        .unwrap();
-    let mut core = Files::from([
-        ("entry.yaml".into(), held.entry_bytes.clone()),
-        ("authority.yaml".into(), held.authority_bytes.clone()),
-    ]);
-    for (operation, bytes) in &held.commits {
-        core.insert(format!("commits/{operation}.yaml"), bytes.clone());
-    }
-    for (path, bytes) in &held.storage_bytes {
-        core.insert(format!("objects/{path}"), bytes.clone());
-    }
+            operation: "import-originals".into(), recorded_at: AT.into(),
+            record_id: Some("bound-originals".into()), read_mode: crate::source_capture::ReadMode::Frozen,
+            route: false, as_of: None,
+        }, None).unwrap().publish(&original).unwrap();
+    let held = crate::history_store::Store::new(&original.join("GROUNDING.yaml")).unwrap().capture().unwrap();
+    let mut core = Files::from([("entry.yaml".into(), held.entry_bytes.clone()),
+        ("authority.yaml".into(), held.authority_bytes.clone())]);
+    for (operation, bytes) in &held.commits { core.insert(format!("commits/{operation}.yaml"), bytes.clone()); }
+    for (path, bytes) in &held.storage_bytes { core.insert(format!("objects/{path}"), bytes.clone()); }
     let members = super::bound_members(&held).unwrap();
     assert!(!members.is_empty());
     let mut required = members.keys().cloned().collect::<BTreeSet<_>>();
     for bytes in core.values() {
-        required.extend(
-            crate::pending_bundle::required_files(&Y::decode_document(bytes).unwrap()).unwrap(),
-        );
+        required.extend(crate::pending_bundle::required_files(&Y::decode_document(bytes).unwrap()).unwrap());
     }
-    let evidence = required
-        .into_iter()
-        .map(|path| {
-            let raw = std::fs::read(original.join(&path)).unwrap();
-            (path, raw)
-        })
-        .collect();
+    let evidence = required.into_iter().map(|path| {
+        let raw = std::fs::read(original.join(&path)).unwrap(); (path, raw)
+    }).collect();
     let (bundle, files) = contribute_with(&core, &evidence);
     let output = temporary.path().join("output");
     std::fs::create_dir(&output).unwrap();
     materialize_complete(&output, &bundle, &files).unwrap();
     let copied = Capture::read(&output).unwrap();
-    assert_eq!(
-        copied.history.objects().keys().collect::<Vec<_>>(),
-        held.objects.keys().collect::<Vec<_>>()
-    );
-    for (id, object) in &held.objects {
-        assert_eq!(copied.history.object(id).unwrap(), *object);
-    }
+    assert_eq!(copied.history.objects().keys().collect::<Vec<_>>(), held.objects.keys().collect::<Vec<_>>());
+    for (id, object) in &held.objects { assert_eq!(copied.history.object(id).unwrap(), *object); }
     let archived = copied.snapshot.legacy.values().next().unwrap();
     assert_eq!(archived.captured.commits, held.commits);
 }

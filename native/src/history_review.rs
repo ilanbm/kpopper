@@ -243,10 +243,7 @@ impl<'a> Subject<'a> {
             .filter(|id| string_is(&self.objects[*id]["kind"], "judgment"))
             .collect())
     }
-    fn origins(
-        &mut self,
-        head: usize,
-    ) -> Result<(BTreeSet<(usize, usize)>, BTreeSet<usize>, BTreeSet<usize>)> {
+    fn origins(&mut self, head: usize) -> Result<(BTreeSet<(usize, usize)>, BTreeSet<usize>, BTreeSet<usize>)> {
         let mut origins = BTreeSet::new();
         let mut legacy = BTreeSet::new();
         let mut chain = BTreeSet::new();
@@ -262,18 +259,10 @@ impl<'a> Subject<'a> {
             // does not invent semantic acts for the pre-import decision. Keep
             // that notice as claim evidence until an exact review acknowledges it.
             let object = self.objects[version];
-            let imported = object
-                .get("authored")
-                .and_then(|v| map(v).ok())
-                .and_then(|v| v.get("locator"))
-                .and_then(|v| map(v).ok())
-                .is_some_and(|v| {
-                    v.get("kind") == Some(&V::Text("ordinary_bootstrap".into()))
-                        && v.get("import")
-                            .and_then(|v| map(v).ok())
-                            .and_then(|v| v.get("operation"))
-                            == object.get("op")
-                });
+            let imported = object.get("authored").and_then(|v| map(v).ok())
+                .and_then(|v| v.get("locator")).and_then(|v| map(v).ok())
+                .is_some_and(|v| v.get("kind") == Some(&V::Text("ordinary_bootstrap".into()))
+                    && v.get("import").and_then(|v| map(v).ok()).and_then(|v| v.get("operation")) == object.get("op"));
             if imported && crate::ordinary_reader::reversal_pending(&object["body"]).is_some() {
                 legacy.insert(version);
             }
@@ -452,8 +441,7 @@ impl<'a> Subject<'a> {
         let mut summary = serde_json::json!({"state":status,"provenance":if provenance{"recorded"}else{"missing"},
             "origins":origin_acts,"origin_versions":origin_versions,"satisfied_by":satisfied});
         if !legacy.is_empty() {
-            summary["legacy_origins"] =
-                serde_json::json!(legacy.iter().map(|v| self.ids[*v]).collect::<BTreeSet<_>>());
+            summary["legacy_origins"] = serde_json::json!(legacy.iter().map(|v| self.ids[*v]).collect::<BTreeSet<_>>());
         }
         V::from_json(&summary)
     }
@@ -614,18 +602,10 @@ pub(crate) fn validate_summary(
             "invalid_review_state",
         )?;
         let origins = ids(&result["origins"], true)?;
-        let legacy = result
-            .get("legacy_origins")
-            .map(|v| ids(v, true))
-            .transpose()?
-            .unwrap_or_default();
+        let legacy = result.get("legacy_origins").map(|v| ids(v, true)).transpose()?.unwrap_or_default();
         let versions = ids(&result["origin_versions"], true)?;
         let satisfied = ids(&result["satisfied_by"], true)?;
-        require(
-            legacy.iter().all(|v| versions.contains(v))
-                && (legacy.is_empty() || provenance == "missing"),
-            "invalid_review_state",
-        )?;
+        require(legacy.iter().all(|v| versions.contains(v)) && (legacy.is_empty() || provenance == "missing"), "invalid_review_state")?;
         let has_origin = !origins.is_empty() || !legacy.is_empty();
         require(
             match state {

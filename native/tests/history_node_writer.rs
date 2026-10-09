@@ -720,11 +720,7 @@ fn batch_updates_the_existing_record_date_and_retains_its_template() {
     let root = setup();
     let entry = root.path().join("GROUNDING.yaml");
     let raw = fs::read_to_string(&entry).unwrap();
-    fs::write(
-        &entry,
-        raw.replace("meta:\n", "meta:\n  updated: 2026-09-01\n"),
-    )
-    .unwrap();
+    fs::write(&entry, raw.replace("meta:\n", "meta:\n  updated: 2026-09-01\n")).unwrap();
     write(root.path(), "dated-add", &add());
     let mut next = options("dated-batch");
     next.recording_day = "2026-09-25".into();
@@ -735,19 +731,10 @@ fn batch_updates_the_existing_record_date_and_retains_its_template() {
     let prepared = W::prepare(root.path(), &action, &next, None).unwrap();
     W::publish(root.path(), &prepared, None, |_| Ok(())).unwrap();
     let capture = Capture::read(root.path()).unwrap();
-    assert_eq!(
-        map(&map(capture.document())["meta"])["updated"],
-        value(json!("2026-09-25"))
-    );
-    assert_eq!(
-        map(&map(&map(capture.document())["known"])["p.a"])["v"],
-        value(json!(19))
-    );
+    assert_eq!(map(&map(capture.document())["meta"])["updated"], value(json!("2026-09-25")));
+    assert_eq!(map(&map(&map(capture.document())["known"])["p.a"])["v"], value(json!(19)));
     let copy = P::export(root.path()).unwrap().reconstruct().unwrap();
-    assert_eq!(
-        Capture::read(copy.path()).unwrap().document(),
-        capture.document()
-    );
+    assert_eq!(Capture::read(copy.path()).unwrap().document(), capture.document());
 }
 
 #[test]
@@ -757,11 +744,7 @@ fn many_new_subjects_remain_readable_and_portable_after_batched_creation() {
         let actions = (batch * 64..((batch + 1) * 64).min(700))
             .map(|i| json!({"kind":"add", "id":format!("p.item{i}"), "body":{"v":i}}))
             .collect::<Vec<_>>();
-        write(
-            root.path(),
-            &format!("many-{batch}"),
-            &value(json!({"kind":"batch", "actions":actions})),
-        );
+        write(root.path(), &format!("many-{batch}"), &value(json!({"kind":"batch", "actions":actions})));
     }
     let capture = Capture::read(root.path()).unwrap();
     assert_eq!(map(&map(capture.state())["subjects"]).len(), 700);
@@ -775,23 +758,12 @@ fn many_new_subjects_remain_readable_and_portable_after_batched_creation() {
     // original versions when subsequently changed.
     for i in [0, 699] {
         let subject = format!("p.item{i}");
-        let V::Text(head) = &map(&map(&map(capture.state())["subjects"])[&subject])["head"] else {
-            panic!()
-        };
+        let V::Text(head) = &map(&map(&map(capture.state())["subjects"])[&subject])["head"] else { panic!() };
         let original = capture.object(&subject, head).unwrap();
-        write(
-            copy.path(),
-            &format!("change-{i}"),
-            &value(json!({"kind":"set", "id":subject, "value":-1})),
-        );
+        write(copy.path(), &format!("change-{i}"), &value(json!({"kind":"set", "id":subject, "value":-1})));
         let after = Capture::read(copy.path()).unwrap();
         assert_eq!(after.object(&subject, head).unwrap(), original);
-        assert_eq!(
-            map(&map(after.document())["known"])[&subject]
-                .to_json()
-                .unwrap()["v"],
-            -1
-        );
+        assert_eq!(map(&map(after.document())["known"])[&subject].to_json().unwrap()["v"], -1);
     }
 }
 
@@ -1691,11 +1663,7 @@ fn public_cli_reconcile_requires_exact_baseline_and_records_proposals() {
     };
     // Without a local checkpoint or a Git preimage, an explicit baseline is
     // still necessary. A normal successful publisher now retains the checkpoint.
-    fs::remove_file(
-        root.path()
-            .join(".kpopper/.history-local/accepted-node-view.yaml"),
-    )
-    .unwrap();
+    fs::remove_file(root.path().join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap();
     let fail = run(&[
         "history",
         "reconcile",

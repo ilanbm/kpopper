@@ -551,7 +551,12 @@ fn materialize(
                 let value = imported.strict_typed()?;
                 for member in list(&map(&value)?["members"])? {
                     let relative = safe(text(&map(member)?["path"])?)?;
-                    let p = safe_path(&Path::new(&entry).parent().unwrap().join(relative))?;
+                    let p = safe_path(
+                        &Path::new(&entry)
+                            .parent()
+                            .unwrap()
+                            .join(relative),
+                    )?;
                     queue.push_back(p.clone());
                     raw_names.insert(p);
                 }
@@ -752,10 +757,7 @@ mod path_tests {
     use super::*;
     #[test]
     fn filesystem_paths_become_portable_without_accepting_parent_components() {
-        assert_eq!(
-            safe_path(&Path::new("nested").join(".kpopper").join("history.yaml")).unwrap(),
-            "nested/.kpopper/history.yaml"
-        );
+        assert_eq!(safe_path(&Path::new("nested").join(".kpopper").join("history.yaml")).unwrap(), "nested/.kpopper/history.yaml");
         assert!(safe_path(&Path::new("nested").join("..").join("outside.yaml")).is_err());
         assert!(safe(r"nested\history.yaml").is_err());
     }

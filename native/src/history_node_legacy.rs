@@ -64,16 +64,10 @@ pub(crate) fn load(raw: &[u8]) -> Result<Arc<Legacy>> {
             }
         }
     }
-    Y::with_decoded_documents(|| {
-        load_definitions(&core, files.values().map(Vec::len).sum(), &digest)
-    })
+    Y::with_decoded_documents(|| load_definitions(&core, files.values().map(Vec::len).sum(), &digest))
 }
 
-fn load_definitions(
-    core: &crate::history_authority::Files,
-    decoded_bytes: usize,
-    digest: &str,
-) -> Result<Arc<Legacy>> {
+fn load_definitions(core: &crate::history_authority::Files, decoded_bytes: usize, digest: &str) -> Result<Arc<Legacy>> {
     let captured = crate::history_bundle::capture(core, None)?;
     let mut manifests = BTreeMap::new();
     let mut receipts = BTreeMap::new();

@@ -44,69 +44,27 @@ fn a_compact_copy_preserves_an_unacknowledged_ordinary_reversal() {
         fs::write(source.join("GROUNDING.yaml"), "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.runs: {v: 0, of: 2026-09-01}\njudgments:\n  d.done:\n    verdict: not demonstrated\n    because: no brief\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n").unwrap();
         for args in [
             vec!["set", "p.runs", "1", "--as-of", "2026-09-02"],
-            vec![
-                "add",
-                "d.done",
-                "verdict=done",
-                "because=one brief",
-                "rests_on=[p.runs]",
-                "wrong_if=p.runs < 1",
-            ],
-        ] {
-            assert!(cli(&source, &args, &private).status.success());
-        }
-        if acknowledged {
-            assert!(
-                cli(&source, &["review", "d.done"], &private)
-                    .status
-                    .success()
-            );
-        }
+            vec!["add", "d.done", "verdict=done", "because=one brief", "rests_on=[p.runs]", "wrong_if=p.runs < 1"],
+        ] { assert!(cli(&source, &args, &private).status.success()); }
+        if acknowledged { assert!(cli(&source, &["review", "d.done"], &private).status.success()); }
         let copy = temp.path().join("copy");
         // The retired bootstrap copy honours the ordinary `reviewed` date; its reader must keep doing so.
-        kpop_native::history_node_bootstrap::Plan::prepare(&source.join("GROUNDING.yaml"))
-            .unwrap()
-            .publish(&copy)
-            .unwrap();
+        kpop_native::history_node_bootstrap::Plan::prepare(&source.join("GROUNDING.yaml")).unwrap().publish(&copy).unwrap();
         let before = image(&copy);
         let opened = cli(&copy, &["open"], &private);
-        assert!(
-            opened.status.success(),
-            "{}",
-            String::from_utf8_lossy(&opened.stderr)
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&opened.stdout).contains("review_provenance_missing"),
-            !acknowledged,
-            "{}",
-            String::from_utf8_lossy(&opened.stdout)
-        );
-        assert_eq!(
-            image(&copy),
-            before,
-            "reading the imported notice wrote history"
-        );
+        assert!(opened.status.success(), "{}", String::from_utf8_lossy(&opened.stderr));
+        assert_eq!(String::from_utf8_lossy(&opened.stdout).contains("review_provenance_missing"), !acknowledged, "{}", String::from_utf8_lossy(&opened.stdout));
+        assert_eq!(image(&copy), before, "reading the imported notice wrote history");
         if !acknowledged {
             let reviewed = cli(&copy, &["review", "d.done"], &private);
-            assert!(
-                reviewed.status.success(),
-                "{}",
-                String::from_utf8_lossy(&reviewed.stderr)
-            );
+            assert!(reviewed.status.success(), "{}", String::from_utf8_lossy(&reviewed.stderr));
             let after = cli(&copy, &["open"], &private);
             assert!(after.status.success());
-            assert!(
-                !String::from_utf8_lossy(&after.stdout).contains("review_provenance_missing"),
-                "{}",
-                String::from_utf8_lossy(&after.stdout)
-            );
+            assert!(!String::from_utf8_lossy(&after.stdout).contains("review_provenance_missing"), "{}", String::from_utf8_lossy(&after.stdout));
         }
         for bytes in image(&copy).values() {
             let bytes = String::from_utf8_lossy(bytes);
-            assert!(
-                !bytes.contains("lineage-review/v1") && !bytes.contains("legacy_origins"),
-                "derived review evidence was stored by migration or review"
-            );
+            assert!(!bytes.contains("lineage-review/v1") && !bytes.contains("legacy_origins"), "derived review evidence was stored by migration or review");
         }
     }
 }
@@ -124,34 +82,13 @@ fn a_default_compact_copy_keeps_the_established_import_review_gap() {
     fs::write(source.join("GROUNDING.yaml"), "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.runs: {v: 0, of: 2026-09-01}\njudgments:\n  d.done:\n    verdict: not demonstrated\n    because: no brief\n    rests_on: [p.runs]\n    seen: {p.runs: 0}\n    wrong_if: p.runs > 0\n").unwrap();
     for args in [
         vec!["set", "p.runs", "1", "--as-of", "2026-09-02"],
-        vec![
-            "add",
-            "d.done",
-            "verdict=done",
-            "because=one brief",
-            "rests_on=[p.runs]",
-            "wrong_if=p.runs < 1",
-        ],
+        vec!["add", "d.done", "verdict=done", "because=one brief", "rests_on=[p.runs]", "wrong_if=p.runs < 1"],
         vec!["review", "d.done"],
-    ] {
-        assert!(cli(&source, &args, &private).status.success());
-    }
+    ] { assert!(cli(&source, &args, &private).status.success()); }
     let copy = temp.path().join("copy");
-    assert!(
-        cli(
-            &source,
-            &["history", "migrate", "--to", copy.to_str().unwrap()],
-            &private
-        )
-        .status
-        .success()
-    );
+    assert!(cli(&source, &["history", "migrate", "--to", copy.to_str().unwrap()], &private).status.success());
     let opened = cli(&copy, &["open"], &private);
-    assert!(
-        opened.status.success(),
-        "{}",
-        String::from_utf8_lossy(&opened.stderr)
-    );
+    assert!(opened.status.success(), "{}", String::from_utf8_lossy(&opened.stderr));
     assert!(String::from_utf8_lossy(&opened.stdout).contains("review_provenance_missing"));
     assert!(cli(&copy, &["review", "d.done"], &private).status.success());
     let after = cli(&copy, &["open"], &private);
@@ -2432,34 +2369,14 @@ fn a_source_role_tie_resolved_by_the_destination_still_folds_an_authored_entry()
     let c = "  d.c: {verdict: c, rests_on: [local.two], seen: {local.two: 2}, wrong_if: local.two > 5}\n";
     commit_record(root, &format!("{known}{z}"), "common record");
     git(root, &["checkout", "-q", "-b", "source"]);
-    commit_record(
-        root,
-        &format!("{known}{b}{z}"),
-        "source adds entry with tied roles",
-    );
+    commit_record(root, &format!("{known}{b}{z}"), "source adds entry with tied roles");
     git(root, &["checkout", "-q", "main"]);
-    let tied = cli(
-        root,
-        &["consolidate", "--dry-run", "--from", "source"],
-        &private,
-    );
+    let tied = cli(root, &["consolidate", "--dry-run", "--from", "source"], &private);
     assert!(!tied.status.success());
-    commit_record(
-        root,
-        &format!("{known}{z}{c}"),
-        "destination resolves roles",
-    );
-    for args in [
-        vec!["consolidate", "--dry-run", "--from", "source"],
-        vec!["consolidate", "--from", "source"],
-    ] {
+    commit_record(root, &format!("{known}{z}{c}"), "destination resolves roles");
+    for args in [vec!["consolidate", "--dry-run", "--from", "source"], vec!["consolidate", "--from", "source"]] {
         let output = cli(root, &args, &private);
-        assert!(
-            output.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
         assert!(String::from_utf8_lossy(&output.stdout).contains("arrived (1)"));
     }
     let after = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();

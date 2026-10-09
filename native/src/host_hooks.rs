@@ -756,12 +756,9 @@ pub fn run(
         "continuation" if host == Some("codex") && !suppressed(payload) => {
             let event = payload["hook_event_name"].as_str().unwrap_or_default();
             crate::view_continuation::hook_for_session(event, payload).map(|context| Output {
-                stdout: context
-                    .map(|text| envelope(event, &text))
-                    .unwrap_or_default(),
-                ..empty()
+                stdout: context.map(|text| envelope(event, &text)).unwrap_or_default(), ..empty()
             })
-        }
+        },
         "continuation" => Ok(empty()),
         _ => return Err(Error(format!("unknown host hook kind: {kind}"))),
     };

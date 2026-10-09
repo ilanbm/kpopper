@@ -276,11 +276,7 @@ fn populate(
         fs::write(target, raw)?;
     }
     if complete {
-        crate::history_node_complete_union::materialize_complete(
-            root,
-            &bundle.value,
-            &bundle.files,
-        )?;
+        crate::history_node_complete_union::materialize_complete(root, &bundle.value, &bundle.files)?;
     } else if history {
         crate::history_node_contribution::materialize(root, &bundle.value, &bundle.files)?;
     } else {

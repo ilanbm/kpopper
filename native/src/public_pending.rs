@@ -203,9 +203,7 @@ pub fn run(options: &Options, workspace: &Path) -> Result<V> {
             options.authorize,
             options.retry,
         ),
-        Command::AutomaticPublish => {
-            crate::pending_publication::publish_automatic(Project::open(workspace)?)
-        }
+        Command::AutomaticPublish => crate::pending_publication::publish_automatic(Project::open(workspace)?),
         Command::Configure(options) => {
             let project = Project::open(workspace)?;
             crate::pending_control::configure(

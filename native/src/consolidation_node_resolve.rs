@@ -208,12 +208,11 @@ pub(super) fn prepare(
     )?;
     // A rerun may find this exact manifest already staged; any other bytes are not ours.
     let mut already_staged = BTreeSet::new();
-    for item in items
-        .iter()
-        .filter(|i| i.path == format!("{prefix}{manifest}"))
-    {
+    for item in items.iter().filter(|i| i.path == format!("{prefix}{manifest}")) {
         require(
-            item.stage == 0 && item.mode == "100644" && staged_blobs[&item.oid] == union[&manifest],
+            item.stage == 0
+                && item.mode == "100644"
+                && staged_blobs[&item.oid] == union[&manifest],
             &format!(
                 "resolve_history_staged_manifest: {} is staged with bytes this resolution did not generate",
                 item.path
@@ -276,12 +275,7 @@ pub(super) fn prepare(
 
 type Entry = (String, u8, String, String);
 fn entry(item: &Item) -> Entry {
-    (
-        item.path.clone(),
-        item.stage,
-        item.mode.clone(),
-        item.oid.clone(),
-    )
+    (item.path.clone(), item.stage, item.mode.clone(), item.oid.clone())
 }
 
 /// Update a private alternate index beside the real one, starting from `before`,
@@ -295,9 +289,7 @@ fn replace_index(
     expected: &BTreeSet<Entry>,
     update: impl FnOnce(&Path) -> Result<()>,
 ) -> Result<()> {
-    let directory = index
-        .parent()
-        .ok_or_else(|| error("resolve_missing_index"))?;
+    let directory = index.parent().ok_or_else(|| error("resolve_missing_index"))?;
     let alternate = tempfile::Builder::new()
         .prefix(".kpopper-resolve-index-")
         .tempfile_in(directory)?;
@@ -305,9 +297,7 @@ fn replace_index(
     std::fs::write(alternate.path(), before)?;
     // Git uses the index timestamp to detect racily clean entries. A fresh
     // copy's timestamp would hide same-second, same-size unstaged edits.
-    alternate
-        .as_file()
-        .set_times(std::fs::FileTimes::new().set_modified(index_modified))?;
+    alternate.as_file().set_times(std::fs::FileTimes::new().set_modified(index_modified))?;
     update(alternate.path())?;
     let listing = git_with(
         root,
@@ -316,10 +306,7 @@ fn replace_index(
         vec![],
         16 * 1024 * 1024,
     )?;
-    let actual = inventory(&listing)?
-        .iter()
-        .map(entry)
-        .collect::<BTreeSet<_>>();
+    let actual = inventory(&listing)?.iter().map(entry).collect::<BTreeSet<_>>();
     require(
         actual == *expected,
         "resolve_index_update_mismatch: the prepared index differs beyond the generated manifest",
@@ -446,13 +433,7 @@ impl Resolution {
                 git_with(
                     root,
                     Some(alternate),
-                    &[
-                        "update-index",
-                        "--no-split-index",
-                        "--add",
-                        "--cacheinfo",
-                        info,
-                    ],
+                    &["update-index", "--no-split-index", "--add", "--cacheinfo", info],
                     vec![],
                     1024 * 1024,
                 )?;
@@ -465,12 +446,7 @@ impl Resolution {
     /// After the manifest is written, record its file status so abort and reset can
     /// remove it. Only the generated entries are reread; no other entry, stage or
     /// unstaged edit is examined, and `expected` must remain exactly.
-    pub(super) fn refresh(
-        &self,
-        root: &Path,
-        index: &Path,
-        expected: &BTreeSet<Entry>,
-    ) -> Result<()> {
+    pub(super) fn refresh(&self, root: &Path, index: &Path, expected: &BTreeSet<Entry>) -> Result<()> {
         let before = F::read(index)?.ok_or_else(|| error("resolve_missing_index"))?;
         let mut args = vec!["update-index", "--no-split-index", "--"];
         args.extend(self.files.keys().map(String::as_str));

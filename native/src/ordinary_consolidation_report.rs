@@ -371,11 +371,8 @@ pub(super) fn lines(c: &Union<'_>, today: chrono::NaiveDate) -> Result<Vec<Strin
         if !c.refused.is_empty() {
             what.push("a contested reading".into());
         }
-        let review_only = c
-            .untaken
-            .iter()
-            .filter(|i| c.reversed[**i].review_only)
-            .count();
+        let review_only = c.untaken.iter()
+            .filter(|i| c.reversed[**i].review_only).count();
         let other_reversals = c.untaken.len() - review_only;
         if other_reversals > 0 {
             what.push(format!(
@@ -385,10 +382,8 @@ pub(super) fn lines(c: &Union<'_>, today: chrono::NaiveDate) -> Result<Vec<Strin
             ));
         }
         if review_only > 0 {
-            what.push(format!(
-                "{review_only} reversal{} requiring a new proposal",
-                if review_only == 1 { "" } else { "s" }
-            ));
+            what.push(format!("{review_only} reversal{} requiring a new proposal",
+                if review_only == 1 { "" } else { "s" }));
         }
         if !c.drops_needed.is_empty() {
             what.push("a dropped dependency to name".into());
