@@ -36,21 +36,23 @@ in Simple mode; existing registered shared records keep their configured behavio
 ## Formatters and commit hooks
 
 Keep `GROUNDING.yaml` and `.kpopper/` out of reach of code formatters. A repository that
-runs Prettier on commit, for example through husky and lint-staged, otherwise rewrites the
-record as it is committed: quoting, wrapping and indentation change, and nothing reports it.
-The file the writer produced is the file the next session should read, and a
-history-backed record refuses hand edits; a formatter's rewrite looks like one.
+runs Prettier on commit, for example through husky and lint-staged, can rewrite the record
+during the commit, changing its quoting, wrapping and indentation. The file the writer
+produced is the file the next session should read, and a history-backed record refuses hand
+edits; a formatter's rewrite looks like one.
 
-In the same commit that adds the record, list both paths in `.prettierignore`:
+`kpop check` notes a Prettier, lint-staged or husky configuration whose `.prettierignore`
+does not list the record. In the same commit that adds the record, list both paths there:
 
 ```text
 GROUNDING.yaml
 .kpopper/
 ```
 
-and narrow the lint-staged globs so they do not match them, since lint-staged can run other
-tools on the staged files as well. Format-on-save in an editor needs the same exclusion. A
-Simple-mode record kept outside the repository is not reached by the repository's hooks.
+The same `.prettierignore` also covers Prettier's format-on-save in editors. When lint-staged
+runs other tools on the staged files as well, narrow its globs so they do not match the
+record; `check` reads only `.prettierignore` and does not see those tools. A Simple-mode
+record kept outside the repository is not reached by the repository's hooks.
 
 ## Commands
 
