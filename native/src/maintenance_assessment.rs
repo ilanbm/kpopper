@@ -119,6 +119,9 @@ pub(crate) fn assess(
         }
         subject_closures.insert(subject.clone(), scope);
     }
+    // Reuse the bounded requested walks when the shared walk was truncated.
+    let requested_scope = subjects.iter().flat_map(|id| subject_closures[id].iter())
+        .cloned().collect::<BTreeSet<_>>();
     let mut active_related = BTreeSet::new();
     let mut retired_related = BTreeSet::new();
     let mut retired_policies = Vec::new();
@@ -133,12 +136,20 @@ pub(crate) fn assess(
         let existing_related = related.iter().filter(|id| nodes.contains_key(*id)).cloned();
         if retired { retired_related.extend(existing_related); }
         else { active_related.extend(existing_related); }
-        if retired && !related.is_disjoint(&closure) {
+        if retired && !related.is_disjoint(&requested_scope) {
             retired_policies.push(json!({"id":id,"state":item["state"],"subjects":related,"source_ref":m["source_ref"],"scope":"retired_history_not_active_coverage_or_new_offer"}));
         }
     }
-    let relation = |id: &String| subject_closures.get(id).map_or(ScopeRelation::Unresolved, |scope|
-        scope_relation(scope, unresolved.contains(id), nodes.contains_key(id), &active_related, &retired_related));
+    let uncached_scope = |id: &String| {
+        let mut scope = BTreeSet::new();
+        let mut errors = Vec::new();
+        visit(id, nodes, &mut BTreeSet::new(), &mut scope, &mut errors);
+        (scope, !errors.is_empty())
+    };
+    let relation = |id: &String| subject_closures.get(id).map_or_else(|| {
+        let (scope, incomplete) = uncached_scope(id);
+        scope_relation(&scope, incomplete, nodes.contains_key(id), &active_related, &retired_related)
+    }, |scope| scope_relation(scope, unresolved.contains(id), nodes.contains_key(id), &active_related, &retired_related));
     let requested_with = |kind| subjects.iter().collect::<BTreeSet<_>>().into_iter()
         .filter(|id| relation(id) == kind).cloned().collect::<Vec<_>>();
     let covered_subjects = requested_with(ScopeRelation::Active);
@@ -177,7 +188,7 @@ pub(crate) fn assess(
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
-            .filter(|id| closure.contains(*id))
+            .filter(|id| requested_scope.contains(*id))
             .collect::<Vec<_>>();
         if related.is_empty() {
             continue;
@@ -327,7 +338,8 @@ pub(crate) fn assess(
     for subject in subjects {
         let scope = &subject_closures[subject];
         let implicit_check_context = active_related.iter().filter(|id| scope.contains(*id))
-            .filter_map(|id| subject_closures.get(id)).flatten().cloned().collect::<BTreeSet<_>>();
+            .map(|id| subject_closures.get(id).cloned().unwrap_or_else(|| uncached_scope(id).0))
+            .flatten().collect::<BTreeSet<_>>();
         for id in scope {
             if nodes.get(id).is_some_and(|n| n.dependencies.is_empty())
                 && relation(id) != ScopeRelation::Active && !implicit_check_context.contains(id) {

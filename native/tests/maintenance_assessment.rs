@@ -342,31 +342,7 @@ fn deleted_policy_subject_cannot_establish_consumer_coverage() {
 fn combined_depth_and_width_limits_return_unknown_in_either_order() {
     let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
     for wide in [false, true] {
-        let mut nodes = BTreeMap::new();
-        if wide {
-            for (root, prefix) in [("d.atop", "a"), ("d.btop", "b")] {
-                let leaves = (0..600).map(|i| format!("{prefix}.{i}")).collect::<Vec<_>>();
-                for leaf in &leaves { nodes.insert(leaf.clone(), Node::default()); }
-                nodes.insert(root.into(), Node { dependencies: leaves, ..Default::default() });
-            }
-        } else {
-            nodes.insert("fact.deep".into(), Node::default());
-            let mut next = "fact.deep".to_owned();
-            for i in (1..=9).rev() {
-                let id = format!("x{i:02}");
-                nodes.insert(id.clone(), Node { dependencies: vec![next], ..Default::default() });
-                next = id;
-            }
-            nodes.insert("d.hub".into(), Node { dependencies: vec![next], ..Default::default() });
-            let mut next = "d.hub".to_owned();
-            for i in (1..=61).rev() {
-                let id = format!("c{i:02}");
-                nodes.insert(id.clone(), Node { dependencies: vec![next], ..Default::default() });
-                next = id;
-            }
-            nodes.insert("d.atop".into(), Node { dependencies: vec![next], ..Default::default() });
-            nodes.insert("d.btop".into(), Node { dependencies: vec!["d.hub".into()], ..Default::default() });
-        }
+        let nodes = limit_graph(wide);
         for ids in [vec!["d.atop".into(), "d.btop".into()], vec!["d.btop".into(), "d.atop".into()]] {
             let r = assess(&ids, &nodes, &json!({}), &json!({}), &BTreeSet::new(), &BTreeMap::new(), now, "record").unwrap();
             assert_eq!(r["status"], "unknown", "wide={wide} ids={ids:?}");
@@ -374,5 +350,56 @@ fn combined_depth_and_width_limits_return_unknown_in_either_order() {
             assert_eq!(r["covered_subjects"], json!([]));
             assert_eq!(r["authority"], "not_established");
         }
+    }
+}
+
+fn limit_graph(wide: bool) -> BTreeMap<String, Node> {
+    let mut nodes = BTreeMap::new();
+    if wide {
+        for (root, prefix) in [("d.atop", "a"), ("d.btop", "b")] {
+            let leaves = (0..600).map(|i| format!("{prefix}.{i}")).collect::<Vec<_>>();
+            for leaf in &leaves { nodes.insert(leaf.clone(), Node::default()); }
+            nodes.insert(root.into(), Node { dependencies: leaves, ..Default::default() });
+        }
+    } else {
+        nodes.insert("fact.deep".into(), Node::default());
+        let mut next = "fact.deep".to_owned();
+        for i in (1..=9).rev() {
+            let id = format!("x{i:02}");
+            nodes.insert(id.clone(), Node { dependencies: vec![next], ..Default::default() });
+            next = id;
+        }
+        nodes.insert("d.hub".into(), Node { dependencies: vec![next], ..Default::default() });
+        let mut next = "d.hub".to_owned();
+        for i in (1..=61).rev() {
+            let id = format!("c{i:02}");
+            nodes.insert(id.clone(), Node { dependencies: vec![next], ..Default::default() });
+            next = id;
+        }
+        nodes.insert("d.atop".into(), Node { dependencies: vec![next], ..Default::default() });
+        nodes.insert("d.btop".into(), Node { dependencies: vec!["d.hub".into()], ..Default::default() });
+    }
+    nodes
+}
+
+#[test]
+fn limit_hidden_active_policy_is_present_without_false_leaf_absence() {
+    let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+    let mut nodes = limit_graph(false);
+    nodes.insert("fact.base".into(), Node::default());
+    nodes.get_mut("d.atop").unwrap().dependencies.push("fact.base".into());
+    for checked_subject in ["fact.deep", "x09"] {
+    let items = json!({"leaf-clock":{"state":"waiting","spec":{"related":[checked_subject,"fact.base"],"maintenance":{"kind":"clock","due_at":"2026-12-24T09:00:00Z","cadence_days":1,"timezone":"UTC","check_time":"09:00","policy_digest":"clock-digest"}}}});
+    for ids in [vec!["d.atop".into(), "d.btop".into()], vec!["d.btop".into(), "d.atop".into()]] {
+        let r = assess(&ids, &nodes, &items, &json!({}), &BTreeSet::from(["leaf-clock".into()]), &BTreeMap::new(), now, "record").unwrap();
+        assert_eq!(r["status"], "unknown");
+        assert!(r["reasons"].as_array().unwrap().iter().any(|reason| reason["reason"] == "declared_closure_limit"));
+        assert!(!r["reasons"].as_array().unwrap().iter().any(|reason| reason["reason"] == "required_leaf_has_no_maintenance_policy"));
+        assert_eq!(r["policies"][0]["id"], "leaf-clock");
+        assert_eq!(r["policies"][0]["subjects"], json!([checked_subject, "fact.base"]));
+        assert_eq!(r["policies"][0]["declared_choices"]["cadence_days"], 1);
+        assert_eq!(r["policies"][0]["declared_choices"]["due_at"], "2026-12-24T09:00:00Z");
+        assert_eq!(r["authority"], "not_established");
+    }
     }
 }
