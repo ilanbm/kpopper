@@ -251,7 +251,10 @@ pub(crate) fn assess(
             reasons.push(json!({"policy":id,"subjects":related,"kind":if *reason == "evidence_expired" { "stale" } else if *reason == "current_native_clock" { "evidence" } else { "unknown" },"reason":reason}));
         }
         policies.push(json!({"id":id,"subjects":related,"status":status,"reasons":policy_reasons,"warnings":warn,
-            "source_ref":m["source_ref"],"policy_digest":m["policy_digest"],"recording_assurance":"host_attested_or_current_native_clock"}));
+            "source_ref":m["source_ref"],"policy_digest":m["policy_digest"],"recording_assurance":"host_attested_or_current_native_clock",
+            "declared_choices":{"kind":m["kind"],"cadence_days":m["cadence_days"],"timezone":m["timezone"],
+                "check_time":m["check_time"],"use_policy":m["use_policy"],"evidence_requirement":m["evidence_requirement"],
+                "max_age_hours":m["max_age_hours"],"inspection":m["inspection"]}}));
     }
     // A declared leaf with no applicable check remains unknown; stable knowledge
     // is not automatically enrolled into maintenance by this explicit-use query.
@@ -269,6 +272,13 @@ pub(crate) fn assess(
     };
     Ok(
         json!({"status":status,"subjects":subjects,"declared_closure":closure,"policies":policies,"reasons":reasons,
+        "covered_subjects":subjects.iter().filter(|id|covered.contains(*id)).collect::<Vec<_>>(),
+        "uncovered_subjects":subjects.iter().filter(|id|!covered.contains(*id)).collect::<Vec<_>>(),
+        "response_obligation":{
+            "covered_scope":{"action":"use_existing_declaration","duplicate_declaration":"do_not_propose",
+                "instruction":"For covered use, refer to the existing check by id/source/subjects and preserve its declared cadence, timezone/date semantics, use-policy and evidence age. Do not call those choices unresolved or propose the same check again. Describe the actual observation/alignment or host-execution gap and the next step for that existing check. A declaration is not actual user authority to inspect, add or activate a host; retain unknown permission until actual authorization covers the action."},
+            "uncovered_scope":{"applicability":"agent_task_assessment_required",
+                "instruction":"Assess only genuinely uncovered intended use under the discovery criteria. An uncovered locator/provenance leaf is not proof that a new check is needed for an already-covered subject/source. Do not duplicate a covering check or suppress unrelated uncovered maintenance. Stable/historical/closed/one-off uses remain quiet; unknown choices and actual permission stay separate."}},
         "assessed_at":now.to_rfc3339(),"record_identity":record_identity,
         "applicability":"unassessed","authority":"not_established","consumer_artifact":"not_established",
         "limitation":"Declared dependencies only; no truth, hidden-dependency coverage or legal applicability claim"}),

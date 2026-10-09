@@ -227,3 +227,30 @@ fn local_source_change_flows_through_ordinary_update_and_invalidates_review_on_r
     assert_eq!(store.assess_use(&["decision.use".into()], &[]).unwrap()["status"], "unknown");
     assert_eq!(store.show("source-check").unwrap()["attempts"], attempts);
 }
+
+#[test]
+fn scoped_assess_keeps_existing_declaration_choices_separate_from_uncovered_use_and_permission() {
+    let (_temp, workspace, state, store, item, now) = fixture();
+    inspect(&store, &item, now - Duration::days(2), 1);
+    let before = fs::read(&store.path).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&workspace).env("XDG_STATE_HOME", &state)
+        .args(["followups", "assess", "--ids", "decision.use", "fact.untouched"]).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["covered_subjects"], json!(["decision.use"]));
+    assert_eq!(response["uncovered_subjects"], json!(["fact.untouched"]));
+    let policy = &response["policies"][0];
+    assert_eq!(policy["id"], "source-check");
+    assert_eq!(policy["declared_choices"]["cadence_days"], 7);
+    assert_eq!(policy["declared_choices"]["timezone"], "UTC");
+    assert_eq!(policy["declared_choices"]["check_time"], "09:00");
+    assert_eq!(policy["declared_choices"]["use_policy"], "allow_cached_until_expiry");
+    assert_eq!(policy["declared_choices"]["max_age_hours"].as_f64(), Some(24.0));
+    assert_eq!(policy["declared_choices"]["inspection"]["locator"], "https://example.test/status");
+    assert_eq!(response["response_obligation"]["covered_scope"]["action"], "use_existing_declaration");
+    assert_eq!(response["response_obligation"]["covered_scope"]["duplicate_declaration"], "do_not_propose");
+    assert_eq!(response["response_obligation"]["uncovered_scope"]["applicability"], "agent_task_assessment_required");
+    assert_eq!(response["authority"], "not_established");
+    assert_eq!(fs::read(&store.path).unwrap(), before);
+}
