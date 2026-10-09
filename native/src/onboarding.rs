@@ -348,7 +348,7 @@ fn continuity_notice_from_report(report: &Value, include_advisories: bool) -> Op
             .filter(|row| row["maintenance_advisory"].is_object())
         {
             lines.push(format!(
-                "Recurring task {} has a sourced maintenance discovery suggestion: {}. This is advisory only. Ask for the missing choices, compile a declaration proposal, and show its unresolved fields; never turn task prose into an executable policy or permission, and do not add or schedule it without explicit authorization.",
+                "KPOPPER_MAINTENANCE_PROMOTION Recurring task {} has a sourced maintenance discovery suggestion: {}. This is advisory only. Ask for the missing choices, compile a declaration proposal, and show its unresolved fields; never turn task prose into an executable policy or permission, and do not add or schedule it without explicit authorization.",
                 row["id"], serde_json::to_string(&row["maintenance_advisory"]).ok()?
             ));
         }
@@ -688,7 +688,7 @@ pub fn context_with_mode(
             false
         };
         if eligible {
-            lines.push("For explicitly recurring deferred work, recommend a short daily review alongside event checks. Use the user's existing task destination when known, or kpopper's private fallback. The watch command inspects existing schedules before any separate installation request. Acknowledging `kpopper _agent shown followups` records only that the offer was shown, not consent. Use `kpop followups daily adoption authorized --evidence USER_AUTHORIZATION_REFERENCE` only after explicit user authorization; this records permission but does not install a host job. Decline with `kpop followups daily adoption declined` or snooze with `kpop followups daily adoption snoozed --until RFC3339`; either suppresses repeated promotional offers. Health checks remain visible either way.".into());
+            lines.push("KPOPPER_MAINTENANCE_PROMOTION For explicitly recurring deferred work, recommend a short daily review alongside event checks. Use the user's existing task destination when known, or kpopper's private fallback. The watch command inspects existing schedules before any separate installation request. Acknowledging `kpopper _agent shown followups` records only that the offer was shown, not consent. Use `kpop followups daily adoption authorized --evidence USER_AUTHORIZATION_REFERENCE` only after explicit user authorization; this records permission but does not install a host job. Decline with `kpop followups daily adoption declined` or snooze with `kpop followups daily adoption snoozed --until RFC3339`; either suppresses repeated promotional offers. Health checks remain visible either way.".into());
         }
     }
     if lines.is_empty() {
@@ -723,7 +723,7 @@ pub fn compact_canonical_context(context: &str) -> String {
 /// Remove optional promotion before considering omission of required health.
 /// Parse the generated JSON boundary so authored evidence cannot be rewritten.
 pub fn canonical_context_without_promotions(context: &str) -> String {
-    context.lines().map(|line| {
+    context.lines().filter(|line| !line.starts_with("KPOPPER_MAINTENANCE_PROMOTION ")).map(|line| {
         let Some(raw) = line.strip_prefix("KPOPPER_MAINTENANCE_CHOICE ") else { return line.to_owned(); };
         let mut stream = serde_json::Deserializer::from_str(raw).into_iter::<Value>();
         if !matches!(stream.next(), Some(Ok(_))) { return line.to_owned(); }
@@ -798,7 +798,7 @@ fn is_maintenance_canonical_line(line: &str) -> bool {
     line.starts_with("KPOPPER_MAINTENANCE_CHOICE ")
         || line.starts_with("Maintenance continuity health")
         || line.starts_with("Before material current use")
-        || line.starts_with("Recurring task ")
+        || line.starts_with("KPOPPER_MAINTENANCE_PROMOTION ")
 }
 
 /// Preserve ordinary queue/source notices independently of maintenance compaction.

@@ -980,3 +980,78 @@ fn deepest_feasible_source_route_survives_minimal_maintenance_rung() {
     assert!(opened.contains("followups") && opened.contains("daily") && opened.contains("assess"), "{opened}");
     assert!(opened.contains("unknown"), "{opened}");
 }
+
+#[cfg(unix)]
+#[test]
+fn compact_openings_drop_all_eligible_plain_recurring_promotions() {
+    for length in [200usize, 450, 650] {
+        let parent = tempfile::tempdir().unwrap();
+        let mut deep = parent.path().canonicalize().unwrap();
+        let target = length - 11;
+        while deep.as_os_str().len() < target {
+            let remaining = target - deep.as_os_str().len();
+            let width = if remaining == 42 {39} else {(remaining-1).min(40)};
+            deep.push("x".repeat(width));
+        }
+        fs::create_dir_all(&deep).unwrap();
+        let mut p = Probe::with_root(tempfile::tempdir_in(&deep).unwrap());
+        let executable = p.runtime.path().join("kpop".repeat(45));
+        fs::hard_link(env!("CARGO_BIN_EXE_kpop"), &executable).unwrap();
+        p.executable = Some(executable);
+        let now = chrono::Utc::now();
+        let store = kpop_native::followup_store::Store::at_in_state(p.root.path(), &p.root.path().join("xdg-state"), now).unwrap();
+        fs::create_dir(p.runtime.path().join("followups")).unwrap();
+        store.setup(Some(&p.runtime.path().join("followups")), "UTC", None, false).unwrap();
+        for i in 0..2 {
+            let id = format!("plain-{i}");
+            store.add(json!({"id":id,"title":format!("Plain followup {i}"),"why":"Recheck allocation","how":"Review the record",
+                "scope":"Read only","related":["p.opening"],"when":{"at":(now-chrono::Duration::minutes(5)).to_rfc3339_opts(chrono::SecondsFormat::Secs,true)}})).unwrap();
+            let scan = store.scan(20).unwrap();
+            let row = scan["items"].as_array().unwrap().iter().find(|row|row["id"]==id).unwrap();
+            let claimed = store.claim(&id,row["occurrence"].as_str().unwrap(),"test-owner",None).unwrap();
+            let token = claimed["token"].as_str().or_else(||claimed["claim"]["token"].as_str()).unwrap();
+            store.finish(&id,token,"checked","fixture://reviewed",Some(&(now+chrono::Duration::days(1)).to_rfc3339_opts(chrono::SecondsFormat::Secs,true))).unwrap();
+        }
+        let before = fs::read(&store.path).unwrap();
+        let choices_before: Vec<_> = walk_private_files(&p.root.path().join("xdg-state/kpopper/first-use"));
+        let opened = p.session_start();
+        assert!(opened.contains("promotion_allowed\":false"), "must exercise compact rung: {opened}");
+        assert!(!opened.contains("For explicitly recurring deferred work"), "{opened}");
+        assert!(!opened.contains("has a sourced maintenance discovery suggestion"), "{opened}");
+        assert!(opened.contains("this_opening_budget_only"), "{opened}");
+        assert_eq!(fs::read(&store.path).unwrap(), before);
+        assert_eq!(walk_private_files(&p.root.path().join("xdg-state/kpopper/first-use")),choices_before);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn exhausted_route_budget_reports_actual_last_error_on_stderr() {
+    let parent = tempfile::tempdir().unwrap();
+    let mut deep = parent.path().canonicalize().unwrap();
+    while deep.as_os_str().len() < 870 {
+        let remaining = 870 - deep.as_os_str().len();
+        let width = if remaining == 42 {39} else {(remaining-1).min(40)};
+        deep.push("x".repeat(width));
+    }
+    fs::create_dir_all(&deep).unwrap();
+    let mut p = Probe::with_root(tempfile::tempdir_in(&deep).unwrap());
+    let mut executable_dir = p.runtime.path().to_path_buf();
+    while executable_dir.as_os_str().len() < 800 { executable_dir.push("x".repeat(40)); }
+    fs::create_dir_all(&executable_dir).unwrap();
+    let executable = executable_dir.join("kpop");
+    fs::hard_link(env!("CARGO_BIN_EXE_kpop"), &executable).unwrap();
+    p.executable = Some(executable);
+    add_declared_checks(&p, 12);
+    p.read();
+    fs::rename(p.root.path().join("GROUNDING.yaml"), p.root.path().join("PROVENANCE.yaml")).unwrap();
+    let mut child = p.command().args(["session-start", "--host", "codex"]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(json!({"cwd":p.root.path(),"session_id":p.session}).to_string().as_bytes()).unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(result.status.success());
+    let out = String::from_utf8(result.stdout).unwrap();
+    let err = String::from_utf8(result.stderr).unwrap();
+    let reason = err.lines().find_map(|line|line.strip_prefix("kpopper managed view route unavailable: ")).unwrap();
+    assert!(reason.contains("opening allowance"), "{err}");
+    assert!(out.starts_with(&format!("Managed source opening unavailable: {reason}.")), "{out}");
+}

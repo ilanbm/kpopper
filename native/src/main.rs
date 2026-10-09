@@ -443,14 +443,21 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                             json!({"notice_lines":ordinary.lines().count(),"required_queue_read_argv_suffix":["followups","scan"]}));
                         let final_notice = format!("{minimal}\n{queue_read}");
                         let mut delivered = None;
+                        let mut last_error = None;
                         for notice in [reduced, with_ordinary(&summary), with_ordinary(&minimal), final_notice.clone()] {
-                            if let Ok(bound) = fit(&route, 7000usize.saturating_sub(notice.len() + 1)) {
-                                delivered = Some(vec![bound, notice]);
-                                break;
+                            match fit(&route, 7000usize.saturating_sub(notice.len() + 1)) {
+                                Ok(bound) => {
+                                    delivered = Some(vec![bound, notice]);
+                                    break;
+                                }
+                                Err(error) => last_error = Some(error),
                             }
                         }
-                        output = delivered.unwrap_or_else(|| vec![
-                            "Managed source opening unavailable: exact source route cannot fit. Current source evidence is unknown; reopen before answering.".into(), final_notice]);
+                        output = delivered.unwrap_or_else(|| {
+                            let error = last_error.expect("each fallback fit returned an error");
+                            eprintln!("kpopper managed view route unavailable: {error}");
+                            vec![format!("Managed source opening unavailable: {error}. Current source evidence is unknown; reopen before answering."), final_notice]
+                        });
                     }
                 }
         }
