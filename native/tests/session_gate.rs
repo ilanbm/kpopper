@@ -172,13 +172,25 @@ fn unattributed_entries_are_told_an_intent_id_the_record_accepts() {
         let named = suggested(text);
         assert_eq!(named, id);
         assert!(named.starts_with("s."), "{named}");
-        assert!(
-            named
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.'),
-            "suggested id {named:?} holds a character ids refuse"
-        );
     }
+    let scratch = tempfile::tempdir().unwrap();
+    fs::write(scratch.path().join("GROUNDING.yaml"), GOOD).unwrap();
+    let added = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["--workspace", scratch.path().to_str().unwrap(), "add", &id])
+        .args(["asked=add the extra value", "name=Extra value"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        added.status.code(),
+        Some(0),
+        "add refused the suggested id {id:?}: {}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    assert!(
+        fs::read_to_string(scratch.path().join("GROUNDING.yaml"))
+            .unwrap()
+            .contains(&format!("{id}:"))
+    );
     fs::write(
         &record,
         format!(
