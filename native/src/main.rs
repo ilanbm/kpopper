@@ -431,24 +431,26 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
                 match initial {
                     Ok(bound) => output[index] = bound,
                     Err(_) => {
-                        let reduced = kpop_native::onboarding::canonical_context_without_promotions(&siblings.join("\n"));
-                        if let Ok(bound) = fit(&route, 7000usize.saturating_sub(reduced.len() + 1)) {
-                            output = vec![bound, reduced];
-                        } else {
-                        // Route and source safety take precedence. Detailed health
-                        // remains in native status; this bounded card requires it.
-                        let summary = kpop_native::onboarding::bounded_canonical_context(&siblings.join("\n"));
-                        let allowance = 7000usize.saturating_sub(summary.len() + 1);
-                        match fit(&route, allowance) {
-                            Ok(bound) => output = vec![bound, summary],
-                            Err(error) => {
-                                // Never turn a failed representation into a saved
-                                // replacement or silently disable continuation.
-                                output = vec![format!("Managed source opening unavailable: {error}. Current source evidence is unknown; reopen before answering."), summary];
-                                eprintln!("kpopper managed view route unavailable: {error}");
+                        let context = siblings.join("\n");
+                        let reduced = kpop_native::onboarding::canonical_context_without_promotions(&context);
+                        let maintenance = kpop_native::onboarding::maintenance_canonical_context(&context);
+                        let summary = kpop_native::onboarding::bounded_canonical_context(&maintenance);
+                        let minimal = kpop_native::onboarding::minimal_canonical_context(&maintenance);
+                        let ordinary = kpop_native::onboarding::non_maintenance_canonical_context(&context);
+                        let with_ordinary = |notice: &str| if ordinary.is_empty() { notice.to_owned() }
+                            else { format!("{notice}\n{ordinary}") };
+                        let queue_read = format!("KPOPPER_OPENING_NOTICES_DEFERRED {}\nOpening queue/notices deferred. Run followups scan with KPOPPER_AGENT_CONTEXT.command as executable/workspace prefix before relying on queue state.",
+                            json!({"notice_lines":ordinary.lines().count(),"required_queue_read_argv_suffix":["followups","scan"]}));
+                        let final_notice = format!("{minimal}\n{queue_read}");
+                        let mut delivered = None;
+                        for notice in [reduced, with_ordinary(&summary), with_ordinary(&minimal), final_notice.clone()] {
+                            if let Ok(bound) = fit(&route, 7000usize.saturating_sub(notice.len() + 1)) {
+                                delivered = Some(vec![bound, notice]);
+                                break;
                             }
                         }
-                        }
+                        output = delivered.unwrap_or_else(|| vec![
+                            "Managed source opening unavailable: exact source route cannot fit. Current source evidence is unknown; reopen before answering.".into(), final_notice]);
                     }
                 }
         }

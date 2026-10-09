@@ -512,3 +512,21 @@ fn bounded_summary_keeps_unknown_counts_null_and_clock_separate_from_source() {
     assert_eq!(mixed["missing_source_observation_count"], 1);
     assert_eq!(mixed["failed_attempt_count"], 1);
 }
+
+#[test]
+fn promotion_budget_suppression_is_rendered_only_and_preserves_authored_choice() {
+    let stored = json!({"state":"proposed", "authorized":false,
+        "evidence_ref":kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY});
+    let preference = json!({"choice":"proposed", "promotion_allowed":true,"first_use_choice":stored});
+    let notice = format!("KPOPPER_MAINTENANCE_CHOICE {preference}{}{}", kpop_native::onboarding::MAINTENANCE_DISCLOSURE_POLICY,
+        kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY);
+    let reduced = kpop_native::onboarding::canonical_context_without_promotions(&notice);
+    let raw = reduced.strip_prefix("KPOPPER_MAINTENANCE_CHOICE ").unwrap();
+    let rendered: Value = serde_json::Deserializer::from_str(raw).into_iter::<Value>().next().unwrap().unwrap();
+    assert_eq!(rendered["first_use_choice"], stored);
+    assert_eq!(rendered["saved_promotion_allowed"], true);
+    assert_eq!(rendered["promotion_allowed"], false);
+    assert_eq!(rendered["suppression_scope"], "this_opening_budget_only");
+    assert!(reduced.contains("This is not a saved/global opt-out; later material-use assessments and explicit requests"));
+    assert_eq!(kpop_native::onboarding::compact_canonical_context(&notice), notice);
+}

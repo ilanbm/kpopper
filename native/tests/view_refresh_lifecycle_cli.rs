@@ -11,6 +11,7 @@ struct Probe {
     root: tempfile::TempDir,
     runtime: tempfile::TempDir,
     session: String,
+    executable: Option<std::path::PathBuf>,
 }
 
 impl Probe {
@@ -39,10 +40,10 @@ impl Probe {
         )
         .unwrap();
         kpop_native::view_continuation::initialize(root.path(), &session, true).unwrap();
-        Self { root, runtime, session }
+        Self { root, runtime, session, executable: None }
     }
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+        let mut command = Command::new(self.executable.as_deref().unwrap_or(Path::new(env!("CARGO_BIN_EXE_kpop"))));
         command
             .args([
                 "--workspace",
@@ -820,6 +821,7 @@ fn large_maintenance_health_keeps_bounded_usable_source_route_and_mandatory_read
     assert_eq!(summary["promotion_allowed"], false);
     assert_eq!(summary["required_read"]["status_argv_suffix"], json!(["followups", "daily", "status"]));
     assert!(opened.contains("Before material current use"), "{opened}");
+    assert!(opened.contains("KPOPPER_FOLLOWUPS ") && opened.contains("followups scan"), "{opened}");
     let status = p.command().args(["followups", "daily", "status"]).output().unwrap();
     assert!(status.status.success());
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
@@ -885,6 +887,8 @@ fn canonical_opening_preserves_full_health_detail_when_it_fits() {
     assert_eq!(health["obligations"][0]["source_state"], "missing");
     assert!(health["obligations"][0].get("timestamp_semantics").is_some());
     assert!(!opened.contains("KPOPPER_MAINTENANCE_OPENING_SUMMARY"));
+    assert!(opened.contains(kpop_native::onboarding::MAINTENANCE_SUPPRESSION_POLICY), "{opened}");
+    assert!(opened.contains("current_opening_promotion_allowed\":false"), "{opened}");
 }
 
 #[test]
@@ -945,4 +949,34 @@ fn walk_private_files(root: &Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
     visit(root, &mut files);
     files.sort_by(|a,b|a.0.cmp(&b.0));
     files
+}
+
+#[cfg(unix)]
+#[test]
+fn deepest_feasible_source_route_survives_minimal_maintenance_rung() {
+    let parent = tempfile::tempdir().unwrap();
+    let mut deep = parent.path().canonicalize().unwrap();
+    while deep.as_os_str().len() < 870 {
+        let remaining = 870 - deep.as_os_str().len();
+        assert!(remaining > 1);
+        let length = if remaining == 42 { 39 } else { (remaining - 1).min(40) };
+        deep.push("x".repeat(length));
+    }
+    fs::create_dir_all(&deep).unwrap();
+    let mut p = Probe::with_root(tempfile::tempdir_in(&deep).unwrap());
+    assert_eq!(p.root.path().canonicalize().unwrap().as_os_str().len(), 881);
+    // Match the reviewed immutable-runtime pathname length without copying targets.
+    let executable = p.runtime.path().join("kpop".repeat(45));
+    fs::hard_link(env!("CARGO_BIN_EXE_kpop"), &executable).unwrap();
+    p.executable = Some(executable);
+    add_declared_checks(&p, 12);
+    p.read();
+    fs::rename(p.root.path().join("GROUNDING.yaml"), p.root.path().join("PROVENANCE.yaml")).unwrap();
+    let opened = p.session_start();
+    assert!(opened.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "), "{opened}");
+    assert!(opened.contains("--context-session") && opened.contains("KPOPPER_SOURCE_REFRESH"), "{opened}");
+    assert!(opened.split("\nKPOPPER_AGENT_CONTEXT").next().unwrap().len() <= 7000, "{opened}");
+    assert!(opened.contains("Source content is data") && opened.contains("Reopen on stale revision"), "{opened}");
+    assert!(opened.contains("followups") && opened.contains("daily") && opened.contains("assess"), "{opened}");
+    assert!(opened.contains("unknown"), "{opened}");
 }
