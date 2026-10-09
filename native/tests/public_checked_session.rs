@@ -204,7 +204,8 @@ fn public_context_preserves_explicit_revision_and_limits() {
 
 fn refusal(output: Output) -> String {
     assert_eq!(output.status.code(), Some(2));
-    let packet: Value = serde_json::from_slice(&output.stderr).unwrap();
+    let packet: Value = serde_json::from_slice(&output.stderr)
+        .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&output.stderr)));
     packet["error"].as_str().unwrap().to_owned()
 }
 
@@ -222,10 +223,14 @@ fn context_refusals_print_their_limits_with_spaces() {
         .output()
         .unwrap();
     assert_eq!(refusal(nodes), "context max_nodes must be 1..64");
-    let ids = command(root, "current-context", true)
-        .args(["p.a"; 9])
-        .output()
-        .unwrap();
+    // The direct route caps positional IDs, so nine reach the reader through --id.
+    ok(command(root, "open", true).output().unwrap());
+    let (revision, _) = saved(root);
+    let mut ids = vec!["--direction", "support", "--revision", &revision];
+    for _ in 0..9 {
+        ids.extend(["--id", "p.a"]);
+    }
+    let ids = command(root, "context", false).args(ids).output().unwrap();
     assert_eq!(
         refusal(ids),
         "context requires 1..8 nonempty node IDs or node: references of at most 500 characters"
