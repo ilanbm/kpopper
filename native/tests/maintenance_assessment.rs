@@ -403,3 +403,57 @@ fn limit_hidden_active_policy_is_present_without_false_leaf_absence() {
     }
     }
 }
+
+#[test]
+fn shared_walk_policy_dropped() {
+    let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+    let mut nodes = BTreeMap::new();
+    let n = |deps: &[&str]| Node { dependencies: deps.iter().map(|s| s.to_string()).collect(), ..Default::default() };
+    // s2 -> [p, h]; p -> c01 -> ... -> c61 -> h; h -> d (leaf, depth 2 from s2).
+    // A fresh walk of s2 reaches h first with 63 ancestors, so d (64) is cut, and s2 -> h is then skipped.
+    nodes.insert("d".to_string(), n(&[]));
+    nodes.insert("h".to_string(), n(&["d"]));
+    let mut next = "h".to_string();
+    for i in (1..=61).rev() { let id = format!("c{i:02}"); nodes.insert(id.clone(), n(&[&next])); next = id; }
+    nodes.insert("p".to_string(), n(&[&next]));
+    nodes.insert("s2".to_string(), n(&["p", "h"]));
+    // s1 -> e01 -> ... -> e62 -> p : p is reached with 63 ancestors, so the shared walk caches p without h.
+    let mut next = "p".to_string();
+    for i in (1..=62).rev() { let id = format!("e{i:02}"); nodes.insert(id.clone(), n(&[&next])); next = id; }
+    nodes.insert("s1".to_string(), n(&[&next]));
+    let items = json!({"d-clock":{"state":"waiting","spec":{"related":["d"],"maintenance":{"kind":"clock","due_at":"2026-12-24T09:00:00Z","cadence_days":1,"timezone":"UTC","check_time":"09:00","policy_digest":"x"}}}});
+    for ids in [vec!["s1".to_string(), "s2".to_string()], vec!["s2".to_string(), "s1".to_string()]] {
+        let r = assess(&ids, &nodes, &items, &json!({}), &BTreeSet::from(["d-clock".to_string()]), &BTreeMap::new(), now, "record").unwrap();
+        let in_shared = r["declared_closure"].as_array().unwrap().iter().any(|v| v == "d");
+        let listed = r["policies"].as_array().unwrap().iter().any(|p| p["id"] == "d-clock");
+        println!("ids={ids:?} status={} d_in_shared_closure={in_shared} d-clock_listed={listed}", r["status"]);
+        assert_eq!(r["status"], "unknown");
+        assert!(listed, "known check on depth-2 dependency d omitted (ids={ids:?})");
+    }
+}
+
+#[test]
+fn scope_identity_preserves_complete_dag_and_resolution_boundaries() {
+    let (mut nodes, _, _, _, _) = inputs();
+    nodes.insert("d.other".into(), Node { dependencies: vec!["s.source".into()], identity: "other1".into(), dependency_error: None });
+    let ordered = json!({"related":["d.use","d.other"]});
+    let reversed = json!({"related":["d.other","d.use"]});
+    let original = maintenance_assessment::scope_identity(&ordered, &nodes).unwrap();
+    assert_eq!(maintenance_assessment::scope_identity(&reversed, &nodes).unwrap(), original);
+    nodes.get_mut("d.use").unwrap().dependency_error = Some("readback unresolved".into());
+    assert_eq!(maintenance_assessment::scope_identity(&ordered, &nodes).unwrap(), original);
+    nodes.get_mut("d.use").unwrap().dependencies.push("missing".into());
+    assert!(maintenance_assessment::scope_identity(&ordered, &nodes).is_err());
+    nodes.get_mut("d.use").unwrap().dependencies.pop();
+    nodes.get_mut("s.source").unwrap().dependencies.push("d.use".into());
+    assert!(maintenance_assessment::scope_identity(&ordered, &nodes).is_err());
+    nodes.get_mut("s.source").unwrap().dependencies.clear();
+    nodes.get_mut("s.source").unwrap().identity.clear();
+    assert!(maintenance_assessment::scope_identity(&ordered, &nodes).is_err());
+    for wide in [false, true] {
+        let mut bounded = limit_graph(wide);
+        for (id, node) in &mut bounded { node.identity = id.clone(); }
+        assert!(maintenance_assessment::scope_identity(&json!({"related":["d.atop","d.btop"]}), &bounded).is_err());
+        assert!(maintenance_assessment::scope_identity(&json!({"related":["d.btop","d.atop"]}), &bounded).is_err());
+    }
+}

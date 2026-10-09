@@ -31,36 +31,41 @@ fn visit(
     closure: &mut BTreeSet<String>,
     reasons: &mut Vec<Value>,
 ) {
-    if active.len() >= 64 || closure.len() >= 1000 {
-        if !reasons
-            .iter()
-            .any(|r| r["reason"] == "declared_closure_limit")
-        {
-            reasons.push(json!({"subject":id,"kind":"unknown","reason":"declared_closure_limit","detail":"Assessment stops at depth64 or1000 declared nodes"}));
+    fn walk(id: &str, nodes: &BTreeMap<String, Node>, active: &mut BTreeSet<String>,
+        closure: &mut BTreeSet<String>, reasons: &mut Vec<Value>, depths: &mut BTreeMap<String, usize>) {
+        if active.len() >= 64 || (closure.len() >= 1000 && !closure.contains(id)) {
+            if !reasons.iter().any(|r| r["reason"] == "declared_closure_limit") {
+                reasons.push(json!({"subject":id,"kind":"unknown","reason":"declared_closure_limit","detail":"Assessment stops at depth64 or1000 declared nodes"}));
+            }
+            return;
         }
-        return;
+        if active.contains(id) {
+            let reason = json!({"subject":id,"kind":"unknown","reason":"dependency_cycle"});
+            if !reasons.contains(&reason) { reasons.push(reason); }
+            return;
+        }
+        let depth = active.len();
+        if depths.get(id).is_some_and(|previous| *previous <= depth) { return; }
+        // Re-expand a previously deep path when a shallower path can reach
+        // children within the same bounds. A real earlier limit stays visible.
+        depths.insert(id.to_owned(), depth);
+        closure.insert(id.to_owned());
+        let Some(node) = nodes.get(id) else {
+            let reason = json!({"subject":id,"kind":"unknown","reason":"dependency_missing"});
+            if !reasons.contains(&reason) { reasons.push(reason); }
+            return;
+        };
+        if let Some(error) = &node.dependency_error {
+            let reason = json!({"subject":id,"kind":"unknown","reason":"dependency_unresolved","detail":error});
+            if !reasons.contains(&reason) { reasons.push(reason); }
+        }
+        active.insert(id.to_owned());
+        for dependency in &node.dependencies {
+            walk(dependency, nodes, active, closure, reasons, depths);
+        }
+        active.remove(id);
     }
-    if active.contains(id) {
-        reasons.push(json!({"subject":id,"kind":"unknown","reason":"dependency_cycle"}));
-        return;
-    }
-    if !closure.insert(id.to_owned()) {
-        return;
-    }
-    let Some(node) = nodes.get(id) else {
-        reasons.push(json!({"subject":id,"kind":"unknown","reason":"dependency_missing"}));
-        return;
-    };
-    if let Some(error) = &node.dependency_error {
-        reasons.push(
-            json!({"subject":id,"kind":"unknown","reason":"dependency_unresolved","detail":error}),
-        );
-    }
-    active.insert(id.to_owned());
-    for dependency in &node.dependencies {
-        visit(dependency, nodes, active, closure, reasons);
-    }
-    active.remove(id);
+    walk(id, nodes, active, closure, reasons, &mut BTreeMap::new());
 }
 
 // Resolution uncertainty does not erase a known declaration intersection.
