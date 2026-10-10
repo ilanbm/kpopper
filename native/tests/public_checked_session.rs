@@ -202,6 +202,73 @@ fn public_context_preserves_explicit_revision_and_limits() {
     assert_ne!(current["revision"], revision);
 }
 
+fn refusal(output: Output) -> String {
+    assert_eq!(output.status.code(), Some(2));
+    let packet: Value = serde_json::from_slice(&output.stderr)
+        .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&output.stderr)));
+    packet["error"].as_str().unwrap().to_owned()
+}
+
+#[test]
+fn context_refusals_print_their_limits_with_spaces() {
+    let temp = fixture();
+    let root = temp.path();
+    let depth = command(root, "current-context", true)
+        .args(["d.keep", "--depth", "5"])
+        .output()
+        .unwrap();
+    assert_eq!(refusal(depth), "context depth must be 0..4");
+    let nodes = command(root, "current-context", true)
+        .args(["d.keep", "--max-nodes", "65"])
+        .output()
+        .unwrap();
+    assert_eq!(refusal(nodes), "context max_nodes must be 1..64");
+    // The direct route caps positional IDs, so nine reach the reader through --id.
+    ok(command(root, "open", true).output().unwrap());
+    let (revision, _) = saved(root);
+    let mut ids = vec!["--direction", "support", "--revision", &revision];
+    for _ in 0..9 {
+        ids.extend(["--id", "p.a"]);
+    }
+    let ids = command(root, "context", false).args(ids).output().unwrap();
+    assert_eq!(
+        refusal(ids),
+        "context requires 1..8 nonempty node IDs or node: references of at most 500 characters"
+    );
+}
+
+#[test]
+fn search_refusals_print_their_limits_with_spaces() {
+    let temp = fixture();
+    let root = temp.path();
+    ok(command(root, "open", true).output().unwrap());
+    let (revision, _) = saved(root);
+    let search = |args: &[&str]| {
+        command(root, "search", false)
+            .args(["--revision", &revision])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    assert_eq!(
+        refusal(search(&["--query", "p.a", "--limit", "33"])),
+        "limit must be 1..32"
+    );
+    let long = "a".repeat(8001);
+    assert_eq!(
+        refusal(search(&["--query", &long])),
+        "query must be at most 8000 characters"
+    );
+    let mut ids = vec!["--query", "p.a"];
+    for _ in 0..65 {
+        ids.extend(["--id", "p.a"]);
+    }
+    assert_eq!(
+        refusal(search(&ids)),
+        "ids must contain at most 64 nonempty identifier strings of at most 500 characters"
+    );
+}
+
 #[test]
 fn public_context_help_needs_no_record_or_runtime() {
     let root = tempfile::tempdir().unwrap();

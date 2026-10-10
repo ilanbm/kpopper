@@ -1123,6 +1123,7 @@ impl Service {
         Ok(result)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_selected_view(
         &self, full: &J, build: impl Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>,
         ids: &[String], expand: &[String], edge_sets: &[String], memberships: &[String], supplied_index: Option<&J>,
@@ -1153,6 +1154,7 @@ impl Service {
         Err(failure)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_selected_view_at_frontier(
         &self, full: &J, build: impl Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>,
         ids: &[String], expand: &[String], edge_sets: &[String], memberships: &[String], supplied_index: Option<&J>,
@@ -1329,18 +1331,22 @@ impl Service {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn viewing(&self, revision: &str, ids: &[String], expand: &[String], description_cache: Option<&Path>, describe: bool, query: &str, tokens: Option<usize>) -> Result<String> {
         self.viewing_with_anchors(revision, ids, expand, description_cache, describe, query, tokens, &[])
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn viewing_with_anchors(&self, revision: &str, ids: &[String], expand: &[String], description_cache: Option<&Path>, describe: bool, query: &str, tokens: Option<usize>, anchors: &[String]) -> Result<String> {
         self.viewing_internal(revision, ids, expand, description_cache, describe, query, tokens, anchors, None)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn viewing_managed(&self, revision: &str, ids: &[String], expand: &[String], description_cache: Option<&Path>, query: &str, tokens: Option<usize>, anchors: &[String], session: Option<&str>, transport: crate::view_continuation::ViewTransport) -> Result<String> {
         self.viewing_internal(revision, ids, expand, description_cache, false, query, tokens, anchors, Some((session, transport)))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn viewing_internal(&self, revision: &str, ids: &[String], expand: &[String], description_cache: Option<&Path>, describe: bool, query: &str, tokens: Option<usize>, anchors: &[String], managed: Option<(Option<&str>, crate::view_continuation::ViewTransport)>) -> Result<String> {
         let total_start = std::time::Instant::now();
         let refresh_enabled = managed.is_some_and(|(session, _)| session.is_some());
@@ -1636,7 +1642,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                             let limit = args.get("limit").map_or(Ok(8), |v| {
                                 v.as_u64()
                                     .and_then(|n| usize::try_from(n).ok())
-                                    .ok_or_else(|| error("limit must be1..32"))
+                                    .ok_or_else(|| error("limit must be 1..32"))
                             })?;
                             let mode =
                                 match args.get("mode").and_then(J::as_str).unwrap_or("hybrid") {
