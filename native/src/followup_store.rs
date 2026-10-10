@@ -3,7 +3,7 @@ use crate::{
     Error, Result, followup_triggers as triggers, history_contract as H, identity::sha256,
     ordinary_reader::Reader, require, source_capture::ReadMode, value::TypedValue as V,
 };
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use chrono::{DateTime, Duration, SubsecRound, TimeZone, Utc};
 use fs2::FileExt;
 use serde_json::{Map, Value, json};
 use std::{
@@ -408,10 +408,28 @@ fn atomic(path: &Path, raw: &[u8]) -> Result<()> {
         )?;
     }
     fs::create_dir_all(parent)?;
-    let mut temporary = NamedTempFile::new_in(parent)?;
+
+    // tempfile 3.27 passes paths directly to MoveFileExW on Windows. Use the
+    // canonical extended-length form for both names so long retained-evidence
+    // quarantine names can be atomically replaced beyond MAX_PATH.
+    #[cfg(windows)]
+    let (parent, destination) = {
+        let parent = fs::canonicalize(parent)?;
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| error("invalid followups destination"))?;
+        let destination = parent.join(file_name);
+        (parent, destination)
+    };
+    #[cfg(not(windows))]
+    let (parent, destination) = (parent.to_path_buf(), path.to_path_buf());
+
+    let mut temporary = NamedTempFile::new_in(&parent)?;
     temporary.write_all(raw)?;
     temporary.as_file().sync_all()?;
-    temporary.persist(path).map_err(|e| Error::from(e.error))?;
+    temporary
+        .persist(destination)
+        .map_err(|e| Error::from(e.error))?;
     #[cfg(unix)]
     File::open(parent)?.sync_all()?;
     Ok(())
@@ -597,7 +615,9 @@ impl Store {
             path: root.join("followups.yaml"),
             root,
             registered,
-            now: Box::new(now),
+            // The local store clock has the legacy persisted microsecond resolution.
+            // External report timestamps retain their separately supplied precision.
+            now: Box::new(move || now().trunc_subsecs(6)),
         })
     }
 
@@ -915,7 +935,7 @@ impl Store {
         mut self,
         clock: impl Fn() -> DateTime<Utc> + Send + Sync + 'static,
     ) -> Self {
-        self.now = Box::new(clock);
+        self.now = Box::new(move || clock().trunc_subsecs(6));
         self
     }
 
@@ -947,6 +967,7 @@ impl Store {
         let before = digest(&data)?;
         let result = mutation(&mut data)?;
         if digest(&data)? != before {
+            Self::promote_timestamp_precision(&mut data);
             self.retain_maintenance_history(&mut data)?;
             let serialized = serialized_value(&data)?;
             atomic(
@@ -956,6 +977,38 @@ impl Store {
             atomic(&self.path, &serialized)?;
         }
         Ok(result)
+    }
+
+    // Only typed protocol times are inspected, never arbitrary source values,
+    // titles, notes or evidence prose. Wider external times are retained exactly.
+    fn promote_timestamp_precision(data: &mut Value) {
+        if data["version"] != 1 { return; }
+        fn row(value: &Value) -> bool {
+            ["at", "created_at", "started_at", "finished_at", "expires_at", "next_at",
+                "observed_at", "executed_at", "phase_observed_at", "epoch_started_at",
+                "updated_at", "shown_at", "authorized_at", "declined_at", "snoozed_at",
+                "until", "selected_at", "anchor_at"].iter()
+                .any(|field| triggers::extended_timestamp(&value[*field]))
+        }
+        fn claim(value: &Value) -> bool { row(value) || row(&value["host_execution"]) }
+        let observations = data["observations"].as_object().into_iter().flatten()
+            .any(|(_, observation)| row(observation));
+        let items = data["items"].as_object().into_iter().flatten().any(|(_, item)| {
+            row(item) || claim(&item["claim"])
+                || triggers::extended_trigger_timestamps(&item["spec"]["when"])
+                || item["attempts"].as_array().into_iter().flatten().any(|attempt| {
+                    row(attempt) || claim(&attempt["run"]) || row(&attempt["request"])
+                        || triggers::extended_trigger_timestamps(&attempt["previous_spec"]["when"])
+                })
+        });
+        let daily = &data["daily"];
+        let daily_times = claim(&daily["claim"]) || row(&daily["binding"])
+            || row(&daily["adoption"]) || row(&daily["maintenance_mode"])
+            || row(&daily["maintenance_mode"]["native_readback"])
+            || row(&daily["installation"]) || row(&daily["installation"]["reconciliation"])
+            || daily["binding_history"].as_array().into_iter().flatten().any(row)
+            || daily["receipts"].as_array().into_iter().flatten().any(claim);
+        if observations || items || daily_times { data["version"] = json!(2); }
     }
 
     // Immutable segments live beside the existing ledger, not in a receipt database.
@@ -2705,6 +2758,7 @@ impl Store {
             &self.root.join("followups.previous.yaml"),
             &fs::read(&self.path)?,
         )?;
+        Self::promote_timestamp_precision(&mut data);
         atomic_value(&self.path, &data)?;
         self.register()?;
         Ok(data["config"].clone())
@@ -2735,6 +2789,7 @@ impl Store {
             None
         };
         recovered.as_object_mut().unwrap().entry("restorations").or_insert_with(||json!([])).as_array_mut().unwrap().push(json!({"at":triggers::stamp(self.now()),"backup":backup.canonicalize()?,"evidence":evidence,"quarantine":quarantine}));
+        Self::promote_timestamp_precision(&mut recovered);
         atomic_value(&self.path, &recovered)?;
         self.register()?;
         Ok(

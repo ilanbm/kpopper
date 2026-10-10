@@ -1409,10 +1409,11 @@ mod daily_repair_tests {
 
     #[test]
     fn nanosecond_binding_boundary_rejects_prior_and_future_execution() {
-        let bound = chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00.123456789Z").unwrap().with_timezone(&Utc);
-        let now = bound + Duration::nanoseconds(2);
+        let bound = chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00.123456Z").unwrap().with_timezone(&Utc);
+        let now = bound + Duration::microseconds(2);
         let binding = json!({"host":"host","id":"job","state":"active","epoch_started_at":stamp(bound)});
-        let report = |executed, observed| json!({"schema":"kpopper.host-execution/v1","trigger":"scheduled","host":"host","id":"job","executed_at":stamp(executed),"observed_at":stamp(observed),"evidence":"fixture://readback"});
+        let external = |value: chrono::DateTime<Utc>| value.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let report = |executed, observed| json!({"schema":"kpopper.host-execution/v1","trigger":"scheduled","host":"host","id":"job","executed_at":external(executed),"observed_at":external(observed),"evidence":"fixture://readback"});
         assert!(super::validate_host_execution(&report(bound, now), &binding, now).is_ok());
         assert!(super::validate_host_execution(&report(bound + Duration::nanoseconds(1), now), &binding, now).is_ok());
         assert!(super::validate_host_execution(&report(bound - Duration::nanoseconds(1), now), &binding, now).is_err());

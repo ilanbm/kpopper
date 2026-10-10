@@ -275,7 +275,7 @@ pub(crate) fn select(
 #[cfg(test)]
 mod tests {
     use super::{assess, reported_liveness_window};
-    use chrono::{Duration, TimeZone, Utc};
+    use chrono::{Duration, SubsecRound, TimeZone, Utc};
     use serde_json::json;
 
     #[test]
@@ -368,7 +368,7 @@ mod tests {
         let started = crate::followup_daily::start_with_mode(&store, "owner", |_| Ok(None), Some("fixture://current-manual-grant")).unwrap();
         assert_eq!(started["claim"]["execution_origin"], "manual");
         let stamped = started["claim"]["started_at"].as_str().unwrap();
-        assert_eq!(crate::followup_triggers::parse_time(stamped, "UTC").unwrap(), now);
+        assert_eq!(crate::followup_triggers::parse_time(stamped, "UTC").unwrap(), now.trunc_subsecs(6));
     }
 
 }

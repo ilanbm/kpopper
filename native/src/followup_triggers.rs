@@ -126,6 +126,20 @@ fn text(value: &Value, label: &str) -> Result<String> {
     Ok(value.to_owned())
 }
 
+pub(crate) fn extended_timestamp(value: &Value) -> bool {
+    value.as_str().is_some_and(|value| {
+        parse_time(value, "UTC").is_ok()
+            && value.split_once('.').is_some_and(|(_, fraction)| {
+                fraction.bytes().take_while(u8::is_ascii_digit).count() > 6
+            })
+    })
+}
+
+pub(crate) fn extended_trigger_timestamps(trigger: &Value) -> bool {
+    walk(trigger).is_ok_and(|parts| parts.iter().any(|(kind, value, _)|
+        *kind == "at" && extended_timestamp(value)))
+}
+
 fn walk(root: &Value) -> Result<Vec<(&str, &Value, String)>> {
     let mut result = vec![];
     let mut stack = vec![(root, 1usize, "0".to_owned())];

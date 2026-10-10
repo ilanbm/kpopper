@@ -1153,3 +1153,61 @@ fn old_v2_noop_does_not_consume_backup_or_rewrite_metadata() {
         backup
     );
 }
+
+#[test]
+fn ordinary_nanosecond_clock_keeps_version_one_legacy_time_fields() {
+    let (_temp, workspace, state, start) = fixture();
+    let now = start + Duration::nanoseconds(789);
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let mut supplied = spec(json!({"at":"2026-09-10"}));
+    supplied["title"] = json!("2026-09-10T12:00:00.123456789Z");
+    store.add(supplied).unwrap();
+    let scan = store.scan(20).unwrap();
+    store.claim("review", row(&scan)["occurrence"].as_str().unwrap(), "owner", None).unwrap();
+    kpop_native::followup_daily::start_with_mode(&store, "daily", |_| Ok(None), None).unwrap();
+    let ledger = store.status().unwrap()["ledger"].as_str().unwrap().to_owned();
+    let data: Value = serde_json::from_slice(&fs::read(ledger).unwrap()).unwrap();
+    assert_eq!(data["version"], 1);
+    let legacy = regex::Regex::new(r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2})(?::([0-9]{2})(\.[0-9]{1,6})?)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap();
+    for value in [&data["items"]["review"]["created_at"], &data["items"]["review"]["claim"]["started_at"], &data["items"]["review"]["claim"]["expires_at"], &data["daily"]["claim"]["started_at"], &data["daily"]["claim"]["expires_at"]] {
+        assert!(legacy.is_match(value.as_str().unwrap()), "legacy v1 reader rejects {value}");
+    }
+}
+
+#[test]
+fn precise_external_times_require_version_two_without_rounding_evidence() {
+    for kind in ["observation", "trigger", "host-report", "next-at"] {
+        let (_temp, workspace, state, now) = fixture();
+        let store = Store::at_in_state(&workspace, &state, now).unwrap();
+        let precise = "2026-09-10T11:59:59.123456789Z";
+        match kind {
+            "observation" => {
+                store.observe(json!({"ref":"input","value":{"note":"2026-09-10T11:00:00.123456789Z"},"observed_at":"2026-09-10T11:59:59Z","evidence":"fixture://readback"})).unwrap();
+                let ledger = store.status().unwrap()["ledger"].as_str().unwrap().to_owned();
+                assert_eq!(serde_json::from_slice::<Value>(&fs::read(ledger).unwrap()).unwrap()["version"], 1);
+                assert_eq!(store.observe(json!({"ref":"input","value":1,"observed_at":precise,"evidence":"fixture://precise"})).unwrap()["observed_at"], precise);
+            }
+            "trigger" => { store.add(spec(json!({"all":[{"at":precise},{"at":"2026-09-10"}]}))).unwrap(); }
+            "host-report" => {
+                kpop_native::followup_daily::bind(&store, json!({"host":"host","id":"job","state":"active","evidence":"fixture://binding"})).unwrap();
+                let later = Store::at_in_state(&workspace, &state, now + Duration::microseconds(1)).unwrap();
+                let report = json!({"schema":"kpopper.host-execution/v1","trigger":"scheduled","host":"host","id":"job","executed_at":"2026-09-10T12:00:00.000000001Z","observed_at":"2026-09-10T12:00:00.000000999Z","evidence":"fixture://external"});
+                let started = kpop_native::followup_daily::start_attested(&later, "owner", report.clone()).unwrap();
+                assert_eq!(started["claim"]["host_execution"], report);
+            }
+            "next-at" => {
+                store.add(spec(json!({"at":"2026-09-10"}))).unwrap();
+                let scan = store.scan(20).unwrap();
+                let claim = store.claim("review", row(&scan)["occurrence"].as_str().unwrap(), "owner", None).unwrap();
+                store.finish("review", claim["claim"]["token"].as_str().unwrap(), "checked", "fixture://completed", Some("2026-09-11T12:00:00.123456789Z")).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let ledger = store.status().unwrap()["ledger"].as_str().unwrap().to_owned();
+        let data: Value = serde_json::from_slice(&fs::read(ledger).unwrap()).unwrap();
+        assert_eq!(data["version"], 2, "{kind}");
+        if kind == "observation" { assert_eq!(data["observations"]["input"]["observed_at"], precise); }
+        if kind == "trigger" { assert_eq!(data["items"]["review"]["spec"]["when"]["all"][0]["at"], precise); }
+        if kind == "next-at" { assert_eq!(data["items"]["review"]["next_at"], "2026-09-11T12:00:00.123456789Z"); }
+    }
+}

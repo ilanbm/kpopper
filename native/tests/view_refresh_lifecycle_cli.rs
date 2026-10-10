@@ -788,9 +788,11 @@ fn persisted_pre_upgrade_reader_survives_same_root_restart() {
 
 fn add_declared_checks(p: &Probe, count: usize) {
     let now = chrono::Utc::now();
-    let store = kpop_native::followup_store::Store::at_in_state(p.root.path(), &p.root.path().join("xdg-state"), now).unwrap();
+    let store = kpop_native::followup_store::Store::at_in_state(p.root.path(), &p.root.path().join("xdg-state"), now)
+        .unwrap_or_else(|error| panic!("Store::at_in_state failed for workspace {}: {error}", p.root.path().display()));
     fs::create_dir(p.runtime.path().join("followups")).unwrap();
-    store.setup(Some(&p.runtime.path().join("followups")), "UTC", None, false).unwrap();
+    store.setup(Some(&p.runtime.path().join("followups")), "UTC", None, false)
+        .unwrap_or_else(|error| panic!("Store::setup failed for workspace {}: {error}", p.root.path().display()));
     for i in 0..count {
         let declaration = json!({"schema":"kpopper.maintenance-declaration/v1","kind":"source",
             "id":format!("source-check-{i}"),"title":format!("Check input {i}"),"why":"Keep current evidence visible",
@@ -848,7 +850,12 @@ fn failed_opening_fit_does_not_persist_replacement_selection() {
 fn deep_path_and_many_obligations_keep_executable_status_route() {
     let parent = tempfile::tempdir().unwrap();
     let mut deep = parent.path().to_path_buf();
-    while deep.as_os_str().len() < 780 { deep.push("nested_source_workspace_xxxxxxxxxxxxxxxxxx"); }
+    // Keep the workspace path deep enough to exercise the long-route budget
+    // while remaining within the path limit supported by Windows CI.
+    // Leave room for the sibling state path and its hashed store directory,
+    // which Windows also limits to MAX_PATH in this CI environment.
+    let path_target = if cfg!(windows) { 130 } else { 780 };
+    while deep.as_os_str().len() < path_target { deep.push("nested_source_workspace_xxxxxxxxxxxxxxxxxx"); }
     fs::create_dir_all(&deep).unwrap();
     let p = Probe::with_root(tempfile::tempdir_in(&deep).unwrap());
     add_declared_checks(&p, 12);

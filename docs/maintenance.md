@@ -223,9 +223,16 @@ acceptance. This command changes no host job.
 
 
 Routine shown, decline, snooze and authorization choices live in private first-use state,
-including the actual unexpired snooze time. A routine acknowledgement does not upgrade an
-ordinary ledger. Actual maintenance capture or an execution-mode choice remains a version2
-boundary; do not lower an existing ledger version to make rollback appear supported.
+including the actual unexpired snooze time. A routine acknowledgement at legacy timestamp
+precision does not upgrade an ordinary ledger. Actual maintenance capture or an
+execution-mode choice remains a version2 boundary; do not lower an existing ledger
+version to make rollback appear supported.
+
+Ordinary followups use a microsecond store clock and remain compatible with version1
+runners by default. External timestamp evidence keeps its supplied precision. Persisting
+7–9 fractional digits on a typed followup timestamp boundary requires a version2 ledger;
+upgrade older runners before sharing that state. Reading a newer format does not grant
+source access or scheduling authority.
 
 A received authorized native wake may run due catchup work even when phase readback is old,
 unknown or incompatible. Its packet preserves the unknown/repair status; this does not select

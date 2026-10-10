@@ -316,9 +316,9 @@ fn session_packet(workspace: &Path, state: &Path, subject: &str, format: &str) -
         fs::create_dir_all(resources.join("reasoning")).unwrap();
         fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/reasoning/native").join(format!("{target}.kpopper-runtime")), resources.join("reasoning").join(format!("{target}.zip"))).unwrap();
         let ordinary = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM").map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("HOME").unwrap()).join(".cache/kpopper/lean").join(&target).join(env!("KPOP_ORDINARY_SOURCE_SHA256")));
+            .unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).expect("home directory")).join(".cache/kpopper/lean").join(&target).join(env!("KPOP_ORDINARY_SOURCE_SHA256")));
         fs::create_dir_all(resources.join("ordinary").join(&target)).unwrap();
-        for name in ["build.json", "epistemic-core"] { fs::copy(ordinary.join(name), resources.join("ordinary").join(&target).join(name)).unwrap(); }
+        for name in ["build.json", if cfg!(windows) { "epistemic-core.exe" } else { "epistemic-core" }] { fs::copy(ordinary.join(name), resources.join("ordinary").join(&target).join(name)).unwrap(); }
     }
     let base = ["--workspace", workspace.to_str().unwrap(), "session", "open", "--no-settings", "--input", "PROVENANCE.yaml", "--project", "maintenance-reader", "--state", "reader-state", "--tokens", "16000"];
     let opened = command(workspace, state, &base, None);
@@ -419,7 +419,16 @@ fn future_choice_schema_and_absent_read_only_state_are_preserved_on_reads() {
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.contains("KPOPPER_MAINTENANCE_CHOICE"), "{text}");
     assert!(!text.contains("restore the required retained segments"), "{text}");
+    // On Unix the mode bit makes the whole state directory genuinely read-only.
+    // Windows does not provide equivalent directory write protection through
+    // `Permissions::readonly`; there we still assert that reads do not create a
+    // first-use choice record.
+    #[cfg(unix)]
     assert_eq!(fs::read_dir(&empty_state).unwrap().count(), 0);
+    #[cfg(windows)]
+    assert!(!empty_state.join("kpopper/first-use/projects")
+        .join(kpop_native::onboarding::project_key(&workspace.canonicalize().unwrap()))
+        .join("maintenance-choice.json").exists());
 }
 
 #[cfg(unix)]
