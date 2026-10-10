@@ -147,6 +147,62 @@ fn unattributed_new_entries_block_unless_they_are_not_owned_by_this_session() {
 }
 
 #[test]
+fn unattributed_entries_are_told_an_intent_id_the_record_accepts() {
+    let (tmp, record, state) = setup(GOOD);
+    session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
+    fs::write(&record, format!("{GOOD}  p.extra: {{v: 2}}\n")).unwrap();
+    let result = session_gate::gate(&options(&state, &record, tmp.path())).unwrap();
+    assert_eq!(result.code, 2);
+    assert!(
+        result.text.contains("recorded no intent"),
+        "{}",
+        result.text
+    );
+    let suggested = |text: &str| -> String {
+        let (_, rest) = text
+            .split_once("recorded no intent: add ")
+            .unwrap_or_else(|| panic!("no suggested id in {text:?}"));
+        rest.split_whitespace().next().unwrap().to_string()
+    };
+    assert!(!result.issues.is_empty());
+    let mut texts = vec![result.text.clone()];
+    texts.extend(result.issues.iter().map(|issue| issue.text.clone()));
+    let id = suggested(&result.text);
+    for text in &texts {
+        let named = suggested(text);
+        assert_eq!(named, id);
+        assert!(named.starts_with("s."), "{named}");
+    }
+    let scratch = tempfile::tempdir().unwrap();
+    fs::write(scratch.path().join("GROUNDING.yaml"), GOOD).unwrap();
+    let added = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .args(["--workspace", scratch.path().to_str().unwrap(), "add", &id])
+        .args(["asked=add the extra value", "name=Extra value"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        added.status.code(),
+        Some(0),
+        "add refused the suggested id {id:?}: {}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    assert!(
+        fs::read_to_string(scratch.path().join("GROUNDING.yaml"))
+            .unwrap()
+            .contains(&format!("{id}:"))
+    );
+    fs::write(
+        &record,
+        format!(
+            "{GOOD}  p.extra: {{v: 2, from: {id}}}\nsources:\n  {id}: {{asked: add the extra value, name: Extra value}}\n"
+        ),
+    )
+    .unwrap();
+    let attributed = session_gate::gate(&options(&state, &record, tmp.path())).unwrap();
+    assert_eq!(attributed.code, 0, "{}", attributed.text);
+}
+
+#[test]
 fn hypothesis_only_ids_are_counted_by_the_gate() {
     let (tmp, record, state) = setup(GOOD);
     session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
