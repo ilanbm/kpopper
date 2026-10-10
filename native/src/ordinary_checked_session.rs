@@ -422,9 +422,8 @@ impl OrdinarySession {
         }
         let seeds=ids.clone();
         for edge in self.graph["edges"].as_array().into_iter().flatten() {
-            if edge["from"].as_str().is_some_and(|id|seeds.contains(id)) {
-                if let Some(id)=edge["to"].as_str().filter(|id| self.graph["nodes"].get(*id).is_some()) {ids.insert(id.to_owned());}
-            }
+            if edge["from"].as_str().is_some_and(|id|seeds.contains(id))
+                && let Some(id)=edge["to"].as_str().filter(|id| self.graph["nodes"].get(*id).is_some()) {ids.insert(id.to_owned());}
         }
         Ok(ids.into_iter().collect())
     }

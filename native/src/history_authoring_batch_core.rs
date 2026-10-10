@@ -189,7 +189,7 @@ pub(crate) fn prepare(
     let (doc, mut steps) = stage(&before_doc, &normalized)?;
     let mut doc = A::destination(&doc)?;
     let mut profiles = BTreeSet::new();
-    for state in map(&map(&input.state())?["subjects"])?.values() {
+    for state in map(&map(input.state())?["subjects"])?.values() {
         if let Some(h) = map(state)?.get("head") {
             let o = input.object(text(h)?)?;
             profiles.insert(text(field(map(field(map(o)?, "authored")?)?, "profile")?)?);
@@ -211,7 +211,7 @@ pub(crate) fn prepare(
                 .is_none_or(|v| *v == V::Null || *v == map(&cap).unwrap()["profile"]),
             "history_profile_migration_required",
         )?;
-        if map(&map(&input.state())?["subjects"])?.contains_key(&step.subject) {
+        if map(&map(input.state())?["subjects"])?.contains_key(&step.subject) {
             input.head(&step.subject)?;
         }
         let prior = admission_document(&doc, step)?;
@@ -277,7 +277,7 @@ pub(crate) fn prepare(
             producing.insert(step.subject.clone());
         }
     }
-    let original_states = map(&map(&input.state())?["subjects"])?;
+    let original_states = map(&map(input.state())?["subjects"])?;
     let mut versions = Map::new();
     for (name, state) in original_states {
         let state = map(state)?;

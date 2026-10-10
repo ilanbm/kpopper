@@ -936,25 +936,23 @@ pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
     let key = DECODED_DOCUMENTS.with(|slot| {
         slot.borrow().as_ref().map(|_| crate::identity::sha256(raw))
     });
-    if let Some(key) = &key {
-        if let Some(value) = DECODED_DOCUMENTS.with(|slot| {
+    if let Some(key) = &key
+        && let Some(value) = DECODED_DOCUMENTS.with(|slot| {
             slot.borrow().as_ref().and_then(|cache| cache.values.get(key).cloned())
         }) { return Ok(value); }
-    }
     let value = decode_source_document(raw)?.typed();
     if let Some(key) = key {
         let bytes = raw.len().saturating_add(compact_json_size(&value));
         let nodes = value_nodes(&value);
         DECODED_DOCUMENTS.with(|slot| {
-            if let Some(cache) = slot.borrow_mut().as_mut() {
-                if cache.bytes.saturating_add(bytes) <= 64 * 1024 * 1024
-                    && cache.nodes.saturating_add(nodes) <= 1_000_000
-                    && cache.values.len() < 4096
-                {
-                    cache.bytes += bytes;
-                    cache.nodes += nodes;
-                    cache.values.insert(key, value.clone());
-                }
+            if let Some(cache) = slot.borrow_mut().as_mut()
+                && cache.bytes.saturating_add(bytes) <= 64 * 1024 * 1024
+                && cache.nodes.saturating_add(nodes) <= 1_000_000
+                && cache.values.len() < 4096
+            {
+                cache.bytes += bytes;
+                cache.nodes += nodes;
+                cache.values.insert(key, value.clone());
             }
         });
     }

@@ -615,7 +615,7 @@ impl ImportPlan {
                         &subject,
                         &mapping,
                         exact,
-                        &options,
+                        options,
                     )?;
                     map_mut(&mut location)?.extend(Map::from([
                         ("archive_index".into(), n(&(index + 1).to_string())),
@@ -646,7 +646,7 @@ impl ImportPlan {
                         &saw,
                         &mut objects,
                         &mut locators,
-                        &options,
+                        options,
                     )?;
                     if let Some(old) = &previous_claim {
                         let mut seen = saw.clone();
@@ -659,7 +659,7 @@ impl ImportPlan {
                             &location,
                             &mut objects,
                             &mut locators,
-                            &options,
+                            options,
                         )?;
                         saw.push(text(&map(&act)?["id"])?.into());
                     }
@@ -680,7 +680,7 @@ impl ImportPlan {
                     &subject,
                     &mapping,
                     exact,
-                    &options,
+                    options,
                 )?;
                 let claim = claim(
                     &subject,
@@ -692,7 +692,7 @@ impl ImportPlan {
                     &saw,
                     &mut objects,
                     &mut locators,
-                    &options,
+                    options,
                 )?;
                 if let Some(old) = &previous_claim {
                     saw.push(text(&map(&claim)?["id"])?.into());
@@ -704,7 +704,7 @@ impl ImportPlan {
                         &location,
                         &mut objects,
                         &mut locators,
-                        &options,
+                        options,
                     )?;
                 }
             } else if let Some(old) = &previous_claim {
@@ -716,7 +716,7 @@ impl ImportPlan {
                     last_location.as_ref().unwrap(),
                     &mut objects,
                     &mut locators,
-                    &options,
+                    options,
                 )?;
             }
         }

@@ -22,7 +22,7 @@ pub(crate) struct Legacy {
     orders: BTreeMap<String, V>,
     pub decoded_bytes: usize,
 }
-thread_local! { static CACHE: RefCell<BTreeMap<String,Weak<Legacy>>> = RefCell::new(BTreeMap::new()); }
+thread_local! { static CACHE: RefCell<BTreeMap<String,Weak<Legacy>>> = const { RefCell::new(BTreeMap::new()) }; }
 pub(crate) fn kind(context: &V, kind: &str) -> bool {
     map(context)
         .ok()

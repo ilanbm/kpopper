@@ -177,7 +177,7 @@ pub(crate) fn receipt(
     let claim_id = map(&new[0])?["id"].clone();
     let versions = input.accepted_versions()?;
     let mut before = crate::history_authoring_reader::AuthoringReader::document_evidence(
-        &doc, runtime, audit, &versions,
+        doc, runtime, audit, &versions,
     )?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
@@ -196,12 +196,12 @@ pub(crate) fn receipt(
         ]),
     );
     let mut after = crate::history_authoring_reader::AuthoringReader::document_evidence(
-        &doc, runtime, audit, &versions,
+        doc, runtime, audit, &versions,
     )?;
     map_mut(&mut after)?.insert(
         "proposal".into(),
         crate::history_authoring_reader::AuthoringReader::document_evidence(
-            &hypothetical,
+            hypothetical,
             runtime,
             audit,
             &versions,
@@ -219,6 +219,6 @@ pub(crate) fn receipt(
             ("proposal", claim_id),
         ]),
     );
-    let receipt = T::semantic_receipt(text(&map(&cap)?["profile"])?, &cap, &before, &after)?;
+    let receipt = T::semantic_receipt(text(&map(cap)?["profile"])?, cap, &before, &after)?;
     Ok(receipt)
 }

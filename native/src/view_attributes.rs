@@ -443,14 +443,11 @@ fn restore_status_text(attributes: &mut Map<String, J>, rule: &J, schema: &J) ->
             let status = V::from_json(status)?;
             J::String(reasoning_projection::render_projected_status(&status)?)
         }
-        Some("uncertainty") => {
-            let uncertainty = attributes
-                .get("uncertainty")
-                .filter(|value| value.is_array())
-                .cloned()
-                .ok_or_else(|| Error("missing uncertainty array for exact alias".into()))?;
-            uncertainty
-        }
+        Some("uncertainty") => attributes
+            .get("uncertainty")
+            .filter(|value| value.is_array())
+            .cloned()
+            .ok_or_else(|| Error("missing uncertainty array for exact alias".into()))?,
         _ => return Err(Error("unsupported status_text derivation".into())),
     };
     attributes.insert("status_text".into(), restored);

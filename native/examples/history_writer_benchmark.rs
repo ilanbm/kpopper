@@ -789,7 +789,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         add_to_jsonl(&mut progress_log, &measurement)?;
         operations.push(measurement);
 
-        if completed % 25 == 0 || status != "success" || completed == args.size {
+        if completed.is_multiple_of(25) || status != "success" || completed == args.size {
             progress_log.flush()?;
             progress_log.get_ref().sync_data()?;
             checkpoint(
