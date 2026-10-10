@@ -345,7 +345,8 @@ class WorkflowCoverage(unittest.TestCase):
         self.assertEqual(set(jobs["candidate-checked"]["needs"]), set(jobs) - {"candidate-checked", "ci-required"})
         self.assertEqual(set(jobs["ci-required"]["needs"]), {"candidate-checked", "changes"})
         self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"candidate-checked", "ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]), ALL | {"platforms", "release", "promotion", "source", "validation"})
+        self.assertEqual(set(jobs["changes"]["outputs"]),
+                         ALL | {"platforms", "release", "promotion", "source", "validation", "recovery"})
         self.assertEqual({lane for lanes in CI.JOB_LANES.values() for lane in lanes}, ALL)
 
     def test_native_targets_follow_the_selector_and_start_without_waiting_for_record(self):
@@ -474,7 +475,7 @@ class NativeTestPool(unittest.TestCase):
             budgets = [job_timeout]
         else:
             per_target = re.fullmatch(
-                r"\$\{\{ matrix.target == 'darwin-x86_64' && (\d+) \|\| (\d+) \}\}", job_timeout)
+                r"\$\{\{ \(matrix.target == 'darwin-x86_64' \|\| matrix.target == 'windows-x86_64'\) && (\d+) \|\| (\d+) \}\}", job_timeout)
             self.assertIsNotNone(per_target, job_timeout)
             budgets = [int(value) for value in per_target.groups()]
         for job in budgets:

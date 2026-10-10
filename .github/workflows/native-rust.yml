@@ -61,7 +61,7 @@ jobs:
     if: inputs.validation != 'distribution'
     # Intel needs room for compilation and the full suite on slower runners.
     # Per-test deadlines still fail hangs long before this job limit.
-    timeout-minutes: ${{ matrix.target == 'darwin-x86_64' && 120 || 75 }}
+    timeout-minutes: ${{ (matrix.target == 'darwin-x86_64' || matrix.target == 'windows-x86_64') && 120 || 75 }}
     strategy:
       fail-fast: false
       matrix:
