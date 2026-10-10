@@ -13,10 +13,12 @@ use crate::{
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
+/// Inspect, rebuild or migrate a record's history, or record an explicit act on it
 #[derive(Clone, Default, clap::Args)]
 pub struct Options {
     /// status, reconcile, rebuild, or migrate. Feasibility stores accept a subject.
     pub operation: Option<String>,
+    /// Record entry to operate on instead of the workspace's.
     #[arg(long)]
     pub record: Option<PathBuf>,
     /// Absent destination directory for a verified history copy.
@@ -25,16 +27,22 @@ pub struct Options {
     /// Compatibility alias: history migrate always creates compact node history.
     #[arg(long)]
     pub node_history: bool,
+    /// How migrate reads the record; defaults to live in Advanced projects, frozen otherwise.
     #[arg(long, value_parser = ["live", "frozen"])]
     pub read_mode: Option<String>,
+    /// Entry an accept, refute, correct, propose or retire act names.
     #[arg(long)]
     pub subject: Option<String>,
+    /// Version of the subject the act is about.
     #[arg(long = "of")]
     pub target: Option<String>,
+    /// Alternative version the act replaces; repeat as needed.
     #[arg(long)]
     pub over: Vec<String>,
+    /// Why, recorded with an explicit act or with --record-proposals.
     #[arg(long)]
     pub because: Option<String>,
+    /// Recorded actor; adoption requires it, other writes default to the current agent session when present.
     #[arg(long)]
     pub by: Option<String>,
     /// Fresh challenge token for a native deployment declaration.
@@ -49,11 +57,13 @@ pub struct Options {
     /// Show adoption choices without writing.
     #[arg(long)]
     pub preview: bool,
+    /// With reconcile, record the current edits as unaccepted proposals; needs --because.
     #[arg(long)]
     pub record_proposals: bool,
     /// Exact saved accepted GROUNDING.yaml for node-history edited-file proposals.
     #[arg(long)]
     pub baseline: Option<PathBuf>,
+    /// Limit --record-proposals to this subject; repeat as needed.
     #[arg(long)]
     pub proposal_subject: Vec<String>,
 }
