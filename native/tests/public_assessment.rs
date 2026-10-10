@@ -160,12 +160,13 @@ fn unavailable_computation_and_profile_rejections_remain_explicit() {
             .contains("--as-of is available")
     );
     opts.as_of = None;
-    opts.ids = vec!["not.here".into()];
-    assert!(
-        public_assessment::report(&opts, root, ReadMode::Frozen, None)
-            .unwrap_err()
-            .0
-            .contains("unknown assessment ID")
+    opts.ids = vec!["not.here".into(), "d.work".into(), "also.gone".into()];
+    let refusal = public_assessment::report(&opts, root, ReadMode::Frozen, None)
+        .unwrap_err()
+        .0;
+    assert_eq!(
+        refusal,
+        "unknown assessment ID(s): not.here, also.gone; use open or pull to find an entry"
     );
     assert_eq!(
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),

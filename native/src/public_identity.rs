@@ -218,6 +218,33 @@ fn run_with_runtime(
     run_routed(request, cwd, runtime_override, probe, &mut false)
 }
 
+/// Refuses a record named on the command line that is not a file once a Simple project's
+/// redirect is followed: a missing one as the readers refuse it, naming it as given or the
+/// configured record in full, and a path that is there but no file as the workspace does.
+pub(crate) fn require_named_record(cwd: &Path, named: &Path, path: &Path) -> Result<()> {
+    let path = if path.parent().is_some_and(Path::is_dir) {
+        crate::project_modes::write_paths(&[path.to_path_buf()], cwd)?.remove(0)
+    } else {
+        path.to_path_buf()
+    };
+    if path.is_file() {
+        return Ok(());
+    }
+    if path.symlink_metadata().is_ok() {
+        return Err(error(&format!(
+            "{} {}",
+            public_workspace::UNREADABLE_ENTRY,
+            path.display()
+        )));
+    }
+    let named = named.to_string_lossy();
+    Err(crate::public_readers::no_record_here(
+        [named.as_ref()],
+        cwd,
+        true,
+    ))
+}
+
 fn run_routed(
     request: Request,
     cwd: &Path,
@@ -226,6 +253,12 @@ fn run_routed(
     ordinary: &mut bool,
 ) -> Result<String> {
     let cwd = cwd.canonicalize()?;
+    if let Some(named) = &request.record {
+        // A named record that is not a file is refused on stderr, as the readers refuse it.
+        *ordinary = true;
+        require_named_record(&cwd, named, &cwd.join(named))?;
+        *ordinary = false;
+    }
     let original = request
         .record
         .as_ref()
