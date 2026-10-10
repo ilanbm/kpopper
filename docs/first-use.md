@@ -33,6 +33,27 @@ CI after resolution. Read the [open merge design question](advanced-mode-merging
 [working modes](project-modes.md) when choosing how to use it. Projects without Git start
 in Simple mode; existing registered shared records keep their configured behavior.
 
+## Formatters and commit hooks
+
+Keep `GROUNDING.yaml` and `.kpopper/` out of reach of code formatters. A repository that
+runs Prettier on commit, for example through husky and lint-staged, can rewrite the record
+during the commit, changing its quoting, wrapping and indentation. The file the writer
+produced is the file the next session should read, and a history-backed record refuses hand
+edits; a formatter's rewrite looks like one.
+
+`kpop check` notes a Prettier, lint-staged or husky configuration whose `.prettierignore`
+does not list the record. In the same commit that adds the record, list both paths there:
+
+```text
+GROUNDING.yaml
+.kpopper/
+```
+
+The same `.prettierignore` also covers Prettier's format-on-save in editors. When lint-staged
+runs other tools on the staged files as well, narrow its globs so they do not match the
+record; `check` reads only `.prettierignore` and does not see those tools. A Simple-mode
+record kept outside the repository is not reached by the repository's hooks.
+
 ## Commands
 
 The first-use interface has three operations. When deferred work first arises, the agent
