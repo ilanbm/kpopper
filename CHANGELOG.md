@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.2 — 2026-10-10
+
+- Show an accepted session id in the no-intent refusals (#306) — patch
+- Check every example record's verdict in a native test (#305) — patch
+- Check that every hook manifest route reaches the native command (#304) — patch
+- Match the local check recipe to CI and keep formatters off the record (#307) — patch
+- Describe every option of export, history, answer, pending and board (#303) — patch
+
 ## 0.16.1 — 2026-10-09
 
 ### Fixed
