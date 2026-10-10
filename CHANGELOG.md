@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.16.1 — 2026-10-09
+## Unreleased
 
 ### Ongoing knowledge maintenance
 
@@ -21,6 +21,8 @@
   2 private ledger; older runtimes must be upgraded before using that ledger.
   Existing ordinary followups keep their behavior. See
   [clock and source maintenance](docs/maintenance.md).
+
+## 0.16.1 — 2026-10-09
 
 ### Fixed
 
