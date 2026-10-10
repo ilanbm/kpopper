@@ -850,10 +850,9 @@ fn failed_opening_fit_does_not_persist_replacement_selection() {
 fn deep_path_and_many_obligations_keep_executable_status_route() {
     let parent = tempfile::tempdir().unwrap();
     let mut deep = parent.path().to_path_buf();
-    // Keep the workspace path deep enough to exercise the long-route budget
-    // while remaining within the path limit supported by Windows CI.
-    // Leave room for the sibling state path and its hashed store directory,
-    // which Windows also limits to MAX_PATH in this CI environment.
+    // Windows uses a shorter path fixture. It still exercises the opening
+    // budget, executable route, and 12-obligation omission behavior, but does
+    // not qualify deep workspace or state roots.
     let path_target = if cfg!(windows) { 130 } else { 780 };
     while deep.as_os_str().len() < path_target { deep.push("nested_source_workspace_xxxxxxxxxxxxxxxxxx"); }
     fs::create_dir_all(&deep).unwrap();

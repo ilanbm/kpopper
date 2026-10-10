@@ -8,6 +8,23 @@ use std::{
     process::{Command, Output, Stdio},
 };
 use tempfile::TempDir;
+#[cfg(windows)]
+use std::collections::BTreeSet;
+
+#[cfg(windows)]
+fn collect_state_entries(root: &Path, current: &Path, entries: &mut BTreeSet<String>) {
+    for entry in fs::read_dir(current).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        let relative = path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
+        entries.insert(relative);
+        let file_type = entry.file_type().unwrap();
+        assert!(file_type.is_file() || file_type.is_dir(), "unexpected state entry: {}", path.display());
+        if file_type.is_dir() {
+            collect_state_entries(root, &path, entries);
+        }
+    }
+}
 
 fn record(workspace: &Path, state: &Path) {
     fs::write(
@@ -420,15 +437,27 @@ fn future_choice_schema_and_absent_read_only_state_are_preserved_on_reads() {
     assert!(text.contains("KPOPPER_MAINTENANCE_CHOICE"), "{text}");
     assert!(!text.contains("restore the required retained segments"), "{text}");
     // On Unix the mode bit makes the whole state directory genuinely read-only.
-    // Windows does not provide equivalent directory write protection through
-    // `Permissions::readonly`; there we still assert that reads do not create a
-    // first-use choice record.
     #[cfg(unix)]
     assert_eq!(fs::read_dir(&empty_state).unwrap().count(), 0);
     #[cfg(windows)]
-    assert!(!empty_state.join("kpopper/first-use/projects")
-        .join(kpop_native::onboarding::project_key(&workspace.canonicalize().unwrap()))
-        .join("maintenance-choice.json").exists());
+    {
+        // Windows directory readonly attributes do not block writes. Check the
+        // exact writable state produced by the hook rather than claiming this
+        // is a read-only filesystem test.
+        let key = store.root.file_name().unwrap().to_string_lossy();
+        let expected: BTreeSet<String> = [
+            "kpopper".to_owned(),
+            "kpopper/followups".to_owned(),
+            format!("kpopper/followups/{key}"),
+            format!("kpopper/followups/{key}/delivery.yaml"),
+            format!("kpopper/followups/{key}/ledger.lock"),
+        ]
+        .into_iter()
+        .collect();
+        let mut actual = BTreeSet::new();
+        collect_state_entries(&empty_state, &empty_state, &mut actual);
+        assert_eq!(actual, expected, "unexpected writable state entries under {}", empty_state.display());
+    }
 }
 
 #[cfg(unix)]

@@ -293,7 +293,7 @@ fn offset_timestamp_round_trips_preserve_native_nanosecond_precision() {
 }
 
 #[test]
-fn daily_claim_expiry_preserves_the_exact_nanosecond_boundary() {
+fn daily_claim_expiry_respects_the_microsecond_store_clock_boundary() {
     use chrono::SubsecRound;
     use kpop_native::{followup_daily, followup_store::Store};
     let now = chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00.123456789Z").unwrap().with_timezone(&Utc);

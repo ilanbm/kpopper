@@ -234,6 +234,12 @@ runners by default. External timestamp evidence keeps its supplied precision. Pe
 upgrade older runners before sharing that state. Reading a newer format does not grant
 source access or scheduling authority.
 
+Windows retention coverage includes a quarantine filename beyond `MAX_PATH` while
+its ordinary ledger path remains below that limit. Deep workspace and state-root
+paths are not currently qualified on Windows. The Windows read test checks the
+allowed state entries in a writable directory; Unix separately tests an unwritable
+directory. These are distinct coverage boundaries.
+
 A received authorized native wake may run due catchup work even when phase readback is old,
 unknown or incompatible. Its packet preserves the unknown/repair status; this does not select
 a daily fallback, acknowledge empty-run cost, change the owner or rewrite a schedule. Phase
