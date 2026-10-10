@@ -21,21 +21,28 @@ pub enum Command {
     Illustration,
     /// Inspect repository access and its target branch without granting permission.
     Inspect {
+        /// Git remote to inspect; defaults to the configured one, or the only remote.
         #[arg(long)]
         remote: Option<String>,
+        /// Target branch to inspect; defaults to the configured one.
         #[arg(long)]
         target: Option<String>,
     },
     /// Connect the exact destination approved by the project owner.
     Connect {
+        /// Git remote the owner approved.
         #[arg(long)]
         remote: String,
+        /// Push destination inspect reported for that remote; the connection is refused if it changed.
         #[arg(long)]
         repository: String,
+        /// Target branch the owner approved.
         #[arg(long)]
         target: String,
+        /// Project policy generation inspect reported; the connection is refused if it changed.
         #[arg(long)]
         generation: u64,
+        /// Confirm the owner granted standing publication permission; required.
         #[arg(long)]
         grant: bool,
     },
