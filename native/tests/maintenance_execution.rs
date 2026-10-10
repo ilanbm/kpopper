@@ -278,3 +278,43 @@ fn actual_current_matching_host_attestation_is_distinct_from_manual_completion()
         );
     }
 }
+
+#[test]
+fn offset_timestamp_round_trips_preserve_native_nanosecond_precision() {
+    use kpop_native::followup_triggers::{parse_time, stamp};
+    for text in ["2026-10-10T09:00:00.123456789Z", "2026-10-10T11:00:00.1234567+02:00", "2026-10-10T09:00:00.000000001Z", "2026-10-10T09:00:00.123456Z"] {
+        let exact = chrono::DateTime::parse_from_rfc3339(text).unwrap().with_timezone(&Utc);
+        assert_eq!(parse_time(text, "UTC").unwrap(), exact);
+        assert_eq!(parse_time(&stamp(exact), "UTC").unwrap(), exact);
+    }
+    for text in ["2026-10-10T09:00:00.1234567891Z", "2026-10-10T09:00:00.123456789", "2026-10-10T09:00:60.123456789Z"] {
+        assert!(parse_time(text, "UTC").is_err());
+    }
+}
+
+#[test]
+fn daily_claim_expiry_preserves_the_exact_nanosecond_boundary() {
+    use kpop_native::{followup_daily, followup_store::Store};
+    let now = chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00.123456789Z").unwrap().with_timezone(&Utc);
+    for offset in [-1, 0, 1] {
+        let t = tempfile::tempdir().unwrap();
+        let work = t.path().join("work");
+        fs::create_dir(&work).unwrap();
+        fs::write(work.join("PROVENANCE.yaml"), "meta: {name: Claim precision}
+known:
+  facts.count: {v: 1}
+").unwrap();
+        let state = t.path().join("state");
+        let store = Store::at_in_state(&work, &state, now).unwrap();
+        store.setup(None, "UTC", None, true).unwrap();
+        let started = followup_daily::start_with_mode(&store, "owner", |_| Ok(None), None).unwrap();
+        let expires = now + Duration::minutes(30);
+        assert_eq!(kpop_native::followup_triggers::parse_time(started["claim"]["expires_at"].as_str().unwrap(), "UTC").unwrap(), expires);
+        let boundary = Store::at_in_state(&work, &state, expires + Duration::nanoseconds(offset)).unwrap();
+        let recovered = followup_daily::recover(&boundary, "fixture://reconciled");
+        assert_eq!(recovered.is_ok(), offset >= 0);
+        if offset < 0 {
+            assert!(followup_daily::finish(&boundary, started["claim"]["token"].as_str().unwrap(), "fixture://finished").is_ok());
+        }
+    }
+}

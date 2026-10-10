@@ -351,4 +351,24 @@ mod tests {
                 "timezone":"UTC","check_time":"08:00"}}}}});
         assert_eq!(assess(&data, now)["state"], "unknown");
     }
+    #[test]
+    fn nanosecond_mode_selection_remains_readable_for_daily_start() {
+        use std::fs;
+        let t = tempfile::tempdir().unwrap();
+        let work = t.path().join("work");
+        fs::create_dir(&work).unwrap();
+        fs::write(work.join("PROVENANCE.yaml"), "meta: {name: Precision}
+    known:
+      facts.count: {v: 1}
+    ").unwrap();
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00.123456789Z").unwrap().with_timezone(&Utc);
+        let store = crate::followup_store::Store::at_in_state(&work, &t.path().join("state"), now).unwrap();
+        store.setup(None, "UTC", None, true).unwrap();
+        super::select(&store, "manual", "fixture://manual-scope", false, None).unwrap();
+        let started = crate::followup_daily::start_with_mode(&store, "owner", |_| Ok(None), Some("fixture://current-manual-grant")).unwrap();
+        assert_eq!(started["claim"]["execution_origin"], "manual");
+        let stamped = started["claim"]["started_at"].as_str().unwrap();
+        assert_eq!(crate::followup_triggers::parse_time(stamped, "UTC").unwrap(), now);
+    }
+
 }

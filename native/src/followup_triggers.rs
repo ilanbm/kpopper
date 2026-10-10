@@ -19,10 +19,12 @@ pub struct Evaluation {
 
 pub fn stamp(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(
-        if value.timestamp_subsec_micros() == 0 {
+        if value.timestamp_subsec_nanos() == 0 {
             chrono::SecondsFormat::Secs
-        } else {
+        } else if value.timestamp_subsec_nanos() % 1000 == 0 {
             chrono::SecondsFormat::Micros
+        } else {
+            chrono::SecondsFormat::Nanos
         },
         true,
     )
@@ -81,7 +83,7 @@ pub fn parse_time(value: &str, zone: &str) -> Result<DateTime<Utc>> {
     }
     static STAMP: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
         regex::Regex::new(
-        r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2})(?::([0-9]{2})(\.[0-9]{1,6})?)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap()
+        r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2})(?::([0-9]{2})(\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap()
     });
     let fields = STAMP.captures(value).ok_or_else(|| {
         Error(

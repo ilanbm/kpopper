@@ -597,6 +597,25 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
         diagnostic(&nv)
     );
     assert!(native_text.contains("\"state\":\"ready\""));
+    // Compare the complete ordinary payload separately from the intentional
+    // native maintenance extension, and require that extension even without Python.
+    let (instructions, choice_text) = native_text.split_once('\n').unwrap().1
+        .split_once("\nKPOPPER_MAINTENANCE_CHOICE ").unwrap();
+    let (native_ordinary, maintenance) = instructions
+        .split_once(" Maintenance health is local detection only; ").unwrap();
+    assert_eq!(native_ordinary, "Read the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue.");
+    assert_eq!(maintenance, "it does not fetch sources or grant permission. For material current use, run `kpop followups assess --ids ACTUAL_SUBJECT_IDS` over the actual requested subject IDs. For any answer about a covered subject, including its recorded value, disclose failed, paused, missing, overdue, stale, or unknown evidence with the actual failure reason and any known observed_at/due_at; do not replace these with a receipt date or invent facts. within_age_window is not current adequacy. Changed observation/model alignment remains pending until actual review. Source truth, applicability, authority and consumer version are separate.");
+    let mut choices = serde_json::Deserializer::from_str(choice_text).into_iter::<serde_json::Value>();
+    let choice = choices.next().unwrap().unwrap();
+    assert_eq!(choice["authorized"], false);
+    assert_eq!(choice["promotion_allowed"], true);
+    assert_eq!(choice["choice"], "proposed");
+    assert_eq!(choice["continuity_snapshot"]["current_continuity"], "unknown");
+    assert_eq!(choice["continuity_snapshot"]["source_truth"], "unassessed");
+    assert_eq!(choice["continuity_snapshot"]["record_invalidity"], "not_established");
+    assert_eq!(&choice_text[choices.byte_offset()..], format!("{}{}",
+        kpop_native::onboarding::MAINTENANCE_DISCLOSURE_POLICY,
+        kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY));
     let mut again = Command::new(env!("CARGO_BIN_EXE_kpop"))
         .args(["_hook", "followups"])
         .current_dir(&work)
@@ -660,10 +679,7 @@ fn followup_native_delivery_is_positive_on_windows_and_matches_python_where_supp
                 native_json.as_object_mut().unwrap().remove(key);
             }
             assert_eq!(native_json, python_json);
-            assert_eq!(
-                native_text.split_once('\n').unwrap().1,
-                python_text.split_once('\n').unwrap().1
-            );
+            assert_eq!(native_ordinary, python_text.split_once('\n').unwrap().1);
         }
     }
     assert_eq!(
