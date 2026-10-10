@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.1 — 2026-10-09
 
 ### Ongoing knowledge maintenance
 
@@ -27,6 +27,10 @@
 - `set` preserves long text values when adding their first `of` date. The date
   follows the complete wrapped value instead of interrupting it and causing
   `invalid_history_yaml`; existing dates, source citations and comments are preserved.
+
+### Included changes
+
+- Keep inserted dates after wrapped set values (#299)
 
 ## 0.16.0 — 2026-10-08
 
