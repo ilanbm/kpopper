@@ -1086,6 +1086,8 @@ fn set_entry(
         .split('\n')
         .map(str::to_owned)
         .collect::<Vec<_>>();
+    // A folded scalar must end before a newly inserted date field.
+    let value_end = field.start + replacement_lines.len();
     replacement_lines.extend(
         lines[field.start..field.end]
             .iter()
@@ -1107,9 +1109,8 @@ fn set_entry(
             scalar(&s(stamp), style(old_date))?
         );
     } else {
-        let insertion = field.start + 1;
         lines.insert(
-            insertion,
+            value_end,
             format!("{}of: \"{stamp}\"", " ".repeat(field.indent)),
         );
     }

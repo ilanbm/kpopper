@@ -82,7 +82,10 @@ of tooling contracts. Run them, and the record checks, before submitting:
 
 ```sh
 python -m pip install -r .github/requirements-test.txt
-python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
+python -m unittest tests.test_skills tests.test_release tests.test_ci_selection \
+  tests.test_ci_release_flow tests.test_ci_audit tests.test_native_distribution \
+  tests.test_native_release_assets tests.test_native_launcher tests.test_hook_delivery \
+  tests.test_release_candidate tests.test_release_recovery
 kpop --frozen check
 kpop --frozen consolidate --dry-run
 kpop --frozen experimental hub --verify
