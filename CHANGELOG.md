@@ -8,6 +8,8 @@
   revisited, even before followups are configured. Decline, snooze, pause and
   guidance-off suppress repeated offers while relevant missing, failed or overdue
   evidence remains visible.
+- Reader guidance directs agents to complete task-required file comparisons and
+  read other project materials within the existing authorization.
 - Explicit declarations select source scope, evidence requirements and cadence in
   whole local calendar days. Recurring checks share the existing followup ledger,
   ownership and daily task budget. Proposals do not install a schedule or grant
