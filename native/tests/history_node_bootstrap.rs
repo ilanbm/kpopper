@@ -8,7 +8,7 @@ fn fixture(root: &Path, raw: &[u8]) {
     fs::create_dir_all(root).unwrap();
     fs::write(root.join("GROUNDING.yaml"), raw).unwrap();
 }
-fn text<'a>(value: &'a V) -> &'a str {
+fn text(value: &V) -> &str {
     let V::Text(text) = value else {
         panic!("expected text")
     };

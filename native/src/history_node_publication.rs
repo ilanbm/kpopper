@@ -977,6 +977,7 @@ pub(crate) fn prepare_union(
             .collect(),
     )
 }
+#[allow(clippy::too_many_arguments)]
 fn prepare_inner(
     root: &Path,
     operation: &str,

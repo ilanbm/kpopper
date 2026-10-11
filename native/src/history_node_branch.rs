@@ -257,23 +257,20 @@ fn plan(
             .versions
             .get(&subject)
             .is_some_and(|old| old.keys().eq(versions.keys()))
+            && let Some(history) = target_history
+            && let Some(binding) = map(&history["originals"])?.get(&subject)
+            && Original::decode(binding)?.from_document(&document).is_ok()
         {
-            if let Some(history) = target_history {
-                if let Some(binding) = map(&history["originals"])?.get(&subject) {
-                    if Original::decode(binding)?.from_document(&document).is_ok() {
-                        originals.insert(subject.clone(), binding.clone());
-                        if let Some(tail) = history
-                            .get("tails")
-                            .and_then(|v| map(v).ok())
-                            .and_then(|m| m.get(&subject))
-                        {
-                            tails.insert(subject.clone(), tail.clone());
-                        }
-                        lazy.insert(subject);
-                        continue;
-                    }
-                }
+            originals.insert(subject.clone(), binding.clone());
+            if let Some(tail) = history
+                .get("tails")
+                .and_then(|v| map(v).ok())
+                .and_then(|m| m.get(&subject))
+            {
+                tails.insert(subject.clone(), tail.clone());
             }
+            lazy.insert(subject);
+            continue;
         }
         let target_physical = target.versions.contains_key(&subject)
             && !target_origins.keys().any(|(s, _)| s == &subject);
@@ -286,11 +283,11 @@ fn plan(
                 p["body"].clone(),
                 map(&p["context"])?.clone(),
             )?;
-            if let Ok(event) = original.from_document(&document) {
-                if event.id() == base.id() {
-                    originals.insert(subject.clone(), original.encode()?);
-                    lazy.insert(subject);
-                }
+            if let Ok(event) = original.from_document(&document)
+                && event.id() == base.id()
+            {
+                originals.insert(subject.clone(), original.encode()?);
+                lazy.insert(subject);
             }
         }
     }

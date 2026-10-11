@@ -510,7 +510,7 @@ fn same(
             for old in olds {
                 objects.push(act(
                     captured,
-                    captured.object(&old)?,
+                    captured.object(old)?,
                     "retire",
                     &format!("explicit alias of {survivor}"),
                     strings(vec![]),
@@ -616,7 +616,7 @@ fn distinct(
             for old in ids {
                 objects.push(act(
                     captured,
-                    captured.object(&old)?,
+                    captured.object(old)?,
                     "retire",
                     "explicit distinct metadata update",
                     strings(vec![]),

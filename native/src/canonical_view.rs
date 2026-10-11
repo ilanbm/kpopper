@@ -26,9 +26,7 @@ pub fn add_membership_details(logical: &J, packet: &mut J, requested: &[String])
     let mut dictionary = packet["dictionary"].as_object().cloned().ok_or_else(|| Error("missing membership dictionary".into()))?;
     let mut references = BTreeMap::new();
     for (alias, value) in &dictionary {
-        if value["kind"] == "node" {
-            if let Some(id) = value["original"].as_str() { references.insert(id.to_owned(), alias.clone()); }
-        }
+        if value["kind"] == "node" && let Some(id) = value["original"].as_str() { references.insert(id.to_owned(), alias.clone()); }
     }
     let mut facets = BTreeMap::<String, BTreeSet<String>>::new();
     for row in packet["navigation_facets"]["nodes"].as_array().into_iter().flatten() {
@@ -91,6 +89,9 @@ pub struct CanonicalViewRequest {
 
 /// Build a common graph packet. Every source node is represented exactly once in
 /// `nodes` or `groups`; `navigation_membership` separately retains overlapping paths.
+// `only_used_in_recursion` fires on the nested `visit` but honours only this
+// enclosing item's level, so the allow cannot move onto `visit`.
+#[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
 pub fn build(
     project: &str,
     project_identity: J,
@@ -151,6 +152,7 @@ pub fn build(
     let mut out_nodes = Vec::new();
     let mut out_groups = Vec::new();
     let mut frontier_paths = BTreeSet::new();
+    #[allow(clippy::too_many_arguments)]
     fn visit(
         path: &str,
         nodes: &BTreeMap<String, J>,
@@ -608,15 +610,14 @@ pub fn compact(packet: &J, requested_edge_sets: &[String]) -> crate::Result<J> {
             if let Some(object) = metadata.as_object_mut() {
                 // Remove copied bodies only when the ordinary JSON value converts
                 // to precisely the same typed body. Missing and null stay distinct.
-                if let Some(source_body) = object.get("body") {
-                    if V::from_json(source_body)
+                if let Some(source_body) = object.get("body")
+                    && V::from_json(source_body)
                         .and_then(|value| value.to_tagged())
                         .ok()
                         .as_ref()
                         == Some(&body)
-                    {
-                        object.remove("body");
-                    }
+                {
+                    object.remove("body");
                 }
                 if object.get("states").is_some()
                     && node.get("uncertainty").is_some()
@@ -737,11 +738,11 @@ pub fn compact(packet: &J, requested_edge_sets: &[String]) -> crate::Result<J> {
 
     let mut links = Vec::new();
     let mut handle_edges = BTreeMap::<String, Vec<J>>::new();
-    let mut edge_set_index = 0usize;
-    for ((from_ref, _rel_key, to_ref, rel_json), exact_edges) in aggregates {
+    for (edge_set_index, ((from_ref, _rel_key, to_ref, rel_json), exact_edges)) in
+        aggregates.into_iter().enumerate()
+    {
         let rel: J = serde_json::from_str(&rel_json)?;
         let alias = format!("e{edge_set_index}");
-        edge_set_index += 1;
         if handle_edges
             .insert(alias.clone(), exact_edges.clone())
             .is_some()

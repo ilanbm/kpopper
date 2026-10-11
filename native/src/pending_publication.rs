@@ -84,10 +84,9 @@ fn legacy_owned_evidence(bundle: &pending_state::Bundle, name: &str) -> Result<b
         Some(format!("commits/{name}"))
     } else if let Some(name) = name.strip_prefix(".kpopper/history/") {
         Some(format!("objects/{name}"))
-    } else if let Some(name) = name.strip_prefix(".kpopper/history-cancellations/") {
-        Some(format!("cancellations/{name}"))
     } else {
-        None
+        name.strip_prefix(".kpopper/history-cancellations/")
+            .map(|name| format!("cancellations/{name}"))
     };
     Ok(member.is_some_and(|member| {
         bundle

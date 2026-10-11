@@ -36,22 +36,21 @@ fn local(root: &Path, relative: &str) -> Option<Vec<u8>> {
 pub(crate) fn accepted(root: &Path) -> Result<Vec<u8>> {
     let valid = |raw: &[u8]| P::capture_edited_snapshot(root, raw).is_ok();
     for relative in [PATH, "GROUNDING.yaml"] {
-        if let Some(raw) = local(root, relative) {
-            if valid(&raw) {
-                return Ok(raw);
-            }
+        if let Some(raw) = local(root, relative)
+            && valid(&raw)
+        {
+            return Ok(raw);
         }
     }
     if let Ok(prefix) = crate::history_branch_git::git(root, &["rev-parse", "--show-prefix"], 4096)
+        && let Ok(prefix) = std::str::from_utf8(&prefix)
     {
-        if let Ok(prefix) = std::str::from_utf8(&prefix) {
-            let path = format!("{}GROUNDING.yaml", prefix.trim_end_matches('\n'));
-            for revision in [format!(":{path}"), format!("HEAD:{path}")] {
-                if let Ok(raw) = crate::history_branch_git::git(root, &["show", &revision], LIMIT) {
-                    if valid(&raw) {
-                        return Ok(raw);
-                    }
-                }
+        let path = format!("{}GROUNDING.yaml", prefix.trim_end_matches('\n'));
+        for revision in [format!(":{path}"), format!("HEAD:{path}")] {
+            if let Ok(raw) = crate::history_branch_git::git(root, &["show", &revision], LIMIT)
+                && valid(&raw)
+            {
+                return Ok(raw);
             }
         }
     }
