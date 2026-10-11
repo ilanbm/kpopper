@@ -399,7 +399,10 @@ fn d0_attention_overflow_falls_back_and_durable_disable_rolls_back() {
     ok(Command::new(env!("CARGO_BIN_EXE_kpop")).args(["--workspace",root.to_str().unwrap(),"session","disable"])
         .env("KPOPPER_SESSION_CONFIG",root.join("settings.json")).output().unwrap());
     let text=ok(d0_start(&root,"codex",&[]));
-    assert!(d0_route(&text).is_none() && !text.contains("unavailable"),"{text}");
+    assert!(d0_route(&text).is_none(),"{text}");
+    // Instruction prose can discuss unavailable material without reporting a failure.
+    assert!(!text.lines().any(|line| line.starts_with("Canonical default unavailable:")
+        || line.starts_with("Checked session view unavailable:")),"{text}");
     let explicit=ok(d0_start(&root,"codex",&[("KPOPPER_CANONICAL_VIEW","1")]));
     assert!(d0_route(&explicit).is_some(),"{explicit}");
 }
