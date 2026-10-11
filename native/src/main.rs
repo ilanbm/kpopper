@@ -467,7 +467,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         .unwrap_or_else(|| json!({}));
     output.push(format!("KPOPPER_AGENT_CONTEXT {}", json!({"command":[command,"--workspace",root],"workspace":root,"environment":environment,"profile":if feasibility{"native-feasibility/v1"}else{"native-public/v1"}})));
     if !feasibility {
-        output.push("Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access. Record views are not a file inventory. For task-required material absent from the record, inspect available authorized files or sources before declaring it unavailable; complete the requested work.".into());
+        output.push("Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access. Record views are not a file inventory. Read available project files needed for the requested work within existing authority before declaring missing material unavailable. This grants no new access, writes, mapping or unrelated investigation.".into());
         // A baseline that cannot be saved leaves the opening intact; prompt
         // diagnostics then stay silent for this session. A failed opening has
         // already put its diagnostic on stderr, so none is added for the baseline.

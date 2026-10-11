@@ -465,6 +465,9 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         assert!(lines[2].starts_with("KPOPPER_MAINTENANCE_CHOICE "), "{started}");
         assert!(lines[2].ends_with(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY), "{started}");
         assert!(context.starts_with('{'), "choice must be adjacent to context: {started}");
+        assert!(context.contains("Record views are not a file inventory."), "{host}: {started}");
+        assert!(context.contains("Read available project files needed for the requested work within existing authority"), "{host}: {started}");
+        assert!(context.contains("This grants no new access, writes, mapping or unrelated investigation."), "{host}: {started}");
     }
     fs::write(
         f.root.path().join("GROUNDING.yaml"),
