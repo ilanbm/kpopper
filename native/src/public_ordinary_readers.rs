@@ -298,6 +298,7 @@ pub struct Projection<'a> {
     unread_failures: Vec<String>,
     pub(crate) disputed: BTreeMap<String, Vec<(String, V)>>,
     pub(crate) knowledge: Vec<String>,
+    formatter: Option<String>,
 }
 
 /// Stable data needed by the session stop gate.  This deliberately excludes
@@ -664,8 +665,19 @@ impl<'a> Projection<'a> {
             unread_failures,
             disputed,
             knowledge,
+            formatter: None,
         })
     }
+
+    /// Carry the workspace's formatter warning for the record at `record` into `check`.
+    /// This copy's readers (the Stop gate, watch, consolidation) read FAIL and MOVED
+    /// lines only, so no command sets it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn with_formatter_notice(mut self, record: &std::path::Path) -> Self {
+        self.formatter = crate::formatter_notice::notice(record);
+        self
+    }
+
     fn every(&self) -> BTreeSet<String> {
         self.base
             .reader
@@ -2558,6 +2570,7 @@ impl Projection<'_> {
                 }
             }
         }
+        note.extend(self.formatter.clone());
         fail.extend(self.unread_failures.clone());
         let mut lines = vec![];
         lines.extend(note.iter().map(|line| format!("NOTE {line}")));
@@ -2911,6 +2924,29 @@ mod tests {
                 Projection::new(&document, &Map::new(), &Map::new(), vec![], None).unwrap();
             assert_eq!(projection.check(None).unwrap().0, reference);
         }
+    }
+    #[test]
+    fn a_formatter_in_the_workspace_is_noted_like_the_reader_check() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join(".prettierrc"), "{}").unwrap();
+        let document = crate::history_yaml::decode_document(b"known:\n  x.one: {v: 1}\n").unwrap();
+        let projection = || Projection::new(&document, &Map::new(), &Map::new(), vec![], None);
+        assert_eq!(
+            projection().unwrap().check(None).unwrap().0,
+            "\n0 judgments, 1 entries, 0 problems\n"
+        );
+        let noted = projection()
+            .unwrap()
+            .with_formatter_notice(&root.path().join("GROUNDING.yaml"))
+            .check(None)
+            .unwrap();
+        assert_eq!(
+            noted,
+            (
+                "NOTE formatter: .prettierrc is present and .prettierignore does not list GROUNDING.yaml - a pre-commit formatter may rewrite the record; add GROUNDING.yaml and .kpopper/ to .prettierignore\n\n0 judgments, 1 entries, 0 problems, 1 declared\n".into(),
+                0
+            )
+        );
     }
     #[test]
     fn conditions_read_through_the_evaluator_match_the_python_reference() {

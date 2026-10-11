@@ -12,6 +12,9 @@ kpop experimental hub --verify
 kpop experimental hub --open
 ```
 
+Besides checking the page, `--verify` reports which session requests the **Now** tab serves
+and how many of the entries those sessions wrote it picks.
+
 On the **Now** tab, hover over the heating conclusion to see its premises, condition and
 reasoning. Click the conclusion to pin the card, then follow `heat.deficit_kw` and
 `heat.boiler_kw` to reach the boiler-output reading in two steps. The card names

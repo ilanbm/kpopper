@@ -28,6 +28,9 @@ VERSION_FILES = {
     ".claude-plugin/plugin.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".codex-plugin/plugin.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".claude-plugin/marketplace.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
+    "adapters/gemini/gemini-extension.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
+    # the CI example pins one release; the version appears once and both lines read it
+    "docs/coding-and-ci.md": (re.compile(r'KPOPPER_VERSION: (\d+\.\d+\.\d+)'), 'KPOPPER_VERSION: {v}'),
 }
 BUMPS = ("patch", "minor", "major")
 BUMP_LINE = re.compile(r"^\s*bump\s*:\s*(patch|minor|major)\b", re.I | re.M)

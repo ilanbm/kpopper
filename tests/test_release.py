@@ -38,10 +38,27 @@ class TheReleaseLine(unittest.TestCase):
         self.assertEqual(set(found), {
             "VERSION", "native/Cargo.toml", "native/Cargo.lock",
             ".claude-plugin/plugin.json", ".codex-plugin/plugin.json",
-            ".claude-plugin/marketplace.json",
+            ".claude-plugin/marketplace.json", "adapters/gemini/gemini-extension.json",
+            "docs/coding-and-ci.md",
         })
         self.assertNotIn("pyproject.toml", R.VERSION_FILES)
         self.assertNotIn("package.json", R.VERSION_FILES)
+
+    def test_every_tracked_manifest_with_a_release_version_is_registered(self):
+        # A manifest the registry misses keeps its old number through every release.
+        # An integer "version" (a hook file's schema version) is not a release version.
+        tracked = subprocess.run(
+            ["git", "ls-files", "--", ".claude-plugin", ".codex-plugin", "adapters"],
+            cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+        manifests = set()
+        for name in tracked:
+            if not name.endswith(".json") or pathlib.PurePosixPath(name).name == "package.json":
+                continue
+            data = json.loads((ROOT / name).read_text(encoding="utf-8"))
+            if isinstance(data, dict) and isinstance(data.get("version"), str):
+                manifests.add(name)
+        self.assertIn("adapters/gemini/gemini-extension.json", manifests)
+        self.assertEqual(manifests - set(R.VERSION_FILES), set())
 
     def test_with_version_changes_only_native_root_versions(self):
         texts = R.read_texts()

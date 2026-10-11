@@ -82,7 +82,10 @@ of tooling contracts. Run them, and the record checks, before submitting:
 
 ```sh
 python -m pip install -r .github/requirements-test.txt
-python -m unittest tests.test_skills tests.test_release tests.test_ci_selection
+python -m unittest tests.test_skills tests.test_release tests.test_ci_selection \
+  tests.test_ci_release_flow tests.test_ci_audit tests.test_native_distribution \
+  tests.test_native_release_assets tests.test_native_launcher tests.test_hook_delivery \
+  tests.test_release_candidate tests.test_release_recovery
 kpop --frozen check
 kpop --frozen consolidate --dry-run
 kpop --frozen experimental hub --verify
@@ -93,6 +96,14 @@ Read the measurement recipes before running `kpop --frozen remeasure --run`; the
 [measurement checks](#record-and-measurement-checks) below explain what executes.
 Optional runtimes may skip tests locally. Changes to them need their documented setup and
 the corresponding CI job; skips are not proof that the integration passes.
+
+For a reviewed series confined to public reader behavior, a maintainer can apply the
+`ci:reader-checks` PR label before pushing. This keeps the record and tooling contracts,
+runs native unit and reader integration tests plus branch-reference parity on Linux, and
+skips distribution builds. Unknown files, dependencies and packaging changes retain full
+validation. The label does not reduce release-candidate checks or a manual full diagnostic
+run. Run the complete combined change through full validation before release; the focused
+profile is not platform or distribution acceptance.
 
 For changes to the checked session, follow the full [checked-session setup](docs/checked-sessions.md)
 and use the toolchain pinned in `scripts/session/lean/lean-toolchain`. Without a matching

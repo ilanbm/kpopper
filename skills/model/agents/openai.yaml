@@ -1,0 +1,4 @@
+interface:
+  display_name: "Model Plugins"
+  short_description: "Create source-grounded model plugins"
+  default_prompt: "Use $model to turn these sources into a native knowledge model plugin."

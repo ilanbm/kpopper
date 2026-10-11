@@ -252,6 +252,77 @@ fn set_replaces_source_citation_in_the_same_guarded_write() {
 }
 
 #[test]
+fn set_preserves_wrapped_text_when_adding_or_refreshing_date() {
+    let values = [
+        format!("{}word", "word ".repeat(18)),
+        "word ".repeat(50).trim().to_owned(),
+        "a".repeat(120),
+        "שלום \"quoted\" \\path ".repeat(12).trim().to_owned(),
+    ];
+    for field in ["v", "quoted"] {
+        for old_date in ["", "    of: \"2026-10-07\"\n"] {
+            for value in &values {
+                let temp = tempfile::tempdir().unwrap();
+                let root = temp.path().canonicalize().unwrap();
+                let entry = root.join("GROUNDING.yaml");
+                let before = format!(
+                    "meta:\n  updated: \"2026-10-07\"\nknown:\n  p.x:\n    name: \"a value\"\n    {field}: \"short\"\n{old_date}    # retained comment\n    note: \"keep me\"\n  p.other:\n    v: 7\n"
+                );
+                write(&entry, before.as_bytes());
+                success(run(
+                    &root,
+                    &["set", "p.x", value, "--as-of", "2026-10-08", "GROUNDING.yaml"],
+                ));
+                let after = fs::read_to_string(&entry).unwrap();
+                let parsed = kpop_native::history_yaml::decode_document(after.as_bytes())
+                    .unwrap()
+                    .to_json()
+                    .unwrap();
+                assert_eq!(parsed["known"]["p.x"][field], value.as_str());
+                assert_eq!(parsed["known"]["p.x"]["of"], "2026-10-08");
+                assert_eq!(parsed["known"]["p.x"]["name"], "a value");
+                assert_eq!(parsed["known"]["p.x"]["note"], "keep me");
+                assert_eq!(parsed["known"]["p.other"]["v"], 7);
+                assert_eq!(parsed["meta"]["updated"], "2026-10-08");
+                assert_eq!(after.matches("# retained comment").count(), 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn set_wrapped_text_keeps_new_date_reason_and_source_outside_the_value() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let entry = root.join("GROUNDING.yaml");
+    let before = String::from_utf8(fixture("source-before.yaml"))
+        .unwrap()
+        .replace("    of: 2026-09-01\n", "");
+    write(&entry, before.as_bytes());
+    let value = "a longer sourced observation ".repeat(10).trim().to_owned();
+    success(run(
+        &root,
+        &[
+            "set", "p.input", &value, "--source", "s.new", "--at", "page-2",
+            "--why", "corrected observation", "--as-of", "2026-09-19", "GROUNDING.yaml",
+        ],
+    ));
+    let after = fs::read_to_string(&entry).unwrap();
+    let kpop_native::value::TypedValue::Map(parsed) =
+        kpop_native::history_yaml::decode_document(after.as_bytes()).unwrap()
+    else {
+        panic!("expected a record mapping");
+    };
+    let known = parsed["known"].to_json().unwrap();
+    assert_eq!(known["p.input"]["v"], value);
+    assert_eq!(known["p.input"]["of"], "2026-09-19");
+    assert_eq!(known["p.input"]["from"], "s.new");
+    assert_eq!(known["p.input"]["at"], "page-2");
+    assert!(after.contains("    # set 2026-09-19: corrected observation\n"));
+    success(run(&root, &["check", "GROUNDING.yaml"]));
+}
+
+#[test]
 fn same_day_contradiction_is_refused_without_a_byte_change() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();

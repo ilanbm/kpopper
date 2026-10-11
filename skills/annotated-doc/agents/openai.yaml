@@ -1,0 +1,4 @@
+interface:
+  display_name: "Annotated Documents"
+  short_description: "Experimental: share a standalone HTML document backed by its evidence"
+  default_prompt: "Use $annotated-doc to write a standalone HTML document with its evidence."

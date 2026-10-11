@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-29
+  updated: 2026-10-06
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -8271,6 +8271,17 @@ sources:
     at: "CI and merge API observations plus retained local acceptance and timing receipts"
     of: "2026-09-18"
     read: "2026-09-18"
+    fidelity: quoted
+  s.release_renumbering:
+    name: "Earlier GitHub releases renumbered into the 0.x series"
+    url: "https://github.com/ilanbm/kpopper/releases"
+    at: "Release notes of v0.6.0, v0.7.0, v0.8.0 and v0.8.1, and the repository's remote tags"
+    of: "Originally published as 1.6.0; renumbered 0.6.0 when the release series returned to 0.x
+         ahead of 1.0. The attached Python packages keep the version they were built with, 1.6.0.
+         (The v0.7.0, v0.8.0 and v0.8.1 notes say the same for 1.7.0, 1.8.0 and 1.8.1.) Tags v0.6.0,
+         v0.7.0, v0.8.0 and v0.8.1 point at e28bd50, 5acfd0f, f480ea6 and 46368fa; no v1.x tag
+         remains, and 0.15.1 is Latest."
+    read: "2026-10-06"
     fidelity: quoted
   s.representation_evolution_contract:
     name: "Guarded stored-to-derived representation contract"

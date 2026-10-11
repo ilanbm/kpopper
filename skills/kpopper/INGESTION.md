@@ -77,17 +77,29 @@ for the compact handoff and delivery confirmation; no routine receipt needs a pr
 same envelope idempotent; reusing it with different content is refused. Otherwise a fresh ID is
 assigned. `session_id` is provenance metadata, never permission to send messages to another task.
 
-When the target or meaning is unresolved, preserve the quote without inventing a mapping:
+When the meaning of a reading is unresolved, preserve the quote without inventing a mapping.
+Name the stored entry the quote is about and the value as read, and put the doubt in
+`question` with `kind: question`:
 
 ```json
 {
-  "source_quote": "The cheque has not been deposited.",
-  "question": "Does this refer to cheque A or cheque B?"
+  "event_id": "stock-report-2026-09-10-1",
+  "date": "2026-09-10",
+  "source_quote": "Six packages are on the shelf, counting the returned ones.",
+  "target": "stock.packages",
+  "value": 6,
+  "kind": "question",
+  "question": "Do returned packages count as completed stock?"
 }
 ```
 
-This stays as a captured report needing a decision. No fact is guessed or overwritten. This
-version does not invoke a language model to infer missing identity, intent, time, or relationships.
+This is retained as `needs_primary` (exit 1) with a signal carrying the question and the
+target. No fact is guessed or overwritten: the record is untouched until the primary
+decides. The writer retains only a complete report. An envelope without `date`, `target`
+and `value` is refused as an invalid request (exit 2) and nothing is kept, so when you
+cannot name the entry or read a value, keep the quote and the question yourself and raise
+them with the primary. This version does not invoke a language model to infer missing
+identity, intent, time, or relationships.
 
 A type or representation refusal is a decision for the primary, not an invitation to
 cast the submitted value. Follow [live representation evolution](EVOLUTION.md): inspect

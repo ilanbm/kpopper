@@ -1,0 +1,4 @@
+interface:
+  display_name: "kpopper Hub"
+  short_description: "Experimental: explore the knowledge record as a visual page"
+  default_prompt: "Use $hub to build this project's kpopper Hub page."

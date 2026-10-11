@@ -1,0 +1,40 @@
+[package]
+name = "kpopper-model-package"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Build and run isolated native kpopper model plugins"
+publish = false
+
+[lib]
+name = "kpop_model"
+
+[[bin]]
+name = "kpop-model"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+sha2 = "0.10"
+tempfile = "3"
+fs2 = "0.4"
+tar = "0.4"
+flate2 = "1"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", features = ["signal", "process"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# Integrity checks hash the complete native distribution in focused tests too.
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.test.package.sha2]
+opt-level = 3

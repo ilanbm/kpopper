@@ -358,7 +358,7 @@ fn rank(
     semantic: Option<&dyn SemanticProvider>,
 ) -> Result<Ranked> {
     if request.query.chars().count() > 8_000 {
-        return Err(error("query must be at most8000 characters"));
+        return Err(error("query must be at most 8000 characters"));
     }
     let supplied_ids = request.ids.as_deref().unwrap_or(&[]);
     if supplied_ids.len() > 64
@@ -367,11 +367,11 @@ fn rank(
             .any(|id| id.is_empty() || id.chars().count() > 500)
     {
         return Err(error(
-            "ids must contain at most64 nonempty identifier strings of at most500 characters",
+            "ids must contain at most 64 nonempty identifier strings of at most 500 characters",
         ));
     }
     if !(1..=32).contains(&request.limit) {
-        return Err(error("limit must be1..32"));
+        return Err(error("limit must be 1..32"));
     }
     if offset > nodes.len() {
         return Err(error("invalid search cursor offset"));

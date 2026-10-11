@@ -54,20 +54,28 @@ impl Default for Options {
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct CommandOptions {
+    /// Entry IDs to start the excerpt from, 1 to 8.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<String>,
+    /// Read this record instead of discovering the workspace's; repeat for more inputs.
     #[arg(long = "record")]
     pub records: Vec<std::path::PathBuf>,
+    /// Markdown text, Markdown with an appended Mermaid diagram, or diagram source only.
     #[arg(long, value_enum, default_value = "markdown")]
     pub format: Format,
+    /// Follow recorded links outward to what the IDs rest on, or backward to what rests on them.
     #[arg(long, value_enum, default_value = "support")]
     pub direction: Direction,
+    /// Links to follow from the IDs, 0 to 4.
     #[arg(long, default_value_t = 1)]
     pub depth: usize,
+    /// Most entries in the excerpt, 1 to 32, counting the IDs themselves.
     #[arg(long, default_value_t = 12)]
     pub max_nodes: usize,
+    /// Add each selected entry's original recorded fields; text formats only.
     #[arg(long)]
     pub details: bool,
+    /// Read the record with the core reasoning profile; the record itself is not changed.
     #[arg(long, value_parser = ["core/v1"])]
     pub profile: Option<String>,
 }

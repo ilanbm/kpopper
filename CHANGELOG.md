@@ -1,14 +1,45 @@
 # Changelog
 
-## Unreleased
+## 0.16.1 — 2026-10-09
+
+### Fixed
+
+- `set` preserves long text values when adding their first `of` date. The date
+  follows the complete wrapped value instead of interrupting it and causing
+  `invalid_history_yaml`; existing dates, source citations and comments are preserved.
+
+### Included changes
+
+- Keep inserted dates after wrapped set values (#299)
+
+## 0.16.0 — 2026-10-08
+
+### Native model plugins
+
+- Added an opt-in `model` skill and native `kpop-model` companion for packaging
+  a committed knowledge model, its source/history closure and domain skill as
+  an installable plugin. Read/query models use the shared reader without custom
+  application code; dated case applications can provide a native adapter.
+- Generated bundles include a pinned complete engine, validate the model before
+  publishing the output directory, and prepare private verified generations on
+  explicit setup. Updates, rollback and damaged-cache recovery preserve model
+  identity and keep case writes out of the canonical model and project record.
+- Initial support is local Codex on macOS ARM64 with kpopper 0.15.1. Consumers
+  need no Python or compiler. Source checkouts still need the qualified prebuilt
+  companion and engine to generate a bundle; project storage and hooks remain
+  unchanged. See [Create a reusable model plugin](docs/model-plugins.md).
 
 ### Documentation
 
+- The README separates using knowledge to support project work from building a
+  reusable knowledge model as the product. Both paths share installation and link
+  to their next steps; the guide defines a living knowledge model and distinguishes
+  complete models from reading excerpts.
 - Expanded the [living knowledge model guide](docs/living-knowledge-models.md) to
   cover an application-owned model bundle alongside an optional project record,
   explicit project/model selection and ephemeral case data. It describes an
-  application pattern using existing operations, not a general package or runtime
-  security contract. The flight example is a reading excerpt with synthetic
+  application pattern using existing operations, with the optional native plugin
+  companion providing packaging. The public flight example is a reading excerpt with synthetic
   results; it is not a standalone runnable model or a complete account of rights.
 
 ### Conversation freshness
@@ -48,6 +79,33 @@
 - Skill guidance uses **kpopper** in ordinary conversation. Fully qualified skill
   names such as `kpopper:ground` are reserved for invocation instructions,
   technical documentation, debugging and explanations of a specific skill.
+
+### Included changes
+
+- Finish Windows release checks and bind reused workflow evidence (#301)
+- Verify release test reuse after a Windows fixture correction (#295)
+- Stabilize Windows transient-publisher test scheduling (#294)
+- Add native packaging for reusable knowledge models (#281)
+- Clarify project work and reusable knowledge models in the README (#279)
+- Warn when formatters may rewrite the record (#292)
+- Record evidence for release renumbering (#282)
+- Name checked recovery for conflicted records (#291)
+- Show pending knowledge in ordinary branch comparisons (#289)
+- Report unavailable record paths consistently (#283)
+- Add focused CI for reviewed reader changes (#293)
+- Pin check and release workflow actions to commit SHAs (#290)
+- Keep Gemini and CI example versions aligned with releases (#285)
+- Check CLI references in skills and documentation (#280)
+- Cover the launchers' Windows, Linux, hosted and unknown-hook paths (#288)
+- Give the greenhouse example's page brief a tab that serves its sessions (#287)
+- Add Codex listing metadata for every canonical skill (#286)
+- Describe the question report the ingestion writer retains (#284)
+- Refresh the flight example source after history cleanup (#278)
+- Document separate decision models and project knowledge (#277)
+- Refresh changed conversation evidence before the next answer (#271)
+- Use kpopper as the product name in conversation (#274)
+
+Decisions recorded: decision.source_refresh_before_answer
 
 ## 0.15.1 — 2026-10-01
 
