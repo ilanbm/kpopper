@@ -310,10 +310,10 @@ impl CheckedSession {
         // Include immediate support without mistaking external endpoints for nodes.
         let seeds = ids.clone();
         for edge in &self.edges {
-            if edge["from"].as_str().is_some_and(|id| seeds.contains(id)) {
-                if let Some(id) = edge["to"].as_str().filter(|id| self.nodes.contains_key(*id)) {
-                    ids.insert(id.to_owned());
-                }
+            if edge["from"].as_str().is_some_and(|id| seeds.contains(id))
+                && let Some(id) = edge["to"].as_str().filter(|id| self.nodes.contains_key(*id))
+            {
+                ids.insert(id.to_owned());
             }
         }
         Ok(ids.into_iter().collect())
@@ -1265,17 +1265,17 @@ where
 {
     budget(options.tokens)?;
     require(revision == graph.revision, graph.revision_error)?;
-    require(options.depth <= 4, "context depth must be0..4")?;
+    require(options.depth <= 4, "context depth must be 0..4")?;
     require(
         (1..=64).contains(&options.max_nodes),
-        "context max_nodes must be1..64",
+        "context max_nodes must be 1..64",
     )?;
     require(
         (1..=8).contains(&ids.len())
             && ids
                 .iter()
                 .all(|n| !n.is_empty() && n.chars().count() <= 500),
-        "context requires1..8 nonempty node IDs or node: references of at most500 characters",
+        "context requires 1..8 nonempty node IDs or node: references of at most 500 characters",
     )?;
     let mut seeds = Vec::new();
     for reference in ids {
