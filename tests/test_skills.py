@@ -196,6 +196,16 @@ class Community(unittest.TestCase):
             with self.subTest(file=name):
                 self.assertEqual(local_link_errors(path.read_text(encoding="utf-8"), path, ROOT), [])
 
+    def test_contributing_runs_the_contract_modules_ci_runs(self):
+        workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "check.yml").read_text(encoding="utf-8"))
+        step = next(step for step in workflow["jobs"]["record"]["steps"]
+                    if step.get("name", "").startswith("Check skill/release contracts"))
+        guide = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        blocks = "\n".join(re.findall(r"^```sh\n(.*?)^```", guide, re.M | re.S))
+        command = re.search(r"^python -m unittest((?:\\\n|[^\n])*)", blocks, re.M).group(1)
+        modules = lambda text: sorted(re.findall(r"\btests\.\w+", text))
+        self.assertEqual(modules(command), modules(step["run"]))
+
     def test_living_knowledge_model_guide_links_resolve(self):
         path = ROOT / "docs" / "living-knowledge-models.md"
         self.assertEqual(local_link_errors(path.read_text(encoding="utf-8"), path, ROOT), [])

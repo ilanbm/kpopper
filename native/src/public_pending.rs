@@ -55,44 +55,57 @@ pub enum Command {
 
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct StatusOptions {
+    /// Also check the pending revisions against the publication remote.
     #[arg(long)]
     pub verify: bool,
 }
 
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct PublishOptions {
+    /// Permit this one cycle to push and open or update the pull request without standing permission.
     #[arg(long)]
     pub authorize: bool,
+    /// Attempt now even while a failure backoff is in effect.
     #[arg(long)]
     pub retry: bool,
 }
 
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct ConfigureOptions {
+    /// Git remote to publish through; required the first time, then kept.
     #[arg(long)]
     pub remote: Option<String>,
+    /// Branch the pull request targets; required the first time, then kept.
     #[arg(long)]
     pub target: Option<String>,
+    /// Managed branch that carries the pending contributions; defaults to pending_grounding.
     #[arg(long)]
     pub branch: Option<String>,
+    /// Grant standing permission to publish to this scope without --authorize.
     #[arg(long, conflicts_with = "revoke")]
     pub grant: bool,
+    /// Revoke standing publication permission.
     #[arg(long, conflicts_with = "grant")]
     pub revoke: bool,
 }
 
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct ControlOptions {
+    /// Captured immutable revisions the decision applies to; withdraw and reject need at least one.
     pub revisions: Vec<String>,
+    /// Why, kept with the decision; withdraw and reject need one.
     #[arg(long, default_value = "")]
     pub reason: String,
 }
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct SupersedeOptions {
+    /// Captured immutable revisions to supersede; at least one.
     pub revisions: Vec<String>,
+    /// Why, kept with the decision; required.
     #[arg(long, default_value = "")]
     pub reason: String,
+    /// A different captured revision that replaces them.
     #[arg(long)]
     pub replacement: String,
 }

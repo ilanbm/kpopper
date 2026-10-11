@@ -775,7 +775,7 @@ pub fn gate_with_recording_context(
                     )
                 } else {
                     format!(
-                        "this session wrote {} {} ({names}) and recorded no intent: add s.<date>_<slug> asked=\"...\" name=\"...\", and from: it on what it wrote",
+                        "this session wrote {} {} ({names}) and recorded no intent: add s.2026_10_05_slug asked=\"...\" name=\"...\" (the id takes underscores, not hyphens), and from: it on what it wrote",
                         new.len(),
                         if new.len() == 1 { "entry" } else { "entries" }
                     )
@@ -788,7 +788,7 @@ pub fn gate_with_recording_context(
                         )
                     } else {
                         format!(
-                            "this session wrote 1 entry ({id}) and recorded no intent: add s.<date>_<slug> asked=\"...\" name=\"...\", and from: it on what it wrote"
+                            "this session wrote 1 entry ({id}) and recorded no intent: add s.2026_10_05_slug asked=\"...\" name=\"...\" (the id takes underscores, not hyphens), and from: it on what it wrote"
                         )
                     };
                     issues.push(Issue {
