@@ -279,7 +279,11 @@ fn migrate(
     _read_mode: Option<&str>,
 ) -> Result<Value> {
     let record = match record {
-        Some(record) => expanded_path(cwd, record)?,
+        Some(named) => {
+            let record = expanded_path(cwd, named)?;
+            crate::public_identity::require_named_record(cwd, named, &record)?;
+            record
+        }
         None => crate::public_workspace::records(cwd)?
             .into_iter()
             .next()
