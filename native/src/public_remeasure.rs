@@ -884,7 +884,14 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         None => Some(record.display().to_string()),
     };
     let observed_day = utc_day();
-    let runtime = public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None)?;
+    // a record that does not parse is told as every reader tells it: the diagnostic alone
+    let runtime =
+        match public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None) {
+            Err(error) if crate::ordinary_yaml_diagnostic::explains_record(&error) => {
+                return Ok(refusal(error.0));
+            }
+            runtime => runtime?,
+        };
     let capture = match source_capture::capture_ordinary_source_with_runtime(
         std::slice::from_ref(&record),
         cwd,
@@ -901,6 +908,9 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
                 "{}: no record here. Run this from the directory the record sits in, or name the record file as an argument.",
                 spelled.as_deref().unwrap_or("GROUNDING.yaml")
             )));
+        }
+        Err(error) if crate::ordinary_yaml_diagnostic::explains_record(&error) => {
+            return Ok(refusal(error.0));
         }
         capture => capture?,
     };
