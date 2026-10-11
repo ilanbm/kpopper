@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install kpopper
         env:
-          KPOPPER_VERSION: 0.16.1
+          KPOPPER_VERSION: 0.16.2
         run: |
           curl -fsSL -o install.sh \
             "https://github.com/ilanbm/kpopper/releases/download/v$KPOPPER_VERSION/install.sh"
