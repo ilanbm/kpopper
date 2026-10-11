@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.16.2 — 2026-10-11
+
+- Make the native crate pass its documented clippy check (#298) — patch
+- Refuse a hub brief that is named but missing (#300) — patch
+- Tell a record that is not valid YAML the same way on remeasure (#302) — patch
+- Space the numbers in context and search limit refusals (#308) — patch
+- Show an accepted session id in the no-intent refusals (#306) — patch
+- Check every example record's verdict in a native test (#305) — patch
+- Check that every hook manifest route reaches the native command (#304) — patch
+- Match the local check recipe to CI and keep formatters off the record (#307) — patch
+- Describe every option of export, history, answer, pending and board (#303) — patch
+
 ## 0.16.1 — 2026-10-09
 
 ### Fixed
