@@ -18,6 +18,7 @@ pub mod direct_history;
 mod followup_core;
 pub mod followup_store;
 pub mod followup_triggers;
+pub mod maintenance_contract;
 mod formatter_notice;
 pub mod history_activation;
 mod history_activation_verify;
@@ -257,6 +258,8 @@ pub mod public_session;
 
 pub mod application_cli;
 pub mod followup_daily;
+mod maintenance_wake;
+mod maintenance_assessment;
 pub mod history_contribution_adoption;
 pub(crate) mod history_contribution_prepare;
 pub mod public_expressions;

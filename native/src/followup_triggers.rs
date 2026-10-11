@@ -19,10 +19,12 @@ pub struct Evaluation {
 
 pub fn stamp(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(
-        if value.timestamp_subsec_micros() == 0 {
+        if value.timestamp_subsec_nanos() == 0 {
             chrono::SecondsFormat::Secs
-        } else {
+        } else if value.timestamp_subsec_nanos() % 1000 == 0 {
             chrono::SecondsFormat::Micros
+        } else {
+            chrono::SecondsFormat::Nanos
         },
         true,
     )
@@ -81,7 +83,7 @@ pub fn parse_time(value: &str, zone: &str) -> Result<DateTime<Utc>> {
     }
     static STAMP: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
         regex::Regex::new(
-        r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2})(?::([0-9]{2})(\.[0-9]{1,6})?)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap()
+        r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2})(?::([0-9]{2})(\.[0-9]{1,9})?)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap()
     });
     let fields = STAMP.captures(value).ok_or_else(|| {
         Error(
@@ -122,6 +124,20 @@ fn text(value: &Value, label: &str) -> Result<String> {
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| Error(format!("{label} must be a nonempty string")))?;
     Ok(value.to_owned())
+}
+
+pub(crate) fn extended_timestamp(value: &Value) -> bool {
+    value.as_str().is_some_and(|value| {
+        parse_time(value, "UTC").is_ok()
+            && value.split_once('.').is_some_and(|(_, fraction)| {
+                fraction.bytes().take_while(u8::is_ascii_digit).count() > 6
+            })
+    })
+}
+
+pub(crate) fn extended_trigger_timestamps(trigger: &Value) -> bool {
+    walk(trigger).is_ok_and(|parts| parts.iter().any(|(kind, value, _)|
+        *kind == "at" && extended_timestamp(value)))
 }
 
 fn walk(root: &Value) -> Result<Vec<(&str, &Value, String)>> {

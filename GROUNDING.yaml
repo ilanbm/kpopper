@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-10-06
+  updated: 2026-10-09
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -109,14 +109,14 @@ known:
     of: "2026-09-10"
   followups.maintenance_scope:
     name: "What graph maintenance currently selects"
-    v: "The packet returns at most one flagged item: legacy judgments, or core nodes and history
-        subjects with attention, reserved support or unavailable readings. Source refresh and
-        open-question work remain permitted by the agent prompt, without a general source-age or
-        worktree-graph sweep."
+    v: "The daily packet retains its at-most-one flagged judgment review suggestion. Explicit source
+        and clock checks share the three daily followup task slots and rearm by their declared local
+        calendar-day cadence. Ordinary discovery can propose a scoped check before a policy exists;
+        it neither registers policy nor establishes consent or successful refresh."
     # set 2026-09-18: Core followup scans now project independent captured findings.
-    from: s.core_followups_contract
-    at: "project; scripts/followups.py Store.scan; scripts/followup_daily.py plan"
-    of: "2026-09-18"
+    from: s.maintenance_contract
+    at: "Maintenance declarations, daily coordination and current-use assessment"
+    of: "2026-10-08"
   followups.outcome_retention:
     name: "What completion preserves"
     v: "Attempt outcomes and evidence remain in the private followup ledger. Finishing a task does
@@ -3698,6 +3698,54 @@ judgments:
       m.reach.local_checked_held: 83
       m.reach.local_assumed_held: 25
       m.reach.assumed_at_high_confidence: 0
+  d.maintenance_notice_keeps_source_access:
+    name: "Maintenance notices preserve access to their underlying record"
+    verdict: "Keep a usable exact route for reading the source and its safety instructions ahead of
+              optional maintenance prose. When detailed maintenance state exceeds the opening
+              allowance, expose the incomplete summary and require the authoritative status or scoped
+              assessment before material use."
+    because: "Many checks or long saved evidence can exceed a fixed opening allowance. Deferring
+              details must preserve their existence and availability, keep missing information
+              unknown, and never turn a failed presentation into persisted replacement state,
+              scheduling consent or evidence of freshness."
+    rests_on: [d.maintenance_reuses_followups, s.maintenance_opening_bounds]
+    reopened_by: "An accepted bounded opening loses a usable source route or instruction to treat
+                  source content as data; required maintenance details cannot be read without setup
+                  or side effects; an unknown count becomes zero; or failed fitting changes
+                  continuation replacement state."
+    seen:
+      d.maintenance_reuses_followups: "Use the existing followup ledger for recurring source and
+                                       clock checks, with explicit policy and truthful scoped
+                                       continuity."
+      s.maintenance_opening_bounds: "read 2026-10-09"
+  d.maintenance_reuses_followups:
+    name: "Recurring checks preserve followup authority and evidence boundaries"
+    verdict: "Use the existing followup ledger for recurring source and clock checks, with explicit
+              policy and truthful scoped continuity."
+    because: "One ledger retains ownership, budget, recurrence and failure history. Configuration,
+              reported execution, guarded observation and accepted knowledge are separate states, so
+              neither a due task nor a recent source observation can silently authorize or validate a
+              conclusion."
+    rests_on: [followups.maintenance_scope, followups.installation_evidence, d.followups_readiness_is_not_authority, s.maintenance_contract]
+    reopened_by: "A supported enabled reader presents declared missing, failed or expired source
+                  evidence as current; an offer creates policy or a host job without authority; or
+                  source inspection marks an unchanged dependent conclusion accepted without its
+                  actual review."
+    seen:
+      followups.maintenance_scope: "The daily packet retains its at-most-one flagged judgment review
+                                    suggestion. Explicit source and clock checks share the three
+                                    daily followup task slots and rearm by their declared local
+                                    calendar-day cadence. Ordinary discovery can propose a scoped
+                                    check before a policy exists; it neither registers policy nor
+                                    establishes consent or successful refresh."
+      followups.installation_evidence: "Matching host configuration readback confirms installation.
+                                        The installer explicitly leaves first-run verification false;
+                                        a real scheduled wake needs separate runtime evidence."
+      d.followups_readiness_is_not_authority: "A due trigger and a claim select work to consider or
+                                               perform within existing authorization; they do not
+                                               authorize additional effects or silently review
+                                               conclusions."
+      s.maintenance_contract: "read 2026-10-08"
   d.measure_names_a_recipe:
     rests_on: [s.2026_09_04_remeasure, m.remeasure.stale_green, run.page_move_three_states, d.record_is_code, p.recipe_runners]
     verdict: "an entry whose value is a fact about the tree names its recipe with measure: - a bare
@@ -7916,6 +7964,21 @@ sources:
     of: "Source reading, paraphrased: the timeline places K-pop in the broader history of Korean
          popular music and describes the emergence of Seo Taiji and Boys as a cultural turning point
          in the 1992-1996 period. It explicitly says the timeline is not exhaustive."
+  s.maintenance_contract:
+    name: "Clock and source maintenance contract"
+    file: "docs/maintenance.md"
+    read: "2026-10-08"
+    revision: "8e27c6242958c4e762174c2f641cd7aa5b01115d"
+    of: "Explicit recurring declarations, source attestations, adoption choices and current-use
+         adequacy."
+  s.maintenance_opening_bounds:
+    name: "Bounded maintenance notice and source access contract"
+    file: "native/src/onboarding.rs"
+    read: "2026-10-09"
+    revision: "99333d55452029997621dc66d1e3bf58d33c350f"
+    at: "Canonical maintenance summary and required status drilldown;
+         native/src/view_continuation.rs fit before persistence; native/src/followup_daily.rs
+         read-only status."
   s.native_authoring_envelopes:
     name: "Native semantic authoring conformance"
     from: s.2026_09_19_native_snapshot_continuation

@@ -44,27 +44,34 @@ kpop expressions convert --predicate --readable
 kpop expressions migrate --apply --destination= --profile= --readable --record=
 kpop followups
 kpop followups add --file=
-kpop followups claim --daily-token= --occurrence= --owner=
+kpop followups assess --claim-token= --ids=
+kpop followups attempt --file=
+kpop followups claim --current-use-authority= --daily-token= --occurrence= --owner=
+kpop followups compile --file=
 kpop followups daily
+kpop followups daily adoption --evidence= --until=
 kpop followups daily bind --file=
 kpop followups daily finish --evidence= --token=
 kpop followups daily install --check --fail= --inspect= --owner= --private --reconcile= --result= --resume --store= --time= --timezone= --token= --unchanged
+kpop followups daily mode --acknowledge-empty-run-cost --authorization-evidence= --file=
 kpop followups daily plan --time=
 kpop followups daily recover --evidence=
 kpop followups daily renew --token=
-kpop followups daily start --owner=
+kpop followups daily start --host-execution= --manual-evidence= --owner=
 kpop followups daily status
-kpop followups finish --evidence= --next-at= --outcome= --token=
+kpop followups finish --authorization-evidence= --evidence= --next-at= --outcome= --token=
+kpop followups inspect --file=
 kpop followups list
 kpop followups observe --file=
 kpop followups recover --evidence=
-kpop followups refresh --evidence= --file=
+kpop followups refresh --authorization-evidence= --evidence= --file=
 kpop followups release --evidence= --token=
-kpop followups relocate --evidence= --record=
+kpop followups relocate --authorization-evidence= --evidence= --record=
 kpop followups renew --token=
-kpop followups resolve --evidence= --outcome=
+kpop followups resolve --authorization-evidence= --evidence= --outcome=
 kpop followups restore --backup= --evidence=
 kpop followups resume --evidence=
+kpop followups review-source --authorization-evidence= --evidence= --outcome=
 kpop followups scan --limit=
 kpop followups setup --private --record= --store= --timezone=
 kpop followups show

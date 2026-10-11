@@ -221,8 +221,10 @@ fn timestamp_grammar_and_age_bounds_match_python() {
     ] {
         assert_eq!(T::stamp(T::parse_time(input, zone).unwrap()), expected);
     }
+    // Native 7–9-digit evidence is an intentional extension covered separately
+    // by maintenance_execution; the shared legacy grammar above stays unchanged.
     for bad in [
-        "2026-09-10T12:00:00.123456789Z",
+        "2026-09-10T12:00:00.1234567891Z",
         "2027-01-01T09:00:60Z",
         "0000-01-01",
     ] {
@@ -293,7 +295,7 @@ fn writes_keep_float_types_and_refuse_invalid_times_and_unbounded_ages() {
         "5e57da58a961618b3b0b5a51b8e4d809a358fa263855de3df953676064ab22a5"
     );
     let before = fs::read(&store.path).unwrap();
-    assert!(store.observe(json!({"ref":"bad","value":true,"observed_at":"2026-09-19T12:00:00.123456789Z","evidence":"bad timestamp"})).is_err());
+    assert!(store.observe(json!({"ref":"bad","value":true,"observed_at":"2026-09-19T12:00:00.1234567891Z","evidence":"bad timestamp"})).is_err());
     let bad = json!({"id":"bad","title":"Bad age","why":"test","how":"inspect","scope":"Read only","related":["p.x"],"when":{"external":{"ref":"large","equals":true,"max_age_hours":1e18}}});
     assert_eq!(store.add(bad).unwrap_err().0, "max_age_hours is too large");
     assert_eq!(fs::read(&store.path).unwrap(), before);

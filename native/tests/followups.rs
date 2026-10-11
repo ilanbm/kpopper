@@ -44,6 +44,456 @@ fn fixture() -> (
     (temp, workspace, state, now)
 }
 
+#[test]
+fn maintenance_metadata_is_consumed_by_the_local_followup_add_path() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let added = store.add(proposal["spec"].clone()).unwrap();
+
+    assert!(
+        added["spec"]["maintenance"]["consent_digest"]
+            .as_str()
+            .is_some()
+    );
+    assert_eq!(
+        store.show("source-refresh").unwrap()["spec"]["maintenance"]["cadence_days"],
+        3
+    );
+    assert!(store.add(added["spec"].clone()).is_err());
+}
+
+fn source_declaration() -> Value {
+    json!({
+        "schema":"kpopper.maintenance-declaration/v1",
+        "kind":"source",
+        "id":"source-refresh",
+        "title":"Refresh the report",
+        "why":"Keep the source evidence current.",
+        "how":"Inspect the selected report and retain its result.",
+        "scope":"Inspect the report and report material changes.",
+        "related":["facts.count"],
+        "cadence_days":3,
+        "timezone":"Europe/Prague", "check_time":"09:00", "use_policy":"allow_cached_until_expiry", "evidence_requirement":"host_attested",
+        "first_due_at":"2026-09-10T12:00:00Z",
+        "source":{
+            "source_id":"quarterly-report",
+            "locator":"https://example.test/report",
+            "publisher":"Example publisher",
+            "selection":"Latest issued report",
+            "adapter":"host-read/v1",
+            "evidence_format":"text", "tool_policy":"read-only selected host source tool", "allowed_roots":["https://example.test/"],
+            "max_age_hours":72.0
+        }
+    })
+}
+
+#[test]
+fn maintenance_compiler_proposes_local_inspection_without_copying_authority() {
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let proposed = &proposal["spec"];
+    assert_eq!(proposal["unresolved"], json!(["authorization"]));
+    assert_eq!(proposed["when"], json!({"at":"2026-09-10T12:00:00Z"}));
+    assert_eq!(proposed["maintenance"]["cadence_days"], 3);
+    assert_eq!(proposed["maintenance"]["max_age_hours"], 72.0);
+    assert!(proposed["maintenance"]["consent_digest"].is_null());
+    assert_ne!(
+        proposed["maintenance"]["inspection_digest"],
+        proposed["maintenance"]["policy_digest"]
+    );
+    assert!(
+        kpop_native::followup_triggers::referenced_external(&proposed["when"])
+            .unwrap()
+            .is_empty()
+    );
+
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let added = store.add(proposed.clone()).unwrap();
+    assert!(
+        added["spec"]["maintenance"]["consent_digest"]
+            .as_str()
+            .is_some()
+    );
+    assert_ne!(
+        added["spec"]["maintenance"]["consent_digest"],
+        proposed["maintenance"]["inspection_digest"]
+    );
+    let mut changed_cadence = source_declaration();
+    changed_cadence["cadence_days"] = json!(7);
+    let changed = kpop_native::maintenance_contract::compile(&changed_cadence).unwrap();
+    assert_eq!(
+        changed["spec"]["maintenance"]["inspection_digest"],
+        proposed["maintenance"]["inspection_digest"]
+    );
+    assert_ne!(
+        changed["spec"]["maintenance"]["policy_digest"],
+        proposed["maintenance"]["policy_digest"]
+    );
+    let mut copied_authority = source_declaration();
+    copied_authority["consent_digest"] = json!(added["spec"]["maintenance"]["consent_digest"]);
+    assert!(kpop_native::maintenance_contract::compile(&copied_authority).is_err());
+}
+
+#[test]
+fn maintenance_compiler_reports_missing_age_and_rejects_non_day_cadence() {
+    let mut declaration = source_declaration();
+    declaration["source"]
+        .as_object_mut()
+        .unwrap()
+        .remove("max_age_hours");
+    let missing_age = kpop_native::maintenance_contract::compile(&declaration).unwrap();
+    assert!(missing_age["spec"].is_null());
+    assert!(
+        missing_age["unresolved"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("source.max_age_hours"))
+    );
+
+    declaration = source_declaration();
+    declaration["cadence_days"] = json!(1.5);
+    let invalid_cadence = kpop_native::maintenance_contract::compile(&declaration).unwrap();
+    assert!(invalid_cadence["spec"].is_null());
+    assert!(
+        invalid_cadence["unresolved"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("cadence_days"))
+    );
+}
+
+#[test]
+fn maintenance_inspection_retains_success_after_a_failed_attempt() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let item = store.add(proposal["spec"].clone()).unwrap();
+    let mut report = json!({"id":"source-refresh", "policy_digest":item["spec"]["maintenance"]["policy_digest"],
+        "source_ref":item["spec"]["maintenance"]["source_ref"], "evidence":"fixture://inspection", "reason":"source unavailable"});
+    store.record_maintenance_attempt(report.clone()).unwrap();
+    report.as_object_mut().unwrap().remove("reason");
+    report["inspected_at"] = json!("2026-09-10T11:59:00+00:00");
+    report["value"] = json!({"revision":"accepted"});
+    report["inspection"] = item["spec"]["maintenance"]["inspection"].clone();
+    let result = store.inspect_maintenance(report).unwrap();
+    assert_eq!(result["outcome"], "observed");
+    let shown = store.show("source-refresh").unwrap();
+    let attempt = shown["attempts"].as_array().unwrap().last().unwrap();
+    assert_eq!(attempt["outcome"], "observed");
+    assert_eq!(attempt["receipt_at"], "2026-09-10T12:00:00Z");
+    assert!(attempt["observation_digest"].as_str().is_some());
+}
+
+#[test]
+fn maintenance_add_acknowledgement_is_bound_to_its_workspace() {
+    let (_a, workspace_a, state_a, now) = fixture();
+    let (_b, workspace_b, state_b, _) = fixture();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let a = Store::at_in_state(&workspace_a, &state_a, now)
+        .unwrap()
+        .add(proposal["spec"].clone())
+        .unwrap();
+    let b = Store::at_in_state(&workspace_b, &state_b, now)
+        .unwrap()
+        .add(proposal["spec"].clone())
+        .unwrap();
+    assert_ne!(
+        a["spec"]["maintenance"]["consent_digest"],
+        b["spec"]["maintenance"]["consent_digest"]
+    );
+}
+
+#[test]
+fn maintenance_inspection_refuses_a_changed_task_until_explicit_refresh() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let item = store.add(proposal["spec"].clone()).unwrap();
+    fs::write(
+        item["task"].as_str().unwrap(),
+        "Changed selected inspection scope",
+    )
+    .unwrap();
+    let report = json!({"id":"source-refresh", "policy_digest":item["spec"]["maintenance"]["policy_digest"],
+        "source_ref":item["spec"]["maintenance"]["source_ref"], "evidence":"fixture://changed-task",
+        "inspected_at":"2026-09-10T11:59:00Z", "value":{"revision":"new"}});
+    assert!(store.inspect_maintenance(report).is_err());
+    assert!(
+        store.load(true).unwrap().unwrap()["observations"]
+            .as_object()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn maintenance_inspection_identity_and_use_inputs_are_explicit() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    assert_eq!(
+        proposal["spec"]["maintenance"]["inspection"]["locator"],
+        "https://example.test/report"
+    );
+    let mut tampered = proposal["spec"].clone();
+    tampered["maintenance"]["inspection"]["selection"] = json!("Different report");
+    assert!(store.add(tampered).is_err());
+    let mut missing = source_declaration();
+    missing.as_object_mut().unwrap().remove("use_policy");
+    let unresolved = kpop_native::maintenance_contract::compile(&missing).unwrap();
+    assert!(unresolved["spec"].is_null());
+    assert!(
+        unresolved["unresolved"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("use_policy"))
+    );
+}
+
+#[test]
+fn maintenance_refresh_preserves_compatible_evidence_and_requires_scope_reference() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let first = store.add(proposal["spec"].clone()).unwrap();
+    let mut cadence = source_declaration();
+    cadence["cadence_days"] = json!(2);
+    let next = kpop_native::maintenance_contract::compile(&cadence).unwrap();
+    let changed = store
+        .refresh(
+            "source-refresh",
+            next["spec"].clone(),
+            "fixture://selected-cadence",
+        )
+        .unwrap();
+    assert_eq!(
+        changed["spec"]["maintenance"]["source_ref"],
+        first["spec"]["maintenance"]["source_ref"]
+    );
+    assert_ne!(
+        changed["spec"]["maintenance"]["policy_digest"],
+        first["spec"]["maintenance"]["policy_digest"]
+    );
+    cadence["source"]["locator"] = json!("https://another.example.test/report");
+    let outside = kpop_native::maintenance_contract::compile(&cadence).unwrap();
+    assert!(
+        store
+            .refresh(
+                "source-refresh",
+                outside["spec"].clone(),
+                "fixture://source-reread"
+            )
+            .is_err()
+    );
+    let authorized = store
+        .refresh_with_authority(
+            "source-refresh",
+            outside["spec"].clone(),
+            "fixture://source-reread",
+            Some("fixture://existing-user-grant"),
+        )
+        .unwrap();
+    assert_ne!(
+        authorized["spec"]["maintenance"]["source_ref"],
+        first["spec"]["maintenance"]["source_ref"]
+    );
+    assert_eq!(
+        authorized["attempts"].as_array().unwrap().last().unwrap()["authorization_reference"],
+        "fixture://existing-user-grant"
+    );
+}
+
+#[test]
+fn maintenance_wrong_selection_is_unavailable_and_preserves_success() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let item = store.add(proposal["spec"].clone()).unwrap();
+    let mut report = json!({"id":"source-refresh", "policy_digest":item["spec"]["maintenance"]["policy_digest"],
+        "source_ref":item["spec"]["maintenance"]["source_ref"], "inspection":item["spec"]["maintenance"]["inspection"],
+        "evidence":"fixture://selected-source", "inspected_at":"2026-09-10T11:59:00Z", "value":{"revision":"accepted"}});
+    store.inspect_maintenance(report.clone()).unwrap();
+    let before = store.load(true).unwrap().unwrap()["observations"].clone();
+    report["inspection"]["locator"] = json!("https://wrong.example.test/report");
+    report["value"] = json!({"revision":"wrong-source"});
+    let result = store.inspect_maintenance(report.clone()).unwrap();
+    assert_eq!(result["outcome"], "unavailable");
+    assert_eq!(store.load(true).unwrap().unwrap()["observations"], before);
+    report["inspection"] = item["spec"]["maintenance"]["inspection"].clone();
+    report["inspected_at"] = json!("2026-09-10T12:01:00Z");
+    let future = store.inspect_maintenance(report).unwrap();
+    assert_eq!(future["outcome"], "unavailable");
+    assert!(
+        future["attempt"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("future")
+    );
+    assert_eq!(store.load(true).unwrap().unwrap()["observations"], before);
+}
+
+#[test]
+fn maintenance_inspection_refusal_records_failure_without_replacing_success() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    let item = store.add(proposal["spec"].clone()).unwrap();
+    let metadata = &item["spec"]["maintenance"];
+    let source_ref = metadata["source_ref"].as_str().unwrap();
+    let policy_digest = metadata["policy_digest"].as_str().unwrap();
+    store
+        .inspect_maintenance(json!({
+            "id":"source-refresh", "policy_digest":policy_digest, "source_ref":source_ref,
+            "inspection":metadata["inspection"],
+            "value":{"revision":"accepted"},
+            "inspected_at":"2026-09-10T12:00:00Z",
+            "evidence":"evidence://accepted"
+        }))
+        .unwrap();
+
+    let result = store
+        .inspect_maintenance(json!({
+            "id":"source-refresh",
+            "policy_digest":policy_digest,
+            "source_ref":source_ref,
+            "inspection":metadata["inspection"],
+            "inspected_at":"2026-09-10T11:59:00Z",
+            "evidence":"evidence://older-copy",
+            "value":{"revision":"older"}
+        }))
+        .unwrap();
+
+    assert_eq!(result["outcome"], "unavailable");
+    assert_eq!(
+        store.load(true).unwrap().unwrap()["observations"][source_ref]["value"]["revision"],
+        "accepted"
+    );
+    let attempts = store.show("source-refresh").unwrap()["attempts"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(attempts.last().unwrap()["outcome"], "unavailable");
+    assert_eq!(
+        attempts.last().unwrap()["receipt_at"],
+        "2026-09-10T12:00:00Z"
+    );
+    assert!(
+        attempts.last().unwrap()["reason"]
+            .as_str()
+            .unwrap()
+            .contains("older")
+    );
+}
+
+#[test]
+fn legacy_followup_specs_without_maintenance_metadata_still_roundtrip() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let original = spec(json!({"external":{"ref":"legacy-source","equals":"current"}}));
+    let added = store.add(original.clone()).unwrap();
+    assert_eq!(added["spec"], original);
+    assert!(
+        store.show("review").unwrap()["spec"]
+            .get("maintenance")
+            .is_none()
+    );
+    assert_eq!(store.load(true).unwrap().unwrap()["version"], 1);
+}
+
+#[test]
+fn maintenance_compile_and_attempt_are_reachable_through_the_followups_cli() {
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("project");
+    let state = temp.path().join("state");
+    fs::create_dir(&workspace).unwrap();
+    record(&workspace, 1);
+    let binary = env!("CARGO_BIN_EXE_kpop");
+    let invoke = |arguments: &[&str]| {
+        Command::new(binary)
+            .env("HOME", temp.path())
+            .env("XDG_STATE_HOME", &state)
+            .args(["--workspace", workspace.to_str().unwrap(), "followups"])
+            .args(arguments)
+            .output()
+            .unwrap()
+    };
+    let declaration = temp.path().join("declaration.json");
+    fs::write(
+        &declaration,
+        serde_json::to_vec(&source_declaration()).unwrap(),
+    )
+    .unwrap();
+    let compiled = invoke(&["compile", "--file", declaration.to_str().unwrap()]);
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let compiled: Value = serde_json::from_slice(&compiled.stdout).unwrap();
+    assert!(compiled["spec"]["maintenance"]["consent_digest"].is_null());
+    assert_eq!(
+        compiled["spec"]["task"],
+        json!(declaration.canonicalize().unwrap())
+    );
+
+    let now = Utc::now();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    store.setup(None, "UTC", None, true).unwrap();
+    let item = store.add(compiled["spec"].clone()).unwrap();
+    let attempt = temp.path().join("attempt.json");
+    fs::write(
+        &attempt,
+        serde_json::to_vec(&json!({
+            "id":"source-refresh",
+            "policy_digest":item["spec"]["maintenance"]["policy_digest"],
+            "source_ref":item["spec"]["maintenance"]["source_ref"],
+            "evidence":"evidence://unavailable",
+            "reason":"The local inspection tool could not read the source."
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let result = invoke(&["attempt", "--file", attempt.to_str().unwrap()]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&result.stdout).unwrap()["outcome"],
+        "unavailable"
+    );
+    assert_eq!(
+        store.show("source-refresh").unwrap()["attempts"][0]["outcome"],
+        "unavailable"
+    );
+    // Even a whitespace-only authorized declaration edit requires the native
+    // refresh receipt, without requesting the same source permission again.
+    let mut bytes = fs::read(&declaration).unwrap();
+    bytes.push(b' ');
+    fs::write(&declaration, bytes).unwrap();
+    assert!(
+        !invoke(&["attempt", "--file", attempt.to_str().unwrap()])
+            .status
+            .success()
+    );
+    let refreshed = invoke(&["compile", "--file", declaration.to_str().unwrap()]);
+    let refreshed: Value = serde_json::from_slice(&refreshed.stdout).unwrap();
+    store
+        .refresh(
+            "source-refresh",
+            refreshed["spec"].clone(),
+            "fixture://authorized-innocuous-reread",
+        )
+        .unwrap();
+    assert!(
+        invoke(&["attempt", "--file", attempt.to_str().unwrap()])
+            .status
+            .success()
+    );
+}
+
 fn row(scan: &Value) -> &Value {
     &scan["items"][0]
 }
@@ -392,4 +842,372 @@ fn real_cli_uses_disposable_state_and_keeps_status_record_independent() {
         true
     );
     assert!(!invoke(&["daily", "install"]).status.success());
+}
+
+#[test]
+fn maintenance_ref_cannot_be_overwritten_by_legacy_observe_even_after_closure() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let added = store
+        .add(
+            kpop_native::maintenance_contract::compile(&source_declaration()).unwrap()["spec"]
+                .clone(),
+        )
+        .unwrap();
+    let observation = json!({"ref":added["spec"]["maintenance"]["source_ref"],"value":"forged", "observed_at":"2026-09-10T12:00:00Z", "evidence":"fixture://forged"});
+    assert!(store.observe(observation.clone()).is_err());
+    store
+        .resolve_with_authority(
+            "source-refresh",
+            "cancelled",
+            "fixture://user-closed",
+            Some("fixture://user-authority"),
+        )
+        .unwrap();
+    assert!(store.observe(observation).is_err());
+    store.observe(json!({"ref":"unrelated-legacy", "value":"ok", "observed_at":"2026-09-10T12:00:00Z", "evidence":"fixture://legacy"})).unwrap();
+}
+
+#[test]
+fn maintenance_inspection_records_limited_assurance_without_current_use_verdict() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let mut declaration = source_declaration();
+    declaration["use_policy"] = json!("require_live");
+    declaration["evidence_requirement"] = json!("trusted_origin");
+    let added = store
+        .add(kpop_native::maintenance_contract::compile(&declaration).unwrap()["spec"].clone())
+        .unwrap();
+    let m = &added["spec"]["maintenance"];
+    let result = store.inspect_maintenance(json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "inspection":m["inspection"], "inspected_at":"2016-01-01T00:00:00Z", "value":"old", "evidence":"fixture://old"})).unwrap();
+    assert_eq!(result["outcome"], "observed");
+    assert_eq!(result["attempt"]["assurance"]["recording"], "host_attested");
+    assert_eq!(result["attempt"]["assurance"]["requirement_met"], false);
+    assert_eq!(
+        result["attempt"]["assurance"]["current_use_adequacy"],
+        "unassessed"
+    );
+}
+
+#[test]
+fn maintenance_refresh_records_authority_for_weaker_policy_identity_and_owner() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let original = source_declaration();
+    let initial = kpop_native::maintenance_contract::compile(&original).unwrap()["spec"].clone();
+    store.add(initial.clone()).unwrap();
+    for change in ["cadence", "age", "identity", "owner"] {
+        let mut d = original.clone();
+        match change {
+            "cadence" => d["cadence_days"] = json!(36500),
+            "age" => d["source"]["max_age_hours"] = json!(24000),
+            "identity" => d["source"]["source_id"] = json!("other-source"),
+            _ => {}
+        }
+        let mut spec = kpop_native::maintenance_contract::compile(&d).unwrap()["spec"].clone();
+        if change == "owner" {
+            spec["executor"] = json!("some-other-agent");
+        }
+        assert!(
+            store
+                .refresh("source-refresh", spec.clone(), "fixture://reread")
+                .is_err(),
+            "{change}"
+        );
+        let recorded = store
+            .refresh_with_authority(
+                "source-refresh",
+                spec,
+                "fixture://reread",
+                Some("fixture://standing-user-grant"),
+            )
+            .unwrap();
+        assert_eq!(
+            recorded["attempts"].as_array().unwrap().last().unwrap()["authorization_reference"],
+            "fixture://standing-user-grant"
+        );
+        store
+            .refresh_with_authority(
+                "source-refresh",
+                initial.clone(),
+                "fixture://restore-selection",
+                Some("fixture://standing-user-grant"),
+            )
+            .unwrap();
+    }
+    let mut removed = initial.clone();
+    removed.as_object_mut().unwrap().remove("maintenance");
+    assert!(
+        store
+            .refresh("source-refresh", removed.clone(), "fixture://remove")
+            .is_err()
+    );
+    store
+        .refresh_with_authority(
+            "source-refresh",
+            removed,
+            "fixture://remove",
+            Some("fixture://standing-user-grant"),
+        )
+        .unwrap();
+    assert_eq!(store.load(true).unwrap().unwrap()["version"], 2);
+    assert!(store.observe(json!({"ref":initial["maintenance"]["source_ref"], "value":"forged", "observed_at":"2026-09-10T12:00:00Z", "evidence":"fixture://forged-after-removal"})).is_err());
+}
+
+#[test]
+fn recurring_attempts_keep_bounded_hot_history_and_immutable_recoverable_segments() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let item = store
+        .add(
+            kpop_native::maintenance_contract::compile(&source_declaration()).unwrap()["spec"]
+                .clone(),
+        )
+        .unwrap();
+    let m = &item["spec"]["maintenance"];
+    let report = json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "evidence":"fixture://success", "value":"current", "inspection":m["inspection"], "inspected_at":"2026-09-10T12:00:00Z"});
+    let mut oversized = report.clone();
+    oversized["evidence"] = json!("x".repeat(513));
+    assert!(store.inspect_maintenance(oversized).is_err());
+    for _ in 0..1002 {
+        store.inspect_maintenance(report.clone()).unwrap();
+    }
+    let data = store.load(true).unwrap().unwrap();
+    assert!(
+        data["items"]["source-refresh"]["attempts"]
+            .as_array()
+            .unwrap()
+            .len()
+            <= 66
+    );
+    assert!(fs::metadata(&store.path).unwrap().len() < 100000);
+    let mut head = data["items"]["source-refresh"]["attempt_archive"].clone();
+    let mut count = data["items"]["source-refresh"]["attempts"]
+        .as_array()
+        .unwrap()
+        .len();
+    let mut first_bytes = None;
+    while let Some(hash) = head.as_str() {
+        let path = store
+            .root
+            .join("attempt-history")
+            .join(format!("{hash}.json"));
+        let bytes = fs::read(&path).unwrap();
+        let segment = parse_input(&bytes).unwrap();
+        assert_eq!(kpop_native::followup_store::digest(&segment).unwrap(), hash);
+        count += segment["attempts"].as_array().unwrap().len();
+        first_bytes = Some((path, bytes));
+        head = segment["previous"].clone();
+    }
+    assert_eq!(count, 1002);
+    store.inspect_maintenance(report).unwrap();
+    let (path, bytes) = first_bytes.unwrap();
+    assert_eq!(fs::read(path).unwrap(), bytes);
+    let success = store.inspect_maintenance(json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "inspection":m["inspection"], "value":"current", "inspected_at":"2026-09-10T12:00:00Z", "evidence":"fixture://success"})).unwrap();
+    assert_eq!(success["outcome"], "observed");
+    store.add(spec(json!({"manual":"unrelated"}))).unwrap();
+}
+
+#[test]
+fn maintenance_metadata_v1_digest_is_frozen() {
+    let proposal = kpop_native::maintenance_contract::compile(&source_declaration()).unwrap();
+    assert_eq!(
+        proposal["spec"]["maintenance"]["policy_digest"],
+        "2755611dcd8553e866aab3a3c3ba285f2afc4cac683bc1bd4434267427945641"
+    );
+}
+
+#[test]
+fn archived_finish_requests_remain_idempotent_and_missing_history_is_explicit() {
+    let (_temp, workspace, state, now) = fixture();
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let item = store
+        .add(
+            kpop_native::maintenance_contract::compile(&source_declaration()).unwrap()["spec"]
+                .clone(),
+        )
+        .unwrap();
+    let ready = store.scan(20).unwrap();
+    let occurrence = ready["items"][0]["occurrence"].as_str().unwrap();
+    let claimed = store
+        .claim("source-refresh", occurrence, "test-host", None)
+        .unwrap();
+    let token = claimed["claim"]["token"].as_str().unwrap();
+    store
+        .finish(
+            "source-refresh",
+            token,
+            "released",
+            "fixture://released",
+            None,
+        )
+        .unwrap();
+    let m = &item["spec"]["maintenance"];
+    for _ in 0..80 {
+        store.inspect_maintenance(json!({"id":"source-refresh", "policy_digest":m["policy_digest"], "source_ref":m["source_ref"], "evidence":"fixture://success", "value":"current", "inspection":m["inspection"], "inspected_at":"2026-09-10T12:00:00Z"})).unwrap();
+    }
+    assert_eq!(
+        store
+            .finish(
+                "source-refresh",
+                token,
+                "released",
+                "fixture://released",
+                None
+            )
+            .unwrap()["already_recorded"],
+        true
+    );
+    let data = store.load(true).unwrap().unwrap();
+    let hash = data["items"]["source-refresh"]["attempt_archive"]
+        .as_str()
+        .unwrap();
+    let path = store
+        .root
+        .join("attempt-history")
+        .join(format!("{hash}.json"));
+    let backup = fs::read(&path).unwrap();
+    fs::remove_file(&path).unwrap();
+    assert!(store.load(true).is_err());
+    fs::write(&path, backup).unwrap();
+    assert_eq!(
+        store
+            .finish(
+                "source-refresh",
+                token,
+                "released",
+                "fixture://released",
+                None
+            )
+            .unwrap()["already_recorded"],
+        true
+    );
+}
+
+#[test]
+fn preseeded_legacy_observation_cannot_be_adopted_by_add_or_identity_refresh() {
+    let (_t, w, state, now) = fixture();
+    let store = Store::at_in_state(&w, &state, now).unwrap();
+    let original =
+        kpop_native::maintenance_contract::compile(&source_declaration()).unwrap()["spec"].clone();
+    let mut changed = source_declaration();
+    changed["source"]["source_id"] = json!("preseeded-target");
+    let target = kpop_native::maintenance_contract::compile(&changed).unwrap()["spec"].clone();
+    store.observe(json!({"ref":target["maintenance"]["source_ref"],"value":"legacy-forged","observed_at":"2026-09-10T12:00:00Z","evidence":"fixture://legacy"})).unwrap();
+    assert!(store.add(target.clone()).is_err());
+    assert_eq!(store.load(true).unwrap().unwrap()["version"], 1);
+    store.add(original.clone()).unwrap();
+    let bytes = fs::read(&store.path).unwrap();
+    assert!(
+        store
+            .refresh_with_authority(
+                "source-refresh",
+                target,
+                "fixture://reread",
+                Some("fixture://actual-standing-grant")
+            )
+            .is_err()
+    );
+    assert_eq!(fs::read(&store.path).unwrap(), bytes);
+    assert_eq!(
+        store.show("source-refresh").unwrap()["spec"]["maintenance"]["source_ref"],
+        original["maintenance"]["source_ref"]
+    );
+}
+
+#[test]
+fn old_v2_noop_does_not_consume_backup_or_rewrite_metadata() {
+    let (_t, w, state, now) = fixture();
+    let store = Store::at_in_state(&w, &state, now).unwrap();
+    store
+        .add(
+            kpop_native::maintenance_contract::compile(&source_declaration()).unwrap()["spec"]
+                .clone(),
+        )
+        .unwrap();
+    store
+        .resolve_with_authority(
+            "source-refresh",
+            "cancelled",
+            "fixture://closed",
+            Some("fixture://close-grant"),
+        )
+        .unwrap();
+    let mut data = store.load(true).unwrap().unwrap();
+    data["items"]["source-refresh"]
+        .as_object_mut()
+        .unwrap()
+        .remove("protected_source_refs");
+    fs::write(&store.path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+    let before = fs::read(&store.path).unwrap();
+    let backup = fs::read(store.root.join("followups.previous.yaml")).unwrap();
+    assert_eq!(
+        store
+            .resolve("source-refresh", "cancelled", "fixture://same-closed-state")
+            .unwrap()["already_recorded"],
+        true
+    );
+    assert_eq!(fs::read(&store.path).unwrap(), before);
+    assert_eq!(
+        fs::read(store.root.join("followups.previous.yaml")).unwrap(),
+        backup
+    );
+}
+
+#[test]
+fn ordinary_nanosecond_clock_keeps_version_one_legacy_time_fields() {
+    let (_temp, workspace, state, start) = fixture();
+    let now = start + Duration::nanoseconds(789);
+    let store = Store::at_in_state(&workspace, &state, now).unwrap();
+    let mut supplied = spec(json!({"at":"2026-09-10"}));
+    supplied["title"] = json!("2026-09-10T12:00:00.123456789Z");
+    store.add(supplied).unwrap();
+    let scan = store.scan(20).unwrap();
+    store.claim("review", row(&scan)["occurrence"].as_str().unwrap(), "owner", None).unwrap();
+    kpop_native::followup_daily::start_with_mode(&store, "daily", |_| Ok(None), None).unwrap();
+    let ledger = store.status().unwrap()["ledger"].as_str().unwrap().to_owned();
+    let data: Value = serde_json::from_slice(&fs::read(ledger).unwrap()).unwrap();
+    assert_eq!(data["version"], 1);
+    let legacy = regex::Regex::new(r"^([0-9]{4}-[0-9]{2}-[0-9]{2})[Tt ]([0-9]{2}:[0-9]{2})(?::([0-9]{2})(\.[0-9]{1,6})?)?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap();
+    for value in [&data["items"]["review"]["created_at"], &data["items"]["review"]["claim"]["started_at"], &data["items"]["review"]["claim"]["expires_at"], &data["daily"]["claim"]["started_at"], &data["daily"]["claim"]["expires_at"]] {
+        assert!(legacy.is_match(value.as_str().unwrap()), "legacy v1 reader rejects {value}");
+    }
+}
+
+#[test]
+fn precise_external_times_require_version_two_without_rounding_evidence() {
+    for kind in ["observation", "trigger", "host-report", "next-at"] {
+        let (_temp, workspace, state, now) = fixture();
+        let store = Store::at_in_state(&workspace, &state, now).unwrap();
+        let precise = "2026-09-10T11:59:59.123456789Z";
+        match kind {
+            "observation" => {
+                store.observe(json!({"ref":"input","value":{"note":"2026-09-10T11:00:00.123456789Z"},"observed_at":"2026-09-10T11:59:59Z","evidence":"fixture://readback"})).unwrap();
+                let ledger = store.status().unwrap()["ledger"].as_str().unwrap().to_owned();
+                assert_eq!(serde_json::from_slice::<Value>(&fs::read(ledger).unwrap()).unwrap()["version"], 1);
+                assert_eq!(store.observe(json!({"ref":"input","value":1,"observed_at":precise,"evidence":"fixture://precise"})).unwrap()["observed_at"], precise);
+            }
+            "trigger" => { store.add(spec(json!({"all":[{"at":precise},{"at":"2026-09-10"}]}))).unwrap(); }
+            "host-report" => {
+                kpop_native::followup_daily::bind(&store, json!({"host":"host","id":"job","state":"active","evidence":"fixture://binding"})).unwrap();
+                let later = Store::at_in_state(&workspace, &state, now + Duration::microseconds(1)).unwrap();
+                let report = json!({"schema":"kpopper.host-execution/v1","trigger":"scheduled","host":"host","id":"job","executed_at":"2026-09-10T12:00:00.000000001Z","observed_at":"2026-09-10T12:00:00.000000999Z","evidence":"fixture://external"});
+                let started = kpop_native::followup_daily::start_attested(&later, "owner", report.clone()).unwrap();
+                assert_eq!(started["claim"]["host_execution"], report);
+            }
+            "next-at" => {
+                store.add(spec(json!({"at":"2026-09-10"}))).unwrap();
+                let scan = store.scan(20).unwrap();
+                let claim = store.claim("review", row(&scan)["occurrence"].as_str().unwrap(), "owner", None).unwrap();
+                store.finish("review", claim["claim"]["token"].as_str().unwrap(), "checked", "fixture://completed", Some("2026-09-11T12:00:00.123456789Z")).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let ledger = store.status().unwrap()["ledger"].as_str().unwrap().to_owned();
+        let data: Value = serde_json::from_slice(&fs::read(ledger).unwrap()).unwrap();
+        assert_eq!(data["version"], 2, "{kind}");
+        if kind == "observation" { assert_eq!(data["observations"]["input"]["observed_at"], precise); }
+        if kind == "trigger" { assert_eq!(data["items"]["review"]["spec"]["when"]["all"][0]["at"], precise); }
+        if kind == "next-at" { assert_eq!(data["items"]["review"]["next_at"], "2026-09-11T12:00:00.123456789Z"); }
+    }
 }

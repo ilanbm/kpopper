@@ -1501,7 +1501,33 @@ fn canonical_hook_route_is_executable_complete_and_explicitly_bounded() {
     assert_eq!(bounded_route["argv"],route["argv"]);
     assert_eq!(bounded_route["view_sha256"],kpop_native::identity::sha256(received.as_bytes()));
     assert!(bounded.len()<=2_000);
+    assert!(bounded.contains("For more record evidence, use --query in the source language"));
+    assert!(bounded.contains("Read task-required project files within existing authority; the graph is not a file inventory."));
     assert!(!command(root,"hook-view").args(["--tokens","64"]).output().unwrap().status.success());
+}
+
+#[test]
+fn canonical_hook_keeps_project_read_guidance_with_long_route_paths() {
+    let workspace=format!("/private/{}","project/".repeat(28));
+    let binary=format!("/opt/{}kpop","tooling/".repeat(20));
+    let graph=format!("{}\n",json!({"revision":"record-revision","scope":"requested record","evidence":"x".repeat(2500)}));
+    let route=json!({
+        "schema":"kpopper.canonical-view-route/v1","complete_graph_in_hook":true,
+        "view_sha256":kpop_native::identity::sha256(graph.as_bytes()),
+        "revision":"record-revision","scope":"requested record",
+        "argv":[binary,"--workspace",workspace,"session","view","--input",
+            format!("{workspace}GROUNDING.yaml"),"--state",format!("{workspace}state"),
+            "--tokens","16000","--max-view-bytes","39000"],
+        "view_tokens":16000,"max_output_tokens":16512,"max_view_bytes":39000
+    });
+    let opened=format!("KPOPPER_CANONICAL_VIEW_ROUTE {route}\nKPOPPER_CANONICAL_GRAPH_VIEW {graph}");
+    let bounded=kpop_native::session_admin::canonical_hook_delivery(&opened,2_000).unwrap();
+    let received:J=serde_json::from_str(bounded.lines().next().unwrap().strip_prefix("KPOPPER_CANONICAL_VIEW_ROUTE ").unwrap()).unwrap();
+    assert!(bounded.len()<=2_000);
+    assert_eq!(received["argv"],route["argv"]);
+    assert_eq!(received["view_sha256"],route["view_sha256"]);
+    assert!(bounded.contains("For more record evidence, use --query in the source language"));
+    assert!(bounded.contains("Read task-required project files within existing authority; the graph is not a file inventory."));
 }
 
 #[test]

@@ -1,6 +1,7 @@
 //! `--json` on the public read and write commands answers as the Python reference does:
 //! `open` with its own object, every other command with the output it prints without
 //! `--json`, wrapped as `{"command", "exit_code", "output", "error"}`.
+//! Native maintenance metadata accompanies that legacy projection as typed fields.
 use serde_json::{Value as J, json};
 use std::{
     fs,
@@ -70,7 +71,37 @@ fn assert_wraps(command: &str, plain: &Output, structured: &Output) {
             text(&structured.stdout)
         )
     });
-    assert_eq!(value, wrapped(command, plain), "{command}");
+    let mut expected = wrapped(command, plain);
+    let mut actual = value.clone();
+    let mut extensions = serde_json::Map::new();
+    let plain_output = text(&plain.stdout);
+    let mut record_output = plain_output.clone();
+    // Derive the expected output solely from the plain response, never actual.
+    let markers = [("\nKPOPPER_SCOPED_CONTINUITY ", "maintenance_continuity"),
+        ("\nKPOPPER_MAINTENANCE_DISCOVERY ", "maintenance_discovery")];
+    if let Some(cut) = markers.iter().filter_map(|(marker, _)| plain_output.find(marker)).min() {
+        record_output = plain_output[..cut].to_owned();
+        for line in plain_output[cut..].lines().filter(|line| !line.is_empty()) {
+            let (marker, field) = markers.iter().find(|(marker, _)| line.starts_with(marker.trim_start())).unwrap();
+            let metadata: J = serde_json::from_str(line.strip_prefix(marker.trim_start()).unwrap()).unwrap();
+            assert!(extensions.insert((*field).into(), metadata).is_none());
+        }
+    } else if let Ok(mut record) = serde_json::from_str::<J>(&plain_output) {
+        for field in ["maintenance_continuity", "maintenance_discovery"] {
+            if let Some(metadata) = record.as_object_mut().and_then(|object| object.remove(field)) {
+                extensions.insert(field.into(), metadata);
+            }
+        }
+        if !extensions.is_empty() {
+            record_output = serde_json::to_string(&record).unwrap() + "\n";
+        }
+    }
+    for field in ["maintenance_continuity", "maintenance_discovery"] {
+        assert_eq!(actual.get(field), extensions.get(field), "{command}: unexpected or mismatched {field}");
+        actual.as_object_mut().unwrap().remove(field);
+    }
+    expected["output"] = json!(record_output);
+    assert_eq!(actual, expected, "{command}");
     assert_eq!(structured.status.code(), plain.status.code(), "{command}");
     assert!(
         structured.stderr.is_empty(),

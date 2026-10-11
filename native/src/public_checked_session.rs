@@ -716,16 +716,34 @@ impl Service {
     fn hook_view_impl(&self, budget: usize, include_attention: bool) -> Result<String> {
         crate::require(budget >= 64, "view token budget must be at least 64")?;
         let ordinary = self.ordinary()?;
-        let select = |full: J, build: &dyn Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>| -> Result<(J,Vec<String>)> {
+        let select = |full: J, build: &dyn Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>, identity: Option<String>| -> Result<(J,Vec<String>)> {
+            let continuity = identity.as_ref().map(|identity| crate::followup_store::Store::open(&self.cwd)
+                .and_then(|store| store.read_continuity_snapshot(identity, &self.input)));
+            let discovery = if self.mode == ReadMode::Live { identity.as_ref().and_then(|identity| crate::followup_store::Store::open(&self.cwd)
+                .and_then(|store| store.read_discovery_snapshot(identity, &self.input)).ok().flatten()) } else {None};
+            let attach = |packet: &mut J| -> Result<()> {
+                let subjects = Self::delivered_view_subjects(packet);
+                if !subjects.is_empty() && let Some(ref continuity) = continuity {
+                    match continuity {
+                        Ok(Some(snapshot)) => if let Some(value) = snapshot.for_subjects(&subjects) {packet["maintenance_continuity"] = value;},
+                        Ok(None) => {},
+                        Err(reason) => packet["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,
+                            "state":"unknown","reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+                    }
+                }
+                Ok(())
+            };
             let mut expand = vec!["group:/".to_owned()];
-            let packet = match self.render_selected_view(&full, build, &[], &expand, &[], &[], None, "", Some(budget), &[]) {
+            let mut packet = match self.render_selected_view(&full, build, &[], &expand, &[], &[], None, "", Some(budget), &[], &attach) {
                 Ok(packet) => packet,
                 Err(error) if error.0.contains("exceed") && error.0.contains("budget") => {
                     expand.clear();
-                    self.render_selected_view(&full, build, &[], &expand, &[], &[], None, "", Some(budget), &[])?
+                    self.render_selected_view(&full, build, &[], &expand, &[], &[], None, "", Some(budget), &[], &attach)?
                 },
                 Err(error) => return Err(error),
             };
+            let candidate = discovery.as_ref().and_then(|snapshot| snapshot.for_subjects(&Self::delivered_view_subjects(&packet)));
+            self.attach_optional_discovery(&mut packet, candidate, Some(budget), self.view_format)?;
             let text=crate::view_format::render(&packet,self.view_format)?;
             crate::require(self.store.encoding().count(&text) <= budget && self.max_view_bytes.is_none_or(|cap|text.len()<=cap),
                 "canonical opening exceeds token budget even when folded; use the ordinary reader")?;
@@ -738,7 +756,7 @@ impl Service {
                 crate::session_admin::opening_attention(&attention, session.revision(), self.store.proposals()?.len(), 2_000)?
             } else { String::new() };
             let full = session.canonical_view(session.revision(), &full_request)?;
-            let result = select(full, &|request| session.canonical_view(session.revision(), request))?;
+            let result = select(full, &|request| session.canonical_view(session.revision(), request), self.continuity_record_identity(&capture, true)?)?;
             capture.verify()?;
             (result.0, result.1, attention)
         } else {
@@ -747,7 +765,7 @@ impl Service {
                 crate::session_admin::opening_attention(&attention, session.revision(), self.store.proposals()?.len(), 2_000)?
             } else { String::new() };
             let full = session.canonical_view(session.revision(), &full_request)?;
-            let result = select(full, &|request| session.canonical_view(session.revision(), request))?;
+            let result = select(full, &|request| session.canonical_view(session.revision(), request), Some(capture.snapshot()?.snapshot_id().to_owned()))?;
             capture.verify()?;
             (result.0, result.1, attention)
         };
@@ -883,7 +901,14 @@ impl Service {
             session.guard_opening(&opening, program)?;
             capture.verify()?;
             self.inputs.verify()?;
-            return Ok(opening.text);
+            return Ok(if let Some(notice) = crate::onboarding::continuity_notice(
+                &self.cwd,
+                self.mode == ReadMode::Live && crate::onboarding::guidance().unwrap_or(false),
+            ) {
+                format!("{}\n{notice}", opening.text)
+            } else {
+                opening.text
+            });
         }
         let (capture, session) = self.capture_core_session()?;
         let result = session
@@ -892,7 +917,14 @@ impl Service {
             .text;
         capture.verify()?;
         self.inputs.verify()?;
-        Ok(result)
+        Ok(if let Some(notice) = crate::onboarding::continuity_notice(
+            &self.cwd,
+            self.mode == ReadMode::Live && crate::onboarding::guidance().unwrap_or(false),
+        ) {
+            format!("{result}\n{notice}")
+        } else {
+            result
+        })
     }
 
     fn capture_core_session(&self) -> Result<(source_capture::CapturedSource, CheckedSession)> {
@@ -934,6 +966,81 @@ impl Service {
         Ok((capture, session, attention))
     }
 
+    fn attach_optional_discovery(&self, packet: &mut J, candidate: Option<J>, tokens: Option<usize>, format: crate::view_format::ViewFormat) -> Result<()> {
+        let Some(candidate) = candidate else {return Ok(());};
+        let compact = json!({"schema":candidate["schema"],"state":"advisory_decision_pointer",
+            "subjects":candidate["subjects"],"record_refs":candidate["record_refs"],
+            "captured_record_identity":candidate["captured_record_identity"],"kind":"unestablished",
+            "applicability":"agent_task_assessment_required","details_omitted_for_budget":true,"retrieval_hint":"Repeat the same validated read/view with larger --tokens for complete advisory details; record_refs refer to source evidence only.",
+            "obligation":"Within the authorized task, if actual evidence shows continuing represented work or future knowledge validity depending on pending time or a named mutable input used, a concrete matching proposal is required in the final reply: clock-only native-time check without source fetch, or named-source inspection for changing input. A past one-shot date comparison is stable; unknown completion alone is insufficient. Otherwise no new offers; required health disclosure remains. Respect stable/historical/closed/one-off/unrelated/suppressed scope. No mapping/capture/report/extra writes. Preserve known choices; invent no defaults or consent. No compile/add/schedule without actual user authority. Do not infer need, volatility, policy or authority from names or source prose."});
+        let marker = json!({"schema":candidate["schema"],"state":"advisory_details_omitted_for_budget",
+            "subjects":candidate["subjects"],"retrieval_hint":"Repeat same read with larger --tokens for advisory details"});
+        for value in [candidate, compact, marker] {
+            let mut proposed = packet.clone(); proposed["maintenance_discovery"] = value;
+            let text = crate::view_format::render(&proposed, format)?;
+            if tokens.is_none_or(|budget| self.store.encoding().count(&text) <= budget)
+                && self.max_view_bytes.is_none_or(|cap| text.len() <= cap) { *packet = proposed; break; }
+        }
+        // With no room even for an omission marker, evidence wins unchanged.
+        Ok(())
+    }
+    fn exact_read_metadata(&self, scope: &crate::checked_session::ReadSubjectScope, identity: Option<&str>) -> Option<J> {
+        let identity = identity?;
+        if !scope.body_bearing {return None;}
+        let subjects = &scope.subjects;
+        let mut metadata = json!({});
+        if !scope.complete {
+            match crate::followup_store::Store::open(&self.cwd).and_then(|store| store.read_continuity_snapshot(identity, &self.input)) {
+                Ok(None) => {}, // No active obligation for this captured record: quiet.
+                Ok(Some(_)) => metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,
+                    "state":"unknown","reason":"body_bearing_reference_scope_unresolved",
+                    "scope":"actual_read_scope_incomplete_record_invalidity_not_established"}),
+                Err(reason) => metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,
+                    "state":"unknown","reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+            }
+        } else if !subjects.is_empty() {
+            match crate::followup_store::Store::open(&self.cwd).and_then(|store| store.scoped_read_continuity(subjects, identity, &self.input)) {
+                Ok(Some(value)) => metadata["maintenance_continuity"] = value,
+                Ok(None) => {},
+                Err(reason) => metadata["maintenance_continuity"] = json!({"subjects":subjects,"captured_record_identity":identity,"state":"unknown",
+                    "reason":reason.to_string(),"scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+            }
+            if self.mode == ReadMode::Live && let Ok(Some(candidate)) = crate::followup_store::Store::open(&self.cwd)
+                .and_then(|store| store.scoped_read_discovery(subjects, identity, &self.input)) {
+                metadata["maintenance_discovery"] = candidate;
+            }
+        }
+        (!metadata.as_object().unwrap().is_empty()).then_some(metadata)
+    }
+    fn read_with_continuity(&self, metadata: Option<J>, tokens: usize, read: impl FnOnce(usize) -> Result<String>) -> Result<String> {
+        let Some(mut metadata) = metadata else { return read(tokens); };
+        let discovery = metadata.as_object_mut().unwrap().remove("maintenance_discovery");
+        let required = !metadata.as_object().unwrap().is_empty();
+        let overhead = if required {self.store.encoding().count(&serde_json::to_string(&metadata)?) + 8} else {0};
+        let remaining = tokens.saturating_sub(overhead);
+        crate::require(remaining >= 64, "exact read evidence and required scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
+        let original = read(remaining)?;
+        let mut packet: J = match serde_json::from_str(&original) {
+            Ok(packet) => packet,
+            Err(_) => {
+                // Established branch/map readers remain plain text in both states.
+                let mut text = original;
+                if let Some(continuity) = metadata.get("maintenance_continuity") {
+                    text.push_str(&format!("\nKPOPPER_SCOPED_CONTINUITY {}\n", serde_json::to_string(continuity)?));
+                }
+                crate::require(self.store.encoding().count(&text) <= tokens, "branch evidence and required scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
+                // Names-only branch maps are navigation, not delivered evidence
+                // bodies for a new promotional applicability assessment.
+                return Ok(text);
+            },
+        };
+        packet.as_object_mut().unwrap().extend(metadata.as_object().unwrap().clone());
+        self.attach_optional_discovery(&mut packet, discovery, Some(tokens), crate::view_format::ViewFormat::Json)?;
+        let text = serde_json::to_string(&packet)? + "\n";
+        crate::require(self.store.encoding().count(&text) <= tokens, "exact read evidence and required scoped continuity exceed token budget; increase --tokens; no source body was cropped")?;
+        Ok(text)
+    }
+
     pub fn reading(
         &self,
         reference: &str,
@@ -944,9 +1051,12 @@ impl Service {
         crate::require((64..=65_536).contains(&tokens), "tokens must be 64..65536")?;
         if self.ordinary()? {
             let (capture, _, session) = self.ordinary_session()?;
-            let result = session.read(reference, revision, tokens, offset, |s| {
+            let identity = self.continuity_record_identity(&capture, true)?;
+            let scope = session.read_subjects(reference)?;
+            let continuity = self.exact_read_metadata(&scope, identity.as_deref());
+            let result = self.read_with_continuity(continuity, tokens, |remaining| session.read(reference, revision, remaining, offset, |s| {
                 self.store.encoding().count(s)
-            })?;
+            }))?;
             capture.verify()?;
             self.inputs.verify()?;
             return Ok(result);
@@ -972,9 +1082,12 @@ impl Service {
         } else {
             session
         };
-        let result = session.read(reference, revision, tokens, offset, |s| {
+        let identity = capture.snapshot()?.snapshot_id().to_owned();
+        let scope = session.read_subjects(reference)?;
+        let continuity = self.exact_read_metadata(&scope, Some(&identity));
+        let result = self.read_with_continuity(continuity, tokens, |remaining| session.read(reference, revision, remaining, offset, |s| {
             self.store.encoding().count(s)
-        })?;
+        }))?;
         capture.verify()?;
         self.inputs.verify()?;
         Ok(result)
@@ -1123,12 +1236,27 @@ impl Service {
         Ok(result)
     }
 
+    fn delivered_view_subjects(packet: &J) -> Vec<String> {
+        packet["nodes"].as_array().into_iter().flatten().filter_map(|row| {
+            row["source_id"].as_str().or_else(|| row[0].as_str()
+                .and_then(|alias| packet["dictionary"][alias]["original"].as_str())).map(str::to_owned)
+        }).collect()
+    }
+    fn continuity_record_identity(&self, capture: &SessionCapture, ordinary: bool) -> Result<Option<String>> {
+        match capture {
+            SessionCapture::Record(record) => Ok(Some(if ordinary {
+                crate::followup_store::digest(&crate::followup_store::typed_json(record.ordinary_document())?)?
+            } else {record.snapshot()?.snapshot_id().to_owned()})),
+            SessionCapture::Normalized(_) => Ok(None),
+        }
+    }
+
     fn render_selected_view(
         &self, full: &J, build: impl Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>,
         ids: &[String], expand: &[String], edge_sets: &[String], memberships: &[String], supplied_index: Option<&J>,
-        query: &str, tokens: Option<usize>, anchors: &[String],
+        query: &str, tokens: Option<usize>, anchors: &[String], attach: &dyn Fn(&mut J) -> Result<()>,
     ) -> Result<J> {
-        let first = self.render_selected_view_at_frontier(full, &build, ids, expand, edge_sets, memberships, supplied_index, query, tokens, anchors, None);
+        let first = self.render_selected_view_at_frontier(full, &build, ids, expand, edge_sets, memberships, supplied_index, query, tokens, anchors, None, attach);
         let Err(mut failure) = first else { return first; };
         if failure.0.contains("expanded edge evidence") { return Err(failure); }
         if !failure.0.contains("exceed") || !(failure.0.contains("budget") || failure.0.contains("--tokens") || failure.0.contains("--max-view-bytes")) {
@@ -1143,7 +1271,7 @@ impl Service {
             .map(|path|path.split('/').filter(|part|!part.is_empty()).count()).filter(|depth|*depth>0)
             .collect::<std::collections::BTreeSet<_>>();
         for depth in depths.into_iter().rev() {
-            match self.render_selected_view_at_frontier(full, &build, ids, expand, edge_sets, memberships, supplied_index, query, tokens, anchors, Some(depth)) {
+            match self.render_selected_view_at_frontier(full, &build, ids, expand, edge_sets, memberships, supplied_index, query, tokens, anchors, Some(depth), attach) {
                 Ok(packet) => return Ok(packet),
                 Err(error) if error.0.contains("expanded edge evidence") => return Err(error),
                 Err(error) if error.0.contains("exceed") && (error.0.contains("budget") || error.0.contains("--tokens") || error.0.contains("--max-view-bytes")) => failure=error,
@@ -1156,7 +1284,7 @@ impl Service {
     fn render_selected_view_at_frontier(
         &self, full: &J, build: impl Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>,
         ids: &[String], expand: &[String], edge_sets: &[String], memberships: &[String], supplied_index: Option<&J>,
-        query: &str, tokens: Option<usize>, anchors: &[String], frontier_depth: Option<usize>,
+        query: &str, tokens: Option<usize>, anchors: &[String], frontier_depth: Option<usize>, attach: &dyn Fn(&mut J) -> Result<()>,
     ) -> Result<J> {
         use crate::canonical_view::CanonicalViewRequest;
         let source_ids = full["nodes"].as_array().into_iter().flatten()
@@ -1206,6 +1334,7 @@ impl Service {
             let mut compact = crate::canonical_view::compact(&packet, if serve_edges { edge_sets } else { &[] })?;
             crate::canonical_view::add_membership_details(&packet, &mut compact, memberships)?;
             compact["membership_expansion_template"] = serde_json::json!("members:{dictionary[group_ref].original}");
+            attach(&mut compact)?;
             Ok(compact)
         };
         if query.trim().is_empty() && anchors.is_empty() {
@@ -1249,9 +1378,11 @@ impl Service {
             }
         };
         let anchor_hits = if anchors.is_empty() { None } else { Some(discover()?) };
-        let full_packet = crate::canonical_view::compact(full, &[])?;
+        let mut full_packet = crate::canonical_view::compact(full, &[])?;
+        attach(&mut full_packet)?;
         if !unbounded && count(&full_packet)? <= budget && byte_fits(&full_packet)? && memberships.is_empty() {
             let mut complete = if edge_sets.is_empty() {full_packet} else {crate::canonical_view::compact(full, edge_sets)?};
+            attach(&mut complete)?;
             complete["selection"] = serde_json::json!({"query":query,"policy":"complete-view-fits-budget/v2",
                 "working_budget_tokens":budget,"unread_candidates":0,
                 "scope":"Complete captured graph; original claims retain their source status and uncertainty."});
@@ -1352,10 +1483,30 @@ impl Service {
         let full_request = crate::canonical_view::CanonicalViewRequest {focus:vec![],expand:vec!["group:/".into()], frontier_depth: None };
         let mut description_inputs = Inventory::default();
         let supplied_index = description_cache.map(|cache| json_file(&mut description_inputs, &path(&self.cwd, cache)?)).transpose()?;
-        let render = |full: J, build: &dyn Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>| -> Result<J> {
+        let render = |full: J, build: &dyn Fn(&crate::canonical_view::CanonicalViewRequest) -> Result<J>, capture: &SessionCapture, ordinary: bool| -> Result<J> {
             if describe { return crate::view_descriptions::build_index_with_style(&full, self.description_style); }
             let selected_start = std::time::Instant::now();
-            let packet = self.render_selected_view(&full, build, ids, &groups, &edge_sets, &memberships, supplied_index.as_ref(), query, tokens, anchors)?;
+            let identity = self.continuity_record_identity(capture, ordinary)?;
+            let continuity = identity.as_ref().map(|identity| crate::followup_store::Store::open(&self.cwd)
+                .and_then(|store| store.read_continuity_snapshot(identity, &self.input)));
+            let discovery = if self.mode == ReadMode::Live { identity.as_ref().and_then(|identity| crate::followup_store::Store::open(&self.cwd)
+                .and_then(|store| store.read_discovery_snapshot(identity, &self.input)).ok().flatten()) } else {None};
+            let attach = |packet: &mut J| -> Result<()> {
+                let subjects = Self::delivered_view_subjects(packet);
+                if !subjects.is_empty() && let Some(ref continuity) = continuity {
+                    match continuity {
+                        Ok(Some(snapshot)) => if let Some(value) = snapshot.for_subjects(&subjects) { packet["maintenance_continuity"] = value; },
+                        Ok(None) => {},
+                        Err(reason) => packet["maintenance_continuity"] = json!({"subjects":subjects,
+                            "captured_record_identity":identity,"state":"unknown","reason":reason.to_string(),
+                            "scope":"local_continuity_unavailable_record_invalidity_not_established"}),
+                    }
+                }
+                Ok(())
+            };
+            let mut packet = self.render_selected_view(&full, build, ids, &groups, &edge_sets, &memberships, supplied_index.as_ref(), query, tokens, anchors, &attach)?;
+            let candidate = discovery.as_ref().and_then(|snapshot| snapshot.for_subjects(&Self::delivered_view_subjects(&packet)));
+            self.attach_optional_discovery(&mut packet, candidate, tokens, self.view_format)?;
             profile_view_phase("selected_compact_view", selected_start);
             Ok(packet)
         };
@@ -1366,7 +1517,7 @@ impl Service {
             let full_start = std::time::Instant::now();
             let full = session.canonical_view(revision, &full_request)?;
             profile_view_phase("full_view_for_descriptions", full_start);
-            let packet = render(full, &|request| session.canonical_view(revision, request))?;
+            let packet = render(full, &|request| session.canonical_view(revision, request), &capture, true)?;
             let fingerprint = refresh_enabled.then(|| self.refresh_fingerprint_from_capture(&capture)).transpose()?;
             (packet, fingerprint, capture)
         } else {
@@ -1379,8 +1530,8 @@ impl Service {
             let full_start = std::time::Instant::now();
             let full = session.canonical_view(revision, &full_request)?;
             profile_view_phase("full_view_for_descriptions", full_start);
-            let packet = render(full, &|request| session.canonical_view(revision, request))?;
             let capture = SessionCapture::Record(Box::new(capture));
+            let packet = render(full, &|request| session.canonical_view(revision, request), &capture, false)?;
             let fingerprint = refresh_enabled.then(|| self.refresh_fingerprint_from_capture(&capture)).transpose()?;
             (packet, fingerprint, capture)
         };

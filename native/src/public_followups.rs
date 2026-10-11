@@ -39,6 +39,21 @@ pub enum Command {
         #[arg(long)]
         file: String,
     },
+    /// Compile an explicit maintenance declaration into a local proposal.
+    Compile {
+        #[arg(long)]
+        file: String,
+    },
+    /// Record an attested source inspection or retain its unavailable outcome.
+    Inspect {
+        #[arg(long)]
+        file: String,
+    },
+    /// Retain an unavailable source inspection without changing its observation.
+    Attempt {
+        #[arg(long)]
+        file: String,
+    },
     Observe {
         #[arg(long)]
         file: String,
@@ -49,6 +64,26 @@ pub enum Command {
         file: String,
         #[arg(long)]
         evidence: String,
+        /// Reference to existing user authorization for a changed inspection scope.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
+    },
+    /// Correlate an actual source/model review; never accepts a semantic model change.
+    ReviewSource {
+        id: String,
+        #[arg(long, value_parser = ["no_model_change_needed", "candidate_pending", "reviewed_model_update"])]
+        outcome: String,
+        #[arg(long)]
+        evidence: String,
+        #[arg(long)]
+        authorization_evidence: String,
+    },
+    /// Recompute declared-scope evidence/alignment adequacy with current native time.
+    Assess {
+        #[arg(long, required = true, num_args = 1..)]
+        ids: Vec<String>,
+        #[arg(long)]
+        claim_token: Vec<String>,
     },
     /// Read-only readiness check; never executes a task.
     Scan {
@@ -63,6 +98,9 @@ pub enum Command {
         owner: String,
         #[arg(long)]
         daily_token: Option<String>,
+        /// Actual current-user authorization for an inspection before periodic due time.
+        #[arg(long)]
+        current_use_authority: Option<String>,
     },
     Renew {
         id: String,
@@ -86,6 +124,9 @@ pub enum Command {
         evidence: String,
         #[arg(long)]
         next_at: Option<String>,
+        /// Existing or new user authorization when cancelling maintenance.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
     },
     Recover {
         id: String,
@@ -103,6 +144,9 @@ pub enum Command {
         outcome: String,
         #[arg(long)]
         evidence: String,
+        /// Existing or new user authorization when closing maintenance.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
     },
     /// Explicitly rebind a moved pinned record, preserving history.
     Relocate {
@@ -110,6 +154,9 @@ pub enum Command {
         record: PathBuf,
         #[arg(long)]
         evidence: String,
+        /// Existing or new user authorization for rebinding maintenance to a record.
+        #[arg(long)]
+        authorization_evidence: Option<String>,
     },
     /// Restore an inspected backup and park uncertain unfinished work.
     Restore {
@@ -167,6 +214,11 @@ pub enum DailyCommand {
     Start {
         #[arg(long)]
         owner: String,
+        #[arg(long, conflicts_with = "host_execution")]
+        manual_evidence: Option<String>,
+        /// Actual normalized readback of this bound scheduled invocation; owner text is not proof.
+        #[arg(long)]
+        host_execution: Option<String>,
     },
     Finish {
         #[arg(long)]
@@ -181,6 +233,26 @@ pub enum DailyCommand {
     Recover {
         #[arg(long)]
         evidence: String,
+    },
+    /// Select local execution intent; does not mutate a host schedule.
+    Mode {
+        #[arg(value_parser = ["manual", "paused", "daily_fallback", "native"])]
+        mode: String,
+        #[arg(long)]
+        authorization_evidence: String,
+        #[arg(long)]
+        acknowledge_empty_run_cost: bool,
+        #[arg(long)]
+        file: Option<String>,
+    },
+    /// Record an explicit offer, decline, snooze or user authorization; never installs a host job.
+    Adoption {
+        #[arg(value_parser = ["shown", "declined", "snoozed", "authorized"])]
+        action: String,
+        #[arg(long)]
+        until: Option<String>,
+        #[arg(long)]
+        evidence: Option<String>,
     },
 }
 
@@ -202,6 +274,13 @@ fn supplied(path: &str) -> Result<Value> {
 }
 
 pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
+    if let Command::Compile { file } = &args.command {
+        let mut proposal = crate::maintenance_contract::compile(&supplied(file)?)?;
+        if file != "-" && proposal["spec"].is_object() {
+            proposal["spec"]["task"] = serde_json::json!(PathBuf::from(file).canonicalize()?);
+        }
+        return Ok(proposal);
+    }
     let store = Store::open(workspace)?;
     match &args.command {
         Command::Setup {
@@ -225,15 +304,42 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
         Command::List => store.list(),
         Command::Show { id } => store.show(id),
         Command::Add { file } => store.add(supplied(file)?),
+        Command::Compile { .. } => unreachable!(),
+        Command::Inspect { file } => store.inspect_maintenance(supplied(file)?),
+        Command::Attempt { file } => store.record_maintenance_attempt(supplied(file)?),
         Command::Observe { file } => store.observe(supplied(file)?),
-        Command::Refresh { id, file, evidence } => store.refresh(id, supplied(file)?, evidence),
+        Command::Refresh {
+            id,
+            file,
+            evidence,
+            authorization_evidence,
+        } => store.refresh_with_authority(
+            id,
+            supplied(file)?,
+            evidence,
+            authorization_evidence.as_deref(),
+        ),
+        Command::ReviewSource {
+            id,
+            outcome,
+            evidence,
+            authorization_evidence,
+        } => store.record_model_alignment(id, outcome, evidence, authorization_evidence),
+        Command::Assess { ids, claim_token } => store.assess_use(ids, claim_token),
         Command::Scan { limit } => store.scan(*limit),
         Command::Claim {
             id,
             occurrence,
             owner,
             daily_token,
-        } => store.claim(id, occurrence, owner, daily_token.as_deref()),
+            current_use_authority,
+        } => store.claim_for_use(
+            id,
+            occurrence,
+            owner,
+            daily_token.as_deref(),
+            current_use_authority.as_deref(),
+        ),
         Command::Renew { id, token } => store.renew(id, token),
         Command::Release {
             id,
@@ -246,15 +352,28 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             outcome,
             evidence,
             next_at,
-        } => store.finish(id, token, outcome, evidence, next_at.as_deref()),
+            authorization_evidence,
+        } => store.finish_with_authority(
+            id,
+            token,
+            outcome,
+            evidence,
+            next_at.as_deref(),
+            authorization_evidence.as_deref(),
+        ),
         Command::Recover { id, evidence } => store.recover(id, evidence),
         Command::Resume { id, evidence } => store.resume(id, evidence),
         Command::Resolve {
             id,
             outcome,
             evidence,
-        } => store.resolve(id, outcome, evidence),
-        Command::Relocate { record, evidence } => store.relocate(record, evidence),
+            authorization_evidence,
+        } => store.resolve_with_authority(id, outcome, evidence, authorization_evidence.as_deref()),
+        Command::Relocate {
+            record,
+            evidence,
+            authorization_evidence,
+        } => store.relocate_with_authority(record, evidence, authorization_evidence.as_deref()),
         Command::Restore { backup, evidence } => store.restore(backup, evidence),
         Command::Daily { operation } => match operation {
             DailyCommand::Plan { time } => crate::followup_daily::plan(&store, time),
@@ -316,12 +435,48 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
             }
             DailyCommand::Status => crate::followup_daily::status(&store),
             DailyCommand::Bind { file } => crate::followup_daily::bind(&store, supplied(file)?),
-            DailyCommand::Start { owner } => crate::followup_daily::start(&store, owner),
+            DailyCommand::Start {
+                owner,
+                manual_evidence,
+                host_execution,
+            } => {
+                if let Some(file) = host_execution {
+                    crate::followup_daily::start_attested(&store, owner, supplied(file)?)
+                } else if let Some(reference) = manual_evidence {
+                    crate::followup_daily::start_manual(&store, owner, reference)
+                } else {
+                    crate::followup_daily::start(&store, owner)
+                }
+            }
             DailyCommand::Finish { token, evidence } => {
                 crate::followup_daily::finish(&store, token, evidence)
             }
             DailyCommand::Renew { token } => crate::followup_daily::renew(&store, token),
             DailyCommand::Recover { evidence } => crate::followup_daily::recover(&store, evidence),
+            DailyCommand::Mode {
+                mode,
+                authorization_evidence,
+                acknowledge_empty_run_cost,
+                file,
+            } => crate::followup_daily::maintenance_mode(
+                &store,
+                mode,
+                authorization_evidence,
+                *acknowledge_empty_run_cost,
+                file.as_deref().map(supplied).transpose()?,
+            ),
+            DailyCommand::Adoption {
+                action,
+                until,
+                evidence,
+            } => {
+                let value = if action == "snoozed" {
+                    until.as_deref()
+                } else {
+                    evidence.as_deref()
+                };
+                crate::followup_daily::record_adoption(&store, action, value)
+            }
         },
     }
 }
