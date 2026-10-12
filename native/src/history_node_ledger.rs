@@ -113,7 +113,7 @@ pub(crate) fn observation_base(state: &V) -> Result<Option<String>> {
         .iter()
         .find(|(name, _, _)| name == tip)
         .ok_or_else(|| error("node_ledger_tip"))?;
-    let obs = observation(field(map(&slot)?, "observation")?)?;
+    let obs = observation(field(map(slot)?, "observation")?)?;
     Ok(Some(obs.id))
 }
 
@@ -500,10 +500,10 @@ fn lift_common(slots: &mut Map) -> Result<Map> {
                 .and_then(|s| map(field(s, "header")?))
                 .and_then(|h| field(h, key))
         });
-        if let Some(Ok(first)) = values.next() {
-            if values.all(|v| v.is_ok_and(|value| value == first)) {
-                common.insert(key.into(), first.clone());
-            }
+        if let Some(Ok(first)) = values.next()
+            && values.all(|v| v.is_ok_and(|value| value == first))
+        {
+            common.insert(key.into(), first.clone());
         }
     }
     if !common.is_empty() {
@@ -666,8 +666,7 @@ fn resolve_alias(
     anchors: &std::collections::BTreeMap<String, String>,
     caret: bool,
 ) -> Result<String> {
-    if token.starts_with('@') {
-        let name = &token[1..];
+    if let Some(name) = token.strip_prefix('@') {
         parse_slot_name(name)?;
         let id = anchors
             .iter()
@@ -867,7 +866,7 @@ mod tests {
     #[test]
     fn act_only_keeps_claim_prototype_and_slots_are_reused_across_actions() {
         let initial_claim = claim("known", "claim", "alice", "today", 1);
-        let first = pack(None, &[initial_claim.clone()]).unwrap();
+        let first = pack(None, std::slice::from_ref(&initial_claim)).unwrap();
         let first_act = act(
             "act",
             "bob",
@@ -974,7 +973,7 @@ mod tests {
                 .unwrap();
         assert!(pack(None, &[(c.0.clone(), wrong)]).is_err());
         let large = claim("known", "large", "alice", "today", 1);
-        let first = pack(None, &[large.clone()]).unwrap();
+        let first = pack(None, std::slice::from_ref(&large)).unwrap();
         let mut state = first;
         for i in 0..20 {
             let act = act(

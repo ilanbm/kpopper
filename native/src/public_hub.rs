@@ -298,6 +298,21 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
         };
         return browser_checks(&page);
     }
+    // A named brief that is not there would otherwise read as no brief at all.
+    let named_brief = match &options.brief {
+        Some(path) => {
+            let brief = absolute(&cwd.join(path))?;
+            require(
+                brief.is_file(),
+                &format!(
+                    "{}: no brief here. Name an existing brief file, or leave out --brief to read the record's own view.",
+                    path.display()
+                ),
+            )?;
+            Some(brief)
+        }
+        None => None,
+    };
     let paths = if options.files.is_empty() {
         W::records(&cwd)?
     } else {
@@ -329,8 +344,8 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     if !core {
         captured.require_ordinary_reader()?;
     }
-    let brief = match &options.brief {
-        Some(path) => absolute(&cwd.join(path))?,
+    let brief = match named_brief {
+        Some(brief) => brief,
         None => first.parent().unwrap().join(
             crate::history_transaction::Layout::for_entry(
                 first

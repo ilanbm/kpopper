@@ -439,7 +439,7 @@ fn prepare_act_inner(
     let draft = Preparation::prepare_commit(
         capture,
         &options.operation,
-        &new,
+        new,
         &initial_template,
         &placeholder,
         requires.as_ref(),
@@ -450,7 +450,7 @@ fn prepare_act_inner(
     let draft = Preparation::prepare_commit(
         capture,
         &options.operation,
-        &new,
+        new,
         &template,
         &placeholder,
         requires.as_ref(),
@@ -469,7 +469,7 @@ fn prepare_act_inner(
     let mutation = Preparation::prepare_commit(
         capture,
         &options.operation,
-        &new,
+        new,
         &template,
         &receipt,
         options.requires_for(&after_doc)?.as_ref(),
@@ -533,14 +533,14 @@ pub(crate) fn prepare_proposal_inner(
         audit,
         &frozen_archive,
     )?;
-    let mut template = template(capture, &doc)?;
+    let mut template = template(capture, doc)?;
     map_mut(&mut template)?
         .entry(collection.into())
         .or_insert_with(empty);
     let mutation = Preparation::prepare_commit(
         capture,
         &options.operation,
-        &new,
+        new,
         &template,
         &receipt,
         options.requires_for(&plan.hypothetical)?.as_ref(),

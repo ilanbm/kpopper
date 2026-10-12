@@ -876,6 +876,7 @@ fn receipt(
         graphs.as_ref(),
     )
 }
+#[allow(clippy::too_many_arguments)]
 fn receipt_parts(
     report: &Report,
     record: &Path,

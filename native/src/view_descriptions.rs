@@ -138,10 +138,10 @@ impl<'a> GraphIndex<'a> {
             }
             V::from_tagged(&node["body"])?;
         }
-        if let Some(count) = full["coverage"]["count"].as_u64() {
-            if count as usize != nodes.len() {
-                return Err(Error("incomplete description source coverage".into()));
-            }
+        if let Some(count) = full["coverage"]["count"].as_u64()
+            && count as usize != nodes.len()
+        {
+            return Err(Error("incomplete description source coverage".into()));
         }
         if let Some(ids) = full["coverage"]["source_ids"].as_array() {
             let expected: BTreeSet<_> = ids.iter().filter_map(J::as_str).collect();
@@ -346,7 +346,7 @@ impl<'a> GraphIndex<'a> {
                 self.nodes
                     .get(id)
                     .copied()
-                    .map(J::clone)
+                    .cloned()
                     .ok_or_else(|| Error("missing description basis node".into()))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -699,12 +699,12 @@ fn build_or_refresh_specs(
             );
         }
     }
-    if delete_unrequested {
-        if let Some(old) = previous.and_then(|index| index["descriptions"].as_object()) {
-            for group in old.keys().filter(|group| !requested.contains(*group)) {
-                metrics.deleted += 1;
-                metrics.affected_group_ids.push(group.clone());
-            }
+    if delete_unrequested
+        && let Some(old) = previous.and_then(|index| index["descriptions"].as_object())
+    {
+        for group in old.keys().filter(|group| !requested.contains(*group)) {
+            metrics.deleted += 1;
+            metrics.affected_group_ids.push(group.clone());
         }
     }
     metrics.affected_group_ids.sort();

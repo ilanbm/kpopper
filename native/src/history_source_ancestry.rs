@@ -146,10 +146,10 @@ impl Graph {
                 if id == a {
                     return true;
                 }
-                if seen.insert(id) {
-                    if let Some(parents) = self.edges.get(id) {
-                        todo.extend(parents.iter().map(String::as_str));
-                    }
+                if seen.insert(id)
+                    && let Some(parents) = self.edges.get(id)
+                {
+                    todo.extend(parents.iter().map(String::as_str));
                 }
             }
             false

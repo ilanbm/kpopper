@@ -103,10 +103,10 @@ fn private_targets(capture: &Capture, action: &V) -> Result<bool> {
     }
     let over = list(field(action, "over")?)?;
     for id in std::iter::once(field(action, "of")?).chain(over) {
-        if let Some(object) = capture.history.objects().get(text(id)?) {
-            if Privacy::private_marker(object) {
-                return Ok(true);
-            }
+        if let Some(object) = capture.history.objects().get(text(id)?)
+            && Privacy::private_marker(object)
+        {
+            return Ok(true);
         }
     }
     Ok(false)
