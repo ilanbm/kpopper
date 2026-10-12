@@ -493,10 +493,9 @@ pub fn mark(workspace: &Path, event: &str) -> Result<Value> {
             &json!({"shown":true}),
         )?;
     }
-    if event == "followups" && crate::public_workspace::locate(workspace, crate::source_capture::ReadMode::Live).is_ok_and(|location| location.status == "found") {
-        if let Ok(store) = crate::followup_store::Store::open(workspace) {
-            crate::followup_daily::record_adoption(&store, "shown", None)?;
-        }
+    if event == "followups" && crate::public_workspace::locate(workspace, crate::source_capture::ReadMode::Live).is_ok_and(|location| location.status == "found")
+        && let Ok(store) = crate::followup_store::Store::open(workspace) {
+        crate::followup_daily::record_adoption(&store, "shown", None)?;
     }
     status(
         workspace,
@@ -532,10 +531,9 @@ pub fn mark_key(
             &json!({"shown":true}),
         )?;
     }
-    if event == "followups" && crate::public_workspace::locate(workspace, crate::source_capture::ReadMode::Live).is_ok_and(|location| location.status == "found") {
-        if let Ok(store) = crate::followup_store::Store::open(workspace) {
-            crate::followup_daily::record_adoption(&store, "shown", None)?;
-        }
+    if event == "followups" && crate::public_workspace::locate(workspace, crate::source_capture::ReadMode::Live).is_ok_and(|location| location.status == "found")
+        && let Ok(store) = crate::followup_store::Store::open(workspace) {
+        crate::followup_daily::record_adoption(&store, "shown", None)?;
     }
     status_at(workspace, key, record, status_value, "")
 }

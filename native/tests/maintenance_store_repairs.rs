@@ -71,7 +71,7 @@ fn clock_declaration(
 }
 
 fn checked_clock_at(now: DateTime<Utc>, timezone: &str, expected_next: &str) {
-    let (_temp, store, _) = fixture(now.clone(), timezone);
+    let (_temp, store, _) = fixture(now, timezone);
     let declaration = clock_declaration(
         "clock-check",
         timezone,
@@ -165,7 +165,7 @@ fn maintenance_health_degradation_remains_visible() {
 #[test]
 fn intervention_items_precede_ready_rows_in_a_truncated_scan() {
     let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
-    let (temp, store, workspace) = fixture(now.clone(), "UTC");
+    let (temp, store, workspace) = fixture(now, "UTC");
     store
         .add(ordinary("needs-user", "2026-10-06T11:00:00Z"))
         .unwrap();

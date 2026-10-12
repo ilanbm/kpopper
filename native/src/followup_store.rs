@@ -1418,8 +1418,10 @@ impl Store {
             return Ok(graph);
         }
         let reader = Reader::for_followups(capture.ordinary_document(), runtime.as_ref())?;
-        let mut graph = Graph::default();
-        graph.record_identity = digest(&typed_json(capture.ordinary_document())?)?;
+        let mut graph = Graph {
+            record_identity: digest(&typed_json(capture.ordinary_document())?)?,
+            ..Graph::default()
+        };
         for id in &reader.ids {
             let Some(body) = reader.raw().get(id) else {
                 continue;
@@ -2120,8 +2122,7 @@ impl Store {
                 _ => true,
             });
             let mut failure = if inspected_at.is_some_and(|time| time > receipt_at) { "Attested inspection time is in the future".into() }
-                else if !allow_value { reason.clone() }
-                else if !reason.is_empty() { reason.clone() }
+                else if !allow_value || !reason.is_empty() { reason.clone() }
                 else if !usable { "Inspection did not produce a usable value".into() }
                 else if inspected_at.is_none() { "Inspection supplied no attested inspection time".into() }
                 else if report.get("inspection") != maintenance.get("inspection") { "Attested inspection selection does not match the declared locator/tool semantics".into() }
@@ -2145,19 +2146,16 @@ impl Store {
                 if failure.is_empty() {
                     if let Some(old) = data["observations"].get(&source_ref) { self.retain_observation(old)?; }
                     self.retain_observation(&value)?;
-                    if let Some(old) = data["observations"].get(&source_ref) {
-                        if prior_alignment["source_ref"] == source_ref && prior_alignment["observation_digest"] == digest(old)?
-                            && matches!(prior_alignment["outcome"].as_str(),Some("no_model_change_needed"|"reviewed_model_update"))
-                            && digest(&old["value"])? == digest(&value["value"])? {
-                            if let Ok(graph) = self.graph(data) {
-                                if crate::maintenance_assessment::scope_identity(&Self::item(data,&id)?["spec"],&graph.nodes).is_ok_and(|scope|prior_alignment["scope_identity"] == scope) {
-                                    carried_alignment = prior_alignment.clone();
-                                    carried_alignment["carried_from_observation"] = prior_alignment["observation_digest"].clone();
-                                    carried_alignment["observation_digest"] = json!(digest(&value)?);
-                                    carried_alignment["carried_at"] = json!(triggers::stamp(receipt_at));
-                                }
-                            }
-                        }
+                    if let Some(old) = data["observations"].get(&source_ref)
+                        && prior_alignment["source_ref"] == source_ref && prior_alignment["observation_digest"] == digest(old)?
+                        && matches!(prior_alignment["outcome"].as_str(),Some("no_model_change_needed"|"reviewed_model_update"))
+                        && digest(&old["value"])? == digest(&value["value"])?
+                        && let Ok(graph) = self.graph(data)
+                        && crate::maintenance_assessment::scope_identity(&Self::item(data,&id)?["spec"],&graph.nodes).is_ok_and(|scope|prior_alignment["scope_identity"] == scope) {
+                        carried_alignment = prior_alignment.clone();
+                        carried_alignment["carried_from_observation"] = prior_alignment["observation_digest"].clone();
+                        carried_alignment["observation_digest"] = json!(digest(&value)?);
+                        carried_alignment["carried_at"] = json!(triggers::stamp(receipt_at));
                     }
                     data["observations"].as_object_mut().unwrap().insert(source_ref.clone(), value.clone());
                     observation = value;
@@ -2322,22 +2320,21 @@ impl Store {
             if let Some(token) = item["claim"]["token"]
                 .as_str()
                 .filter(|token| claim_tokens.iter().any(|t| t == token))
+                && let Ok(claim) = self.owned_claim(item, token, true)
             {
-                if let Ok(claim) = self.owned_claim(item, token, true) {
-                    active.insert(
-                        id.clone(),
-                        crate::maintenance_assessment::ActiveUse {
-                            started_at: triggers::parse_time(
-                                claim["started_at"].as_str().unwrap(),
-                                "UTC",
-                            )?,
-                            expires_at: triggers::parse_time(
-                                claim["expires_at"].as_str().unwrap(),
-                                "UTC",
-                            )?,
-                        },
-                    );
-                }
+                active.insert(
+                    id.clone(),
+                    crate::maintenance_assessment::ActiveUse {
+                        started_at: triggers::parse_time(
+                            claim["started_at"].as_str().unwrap(),
+                            "UTC",
+                        )?,
+                        expires_at: triggers::parse_time(
+                            claim["expires_at"].as_str().unwrap(),
+                            "UTC",
+                        )?,
+                    },
+                );
             }
         }
         crate::maintenance_assessment::assess(

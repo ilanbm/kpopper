@@ -21,7 +21,7 @@ pub fn stamp(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(
         if value.timestamp_subsec_nanos() == 0 {
             chrono::SecondsFormat::Secs
-        } else if value.timestamp_subsec_nanos() % 1000 == 0 {
+        } else if value.timestamp_subsec_nanos().is_multiple_of(1000) {
             chrono::SecondsFormat::Micros
         } else {
             chrono::SecondsFormat::Nanos

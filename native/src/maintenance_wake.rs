@@ -91,20 +91,20 @@ fn assess_phase(data: &Value, now: DateTime<Utc>) -> Value {
             // Recurrence is calendar N days from the admitted check, at check_time.
             // first_due_at may have another time and can be caught up once; it is
             // not proof of the recurring phase. Cross-zone/DST phases need proof.
-            if phase.is_none()
-                || zone.is_none()
-                || check_time.is_none()
-                || policy_zone.is_none()
-                || zone != policy_zone
-            {
-                unproven = true;
-                reasons.push(json!({"id":id,"reason":"daily_recurring_phase_unestablished"}));
-                maintenance_phases.insert(id.clone(), json!("unknown"));
-            } else if phase.unwrap() < check_time.unwrap() {
-                reasons.push(json!({"id":id,"reason":"daily_wake_precedes_recurring_check_time","check_time":m["check_time"]}));
-                maintenance_phases.insert(id.clone(), json!("incompatible"));
-            } else {
-                maintenance_phases.insert(id.clone(), json!("compatible"));
+            match (phase, zone, check_time, policy_zone) {
+                (Some(phase), Some(zone), Some(check_time), Some(policy_zone)) if zone == policy_zone => {
+                    if phase < check_time {
+                        reasons.push(json!({"id":id,"reason":"daily_wake_precedes_recurring_check_time","check_time":m["check_time"]}));
+                        maintenance_phases.insert(id.clone(), json!("incompatible"));
+                    } else {
+                        maintenance_phases.insert(id.clone(), json!("compatible"));
+                    }
+                }
+                _ => {
+                    unproven = true;
+                    reasons.push(json!({"id":id,"reason":"daily_recurring_phase_unestablished"}));
+                    maintenance_phases.insert(id.clone(), json!("unknown"));
+                }
             }
         }
         return json!({"state":if reasons.is_empty(){"compatible"}else if unproven{"unknown"}else{"incompatible"},

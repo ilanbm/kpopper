@@ -80,6 +80,7 @@ fn scope_relation(scope: &BTreeSet<String>, unresolved: bool, exists: bool,
     else { ScopeRelation::Uncovered }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn assess(
     subjects: &[String],
     nodes: &BTreeMap<String, Node>,
@@ -343,8 +344,7 @@ pub(crate) fn assess(
     for subject in subjects {
         let scope = &subject_closures[subject];
         let implicit_check_context = active_related.iter().filter(|id| scope.contains(*id))
-            .map(|id| subject_closures.get(id).cloned().unwrap_or_else(|| uncached_scope(id).0))
-            .flatten().collect::<BTreeSet<_>>();
+            .flat_map(|id| subject_closures.get(id).cloned().unwrap_or_else(|| uncached_scope(id).0)).collect::<BTreeSet<_>>();
         for id in scope {
             if nodes.get(id).is_some_and(|n| n.dependencies.is_empty())
                 && relation(id) != ScopeRelation::Active && !implicit_check_context.contains(id) {
