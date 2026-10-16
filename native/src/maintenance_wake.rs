@@ -206,7 +206,7 @@ pub(crate) fn select(
     )?;
     require(
         !authority.trim().is_empty() && authority.len() <= 512,
-        "Supply an existing or new user authorization reference (at most512 bytes)",
+        "Supply an existing or new user authorization reference (at most 512 bytes)",
     )?;
     require(
         mode != "daily_fallback" || acknowledge_empty_run_cost,

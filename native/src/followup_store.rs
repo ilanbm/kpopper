@@ -2227,7 +2227,7 @@ impl Store {
         )?;
         require(
             evidence.len() <= 512 && authority.len() <= 512,
-            "Model review evidence and authority must be references of at most512 bytes",
+            "Model review evidence and authority must be references of at most 512 bytes",
         )?;
         self.transaction(|data| {
             let item = Self::item(data,key)?.clone();
