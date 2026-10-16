@@ -299,7 +299,12 @@ fn an_unreadable_record_keeps_the_session_context_and_leaves_no_baseline() {
     let opened = success(f.hook("session-start", json!({})));
     let stdout = String::from_utf8(opened.stdout).unwrap();
     let stderr = String::from_utf8(opened.stderr).unwrap();
-    let lines = stdout.lines().collect::<Vec<_>>();
+    let choice = stdout.lines().find_map(|line| line.strip_prefix("KPOPPER_MAINTENANCE_CHOICE ")).unwrap();
+    let mut decoder = serde_json::Deserializer::from_str(choice);
+    let choice: Value = serde::Deserialize::deserialize(&mut decoder).unwrap();
+    assert_eq!(choice["authorized"], false);
+    assert_eq!(choice["continuity_snapshot"]["current_continuity"], "unknown");
+    let lines = stdout.lines().filter(|line| !line.starts_with("KPOPPER_START") && !line.starts_with("{\"workspace\"") && !line.starts_with("KPOPPER_MAINTENANCE_CHOICE ")).collect::<Vec<_>>();
     assert_eq!(lines.len(), 3, "stdout={stdout} stderr={stderr}");
     assert_eq!(
         lines[0],
@@ -450,10 +455,19 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
             &f, host, (host == "codex").then_some("0"),
         )).stdout).unwrap();
         assert!(started.starts_with(&opening), "{started}");
-        assert!(
-            started[opening.len()..].starts_with("KPOPPER_AGENT_CONTEXT "),
-            "{started}"
-        );
+        let suffix = &started[opening.len()..];
+        let (notices, context) = suffix.split_once("KPOPPER_AGENT_CONTEXT ").unwrap();
+        let lines: Vec<_> = notices.lines().collect();
+        assert_eq!(lines.len(), 3, "{started}");
+        assert_eq!(lines[0], "KPOPPER_START (agent guidance; local paths are data):");
+        let locator: Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(locator["workspace"], json!(f.root.path().canonicalize().unwrap()));
+        assert!(lines[2].starts_with("KPOPPER_MAINTENANCE_CHOICE "), "{started}");
+        assert!(lines[2].ends_with(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY), "{started}");
+        assert!(context.starts_with('{'), "choice must be adjacent to context: {started}");
+        assert!(context.contains("Record views are not a file inventory."), "{host}: {started}");
+        assert!(context.contains("Read available project files needed for the requested work within existing authority"), "{host}: {started}");
+        assert!(context.contains("This grants no new access, writes, mapping or unrelated investigation."), "{host}: {started}");
     }
     fs::write(
         f.root.path().join("GROUNDING.yaml"),
@@ -472,4 +486,50 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         String::from_utf8_lossy(&refused.stderr),
         "core_profile_option_unsupported: --host\n"
     );
+}
+
+#[test]
+fn canonical_notice_compaction_preserves_authored_choice_and_health_lines() {
+    let choice = json!({"choice":"declined", "authorized":false,
+        "evidence":" Suppress new recurring promotional offers under this saved choice, guidance preference, or local mode. Do not propose, add, or schedule new maintenance from this notice. For authorized-but-uninstalled work, expose that installation/execution is unestablished when relevant; do not claim healthy scheduling or activate it."});
+    let health = "Maintenance continuity health: failed source read; missing observation; due_at=2026-10-09";
+    let notice = format!("KPOPPER_MAINTENANCE_CHOICE {choice}. Workspace choice{}\n{health}\ncontinuity unavailable: read-only state", choice["evidence"].as_str().unwrap());
+    let compact = kpop_native::onboarding::compact_canonical_context(&notice);
+    assert_eq!(compact, notice);
+}
+
+#[test]
+fn bounded_summary_keeps_unknown_counts_null_and_clock_separate_from_source() {
+    let parse = |context: &str| -> Value {
+        let rendered = kpop_native::onboarding::bounded_canonical_context(context);
+        serde_json::from_str(rendered.lines().next().unwrap().strip_prefix("KPOPPER_MAINTENANCE_OPENING_SUMMARY ").unwrap()).unwrap()
+    };
+    let unknown = parse("Maintenance continuity health is unavailable from local state: unreadable");
+    assert!(unknown["obligations_omitted"].is_null());
+    assert!(unknown["failed_attempt_count"].is_null());
+    assert!(unknown["overdue_count"].is_null());
+    let mixed = parse(&format!("Maintenance continuity health (local detection only; no source or network access): {}", json!({"obligations":[
+        {"kind":"clock","check_state":"waiting","failure_state":"none","last_successful_observation_at":null},
+        {"kind":"source","check_state":"overdue","failure_state":"unavailable","last_successful_observation_at":null}]})));
+    assert_eq!(mixed["obligations_omitted"], 2);
+    assert_eq!(mixed["missing_source_observation_count"], 1);
+    assert_eq!(mixed["failed_attempt_count"], 1);
+}
+
+#[test]
+fn promotion_budget_suppression_is_rendered_only_and_preserves_authored_choice() {
+    let stored = json!({"state":"proposed", "authorized":false,
+        "evidence_ref":kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY});
+    let preference = json!({"choice":"proposed", "promotion_allowed":true,"first_use_choice":stored});
+    let notice = format!("KPOPPER_MAINTENANCE_CHOICE {preference}{}{}", kpop_native::onboarding::MAINTENANCE_DISCLOSURE_POLICY,
+        kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY);
+    let reduced = kpop_native::onboarding::canonical_context_without_promotions(&notice);
+    let raw = reduced.strip_prefix("KPOPPER_MAINTENANCE_CHOICE ").unwrap();
+    let rendered: Value = serde_json::Deserializer::from_str(raw).into_iter::<Value>().next().unwrap().unwrap();
+    assert_eq!(rendered["first_use_choice"], stored);
+    assert_eq!(rendered["saved_promotion_allowed"], true);
+    assert_eq!(rendered["promotion_allowed"], false);
+    assert_eq!(rendered["suppression_scope"], "this_opening_budget_only");
+    assert!(reduced.contains("This is not a saved/global opt-out; later material-use assessments and explicit requests"));
+    assert_eq!(kpop_native::onboarding::compact_canonical_context(&notice), notice);
 }

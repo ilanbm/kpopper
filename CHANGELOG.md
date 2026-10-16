@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Ongoing knowledge maintenance
+
+- Ordinary work can propose source or clock checks for knowledge that will be
+  revisited, even before followups are configured. Decline, snooze, pause and
+  guidance-off suppress repeated offers while relevant missing, failed or overdue
+  evidence remains visible.
+- Reader guidance directs agents to complete task-required file comparisons and
+  read other project materials within the existing authorization.
+- Explicit declarations select source scope, evidence requirements and cadence in
+  whole local calendar days. Recurring checks share the existing followup ledger,
+  ownership and daily task budget. Proposals do not install a schedule or grant
+  source access, record changes or publication authority.
+- Keep successful source observations separate from failed attempts, evidence
+  expiry, the next check's due time and reported host execution. Current-use
+  assessment also checks declared dependencies and source-to-record alignment;
+  a recent observation does not automatically validate an old conclusion.
+- Inspection receipts are host-attested, not authenticated source truth or proof
+  that future scheduled runs will occur. New maintenance capture uses the version
+  2 private ledger; older runtimes must be upgraded before using that ledger.
+  Existing ordinary followups keep their behavior. See
+  [clock and source maintenance](docs/maintenance.md).
+
 ## 0.16.1 — 2026-10-09
 
 ### Fixed

@@ -14,6 +14,33 @@ const MIN_TOKENS: usize = 64;
 const MAX_TOKENS: usize = 65_536;
 pub const CANONICAL_RULES: &str = RULES;
 
+/// Captured node IDs whose bodies or checks can inform an exact read.
+/// An incomplete body-bearing scope requires an unknown disclosure by callers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReadSubjectScope {
+    pub subjects: Vec<String>,
+    pub complete: bool,
+    pub body_bearing: bool,
+}
+
+impl ReadSubjectScope {
+    pub(crate) fn complete(subjects: impl IntoIterator<Item = String>, body_bearing: bool) -> Self {
+        Self {
+            subjects: subjects.into_iter().collect(),
+            complete: true,
+            body_bearing,
+        }
+    }
+
+    pub(crate) fn unresolved_body() -> Self {
+        Self {
+            subjects: Vec::new(),
+            complete: false,
+            body_bearing: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Opening {
     pub text: String,
@@ -361,6 +388,68 @@ impl CheckedSession {
     /// Validate an exact recorded reference without adding a presentation budget.
     pub fn validate_reference(&self, reference: &str) -> Result<()> {
         self.read_value(reference).map(|_| ())
+    }
+
+    pub(crate) fn read_subjects(&self, reference: &str) -> Result<ReadSubjectScope> {
+        // Branch maps are accepted by read() before read_value() is called.
+        if reference.starts_with('/') {
+            require(
+                self.groups.contains_key(reference),
+                "unknown branch; read / with this revision to list valid branches",
+            )?;
+            return Ok(ReadSubjectScope::complete(self.groups[reference].iter().cloned(), true));
+        }
+        // Keep exact references aligned with read_value's accepted grammar.
+        self.validate_reference(reference)?;
+        let base = reference
+            .split_once('#')
+            .map_or(reference, |(base, _)| base);
+        if self.nodes.contains_key(base)
+            && !["orientation", "assessment", "pending", "native"].contains(&base)
+        {
+            return Ok(ReadSubjectScope::complete([base.to_owned()], true));
+        }
+        if let Some(id) = base.strip_prefix("node:") {
+            return Ok(ReadSubjectScope::complete([id.to_owned()], true));
+        }
+        if let Some(id) = base.strip_prefix("finding:") {
+            return Ok(if self.nodes.contains_key(id) {
+                ReadSubjectScope::complete([id.to_owned()], true)
+            } else {
+                ReadSubjectScope::unresolved_body()
+            });
+        }
+        if let Some(id) = base.strip_prefix("history:") {
+            return Ok(if self.nodes.contains_key(id) {
+                ReadSubjectScope::complete([id.to_owned()], true)
+            } else {
+                ReadSubjectScope::unresolved_body()
+            });
+        }
+        if base == "history" {
+            let assessment = vmap(self.context.assessment(), "invalid captured assessment")?;
+            let history = vmap(
+                &assessment["history_subjects"],
+                "invalid captured assessment",
+            )?;
+            let subjects = history
+                .keys()
+                .filter(|id| self.nodes.contains_key(*id))
+                .cloned()
+                .collect();
+            return Ok(ReadSubjectScope {
+                subjects,
+                complete: history.keys().all(|id| self.nodes.contains_key(id)),
+                body_bearing: true,
+            });
+        }
+        if let Some(key) = base.strip_prefix("conditions:") {
+            return Ok(ReadSubjectScope::complete(self.members(key)?, true));
+        }
+        if base == "pending" || base == "native" || base.starts_with("proposal:") {
+            return Ok(ReadSubjectScope::unresolved_body());
+        }
+        Ok(ReadSubjectScope::complete([], false))
     }
 
     /// Attach validated private proposals without changing the captured revision.
