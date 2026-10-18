@@ -32,7 +32,7 @@ fn s(v: &str) -> V {
 fn get<'a>(m: &'a Map, k: &str) -> &'a V {
     m.get(k).unwrap_or(&V::Null)
 }
-fn iterable(v: &V) -> Result<Vec<String>> {
+pub(crate) fn iterable(v: &V) -> Result<Vec<String>> {
     if !truth(v) {
         return Ok(vec![]);
     }
