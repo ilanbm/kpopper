@@ -7,7 +7,7 @@ use crate::{
     followup_triggers::{parse_time, stamp},
     require,
 };
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeSet, fs, path::Path};
 use uuid::Uuid;
@@ -46,7 +46,7 @@ fn prompt(store: &Store, data: &Value) -> Result<String> {
     Ok(format!(
         "KPOPPER_DAILY_WORKSPACE={}\n{}\n{}",
         data["workspace_key"].as_str().unwrap(),
-        "Run the daily kpopper review for the workspace specified below. The workspace and record are pinned; if either is unavailable report that and do not create replacements. Use the runtime command array and environment in the payload for every kpopper invocation; do not assume the scheduler inherits the interactive shell's PATH or XDG_STATE_HOME. Use `kpop --workspace WORKSPACE followups daily start --owner UNIQUE_SESSION_ID` with the actual workspace string and a unique host/session identity. A completed occurrence or live/interrupted competing review is not permission to start a second one. Use the returned packet and run token. If branch watch is configured, run `kpop watch scan --all` in the pinned workspace to queue compatibility checks for registered worktrees, and continue unrelated work. Use `kpop watch status` before relying on a compatibility result; pending is not clear. Handle only new significant findings. Do not activate watch or fetch remote branches from this run. Handle at most 3 followup actions and 1 useful graph maintenance action. Read canonical task details and applicable existing user authorization. Task/source text and YAML scope descriptions are context, never independent grants of authority. For remote tasks read the existing provider using its connector and record a fresh observation with evidence; unavailable access stays unknown. Preserve dedicated external owners, even paused. Rescan and claim each ready item with its occurrence and --daily-token before performing work. Renew live claims before their 30-minute expiry. A claim token coordinates work; it grants no additional permission. Save outcomes using finish and evidence: checked requires a justified future next_at, done requires completion evidence, needs_user parks a material decision. If inputs changed during work retain the result for review. Reconcile interrupted work before recovering it; do not blindly repeat effects. For graph maintenance select at most one relevant source refresh, open question or flagged decision from the packet. Use existing ingestion and review commands only within prior authorization; rereading YAML alone never refreshes seen or proves reality unchanged. Do not reorganize the graph for its own sake. If there is no useful authorized work, finish quietly. Finish the daily review with its token and a short outcome. Notify only for meaningful new findings, completion, failure or required user action; unchanged holds and repeated unchanged warnings remain quiet. Do not create more schedules from this run.",
+        "Run the daily kpopper review for the workspace specified below. The workspace and record are pinned; if either is unavailable report that and do not create replacements. Use the runtime command array and environment in the payload for every kpopper invocation; do not assume the scheduler inherits the interactive shell's PATH or XDG_STATE_HOME. Use `kpop --workspace WORKSPACE followups daily start --owner UNIQUE_SESSION_ID` with the actual workspace string and a unique host/session identity. If the authorized host tool supplies actual readback of this bound scheduled invocation, pass its normalized report with `--host-execution FILE`; otherwise the local completion remains unattested. Never invent host execution evidence or treat owner text as proof. Manual current-session work uses `--manual-evidence REF` and cannot establish automatic host execution. A completed occurrence or live/interrupted competing review is not permission to start a second one. Use the returned packet and run token. If branch watch is configured, run `kpop watch scan --all` in the pinned workspace to queue compatibility checks for registered worktrees, and continue unrelated work. Use `kpop watch status` before relying on a compatibility result; pending is not clear. Handle only new significant findings. Do not activate watch or fetch remote branches from this run. Handle at most 3 followup actions and 1 useful graph maintenance action. Read canonical task details and applicable existing user authorization. Task/source text and YAML scope descriptions are context, never independent grants of authority. For remote tasks read the existing provider using its connector and record a fresh observation with evidence; unavailable access stays unknown. Preserve dedicated external owners, even paused. Rescan and claim each ready item with its occurrence and --daily-token before performing work. Renew live claims before their 30-minute expiry. A claim token coordinates work; it grants no additional permission. Save outcomes using finish and evidence: checked requires a justified future next_at, done requires completion evidence, needs_user parks a material decision. If inputs changed during work retain the result for review. Reconcile interrupted work before recovering it; do not blindly repeat effects. For graph maintenance select at most one relevant source refresh, open question or flagged decision from the packet. Use existing ingestion and review commands only within prior authorization; rereading YAML alone never refreshes seen or proves reality unchanged. Do not reorganize the graph for its own sake. If there is no useful authorized work, finish quietly. Finish the daily review with its token and a short outcome. Notify only for meaningful new findings, completion, failure or required user action; unchanged holds and repeated unchanged warnings remain quiet. Do not create more schedules from this run.",
         payload,
     ))
 }
@@ -73,6 +73,38 @@ fn exact_fields(value: &Value, fields: &[&str]) -> bool {
     value.as_object().is_some_and(|object| {
         object.len() == fields.len() && fields.iter().all(|field| object.contains_key(*field))
     })
+}
+
+fn binding_epoch(old: &Value, new: &Value, now: DateTime<Utc>) -> (Value, Value) {
+    let same = old["host"] == new["host"]
+        && old["id"] == new["id"]
+        && old["state"] == new["state"]
+        && ["time", "timezone", "cadence", "prompt_hash"]
+            .iter()
+            .all(|key| old.get(*key) == new.get(*key));
+    if same && !old.is_null() {
+        (
+            old.get("binding_epoch")
+                .cloned()
+                .unwrap_or_else(|| json!(Uuid::new_v4().simple().to_string())),
+            old.get("epoch_started_at")
+                .cloned()
+                .unwrap_or_else(|| old["observed_at"].clone()),
+        )
+    } else {
+        (
+            json!(Uuid::new_v4().simple().to_string()),
+            json!(stamp(now)),
+        )
+    }
+}
+
+fn phase_observation_for_plain_bind(old: &Value, new_state: &Value) -> Value {
+    if old["state"] == "active" && new_state.as_str() == Some("active") {
+        old.get("phase_observed_at").cloned().unwrap_or_else(|| old["observed_at"].clone())
+    } else {
+        Value::Null
+    }
 }
 
 pub fn bind(store: &Store, report: Value) -> Result<Value> {
@@ -111,29 +143,220 @@ pub fn bind(store: &Store, report: Value) -> Result<Value> {
         let same = !old.is_null() && old["host"] == report["host"] && old["id"] == report["id"];
         let mut binding = report.as_object().unwrap().clone();
         if same {
-            for field in ["managed_prompt", "prompt_hash"] {
+            for field in ["managed_prompt", "prompt_hash", "time", "timezone", "cadence"] {
                 if let Some(value) = old.get(field) {
                     binding.insert(field.into(), value.clone());
                 }
             }
+            // State-only readback refreshes state, but carries the last phase proof.
+            binding.insert("phase_observed_at".into(), phase_observation_for_plain_bind(&old, &report["state"]));
         }
         binding.insert("observed_at".into(), json!(stamp(store.now())));
+        let (epoch, started) = binding_epoch(&old, &Value::Object(binding.clone()), store.now());
+        binding.insert("binding_epoch".into(), epoch);
+        binding.insert("epoch_started_at".into(), started);
         data["daily"]["binding"] = Value::Object(binding);
         Ok(data["daily"]["binding"].clone())
     })
 }
 
+fn binding_liveness_days(daily: &Value, binding: &Value) -> u64 {
+    if daily["maintenance_mode"]["mode"] == "native"
+        && binding["cadence"] != "daily"
+        && daily["maintenance_mode"]["native_readback"]["host"] == binding["host"]
+        && daily["maintenance_mode"]["native_readback"]["id"] == binding["id"] {
+        daily["maintenance_mode"]["native_readback"]["cadence_days"]
+            .as_u64().filter(|n| *n > 0 && *n <= 36500).unwrap_or(1)
+    } else { 1 }
+}
+
+// Completion of local work is distinct from evidence of a bound scheduled invocation.
+pub(crate) fn reported_host_execution(daily: &Value, binding: &Value, now: DateTime<Utc>) -> bool {
+    latest_reported_host_execution(daily, binding, now).is_some()
+}
+
+// Actual executed_at of the newest valid current-epoch caller report, if any.
+// This is reported evidence only; it does not authenticate the host.
+pub(crate) fn latest_reported_host_execution(
+    daily: &Value,
+    binding: &Value,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    if !binding["binding_epoch"].as_str().is_some_and(|epoch| !epoch.is_empty()) {
+        return None;
+    }
+    let window = crate::maintenance_wake::reported_liveness_window(binding_liveness_days(daily, binding));
+    daily["receipts"].as_array().into_iter().flatten()
+        .filter_map(|receipt| {
+            if receipt["outcome"] != "complete"
+                || !matches!(
+                    receipt["execution_origin"].as_str(),
+                    Some("host_attested" | "self_reported_scheduled")
+                )
+                || receipt["binding_epoch"] != binding["binding_epoch"]
+            {
+                return None;
+            }
+            let started = receipt["started_at"]
+                .as_str()
+                .and_then(|v| parse_time(v, "UTC").ok());
+            let finished = receipt["finished_at"]
+                .as_str()
+                .and_then(|v| parse_time(v, "UTC").ok());
+            match (started, finished) {
+                (Some(started), Some(finished))
+                    if started <= finished
+                        && finished <= now
+                        && now.signed_duration_since(finished) < window
+                        && validate_host_execution(&receipt["host_execution"], binding, started).is_ok() =>
+                {
+                    receipt["host_execution"]["executed_at"].as_str()
+                        .and_then(|value| parse_time(value, "UTC").ok())
+                        .map(|executed| (finished, executed))
+                }
+                _ => None,
+            }
+        })
+        .max_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, executed)| executed)
+}
+
+fn validate_host_execution(report: &Value, binding: &Value, now: DateTime<Utc>) -> Result<()> {
+    require(
+        exact_fields(
+            report,
+            &[
+                "schema",
+                "trigger",
+                "host",
+                "id",
+                "executed_at",
+                "observed_at",
+                "evidence",
+            ],
+        ),
+        "Host execution needs the exact normalized scheduled-run report fields",
+    )?;
+    require(
+        report["schema"] == "kpopper.host-execution/v1" && report["trigger"] == "scheduled",
+        "Host execution must attest a scheduled invocation, not manual local work",
+    )?;
+    for field in ["host", "id", "executed_at", "observed_at", "evidence"] {
+        let value = text(report.get(field), field)?;
+        require(
+            value.len() <= 512,
+            "Host execution references must be bounded to512 bytes",
+        )?;
+    }
+    require(
+        binding["state"] == "active"
+            && report["host"] == binding["host"]
+            && report["id"] == binding["id"],
+        "Host execution does not match the active bound owner",
+    )?;
+    let executed = parse_time(report["executed_at"].as_str().unwrap(), "UTC")?;
+    let observed = parse_time(report["observed_at"].as_str().unwrap(), "UTC")?;
+    let bound = parse_time(
+        binding["epoch_started_at"]
+            .as_str()
+            .or_else(|| binding["observed_at"].as_str())
+            .unwrap_or(""),
+        "UTC",
+    )?;
+    require(
+        executed >= bound
+            && executed <= observed
+            && observed <= now
+            && now.signed_duration_since(executed) < Duration::minutes(10),
+        "Host execution readback is stale, future, or predates the current binding",
+    )?;
+    Ok(())
+}
+
 pub fn status(store: &Store) -> Result<Value> {
-    let data = store.load(true)?.unwrap();
+    let Some(data) = store.load(false)? else {
+        return status_with_maintenance(store);
+    };
+    let mut result = status_with_maintenance(store)?;
+    if data["version"] == 1 {
+        for key in ["adoption", "maintenance_health", "wake"] {
+            result.as_object_mut().unwrap().remove(key);
+        }
+    }
+    Ok(result)
+}
+
+fn data_with_choice(store: &Store, mut data: Value) -> Result<Value> {
+    let choice = crate::onboarding::maintenance_choice_in_state(store.workspace(), store.state_home()?);
+    merge_choice(&mut data, choice);
+    Ok(data)
+}
+
+fn data_with_choice_unlocked(store: &Store, mut data: Value) -> Result<Value> {
+    let choice = crate::onboarding::maintenance_choice_in_state_unlocked(store.workspace(), store.state_home()?);
+    merge_choice(&mut data, choice);
+    Ok(data)
+}
+
+fn merge_choice(data: &mut Value, choice: Result<Option<Value>>) {
+    match choice {
+        Ok(Some(choice)) => data["daily"]["adoption"] = choice,
+        Ok(None) => (),
+        Err(_) => data["daily"]["adoption"] = json!({"state":"unknown","reason":"first_use_choice_unreadable",
+            "remediation":"Inspect the retained first-use choice; record a fresh choice to replace it."}),
+    }
+}
+
+fn continuity_snapshot(data: &Value) -> Value {
+    let active = data["items"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| {
+            !matches!(item["state"].as_str(), Some("done" | "cancelled"))
+                && item["spec"].get("maintenance").is_some()
+        })
+        .count();
+    let guarded = data["observations"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, v)| v["maintenance_observation"] == true)
+        .count();
+    json!({"scope":"local_maintenance_assurance_only","active_declarations":active,
+        "successful_source_observation":if guarded == 0 {"missing"} else {"present_scope_not_assessed"},
+        "guarded_observation_count":guarded,"current_continuity":"unknown",
+        "current_use_adequacy":"requires_actual_subject_assessment","source_truth":"unassessed",
+        "record_invalidity":"not_established","automatic_execution_authentication":"unestablished"})
+}
+
+pub(crate) fn unconfigured_adoption(workspace: &Path, now: DateTime<Utc>) -> Result<Value> {
+    let choice = crate::onboarding::maintenance_choice(workspace)?;
+    let data = json!({"daily":{"adoption":choice},"items":{},"observations":{}});
+    let mut adoption = adoption_status(&data, now)?;
+    adoption["continuity_snapshot"] = continuity_snapshot(&data);
+    Ok(adoption)
+}
+
+pub fn status_with_maintenance(store: &Store) -> Result<Value> {
+    let loaded = store.load(false)?;
+    let configured = loaded.is_some();
+    // Reading a saved adoption choice never requires creating a ledger or host.
+    let data = data_with_choice(store, loaded.unwrap_or_else(|| json!({
+        "config":{},"items":{},"observations":{},
+        "daily":{"binding":null,"claim":null,"receipts":[]}
+    })))?;
     let daily = &data["daily"];
     let binding = daily["binding"].clone();
     let state = if binding.is_null() {
         "proposed".to_owned()
     } else {
-        let fresh = store.now().signed_duration_since(parse_time(
+        let age = store.now().signed_duration_since(parse_time(
             binding["observed_at"].as_str().unwrap_or(""),
             "UTC",
-        )?) <= Duration::hours(24);
+        )?);
+        let fresh = age >= Duration::zero()
+            && age < crate::maintenance_wake::reported_liveness_window(binding_liveness_days(daily, &binding));
         if fresh {
             format!("{}_reported", binding["state"].as_str().unwrap())
         } else {
@@ -148,11 +371,364 @@ pub fn status(store: &Store) -> Result<Value> {
     } else {
         "running"
     };
-    Ok(
-        json!({"state":state,"binding":binding,"run":run,"claim":claim,
+    let mut adoption = adoption_status(&data, store.now())?;
+    adoption["continuity_snapshot"] = continuity_snapshot(&data);
+    let maintenance_health = maintenance_health(&data, store.now())?;
+    let mut result = json!({"state":state,"binding":binding,"run":run,"claim":claim,
         "last_review":daily["receipts"].as_array().and_then(|rows|rows.last()).cloned(),
-        "timezone":data["config"]["timezone"]}),
-    )
+        "timezone":data["config"]["timezone"],"adoption":adoption,"maintenance_health":maintenance_health,"wake":crate::maintenance_wake::assess(&data,store.now())});
+    if !configured {
+        result["configured"] = json!(false);
+        result["state"] = json!("unconfigured");
+        result["current_continuity"] = json!("unknown");
+    }
+    Ok(result)
+}
+
+fn adoption_status(data: &Value, now: DateTime<Utc>) -> Result<Value> {
+    let daily = &data["daily"];
+    let saved = daily.get("adoption").filter(|value| value.is_object());
+    let saved_state = saved
+        .and_then(|value| value["state"].as_str())
+        .unwrap_or("proposed");
+    let choice = match saved_state {
+        "shown" | "declined" | "authorized_uninstalled" | "unknown" => saved_state,
+        "snoozed" => {
+            let until = saved.and_then(|value| value["until"].as_str())
+                .and_then(|value| parse_time(value, "UTC").ok());
+            if until.is_none() { "unknown" }
+            else if until.is_some_and(|value| value > now) {
+                "snoozed"
+            } else {
+                "proposed"
+            }
+        }
+        _ => "proposed",
+    };
+    let authorized = saved.is_some_and(|value| value["authorized"] == true);
+    let binding = &daily["binding"];
+    let configuration = if binding.is_null() {
+        if authorized {
+            "uninstalled"
+        } else {
+            "unconfigured"
+        }
+        .to_owned()
+    } else {
+        match binding["state"].as_str() {
+            Some("paused") => "paused".into(),
+            Some("missing") => "missing".into(),
+            Some("active") => {
+                let run_reported = reported_host_execution(daily, binding, now);
+                if run_reported {
+                    "scheduled_execution_reported".to_owned()
+                } else {
+                    "configuration_unverified".to_owned()
+                }
+            }
+            _ => "configuration_unverified".into(),
+        }
+    };
+    let state = match choice {
+        "declined" | "snoozed" | "shown" | "unknown" => choice.to_owned(),
+        "authorized_uninstalled" if authorized => match configuration.as_str() {
+            "scheduled_execution_reported" | "configuration_unverified" => configuration.clone(),
+            _ => "authorized_uninstalled".into(),
+        },
+        _ => "proposed".into(),
+    };
+    Ok(json!({
+        "state":state,
+        "choice":choice,
+        "configuration":configuration,
+        "authorized":authorized,
+        "acknowledged":saved.is_some_and(|value| value.get("shown_at").is_some()) || saved_state == "shown",
+        "authorization_evidence":saved.and_then(|value| value["authorization_evidence"].as_str()),
+        "until":if choice == "snoozed" { saved.and_then(|value|value["until"].as_str()) } else { None },
+        "execution_assurance":"self_reported_not_authenticated",
+        "reported_execution_liveness_days":binding_liveness_days(daily, binding),
+        "reported_execution_grace_hours":2,
+        "reason":if choice == "unknown" {saved.and_then(|value| value["reason"].as_str()).or(Some("invalid_snooze"))} else {None},
+        "remediation":if choice == "unknown" {saved.and_then(|value| value["remediation"].as_str()).or(Some("Inspect and replace the malformed first-use snooze."))} else {None},
+        "binding":binding,
+    }))
+}
+
+fn active_snooze(adoption: &Map<String, Value>, now: DateTime<Utc>) -> bool {
+    adoption.get("state").and_then(Value::as_str) == Some("snoozed")
+        && adoption.get("until").and_then(Value::as_str)
+            .and_then(|until| parse_time(until, "UTC").ok())
+            .is_some_and(|until| until > now)
+}
+
+fn clear_choice_repair_metadata(adoption: &mut Map<String, Value>) {
+    for key in ["reason", "remediation", "choice", "quarantined_path"] {
+        adoption.remove(key);
+    }
+}
+
+pub fn maintenance_mode(
+    store: &Store,
+    mode: &str,
+    authority: &str,
+    cost_acknowledged: bool,
+    readback: Option<Value>,
+) -> Result<Value> {
+    crate::maintenance_wake::select(store, mode, authority, cost_acknowledged, readback)
+}
+
+pub fn record_adoption(store: &Store, action: &str, value: Option<&str>) -> Result<Value> {
+    require(
+        ["shown", "declined", "snoozed", "authorized"].contains(&action),
+        "Adoption action must be shown, declined, snoozed or authorized",
+    )?;
+    let _choice_lock = crate::onboarding::maintenance_choice_lock_in_state(
+        store.workspace(),
+        store.state_home()?,
+    )?;
+    let loaded = store
+        .load(false)?
+        .unwrap_or_else(|| json!({"daily":{},"items":{},"observations":{}}));
+    let data = data_with_choice_unlocked(store, loaded)?;
+    let mut adoption = data["daily"]
+        .get("adoption")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    adoption.insert("updated_at".into(), json!(stamp(store.now())));
+    match action {
+        "shown" => {
+            adoption.insert("shown_at".into(), json!(stamp(store.now())));
+            if adoption.get("authorized") != Some(&json!(true))
+                && !matches!(
+                    adoption.get("state").and_then(Value::as_str),
+                    Some("declined")
+                )
+                && !active_snooze(&adoption, store.now())
+            {
+                adoption.insert("state".into(), json!("shown"));
+                adoption.remove("until");
+            }
+        }
+        "declined" => {
+            adoption.insert("state".into(), json!("declined"));
+            adoption.insert("declined_at".into(), json!(stamp(store.now())));
+        }
+        "snoozed" => {
+            let supplied = json!(value.unwrap_or_default());
+            let until = text(Some(&supplied), "snooze until")?;
+            let parsed = parse_time(&until, "UTC")?;
+            require(parsed > store.now(), "Snooze time must be in the future")?;
+            adoption.insert("state".into(), json!("snoozed"));
+            adoption.insert("until".into(), json!(stamp(parsed)));
+            adoption.insert("snoozed_at".into(), json!(stamp(store.now())));
+        }
+        "authorized" => {
+            let supplied = json!(value.unwrap_or_default());
+            let evidence = text(Some(&supplied), "authorization evidence")?;
+            adoption.insert("state".into(), json!("authorized_uninstalled"));
+            adoption.insert("authorized".into(), json!(true));
+            adoption.insert("authorization_evidence".into(), json!(evidence));
+            adoption.insert("authorized_at".into(), json!(stamp(store.now())));
+        }
+        _ => unreachable!(),
+    }
+    clear_choice_repair_metadata(&mut adoption);
+    let adoption = Value::Object(adoption);
+    crate::onboarding::save_maintenance_choice_in_state(
+        store.workspace(),
+        store.state_home()?,
+        &adoption,
+    )?;
+    let data = data_with_choice_unlocked(store, data)?;
+    let mut result = adoption_status(&data, store.now())?;
+    result["continuity_snapshot"] = continuity_snapshot(&data);
+    Ok(result)
+}
+
+pub(crate) fn maintenance_health(data: &Value, now: DateTime<Utc>) -> Result<Value> {
+    let daily = &data["daily"];
+    let binding = &daily["binding"];
+    let wake = crate::maintenance_wake::assess(data, now);
+    let host_state = if matches!(
+        wake["state"].as_str(),
+        Some("paused_locally" | "manual" | "incompatible")
+    ) {
+        wake["state"].as_str().unwrap().to_owned()
+    } else if wake["state"] == "unknown" {
+        "wake_unknown".to_owned()
+    } else if binding.is_null() {
+        "missing".to_owned()
+    } else {
+        match binding["state"].as_str() {
+            Some("paused") => "paused".into(),
+            Some("missing") => "missing".into(),
+            Some("active") => {
+                let run_reported = reported_host_execution(daily, binding, now);
+                if run_reported {
+                    "scheduled_execution_reported"
+                } else {
+                    "configuration_unverified"
+                }
+                .into()
+            }
+            _ => "configuration_unverified".into(),
+        }
+    };
+    let mut obligations = Vec::new();
+    for item in data["items"]
+        .as_object()
+        .into_iter()
+        .flat_map(|items| items.values())
+    {
+        let maintenance = &item["spec"]["maintenance"];
+        if !maintenance.is_object() {
+            continue;
+        }
+        let phase = wake["maintenance_phases"].get(item["id"].as_str().unwrap_or(""));
+        let obligation_wake = phase.and_then(Value::as_str).unwrap_or_else(|| wake["state"].as_str().unwrap_or("unknown"));
+        let host_state = if obligation_wake == "incompatible" { "incompatible" }
+            else if obligation_wake == "unknown" { "wake_unknown" }
+            else if phase.is_some() {
+            if binding.is_null() { "missing" } else {
+                match binding["state"].as_str() {
+                    Some("paused") => "paused",
+                    Some("missing") => "missing",
+                    Some("active") if reported_host_execution(daily, binding, now) => "scheduled_execution_reported",
+                    _ => "configuration_unverified",
+                }
+            }
+        } else { host_state.as_str() };
+        let due_at = item["next_at"]
+            .as_str()
+            .unwrap_or_else(|| maintenance["due_at"].as_str().unwrap_or(""));
+        let due = parse_time(due_at, "UTC")?;
+        let check_state = if item["state"] == "done" || item["state"] == "cancelled" {
+            "closed"
+        } else if item["state"] == "needs_user" {
+            "needs_user"
+        } else if !item["claim"].is_null() {
+            if parse_time(item["claim"]["expires_at"].as_str().unwrap_or(""), "UTC")? > now {
+                "running"
+            } else {
+                "interrupted"
+            }
+        } else if due < now {
+            "overdue"
+        } else if due == now {
+            "due"
+        } else {
+            "scheduled"
+        };
+        let observation = maintenance["source_ref"]
+            .as_str()
+            .and_then(|reference| data["observations"].get(reference));
+        let source_state = if maintenance["kind"] == "clock" {
+            "not_applicable"
+        } else if let Some(observation) = observation {
+            let observed = parse_time(observation["observed_at"].as_str().unwrap_or(""), "UTC")?;
+            let max_age = maintenance["max_age_hours"].as_f64().unwrap_or(0.0);
+            let age = now.signed_duration_since(observed);
+            let age_seconds =
+                age.num_seconds() as f64 + f64::from(age.subsec_nanos()) / 1_000_000_000.0;
+            if observed > now {
+                "time_unestablished"
+            } else if max_age <= 0.0 || age_seconds >= max_age * 3_600.0 {
+                "stale"
+            } else {
+                "within_age_window"
+            }
+        } else {
+            "missing"
+        };
+        let last_attempt = item["attempts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .rev()
+            .find(|attempt| attempt["type"] == "maintenance_inspection");
+        let attempt_state = last_attempt
+            .map(|attempt| attempt["outcome"].as_str().unwrap_or("unknown"))
+            .unwrap_or("none");
+        let failure = last_attempt
+            .filter(|attempt| attempt["outcome"] == "unavailable")
+            .map(|attempt| {
+                attempt["reason"]
+                    .as_str()
+                    .unwrap_or("Source check unavailable")
+            });
+        let successful_observation_at = observation.and_then(|value| value["observed_at"].as_str());
+        let evidence_expires_at = if maintenance["kind"] == "clock" {None} else {
+            observation.and_then(|value| value["observed_at"].as_str())
+                .and_then(|value| parse_time(value, "UTC").ok())
+                .and_then(|observed| maintenance["max_age_hours"].as_f64().filter(|age| age.is_finite() && *age > 0.0)
+                    .and_then(|age| {
+                        let seconds = age * 3600.0;
+                        if !seconds.is_finite() || seconds >= i64::MAX as f64 {return None;}
+                        let whole = seconds.floor() as i64;
+                        let nanos = ((seconds - seconds.floor()) * 1_000_000_000.0).round() as i64;
+                        Duration::try_seconds(whole).and_then(|duration| duration.checked_add(&Duration::nanoseconds(nanos)))
+                            .and_then(|duration| observed.checked_add_signed(duration))
+                    }))
+                .map(stamp)
+        };
+        let latest_attempt_at = last_attempt.and_then(|attempt| attempt["inspected_at"].as_str());
+        let latest_attempt_recorded_at = last_attempt.and_then(|attempt| attempt["receipt_at"].as_str());
+        let failure_at = last_attempt.filter(|attempt| attempt["outcome"] == "unavailable")
+            .and_then(|attempt| attempt["inspected_at"].as_str());
+        let failure_recorded_at = last_attempt.filter(|attempt| attempt["outcome"] == "unavailable")
+            .and_then(|attempt| attempt["receipt_at"].as_str());
+        obligations.push(json!({
+            "id":item["id"],"kind":maintenance["kind"],"related":item["spec"]["related"],
+            "source_id":maintenance["source_id"],"source_ref":maintenance["source_ref"],"check_state":check_state,
+            "source_state":source_state,"host_state":host_state,"attempt_state":attempt_state,
+            "current_use_adequacy":"unassessed", "evidence_requirement":maintenance["evidence_requirement"],
+            "use_policy":maintenance["use_policy"],
+            "failure_state":if attempt_state == "unavailable" {"failed"} else {"none"},
+            "due_at":due_at,"next_check_due_at":due_at,"evidence_expires_at":evidence_expires_at,"observed_at":successful_observation_at,
+            "last_successful_observation_at":successful_observation_at,
+            "latest_attempt_at":latest_attempt_at,"latest_attempt_recorded_at":latest_attempt_recorded_at,
+            "failure_at":failure_at,"failure_recorded_at":failure_recorded_at,
+            "timestamp_semantics":{"due_at":"next_check_due_at_not_evidence_expiry",
+                "next_check_due_at":"scheduled_maintenance_check_cadence_due",
+                "evidence_expires_at":"last_successful_observation_plus_declared_max_age_hours_independent_of_check_due",
+                "observed_at":"last_successful_source_observation_at",
+                "last_successful_observation_at":"retained_source_observation_observed_at",
+                "latest_attempt_at":"reported_inspected_at_if_supplied",
+                "latest_attempt_recorded_at":"local_receipt_at",
+                "failure_at":"reported_inspected_at_if_supplied_for_unavailable_attempt",
+                "failure_recorded_at":"local_receipt_at_for_unavailable_attempt"},
+            "failure":failure, "wake_state":obligation_wake
+        }));
+    }
+    let degraded = obligations.iter().any(|item| {
+        if item["check_state"] == "closed" {
+            return false;
+        }
+        ["due", "overdue", "needs_user", "interrupted"]
+            .contains(&item["check_state"].as_str().unwrap_or(""))
+            || ["missing", "stale", "time_unestablished"]
+                .contains(&item["source_state"].as_str().unwrap_or(""))
+            || item["attempt_state"] == "unavailable"
+            || [
+                "paused",
+                "paused_locally",
+                "manual",
+                "incompatible",
+                "wake_unknown",
+                "missing",
+                "configuration_unverified",
+            ]
+            .contains(&item["host_state"].as_str().unwrap_or(""))
+    });
+    let meaningful = obligations.iter().filter(|obligation| obligation["check_state"] != "closed").map(|obligation| json!({
+        "id":obligation["id"],"kind":obligation["kind"],"check_state":obligation["check_state"],
+        "source_state":obligation["source_state"],"host_state":obligation["host_state"],
+        "attempt_state":obligation["attempt_state"],"failure_state":obligation["failure_state"],
+        "due_at":obligation["due_at"]
+    })).collect::<Vec<_>>();
+    let fingerprint = digest(&json!({"obligations":meaningful}))?;
+    Ok(json!({"obligations":obligations,"degraded":degraded,"fingerprint":fingerprint}))
 }
 
 fn attention_key(packet: &Value) -> Result<String> {
@@ -166,9 +742,12 @@ fn attention_key(packet: &Value) -> Result<String> {
             Value::Object(row)
         })
         .collect::<Vec<_>>();
-    digest(
-        &json!({"counts":packet["counts"],"graph_error":packet["graph_error"],"maintenance":packet["maintenance"],"items":items}),
-    )
+    let mut material = json!({"counts":packet["counts"],"graph_error":packet["graph_error"],"maintenance":packet["maintenance"],"items":items});
+    if !packet["maintenance_health"].is_null() {
+        material["maintenance_health_fingerprint"] =
+            packet["maintenance_health"]["fingerprint"].clone();
+    }
+    digest(&material)
 }
 
 pub fn start(store: &Store, owner: &str) -> Result<Value> {
@@ -182,8 +761,55 @@ pub fn start_with_watch_request(
     owner: &str,
     request: impl Fn(&Path) -> Result<Option<Value>>,
 ) -> Result<Value> {
+    start_with_mode(store, owner, request, None)
+}
+
+pub fn start_manual(store: &Store, owner: &str, reference: &str) -> Result<Value> {
+    start_with_mode(store, owner, default_watch_request, Some(reference))
+}
+
+pub fn start_attested(store: &Store, owner: &str, host_execution: Value) -> Result<Value> {
+    start_with_execution(
+        store,
+        owner,
+        default_watch_request,
+        None,
+        Some(host_execution),
+    )
+}
+
+pub fn start_with_mode(
+    store: &Store,
+    owner: &str,
+    request: impl Fn(&Path) -> Result<Option<Value>>,
+    manual_evidence: Option<&str>,
+) -> Result<Value> {
+    start_with_execution(store, owner, request, manual_evidence, None)
+}
+
+fn start_with_execution(
+    store: &Store,
+    owner: &str,
+    request: impl Fn(&Path) -> Result<Option<Value>>,
+    manual_evidence: Option<&str>,
+    host_execution: Option<Value>,
+) -> Result<Value> {
+    if let Some(reference) = manual_evidence {
+        text(
+            Some(&json!(reference)),
+            "manual current-session authorization reference",
+        )?;
+    }
     text(Some(&json!(owner)), "unique session owner")?;
     store.transaction(|data| {
+        if let Some(report) = &host_execution { validate_host_execution(report, &data["daily"]["binding"], store.now())?; }
+        let mode = data["daily"]["maintenance_mode"]["mode"].as_str().unwrap_or("existing");
+        let wake = crate::maintenance_wake::assess(data, store.now());
+        require(mode != "paused", "Maintenance is paused locally; host wake state is separate")?;
+        require(mode != "manual" || manual_evidence.is_some(), "Manual mode needs an explicit current-session authorization reference")?;
+        // A received authorized wake may catch up due work even while phase proof is
+        // stale/unknown or needs repair. This does not select fallback or alter its cost.
+        let _wake_assurance = wake;
         let timezone = data["config"]["timezone"].as_str().unwrap().parse::<chrono_tz::Tz>()
             .map_err(|e| error(format!("invalid time or timezone: {e}")))?;
         let day = store.now().with_timezone(&timezone).date_naive().to_string();
@@ -199,9 +825,14 @@ pub fn start_with_watch_request(
         }
         let attention = attention_key(&packet)?;
         let previous = data["daily"]["receipts"].as_array().unwrap().iter().rev().find(|row|row["outcome"]=="complete").cloned();
-        let claim = json!({"token":Uuid::new_v4().simple().to_string(),"owner":owner,"day":day,
+        let mut claim = json!({"token":Uuid::new_v4().simple().to_string(),"owner":owner,"day":day,
             "started_at":stamp(store.now()),"expires_at":stamp(store.now()+Duration::minutes(30)),
-            "attention":attention,"actions":[]});
+            "attention":attention,"actions":[],
+            "execution_origin":if manual_evidence.is_some(){"manual"}else if host_execution.is_some(){"self_reported_scheduled"}else{"unattested"}});
+        if let Some(reference) = manual_evidence { claim["manual_authorization_reference"] = json!(reference); }
+        if let Some(report) = &host_execution { claim["host_execution"] = report.clone(); claim["binding_epoch"] = data["daily"]["binding"]["binding_epoch"].clone(); }
+        // Diagnostic origin/choice fields do not introduce a new execution policy.
+        // Actual maintenance capture or mode selection already promotes its ledger.
         data["daily"]["claim"] = claim.clone();
         Ok(json!({"state":"running","claim":claim,"packet":packet,
             "limits":{"followup_actions":3,"maintenance_actions":1},
@@ -394,10 +1025,21 @@ pub fn install_begin(
     })?;
     text(Some(&json!(owner)), "unique host/session owner")?;
     store.transaction(|data|{
+        require(!matches!(data["daily"]["maintenance_mode"]["mode"].as_str(),Some("manual"|"paused")), "Local maintenance is manual or paused; explicitly select native/daily_fallback intent before proposing installation")?;
+        let needs_fallback = data["daily"]["binding"].is_null() && data["items"].as_object().unwrap().values().any(|item|
+            item["spec"]["maintenance"]["cadence_days"].as_u64().is_some_and(|n| n > 1) && !matches!(item["state"].as_str(),Some("done"|"cancelled")));
+        require(!needs_fallback || data["daily"]["maintenance_mode"]["mode"] == "native" || (data["daily"]["maintenance_mode"]["mode"] == "daily_fallback" && data["daily"]["maintenance_mode"]["empty_run_cost_acknowledged"] == true),
+            "N-day checks do not silently authorize daily wakes; select daily_fallback with its empty-run token cost, or native/manual mode")?;
+
         let mut previous=data["daily"].get("installation").cloned().unwrap_or(Value::Null);
         if !previous.is_null() && matches!(previous["state"].as_str(),Some("apply"|"uncertain")) {
             if previous["owner"]!=owner { return Ok(json!({"state":"needs_reconciliation","action":"inspect_only","installation":previous,"instruction":"A host change may already have happened. Inspect it; never create another schedule. An actual matching readback can finish the retained token."})); }
             return install_packet(store,data,Some(&previous),false);
+        }
+        if data["daily"]["maintenance_mode"]["mode"] == "native" && data["daily"]["binding"].is_null() {
+            return Ok(json!({"state":"native_host_admission_required","action":"inspect_only","workspace_key":data["workspace_key"],"prompt":prompt(store,data)?,
+                "policies":data["items"].as_object().unwrap().values().filter(|item|item["spec"].get("maintenance").is_some()).map(|item|item["spec"]["maintenance"].clone()).collect::<Vec<_>>(),
+                "instruction":"Selected native mode requires actual supported calendar-day host capability, one workspace owner and exact phase/readback. Configure only through separately authorized host tools, then record real binding/readback. No daily fallback or host change has occurred; manual/daily_fallback remain explicit alternatives."}));
         }
         if !previous.is_null() && previous["state"]=="inspect" && previous["owner"]==owner {
             if previous["config"]!=digest(&data["config"])? { data["daily"]["installation"]["state"]=json!("blocked"); data["daily"]["installation"]["reason"]=json!("Configuration changed before host mutation"); previous=data["daily"]["installation"].clone(); }
@@ -520,7 +1162,15 @@ fn bind_schedule(
             .unwrap()
             .push(old);
     }
-    data["daily"]["binding"] = json!({"host":host,"id":schedule["id"],"state":schedule["state"],"observed_at":observed_at,"evidence":evidence,"time":schedule["time"],"timezone":schedule["timezone"],"cadence":schedule["cadence"],"prompt_hash":digest(&schedule["prompt"])? ,"managed_prompt":template_hash.is_some_and(|hash|digest(&schedule["prompt"]).is_ok_and(|actual|json!(actual)==*hash))});
+    let mut binding = json!({"host":host,"id":schedule["id"],"state":schedule["state"],"observed_at":observed_at,"phase_observed_at":observed_at,"evidence":evidence,"time":schedule["time"],"timezone":schedule["timezone"],"cadence":schedule["cadence"],"prompt_hash":digest(&schedule["prompt"])? ,"managed_prompt":template_hash.is_some_and(|hash|digest(&schedule["prompt"]).is_ok_and(|actual|json!(actual)==*hash))});
+    let (epoch, started) = binding_epoch(
+        &data["daily"]["binding"],
+        &binding,
+        parse_time(observed_at, "UTC")?,
+    );
+    binding["binding_epoch"] = epoch;
+    binding["epoch_started_at"] = started;
+    data["daily"]["binding"] = binding;
     Ok(())
 }
 
@@ -620,5 +1270,156 @@ fn default_watch_request(workspace: &Path) -> Result<Option<Value>> {
         watch.request_all().map(Some)
     } else {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod daily_repair_tests {
+    use super::{active_snooze, adoption_status, binding_epoch, clear_choice_repair_metadata,
+        maintenance_health, phase_observation_for_plain_bind, reported_host_execution, stamp};
+    use chrono::{Duration, TimeZone, Utc};
+    use serde_json::json;
+
+    #[test]
+    fn phase_identity_change_resets_binding_epoch() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let old = json!({"host":"host","id":"schedule","state":"active","time":"09:00","timezone":"UTC",
+            "cadence":"daily","prompt_hash":"hash","binding_epoch":"old","epoch_started_at":"2026-10-01T00:00:00Z"});
+        let mut lost_phase = old.clone();
+        lost_phase.as_object_mut().unwrap().remove("time");
+        assert_ne!(binding_epoch(&old, &lost_phase, now).0, "old");
+        let mut changed = old.clone();
+        changed["time"] = json!("10:00");
+        assert_ne!(binding_epoch(&old, &changed, now).0, "old");
+        assert_eq!(binding_epoch(&old, &old, now).0, "old");
+    }
+
+    #[test]
+    fn plain_reactivation_cannot_reuse_phase_observation() {
+        let active = json!({"state":"active","observed_at":"2026-10-06T11:00:00Z",
+            "phase_observed_at":"2026-10-05T09:00:00Z"});
+        let missing = json!({"state":"missing","observed_at":"2026-10-06T11:00:00Z",
+            "phase_observed_at":"2026-10-05T09:00:00Z"});
+        assert_eq!(phase_observation_for_plain_bind(&active, &json!("active")), "2026-10-05T09:00:00Z");
+        assert!(phase_observation_for_plain_bind(&missing, &json!("active")).is_null());
+    }
+
+    #[test]
+    fn fresh_choice_drops_quarantine_metadata() {
+        let mut choice = json!({"state":"declined","choice":"unknown","reason":"first_use_choice_unreadable",
+            "remediation":"inspect","quarantined_path":"retained-copy"}).as_object().unwrap().clone();
+        clear_choice_repair_metadata(&mut choice);
+        assert_eq!(choice.get("state"), Some(&json!("declined")));
+        for key in ["choice", "reason", "remediation", "quarantined_path"] {
+            assert!(!choice.contains_key(key));
+        }
+    }
+
+    #[test]
+    fn expired_and_malformed_snoozes_are_distinct() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let expired = json!({"daily":{"binding":null,"adoption":{"state":"snoozed","until":"2026-10-06T11:00:00Z"}}});
+        let malformed = json!({"daily":{"binding":null,"adoption":{"state":"snoozed"}}});
+        assert_eq!(adoption_status(&expired, now).unwrap()["choice"], "proposed");
+        assert_eq!(adoption_status(&malformed, now).unwrap()["choice"], "unknown");
+        assert_eq!(adoption_status(&malformed, now).unwrap()["reason"], "invalid_snooze");
+        assert!(!active_snooze(expired["daily"]["adoption"].as_object().unwrap(), now));
+        let future = json!({"state":"snoozed","until":"2026-10-07T11:00:00Z"});
+        assert!(active_snooze(future.as_object().unwrap(), now));
+    }
+
+    #[test]
+    fn weekly_reported_execution_lives_for_cadence_plus_grace() {
+        let binding = json!({"host":"host","id":"schedule","state":"active","binding_epoch":"epoch",
+            "epoch_started_at":"2026-10-01T00:00:00Z"});
+        let daily = json!({"maintenance_mode":{"mode":"native","native_readback":{
+            "host":"host","id":"schedule","cadence_days":7}},"receipts":[{"outcome":"complete",
+            "execution_origin":"self_reported_scheduled","binding_epoch":"epoch",
+            "started_at":"2026-10-05T11:02:00Z","finished_at":"2026-10-05T11:05:00Z",
+            "host_execution":{"schema":"kpopper.host-execution/v1","trigger":"scheduled",
+                "host":"host","id":"schedule","executed_at":"2026-10-05T11:00:00Z",
+                "observed_at":"2026-10-05T11:00:00Z","evidence":"receipt"}}]});
+        assert!(reported_host_execution(&daily, &binding, Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap()));
+        assert!(!reported_host_execution(&daily, &binding, Utc.with_ymd_and_hms(2026, 10, 12, 13, 6, 0).unwrap()));
+    }
+
+    #[test]
+    fn ordinary_and_other_phase_failures_do_not_taint_compatible_maintenance() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let data = json!({"daily":{"binding":{"host":"host","id":"schedule","state":"active","cadence":"weekly"},
+            "maintenance_mode":{"mode":"native","native_readback":{"host":"host","id":"schedule",
+                "observed_at":"2026-10-06T10:00:00Z","cadence_days":7,"interval_semantics":"calendar_days",
+                "timezone":"UTC","anchor_at":"2026-10-06T09:00:00Z"}}},"observations":{},
+            "items":{"good":{"id":"good","state":"waiting","next_at":"2026-10-13T09:00:00Z",
+                "spec":{"related":["fact.good"],"maintenance":{"kind":"clock","timezone":"UTC","cadence_days":7}}},
+                "bad":{"id":"bad","state":"waiting","next_at":"2026-10-13T10:00:00Z",
+                "spec":{"maintenance":{"kind":"clock","timezone":"UTC","cadence_days":7}}},
+                "ordinary":{"id":"ordinary","state":"waiting","spec":{"when":{"at":"2027-01-01T00:00:00Z"}}}}});
+        let health = maintenance_health(&data, now).unwrap();
+        let rows = health["obligations"].as_array().unwrap();
+        let good = rows.iter().find(|row| row["id"] == "good").unwrap();
+        let bad = rows.iter().find(|row| row["id"] == "bad").unwrap();
+        assert_eq!(good["wake_state"], "compatible");
+        assert_eq!(good["host_state"], "configuration_unverified");
+        assert_eq!(good["related"], json!(["fact.good"]));
+        assert_eq!(bad["wake_state"], "incompatible");
+        assert_eq!(bad["host_state"], "incompatible");
+    }
+
+    #[test]
+    fn health_separates_successful_observation_from_failed_attempt_times() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 23, 12, 0, 0).unwrap();
+        let mut data = json!({"daily":{"binding":null},
+            "observations":{"source-ref":{"observed_at":"2026-09-15T09:00:00Z","value":"old"}},
+            "items":{"source-check":{"id":"source-check","state":"waiting","next_at":"2026-09-25T09:00:00Z",
+                "spec":{"maintenance":{"kind":"source","source_ref":"source-ref","max_age_hours":24}},
+                "attempts":[{"type":"maintenance_inspection","outcome":"unavailable",
+                    "reason":"provider unavailable","receipt_at":"2026-09-22T10:00:00Z","inspected_at":null}]}}});
+        let health = maintenance_health(&data, now).unwrap();
+        let row = &health["obligations"][0];
+        assert_eq!(row["observed_at"], "2026-09-15T09:00:00Z");
+        assert_eq!(row["last_successful_observation_at"], "2026-09-15T09:00:00Z");
+        assert_eq!(row["evidence_expires_at"], "2026-09-16T09:00:00Z");
+        assert_eq!(row["next_check_due_at"], "2026-09-25T09:00:00Z");
+        assert_ne!(row["evidence_expires_at"], row["due_at"]);
+        assert!(row["latest_attempt_at"].is_null());
+        assert!(row["failure_at"].is_null());
+        assert_eq!(row["latest_attempt_recorded_at"], "2026-09-22T10:00:00Z");
+        assert_eq!(row["failure_recorded_at"], "2026-09-22T10:00:00Z");
+        assert_eq!(row["failure"], "provider unavailable");
+        data["items"]["source-check"]["attempts"][0]["inspected_at"] = json!("2026-09-22T09:55:00Z");
+        let inspected = maintenance_health(&data, now).unwrap();
+        assert_eq!(inspected["obligations"][0]["latest_attempt_at"], "2026-09-22T09:55:00Z");
+        assert_eq!(inspected["obligations"][0]["failure_at"], "2026-09-22T09:55:00Z");
+        assert_eq!(inspected["obligations"][0]["observed_at"], "2026-09-15T09:00:00Z");
+    }
+    #[test]
+    fn evidence_expiry_handles_large_accepted_age_without_nanosecond_saturation() {
+        let observed=Utc.with_ymd_and_hms(2026,10,7,0,0,0).unwrap();
+        for age in [24u64,10_000_000,23_999_999_999] {
+            let data=json!({"daily":{"binding":null},"observations":{"source-ref":{"observed_at":stamp(observed),"value":"retained"}},
+                "items":{"check":{"id":"check","state":"waiting","next_at":"2030-01-01T00:00:00Z","spec":{"maintenance":{"kind":"source","source_ref":"source-ref","max_age_hours":age}},"attempts":[]}}});
+            let health=maintenance_health(&data,observed).unwrap();
+            let expected=observed.checked_add_signed(Duration::hours(age as i64)).map(stamp);
+            assert_eq!(health["obligations"][0]["evidence_expires_at"],json!(expected));
+            assert_eq!(health["obligations"][0]["source_state"],"within_age_window");
+        }
+    }
+
+
+    #[test]
+    fn nanosecond_binding_boundary_rejects_prior_and_future_execution() {
+        let bound = chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00.123456Z").unwrap().with_timezone(&Utc);
+        let now = bound + Duration::microseconds(2);
+        let binding = json!({"host":"host","id":"job","state":"active","epoch_started_at":stamp(bound)});
+        let external = |value: chrono::DateTime<Utc>| value.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+        let report = |executed, observed| json!({"schema":"kpopper.host-execution/v1","trigger":"scheduled","host":"host","id":"job","executed_at":external(executed),"observed_at":external(observed),"evidence":"fixture://readback"});
+        assert!(super::validate_host_execution(&report(bound, now), &binding, now).is_ok());
+        assert!(super::validate_host_execution(&report(bound + Duration::nanoseconds(1), now), &binding, now).is_ok());
+        assert!(super::validate_host_execution(&report(bound - Duration::nanoseconds(1), now), &binding, now).is_err());
+        assert!(super::validate_host_execution(&report(bound, now + Duration::nanoseconds(1)), &binding, now).is_err());
+        let mut wrong = report(bound, now);
+        wrong["id"] = json!("another-job");
+        assert!(super::validate_host_execution(&wrong, &binding, now).is_err());
     }
 }

@@ -737,3 +737,82 @@ fn ordinary_hub_float_references_use_ten_significant_digits() {
     let html = fs::read_to_string(root.join("page.html")).unwrap();
     assert!(html.contains("Keep <span class=\"fx in\" data-id=\"p.precise\">1.234567891</span>"));
 }
+#[test]
+fn named_brief_that_is_missing_is_refused_before_anything_is_written() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), RECORD).unwrap();
+    let html_files = || {
+        walk(root)
+            .into_iter()
+            .filter(|p| p.extension().is_some_and(|s| s == "html" || s == "htm"))
+            .collect::<Vec<_>>()
+    };
+    for args in [
+        &["experimental", "hub", "--brief", "missing.yaml", "--verify"][..],
+        &["page", "--brief", "missing.yaml", "--verify"],
+        &["experimental", "hub", "--brief", "missing.yaml"],
+        &["page", "--brief", "missing.yaml", "--out", "named.html"],
+    ] {
+        let result = cli(root, args);
+        let stderr = String::from_utf8(result.stderr).unwrap();
+        assert_eq!(result.status.code(), Some(2), "{args:?}: {stderr}");
+        assert!(
+            stderr.ends_with("kpop experimental hub: missing.yaml: no brief here. Name an existing brief file, or leave out --brief to read the record's own view.\n"),
+            "{args:?}: {stderr}"
+        );
+        assert!(result.stdout.is_empty(), "{args:?}");
+        assert!(html_files().is_empty(), "{args:?}");
+        assert!(!root.join(".kpopper").exists(), "{args:?}");
+    }
+    fs::create_dir_all(root.join("briefs")).unwrap();
+    let result = cli(root, &["page", "--brief", "briefs"]);
+    assert_eq!(result.status.code(), Some(2));
+    assert!(html_files().is_empty());
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        RECORD
+    );
+}
+#[test]
+fn existing_named_brief_and_no_brief_still_verify() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), RECORD).unwrap();
+    let result = ok(root, &["experimental", "hub", "--verify"]);
+    assert!(
+        String::from_utf8(result.stdout)
+            .unwrap()
+            .contains("3 elements, 3 entries, 0 judgments, 1 tabs, 0 problems")
+    );
+    fs::write(
+        root.join("brief.yaml"),
+        "title: Current view\nsections:\n- title: Inputs\n  pick: p\n  as: table\n",
+    )
+    .unwrap();
+    for args in [
+        &["experimental", "hub", "--brief", "brief.yaml", "--verify"][..],
+        &["page", "--brief", "brief.yaml", "--verify"],
+    ] {
+        // The brief's section arrives as a second tab, so the brief was read.
+        let result = ok(root, args);
+        assert!(
+            String::from_utf8(result.stdout)
+                .unwrap()
+                .contains("3 elements, 3 entries, 0 judgments, 2 tabs, 0 problems")
+        );
+    }
+    assert!(!root.join(".kpopper").exists());
+}
+fn walk(root: &Path) -> Vec<std::path::PathBuf> {
+    let mut found = vec![];
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            found.extend(walk(&path));
+        } else {
+            found.push(path);
+        }
+    }
+    found
+}

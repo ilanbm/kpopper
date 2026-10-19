@@ -152,7 +152,7 @@ fn branch_role_order(document: &crate::ordinary_value::Value) -> crate::ordinary
                 "request",
             ]
             .iter()
-            .any(|key| fields.contains_key(*key));
+            .any(|key| fields.contains_key(key));
             if !judgment {
                 fields.retain(|_, value| !matches!(value, OV::List(_)));
             }
@@ -279,12 +279,11 @@ fn read_hypotheses(
                 .and_then(|value| map(value).ok().and_then(|m| m.get("doc")))
                 .or(h.comparison_base.as_ref())
                 .ok_or_else(|| error("branch_comparison_base_missing"))?;
-            if let Err(failure) = crate::reasoning_snapshot::entries(&h.document) {
-                if failure.0 != "duplicate_entry"
-                    || !branch_duplicate_is_an_authored_kind_change(&h.document, basis)?
-                {
-                    return Err(failure);
-                }
+            if let Err(failure) = crate::reasoning_snapshot::entries(&h.document)
+                && (failure.0 != "duplicate_entry"
+                    || !branch_duplicate_is_an_authored_kind_change(&h.document, basis)?)
+            {
+                return Err(failure);
             }
             let source = crate::ordinary_value::Value::from_typed(&h.source_record);
             crate::source_capture::require_ordinary(

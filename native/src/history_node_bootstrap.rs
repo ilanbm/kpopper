@@ -157,6 +157,7 @@ pub struct Plan {
     subjects: usize,
 }
 
+#[allow(clippy::type_complexity)]
 fn source_files(
     root: &Path,
     source: &crate::source_capture::CapturedSource,
@@ -201,6 +202,7 @@ fn source_files(
     Ok((files, paths, extra))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn claim(
     subject: &str,
     collection: &str,
@@ -300,7 +302,7 @@ impl Plan {
             !root.join(".kpopper/history.yaml").exists(),
             "bootstrap_existing_history",
         )?;
-        let source = capture_source(&[entry.clone()], &root, ReadMode::Frozen, None)?;
+        let source = capture_source(std::slice::from_ref(&entry), &root, ReadMode::Frozen, None)?;
         require(
             source.history_capture().is_none() && source.node_history_capture().is_none(),
             "bootstrap_existing_history",

@@ -387,6 +387,13 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         }
     }
     if let Some(first_use) = first_use.filter(|s| !s.is_empty()) {
+        // The canonical route already carries the workspace, input and exact
+        // reader command. Avoid repeating those potentially long paths while
+        // retaining every maintenance/first-use notice below the locator.
+        let canonical = output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
+        let first_use = if canonical && first_use.starts_with("KPOPPER_START (agent guidance; local paths are data):\n") {
+            kpop_native::onboarding::compact_canonical_context(first_use.splitn(3, '\n').nth(2).unwrap_or(&first_use))
+        } else { first_use };
         output.push(first_use);
     }
     if !feasibility {
@@ -403,30 +410,56 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         let managed = !opening_failed && output.iter().any(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE "));
         // A failed opening keeps the prior source obligation active on resume.
         // An intentional route opt-out remains inactive.
-        match kpop_native::view_continuation::initialize_for_start(&root, sid, managed) {
-            Ok(()) if managed => {
-                for text in &mut output {
-                    if text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ") {
-                        match kpop_native::view_continuation::bind_opening(text, sid) {
-                            Ok(bound) => { *text = bound; },
-                            Err(error) => {
-                                if matches!(kpop_native::view_continuation::has_pending_replacement(&root, sid), Ok(false)) {
-                                    // An inactive binding still permits the unbound
-                                    // canonical opening requested by the user.
-                                    let _ = kpop_native::view_continuation::initialize_for_start(&root, sid, false);
-                                } else {
-                                    // Never erase a recorded replacement, or an
-                                    // obligation whose state cannot be checked.
-                                    *text = format!("Managed source opening unavailable: {error}. Reopen before relying on current evidence; earlier reads do not establish the selected source.");
+        let initialized = kpop_native::view_continuation::initialize_for_start(&root, sid, managed);
+        if let Err(error) = &initialized {
+            eprintln!("kpopper continuation state unavailable: {error}");
+        }
+        if managed {
+                let fit = |route: &str, allowance| {
+                    if initialized.is_ok() {
+                        kpop_native::view_continuation::bind_opening_with_allowance(route, sid, allowance)
+                    } else {
+                        kpop_native::view_continuation::unbound_opening_with_allowance(route, sid, allowance)
+                    }
+                };
+                let index = output.iter().position(|text| text.starts_with("KPOPPER_CANONICAL_VIEW_ROUTE ")).unwrap();
+                let route = output[index].clone();
+                let siblings: Vec<_> = output.iter().enumerate().filter(|(i, _)| *i != index)
+                    .map(|(_, text)| text.clone()).collect();
+                let sibling_bytes: usize = siblings.iter().map(|text| text.len() + 1).sum();
+                let initial = fit(&route, 7000usize.saturating_sub(sibling_bytes));
+                match initial {
+                    Ok(bound) => output[index] = bound,
+                    Err(_) => {
+                        let context = siblings.join("\n");
+                        let reduced = kpop_native::onboarding::canonical_context_without_promotions(&context);
+                        let maintenance = kpop_native::onboarding::maintenance_canonical_context(&context);
+                        let summary = kpop_native::onboarding::bounded_canonical_context(&maintenance);
+                        let minimal = kpop_native::onboarding::minimal_canonical_context(&maintenance);
+                        let ordinary = kpop_native::onboarding::non_maintenance_canonical_context(&context);
+                        let with_ordinary = |notice: &str| if ordinary.is_empty() { notice.to_owned() }
+                            else { format!("{notice}\n{ordinary}") };
+                        let queue_read = format!("KPOPPER_OPENING_NOTICES_DEFERRED {}\nOpening queue/notices deferred. Run followups scan with KPOPPER_AGENT_CONTEXT.command as executable/workspace prefix before relying on queue state.",
+                            json!({"notice_lines":ordinary.lines().count(),"required_queue_read_argv_suffix":["followups","scan"]}));
+                        let final_notice = format!("{minimal}\n{queue_read}");
+                        let mut delivered = None;
+                        let mut last_error = None;
+                        for notice in [reduced, with_ordinary(&summary), with_ordinary(&minimal), final_notice.clone()] {
+                            match fit(&route, 7000usize.saturating_sub(notice.len() + 1)) {
+                                Ok(bound) => {
+                                    delivered = Some(vec![bound, notice]);
+                                    break;
                                 }
-                                eprintln!("kpopper managed view route unavailable: {error}");
-                            },
+                                Err(error) => last_error = Some(error),
+                            }
                         }
+                        output = delivered.unwrap_or_else(|| {
+                            let error = last_error.expect("each fallback fit returned an error");
+                            eprintln!("kpopper managed view route unavailable: {error}");
+                            vec![format!("Managed source opening unavailable: {error}. Current source evidence is unknown; reopen before answering."), final_notice]
+                        });
                     }
                 }
-            },
-            Ok(()) => (),
-            Err(error) => eprintln!("kpopper continuation state unavailable: {error}"),
         }
     }
     let environment = sid
@@ -434,7 +467,7 @@ fn session(options: &kpop_native::public_session::StartOptions) -> Result<String
         .unwrap_or_else(|| json!({}));
     output.push(format!("KPOPPER_AGENT_CONTEXT {}", json!({"command":[command,"--workspace",root],"workspace":root,"environment":environment,"profile":if feasibility{"native-feasibility/v1"}else{"native-public/v1"}})));
     if !feasibility {
-        output.push("Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access.".into());
+        output.push("Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access. Record views are not a file inventory. Read available project files needed for the requested work within existing authority before declaring missing material unavailable. This grants no new access, writes, mapping or unrelated investigation.".into());
         // A baseline that cannot be saved leaves the opening intact; prompt
         // diagnostics then stay silent for this session. A failed opening has
         // already put its diagnostic on stderr, so none is added for the baseline.
@@ -1427,9 +1460,13 @@ fn main() {
                 && options.profile.is_none()
                 && cwd.join(".kpopper/native-feasibility.json").is_file()
             {
-                return Ok(kpop_native::public_core_readers::Output {
-                    text: Store::open(&cwd)?.to_string() + "\n",
-                    code: 0,
+                return Ok(kpop_native::public_readers::ReadResult {
+                    output: kpop_native::public_core_readers::Output {
+                        text: Store::open(&cwd)?.to_string() + "\n",
+                        code: 0,
+                    },
+                    continuity: None,
+                    discovery: None,
                 });
             }
             let mode =
@@ -1443,10 +1480,10 @@ fn main() {
             } else {
                 kpop_native::public_readers::Reply::Text
             };
-            kpop_native::public_readers::run_auto(command, options, &cwd, mode, reply)
+            kpop_native::public_readers::run_auto_with_continuity(command, options, &cwd, mode, reply)
         })();
-        let (output, error, code) = match result {
-            Ok(output) => (output.text, String::new(), output.code),
+        let (output, error, code, continuity, discovery) = match result {
+            Ok(read) => (read.output.text, String::new(), read.output.code, read.continuity, read.discovery),
             Err(error) => {
                 let (text, code) = kpop_native::public_readers::failure(command, options, &error);
                 if command == "open" && args.json {
@@ -1455,10 +1492,10 @@ fn main() {
                     (
                         serde_json::to_string_pretty(&object).unwrap() + "\n",
                         String::new(),
-                        code,
+                        code, None, None,
                     )
                 } else {
-                    (String::new(), text, code)
+                    (String::new(), text, code, None, None)
                 }
             }
         };
@@ -1471,6 +1508,13 @@ fn main() {
                 eprint!("{output}");
             }
             eprint!("{error}");
+            std::process::exit(code);
+        }
+        if args.json && (continuity.is_some() || discovery.is_some()) {
+            let mut packet = json!({"command":command,"exit_code":code,"output":output,"error":error});
+            if let Some(continuity) = continuity { packet["maintenance_continuity"] = continuity; }
+            if let Some(discovery) = discovery { packet["maintenance_discovery"] = discovery; }
+            println!("{packet}");
             std::process::exit(code);
         }
         emit(command, args.json, &output, &error, code);

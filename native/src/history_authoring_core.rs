@@ -353,13 +353,13 @@ pub(crate) fn receipt(
     let subject = text(&map(&new[0])?["subject"])?;
     let mut before_world =
         crate::history_authoring_reader::AuthoringReader::new(before_doc, runtime)?;
-    let mut after_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
+    let mut after_world = crate::history_authoring_reader::AuthoringReader::new(doc, runtime)?;
     let before_versions = input.accepted_versions()?;
     let mut after_versions = before_versions.clone();
     if kind != "review" {
         after_versions.insert(subject.into(), map(&new[0])?["id"].clone());
     }
-    let mut before = before_world.evidence(&before_doc, audit, &before_versions)?;
+    let mut before = before_world.evidence(before_doc, audit, &before_versions)?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -371,7 +371,7 @@ pub(crate) fn receipt(
             ("baseline", input.baseline().clone()),
         ]),
     );
-    let mut after = after_world.evidence(&doc, audit, &after_versions)?;
+    let mut after = after_world.evidence(doc, audit, &after_versions)?;
     let ids = new
         .iter()
         .map(|o| text(&map(o)?["id"]).map(str::to_owned))
@@ -380,6 +380,6 @@ pub(crate) fn receipt(
         "authoring".into(),
         obj([("objects", strings(ids)), ("notes", strings(notes))]),
     );
-    let receipt = T::semantic_receipt(text(&map(&cap)?["profile"])?, &cap, &before, &after)?;
+    let receipt = T::semantic_receipt(text(&map(cap)?["profile"])?, cap, &before, &after)?;
     Ok(receipt)
 }

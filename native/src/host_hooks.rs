@@ -129,17 +129,54 @@ fn state_path(sid: &str) -> PathBuf {
 }
 
 fn followup_text(store: &crate::followup_store::Store) -> Result<String> {
-    let report = store.scan(3)?;
+    let mut report = store.scan(3)?;
+    if let Some(rows) = report["maintenance_health"]["obligations"].as_array_mut() {
+        rows.retain(|row| row["check_state"] != "closed");
+    }
     let visible=report["items"].as_array().cloned().unwrap_or_default().into_iter().filter(|r|!matches!(r["state"].as_str(),Some("waiting"|"done"|"cancelled"))).map(|r|json!({"id":r["id"],"state":r["state"],"title":r["title"],"reasons":r["reasons"].as_array().into_iter().flatten().take(2).map(|x|J::String(x.as_str().unwrap_or("").chars().take(240).collect())).collect::<Vec<_>>()})).collect::<Vec<_>>();
-    if visible.is_empty() && report["graph_error"].is_null() {
+    if visible.is_empty()
+        && report["graph_error"].is_null()
+        && report["degraded"] != true
+        && report["maintenance_health"]["degraded"] != true
+        && report["maintenance_health"]["obligations"]
+            .as_array()
+            .is_none_or(|v| v.is_empty())
+    {
         return Ok(String::new());
     }
+    if report["maintenance_health"].is_null() && report["degraded"] != true {
+        return Ok(format!(
+            "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue.",
+            serde_json::to_string(
+                &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"]})
+            )?
+        ));
+    }
+    let maintenance_health = if report["maintenance_health"]["obligations"]
+        .as_array()
+        .is_some_and(|v| !v.is_empty())
+    {
+        report["maintenance_health"].clone()
+    } else {
+        J::Null
+    };
     Ok(format!(
-        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue.",
+        "KPOPPER_FOLLOWUPS {}\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue. Maintenance health is local detection only; it does not fetch sources or grant permission. For material current use, run `kpop followups assess --ids ACTUAL_SUBJECT_IDS` over the actual requested subject IDs. For any answer about a covered subject, including its recorded value, disclose failed, paused, missing, overdue, stale, or unknown evidence with the actual failure reason and any known observed_at/due_at; do not replace these with a receipt date or invent facts. within_age_window is not current adequacy. Changed observation/model alignment remains pending until actual review. Source truth, applicability, authority and consumer version are separate.",
         serde_json::to_string(
-            &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"]})
+            &json!({"counts":report["counts"],"items":visible,"record":report["record"],"graph_error":report["graph_error"],"maintenance_health":maintenance_health,"maintenance_omitted":report["maintenance_omitted"],"omitted":report["omitted"],"degraded":report["degraded"]})
         )?
     ))
+}
+fn unavailable_followups(discovery: &str, reason: &str) -> String {
+    if discovery.contains("Maintenance continuity health is unavailable") {
+        discovery.to_owned()
+    } else {
+        format!(
+            "{}\n{}",
+            discovery,
+            crate::onboarding::unavailable_continuity(reason)
+        )
+    }
 }
 fn followups(payload: &J) -> Result<Output> {
     if suppressed(payload) {
@@ -148,51 +185,107 @@ fn followups(payload: &J) -> Result<Output> {
     let Some(owner) = owner(payload) else {
         return Ok(empty());
     };
-    let store = crate::followup_store::Store::open(&cwd(payload)?)?;
-    if store.load(false)?.is_none() {
+    let requested = cwd(payload)?;
+    let location =
+        crate::public_workspace::locate(&requested, crate::source_capture::ReadMode::Live)?;
+    if location.status != "found" {
         return Ok(empty());
     }
-    let text = followup_text(&store)?;
-    let fingerprint = crate::followup_store::digest(&J::String(text.clone()))?;
-    fs::create_dir_all(&store.root)?;
-    let lock = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(store.root.join("ledger.lock"))?;
-    FileExt::lock_exclusive(&lock)?;
-    let path = store.root.join("delivery.yaml");
-    let mut rows = if path.exists() {
-        crate::history_yaml::decode_source_value(&fs::read(&path)?)?
-            .typed()
-            .to_json()?
-            .as_array()
-            .cloned()
-            .ok_or_else(|| Error("Invalid followup delivery receipts".into()))?
-    } else {
-        vec![]
+    let discovery = crate::onboarding::maintenance_discovery_notice(
+        &location.workspace,
+        crate::onboarding::guidance().unwrap_or(false),
+    )
+    .unwrap_or_else(|reason| crate::onboarding::unavailable_continuity(&reason.to_string()));
+    let store = match crate::followup_store::Store::open(&location.workspace) {
+        Ok(store) => store,
+        Err(reason) => {
+            let text = unavailable_followups(&discovery, &reason.to_string());
+            return Ok(Output {
+                stdout: envelope("PostToolUse", &text),
+                ..empty()
+            });
+        }
     };
-    if rows
-        .iter()
-        .any(|r| r["session"] == owner && r["fingerprint"] == fingerprint)
-    {
+    let text = match store.load(false) {
+        Ok(None) => discovery,
+        Ok(Some(_)) => match followup_text(&store) {
+            Ok(followup) if followup.is_empty() => discovery,
+            Ok(followup) => format!("{}\n{}", followup, discovery),
+            Err(reason) => unavailable_followups(&discovery, &reason.to_string()),
+        },
+        Err(reason) => unavailable_followups(&discovery, &reason.to_string()),
+    };
+    if text.is_empty() {
         return Ok(empty());
     }
-    rows.retain(|r| r["session"] != owner);
-    if rows.len() > 127 {
-        rows.drain(..rows.len() - 127);
-    }
-    rows.push(json!({"session":owner,"fingerprint":fingerprint}));
-    atomic_json(&path, &J::Array(rows))?;
-    Ok(if text.is_empty() {
-        empty()
-    } else {
-        Output {
+    let fingerprint = crate::followup_store::digest(&J::String(text.clone()))?;
+    let already_delivered = (|| -> Result<bool> {
+        fs::create_dir_all(&store.root)?;
+        let lock = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(store.root.join("ledger.lock"))?;
+        FileExt::lock_exclusive(&lock)?;
+        let path = store.root.join("delivery.yaml");
+        let mut rows = if path.exists() {
+            let decoded = (|| -> Result<Vec<J>> {
+                crate::history_yaml::decode_source_value(&fs::read(&path)?)?
+                    .typed().to_json()?.as_array().cloned()
+                    .filter(|rows| rows.iter().all(|row| row["session"].is_string() && row["fingerprint"].is_string()))
+                    .ok_or_else(|| Error("Invalid followup delivery receipts".into()))
+            })();
+            match decoded {
+                Ok(rows) => rows,
+                Err(_) => {
+                    fs::rename(&path, store.root.join(format!("delivery.corrupt-{}.yaml", uuid::Uuid::new_v4().simple())))?;
+                    vec![]
+                }
+            }
+        } else {
+            vec![]
+        };
+        if rows
+            .iter()
+            .any(|row| row["session"] == owner && row["fingerprint"] == fingerprint)
+        {
+            return Ok(true);
+        }
+        rows.retain(|row| row["session"] != owner);
+        if rows.len() > 127 {
+            rows.drain(..rows.len() - 127);
+        }
+        rows.push(json!({"session":owner,"fingerprint":fingerprint}));
+        atomic_json(&path, &J::Array(rows))?;
+        Ok(false)
+    })();
+    match already_delivered {
+        Ok(true) => Ok(empty()),
+        Ok(false) => Ok(Output {
             stdout: envelope("PostToolUse", &text),
             ..empty()
+        }),
+        Err(reason) => {
+            let detail = reason
+                .to_string()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(300)
+                .collect::<String>();
+            Ok(Output {
+                stdout: envelope(
+                    "PostToolUse",
+                    &format!(
+                        "{text}\nMaintenance notice delivery state is unavailable: {detail}. The applicable notice is included and may repeat."
+                    ),
+                ),
+                ..empty()
+            })
         }
-    })
+    }
 }
 
 fn watch_text(notice: &J) -> Result<String> {
@@ -756,9 +849,12 @@ pub fn run(
         "continuation" if host == Some("codex") && !suppressed(payload) => {
             let event = payload["hook_event_name"].as_str().unwrap_or_default();
             crate::view_continuation::hook_for_session(event, payload).map(|context| Output {
-                stdout: context.map(|text| envelope(event, &text)).unwrap_or_default(), ..empty()
+                stdout: context
+                    .map(|text| envelope(event, &text))
+                    .unwrap_or_default(),
+                ..empty()
             })
-        },
+        }
         "continuation" => Ok(empty()),
         _ => return Err(Error(format!("unknown host hook kind: {kind}"))),
     };
@@ -799,5 +895,56 @@ pub fn run(
             ),
             code: 0,
         }),
+    }
+}
+
+#[cfg(test)]
+mod maintenance_clock_transition_tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicI64, Ordering},
+    };
+    #[test]
+    fn unchanged_graph_and_ledger_do_not_hide_active_session_expiry_or_due_health() {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("PROVENANCE.yaml"),"meta:\n  name: Clock transition\nknown:\n  subject.value:\n    name: Subject\n    v: 1\n").unwrap();
+        let initial = Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap();
+        let ticks = Arc::new(AtomicI64::new(initial.timestamp()));
+        let clock = ticks.clone();
+        let store = crate::followup_store::Store::at_in_state(
+            &workspace,
+            &temp.path().join("state"),
+            initial,
+        )
+        .unwrap()
+        .with_test_clock(move || Utc.timestamp_opt(clock.load(Ordering::SeqCst), 0).unwrap());
+        store.setup(None, "UTC", None, true).unwrap();
+        let declaration = json!({"schema":"kpopper.maintenance-declaration/v1","kind":"source","id":"subject-check","title":"Subject check","why":"Current subject","how":"Read source","scope":"Read only","related":["subject.value"],"cadence_days":1,"timezone":"UTC","check_time":"09:00","use_policy":"allow_cached_until_expiry","evidence_requirement":"host_attested","first_due_at":"2026-10-06T14:00:00Z","source":{"source_id":"subject-provider","locator":"https://example.test/subject","publisher":"Example","selection":"Subject","adapter":"host/v1","tool_policy":"authorized read","allowed_roots":["https://example.test/"],"evidence_format":"text","max_age_hours":1}});
+        let item = store
+            .add(crate::maintenance_contract::compile(&declaration).unwrap()["spec"].clone())
+            .unwrap();
+        store.inspect_maintenance(json!({"id":"subject-check","policy_digest":item["spec"]["maintenance"]["policy_digest"],"source_ref":item["spec"]["maintenance"]["source_ref"],"inspection":item["spec"]["maintenance"]["inspection"],"inspected_at":initial.to_rfc3339(),"value":"selected data","evidence":"fixture://selected"})).unwrap();
+        let ledger = fs::read(&store.path).unwrap();
+        let graph = fs::read(workspace.join("PROVENANCE.yaml")).unwrap();
+        let before = followup_text(&store).unwrap();
+        let before_key = crate::followup_store::digest(&J::String(before.clone())).unwrap();
+        ticks.store(initial.timestamp() + 3600, Ordering::SeqCst);
+        let expired = followup_text(&store).unwrap();
+        assert!(expired.contains("stale"));
+        assert_ne!(
+            before_key,
+            crate::followup_store::digest(&J::String(expired.clone())).unwrap()
+        );
+        assert_eq!(expired, followup_text(&store).unwrap());
+        ticks.store(initial.timestamp() + 7200, Ordering::SeqCst);
+        let due = followup_text(&store).unwrap();
+        assert!(due.contains("due"));
+        assert_ne!(expired, due);
+        assert_eq!(ledger, fs::read(&store.path).unwrap());
+        assert_eq!(graph, fs::read(workspace.join("PROVENANCE.yaml")).unwrap());
     }
 }

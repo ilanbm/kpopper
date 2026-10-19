@@ -31,6 +31,7 @@ pub struct AnswerOptions {
     /// Why this answers the question.
     #[arg(long)]
     pub why: Option<String>,
+    /// Date the answer is recorded, YYYY-MM-DD, not after today; defaults to today.
     #[arg(long)]
     pub as_of: Option<String>,
 }

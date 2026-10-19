@@ -150,7 +150,7 @@ fn sparse_fork_remove_readd_and_direct_membership_match_legacy() {
         .unwrap()
         .clone();
     let (a, av) = with_saw(claim.clone(), &[], None);
-    let (b, bv) = with_saw(claim, &[a.clone()], None);
+    let (b, bv) = with_saw(claim, std::slice::from_ref(&a), None);
     let make_act = |action: &str, saw: &[String], over: &[String]| {
         let mut value = act.clone();
         let V::Map(m) = &mut value else { panic!() };
@@ -165,10 +165,10 @@ fn sparse_fork_remove_readd_and_direct_membership_match_legacy() {
         );
         with_saw(value, saw, None)
     };
-    let (x, xv) = make_act("accept", &[b.clone()], &[a.clone()]);
-    let (y, yv) = make_act("review", &[x.clone()], &[]);
-    let (z, zv) = make_act("refute", &[y.clone()], &[]);
-    let (w, wv) = make_act("review", &[a.clone()], &[]);
+    let (x, xv) = make_act("accept", std::slice::from_ref(&b), std::slice::from_ref(&a));
+    let (y, yv) = make_act("review", std::slice::from_ref(&x), &[]);
+    let (z, zv) = make_act("refute", std::slice::from_ref(&y), &[]);
+    let (w, wv) = make_act("review", std::slice::from_ref(&a), &[]);
     let objects = std::collections::BTreeMap::from([
         (a.clone(), av),
         (b.clone(), bv),
@@ -242,7 +242,7 @@ fn sparse_fork_remove_readd_and_direct_membership_match_legacy() {
         .0,
         "incomplete_closure"
     );
-    let (bad_id, bad) = with_saw(objects[&b].clone(), &[a.clone()], Some("other"));
+    let (bad_id, bad) = with_saw(objects[&b].clone(), std::slice::from_ref(&a), Some("other"));
     assert_eq!(
         History::from_objects(vec![
             (

@@ -1,6 +1,57 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 — 2026-10-18
+
+### Ongoing knowledge maintenance
+
+- Ordinary work can propose source or clock checks for knowledge that will be
+  revisited, even before followups are configured. Decline, snooze, pause and
+  guidance-off suppress repeated offers while relevant missing, failed or overdue
+  evidence remains visible.
+- Reader guidance directs agents to complete task-required file comparisons and
+  read other project materials within the existing authorization.
+- Explicit declarations select source scope, evidence requirements and cadence in
+  whole local calendar days. Recurring checks share the existing followup ledger,
+  ownership and daily task budget. Proposals do not install a schedule or grant
+  source access, record changes or publication authority.
+- Keep successful source observations separate from failed attempts, evidence
+  expiry, the next check's due time and reported host execution. Current-use
+  assessment also checks declared dependencies and source-to-record alignment;
+  a recent observation does not automatically validate an old conclusion.
+- Inspection receipts are host-attested, not authenticated source truth or proof
+  that future scheduled runs will occur. New maintenance capture uses the version
+  2 private ledger; older runtimes must be upgraded before using that ledger.
+  Existing ordinary followups keep their behavior. See
+  [clock and source maintenance](docs/maintenance.md).
+
+### Included changes
+
+- Add recurring source and clock maintenance (#296)
+- Make the native crate pass its documented clippy check (#298)
+- Refuse a hub brief that is named but missing (#300)
+- Tell a record that is not valid YAML the same way on remeasure (#302)
+- Space the numbers in context and search limit refusals (#308)
+- Show an accepted session id in the no-intent refusals (#306)
+- Check every example record's verdict in a native test (#305)
+- Check that every hook manifest route reaches the native command (#304)
+- Match the local check recipe to CI and keep formatters off the record (#307)
+- Describe every option of export, history, answer, pending and board (#303)
+
+Decisions recorded: d.maintenance_notice_keeps_source_access, d.maintenance_reuses_followups
+
+## 0.16.1 — 2026-10-09
+
+### Fixed
+
+- `set` preserves long text values when adding their first `of` date. The date
+  follows the complete wrapped value instead of interrupting it and causing
+  `invalid_history_yaml`; existing dates, source citations and comments are preserved.
+
+### Included changes
+
+- Keep inserted dates after wrapped set values (#299)
+
+## 0.16.0 — 2026-10-08
 
 ### Native model plugins
 
@@ -67,6 +118,33 @@
 - Skill guidance uses **kpopper** in ordinary conversation. Fully qualified skill
   names such as `kpopper:ground` are reserved for invocation instructions,
   technical documentation, debugging and explanations of a specific skill.
+
+### Included changes
+
+- Finish Windows release checks and bind reused workflow evidence (#301)
+- Verify release test reuse after a Windows fixture correction (#295)
+- Stabilize Windows transient-publisher test scheduling (#294)
+- Add native packaging for reusable knowledge models (#281)
+- Clarify project work and reusable knowledge models in the README (#279)
+- Warn when formatters may rewrite the record (#292)
+- Record evidence for release renumbering (#282)
+- Name checked recovery for conflicted records (#291)
+- Show pending knowledge in ordinary branch comparisons (#289)
+- Report unavailable record paths consistently (#283)
+- Add focused CI for reviewed reader changes (#293)
+- Pin check and release workflow actions to commit SHAs (#290)
+- Keep Gemini and CI example versions aligned with releases (#285)
+- Check CLI references in skills and documentation (#280)
+- Cover the launchers' Windows, Linux, hosted and unknown-hook paths (#288)
+- Give the greenhouse example's page brief a tab that serves its sessions (#287)
+- Add Codex listing metadata for every canonical skill (#286)
+- Describe the question report the ingestion writer retains (#284)
+- Refresh the flight example source after history cleanup (#278)
+- Document separate decision models and project knowledge (#277)
+- Refresh changed conversation evidence before the next answer (#271)
+- Use kpopper as the product name in conversation (#274)
+
+Decisions recorded: decision.source_refresh_before_answer
 
 ## 0.15.1 — 2026-10-01
 
