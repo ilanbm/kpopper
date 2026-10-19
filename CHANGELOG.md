@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 — 2026-10-18
 
 ### Ongoing knowledge maintenance
 
@@ -23,6 +23,21 @@
   2 private ledger; older runtimes must be upgraded before using that ledger.
   Existing ordinary followups keep their behavior. See
   [clock and source maintenance](docs/maintenance.md).
+
+### Included changes
+
+- Add recurring source and clock maintenance (#296)
+- Make the native crate pass its documented clippy check (#298)
+- Refuse a hub brief that is named but missing (#300)
+- Tell a record that is not valid YAML the same way on remeasure (#302)
+- Space the numbers in context and search limit refusals (#308)
+- Show an accepted session id in the no-intent refusals (#306)
+- Check every example record's verdict in a native test (#305)
+- Check that every hook manifest route reaches the native command (#304)
+- Match the local check recipe to CI and keep formatters off the record (#307)
+- Describe every option of export, history, answer, pending and board (#303)
+
+Decisions recorded: d.maintenance_notice_keeps_source_access, d.maintenance_reuses_followups
 
 ## 0.16.1 — 2026-10-09
 
