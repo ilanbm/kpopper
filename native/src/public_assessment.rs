@@ -93,9 +93,18 @@ pub fn report_value(
         )?
     };
     let nodes = map(&map(&report)?["nodes"])?;
+    let unknown = options
+        .ids
+        .iter()
+        .filter(|id| !nodes.contains_key(id))
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     crate::require(
-        options.ids.iter().all(|id| nodes.contains_key(id)),
-        "unknown assessment ID; use open or pull to find an entry",
+        unknown.is_empty(),
+        &format!(
+            "unknown assessment ID(s): {}; use open or pull to find an entry",
+            unknown.join(", ")
+        ),
     )?;
     if !options.history {
         let selected = V::Map(
