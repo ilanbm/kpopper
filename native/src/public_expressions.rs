@@ -279,7 +279,18 @@ fn migrate(
     _read_mode: Option<&str>,
 ) -> Result<Value> {
     let record = match record {
-        Some(record) => expanded_path(cwd, record)?,
+        Some(named) => {
+            let record = expanded_path(cwd, named)?;
+            // Checked from the resolved directory, so a refusal names the record's absolute
+            // path as same and distinct name it.
+            let resolved = cwd.canonicalize()?;
+            crate::public_identity::require_named_record(
+                &resolved,
+                named,
+                &expanded_path(&resolved, named)?,
+            )?;
+            record
+        }
         None => crate::public_workspace::records(cwd)?
             .into_iter()
             .next()
