@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.1 — 2026-10-20
+
+- Give the Intel macOS test job three hours (#313) — patch
+- Name the missing record or unknown id when same, distinct, migrate or assess refuse (#309) — patch
+
 ## 0.17.0 — 2026-10-18
 
 ### Ongoing knowledge maintenance
