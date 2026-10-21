@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-10-09
+  updated: 2026-10-21
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -23,6 +23,12 @@ known:
     name: "A fork of the record per branch"
     from: s.2026_09_01_consolidation
     at: "git already knows the branch; a second copy of what it knows only drifts from it"
+  alt.hook_downloads_the_runtime:
+    v: rejected
+    name: "A session hook that downloads the runtime"
+    from: s.2026_10_20_runtime_once_per_version
+    at: "a hook would fetch and run code from the network without the person deciding; installing
+         stays an explicit act"
   alt.notebook_per_session:
     v: rejected
     name: "A notebook per session beside the shared record"
@@ -34,6 +40,11 @@ known:
     name: "A git merge driver for the record"
     from: s.2026_09_01_consolidation
     at: "hypotheses are separate files, so there is no textual conflict left to drive"
+  alt.runtime_in_the_plugin_repository:
+    v: rejected
+    name: "Committing the native binaries to the plugin repository"
+    from: s.2026_10_20_runtime_once_per_version
+    at: "every clone and every copy of the plugin would carry the binaries of all five platforms"
   alt.sameness_from_names:
     v: rejected
     name: "A tool that infers sameness from names"
@@ -3503,6 +3514,43 @@ judgments:
       s.2026_09_10_skills_split: "read 2026-09-10"
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
+  d.hooks_fall_back_to_the_versioned_install:
+    name: "Plugin hooks fall back to the machine-wide install of the same version"
+    rests_on: [s.2026_10_20_runtime_once_per_version, p.native_distribution_contract, d.opener_reports_a_missing_runtime, alt.runtime_in_the_plugin_repository, alt.hook_downloads_the_runtime]
+    verdict: "Plugin hooks run the copy's own native runtime, or else the machine-wide install of
+              the copy's exact version that the installer made under ~/.local/lib/kpopper and marked
+              with that version; nothing else stands in, no hook downloads or installs a runtime, and
+              with neither the opener offers both installs."
+    because: "Hosts make new copies of the plugin - a fresh copy for a desktop-app session, a cache
+              per version, Codex's own - and each started without a runtime, so one version had to be
+              installed again into every copy, and a session's copy goes with its session. The
+              machine-wide install of a version is already that release's package, checked against
+              its SHA-256 when installed and kept apart by version, so it serves every copy of that
+              version without fetching anything. Requiring the copy's exact version and the
+              installer's marker keeps the binary the one the copy's hooks and skills were released
+              with, which a kpop found on PATH would not be."
+    reopened_by: "A host that runs these hooks under a HOME other than the one the installer used,
+                  so a machine-wide install goes unseen; hooks that need something a release's
+                  machine-wide package lacks; or plugin installation starting to carry its native
+                  runtime."
+    from: s.2026_10_20_runtime_once_per_version
+    seen:
+      s.2026_10_20_runtime_once_per_version: "read 2026-10-20"
+      p.native_distribution_contract: "The native CLI and plugin start at 0.9.0 with GitHub platform
+                                       archives and explicit installers. Public names are kpopper and
+                                       kpop. Existing GitHub tags/releases and legacy PyPI/npm
+                                       versions remain available. Cargo is a source-build route;
+                                       crates.io publication is separate."
+      d.opener_reports_a_missing_runtime: "When the plugin's native runtime is missing, the session
+                                           opener prints the resolver's diagnostic, the exact install
+                                           command and what follows on standard output: kpopper did
+                                           not open the session, hooks never download or install the
+                                           runtime, and the agent may offer to run the command and
+                                           then ask for a new session. It still exits 0. Every other
+                                           hook prints nothing and keeps the diagnostic on standard
+                                           error."
+      alt.runtime_in_the_plugin_repository: rejected
+      alt.hook_downloads_the_runtime: rejected
   d.html_applications_are_optional:
     from: s.2026_09_18_experimental_applications
     rests_on: [doc.applications, d.assessment_separates_findings_and_attention]
@@ -7843,6 +7891,23 @@ sources:
          errors, and bounds retries for transient Windows sharing violations without allowing delete
          sharing or replacing identity checks. Windows regression tests cover transient and
          persistent DELETE handles; actual Windows CI remains the platform acceptance gate."
+  s.2026_10_20_runtime_once_per_version:
+    name: "One machine-wide install per version serves every copy of the plugin"
+    asked: "Paraphrased maintainer request: the Claude desktop app gives the plugin a fresh copy,
+            and every new copy opens with the missing-runtime message, because the resolver looks
+            only inside the copy. Keep the explicit install step and the rule that hooks never
+            download or install anything, but let the resolver fall back to the machine-wide
+            versioned install, so one install per version per machine serves every copy: the app's
+            copies, the Claude Code plugin cache and Codex's copies. Accept only the same version, in
+            a directory the installer marked with it, and name the machine-wide install in the
+            missing-runtime message. Committing the binaries to the plugin repository and a hook that
+            downloads the runtime at session start are rejected."
+    of: "Observed 2026-10-20 on the maintainer's Mac: the app's copy of plugin 0.17.0 for a new
+         session had no scripts/runtime, and its opener printed 'native runtime is not installed for
+         darwin-arm64 in this package'; no app copy held a runtime. ~/.local/lib/kpopper held
+         machine-wide installs of 0.9.0 to 0.15.1, which no copy used, while the Claude Code cache
+         copies of 0.15.0 and 0.16.1 each held their own."
+    read: "2026-10-20"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
