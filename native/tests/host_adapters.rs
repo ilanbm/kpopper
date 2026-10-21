@@ -417,8 +417,8 @@ fn a_checkout_without_its_runtime_reports_the_install_command_as_context() {
         "kpopper: native runtime is not installed for {} in this package.\n\
          Install this active copy: sh \"{}/scripts/install_native.sh\"\n\
          kpopper did not open this session, and its hooks never download or install the runtime.\n\
-         Offer to run the command above (it downloads this version's runtime from the kpopper \
-         GitHub release and checks its SHA-256), then ask the user to start a new session.",
+         Offer to run an install command above (it downloads this version's runtime from the \
+         kpopper GitHub release and checks its SHA-256), then ask the user to start a new session.",
         kpop_native::reasoning_runtime::target_name().unwrap(),
         checkout.root.display()
     );
