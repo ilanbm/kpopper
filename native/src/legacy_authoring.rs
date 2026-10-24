@@ -1631,7 +1631,7 @@ pub(crate) struct Prepared {
     pub(crate) output: String,
     pub(crate) root: PathBuf,
     pub(crate) journal: String,
-    pub(crate) subject: String,
+    pub(crate) subjects: BTreeSet<String>,
     pub(crate) diagnostics: Vec<String>,
     pub(crate) page: Option<crate::ordinary_page_capture::PageCapture>,
 }
@@ -2410,7 +2410,7 @@ fn prepare_with_inventory_mode(
         output: format!("{}\n", output.join("\n")),
         root,
         journal,
-        subject: id,
+        subjects: BTreeSet::from([id]),
         diagnostics,
         page,
     }))
@@ -2519,7 +2519,7 @@ fn publish_with_committed(
     crate::session_activity::published(
         &prepared.root,
         prepared.mutation.files(),
-        Some(&BTreeSet::from([prepared.subject.clone()])),
+        Some(&prepared.subjects),
     );
     Ok(prepared.output)
 }

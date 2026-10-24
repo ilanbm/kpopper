@@ -2,8 +2,23 @@
 
 ## Unreleased
 
-### Changed
-
+- Claude and Codex receive a bounded knowledge-handoff reminder during the current turn,
+  including for research and evidence saved outside the repository. It asks for verified
+  retention or an explicit unresolved outcome without creating a Stop continuation.
+  Recording guidance distinguishes accepted writes, existing coverage, drafts and failures;
+  successful routine recording stays quiet. Prompt identity survives record parse failures,
+  and context compaction re-arms the reminder without creating another user request.
+- Report writes acquire private-state and record locks in canonical order, including when
+  the state directory sorts before the record. Interrupted writes recover under the same order.
+- Report batches retain ownership for each written entry, so the writing session can correct
+  its new entries while another session remains refused, including after an interrupted
+  write is recovered. Older unbound journals do not grant ownership to the retrying session.
+  Legacy history receipts preserve YAML dates using the existing typed JSON format instead
+  of reporting an error after a successful write. Invalid undeclared predicate values are
+  refused before publication with guidance to use an executable predicate or `reopened_by`.
+- Routine recording no longer requires an unrelated maintenance proposal or health paragraph.
+  Readback and hook advice use the same scope. Relevant declared reliability limits and
+  requests for ongoing checking remain visible, within the existing opening budgets.
 - A plugin copy without its own native runtime now uses the machine-wide install of
   the same version, so one install per version serves every copy a host makes, such
   as a fresh copy per session or a cache per version. Only the copy's exact version

@@ -68,7 +68,7 @@ pub fn start_reply(options: &StartOptions, opened: Option<&str>) -> Option<Strin
 pub struct HookOptions {
     #[arg(long,value_parser=["claude","codex"])]
     pub host: Option<String>,
-    #[arg(long, default_value="UserPromptSubmit", value_parser=["UserPromptSubmit", "PostToolUse"])]
+    #[arg(long, default_value="UserPromptSubmit", value_parser=["UserPromptSubmit", "PostToolUse", "SessionStart", "PostCompact"])]
     pub event: String,
 }
 pub fn valid_session(sid: &str) -> bool {
@@ -278,6 +278,78 @@ pub fn stop(_payload: &Value, _host: Option<&str>, _mode: ReadMode) -> Result<Ou
     })
 }
 
+const HANDOFF_GUIDANCE: &str = "kpopper: Complete the user's current request. Before finishing, account for all material findings, decisions, constraints and open questions from this task, including evidence saved outside the repository. Within existing write authority, use the record skill to retain new knowledge, run check and read back the affected IDs. Use the KPOPPER_AGENT_CONTEXT session environment for every write and correction. An earlier write does not prove complete retention. Reuse existing coverage; no update is needed when nothing material was learned or writing is prohibited. Keep successful recording and no-change checks quiet; do not add a bookkeeping paragraph. Distinguish applied writes from pending, private-draft or refused results. Briefly disclose only material unresolved capture that affects the requested work. This reminder grants no write or publication authority and requires no reply of its own.";
+
+fn canonical_grounding_read(payload: &Value) -> bool {
+    let Some(command) = payload["tool_input"]["command"].as_str() else {
+        return false;
+    };
+    let command = command.trim_start();
+    // PowerShell's invocation operator is only accepted at the beginning.
+    let command = command.strip_prefix("& ").map(str::trim_start).unwrap_or(command);
+    // Recognize only a simple canonical read. A compound or unfamiliar command
+    // may also obtain new source evidence, so it remains eligible for the cue.
+    if command.len() > 32_768 || command.contains([';', '|', '&', '<', '>', '$', '`', '\n']) {
+        return false;
+    }
+    // Read the program before POSIX tokenisation, which would remove the
+    // backslashes in a Windows executable path.
+    let (program, rest) = if command.starts_with(['\'', '"']) {
+        let quote = command.chars().next().unwrap();
+        let Some(end) = command[1..].find(quote) else { return false };
+        (&command[1..end + 1], &command[end + 2..])
+    } else {
+        let Some(end) = command.find(char::is_whitespace) else { return false };
+        (&command[..end], &command[end..])
+    };
+    let program = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    if !["kpop", "kpopper", "kpop.exe", "kpopper.exe"].iter()
+        .any(|name| program.eq_ignore_ascii_case(name)) {
+        return false;
+    }
+    let Some(words) = shlex::split(rest) else { return false };
+    let mut args = words.iter().map(String::as_str);
+    loop {
+        match args.next() {
+            Some("--workspace") => { if args.next().is_none() { return false; } }
+            Some(arg) if arg.starts_with("--workspace=") => {}
+            Some("--frozen" | "--no-cache") => {}
+            Some("session") => return matches!(args.next(), Some("view" | "read")),
+            _ => return false,
+        }
+    }
+}
+
+fn handoff_context(payload: &Value, mode: ReadMode) -> Result<String> {
+    if canonical_grounding_read(payload) {
+        return Ok(String::new());
+    }
+    let Some(sid) = payload["session_id"]
+        .as_str()
+        .filter(|sid| valid_session(sid))
+    else {
+        return Ok(String::new());
+    };
+    let tmp = session_activity::temporary_directory();
+    let turn = payload["turn_id"]
+        .as_str()
+        .filter(|turn| valid_session(turn));
+    let cwd = payload["cwd"]
+        .as_str()
+        .ok_or_else(|| crate::Error("missing_workspace".into()))?;
+    let location = W::locate(Path::new(cwd), mode)?;
+    if matches!(location.status.as_str(), "missing" | "unavailable") {
+        return Ok(String::new());
+    }
+    let fresh = session_activity::prepare_handoff_notice(&tmp, sid, turn, &location.record)
+        .unwrap_or(false);
+    Ok(if fresh {
+        HANDOFF_GUIDANCE.into()
+    } else {
+        String::new()
+    })
+}
+
 pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode, event: &str) -> Result<Output> {
     if payload["agent_id"]
         .as_str()
@@ -285,6 +357,51 @@ pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode, event: &str)
     {
         return Ok(Output {
             text: String::new(),
+            code: 0,
+        });
+    }
+    let sid = payload["session_id"]
+        .as_str()
+        .filter(|sid| valid_session(sid));
+    let tmp = session_activity::temporary_directory();
+    if event == "PostCompact" || (event == "SessionStart" && payload["source"] == "compact") {
+        if let Some(sid) = sid {
+            let _ = session_activity::reset_handoff_context(&tmp, sid);
+        }
+        return Ok(Output {
+            text: String::new(),
+            code: 0,
+        });
+    }
+    if event == "SessionStart" {
+        return Ok(Output {
+            text: String::new(),
+            code: 0,
+        });
+    }
+    if event == "UserPromptSubmit"
+        && let Some(sid) = sid
+    {
+        // An unreadable record cannot freeze subsequent prompt identities.
+        let turn = payload["turn_id"]
+            .as_str()
+            .filter(|turn| valid_session(turn));
+        let _ = session_activity::begin_handoff_prompt(&tmp, sid, turn);
+    }
+    // Missing task identity is quiet, not a full assessment on every tool.
+    if event == "PostToolUse" {
+        let text = handoff_context(payload, mode).unwrap_or_default();
+        return Ok(Output {
+            text: if text.is_empty() {
+                text
+            } else {
+                format!(
+                    "{}\n",
+                    json!({"hookSpecificOutput": {
+                        "hookEventName": event, "additionalContext": text
+                    }})
+                )
+            },
             code: 0,
         });
     }

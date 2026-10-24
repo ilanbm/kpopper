@@ -13,6 +13,12 @@ task systems, files and earlier sessions. Record three things while working:
 3. Something concluded — record what it rests on, a `seen` snapshot of those values, and
    `wrong_if`: what would make it wrong. A judgment that cannot be wrong is an opinion.
 
+Before finishing the current request, account for material findings, including those in
+external documents. Within existing write authority, retain new knowledge and read back
+the affected IDs before claiming it is saved. Reuse existing coverage; no filler when
+nothing new was learned. Pending, draft, failed or prohibited capture stays explicit.
+Keep answering the user's request; recording does not authorize a new task or publication.
+
 Never restate recorded material from memory — reference it. Structure is added only when
 something observable forces it. When a dependency moves: flag, never rewrite — re-running
 is allowed, applying is not. A declared hole (`blocked_on`) is honest; prose in a

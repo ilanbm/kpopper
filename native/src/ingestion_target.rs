@@ -140,7 +140,8 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
                     if crate::reasoning_fields::BUILTINS.contains(&dep.as_str()))))) {
                 return Err(error("batch judgments about reader/page counts require primary review; use domain entries as premises"));
             }
-            require(stored + derived + judgment == 1, "add one stored reading, rule, or judgment per entry")?;
+            require(stored + derived + judgment == 1,
+                "add one stored reading, rule, or judgment per entry; source entries are captured from source_quote, or cite an existing source with the report's source field")?;
             if stored == 1 {
                 let value = ["v", "quoted"].iter().find_map(|field| body.get(*field)).unwrap();
                 require(basic_type(value).is_some(), "new stored readings must be scalar")?;

@@ -589,7 +589,7 @@ fn prepare_mode(
         output: format!("{}\n", output.join("\n")),
         root,
         journal: entry_layout(Path::new(&entry_relative))?.journal,
-        subject: id,
+        subjects: BTreeSet::from([id]),
         diagnostics: notes,
         page: None,
     }))

@@ -653,8 +653,11 @@ fn mixed_marks_preserve_failure_sets_profile_changes_nulls_and_nudges() {
                     "8",
                 ],
             );
-            assert_eq!(result.0, 0, "{}", result.1);
-            assert!(result.1.is_empty());
+            // The pinned f480ea68 Python oracle predates advisory-only delivery.
+            // Its old gate can read a native mark and still bounces for an
+            // untouched record. The native branch above must remain silent.
+            assert_eq!(result.0, 2, "{}", result.1);
+            assert!(result.1.contains("record untouched"), "{}", result.1);
         }
     }
 }

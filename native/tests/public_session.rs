@@ -100,6 +100,7 @@ impl Fixture {
         child.wait_with_output().unwrap()
     }
 }
+#[track_caller]
 fn success(output: Output) -> Output {
     assert!(
         output.status.success(),
@@ -238,15 +239,15 @@ fn a_record_that_can_no_longer_be_assessed_is_reported_as_unavailable() {
         );
         let context: Value = serde_json::from_slice(&prompt.stdout).unwrap();
         assert_eq!(context["hookSpecificOutput"]["hookEventName"], event);
-        assert!(
-            context["hookSpecificOutput"]["additionalContext"]
-                .as_str()
-                .unwrap()
-                .ends_with(
-                    "The record assessment is unavailable. Run kpop check before relying on the record."
-                ),
-            "{context}"
-        );
+        let text = context["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+        if event == "UserPromptSubmit" {
+            assert!(text.ends_with("The record assessment is unavailable. Run kpop check before relying on the record."), "{context}");
+        } else {
+            // Tool results carry bounded handoff guidance, not a repeated full
+            // assessment. The real prompt above advanced its identity despite
+            // the broken record and already reported the structural failure.
+            assert!(text.contains("Before finishing"), "{context}");
+        }
     }
 }
 #[test]
@@ -532,4 +533,161 @@ fn promotion_budget_suppression_is_rendered_only_and_preserves_authored_choice()
     assert_eq!(rendered["suppression_scope"], "this_opening_budget_only");
     assert!(reduced.contains("This is not a saved/global opt-out; later material-use assessments and explicit requests"));
     assert_eq!(kpop_native::onboarding::compact_canonical_context(&notice), notice);
+}
+
+#[test]
+fn captured_knowledge_is_checked_and_read_from_a_fresh_checkout_and_session() {
+    for layout in ["ordinary", "history", "node"] {
+        for quoted_date in [false, true] {
+            knowledge_round_trip(layout, quoted_date);
+        }
+    }
+}
+
+fn knowledge_round_trip(layout: &str, quoted_date: bool) {
+    let f = Fixture::new();
+    let record = f.root.path().join("GROUNDING.yaml");
+    let initial = format!("sources:\n  s.seed: {{name: Setup, read: {}}}\nknown:\n  p.seed: {{v: 1, from: s.seed}}\n",
+        if quoted_date { "\"2026-09-01\"" } else { "2026-09-01" });
+    if layout == "ordinary" {
+        fs::write(&record, &initial).unwrap();
+    } else {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("GROUNDING.yaml"), &initial).unwrap();
+        fs::remove_dir(f.root.path()).unwrap();
+        if layout == "history" {
+            kpop_native::history_migration::Plan::prepare(
+                Path::new("GROUNDING.yaml"), source.path(),
+                kpop_native::history_migration::Options {
+                    operation:"knowledge-flow".into(), recorded_at:"2026-09-01T00:00:00Z".into(),
+                    record_id:Some("knowledge-flow".into()),
+                    read_mode:kpop_native::source_capture::ReadMode::Frozen, route:false, as_of:None,
+                }, None,
+            ).unwrap().publish(f.root.path()).unwrap();
+        } else {
+            kpop_native::history_node_bootstrap::Plan::prepare(&source.path().join("GROUNDING.yaml"))
+                .unwrap().publish(f.root.path()).unwrap();
+        }
+    }
+    let opened: Value =
+        serde_json::from_slice(&success(f.run(&["open", "--json"])).stdout).unwrap();
+    let report = json!({
+        "event_id": "handoff-source", "date": "2026-09-02",
+        "record_sha256": opened["record_sha256"],
+        "source_quote": "The maximum load is 731 kg. Receiving ends at 14:35.",
+        "updates": [
+            {"kind":"add", "id":"delivery.max_kg", "body":{"v":731}},
+            {"kind":"add", "id":"delivery.latest", "body":{"quoted":"14:35"}}
+        ]
+    });
+    let mut writer = f
+        .command()
+        .args(["update", "--file", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    writer
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(report.to_string().as_bytes())
+        .unwrap();
+    let applied: Value =
+        serde_json::from_slice(&success(writer.wait_with_output().unwrap()).stdout).unwrap();
+    assert_eq!(applied["state"], "applied");
+    if layout == "history" && !quoted_date {
+        assert_eq!(applied["mutation"]["receipt"]["encoding"], "typed-json/v1");
+        let tagged = &applied["mutation"]["receipt"]["value"];
+        let decoded = kpop_native::value::TypedValue::from_tagged(tagged).unwrap();
+        assert_eq!(decoded.to_tagged().unwrap(), *tagged);
+        assert!(decoded.to_json().is_err(), "the receipt must preserve the original YAML date type");
+    }
+    let written = fs::read(&record).unwrap();
+    let mut retry = f.command().args(["update", "--file", "-"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    retry.stdin.take().unwrap().write_all(report.to_string().as_bytes()).unwrap();
+    let repeated: Value = serde_json::from_slice(&success(retry.wait_with_output().unwrap()).stdout).unwrap();
+    assert_eq!(repeated["state"], "applied");
+    assert_eq!(written, fs::read(&record).unwrap());
+    // A report is a publication by this session, including every entry in its
+    // batch. It must be correctable before another session consumes the record.
+    success(f.run(&[
+        "correct", "delivery.max_kg", "name=Maximum delivery load in kg",
+        "--why", "Name this session's new reading.",
+    ]));
+    success(f.run(&[
+        "correct", "delivery.latest", "name=Latest receiving time",
+        "--why", "Name the other reading from the same report.",
+    ]));
+    success(f.run(&[
+        "correct", applied["source"].as_str().unwrap(), "name=Captured delivery note",
+        "--why", "Name the source written by this session's report.",
+    ]));
+    let other = f.command().env("KPOPPER_AGENT_SESSION", "other-session")
+        .args(["correct", "delivery.max_kg", "v=999", "--why", "Not my entry"])
+        .output().unwrap();
+    assert!(!other.status.success());
+    assert!(String::from_utf8_lossy(&other.stderr).contains("not written by this session"));
+    success(f.run(&["check"]));
+
+    // Only the canonical record and its retained evidence cross the boundary.
+    let next = tempfile::tempdir().unwrap();
+    git(next.path(), &["init", "-q"]);
+    fs::write(
+        next.path().join(".git/kpopper-record"),
+        format!("{}\n", record.display()),
+    )
+    .unwrap();
+    let config: Value = serde_json::from_slice(
+        &success(f.run(&[
+            "--workspace",
+            next.path().to_str().unwrap(),
+            "config",
+            "--json",
+        ]))
+        .stdout,
+    )
+    .unwrap();
+    assert_eq!(config["project"]["mode"], "simple");
+    let before = fs::read(&record).unwrap();
+    success(f.hook(
+        "session-start",
+        json!({"cwd":next.path(), "session_id":"next-session"}),
+    ));
+    let read: Value = serde_json::from_slice(
+        &success(
+            f.command()
+                .env("KPOPPER_AGENT_SESSION", "next-session")
+                .args([
+                    "--workspace",
+                    next.path().to_str().unwrap(),
+                    "context",
+                    "delivery.max_kg",
+                    "delivery.latest",
+                    "--depth",
+                    "0",
+                    "--tokens",
+                    "2000",
+                ])
+                .output()
+                .unwrap(),
+        )
+        .stdout,
+    )
+    .unwrap();
+    let reads = read["reads"].as_array().unwrap();
+    let load = reads.iter().find(|r| r["id"] == "delivery.max_kg").unwrap();
+    let latest = reads.iter().find(|r| r["id"] == "delivery.latest").unwrap();
+    assert_eq!(load["value"]["body"]["v"], 731);
+    assert_eq!(latest["value"]["body"]["quoted"], "14:35");
+    assert_eq!(load["value"]["body"]["from"], applied["source"]);
+    assert!(load["complete"].as_bool().unwrap() && latest["complete"].as_bool().unwrap());
+    assert_eq!(before, fs::read(&record).unwrap());
+    let stop = success(f.hook(
+        "session-stop",
+        json!({"cwd":next.path(), "session_id":"next-session"}),
+    ));
+    assert!(stop.stdout.is_empty() && stop.stderr.is_empty());
 }

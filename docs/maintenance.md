@@ -252,11 +252,14 @@ policy time and timezone stay intact. Closed obligations remain visible as histo
 create ongoing degradation or repeated health fingerprints.
 
 No-policy or no-success snapshots describe local maintenance assurance as unknown; they do
-not prove that recorded facts are invalid. Relevant ongoing clock/source work needs a scoped
-proposal before closing the response, with unresolved choices explicit. Material current use
-must disclose actual failure reasons and known last successful observation and due timestamps.
-Stable, historical, closed or unrelated answers stay quiet, and saved suppression never becomes
-permission or evidence of freshness.
+not prove that recorded facts are invalid or require a health paragraph after ordinary research.
+Disclose health when asked, or when a declared maintenance policy materially changes the
+reliability of the requested claim. Include actual reasons and known observation/due facts.
+A scoped proposal belongs in the answer only for a requested ongoing check or a concrete
+continuing commitment that needs one. Recording a finding, writing a recommendation, or
+suggesting confirmation before a possible booking does not by itself establish that commitment.
+Finish the requested answer without waiting for a maintenance choice. Stable, historical,
+closed or unrelated answers stay quiet; suppression is neither permission nor freshness evidence.
 
 A missing required attempt-history segment makes the validated ledger unavailable across
 ledger-backed followups. Startup keeps its workspace and ordinary guidance and reports that

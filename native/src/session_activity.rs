@@ -56,6 +56,14 @@ pub fn published(root: &Path, files: &[FileImage], subjects: Option<&BTreeSet<St
     }
 }
 
+/// A recovered operation keeps its captured writer, not the retrying session.
+/// This is attribution only; it grants no write authority.
+pub(crate) fn published_for_session(
+    sid: &str, root: &Path, files: &[FileImage], subjects: &BTreeSet<String>,
+) {
+    let _ = published_with(sid, &temporary_directory(), root, files, Some(subjects));
+}
+
 fn valid_session(sid: &str) -> bool {
     !sid.is_empty()
         && sid.len() <= 200
@@ -304,6 +312,103 @@ pub fn owned(tmp: &Path, sid: &str, capture: &CapturedSource) -> BTreeSet<String
     result
 }
 
+fn handoff_lock(home: &Path, wait: bool) -> Result<fs::File> {
+    let path = state_file(home, "state.lock")?;
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(path)?;
+    if wait {
+        lock.lock_exclusive()?;
+    } else {
+        lock.try_lock_exclusive()?;
+    }
+    Ok(lock)
+}
+
+fn save_handoff_state(home: &Path, path: &Path, value: &Value) -> Result<()> {
+    let mut temporary = tempfile::NamedTempFile::new_in(home)?;
+    temporary.write_all(&serde_json::to_vec(value)?)?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(path)
+        .map_err(|e| Error(format!("persist: {}", e.error)))?;
+    Ok(())
+}
+
+/// Track a real prompt without reading the record. A fresh generation also
+/// prevents lost/recreated private state from colliding with old notices.
+pub fn begin_handoff_prompt(tmp: &Path, sid: &str, host_turn: Option<&str>) -> Result<()> {
+    let home = safe_home(tmp, sid)?;
+    let _lock = handoff_lock(&home, true)?;
+    let path = state_file(&home, "handoff-context.json")?;
+    save_handoff_state(
+        &home,
+        &path,
+        &serde_json::json!({
+            "generation": uuid::Uuid::new_v4().to_string(), "host_turn": host_turn
+        }),
+    )
+}
+
+/// Context replacement can discard the notice. Re-arm in O(1), without deleting
+/// publication receipts or iterating over the records touched by the session.
+pub fn reset_handoff_context(tmp: &Path, sid: &str) -> Result<()> {
+    let home = safe_home(tmp, sid)?;
+    let _lock = handoff_lock(&home, true)?;
+    let path = state_file(&home, "handoff-context.json")?;
+    let state = read_state(&path);
+    save_handoff_state(
+        &home,
+        &path,
+        &serde_json::json!({
+            "generation": uuid::Uuid::new_v4().to_string(),
+            "host_turn": state.get("host_turn").and_then(Value::as_str)
+        }),
+    )
+}
+
+/// Prepare a bounded handoff notice once per active context and canonical record.
+/// This records attempted context delivery, never successful knowledge capture.
+pub fn prepare_handoff_notice(
+    tmp: &Path,
+    sid: &str,
+    host_turn: Option<&str>,
+    record: &Path,
+) -> Result<bool> {
+    let record = crate::project_modes::resolved(record)?;
+    let home = safe_home(tmp, sid)?;
+    // A busy private ledger must not hold up a tool result or consume the notice.
+    let _lock = handoff_lock(&home, false)?;
+    let context = read_state(&state_file(&home, "handoff-context.json")?);
+    let generation = context
+        .get("generation")
+        .and_then(Value::as_str)
+        .filter(|v| valid_session(v));
+    let active_turn = context.get("host_turn").and_then(Value::as_str);
+    let host_turn = host_turn.filter(|v| valid_session(v));
+    if generation.is_none() && host_turn.is_none() {
+        return Ok(false);
+    }
+    if let (Some(active), Some(given)) = (active_turn, host_turn)
+        && active != given
+    {
+        return Ok(false);
+    }
+    let turn = sha256(&serde_json::to_vec(&serde_json::json!([
+        generation, host_turn
+    ]))?);
+    let key = sha256(record.to_string_lossy().as_bytes());
+    let path = state_file(&home, &format!("handoff-{key}.json"))?;
+    if read_state(&path).get("turn").and_then(Value::as_str) == Some(turn.as_str()) {
+        return Ok(false);
+    }
+    save_handoff_state(&home, &path, &serde_json::json!({"turn": turn}))?;
+    Ok(true)
+}
+
 /// Atomically select fresh assessed findings for a session and resolved record.
 /// Receipt failures suppress delivery so an unavailable private store cannot
 /// trap the host in a repeated Stop loop.
@@ -525,6 +630,33 @@ mod tests {
     use super::*;
     use crate::source_capture::{ReadMode, capture_source};
     use tempfile::tempdir;
+
+    #[test]
+    fn prompt_and_compaction_wait_for_a_publication_lock_instead_of_losing_the_generation() {
+        for compact in [false, true] {
+            let tmp = tempdir().unwrap();
+            let sid = "contended-prompt";
+            begin_handoff_prompt(tmp.path(), sid, Some("old-turn")).unwrap();
+            let home = safe_home(tmp.path(), sid).unwrap();
+            let before = fs::read(home.join("handoff-context.json")).unwrap();
+            let lock = handoff_lock(&home, true).unwrap();
+            std::thread::scope(|scope| {
+                let (send, receive) = std::sync::mpsc::channel();
+                let path = tmp.path();
+                let worker = scope.spawn(move || {
+                    let result = if compact { reset_handoff_context(path, sid) }
+                        else { begin_handoff_prompt(path, sid, Some("new-turn")) };
+                    send.send(result).unwrap();
+                });
+                let waiting = receive.recv_timeout(std::time::Duration::from_millis(100));
+                FileExt::unlock(&lock).unwrap();
+                assert!(matches!(waiting, Err(std::sync::mpsc::RecvTimeoutError::Timeout)));
+                receive.recv_timeout(std::time::Duration::from_secs(5)).unwrap().unwrap();
+                worker.join().unwrap();
+            });
+            assert_ne!(before, fs::read(home.join("handoff-context.json")).unwrap());
+        }
+    }
     fn image(before: Option<&str>, after: Option<&str>, role: &str) -> FileImage {
         image_path("GROUNDING.yaml", before, after, role)
     }

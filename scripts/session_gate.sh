@@ -10,7 +10,7 @@ while [ $# -gt 0 ]; do
     *) shift ;;
   esac
 done
-case "$EVENT" in UserPromptSubmit|PostToolUse) ;; *) exit 0 ;; esac
+case "$EVENT" in UserPromptSubmit|PostToolUse|SessionStart|PostCompact) ;; *) exit 0 ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case "${KPOPPER_RUNTIME:-rust}" in
   rust) ;;
