@@ -1111,6 +1111,38 @@ fn run_with_probe(
     run_bound(options, cwd, stdin, None, None, supplied_runtime, probe)
 }
 
+/// A report spans the record and a caller-selected private state directory.
+/// Acquire their canonical paths in the global directory-lock order. A lower
+/// state lock must remain held while the record is held, so nested publication
+/// can re-enter it without attempting an out-of-order acquisition.
+struct ReportLocks {
+    record: Option<F::DirectoryGuard>,
+    state: Option<F::DirectoryGuard>,
+    state_first: bool,
+}
+impl ReportLocks {
+    fn acquire(record: &Path, state: &Path) -> Result<Self> {
+        let record = record.canonicalize()?;
+        let state = state.canonicalize()?;
+        let state_first = state < record;
+        let (record_guard, state_guard) = if state_first {
+            let state_guard = F::DirectoryGuard::acquire(&state, true)?;
+            (F::DirectoryGuard::acquire(&record, true)?, state_guard)
+        } else {
+            let record_guard = F::DirectoryGuard::acquire(&record, true)?;
+            (record_guard, F::DirectoryGuard::acquire(&state, true)?)
+        };
+        Ok(Self { record: Some(record_guard), state: Some(state_guard), state_first })
+    }
+    fn release_state_for_record_work(&mut self) {
+        if !self.state_first || self.record.is_none() { self.state.take(); }
+    }
+    fn release_record(&mut self) {
+        self.record.take();
+        self.state.take();
+    }
+}
+
 fn run_bound(
     options: &Options,
     cwd: &Path,
@@ -1169,8 +1201,7 @@ fn run_bound(
         b
     };
     let envelope_sha = crate::identity::sha256(&canonical);
-    let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
-    let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
+    let mut locks = ReportLocks::acquire(record.parent().unwrap(), &root)?;
     if let Some(existing) = F::read(&envelope_path)? {
         crate::require(
             existing == canonical,
@@ -1232,7 +1263,7 @@ fn run_bound(
         serde_json::from_slice::<J>(raw).is_ok_and(|v| v["kind"] == "native-node-report/v1")
     });
     if node_journal || crate::history_node_publication::selected(&record)? {
-        drop(_state_lock);
+        locks.release_state_for_record_work();
         return node::run(
             &report,
             &event,
@@ -1254,8 +1285,8 @@ fn run_bound(
         let mut journal =
             crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)?;
         if journal["kind"] == "native-advanced-report/v1" {
-            drop(_state_lock);
-            drop(_record_lock);
+            locks.release_state_for_record_work();
+            locks.release_record();
             return advanced::recover(
                 &report,
                 &event,
@@ -1276,8 +1307,8 @@ fn run_bound(
         let history = journal["history"]
             .as_bool()
             .ok_or_else(|| error("invalid report journal"))?;
-        drop(_state_lock);
-        drop(_record_lock);
+        locks.release_state_for_record_work();
+        locks.release_record();
         drop(route);
         let recovery = if history {
             let mut committed = |phase: &str| {
@@ -1308,7 +1339,7 @@ fn run_bound(
         };
         if let Err(failure) = recovery {
             if failure.0.starts_with("report_preparation_stale:") {
-                let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
+                let _recovery_locks = ReportLocks::acquire(record.parent().unwrap(), &root)?;
                 let layout = crate::history_transaction::Layout::for_entry(
                     record
                         .file_name()
@@ -1327,7 +1358,6 @@ fn run_bound(
                 if writer_pending {
                     return Err(failure);
                 }
-                let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
                 let reason = failure.0.trim_start_matches("report_preparation_stale: ");
                 let (answer, signals) = receipt(
                     &report,
@@ -1356,8 +1386,7 @@ fn run_bound(
             return Err(failure);
         }
         probe("recovered")?;
-        let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
-        let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
+        let _recovery_locks = ReportLocks::acquire(record.parent().unwrap(), &root)?;
         if let Some(receipt) = F::read(&receipt_path)? {
             let value = crate::json_ingress::parse_slice(
                 &receipt,
@@ -1407,14 +1436,14 @@ fn run_bound(
             code: 0,
         });
     }
-    drop(_state_lock);
+    locks.release_state_for_record_work();
 
     if private_reason(&report)?.is_none()
         && advanced::applies(&report, &route)?
         && crate::legacy_authoring::authority_route(&record)?
             == crate::legacy_authoring::AuthorityRoute::Legacy
     {
-        drop(_record_lock);
+        locks.release_record();
         let captured = advanced::capture(
             &report,
             &event,
@@ -1688,7 +1717,7 @@ fn run_bound(
     if outcome.is_ok()
         && let Some(prepared) = pending_history
     {
-        drop(_record_lock);
+        locks.release_record();
         return advanced::capture_prepared_history(
             &report,
             &event,
@@ -1750,6 +1779,36 @@ fn run_bound(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn report_state_can_sort_before_or_after_the_record_with_recovery() {
+        for (record_name, state_name) in [("a-record", "z-state"), ("z-record", "a-state")] {
+            for interrupted in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                let record_root = temp.path().join(record_name);
+                fs::create_dir(&record_root).unwrap();
+                let entry = record_root.join("GROUNDING.yaml");
+                fs::write(&entry, "sources:\n  s.old: {name: Old, read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n").unwrap();
+                let options = Options { file:"-".into(), record:Some(entry.clone()), state_dir:Some(temp.path().join(state_name)) };
+                let report = serde_json::to_vec(&json!({"event_id":"ordered-report", "date":"2026-09-20", "source_quote":"x is 2", "target":"p.x", "value":2})).unwrap();
+                if interrupted {
+                    let stopped = run_with_probe(&options, &record_root, Some(&report), None, &mut |phase| {
+                        if phase == "prepared" { Err(error("injected preparation interruption")) } else { Ok(()) }
+                    });
+                    assert_eq!(stopped.unwrap_err().0, "injected preparation interruption");
+                }
+                let first = run(&options, &record_root, Some(&report)).unwrap();
+                assert_eq!(first.code, 0, "{record_name}/{state_name}: {}", first.text);
+                let receipt: J = serde_json::from_str(&first.text).unwrap();
+                assert_eq!(receipt["state"], "applied");
+                let saved = fs::read(&entry).unwrap();
+                assert!(String::from_utf8_lossy(&saved).contains("v: 2"));
+                let replay = run(&options, &record_root, Some(&report)).unwrap();
+                assert_eq!(replay.code, 0);
+                assert_eq!(saved, fs::read(&entry).unwrap());
+            }
+        }
+    }
     #[test]
     fn reports_cannot_change_the_captured_scalar_type() {
         for queued in [false, true] {

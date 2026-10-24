@@ -304,44 +304,102 @@ pub fn owned(tmp: &Path, sid: &str, capture: &CapturedSource) -> BTreeSet<String
     result
 }
 
-/// Atomically select fresh assessed findings for a session and resolved record.
-/// Receipt failures suppress delivery so an unavailable private store cannot
-/// trap the host in a repeated Stop loop.
-/// Prepare a bounded handoff notice once per active turn and canonical record.
-/// This records attempted context delivery, never successful knowledge capture.
-pub fn prepare_handoff_notice(tmp: &Path, sid: &str, turn: &str, record: &Path) -> Result<bool> {
-    crate::require(
-        !turn.is_empty() && turn.len() <= 256,
-        "invalid_handoff_turn",
-    )?;
-    let record = crate::project_modes::resolved(record)?;
-    let home = safe_home(tmp, sid)?;
-    let lock_path = state_file(&home, "state.lock")?;
+fn handoff_lock(home: &Path) -> Result<fs::File> {
+    let path = state_file(home, "state.lock")?;
     let lock = OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(lock_path)?;
-    // A busy private ledger must not hold up the user's tool result. A later tool
-    // remains eligible because this attempt has not consumed the notice.
+        .open(path)?;
     lock.try_lock_exclusive()?;
-    let key = sha256(record.to_string_lossy().as_bytes());
-    let path = state_file(&home, &format!("handoff-{key}.json"))?;
-    if read_state(&path).get("turn").and_then(Value::as_str) == Some(turn) {
-        return Ok(false);
-    }
-    // Replace the last turn; do not accumulate a second history or queue.
-    let data = serde_json::to_vec(&serde_json::json!({"turn": turn}))?;
-    let mut temporary = tempfile::NamedTempFile::new_in(&home)?;
-    temporary.write_all(&data)?;
+    Ok(lock)
+}
+
+fn save_handoff_state(home: &Path, path: &Path, value: &Value) -> Result<()> {
+    let mut temporary = tempfile::NamedTempFile::new_in(home)?;
+    temporary.write_all(&serde_json::to_vec(value)?)?;
     temporary.as_file().sync_all()?;
     temporary
         .persist(path)
         .map_err(|e| Error(format!("persist: {}", e.error)))?;
+    Ok(())
+}
+
+/// Track a real prompt without reading the record. A fresh generation also
+/// prevents lost/recreated private state from colliding with old notices.
+pub fn begin_handoff_prompt(tmp: &Path, sid: &str, host_turn: Option<&str>) -> Result<()> {
+    let home = safe_home(tmp, sid)?;
+    let _lock = handoff_lock(&home)?;
+    let path = state_file(&home, "handoff-context.json")?;
+    save_handoff_state(
+        &home,
+        &path,
+        &serde_json::json!({
+            "generation": uuid::Uuid::new_v4().to_string(), "host_turn": host_turn
+        }),
+    )
+}
+
+/// Context replacement can discard the notice. Re-arm in O(1), without deleting
+/// publication receipts or iterating over the records touched by the session.
+pub fn reset_handoff_context(tmp: &Path, sid: &str) -> Result<()> {
+    let home = safe_home(tmp, sid)?;
+    let _lock = handoff_lock(&home)?;
+    let path = state_file(&home, "handoff-context.json")?;
+    let state = read_state(&path);
+    save_handoff_state(
+        &home,
+        &path,
+        &serde_json::json!({
+            "generation": uuid::Uuid::new_v4().to_string(),
+            "host_turn": state.get("host_turn").and_then(Value::as_str)
+        }),
+    )
+}
+
+/// Prepare a bounded handoff notice once per active context and canonical record.
+/// This records attempted context delivery, never successful knowledge capture.
+pub fn prepare_handoff_notice(
+    tmp: &Path,
+    sid: &str,
+    host_turn: Option<&str>,
+    record: &Path,
+) -> Result<bool> {
+    let record = crate::project_modes::resolved(record)?;
+    let home = safe_home(tmp, sid)?;
+    // A busy private ledger must not hold up a tool result or consume the notice.
+    let _lock = handoff_lock(&home)?;
+    let context = read_state(&state_file(&home, "handoff-context.json")?);
+    let generation = context
+        .get("generation")
+        .and_then(Value::as_str)
+        .filter(|v| valid_session(v));
+    let active_turn = context.get("host_turn").and_then(Value::as_str);
+    let host_turn = host_turn.filter(|v| valid_session(v));
+    if generation.is_none() && host_turn.is_none() {
+        return Ok(false);
+    }
+    if let (Some(active), Some(given)) = (active_turn, host_turn)
+        && active != given
+    {
+        return Ok(false);
+    }
+    let turn = sha256(&serde_json::to_vec(&serde_json::json!([
+        generation, host_turn
+    ]))?);
+    let key = sha256(record.to_string_lossy().as_bytes());
+    let path = state_file(&home, &format!("handoff-{key}.json"))?;
+    if read_state(&path).get("turn").and_then(Value::as_str) == Some(turn.as_str()) {
+        return Ok(false);
+    }
+    save_handoff_state(&home, &path, &serde_json::json!({"turn": turn}))?;
     Ok(true)
 }
 
+/// Atomically select fresh assessed findings for a session and resolved record.
+/// Receipt failures suppress delivery so an unavailable private store cannot
+/// trap the host in a repeated Stop loop.
 pub fn deliver_stop(
     tmp: &Path,
     sid: &str,

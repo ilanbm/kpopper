@@ -1611,15 +1611,6 @@ known:
          reader this tree no longer holds - read 2026-09-23, the last reading taken of the reader
          this tree no longer holds"
     of: "2026-09-23"
-  p.private_research_capture_authorized:
-    name: "Approved private research-capture scope for explicitly maintained projects"
-    v: "For projects the maintainer explicitly chooses to maintain with kpopper, material research
-        findings belong in the existing private canonical record without per-entry approval. Explicit
-        record-write or all-write prohibitions override this scope; product changes, external writes,
-        sharing, publication and releases need their own authority. Preserve sources, dates, scope
-        and unknowns, and verify the write. This is an approved authoring policy, not evidence that
-        automatic capture or subsequent-session reuse has been implemented or validated."
-    from: s.2026_10_24_private_research_capture
   p.product_python_modules:
     v: 0
     name: "Modules of the product under scripts/ still written in Python"
@@ -5645,6 +5636,31 @@ judgments:
                                       its neighbours - the entries whose ids share its head - and a
                                       write to an entry goes into the file that holds it; a record in
                                       one file answers that file to all of it"
+  d.task_knowledge_handoff:
+    name: "Retain current-task knowledge without taking over the conversation"
+    rests_on: [doc.task_knowledge_handoff, d.gate_asks_once_after_work, d.gate_reminds]
+    verdict: "Give one advisory reminder on the first task tool result per prompt and canonical
+              record, re-armed after context replacement. Canonical grounding reads do not consume
+              it. Successful recording and no-change checks stay quiet; Stop never requests
+              continuation."
+    because: "The older ten-prompt cooldown covers unchanged-record diagnostics after accumulated
+              work. It cannot cover a short research request, an external deliverable or findings
+              learned after a partial write. The distinct current-task reminder applies only within
+              existing authority and preserves the requested answer. Its prompt identity must not
+              depend on record parsing; a private attempted-delivery marker does not prove accepted
+              capture or model use."
+    reopened_by: "An ordinary request is displaced by bookkeeping, a reminder encourages an
+                  unauthorized write, a fresh prompt or context replacement loses the reminder, or
+                  controlled subsequent-session trials fail to retrieve the retained findings."
+    seen:
+      doc.task_knowledge_handoff: "read 2026-10-24"
+      d.gate_asks_once_after_work: "A session that changed files or ran eight prompts without
+                                    updating the record receives advisory prompt context with a
+                                    ten-prompt cooldown. An untouched record never blocks Stop or
+                                    creates a continuation request."
+      d.gate_reminds: "Lifecycle hooks never request a continuation. Current findings are advisory
+                       context on real user prompts; explicit check, gate and write-admission
+                       failures remain authoritative."
   d.text_holds_the_prose_it_places:
     rests_on: [s.2026_09_04_signals, d.reasoning_in_record, d.moved_is_a_flag]
     verdict: "a section's text is held to the sentence it draws - a judgment placed for its
@@ -7862,13 +7878,6 @@ sources:
          errors, and bounds retries for transient Windows sharing violations without allowing delete
          sharing or replacing identity checks. Windows regression tests cover transient and
          persistent DELETE handles; actual Windows CI remains the platform acceptance gate."
-  s.2026_10_24_private_research_capture:
-    name: "Approval of private research capture for explicitly maintained projects"
-    read: "2026-10-24"
-    of: "Maintainer approval in the knowledge-continuity discussion, followed by replacement global
-         instructions carrying the same bounded authorization."
-    at: "Conversation 01a117f2-387d-7421-9cf2-452a983f2e56, 2026-10-24"
-    fidelity: paraphrase
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"

@@ -100,6 +100,7 @@ impl Fixture {
         child.wait_with_output().unwrap()
     }
 }
+#[track_caller]
 fn success(output: Output) -> Output {
     assert!(
         output.status.success(),
@@ -238,15 +239,15 @@ fn a_record_that_can_no_longer_be_assessed_is_reported_as_unavailable() {
         );
         let context: Value = serde_json::from_slice(&prompt.stdout).unwrap();
         assert_eq!(context["hookSpecificOutput"]["hookEventName"], event);
-        assert!(
-            context["hookSpecificOutput"]["additionalContext"]
-                .as_str()
-                .unwrap()
-                .ends_with(
-                    "The record assessment is unavailable. Run kpop check before relying on the record."
-                ),
-            "{context}"
-        );
+        let text = context["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+        if event == "UserPromptSubmit" {
+            assert!(text.ends_with("The record assessment is unavailable. Run kpop check before relying on the record."), "{context}");
+        } else {
+            // Tool results carry bounded handoff guidance, not a repeated full
+            // assessment. The real prompt above advanced its identity despite
+            // the broken record and already reported the structural failure.
+            assert!(text.contains("Before finishing"), "{context}");
+        }
     }
 }
 #[test]

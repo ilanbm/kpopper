@@ -446,16 +446,21 @@ advisory prompt context with a ten-prompt cooldown. Context never requires a boo
 reply or grants write permission. A user can still explicitly ask about a reminder.
 Diagnostics use `additionalContext`; host interfaces may expose hook activity.
 
-Claude and Codex also receive a knowledge-handoff reminder on the first tool result of an
+Claude and Codex also receive a knowledge-handoff reminder on the first task tool result of an
 active user turn in a workspace with an available record. It asks the agent to account for
 material findings, inspect write outcomes and read back affected entries before finishing
-the requested answer. It covers research and evidence saved outside Git; it does not infer
-completeness from a changed record. A host turn ID, or the grounding hook's real-prompt
-counter when no turn ID is available, scopes the notice. Private session state suppresses
-repeated tool notices for the same turn and canonical record and retains only the last turn.
+the requested answer. A simple `kpop session view` or `session read` only loads existing
+grounding and does not consume the notice; compound and unrecognized commands remain eligible.
+It covers research and evidence saved outside Git; it does not infer
+completeness from a changed record. A private prompt marker, written independently of record
+assessment, scopes the notice; a host turn ID also rejects stale tool events. Compaction
+invalidates the marker so the next tool result can restore guidance lost from context.
+Private session state suppresses repeated notices for the same context and canonical record.
 Subagents and workspaces without an available record receive no such reminder. A busy or
 unavailable private ledger cannot block a tool. This state records attempted context delivery,
-not model receipt, completed recording or semantic completeness. No Stop continuation is added.
+not model receipt, completed recording or semantic completeness. Missing task identity does
+not trigger a full assessment on every tool. Successful recording and no-change checks stay
+out of the final answer unless requested. No Stop continuation is added.
 
 Session attribution requires a successful-write receipt matching the session, source file
 and exact current entry body. Git updates and manual edits alone do not establish authorship.

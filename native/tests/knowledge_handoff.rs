@@ -25,6 +25,10 @@ impl Fixture {
     }
 
     fn hook(&self, event: &str, extra: Value) -> Output {
+        self.host_hook("codex", event, extra)
+    }
+
+    fn host_hook(&self, host: &str, event: &str, extra: Value) -> Output {
         let mut payload = json!({"cwd": self.work.path(), "session_id": "handoff-test",
                                  "turn_id": "turn-one", "hook_event_name": event});
         payload
@@ -40,7 +44,7 @@ impl Fixture {
         if event == "Stop" {
             cmd.arg("session-stop");
         } else {
-            cmd.args(["session-context", "--host", "codex", "--event", event]);
+            cmd.args(["session-context", "--host", host, "--event", event]);
         }
         let mut child = cmd
             .stdin(Stdio::piped())
@@ -102,6 +106,34 @@ fn first_tool_delivers_handoff_with_no_git_or_record_change_and_stop_stays_silen
 }
 
 #[test]
+fn canonical_grounding_reads_do_not_consume_the_task_handoff() {
+    let f = Fixture::new();
+    for command in [
+        "/plugin/kpop --workspace /project session view --input /record/GROUNDING.yaml",
+        "kpop session read --ref node:p.seed# --revision abc",
+    ] {
+        assert!(context(f.hook("PostToolUse", json!({
+            "tool_name":"Bash", "tool_input":{"command":command},
+            "tool_response":"# Checked graph view"
+        }))).is_empty());
+    }
+    let text = context(f.hook("PostToolUse", json!({
+        "tool_name":"Bash", "tool_input":{"command":"cat /source.txt"},
+        "tool_response":"The new load limit is 731 kg."
+    })));
+    assert!(text.contains("record skill"));
+    assert!(context(f.hook("PostToolUse", json!({}))).is_empty());
+}
+
+#[test]
+fn a_compound_grounding_and_source_read_is_still_a_task_result() {
+    let f = Fixture::new();
+    assert!(!context(f.hook("PostToolUse", json!({
+        "tool_name":"Bash", "tool_input":{"command":"kpop session view && cat /source.txt"}
+    }))).is_empty());
+}
+
+#[test]
 fn a_new_turn_is_reminded_even_after_a_partial_record_write() {
     let f = Fixture::new();
     assert!(!context(f.hook("PostToolUse", json!({}))).is_empty());
@@ -126,11 +158,14 @@ fn missing_records_and_child_agents_do_not_get_a_recording_task() {
 }
 
 #[test]
-fn prompt_counter_supports_hosts_without_a_turn_id_and_state_stays_bounded() {
+fn prompt_marker_supports_hosts_without_a_turn_id_and_state_stays_bounded() {
     let f = Fixture::new();
-    let ground = f.state.path().join("kpopper-ground-handoff-test.json");
-    for turn in 1..=12 {
-        fs::write(&ground, json!({"turns": turn}).to_string()).unwrap();
+    for _ in 1..=12 {
+        assert!(
+            f.host_hook("claude", "UserPromptSubmit", json!({"turn_id":null}))
+                .status
+                .success()
+        );
         assert!(!context(f.hook("PostToolUse", json!({"turn_id": null}))).is_empty());
         assert!(context(f.hook("PostToolUse", json!({"turn_id": null}))).is_empty());
     }
@@ -138,10 +173,123 @@ fn prompt_counter_supports_hosts_without_a_turn_id_and_state_stays_bounded() {
     let notices: Vec<_> = fs::read_dir(home)
         .unwrap()
         .filter_map(Result::ok)
-        .filter(|e| e.file_name().to_string_lossy().starts_with("handoff-"))
+        .filter(|e| {
+            e.file_name().to_string_lossy().starts_with("handoff-")
+                && e.file_name() != "handoff-context.json"
+        })
         .collect();
     assert_eq!(notices.len(), 1);
     assert!(notices[0].metadata().unwrap().len() < 512);
+}
+
+#[test]
+fn claude_prompt_marker_advances_even_when_the_record_cannot_be_parsed() {
+    let f = Fixture::new();
+    for turn in 0..3 {
+        if turn == 1 {
+            fs::write(
+                f.work.path().join("GROUNDING.yaml"),
+                "known: [invalid yaml\n",
+            )
+            .unwrap();
+        }
+        assert!(
+            f.host_hook("claude", "UserPromptSubmit", json!({"turn_id":null}))
+                .status
+                .success()
+        );
+        assert!(!context(f.host_hook("claude", "PostToolUse", json!({"turn_id":null}))).is_empty());
+        assert!(context(f.host_hook("claude", "PostToolUse", json!({"turn_id":null}))).is_empty());
+    }
+    let invalid = Fixture::new();
+    fs::write(
+        invalid.work.path().join("GROUNDING.yaml"),
+        "known: [invalid yaml\n",
+    )
+    .unwrap();
+    assert!(
+        invalid
+            .host_hook("claude", "UserPromptSubmit", json!({"turn_id":null}))
+            .status
+            .success()
+    );
+    assert!(
+        !context(invalid.host_hook("claude", "PostToolUse", json!({"turn_id":null}))).is_empty()
+    );
+}
+
+#[test]
+fn compaction_rearms_once_without_changing_the_record_or_starting_a_turn() {
+    for (host, event, turn) in [
+        ("claude", "SessionStart", Value::Null),
+        ("codex", "PostCompact", json!("turn-one")),
+    ] {
+        let f = Fixture::new();
+        let before = fs::read(f.work.path().join("GROUNDING.yaml")).unwrap();
+        assert!(
+            f.host_hook(host, "UserPromptSubmit", json!({"turn_id":turn}))
+                .status
+                .success()
+        );
+        assert!(!context(f.host_hook(host, "PostToolUse", json!({"turn_id":turn}))).is_empty());
+        let reset = f.host_hook(host, event, json!({"turn_id":turn,"source":"compact"}));
+        assert!(reset.status.success() && reset.stdout.is_empty() && reset.stderr.is_empty());
+        assert!(!context(f.host_hook(host, "PostToolUse", json!({"turn_id":turn}))).is_empty());
+        assert!(context(f.host_hook(host, "PostToolUse", json!({"turn_id":turn}))).is_empty());
+        assert_eq!(
+            before,
+            fs::read(f.work.path().join("GROUNDING.yaml")).unwrap()
+        );
+    }
+}
+
+#[test]
+fn unidentified_tool_results_do_not_fall_back_to_full_record_assessment() {
+    let f = Fixture::new();
+    fs::write(f.state.path().join("kpopper-base-handoff-test"), "{}").unwrap();
+    fs::write(
+        f.work.path().join("GROUNDING.yaml"),
+        "known: [invalid yaml\n",
+    )
+    .unwrap();
+    assert!(context(f.host_hook("claude", "PostToolUse", json!({"turn_id":null}))).is_empty());
+}
+
+#[test]
+fn late_tool_result_from_an_old_turn_cannot_consume_the_current_notice() {
+    let f = Fixture::new();
+    assert!(
+        f.hook("UserPromptSubmit", json!({"turn_id":"turn-two"}))
+            .status
+            .success()
+    );
+    assert!(context(f.hook("PostToolUse", json!({"turn_id":"turn-one"}))).is_empty());
+    assert!(!context(f.hook("PostToolUse", json!({"turn_id":"turn-two"}))).is_empty());
+    assert!(context(f.hook("PostToolUse", json!({"turn_id":"turn-two"}))).is_empty());
+}
+
+#[test]
+fn recreated_prompt_state_does_not_collide_with_a_previous_notice() {
+    let f = Fixture::new();
+    assert!(
+        f.host_hook("claude", "UserPromptSubmit", json!({"turn_id":null}))
+            .status
+            .success()
+    );
+    assert!(!context(f.host_hook("claude", "PostToolUse", json!({"turn_id":null}))).is_empty());
+    fs::remove_file(
+        f.state
+            .path()
+            .join("kpopper-session-handoff-test/handoff-context.json"),
+    )
+    .unwrap();
+    assert!(context(f.host_hook("claude", "PostToolUse", json!({"turn_id":null}))).is_empty());
+    assert!(
+        f.host_hook("claude", "UserPromptSubmit", json!({"turn_id":null}))
+            .status
+            .success()
+    );
+    assert!(!context(f.host_hook("claude", "PostToolUse", json!({"turn_id":null}))).is_empty());
 }
 
 #[test]

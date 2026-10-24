@@ -621,7 +621,7 @@ pub fn advisory_reminder(options: &GateOptions<'_>) -> Result<Option<String>> {
         )
     };
     Ok(Some(format!(
-        "kpopper: {what}, the record untouched. Complete the user's current request. Retain useful findings with {record} within existing write authority and read back the affected entries before claiming success. Report failed, deferred or prohibited capture while preserving the requested answer. Reuse existing coverage and do not write filler when nothing new was learned; this reminder requires no reply of its own."
+        "kpopper: {what}, the record untouched. Complete the user's current request. If new material findings need keeping and writing is authorized, use {record} and verify the outcome. Otherwise finish without a record update. Keep successful recording and no-change checks quiet; do not answer or mention this reminder. Briefly disclose only material unresolved capture that affects the requested work."
     )))
 }
 

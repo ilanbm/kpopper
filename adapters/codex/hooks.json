@@ -22,6 +22,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"../../scripts/session_gate.sh\" --host codex --context SessionStart",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -131,6 +140,15 @@
           {
             "type": "command",
             "command": "\"../../scripts/hook.sh\" \"continuation_hook.py\" codex",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"../../scripts/session_gate.sh\" --host codex --context PostCompact",
             "timeout": 10
           }
         ]

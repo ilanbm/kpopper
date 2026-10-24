@@ -33,7 +33,7 @@ read-only or record-write bans; do not turn a restriction inferred in a draft pl
 Before finishing the current request or handing off a PR, account for all material findings,
 including research and external documents. Within existing authority, retain new knowledge and
 run `check` and read back values, sources and scope. Reuse coverage; no filler when nothing is new.
-Keep pending, draft, failed, deferred or prohibited capture explicit alongside the requested answer.
+Keep routine success and no-change checks quiet; report material unresolved capture with the answer.
 Follow the [handoff contract](references/handoff.md); a changed file does not prove complete retention.
 
 A selected mapping or investigation makes discovery the task: follow `kpopper _agent guide`

@@ -645,6 +645,29 @@ mod tests {
     fn report() -> J {
         json!({"event_id":"node-report","date":"2026-09-24","source_quote":"exact quote: x is 2\r\n","updates":[{"kind":"set","id":"p.x","value":2}]})
     }
+
+    #[test]
+    fn node_report_state_before_record_applies_and_recovers() {
+        for interrupted in [false, true] {
+            let (root, runtime) = fixture();
+            let state = tempfile::Builder::new().prefix(".aaa-reports-").tempdir().unwrap();
+            assert!(state.path().canonicalize().unwrap() < root.path().canonicalize().unwrap());
+            let mut options = options(root.path());
+            options.state_dir = Some(state.path().to_path_buf());
+            let bytes = serde_json::to_vec(&report()).unwrap();
+            if interrupted {
+                let stopped = run_with_probe(&options, root.path(), Some(&bytes), Some(&runtime), &mut |phase| {
+                    if phase == "prepared" { Err(error("ordered-node-interruption")) } else { Ok(()) }
+                });
+                assert!(stopped.unwrap_err().0.contains("ordered-node-interruption"));
+            }
+            let result = run_with_probe(&options, root.path(), Some(&bytes), Some(&runtime), &mut |_| Ok(())).unwrap();
+            assert_eq!(result.code, 0, "{}", result.text);
+            let receipt: J = serde_json::from_str(&result.text).unwrap();
+            assert_eq!(receipt["state"], "applied");
+            assert_eq!(Capture::read(root.path()).unwrap().document().to_json().unwrap()["known"]["p.x"]["v"], 2);
+        }
+    }
     #[test]
     fn node_report_applies_with_semantic_result_signals_and_portable_evidence() {
         let (root, runtime) = fixture();

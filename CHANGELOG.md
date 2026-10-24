@@ -6,7 +6,10 @@
   including for research and evidence saved outside the repository. It asks for verified
   retention or an explicit unresolved outcome without creating a Stop continuation.
   Recording guidance distinguishes accepted writes, existing coverage, drafts and failures;
-  empty updates are unnecessary when no material knowledge was learned.
+  successful routine recording stays quiet. Prompt identity survives record parse failures,
+  and context compaction re-arms the reminder without creating another user request.
+- Report writes acquire private-state and record locks in canonical order, including when
+  the state directory sorts before the record. Interrupted writes recover under the same order.
 
 ## 0.17.0 — 2026-10-18
 

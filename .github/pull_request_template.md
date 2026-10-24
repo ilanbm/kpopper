@@ -26,6 +26,9 @@ Bump: patch
 
 Knowledge outcome:
 
+- [ ] Material findings are linked to verified record IDs, existing coverage, or an explicit reason no update was made.
+- [ ] New or changed decisions name their supporting facts and an executable falsifier or human re-opener, or this change makes none.
+
 <!-- Account for material findings, decisions, constraints, measurements and open questions.
      Give the verified record IDs and sources, existing IDs that already cover the finding,
      a specific reason no material knowledge was added, or an explicit unresolved capture

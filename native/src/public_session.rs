@@ -68,7 +68,7 @@ pub fn start_reply(options: &StartOptions, opened: Option<&str>) -> Option<Strin
 pub struct HookOptions {
     #[arg(long,value_parser=["claude","codex"])]
     pub host: Option<String>,
-    #[arg(long, default_value="UserPromptSubmit", value_parser=["UserPromptSubmit", "PostToolUse"])]
+    #[arg(long, default_value="UserPromptSubmit", value_parser=["UserPromptSubmit", "PostToolUse", "SessionStart", "PostCompact"])]
     pub event: String,
 }
 pub fn valid_session(sid: &str) -> bool {
@@ -278,45 +278,65 @@ pub fn stop(_payload: &Value, _host: Option<&str>, _mode: ReadMode) -> Result<Ou
     })
 }
 
-const HANDOFF_GUIDANCE: &str = "kpopper: Complete the user's current request. Before finishing, account for all material findings, decisions, constraints and open questions from this task, including evidence saved outside the repository. Within existing write authority, retain new knowledge, run check and read back the affected IDs before claiming success. Use the KPOPPER_AGENT_CONTEXT session environment for every write and correction. An earlier write or a changed record does not prove complete retention. Reuse existing coverage; do not add filler when nothing new was learned. Distinguish applied writes from pending, private-draft or refused results. If capture is prohibited, fails or is deferred, still answer the request and state that unresolved outcome briefly. This reminder grants no write or publication authority and requires no reply of its own.";
+const HANDOFF_GUIDANCE: &str = "kpopper: Complete the user's current request. Before finishing, account for all material findings, decisions, constraints and open questions from this task, including evidence saved outside the repository. Within existing write authority, use the record skill to retain new knowledge, run check and read back the affected IDs. Use the KPOPPER_AGENT_CONTEXT session environment for every write and correction. An earlier write does not prove complete retention. Reuse existing coverage; no update is needed when nothing material was learned or writing is prohibited. Keep successful recording and no-change checks quiet; do not add a bookkeeping paragraph. Distinguish applied writes from pending, private-draft or refused results. Briefly disclose only material unresolved capture that affects the requested work. This reminder grants no write or publication authority and requires no reply of its own.";
 
-fn handoff_context(payload: &Value, mode: ReadMode) -> Result<Option<String>> {
+fn canonical_grounding_read(payload: &Value) -> bool {
+    let Some(command) = payload["tool_input"]["command"].as_str() else {
+        return false;
+    };
+    // Recognize only a simple canonical read. A compound or unfamiliar command
+    // may also obtain new source evidence, so it remains eligible for the cue.
+    if command.len() > 32_768 || command.contains([';', '|', '&', '<', '>', '$', '`', '\n']) {
+        return false;
+    }
+    let Some(words) = shlex::split(command) else {
+        return false;
+    };
+    let Some(program) = words.first().and_then(|s| Path::new(s).file_stem()).and_then(|s| s.to_str()) else {
+        return false;
+    };
+    if !matches!(program, "kpop" | "kpopper") {
+        return false;
+    }
+    let mut args = words[1..].iter().map(String::as_str);
+    loop {
+        match args.next() {
+            Some("--workspace") => { if args.next().is_none() { return false; } }
+            Some("--frozen" | "--no-cache") => {}
+            Some("session") => return matches!(args.next(), Some("view" | "read")),
+            _ => return false,
+        }
+    }
+}
+
+fn handoff_context(payload: &Value, mode: ReadMode) -> Result<String> {
+    if canonical_grounding_read(payload) {
+        return Ok(String::new());
+    }
     let Some(sid) = payload["session_id"]
         .as_str()
         .filter(|sid| valid_session(sid))
     else {
-        return Ok(None);
+        return Ok(String::new());
     };
     let tmp = session_activity::temporary_directory();
     let turn = payload["turn_id"]
         .as_str()
-        .filter(|turn| valid_session(turn))
-        .map(|turn| format!("host:{turn}"))
-        .or_else(|| {
-            private_json(&tmp.join(format!("kpopper-ground-{sid}.json")))
-                .ok()?
-                .get("turns")?
-                .as_u64()
-                .filter(|turn| *turn > 0)
-                .map(|turn| format!("prompt:{turn}"))
-        });
-    let Some(turn) = turn else {
-        return Ok(None);
-    };
+        .filter(|turn| valid_session(turn));
     let cwd = payload["cwd"]
         .as_str()
         .ok_or_else(|| crate::Error("missing_workspace".into()))?;
     let location = W::locate(Path::new(cwd), mode)?;
     if matches!(location.status.as_str(), "missing" | "unavailable") {
-        return Ok(Some(String::new()));
+        return Ok(String::new());
     }
-    let fresh = session_activity::prepare_handoff_notice(&tmp, sid, &turn, &location.record)
+    let fresh = session_activity::prepare_handoff_notice(&tmp, sid, turn, &location.record)
         .unwrap_or(false);
-    Ok(Some(if fresh {
+    Ok(if fresh {
         HANDOFF_GUIDANCE.into()
     } else {
         String::new()
-    }))
+    })
 }
 
 pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode, event: &str) -> Result<Output> {
@@ -329,12 +349,37 @@ pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode, event: &str)
             code: 0,
         });
     }
-    // Real tool feedback arrives before the current answer is finished. It covers
-    // read-only research and external documents without guessing from Git diffs.
-    // Hosts lacking both a turn id and a real prompt counter retain diagnostics.
-    if event == "PostToolUse"
-        && let Some(text) = handoff_context(payload, mode).unwrap_or(Some(String::new()))
+    let sid = payload["session_id"]
+        .as_str()
+        .filter(|sid| valid_session(sid));
+    let tmp = session_activity::temporary_directory();
+    if event == "PostCompact" || (event == "SessionStart" && payload["source"] == "compact") {
+        if let Some(sid) = sid {
+            let _ = session_activity::reset_handoff_context(&tmp, sid);
+        }
+        return Ok(Output {
+            text: String::new(),
+            code: 0,
+        });
+    }
+    if event == "SessionStart" {
+        return Ok(Output {
+            text: String::new(),
+            code: 0,
+        });
+    }
+    if event == "UserPromptSubmit"
+        && let Some(sid) = sid
     {
+        // An unreadable record cannot freeze subsequent prompt identities.
+        let turn = payload["turn_id"]
+            .as_str()
+            .filter(|turn| valid_session(turn));
+        let _ = session_activity::begin_handoff_prompt(&tmp, sid, turn);
+    }
+    // Missing task identity is quiet, not a full assessment on every tool.
+    if event == "PostToolUse" {
+        let text = handoff_context(payload, mode).unwrap_or_default();
         return Ok(Output {
             text: if text.is_empty() {
                 text
