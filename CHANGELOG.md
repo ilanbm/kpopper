@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Claude and Codex receive a bounded knowledge-handoff reminder during the current turn,
+  including for research and evidence saved outside the repository. It asks for verified
+  retention or an explicit unresolved outcome without creating a Stop continuation.
+  Recording guidance distinguishes accepted writes, existing coverage, drafts and failures;
+  empty updates are unnecessary when no material knowledge was learned.
+
 ## 0.17.0 — 2026-10-18
 
 ### Ongoing knowledge maintenance

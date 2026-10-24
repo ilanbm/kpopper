@@ -24,4 +24,10 @@ Bump: patch
 
 ---
 
-- [ ] A decision this change makes is written into `GROUNDING.yaml`, with what would make it wrong — a sign the change itself cannot suppress — or it makes none
+Knowledge outcome:
+
+<!-- Account for material findings, decisions, constraints, measurements and open questions.
+     Give the verified record IDs and sources, existing IDs that already cover the finding,
+     a specific reason no material knowledge was added, or an explicit unresolved capture
+     and its reason. "Only code/docs/tests/CI" is not a knowledge assessment.
+     A passing record check or an applied write alone does not prove complete retention. -->

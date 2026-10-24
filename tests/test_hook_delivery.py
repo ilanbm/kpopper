@@ -220,6 +220,15 @@ class ShellDispatch(unittest.TestCase):
 
 
 class Manifests(unittest.TestCase):
+    def test_claude_and_codex_deliver_handoff_during_the_active_turn(self):
+        for rel in ('hooks/hooks.json', 'adapters/codex/plugin-hooks.json', 'adapters/codex/hooks.json'):
+            with self.subTest(rel=rel):
+                value = json.loads((ROOT / rel).read_text())
+                commands = [hook['command'] for group in value['hooks']['PostToolUse'] for hook in group['hooks']]
+                matches = [command for command in commands if 'session_gate.sh' in command]
+                self.assertEqual(len(matches), 1)
+                self.assertIn('--context PostToolUse', matches[0])
+
     def test_every_script_a_manifest_names_exists(self):
         for rel in MANIFESTS:
             with self.subTest(rel=rel):

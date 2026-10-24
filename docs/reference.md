@@ -446,6 +446,17 @@ advisory prompt context with a ten-prompt cooldown. Context never requires a boo
 reply or grants write permission. A user can still explicitly ask about a reminder.
 Diagnostics use `additionalContext`; host interfaces may expose hook activity.
 
+Claude and Codex also receive a knowledge-handoff reminder on the first tool result of an
+active user turn in a workspace with an available record. It asks the agent to account for
+material findings, inspect write outcomes and read back affected entries before finishing
+the requested answer. It covers research and evidence saved outside Git; it does not infer
+completeness from a changed record. A host turn ID, or the grounding hook's real-prompt
+counter when no turn ID is available, scopes the notice. Private session state suppresses
+repeated tool notices for the same turn and canonical record and retains only the last turn.
+Subagents and workspaces without an available record receive no such reminder. A busy or
+unavailable private ledger cannot block a tool. This state records attempted context delivery,
+not model receipt, completed recording or semantic completeness. No Stop continuation is added.
+
 Session attribution requires a successful-write receipt matching the session, source file
 and exact current entry body. Git updates and manual edits alone do not establish authorship.
 Writers use `KPOPPER_AGENT_SESSION` from the opening context (or `CODEX_THREAD_ID` in Codex).
