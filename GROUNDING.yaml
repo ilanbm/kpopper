@@ -1700,6 +1700,24 @@ known:
          is only a Python implementation metric, not the native count; q.reader_places_counted_once
          remains open."
     of: "2026-09-25"
+  p.report_receipt_dates:
+    name: "Legacy history report receipts preserve YAML dates"
+    v: "Report receipts retain the existing plain JSON shape when representable. A receipt
+        containing YAML dates uses the existing typed-json/v1 wrapper, preserving the original value
+        types instead of failing after publication. Quoted and unquoted source dates, successful
+        replay, correction ownership and later-session retrieval are exercised across ordinary,
+        history and node layouts."
+    from: doc.report_write_closure
+    of: "2026-10-24"
+  p.report_recovery_attribution:
+    name: "Report recovery preserves its original writing session"
+    v: "Private report journals capture the writing session independently of the report data.
+        Successful recovery attributes exactly the report update IDs and generated source to that
+        original session, even when another session retries. Older or unbound journals do not infer
+        an owner. Regression coverage includes prepared and committed interruptions, foreign retry
+        and replay on ordinary, history and node layouts."
+    from: doc.report_write_closure
+    of: "2026-10-24"
   p.report_write_closure:
     name: "Accepted report entries keep their session ownership"
     v: "The local regression contract covers a session-bound report followed by corrections of its

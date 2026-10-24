@@ -11,10 +11,14 @@
 - Report writes acquire private-state and record locks in canonical order, including when
   the state directory sorts before the record. Interrupted writes recover under the same order.
 - Report batches retain ownership for each written entry, so the writing session can correct
-  its new entries while another session remains refused. Undeclared prose conditions are
+  its new entries while another session remains refused, including after an interrupted
+  write is recovered. Older unbound journals do not grant ownership to the retrying session.
+  Legacy history receipts preserve YAML dates using the existing typed JSON format instead
+  of reporting an error after a successful write. Invalid undeclared predicate values are
   refused before publication with guidance to use an executable predicate or `reopened_by`.
 - Routine recording no longer requires an unrelated maintenance proposal or health paragraph.
-  Relevant declared reliability limits and requests for ongoing checking remain visible.
+  Readback and hook advice use the same scope. Relevant declared reliability limits and
+  requests for ongoing checking remain visible, within the existing opening budgets.
 
 ## 0.17.0 — 2026-10-18
 

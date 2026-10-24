@@ -56,6 +56,14 @@ pub fn published(root: &Path, files: &[FileImage], subjects: Option<&BTreeSet<St
     }
 }
 
+/// A recovered operation keeps its captured writer, not the retrying session.
+/// This is attribution only; it grants no write authority.
+pub(crate) fn published_for_session(
+    sid: &str, root: &Path, files: &[FileImage], subjects: &BTreeSet<String>,
+) {
+    let _ = published_with(sid, &temporary_directory(), root, files, Some(subjects));
+}
+
 fn valid_session(sid: &str) -> bool {
     !sid.is_empty()
         && sid.len() <= 200

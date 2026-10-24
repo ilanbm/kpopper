@@ -446,11 +446,13 @@ advisory prompt context with a ten-prompt cooldown. Context never requires a boo
 reply or grants write permission. A user can still explicitly ask about a reminder.
 Diagnostics use `additionalContext`; host interfaces may expose hook activity.
 
-Claude and Codex also receive a knowledge-handoff reminder on the first task tool result of an
+Claude and Codex also receive a knowledge-handoff reminder on the first eligible tool result of an
 active user turn in a workspace with an available record. It asks the agent to account for
 material findings, inspect write outcomes and read back affected entries before finishing
 the requested answer. A simple `kpop session view` or `session read` only loads existing
 grounding and does not consume the notice; compound and unrecognized commands remain eligible.
+Skill and other preparatory reads remain eligible too. The notice does not classify new
+findings or prove that an agent retained them.
 It covers research and evidence saved outside Git; it does not infer
 completeness from a changed record. A private prompt marker, written independently of record
 assessment, scopes the notice; a host turn ID also rejects stale tool events. Compaction

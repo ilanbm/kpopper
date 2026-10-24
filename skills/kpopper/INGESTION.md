@@ -17,6 +17,13 @@ An undeclared prose condition in `wrong_if` is refused before publication. Use a
 predicate, or place a human reopening condition in `reopened_by`. Inspect the whole outcome;
 a retained source or a private proposal is not an accepted update.
 
+Applied reports retain the writing session's ownership, including after recovery; a retrying
+session does not inherit it. Older journals without a captured writer stay unattributed.
+For legacy history containing YAML dates, `mutation.receipt` uses the standard
+`{"encoding":"typed-json/v1","value":...}` wrapper when ordinary JSON would lose the type.
+JSON-compatible receipts keep their existing shape. A successful write is not reported as
+an encoding failure, and retrying the same envelope returns its retained outcome.
+
 If the result is `needs_primary`, none of that report's requested changes was applied by
 that attempt; the source was retained. Inspect the reason and resolve it while the context
 is available, or report the unresolved decision. A corrected envelope uses a new event ID;

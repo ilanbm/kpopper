@@ -538,19 +538,22 @@ fn promotion_budget_suppression_is_rendered_only_and_preserves_authored_choice()
 #[test]
 fn captured_knowledge_is_checked_and_read_from_a_fresh_checkout_and_session() {
     for layout in ["ordinary", "history", "node"] {
-        knowledge_round_trip(layout);
+        for quoted_date in [false, true] {
+            knowledge_round_trip(layout, quoted_date);
+        }
     }
 }
 
-fn knowledge_round_trip(layout: &str) {
+fn knowledge_round_trip(layout: &str, quoted_date: bool) {
     let f = Fixture::new();
     let record = f.root.path().join("GROUNDING.yaml");
-    let initial = "sources:\n  s.seed: {name: Setup, read: \"2026-09-01\"}\nknown:\n  p.seed: {v: 1, from: s.seed}\n";
+    let initial = format!("sources:\n  s.seed: {{name: Setup, read: {}}}\nknown:\n  p.seed: {{v: 1, from: s.seed}}\n",
+        if quoted_date { "\"2026-09-01\"" } else { "2026-09-01" });
     if layout == "ordinary" {
-        fs::write(&record, initial).unwrap();
+        fs::write(&record, &initial).unwrap();
     } else {
         let source = tempfile::tempdir().unwrap();
-        fs::write(source.path().join("GROUNDING.yaml"), initial).unwrap();
+        fs::write(source.path().join("GROUNDING.yaml"), &initial).unwrap();
         fs::remove_dir(f.root.path()).unwrap();
         if layout == "history" {
             kpop_native::history_migration::Plan::prepare(
@@ -594,6 +597,20 @@ fn knowledge_round_trip(layout: &str) {
     let applied: Value =
         serde_json::from_slice(&success(writer.wait_with_output().unwrap()).stdout).unwrap();
     assert_eq!(applied["state"], "applied");
+    if layout == "history" && !quoted_date {
+        assert_eq!(applied["mutation"]["receipt"]["encoding"], "typed-json/v1");
+        let tagged = &applied["mutation"]["receipt"]["value"];
+        let decoded = kpop_native::value::TypedValue::from_tagged(tagged).unwrap();
+        assert_eq!(decoded.to_tagged().unwrap(), *tagged);
+        assert!(decoded.to_json().is_err(), "the receipt must preserve the original YAML date type");
+    }
+    let written = fs::read(&record).unwrap();
+    let mut retry = f.command().args(["update", "--file", "-"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    retry.stdin.take().unwrap().write_all(report.to_string().as_bytes()).unwrap();
+    let repeated: Value = serde_json::from_slice(&success(retry.wait_with_output().unwrap()).stdout).unwrap();
+    assert_eq!(repeated["state"], "applied");
+    assert_eq!(written, fs::read(&record).unwrap());
     // A report is a publication by this session, including every entry in its
     // batch. It must be correctable before another session consumes the record.
     success(f.run(&[
@@ -603,6 +620,10 @@ fn knowledge_round_trip(layout: &str) {
     success(f.run(&[
         "correct", "delivery.latest", "name=Latest receiving time",
         "--why", "Name the other reading from the same report.",
+    ]));
+    success(f.run(&[
+        "correct", applied["source"].as_str().unwrap(), "name=Captured delivery note",
+        "--why", "Name the source written by this session's report.",
     ]));
     let other = f.command().env("KPOPPER_AGENT_SESSION", "other-session")
         .args(["correct", "delivery.max_kg", "v=999", "--why", "Not my entry"])

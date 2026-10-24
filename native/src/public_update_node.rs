@@ -145,9 +145,10 @@ fn report_result(prepared: &P::Prepared, before: &Capture, after: &Capture) -> R
     }
     W::receipt(&after.snapshot, prepared.operation())
 }
-fn journal(prepared: &P::Prepared, graphs: &(J, J), phase: &str) -> Result<J> {
+fn journal(prepared: &P::Prepared, graphs: &(J, J), phase: &str, attribution: &ReportAttribution) -> Result<J> {
     Ok(
         json!({"version":1,"kind":"native-node-report/v1","phase":phase,
+        "writer_session":attribution.writer,
         "prepared":base64::engine::general_purpose::STANDARD.encode(prepared.to_bytes()?),
         "graph_before":graphs.0,"graph_after":graphs.1}),
     )
@@ -292,6 +293,7 @@ fn retained_sources(ctx: &Context<'_>, prepared: &P::Prepared) -> Result<()> {
     }
     Ok(())
 }
+#[allow(clippy::too_many_arguments)]
 fn publish(
     ctx: &Context<'_>,
     report: &Report,
@@ -299,6 +301,7 @@ fn publish(
     prepared: &P::Prepared,
     graphs: &(J, J),
     runtime: Option<&Runtime>,
+    attribution: &ReportAttribution,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<()> {
     P::publish(
@@ -316,7 +319,7 @@ fn publish(
             if phase == P::Phase::Commit {
                 save(
                     &ctx.journal(event),
-                    &journal(prepared, graphs, "committed")?,
+                    &journal(prepared, graphs, "committed", attribution)?,
                 )?;
             }
             probe(match phase {
@@ -397,6 +400,7 @@ pub(super) fn run(
     event: &str,
     ctx: Context<'_>,
     retained: Option<&[u8]>,
+    recording_session: Option<&str>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<Output> {
     let outcome: Result<(P::Prepared, (J, J), V)> = (|| {
@@ -409,9 +413,11 @@ pub(super) fn run(
         let expected_graphs;
         let owned_runtime;
         let runtime;
+        let attribution;
         if let Some(raw) = retained {
             let retained: J =
                 crate::json_ingress::parse_slice(raw, crate::json_ingress::DuplicateKeys::Reject)?;
+            attribution = ReportAttribution::recovered(report, event, &retained);
             prepared = decode(&retained)?;
             let (before, _) = prepared.snapshots(ctx.root())?;
             let before = Capture::from_snapshot(before)?;
@@ -437,6 +443,7 @@ pub(super) fn run(
                 })?;
             }
         } else {
+            attribution = ReportAttribution::new(report, event, recording_session);
             let before = Capture::read(ctx.root())?;
             verify_captured_target(
                 before.document(),
@@ -488,7 +495,7 @@ pub(super) fn run(
             expected_graphs = (before_graph, after_graph);
             save(
                 &ctx.journal(event),
-                &journal(&prepared, &expected_graphs, "prepared")?,
+                &journal(&prepared, &expected_graphs, "prepared", &attribution)?,
             )?;
             probe("prepared")?;
         }
@@ -499,12 +506,13 @@ pub(super) fn run(
             &prepared,
             &expected_graphs,
             runtime,
+            &attribution,
             probe,
         )?;
         if retained.is_some() {
             probe("recovered")?;
         }
-        crate::session_activity::published(
+        attribution.published(
             ctx.root(),
             &[crate::history_transaction::FileImage {
                 path: "GROUNDING.yaml".into(),
@@ -512,13 +520,6 @@ pub(super) fn run(
                 before: prepared.before_view()?,
                 after: Some(prepared.after_view()?),
             }],
-            Some(
-                &report
-                    .updates
-                    .iter()
-                    .map(|v| v["id"].as_str().unwrap().to_owned())
-                    .collect(),
-            ),
         );
         let (before, after) = prepared.snapshots(ctx.root())?;
         let result = report_result(
@@ -530,7 +531,7 @@ pub(super) fn run(
     })();
     let (answer, signals, code) = match outcome {
         Ok((prepared, graphs, semantic)) => {
-            let data = json!({"operation":prepared.operation(),"digest":prepared.digest(),"receipt":semantic.to_json()?});
+            let data = json!({"operation":prepared.operation(),"digest":prepared.digest(),"receipt":receipt_json(&semantic)?});
             let (answer, signals) = receipt_parts(
                 report,
                 ctx.record,
@@ -542,6 +543,7 @@ pub(super) fn run(
                 None,
                 retained.is_some(),
                 Some(&data),
+                receipt_diagnostics(&semantic)?,
                 Some(&prepared.after_view()?),
                 Some(&graphs),
             )?;
@@ -578,6 +580,7 @@ pub(super) fn run(
                 Some(&e.0),
                 retained.is_some(),
                 None,
+                vec![],
                 None,
                 None,
             )?;

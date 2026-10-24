@@ -848,7 +848,13 @@ fn receipt(
     supplied_graphs: Option<&(J, J)>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<(J, Vec<J>)> {
-    let data = mutation.map(|m| m.to_data().to_json()).transpose()?;
+    // Retained YAML dates require an explicit typed representation. Never turn
+    // a successful publication into a deterministic JSON-conversion failure.
+    let data = mutation.map(receipt_mutation).transpose()?;
+    let diagnostics = mutation.map(|m| {
+        let data = m.to_data();
+        receipt_diagnostics(map(&data)?.get("receipt").unwrap_or(&V::Null))
+    }).transpose()?.unwrap_or_default();
     let after_bytes = mutation
         .and_then(|m| m.files().iter().find(|f| f.role == "record"))
         .and_then(|f| f.after.as_deref());
@@ -872,10 +878,41 @@ fn receipt(
         reason,
         recovered,
         data.as_ref(),
+        diagnostics,
         after_bytes,
         graphs.as_ref(),
     )
 }
+fn receipt_diagnostics(receipt: &V) -> Result<Vec<J>> {
+    let mut value = Some(receipt);
+    for key in ["after", "batch", "diagnostics"] {
+        value = value.and_then(|v| map(v).ok()).and_then(|m| m.get(key));
+    }
+    match value {
+        Some(V::List(values)) => values.iter().map(V::to_json).collect(),
+        _ => Ok(vec![]),
+    }
+}
+
+fn receipt_json(value: &V) -> Result<J> {
+    match value.to_json() {
+        Ok(value) => Ok(value),
+        Err(error) if error.0 == "lossy_json_conversion" =>
+            Ok(json!({"encoding":"typed-json/v1", "value":value.to_tagged()?})),
+        Err(error) => Err(error),
+    }
+}
+
+fn receipt_mutation(mutation: &crate::history_transaction::PreparedMutation) -> Result<J> {
+    let data = mutation.to_data();
+    let data = map(&data)?;
+    Ok(json!({
+        "operation":data.get("operation").ok_or_else(|| error("invalid report mutation"))?.to_json()?,
+        "digest":data.get("digest").ok_or_else(|| error("invalid report mutation"))?.to_json()?,
+        "receipt":receipt_json(data.get("receipt").ok_or_else(|| error("invalid report mutation"))?)?,
+    }))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn receipt_parts(
     report: &Report,
@@ -888,17 +925,11 @@ fn receipt_parts(
     reason: Option<&str>,
     recovered: bool,
     mutation: Option<&J>,
+    diagnostics: Vec<J>,
     after_bytes: Option<&[u8]>,
     graphs: Option<&(J, J)>,
 ) -> Result<(J, Vec<J>)> {
     let source_id = format!("s.ingest_{event}");
-    let diagnostics = mutation
-        .and_then(|data| {
-            data["receipt"]["after"]["batch"]["diagnostics"]
-                .as_array()
-                .cloned()
-        })
-        .unwrap_or_default();
     let (before, after, fired, actionable) = if let Some((before, after)) = graphs {
         let (fired, actionable) = classification(before, after);
         (Some(before.clone()), Some(after.clone()), fired, actionable)
@@ -987,14 +1018,41 @@ fn receipt_parts(
     Ok((value, signals))
 }
 
+#[derive(Clone)]
+struct ReportAttribution {
+    writer: Option<String>,
+    subjects: BTreeSet<String>,
+}
+impl ReportAttribution {
+    fn new(report: &Report, event: &str, session: Option<&str>) -> Self {
+        Self {
+            writer: session.filter(|sid| crate::public_session::valid_session(sid)).map(str::to_owned),
+            subjects: report.updates.iter().map(|u| u["id"].as_str().unwrap().to_owned())
+                .chain(std::iter::once(format!("s.ingest_{event}"))).collect(),
+        }
+    }
+    fn recovered(report: &Report, event: &str, journal: &J) -> Self {
+        // Older or unbound journals stay unattributed. Never infer ownership
+        // from the report's user-supplied session_id or the recovery caller.
+        Self::new(report, event, journal["writer_session"].as_str())
+    }
+    fn published(&self, root: &Path, files: &[crate::history_transaction::FileImage]) {
+        if let Some(writer) = &self.writer {
+            crate::session_activity::published_for_session(writer, root, files, &self.subjects);
+        }
+    }
+}
+
 fn retained_journal(
     mutation: &crate::history_transaction::PreparedMutation,
     history: bool,
     phase: &str,
     graphs: Option<&(J, J)>,
+    attribution: &ReportAttribution,
 ) -> Result<J> {
     let mut value = json!({
         "version": 1, "kind": "native-source-report/v1", "history": history, "phase": phase,
+        "writer_session": attribution.writer,
         "mutation": base64::engine::general_purpose::STANDARD.encode(mutation.to_bytes()?)
     });
     if let Some((before, after)) = graphs {
@@ -1152,6 +1210,16 @@ fn run_bound(
     supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<Output> {
+    run_bound_as(options, cwd, stdin, event_override, expected_target, supplied_runtime,
+        crate::public_amend::session().as_deref(), probe)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_bound_as(
+    options: &Options, cwd: &Path, stdin: Option<&[u8]>, event_override: Option<&str>,
+    expected_target: Option<&J>, supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
+    recording_session: Option<&str>, probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<Output> {
     let raw = if options.file == "-" {
         stdin
             .ok_or_else(|| error("missing standard input"))?
@@ -1278,6 +1346,7 @@ fn run_bound(
                 supplied_runtime,
             },
             retained_report.as_deref(),
+            recording_session,
             probe,
         );
     }
@@ -1304,6 +1373,8 @@ fn run_bound(
             .ok_or_else(|| error("advanced report recovery unavailable"));
         }
         let mutation = journal_mutation(&journal)?;
+        receipt_mutation(&mutation)?;
+        let attribution = ReportAttribution::recovered(&report, &event, &journal);
         let history = journal["history"]
             .as_bool()
             .ok_or_else(|| error("invalid report journal"))?;
@@ -1400,6 +1471,7 @@ fn run_bound(
         }
         journal["phase"] = json!("committed");
         save(&journal_path, &journal)?;
+        attribution.published(record.parent().unwrap(), mutation.files());
         let graphs = match (journal.get("graph_before"), journal.get("graph_after")) {
             (Some(before), Some(after)) => Some((before.clone(), after.clone())),
             _ => None,
@@ -1485,6 +1557,7 @@ fn run_bound(
     }
 
     let mut pending_history = None;
+    let attribution = ReportAttribution::new(&report, &event, recording_session);
     let outcome = (|| {
         if let Some(reason) = private_reason(&report)? {
             return Err(error(reason));
@@ -1566,17 +1639,18 @@ fn run_bound(
                 &source_bodies,
             )?;
             let mutation = prepared.mutation.clone();
+            receipt_mutation(&mutation)?;
             verify_requested_profile(&report, &mutation, supplied_runtime)?;
             let graphs = mutation_graphs(&mutation, &report, supplied_runtime)?;
             save(
                 &journal_path,
-                &retained_journal(&mutation, false, "prepared", Some(&graphs))?,
+                &retained_journal(&mutation, false, "prepared", Some(&graphs), &attribution)?,
             )?;
             probe("prepared")?;
             let mut committed = |_: &V| {
                 save(
                     &journal_path,
-                    &retained_journal(&mutation, false, "committed", Some(&graphs))?,
+                    &retained_journal(&mutation, false, "committed", Some(&graphs), &attribution)?,
                 )?;
                 probe("committed")
             };
@@ -1648,6 +1722,7 @@ fn run_bound(
             &store, &captured, &planned, &batch, runtime,
         )
         .map_err(|e| error(&format!("history report preparation: {e}")))?;
+        receipt_mutation(&mutation)?;
         verify_requested_profile(&report, &mutation, runtime)?;
         let candidate = crate::history_authoring::candidate(&captured, &mutation)
             .map_err(|e| error(&format!("history report candidate: {e}")))?;
@@ -1693,7 +1768,7 @@ fn run_bound(
         }
         save(
             &journal_path,
-            &retained_journal(&mutation, true, "prepared", Some(&graphs))?,
+            &retained_journal(&mutation, true, "prepared", Some(&graphs), &attribution)?,
         )?;
         probe("prepared")?;
         crate::direct_history::publish_prepared(
@@ -1706,19 +1781,13 @@ fn run_bound(
                 if phase == "committed" {
                     save(
                         &journal_path,
-                        &retained_journal(&mutation, true, "committed", Some(&graphs))?,
+                        &retained_journal(&mutation, true, "committed", Some(&graphs), &attribution)?,
                     )?;
                 }
                 probe(phase)
             },
         )?;
-        crate::session_activity::published(
-            &store.root,
-            mutation.files(),
-            Some(&report.updates.iter()
-                .map(|update| update["id"].as_str().unwrap().to_owned())
-                .collect()),
-        );
+        attribution.published(&store.root, mutation.files());
         Ok((mutation, graphs))
     })();
     if outcome.is_ok()
@@ -1786,6 +1855,95 @@ fn run_bound(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_or_unbound_report_journals_do_not_infer_an_owner_from_report_data() {
+        let report = parse(br#"{"source_quote":"x is 2","date":"2026-09-20","target":"p.x","value":2,"session_id":"claimed-owner"}"#).unwrap();
+        for journal in [json!({}), json!({"writer_session":null}), json!({"writer_session":"../invalid"})] {
+            assert!(ReportAttribution::recovered(&report, "event", &journal).writer.is_none());
+        }
+        let attribution = ReportAttribution::recovered(&report, "event",
+            &json!({"writer_session":"actual-writer", "subjects":["unrelated.id"]}));
+        assert_eq!(attribution.writer.as_deref(), Some("actual-writer"));
+        assert_eq!(attribution.subjects, BTreeSet::from(["p.x".into(), "s.ingest_event".into()]));
+    }
+
+    #[test]
+    fn recovered_reports_keep_the_original_writer_across_layouts() {
+        for layout in ["ordinary", "history", "node"] {
+            for phase in ["prepared", "committed"] {
+                for foreign_retry in [false, true] {
+                    let parent = tempfile::tempdir().unwrap();
+                    let source = parent.path().join("seed");
+                    fs::create_dir(&source).unwrap();
+                    let record_root = parent.path().join("record");
+                    let initial = "sources:\n  s.seed: {name: Setup, read: \"2026-09-01\"}\nknown:\n  p.seed: {v: 1, from: s.seed}\n";
+                    fs::write(source.join("GROUNDING.yaml"), initial).unwrap();
+                    if layout == "ordinary" {
+                        fs::create_dir(&record_root).unwrap();
+                        fs::write(record_root.join("GROUNDING.yaml"), initial).unwrap();
+                    } else if layout == "history" {
+                        crate::history_migration::Plan::prepare(Path::new("GROUNDING.yaml"), &source,
+                            crate::history_migration::Options {
+                                operation:"recovery-test".into(), recorded_at:"2026-09-01T00:00:00Z".into(),
+                                record_id:Some("recovery-test".into()), read_mode:crate::source_capture::ReadMode::Frozen,
+                                route:false, as_of:None,
+                            }, None).unwrap().publish(&record_root).unwrap();
+                    } else {
+                        crate::history_node_bootstrap::Plan::prepare(&source.join("GROUNDING.yaml"))
+                            .unwrap().publish(&record_root).unwrap();
+                    }
+                    let entry = record_root.join("GROUNDING.yaml");
+                    let options = Options { file:"-".into(), record:Some(entry.clone()), state_dir:Some(parent.path().join("state")) };
+                    let bytes = serde_json::to_vec(&json!({"event_id":"recovered-owner", "date":"2026-09-20",
+                        "record_sha256":crate::identity::sha256(&fs::read(&entry).unwrap()),
+                        "source_quote":"Load is 731 kg.",
+                        "updates":[{"kind":"add","id":"delivery.load","body":{"v":731}}]})).unwrap();
+                    let writer = format!("writer-{}", uuid::Uuid::new_v4());
+                    let other = format!("other-{}", uuid::Uuid::new_v4());
+                    let interrupted = run_bound_as(&options, &record_root, Some(&bytes), None, None, None,
+                        Some(&writer), &mut |at| if at == phase { Err(error("injected-owner-interruption")) } else { Ok(()) });
+                    assert!(interrupted.unwrap_err().0.contains("injected-owner-interruption"));
+                    let output = run_bound_as(&options, &record_root, Some(&bytes), None, None, None,
+                        Some(if foreign_retry { &other } else { &writer }), &mut |_| Ok(())).unwrap();
+                    assert_eq!(output.code, 0, "{layout}/{phase}: {}", output.text);
+                    let receipt: J = serde_json::from_str(&output.text).unwrap();
+                    assert_eq!(receipt["state"], "applied");
+                    let captured = crate::source_capture::capture_source(std::slice::from_ref(&entry),
+                        &record_root, crate::source_capture::ReadMode::Frozen, None).unwrap();
+                    let tmp = crate::session_activity::temporary_directory();
+                    let owned = crate::session_activity::owned(&tmp, &writer, &captured);
+                    assert!(owned.contains("delivery.load"), "{layout}/{phase}/{foreign_retry}: {owned:?}");
+                    assert!(owned.contains(receipt["source"].as_str().unwrap()), "{layout}/{phase}: {owned:?}");
+                    assert!(crate::session_activity::owned(&tmp, &other, &captured).is_empty());
+                    let replay = run_bound_as(&options, &record_root, Some(&bytes), None, None, None,
+                        Some(&other), &mut |_| Ok(())).unwrap();
+                    assert_eq!(replay.code, 0);
+                    assert!(crate::session_activity::owned(&tmp, &other, &captured).is_empty());
+                    let _ = fs::remove_dir_all(tmp.join(format!("kpopper-session-{writer}")));
+                    let _ = fs::remove_dir_all(tmp.join(format!("kpopper-session-{other}")));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn report_refuses_empty_and_non_predicate_values_without_a_declared_limit() {
+        for condition in [json!(""), json!("   "), J::Null, json!(false), json!(5), json!(["p.load > 750"])] {
+            let root = tempfile::tempdir().unwrap();
+            let entry = root.path().join("GROUNDING.yaml");
+            let original = b"sources:\n  s.old: {name: Setup, read: 2026-09-01}\nknown:\n  p.load: {v: 731, from: s.old}\n";
+            fs::write(&entry, original).unwrap();
+            let options = Options { file:"-".into(), record:Some(entry.clone()), state_dir:Some(root.path().join("state")) };
+            let report = json!({"date":"2026-09-20", "record_sha256":crate::identity::sha256(original),
+                "source_quote":"The load limit is 731 kg.", "updates":[{"kind":"add","id":"d.fit",
+                    "body":{"rests_on":["p.load"],"verdict":"It fits","wrong_if":condition}}]});
+            let result = run(&options, root.path(), Some(&serde_json::to_vec(&report).unwrap())).unwrap();
+            assert_ne!(result.code, 0, "{}", result.text);
+            assert!(result.text.contains("reopened_by"), "{}", result.text);
+            assert_eq!(fs::read(&entry).unwrap(), original);
+        }
+    }
 
     #[test]
     fn report_refuses_a_prose_predicate_without_publishing_any_of_its_entries() {

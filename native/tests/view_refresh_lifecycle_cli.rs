@@ -888,7 +888,8 @@ fn canonical_opening_preserves_full_health_detail_when_it_fits() {
     let opened = p.session_start();
     assert!(opened.split("\nKPOPPER_AGENT_CONTEXT").next().unwrap().len() <= 7000, "{opened}");
     let health: Value = serde_json::from_str(opened.lines().find_map(|line|
-        line.strip_prefix("Maintenance continuity health (local detection only; no source or network access): ")).unwrap()).unwrap();
+        line.strip_prefix("Maintenance continuity health (local detection only; no source or network access): "))
+        .unwrap_or_else(|| panic!("full health detail was omitted: {opened}"))).unwrap();
     assert_eq!(health["obligations"].as_array().unwrap().len(), 1);
     assert_eq!(health["obligations"][0]["source_state"], "missing");
     assert!(health["obligations"][0].get("timestamp_semantics").is_some());
