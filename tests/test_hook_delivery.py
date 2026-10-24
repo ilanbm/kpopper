@@ -62,7 +62,7 @@ def promised_argv(script, args):
     flags = dict(zip(args[::2], args[1::2]))
     if (len(args) % 2 or len(flags) * 2 != len(args) or set(flags) - {'--host', '--context'}
             or flags.get('--host', HOSTS[0]) not in HOSTS
-            or flags.get('--context') not in ('UserPromptSubmit', 'PostToolUse')):
+            or flags.get('--context') not in ('UserPromptSubmit', 'PostToolUse', 'SessionStart', 'PostCompact')):
         return None
     host = ('--host', flags['--host']) if '--host' in flags else ()
     return ' '.join(('session-context', '--event', flags['--context'], *host))
@@ -220,6 +220,26 @@ class ShellDispatch(unittest.TestCase):
 
 
 class Manifests(unittest.TestCase):
+    def test_handoff_context_reset_is_registered_without_a_stop_continuation(self):
+        for rel in ('hooks/hooks.json', 'adapters/codex/plugin-hooks.json', 'adapters/codex/hooks.json'):
+            value = json.loads((ROOT / rel).read_text())
+            events = ['SessionStart'] + (['PostCompact'] if rel.startswith('adapters/codex/') else [])
+            for event in events:
+                with self.subTest(rel=rel, event=event):
+                    handlers = [h for group in value['hooks'][event] for h in group['hooks'] if 'session_gate.sh' in h['command']]
+                    self.assertEqual(len(handlers), 1)
+                    self.assertIn('--context ' + event, handlers[0]['command'])
+                    self.assertFalse(handlers[0].get('async', False))
+
+    def test_claude_and_codex_deliver_handoff_during_the_active_turn(self):
+        for rel in ('hooks/hooks.json', 'adapters/codex/plugin-hooks.json', 'adapters/codex/hooks.json'):
+            with self.subTest(rel=rel):
+                value = json.loads((ROOT / rel).read_text())
+                commands = [hook['command'] for group in value['hooks']['PostToolUse'] for hook in group['hooks']]
+                matches = [command for command in commands if 'session_gate.sh' in command]
+                self.assertEqual(len(matches), 1)
+                self.assertIn('--context PostToolUse', matches[0])
+
     def test_every_script_a_manifest_names_exists(self):
         for rel in MANIFESTS:
             with self.subTest(rel=rel):

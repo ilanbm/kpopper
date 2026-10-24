@@ -888,7 +888,8 @@ fn canonical_opening_preserves_full_health_detail_when_it_fits() {
     let opened = p.session_start();
     assert!(opened.split("\nKPOPPER_AGENT_CONTEXT").next().unwrap().len() <= 7000, "{opened}");
     let health: Value = serde_json::from_str(opened.lines().find_map(|line|
-        line.strip_prefix("Maintenance continuity health (local detection only; no source or network access): ")).unwrap()).unwrap();
+        line.strip_prefix("Maintenance continuity health (local detection only; no source or network access): "))
+        .unwrap_or_else(|| panic!("full health detail was omitted: {opened}"))).unwrap();
     assert_eq!(health["obligations"].as_array().unwrap().len(), 1);
     assert_eq!(health["obligations"][0]["source_state"], "missing");
     assert!(health["obligations"][0].get("timestamp_semantics").is_some());
@@ -1008,7 +1009,9 @@ fn compact_openings_drop_all_eligible_plain_recurring_promotions() {
         let store = kpop_native::followup_store::Store::at_in_state(p.root.path(), &p.root.path().join("xdg-state"), now).unwrap();
         fs::create_dir(p.runtime.path().join("followups")).unwrap();
         store.setup(Some(&p.runtime.path().join("followups")), "UTC", None, false).unwrap();
-        for i in 0..2 {
+        // Promotion text alone must exceed the opening budget. Do not make
+        // this branch depend on TMPDIR, executable paths or policy wording.
+        for i in 0..20 {
             let id = format!("plain-{i}");
             store.add(json!({"id":id,"title":format!("Plain followup {i}"),"why":"Recheck allocation","how":"Review the record",
                 "scope":"Read only","related":["p.opening"],"when":{"at":(now-chrono::Duration::minutes(5)).to_rfc3339_opts(chrono::SecondsFormat::Secs,true)}})).unwrap();
@@ -1020,6 +1023,11 @@ fn compact_openings_drop_all_eligible_plain_recurring_promotions() {
         }
         let before = fs::read(&store.path).unwrap();
         let choices_before: Vec<_> = walk_private_files(&p.root.path().join("xdg-state/kpopper/first-use"));
+        let uncompacted = p.session_start_with_env(&[("KPOPPER_CANONICAL_VIEW", "0")]);
+        let promotion_bytes: usize = uncompacted.lines()
+            .filter(|line| line.starts_with("KPOPPER_MAINTENANCE_PROMOTION "))
+            .map(|line| line.len() + 1).sum();
+        assert!(promotion_bytes > 7000, "fixture must overflow without relying on path lengths: {promotion_bytes}");
         let opened = p.session_start();
         assert!(opened.contains("promotion_allowed\":false"), "must exercise compact rung: {opened}");
         assert!(!opened.contains("For explicitly recurring deferred work"), "{opened}");

@@ -494,7 +494,9 @@ fn actual_uncovered_session_reads_deliver_conditional_decision_without_a_policy(
     assert_eq!(discovery["declaration"], "none"); assert_eq!(discovery["consent"], "none");
     assert!(discovery["response_obligation"]["matching_kind"]["pending_clock"].as_str().unwrap().contains("clock-only"));
     assert!(discovery["response_obligation"]["matching_kind"]["changing_named_source"].as_str().unwrap().contains("named-source"));
-    assert!(discovery["response_obligation"]["ongoing_scope"].as_str().unwrap().contains("future_validity"));
+    assert_eq!(discovery["response_obligation"]["ongoing_scope"], "requested_ongoing_check_or_concrete_continuing_commitment");
+    assert_eq!(discovery["response_obligation"]["then"], kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY.trim());
+    assert!(discovery["response_obligation"]["when"].as_str().unwrap().contains("Retention, recommendations and possible-booking confirmations alone do not qualify"));
     let revision = packet["revision"].as_str().unwrap();
     let read = reader_command(&workspace, &state, "read", Some(revision), &["--ref", "node:facts.count", "--tokens", "2000"]);
     assert!(read.status.success(), "{}", String::from_utf8_lossy(&read.stderr));

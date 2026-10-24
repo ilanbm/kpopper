@@ -338,6 +338,10 @@ fn raw_type(v: &V) -> Option<&'static str> {
         _ => None,
     }
 }
+pub(crate) fn invalid_predicate(id: &str, field: &str, reason: &str) -> crate::Error {
+    error(&format!("invalid_predicate: {id}.{field}: {reason}; use an executable predicate, or put a prose reopening condition in reopened_by"))
+}
+
 pub(crate) fn normalize(
     world: &impl Admission,
     action: &V,
@@ -854,6 +858,24 @@ pub(crate) fn validate_with_page(
     let known = world.raw().contains_key(id);
     let is_jud = judgment(world, id);
     let mut out = vec![];
+    // Preserve the reader's historical text/coercion semantics, but do not
+    // publish a new undeclared prose condition that the next check will reject.
+    let predicate_field = if pred.is_empty() && b.contains_key("wrong_if") { "wrong_if" } else { &pred };
+    // core/v1 already refuses this through its typed-condition validation.
+    if !world.core() && kind == "add" && b.contains_key(&dep)
+        && let Some(value) = b.get(predicate_field)
+        && world.raw().get(id).and_then(|v| map(v).ok()).and_then(|b| b.get(predicate_field)) != Some(value)
+        && crate::reasoning_authoring::blocked_text(body).is_empty()
+        && b.get("reopened_by").is_none_or(|v| !truth(v))
+        && match value {
+            V::Map(_) => false, // Structured forms have their own validation below.
+            V::Text(source) => !crate::ordinary_semantics::CMP.is_match(source)
+                && L::convert_authored(source, true).is_err(),
+            _ => true,
+        }
+    {
+        out.push(invalid_predicate(id, predicate_field, "condition is not an executable comparison").0);
+    }
     let reframe = a.get("reframe") == Some(&V::Bool(true));
     if a.contains_key("reframe") && !matches!(a.get("reframe"), Some(V::Bool(_))) {
         out.push("reframe must be a boolean operation option".into());

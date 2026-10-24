@@ -12,7 +12,7 @@ use crate::{
     history_yaml::SourceValue as Source,
     value::TypedValue as V,
 };
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::{BTreeMap, BTreeSet}, path::Path};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Options {
@@ -92,7 +92,7 @@ fn prepare_mode(
     let mut first_data = None::<V>;
     let mut root = None;
     let mut journal = None;
-    let mut subjects = Vec::new();
+    let mut subjects = BTreeSet::new();
     let mut diagnostics = Vec::new();
 
     for (index, action) in actions.iter().enumerate() {
@@ -124,7 +124,7 @@ fn prepare_mode(
         crate::require(prepared.root == *batch_root, "batch_transaction_root_changed")?;
         receipts.push(field(map(&data)?, "receipt")?.clone());
         outputs.push(prepared.output.trim_end().to_owned());
-        subjects.push(prepared.subject);
+        subjects.extend(prepared.subjects);
         diagnostics.extend(prepared.diagnostics);
         inventory = prepared.inventory;
         if prepared.page.is_some() {
@@ -216,7 +216,7 @@ fn prepare_mode(
         output: format!("{}\n", outputs.join("\n")),
         root: root.unwrap(),
         journal: journal.unwrap(),
-        subject: subjects.join(","),
+        subjects,
         diagnostics,
         page,
     })

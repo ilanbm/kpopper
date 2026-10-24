@@ -30,10 +30,11 @@ Where no record resolves for the workspace, `kpop add` creates `GROUNDING.yaml` 
 "No schema changes" preserves format; it does not forbid authorized knowledge writes. Respect explicit
 read-only or record-write bans; do not turn a restriction inferred in a draft plan into a user prohibition.
 
-Before implementation or handoff (including a PR), check internally for useful unrecorded knowledge
-and actual write constraints. Reuse entries and authorization; do not ask routinely. If writes are
-prohibited, leave the record intact and note useful findings in the handoff. Otherwise avoid filler
-or duplicates. File changes and passing checks do not prove knowledge retention.
+Before finishing the current request or handing off a PR, account for all material findings,
+including research and external documents. Within existing authority, retain new knowledge and
+run `check` and read back values, sources and scope. Reuse coverage; no filler when nothing is new.
+Keep routine success and no-change checks quiet; report material unresolved capture with the answer.
+Follow the [handoff contract](references/handoff.md); a changed file does not prove complete retention.
 
 A selected mapping or investigation makes discovery the task: follow `kpopper _agent guide`
 within its agreed scope and report its limits. More available material is not a reason to survey it.
