@@ -111,6 +111,9 @@ fn canonical_grounding_reads_do_not_consume_the_task_handoff() {
     for command in [
         "/plugin/kpop --workspace /project session view --input /record/GROUNDING.yaml",
         "kpop session read --ref node:p.seed# --revision abc",
+        "kpop --workspace=/project session view",
+        r"C:\plugin\kpop.exe --workspace C:\project session view",
+        r"& 'C:\Program Files\kpop.exe' --workspace=C:\project session view",
     ] {
         assert!(context(f.hook("PostToolUse", json!({
             "tool_name":"Bash", "tool_input":{"command":command},
@@ -127,10 +130,12 @@ fn canonical_grounding_reads_do_not_consume_the_task_handoff() {
 
 #[test]
 fn a_compound_grounding_and_source_read_is_still_a_task_result() {
-    let f = Fixture::new();
-    assert!(!context(f.hook("PostToolUse", json!({
-        "tool_name":"Bash", "tool_input":{"command":"kpop session view && cat /source.txt"}
-    }))).is_empty());
+    for command in ["kpop session view && cat /source.txt", r"& 'C:\plugin\kpop.exe' session view; Get-Content source.txt"] {
+        let f = Fixture::new();
+        assert!(!context(f.hook("PostToolUse", json!({
+            "tool_name":"Bash", "tool_input":{"command":command}
+        }))).is_empty());
+    }
 }
 
 #[test]

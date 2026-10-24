@@ -304,7 +304,7 @@ pub fn owned(tmp: &Path, sid: &str, capture: &CapturedSource) -> BTreeSet<String
     result
 }
 
-fn handoff_lock(home: &Path) -> Result<fs::File> {
+fn handoff_lock(home: &Path, wait: bool) -> Result<fs::File> {
     let path = state_file(home, "state.lock")?;
     let lock = OpenOptions::new()
         .create(true)
@@ -312,7 +312,11 @@ fn handoff_lock(home: &Path) -> Result<fs::File> {
         .read(true)
         .write(true)
         .open(path)?;
-    lock.try_lock_exclusive()?;
+    if wait {
+        lock.lock_exclusive()?;
+    } else {
+        lock.try_lock_exclusive()?;
+    }
     Ok(lock)
 }
 
@@ -330,7 +334,7 @@ fn save_handoff_state(home: &Path, path: &Path, value: &Value) -> Result<()> {
 /// prevents lost/recreated private state from colliding with old notices.
 pub fn begin_handoff_prompt(tmp: &Path, sid: &str, host_turn: Option<&str>) -> Result<()> {
     let home = safe_home(tmp, sid)?;
-    let _lock = handoff_lock(&home)?;
+    let _lock = handoff_lock(&home, true)?;
     let path = state_file(&home, "handoff-context.json")?;
     save_handoff_state(
         &home,
@@ -345,7 +349,7 @@ pub fn begin_handoff_prompt(tmp: &Path, sid: &str, host_turn: Option<&str>) -> R
 /// publication receipts or iterating over the records touched by the session.
 pub fn reset_handoff_context(tmp: &Path, sid: &str) -> Result<()> {
     let home = safe_home(tmp, sid)?;
-    let _lock = handoff_lock(&home)?;
+    let _lock = handoff_lock(&home, true)?;
     let path = state_file(&home, "handoff-context.json")?;
     let state = read_state(&path);
     save_handoff_state(
@@ -369,7 +373,7 @@ pub fn prepare_handoff_notice(
     let record = crate::project_modes::resolved(record)?;
     let home = safe_home(tmp, sid)?;
     // A busy private ledger must not hold up a tool result or consume the notice.
-    let _lock = handoff_lock(&home)?;
+    let _lock = handoff_lock(&home, false)?;
     let context = read_state(&state_file(&home, "handoff-context.json")?);
     let generation = context
         .get("generation")
@@ -618,6 +622,33 @@ mod tests {
     use super::*;
     use crate::source_capture::{ReadMode, capture_source};
     use tempfile::tempdir;
+
+    #[test]
+    fn prompt_and_compaction_wait_for_a_publication_lock_instead_of_losing_the_generation() {
+        for compact in [false, true] {
+            let tmp = tempdir().unwrap();
+            let sid = "contended-prompt";
+            begin_handoff_prompt(tmp.path(), sid, Some("old-turn")).unwrap();
+            let home = safe_home(tmp.path(), sid).unwrap();
+            let before = fs::read(home.join("handoff-context.json")).unwrap();
+            let lock = handoff_lock(&home, true).unwrap();
+            std::thread::scope(|scope| {
+                let (send, receive) = std::sync::mpsc::channel();
+                let path = tmp.path();
+                let worker = scope.spawn(move || {
+                    let result = if compact { reset_handoff_context(path, sid) }
+                        else { begin_handoff_prompt(path, sid, Some("new-turn")) };
+                    send.send(result).unwrap();
+                });
+                let waiting = receive.recv_timeout(std::time::Duration::from_millis(100));
+                FileExt::unlock(&lock).unwrap();
+                assert!(matches!(waiting, Err(std::sync::mpsc::RecvTimeoutError::Timeout)));
+                receive.recv_timeout(std::time::Duration::from_secs(5)).unwrap().unwrap();
+                worker.join().unwrap();
+            });
+            assert_ne!(before, fs::read(home.join("handoff-context.json")).unwrap());
+        }
+    }
     fn image(before: Option<&str>, after: Option<&str>, role: &str) -> FileImage {
         image_path("GROUNDING.yaml", before, after, role)
     }

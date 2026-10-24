@@ -1700,6 +1700,15 @@ known:
          is only a Python implementation metric, not the native count; q.reader_places_counted_once
          remains open."
     of: "2026-09-25"
+  p.report_write_closure:
+    name: "Accepted report entries keep their session ownership"
+    v: "The local regression contract covers a session-bound report followed by corrections of its
+        new entries, refusal of another session correction, a clean check, and reading the same
+        sourced values from a fresh checkout and session. It runs on ordinary, history and node
+        layouts with JSON-compatible source fields. This is local runtime validation, not a published
+        or installed-host receipt."
+    from: doc.report_write_closure
+    of: "2026-10-24"
   p.script_copies:
     v: 1
     name: "Editable copies of the reader and the renderer"
@@ -1785,6 +1794,15 @@ known:
          is only a Python implementation metric, not the native count; q.reader_places_counted_once
          remains open."
     of: "2026-09-25"
+  p.task_capture_evidence_limit:
+    name: "An advisory notice does not establish successful knowledge capture"
+    v: "Receiving the handoff notice does not prove retention or model compliance. Qualification
+        includes missed capture, invalid authored predicates and a runtime loss of session receipts.
+        Accepted writes, semantic checks, later-session retrieval and user-task fidelity need
+        separate verification. A causal improvement from the notice over the previous version remains
+        unestablished; q.unprompted_recording remains open."
+    from: s.task_capture_qualification
+    of: "2026-10-24"
   p.task_knowledge_handoff_contract:
     name: "Knowledge handoff during the current user request"
     v: "This tree delivers a nonblocking knowledge-handoff reminder on the first tool result of an
@@ -3708,6 +3726,35 @@ judgments:
       m.reach.local_checked_held: 83
       m.reach.local_assumed_held: 25
       m.reach.assumed_at_high_confidence: 0
+  d.maintenance_advice_stays_on_task:
+    name: "Keep routine recording free of unrelated maintenance advice"
+    rests_on: [d.maintenance_reuses_followups, d.gate_reminds, doc.maintenance_task_scope, p.task_capture_evidence_limit]
+    verdict: "Disclose maintenance health when requested or when a declared policy materially
+              affects the requested claim. Propose checks for requested ongoing checking or a
+              concrete continuing commitment; ordinary recording and one-off recommendations do not
+              create that commitment."
+    because: "Maintenance evidence and accepted knowledge are distinct. Unconfigured monitoring
+              alone neither refutes a sourced reading nor justifies a generic health paragraph.
+              Scoped disclosure must preserve real reliability limits while letting the current
+              answer finish without an unrelated maintenance decision."
+    reopened_by: "A declared failure that affects the requested claim is hidden, or ordinary
+                  recording causes unsolicited proposals, approval waits or unrelated health
+                  bookkeeping."
+    seen:
+      d.maintenance_reuses_followups: "Use the existing followup ledger for recurring source and
+                                       clock checks, with explicit policy and truthful scoped
+                                       continuity."
+      d.gate_reminds: "Lifecycle hooks never request a continuation. Current findings are advisory
+                       context on real user prompts; explicit check, gate and write-admission
+                       failures remain authoritative."
+      doc.maintenance_task_scope: "read 2026-10-24"
+      p.task_capture_evidence_limit: "Receiving the handoff notice does not prove retention or model
+                                      compliance. Qualification includes missed capture, invalid
+                                      authored predicates and a runtime loss of session receipts.
+                                      Accepted writes, semantic checks, later-session retrieval and
+                                      user-task fidelity need separate verification. A causal
+                                      improvement from the notice over the previous version remains
+                                      unestablished; q.unprompted_recording remains open."
   d.maintenance_notice_keeps_source_access:
     name: "Maintenance notices preserve access to their underlying record"
     verdict: "Keep a usable exact route for reading the source and its safety instructions ahead of
@@ -8006,6 +8053,8 @@ sources:
     revision: "8e27c6242958c4e762174c2f641cd7aa5b01115d"
     of: "Explicit recurring declarations, source attestations, adoption choices and current-use
          adequacy."
+    distinct_from: doc.maintenance_task_scope
+    # distinct 2026-10-24: The first pins the full maintenance contract at 8e27c624 on October 8; the second records the revised task-scope section on October 24 with its file digest. They are different source versions, not duplicate readings.
   s.maintenance_opening_bounds:
     name: "Bounded maintenance notice and source access contract"
     file: "native/src/onboarding.rs"
@@ -8385,6 +8434,12 @@ sources:
     name: "Guarded stored-to-derived representation contract"
     file: "skills/kpopper/EVOLUTION.md"
     read: "2026-09-22"
+  s.task_capture_qualification:
+    name: "Task knowledge capture qualification and its limits"
+    url: "https://github.com/ilanbm/kpopper/pull/316"
+    read: "2026-10-24"
+    at: "Validation and known limits of the candidate revisions; synthetic research and
+         fresh-session trials, with failed and mixed outcomes retained"
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -8594,6 +8649,12 @@ sources:
          test_citation_only_update_is_not_a_value_noop,
          test_hypothesis_keeps_the_new_source_and_leaves_base_untouched, and source-update gates in
          tests/test_ingestion.py at python-final on 2026-09-25."
+  doc.maintenance_task_scope:
+    name: "Maintenance advice remains relevant to the requested work"
+    file: "docs/maintenance.md"
+    read: "2026-10-24"
+    at: "No-policy and no-success snapshots: relevance of health disclosures and scoped proposals"
+    content_sha256: d7d8aab04a57af30768f886efb2fea1da099d281dd014cebfaec4e80758c12c9
   doc.native_browser_checks:
     name: "Native source for the current bundled Hub browser-check path"
     file: "native/src/public_hub.rs"
@@ -8679,6 +8740,12 @@ sources:
          test_file_changes_without_record_writes_never_block_stop, and
          test_changed_tree_reminder_names_each_host_without_blocking in tests/test_nudge.py at
          python-final on 2026-09-25."
+  doc.report_write_closure:
+    name: "Report publication ownership and next-session reading"
+    file: "native/tests/public_session.rs"
+    read: "2026-10-24"
+    at: "knowledge_round_trip: ordinary, history and node layouts; bound update, own correction,
+         foreign-session refusal, check and new-checkout/session read"
   doc.session_activity:
     name: "Session write attribution and Stop delivery contract"
     file: "docs/reference.md"

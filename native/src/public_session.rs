@@ -284,24 +284,35 @@ fn canonical_grounding_read(payload: &Value) -> bool {
     let Some(command) = payload["tool_input"]["command"].as_str() else {
         return false;
     };
+    let command = command.trim_start();
+    // PowerShell's invocation operator is only accepted at the beginning.
+    let command = command.strip_prefix("& ").map(str::trim_start).unwrap_or(command);
     // Recognize only a simple canonical read. A compound or unfamiliar command
     // may also obtain new source evidence, so it remains eligible for the cue.
     if command.len() > 32_768 || command.contains([';', '|', '&', '<', '>', '$', '`', '\n']) {
         return false;
     }
-    let Some(words) = shlex::split(command) else {
-        return false;
+    // Read the program before POSIX tokenisation, which would remove the
+    // backslashes in a Windows executable path.
+    let (program, rest) = if command.starts_with(['\'', '"']) {
+        let quote = command.chars().next().unwrap();
+        let Some(end) = command[1..].find(quote) else { return false };
+        (&command[1..end + 1], &command[end + 2..])
+    } else {
+        let Some(end) = command.find(char::is_whitespace) else { return false };
+        (&command[..end], &command[end..])
     };
-    let Some(program) = words.first().and_then(|s| Path::new(s).file_stem()).and_then(|s| s.to_str()) else {
-        return false;
-    };
-    if !matches!(program, "kpop" | "kpopper") {
+    let program = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    if !["kpop", "kpopper", "kpop.exe", "kpopper.exe"].iter()
+        .any(|name| program.eq_ignore_ascii_case(name)) {
         return false;
     }
-    let mut args = words[1..].iter().map(String::as_str);
+    let Some(words) = shlex::split(rest) else { return false };
+    let mut args = words.iter().map(String::as_str);
     loop {
         match args.next() {
             Some("--workspace") => { if args.next().is_none() { return false; } }
+            Some(arg) if arg.starts_with("--workspace=") => {}
             Some("--frozen" | "--no-cache") => {}
             Some("session") => return matches!(args.next(), Some("view" | "read")),
             _ => return false,

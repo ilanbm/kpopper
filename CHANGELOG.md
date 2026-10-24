@@ -10,6 +10,11 @@
   and context compaction re-arms the reminder without creating another user request.
 - Report writes acquire private-state and record locks in canonical order, including when
   the state directory sorts before the record. Interrupted writes recover under the same order.
+- Report batches retain ownership for each written entry, so the writing session can correct
+  its new entries while another session remains refused. Undeclared prose conditions are
+  refused before publication with guidance to use an executable predicate or `reopened_by`.
+- Routine recording no longer requires an unrelated maintenance proposal or health paragraph.
+  Relevant declared reliability limits and requests for ongoing checking remain visible.
 
 ## 0.17.0 — 2026-10-18
 

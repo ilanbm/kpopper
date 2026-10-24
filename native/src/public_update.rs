@@ -1712,6 +1712,13 @@ fn run_bound(
                 probe(phase)
             },
         )?;
+        crate::session_activity::published(
+            &store.root,
+            mutation.files(),
+            Some(&report.updates.iter()
+                .map(|update| update["id"].as_str().unwrap().to_owned())
+                .collect()),
+        );
         Ok((mutation, graphs))
     })();
     if outcome.is_ok()
@@ -1779,6 +1786,34 @@ fn run_bound(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn report_refuses_a_prose_predicate_without_publishing_any_of_its_entries() {
+        let root = tempfile::tempdir().unwrap();
+        let entry = root.path().join("GROUNDING.yaml");
+        let original = b"sources:\n  s.old: {name: Setup, read: 2026-09-01}\nknown:\n  p.seed: {v: 1, from: s.old}\n";
+        fs::write(&entry, original).unwrap();
+        let options = Options { file:"-".into(), record:Some(entry.clone()), state_dir:Some(root.path().join("state")) };
+        let mut report = json!({"event_id":"invalid-predicate", "date":"2026-09-20",
+            "record_sha256":crate::identity::sha256(original),
+            "source_quote":"Maximum load is 731 kg.", "updates":[
+                {"kind":"add","id":"delivery.max_load","body":{"v":731}},
+                {"kind":"add","id":"d.fit","body":{"rests_on":["delivery.max_load"],
+                    "verdict":"The load fits", "wrong_if":"The approved terms lower the limit"}}
+            ]});
+        let refused = run(&options, root.path(), Some(&serde_json::to_vec(&report).unwrap())).unwrap();
+        assert_ne!(refused.code, 0, "{}", refused.text);
+        assert!(refused.text.contains("reopened_by"), "{}", refused.text);
+        assert_eq!(fs::read(&entry).unwrap(), original);
+
+        report["event_id"] = json!("valid-human-reopener");
+        let body = report["updates"][1]["body"].as_object_mut().unwrap();
+        let condition = body.remove("wrong_if").unwrap();
+        body.insert("reopened_by".into(), condition);
+        let accepted = run(&options, root.path(), Some(&serde_json::to_vec(&report).unwrap())).unwrap();
+        assert_eq!(accepted.code, 0, "{}", accepted.text);
+        assert_eq!(serde_json::from_str::<J>(&accepted.text).unwrap()["state"], "applied");
+    }
 
     #[test]
     fn report_state_can_sort_before_or_after_the_record_with_recovery() {

@@ -537,9 +537,35 @@ fn promotion_budget_suppression_is_rendered_only_and_preserves_authored_choice()
 
 #[test]
 fn captured_knowledge_is_checked_and_read_from_a_fresh_checkout_and_session() {
+    for layout in ["ordinary", "history", "node"] {
+        knowledge_round_trip(layout);
+    }
+}
+
+fn knowledge_round_trip(layout: &str) {
     let f = Fixture::new();
     let record = f.root.path().join("GROUNDING.yaml");
-    fs::write(&record, "sources:\n  s.seed: {name: Setup, read: 2026-09-01}\nknown:\n  p.seed: {v: 1, from: s.seed}\n").unwrap();
+    let initial = "sources:\n  s.seed: {name: Setup, read: \"2026-09-01\"}\nknown:\n  p.seed: {v: 1, from: s.seed}\n";
+    if layout == "ordinary" {
+        fs::write(&record, initial).unwrap();
+    } else {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("GROUNDING.yaml"), initial).unwrap();
+        fs::remove_dir(f.root.path()).unwrap();
+        if layout == "history" {
+            kpop_native::history_migration::Plan::prepare(
+                Path::new("GROUNDING.yaml"), source.path(),
+                kpop_native::history_migration::Options {
+                    operation:"knowledge-flow".into(), recorded_at:"2026-09-01T00:00:00Z".into(),
+                    record_id:Some("knowledge-flow".into()),
+                    read_mode:kpop_native::source_capture::ReadMode::Frozen, route:false, as_of:None,
+                }, None,
+            ).unwrap().publish(f.root.path()).unwrap();
+        } else {
+            kpop_native::history_node_bootstrap::Plan::prepare(&source.path().join("GROUNDING.yaml"))
+                .unwrap().publish(f.root.path()).unwrap();
+        }
+    }
     let opened: Value =
         serde_json::from_slice(&success(f.run(&["open", "--json"])).stdout).unwrap();
     let report = json!({
@@ -568,6 +594,21 @@ fn captured_knowledge_is_checked_and_read_from_a_fresh_checkout_and_session() {
     let applied: Value =
         serde_json::from_slice(&success(writer.wait_with_output().unwrap()).stdout).unwrap();
     assert_eq!(applied["state"], "applied");
+    // A report is a publication by this session, including every entry in its
+    // batch. It must be correctable before another session consumes the record.
+    success(f.run(&[
+        "correct", "delivery.max_kg", "name=Maximum delivery load in kg",
+        "--why", "Name this session's new reading.",
+    ]));
+    success(f.run(&[
+        "correct", "delivery.latest", "name=Latest receiving time",
+        "--why", "Name the other reading from the same report.",
+    ]));
+    let other = f.command().env("KPOPPER_AGENT_SESSION", "other-session")
+        .args(["correct", "delivery.max_kg", "v=999", "--why", "Not my entry"])
+        .output().unwrap();
+    assert!(!other.status.success());
+    assert!(String::from_utf8_lossy(&other.stderr).contains("not written by this session"));
     success(f.run(&["check"]));
 
     // Only the canonical record and its retained evidence cross the boundary.

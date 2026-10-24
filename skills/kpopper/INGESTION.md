@@ -8,11 +8,14 @@ fact already identified in that report, and keep unresolved meaning explicit.
 It accepts the same report contract below, processes only that report, and returns its
 durable receipt. Exit 0 means `applied`; exit 1 means retained but needing a primary
 decision; exit 2 means an invalid request. Inspect `reason`, `diagnostics`, `reach` and
-`newly_fired_judgments` before relying on the result. A refused staged update also returns
-`validation_issues` with the actual check failures. `applied` does not review judgments.
+`newly_fired_judgments` before relying on the result. A refused staged update explains its
+validation failure in `reason`. `applied` does not review judgments.
 Use one `updates` array for related changes from one report: all changes commit together,
 share one source and are checked in their final state. Reuse `event_id` to retry the same
 envelope safely. Supported newly authored formulas normalize to structured expressions.
+An undeclared prose condition in `wrong_if` is refused before publication. Use an executable
+predicate, or place a human reopening condition in `reopened_by`. Inspect the whole outcome;
+a retained source or a private proposal is not an accepted update.
 
 If the result is `needs_primary`, none of that report's requested changes was applied by
 that attempt; the source was retained. Inspect the reason and resolve it while the context
