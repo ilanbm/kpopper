@@ -861,7 +861,8 @@ pub(crate) fn validate_with_page(
     // Preserve the reader's historical text/coercion semantics, but do not
     // publish a new undeclared prose condition that the next check will reject.
     let predicate_field = if pred.is_empty() && b.contains_key("wrong_if") { "wrong_if" } else { &pred };
-    if kind == "add" && b.contains_key(&dep)
+    // core/v1 already refuses this through its typed-condition validation.
+    if !world.core() && kind == "add" && b.contains_key(&dep)
         && let Some(value @ V::Text(source)) = b.get(predicate_field)
         && !source.trim().is_empty()
         && world.raw().get(id).and_then(|v| map(v).ok()).and_then(|b| b.get(predicate_field)) != Some(value)
