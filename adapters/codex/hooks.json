@@ -53,6 +53,15 @@
             "additionalContextLimit": 0
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"../../scripts/session_gate.sh\" --host codex --context PostToolUse",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

@@ -58,6 +58,12 @@ References: [plugin-bundled hooks](https://learn.chatgpt.com/docs/hooks#plugin-b
 
 ## Plain project configuration
 
+The bundled and plain-project manifests deliver a nonblocking knowledge-handoff reminder
+on the first tool result of each active turn with a record. It covers material findings from
+research and external documents and asks for write-result inspection and affected-ID readback.
+Repeated tools in the same turn are quiet. The passive Stop hook remains unchanged: it verifies
+context continuation, not knowledge completion. An explicit write prohibition still takes priority.
+
 Prepare the same [runtime](../../docs/plugin-runtime.md) before installing project
 hooks: install it into the active checkout's `scripts/runtime/TARGET`; a global CLI does
 not satisfy project hooks.

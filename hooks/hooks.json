@@ -71,6 +71,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/session_gate.sh\" --host claude --context PostToolUse",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

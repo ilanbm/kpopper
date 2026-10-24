@@ -278,6 +278,47 @@ pub fn stop(_payload: &Value, _host: Option<&str>, _mode: ReadMode) -> Result<Ou
     })
 }
 
+const HANDOFF_GUIDANCE: &str = "kpopper: Complete the user's current request. Before finishing, account for all material findings, decisions, constraints and open questions from this task, including evidence saved outside the repository. Within existing write authority, retain new knowledge, run check and read back the affected IDs before claiming success. Use the KPOPPER_AGENT_CONTEXT session environment for every write and correction. An earlier write or a changed record does not prove complete retention. Reuse existing coverage; do not add filler when nothing new was learned. Distinguish applied writes from pending, private-draft or refused results. If capture is prohibited, fails or is deferred, still answer the request and state that unresolved outcome briefly. This reminder grants no write or publication authority and requires no reply of its own.";
+
+fn handoff_context(payload: &Value, mode: ReadMode) -> Result<Option<String>> {
+    let Some(sid) = payload["session_id"]
+        .as_str()
+        .filter(|sid| valid_session(sid))
+    else {
+        return Ok(None);
+    };
+    let tmp = session_activity::temporary_directory();
+    let turn = payload["turn_id"]
+        .as_str()
+        .filter(|turn| valid_session(turn))
+        .map(|turn| format!("host:{turn}"))
+        .or_else(|| {
+            private_json(&tmp.join(format!("kpopper-ground-{sid}.json")))
+                .ok()?
+                .get("turns")?
+                .as_u64()
+                .filter(|turn| *turn > 0)
+                .map(|turn| format!("prompt:{turn}"))
+        });
+    let Some(turn) = turn else {
+        return Ok(None);
+    };
+    let cwd = payload["cwd"]
+        .as_str()
+        .ok_or_else(|| crate::Error("missing_workspace".into()))?;
+    let location = W::locate(Path::new(cwd), mode)?;
+    if matches!(location.status.as_str(), "missing" | "unavailable") {
+        return Ok(Some(String::new()));
+    }
+    let fresh = session_activity::prepare_handoff_notice(&tmp, sid, &turn, &location.record)
+        .unwrap_or(false);
+    Ok(Some(if fresh {
+        HANDOFF_GUIDANCE.into()
+    } else {
+        String::new()
+    }))
+}
+
 pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode, event: &str) -> Result<Output> {
     if payload["agent_id"]
         .as_str()
@@ -285,6 +326,26 @@ pub fn context(payload: &Value, host: Option<&str>, mode: ReadMode, event: &str)
     {
         return Ok(Output {
             text: String::new(),
+            code: 0,
+        });
+    }
+    // Real tool feedback arrives before the current answer is finished. It covers
+    // read-only research and external documents without guessing from Git diffs.
+    // Hosts lacking both a turn id and a real prompt counter retain diagnostics.
+    if event == "PostToolUse"
+        && let Some(text) = handoff_context(payload, mode).unwrap_or(Some(String::new()))
+    {
+        return Ok(Output {
+            text: if text.is_empty() {
+                text
+            } else {
+                format!(
+                    "{}\n",
+                    json!({"hookSpecificOutput": {
+                        "hookEventName": event, "additionalContext": text
+                    }})
+                )
+            },
             code: 0,
         });
     }

@@ -621,7 +621,7 @@ pub fn advisory_reminder(options: &GateOptions<'_>) -> Result<Option<String>> {
         )
     };
     Ok(Some(format!(
-        "kpopper: {what}, the record untouched. Complete the user's current request. If useful findings need keeping and a record write is authorized, use {record} within that scope. Do not answer or mention this reminder unless the user asks about it; no record update is required to finish the user's answer."
+        "kpopper: {what}, the record untouched. Complete the user's current request. Retain useful findings with {record} within existing write authority and read back the affected entries before claiming success. Report failed, deferred or prohibited capture while preserving the requested answer. Reuse existing coverage and do not write filler when nothing new was learned; this reminder requires no reply of its own."
     )))
 }
 

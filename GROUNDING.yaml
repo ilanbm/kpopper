@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-10-09
+  updated: 2026-10-24
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -1611,6 +1611,15 @@ known:
          reader this tree no longer holds - read 2026-09-23, the last reading taken of the reader
          this tree no longer holds"
     of: "2026-09-23"
+  p.private_research_capture_authorized:
+    name: "Approved private research-capture scope for explicitly maintained projects"
+    v: "For projects the maintainer explicitly chooses to maintain with kpopper, material research
+        findings belong in the existing private canonical record without per-entry approval. Explicit
+        record-write or all-write prohibitions override this scope; product changes, external writes,
+        sharing, publication and releases need their own authority. Preserve sources, dates, scope
+        and unknowns, and verify the write. This is an approved authoring policy, not evidence that
+        automatic capture or subsequent-session reuse has been implemented or validated."
+    from: s.2026_10_24_private_research_capture
   p.product_python_modules:
     v: 0
     name: "Modules of the product under scripts/ still written in Python"
@@ -1785,6 +1794,15 @@ known:
          is only a Python implementation metric, not the native count; q.reader_places_counted_once
          remains open."
     of: "2026-09-25"
+  p.task_knowledge_handoff_contract:
+    name: "Knowledge handoff during the current user request"
+    v: "This tree delivers a nonblocking knowledge-handoff reminder on the first tool result of an
+        active Claude or Codex turn with a record. It is scoped to the session, turn and canonical
+        record, independent of Git changes or the record digest. It requires existing write
+        authority, write-result inspection, check and affected-ID readback; pending or failed capture
+        stays explicit. The private notice marker records an attempted delivery, not accepted
+        knowledge or model use. Stop does not request a continuation."
+    from: doc.task_knowledge_handoff
   p.tree_positions_kept:
     v: 0
     name: "Places a dragged position is written down"
@@ -1891,7 +1909,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 24993
+    v: 25222
+    # set 2026-10-24: Measured by the existing skill_bytes_largest recipe on the changed source tree
     # set 2026-09-25: Measured by skill_bytes_largest after adding the source-section ordering guidance.
     # Same-day tree correction: previously 23591; skill_bytes_largest measures
     # skills/record/SKILL.md at 24669 bytes in 5650a64e (Board onboarding).
@@ -1913,7 +1932,7 @@ known:
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-25"
+    of: "2026-10-24"
     measure: skill_bytes_largest
 
   m.t3_blocked_rule_inference_regression:
@@ -7843,6 +7862,13 @@ sources:
          errors, and bounds retries for transient Windows sharing violations without allowing delete
          sharing or replacing identity checks. Windows regression tests cover transient and
          persistent DELETE handles; actual Windows CI remains the platform acceptance gate."
+  s.2026_10_24_private_research_capture:
+    name: "Approval of private research capture for explicitly maintained projects"
+    read: "2026-10-24"
+    of: "Maintainer approval in the knowledge-continuity discussion, followed by replacement global
+         instructions carrying the same bounded authorization."
+    at: "Conversation 01a117f2-387d-7421-9cf2-452a983f2e56, 2026-10-24"
+    fidelity: paraphrase
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -8664,6 +8690,12 @@ sources:
     from: s.2026_09_10_standalone_html
     file: "docs/documents.md"
     read: "2026-09-10"
+  doc.task_knowledge_handoff:
+    name: "Same-turn knowledge handoff and private delivery isolation"
+    file: "native/tests/knowledge_handoff.rs"
+    read: "2026-10-24"
+    at: "Tool-result timing, partial record changes, external canonical records, repeated turns,
+         concurrency and unavailable private state"
   doc.three_briefs:
     name: "The three briefs that exist - a finance hub, a keyboard pilot, an academic review -
            and what they contain"
