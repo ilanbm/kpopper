@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.1 — 2026-10-24
 
 - Claude and Codex receive a bounded knowledge-handoff reminder during the current turn,
   including for research and evidence saved outside the repository. It asks for verified
@@ -19,6 +19,14 @@
 - Routine recording no longer requires an unrelated maintenance proposal or health paragraph.
   Readback and hook advice use the same scope. Relevant declared reliability limits and
   requests for ongoing checking remain visible, within the existing opening budgets.
+
+### Included changes
+
+- Fix task knowledge retention and report recovery
+- Give the Intel macOS test job three hours (#313)
+- Name the missing record or unknown id when same, distinct, migrate or assess refuse (#309)
+
+Decisions recorded: d.maintenance_advice_stays_on_task, d.task_knowledge_handoff
 
 ## 0.17.0 — 2026-10-18
 
