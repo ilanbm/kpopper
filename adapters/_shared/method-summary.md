@@ -6,6 +6,11 @@ read as it is) in the project's working directory for work that
 will be revisited. Git is optional; sources may span documents, conversations, calendars,
 task systems, files and earlier sessions. Record three things while working:
 
+Treat that entry file as the reader's implementation boundary. Agents, subagents and hooks use
+`kpop open`, `context`, `pull`, `search`, `affects`, `check` or the revision-bound session reader;
+they do not load, grep, summarize or interpret the YAML directly. A reader failure stays a reader
+failure instead of authorizing a direct-file fallback.
+
 1. Something taken from a source — record where, precisely enough to go back: the source
    AND the location within it. Say whether it is quoted, a paraphrase, or your reading.
 2. Something worked out — record the rule, never the result.

@@ -90,6 +90,9 @@ fn computation_error(reader: &Reader<'_>, pred: &V) -> String {
         }
         &converted
     };
+    if let Some(result) = reader.cached_predicate(pred) {
+        return result.error;
+    }
     R::compute(&reader.raw, &reader.ids, Some(pred), reader.program())["error"]
         .as_str()
         .unwrap_or("")
@@ -119,6 +122,14 @@ pub(crate) fn condition(reader: &Reader<'_>, pred: &V) -> Result<(String, Option
         }
         (converted, R::why_undecided(pred).is_empty())
     };
+    if let Some(result) = reader.cached_predicate(&expression) {
+        let holds = if result.error.is_empty() && decidable {
+            result.holds
+        } else {
+            None
+        };
+        return Ok((result.error, holds));
+    }
     let result = R::compute(
         &reader.raw,
         &reader.ids,

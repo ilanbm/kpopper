@@ -121,6 +121,7 @@ pub struct Reader<'a> {
     pub(crate) hypotheses: Map,
     pub(crate) knowledge_conflicts: BTreeSet<String>,
     runtime: Option<&'a Runtime>,
+    evaluation: O::SharedEvaluation,
 }
 impl<'a> Reader<'a> {
     // Rebuild from the current finite fields, rather than cache a second reader:
@@ -134,6 +135,7 @@ impl<'a> Reader<'a> {
             hypotheses: ordinary_map(&self.hypotheses),
             knowledge_conflicts: self.knowledge_conflicts.clone(),
             runtime: self.runtime,
+            evaluation: self.evaluation.clone(),
         }
     }
     fn from_ordinary(reader: O::Reader<'a>) -> Result<Self> {
@@ -145,6 +147,7 @@ impl<'a> Reader<'a> {
             hypotheses: map(&OV::Map(reader.hypotheses).finite_projection()?)?.clone(),
             knowledge_conflicts: reader.knowledge_conflicts,
             runtime: reader.runtime,
+            evaluation: reader.evaluation,
         })
     }
     pub(crate) fn for_followups(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
@@ -187,7 +190,10 @@ impl<'a> Reader<'a> {
         value_of(&self.raw, &self.ids, key, self.program())
     }
     pub fn predicate(&self, pred: &V) -> Result<Option<bool>> {
-        evaluate(pred, &self.raw, &self.ids, self.program())
+        self.ordinary().predicate(&ordinary(pred))
+    }
+    pub(crate) fn invalidate_evaluation(&mut self) {
+        self.evaluation = std::rc::Rc::new(O::EvaluationCache::default());
     }
     pub(crate) fn for_action(&mut self, action: &V) -> Result<()> {
         let a = map(action)?;
@@ -198,6 +204,7 @@ impl<'a> Reader<'a> {
             && b.contains_key("wrong_if")
         {
             self.fields.insert("predicate".into(), s("wrong_if"));
+            self.invalidate_evaluation();
         }
         Ok(())
     }
@@ -617,6 +624,29 @@ impl Admission for Reader<'_> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn injected_inputs_invalidate_recorded_predicate_results() {
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(cache.path())
+            .with_ordinary_program(program());
+        let document = V::from_json(&json!({
+            "schema": {"deps":"rests_on", "snapshot":"seen", "predicate":"wrong_if"},
+            "known": {"p.capacity": {"v":5}},
+            "judgments": {"d.fits": {
+                "verdict":"fits", "rests_on":["p.capacity"],
+                "seen":{"p.capacity":5}, "wrong_if":{"expr":"p.capacity > 3"}
+            }}
+        })).unwrap();
+        let mut reader = Reader::new(&document, Some(&runtime)).unwrap();
+        let predicate = predicate_of(&reader.raw["d.fits"], &reader.fields);
+        assert_eq!(reader.predicate(&predicate).unwrap(), Some(true));
+        map_mut(reader.raw.get_mut("p.capacity").unwrap()).unwrap()
+            .insert("v".into(), V::from_json(&json!(1)).unwrap());
+        reader.invalidate_evaluation();
+        assert_eq!(reader.predicate(&predicate).unwrap(), Some(false));
+    }
+
     pub(crate) fn program() -> Program {
         let root = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
             .map(std::path::PathBuf::from)

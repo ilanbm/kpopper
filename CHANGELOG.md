@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Ordinary record reads evaluate recorded structured conditions together and reuse
+  their results within the same captured world. This removes repeated full-record
+  evaluator launches from opening, checks and attention on larger records, while
+  preserving the existing per-condition evaluator when a batch cannot be used.
+- Skills, host adapters and hook recovery guidance direct agents and delegated
+  workers through the bounded kpopper reader. An unavailable reader is reported
+  explicitly instead of prompting direct loading or searching of the record YAML.
+  Existing records require no migration.
+
 ## 0.17.1 — 2026-10-24
 
 - Claude and Codex receive a bounded knowledge-handoff reminder during the current turn,

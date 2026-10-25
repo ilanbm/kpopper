@@ -310,7 +310,7 @@ fn an_unreadable_record_keeps_the_session_context_and_leaves_no_baseline() {
     assert_eq!(
         lines[0],
         format!(
-            "The knowledge record could not be opened. Read it before relying on it: {}",
+            "The knowledge record could not be opened through kpopper. Do not read the YAML directly; retry through the kpopper reader or report it unavailable: {}",
             f.root
                 .path()
                 .canonicalize()
@@ -467,7 +467,8 @@ fn session_start_fills_the_slot_for_its_host_and_opens_a_core_record() {
         assert!(lines[2].ends_with(kpop_native::onboarding::MAINTENANCE_PROMOTION_POLICY), "{started}");
         assert!(context.starts_with('{'), "choice must be adjacent to context: {started}");
         assert!(context.contains("Record views are not a file inventory."), "{host}: {started}");
-        assert!(context.contains("Read available project files needed for the requested work within existing authority"), "{host}: {started}");
+        assert!(context.contains("Never use generic filesystem tools or another agent/subagent"), "{host}: {started}");
+        assert!(context.contains("Read other available project files needed for the requested work within existing authority"), "{host}: {started}");
         assert!(context.contains("This grants no new access, writes, mapping or unrelated investigation."), "{host}: {started}");
     }
     fs::write(

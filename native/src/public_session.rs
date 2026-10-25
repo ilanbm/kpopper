@@ -40,7 +40,7 @@ pub struct StartOptions {
     #[arg(long)]
     pub copilot: bool,
 }
-const GEMINI_UNOPENED: &str = "kpopper could not open the record; check it before relying on it.";
+const GEMINI_UNOPENED: &str = "kpopper could not open the record; retry through the kpopper reader or report it unavailable, and never read the YAML directly.";
 /// The opening in the reply format a host flag names; `None` for no output. `opened` is
 /// `None` when the opening failed, after its diagnostic went to standard error. A host
 /// flag always replies with exactly one JSON object.
@@ -278,7 +278,7 @@ pub fn stop(_payload: &Value, _host: Option<&str>, _mode: ReadMode) -> Result<Ou
     })
 }
 
-const HANDOFF_GUIDANCE: &str = "kpopper: Complete the user's current request. Before finishing, account for all material findings, decisions, constraints and open questions from this task, including evidence saved outside the repository. Within existing write authority, use the record skill to retain new knowledge, run check and read back the affected IDs. Use the KPOPPER_AGENT_CONTEXT session environment for every write and correction. An earlier write does not prove complete retention. Reuse existing coverage; no update is needed when nothing material was learned or writing is prohibited. Keep successful recording and no-change checks quiet; do not add a bookkeeping paragraph. Distinguish applied writes from pending, private-draft or refused results. Briefly disclose only material unresolved capture that affects the requested work. This reminder grants no write or publication authority and requires no reply of its own.";
+const HANDOFF_GUIDANCE: &str = "kpopper: Complete the user's current request. Before finishing, account for all material findings, decisions, constraints and open questions from this task, including evidence saved outside the repository. Within existing write authority, use the record skill to retain new knowledge, run check and read back the affected IDs. Use the KPOPPER_AGENT_CONTEXT session environment for every write and correction. Never load or search the record YAML directly or delegate that to another agent; use the kpopper reader. An earlier write does not prove complete retention. Reuse existing coverage; no update is needed when nothing material was learned or writing is prohibited. Keep successful recording and no-change checks quiet; do not add a bookkeeping paragraph. Distinguish applied writes from pending, private-draft or refused results. Briefly disclose only material unresolved capture that affects the requested work. This reminder grants no write or publication authority and requires no reply of its own.";
 
 fn canonical_grounding_read(payload: &Value) -> bool {
     let Some(command) = payload["tool_input"]["command"].as_str() else {

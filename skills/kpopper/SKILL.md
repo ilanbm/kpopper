@@ -1,6 +1,6 @@
 ---
 name: kpopper
-description: "The kpopper method: a knowledge record (GROUNDING.yaml) for work that gets revisited - what is known, where each piece came from, and what would make each conclusion wrong. Use when asked what kpopper is or how to keep a record, when choosing which kpopper skill fits a moment, or when no narrower one does. The occasions have their own skills: ground (read the record before answering), record (write what the work found), map (map existing materials), annotated-doc (a standalone HTML document with evidence), hub (the record's visual home), consolidate (hypotheses and merges), watch (background checks)."
+description: "The kpopper method: a knowledge record (GROUNDING.yaml) for work that gets revisited - what is known, where each piece came from, and what would make each conclusion wrong. Use when asked what kpopper is or how to keep a record, when choosing which kpopper skill fits a moment, or when no narrower one does. The occasions have their own skills: ground (retrieve through the bounded reader, never by loading the YAML into an agent), record (write what the work found), map (map existing materials), annotated-doc (a standalone HTML document with evidence), hub (the record's visual home), consolidate (hypotheses and merges), watch (background checks)."
 ---
 
 # kpopper
