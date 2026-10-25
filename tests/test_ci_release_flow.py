@@ -332,25 +332,62 @@ class PublishBoundary(unittest.TestCase):
         native = self.workflow("native-rust.yml")
         self.assertIn("inputs.publish", native["concurrency"]["group"])
 
-    def test_selected_targets_have_matching_tests_and_distribution_acceptance(self):
-        workflow = self.workflow("native-rust.yml")
+    def matrix(self, job, target="all", *, publish=False, extended_tests=False, validation="full"):
+        # These matrices use only input equality, boolean operators and fromJSON.
+        # Evaluate the actual routing expression so branch order and fallbacks are covered.
+        expression = self.workflow("native-rust.yml")["jobs"][job]["strategy"]["matrix"]["include"]
+        inputs = dict(target=target, publish=publish, extended_tests=extended_tests, validation=validation)
+        expression = re.sub(r"inputs\.(\w+)", lambda match: repr(inputs[match[1]]), expression[3:-2])
+        expression = expression.replace("&&", " and ").replace("||", " or ")
+        return eval(expression.strip(), {"__builtins__": {}, "fromJSON": json.loads})
+
+    def test_routine_suites_are_lean_but_distribution_acceptance_keeps_selected_targets(self):
+        primary = {"linux-x86_64", "darwin-arm64"}
+        all_targets = primary | {"linux-aarch64", "darwin-x86_64", "windows-x86_64"}
         expected = {
-            "linux-x86_64": {"linux-x86_64"},
-            "linux-windows": {"linux-x86_64", "windows-x86_64"},
-            "linux-macos": {"linux-x86_64", "darwin-arm64", "darwin-x86_64"},
+            "all": (primary, all_targets),
+            "linux-x86_64": ({"linux-x86_64"}, {"linux-x86_64"}),
+            "linux-windows": ({"linux-x86_64", "windows-x86_64"}, {"linux-x86_64", "windows-x86_64"}),
+            "linux-macos": (primary, primary | {"darwin-x86_64"}),
+            "darwin-x86_64": ({"darwin-x86_64"}, {"darwin-x86_64"}),
+            "windows-x86_64": ({"windows-x86_64"}, {"windows-x86_64"}),
+            "without-darwin-x86_64": (all_targets - {"darwin-x86_64"}, {"linux-x86_64"}),
         }
-        for name in ("tests", "release"):
-            expression = workflow["jobs"][name]["strategy"]["matrix"]["include"]
-            choices = {target: {row["target"] for row in json.loads(rows)} for target, rows in
-                       re.findall(r"inputs.target == '([^']+)'\s*&& '([^']+)'", expression)}
-            for scope, targets in expected.items():
-                self.assertEqual(choices[scope], targets)
-            fallback = json.loads(re.findall(r"\|\| '(\[.*?\])'", expression)[-1])
-            self.assertEqual({row["target"] for row in fallback}, {
-                "linux-x86_64", "linux-aarch64", "darwin-arm64", "darwin-x86_64", "windows-x86_64"})
-        upload = next(step for step in workflow["jobs"]["release"]["steps"]
+        for target, (tests, release) in expected.items():
+            with self.subTest(target=target):
+                self.assertEqual({row["target"] for row in self.matrix("tests", target)}, tests)
+                self.assertEqual({row["target"] for row in self.matrix("release", target)}, release)
+                for options in ({"publish": True}, {"extended_tests": True}):
+                    expanded = all_targets if target == "all" else release if target == "linux-macos" else tests
+                    self.assertEqual({row["target"] for row in self.matrix("tests", target, **options)}, expanded)
+                self.assertEqual({row["target"] for row in self.matrix("release", target, publish=True)}, all_targets)
+        self.assertEqual({row["target"] for row in self.matrix("tests", validation="readers", extended_tests=True)},
+                         {"linux-x86_64"})
+        upload = next(step for step in self.workflow("native-rust.yml")["jobs"]["release"]["steps"]
                       if step.get("with", {}).get("name") == "verified-crate")
         self.assertIn("inputs.publish", upload["if"])
+
+    def test_full_diagnostics_restore_secondary_suites(self):
+        workflow = self.workflow("native-rust.yml")
+        self.assertEqual(workflow["on"]["workflow_call"]["inputs"]["extended_tests"]["default"], "false")
+        self.assertEqual(workflow["on"]["workflow_dispatch"]["inputs"]["extended_tests"]["default"], "true")
+        caller = self.workflow("check.yml")["jobs"]["native-cli"]["with"]
+        self.assertEqual(caller["extended_tests"], "${{ github.event_name == 'workflow_dispatch' }}")
+
+    def test_runner_migration_preserves_architectures_and_retains_all_downloads(self):
+        expected = {
+            "linux-x86_64": ("ubuntu-24.04", "kpop"),
+            "linux-aarch64": ("ubuntu-24.04-arm", "kpop"),
+            "darwin-arm64": ("macos-15", "kpop"),
+            "darwin-x86_64": ("macos-15-intel", "kpop"),
+            "windows-x86_64": ("windows-2022", "kpop.exe"),
+        }
+        for job in ("tests", "release"):
+            rows = self.matrix(job, publish=True)
+            self.assertEqual({row["target"]: (row["runner"], row["binary"]) for row in rows}, expected)
+        self.assertEqual(self.workflow("model-plugins.yml")["jobs"]["darwin-arm64"]["runs-on"], "macos-15")
+        for path in (ROOT / ".github/workflows").glob("*.yml"):
+            self.assertNotRegex(path.read_text(), r"\bmacos-14\b", str(path))
 
 
 if __name__ == "__main__":

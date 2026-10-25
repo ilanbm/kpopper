@@ -364,7 +364,7 @@ class WorkflowCoverage(unittest.TestCase):
 
 
 # Each runner of the native matrix, as its RUNNER_OS/RUNNER_ARCH name it.
-RUNNER_PLATFORMS = {"ubuntu-24.04": "Linux/X64", "ubuntu-24.04-arm": "Linux/ARM64", "macos-14": "macOS/ARM64",
+RUNNER_PLATFORMS = {"ubuntu-24.04": "Linux/X64", "ubuntu-24.04-arm": "Linux/ARM64", "macos-15": "macOS/ARM64",
                     "macos-15-intel": "macOS/X64", "windows-2022": "Windows/X64"}
 # The attributes that keep a fenced block of a doc comment Rust code for rustdoc.
 RUSTDOC_ATTRIBUTES = {"rust", "ignore", "no_run", "should_panic", "compile_fail", "test_harness", "standalone_crate"}

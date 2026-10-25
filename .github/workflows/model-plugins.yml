@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   darwin-arm64:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 25
     env:
       RUST_BACKTRACE: "1"
