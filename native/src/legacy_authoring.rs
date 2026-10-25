@@ -1749,6 +1749,7 @@ fn prepare_with_inventory_mode(
             map_mut(body)?.insert("v".into(), value);
             reader.ids.insert(id);
         }
+        reader.invalidate_evaluation();
         Some(facts)
     } else { None };
     // The clock is captured once for guards and the candidate. Keep the original

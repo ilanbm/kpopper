@@ -1504,8 +1504,8 @@ fn canonical_hook_route_is_executable_complete_and_explicitly_bounded() {
     assert_eq!(bounded_route["argv"],route["argv"]);
     assert_eq!(bounded_route["view_sha256"],kpop_native::identity::sha256(received.as_bytes()));
     assert!(bounded.len()<=2_000);
-    assert!(bounded.contains("For more record evidence, use --query in the source language"));
-    assert!(bounded.contains("Read task-required project files within existing authority; the graph is not a file inventory."));
+    assert!(bounded.contains("Use source-language --query, then exact IDs."));
+    assert!(bounded.contains("never read/search record YAML directly or via agents."));
     assert!(!command(root,"hook-view").args(["--tokens","64"]).output().unwrap().status.success());
 }
 
@@ -1529,8 +1529,8 @@ fn canonical_hook_keeps_project_read_guidance_with_long_route_paths() {
     assert!(bounded.len()<=2_000);
     assert_eq!(received["argv"],route["argv"]);
     assert_eq!(received["view_sha256"],route["view_sha256"]);
-    assert!(bounded.contains("For more record evidence, use --query in the source language"));
-    assert!(bounded.contains("Read task-required project files within existing authority; the graph is not a file inventory."));
+    assert!(bounded.contains("Use source-language --query, then exact IDs."));
+    assert!(bounded.contains("never read/search record YAML directly or via agents."));
 }
 
 #[test]
