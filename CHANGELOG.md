@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.2 — 2026-10-25
 
 ### Fixed
 
@@ -12,6 +12,13 @@
   workers through the bounded kpopper reader. An unavailable reader is reported
   explicitly instead of prompting direct loading or searching of the record YAML.
   Existing records require no migration.
+
+### Included changes
+
+- Batch ordinary predicates and require bounded record reads (#319)
+- Trim routine platform tests and migrate Apple Silicon CI to macOS 15 (#317)
+
+Decisions recorded: d.record_yaml_is_reader_boundary, d.structured_predicates_batch_once
 
 ## 0.17.1 — 2026-10-24
 
