@@ -154,7 +154,7 @@ class AdmissionOutputs(unittest.TestCase):
 class JobAdmission(unittest.TestCase):
     targets = ["ubuntu-24.04, linux-x86_64, kpop",
                "ubuntu-24.04-arm, linux-aarch64, kpop",
-               "macos-14, darwin-arm64, kpop",
+               "macos-15, darwin-arm64, kpop",
                "macos-15-intel, darwin-x86_64, kpop",
                "windows-2022, windows-x86_64, kpop.exe"]
 
@@ -187,11 +187,20 @@ class JobAdmission(unittest.TestCase):
         mutations.append([dict(job, conclusion="failure") if job["name"] == "changes" else job for job in jobs])
         mutations.append([dict(job, status="in_progress") if job["name"] == "record" else job for job in jobs])
         mutations.append(jobs + [dict(jobs[0])])
-        mutations.append([job for job in jobs if job["name"] != "native-cli / release (macos-14, darwin-arm64, kpop)"])
-        mutations.append([dict(job, conclusion="failure") if job["name"] == "native-cli / tests (macos-14, darwin-arm64, kpop)" else job
+        mutations.append([job for job in jobs if job["name"] != "native-cli / release (macos-15, darwin-arm64, kpop)"])
+        mutations.append([dict(job, conclusion="failure") if job["name"] == "native-cli / tests (macos-15, darwin-arm64, kpop)" else job
                           for job in jobs])
         mutations.append(jobs + [self.job("unrecognized critical gate", "failure")])
         for altered in mutations:
+            with self.subTest(jobs=altered), self.assertRaises(RECOVERY.RecoveryError):
+                RECOVERY.validate_baseline_jobs(altered)
+
+    def test_recovery_rejects_retired_runner_and_reduced_routine_test_evidence(self):
+        jobs = self.baseline_jobs()
+        retired = [dict(job, name=job["name"].replace("macos-15,", "macos-14,")) for job in jobs]
+        reduced = [job for job in jobs if not job["name"].startswith("native-cli / tests (")
+                   or "linux-x86_64" in job["name"] or "darwin-arm64" in job["name"]]
+        for altered in (retired, reduced):
             with self.subTest(jobs=altered), self.assertRaises(RECOVERY.RecoveryError):
                 RECOVERY.validate_baseline_jobs(altered)
 
