@@ -2,17 +2,6 @@
 
 ## Unreleased
 
-### Fixed
-
-- Ordinary record reads evaluate recorded structured conditions together and reuse
-  their results within the same captured world. This removes repeated full-record
-  evaluator launches from opening, checks and attention on larger records, while
-  preserving the existing per-condition evaluator when a batch cannot be used.
-- Skills, host adapters and hook recovery guidance direct agents and delegated
-  workers through the bounded kpopper reader. An unavailable reader is reported
-  explicitly instead of prompting direct loading or searching of the record YAML.
-  Existing records require no migration.
-
 ### Changed
 
 - A plugin copy without its own native runtime now uses the machine-wide install of
@@ -26,6 +15,26 @@
   On Windows the install is found when the hook shell's `HOME` is the directory
   `install.ps1` installed under. See
   [Install the native runtime](docs/plugin-runtime.md#install-the-native-runtime).
+
+## 0.17.2 — 2026-10-25
+
+### Fixed
+
+- Ordinary record reads evaluate recorded structured conditions together and reuse
+  their results within the same captured world. This removes repeated full-record
+  evaluator launches from opening, checks and attention on larger records, while
+  preserving the existing per-condition evaluator when a batch cannot be used.
+- Skills, host adapters and hook recovery guidance direct agents and delegated
+  workers through the bounded kpopper reader. An unavailable reader is reported
+  explicitly instead of prompting direct loading or searching of the record YAML.
+  Existing records require no migration.
+
+### Included changes
+
+- Batch ordinary predicates and require bounded record reads (#319)
+- Trim routine platform tests and migrate Apple Silicon CI to macOS 15 (#317)
+
+Decisions recorded: d.record_yaml_is_reader_boundary, d.structured_predicates_batch_once
 
 ## 0.17.1 — 2026-10-24
 
