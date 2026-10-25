@@ -10,7 +10,12 @@ use crate::{
     require,
 };
 use serde_json::{Value as J, json};
-use std::{collections::BTreeSet, sync::LazyLock};
+use std::{
+    cell::OnceCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+    sync::LazyLock,
+};
 pub(crate) static ID: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+").unwrap());
 pub(crate) static CMP: LazyLock<regex::Regex> = LazyLock::new(|| {
@@ -306,6 +311,31 @@ pub fn evaluate(
     };
     Ok(Some(answer))
 }
+#[derive(Clone, Debug)]
+pub(crate) struct PredicateEvaluation {
+    pub(crate) holds: Option<bool>,
+    pub(crate) error: String,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct EvaluationCache {
+    // Opening, flags, attention and check all ask about the same immutable world.
+    // Scan its structured falsifiers once instead of launching the full program
+    // again from every surface and for every judgment.
+    predicates: OnceCell<BTreeMap<String, PredicateEvaluation>>,
+}
+
+pub(crate) type SharedEvaluation = Rc<EvaluationCache>;
+
+fn predicate_key(pred: &V) -> Result<String> {
+    let normalized = if matches!(pred, V::Map(_)) {
+        L::legacy_expression(pred, true).unwrap_or_else(|_| pred.clone())
+    } else {
+        pred.clone()
+    };
+    Ok(serde_json::to_string(&json_value(&normalized, 0)?)?)
+}
+
 pub struct Reader<'a> {
     pub(crate) document: V,
     pub(crate) fields: Map,
@@ -314,6 +344,7 @@ pub struct Reader<'a> {
     pub(crate) hypotheses: Map,
     pub(crate) knowledge_conflicts: BTreeSet<String>,
     pub(crate) runtime: Option<&'a Runtime>,
+    pub(crate) evaluation: SharedEvaluation,
 }
 impl<'a> Reader<'a> {
     /// Followups retain source-only records even when no judgment field roles
@@ -351,10 +382,11 @@ impl<'a> Reader<'a> {
             hypotheses: Map::new(),
             knowledge_conflicts: BTreeSet::new(),
             runtime,
+            evaluation: Rc::new(EvaluationCache::default()),
         };
-        reader
-            .raw
-            .extend(crate::ordinary_domain_counts::builtins(&reader)?);
+        let builtins = crate::ordinary_domain_counts::builtins(&reader)?;
+        reader.raw.extend(builtins);
+        reader.evaluation = Rc::new(EvaluationCache::default());
         Ok(reader)
     }
 
@@ -423,10 +455,11 @@ impl<'a> Reader<'a> {
             hypotheses: Map::new(),
             knowledge_conflicts: BTreeSet::new(),
             runtime,
+            evaluation: Rc::new(EvaluationCache::default()),
         };
-        reader
-            .raw
-            .extend(crate::ordinary_domain_counts::builtins(&reader)?);
+        let builtins = crate::ordinary_domain_counts::builtins(&reader)?;
+        reader.raw.extend(builtins);
+        reader.evaluation = Rc::new(EvaluationCache::default());
         Ok(reader)
     }
     /// Supply already captured hypothesis documents and conflict IDs explicitly.
@@ -451,8 +484,10 @@ impl<'a> Reader<'a> {
         self.hypotheses = hypotheses;
         self.knowledge_conflicts = knowledge_conflicts;
         self.raw.retain(|k, _| !F::BUILTINS.contains(&k.as_str()));
-        self.raw
-            .extend(crate::ordinary_domain_counts::builtins(&self)?);
+        self.evaluation = Rc::new(EvaluationCache::default());
+        let builtins = crate::ordinary_domain_counts::builtins(&self)?;
+        self.raw.extend(builtins);
+        self.evaluation = Rc::new(EvaluationCache::default());
         Ok(self)
     }
     pub(crate) fn program(&self) -> Option<&Program> {
@@ -468,7 +503,126 @@ impl<'a> Reader<'a> {
         value_of(&self.raw, &self.ids, key, self.program())
     }
     pub fn predicate(&self, pred: &V) -> Result<Option<bool>> {
+        if let Some(result) = self.cached_predicate(pred) {
+            return Ok(result.holds);
+        }
         evaluate(pred, &self.raw, &self.ids, self.program())
+    }
+
+    pub(crate) fn cached_predicate(&self, pred: &V) -> Option<PredicateEvaluation> {
+        if !matches!(pred, V::Map(_)) {
+            return None;
+        }
+        let program = self.program()?;
+        let outcomes = self
+            .evaluation
+            .predicates
+            .get_or_init(|| self.predicate_batch(program));
+        outcomes.get(&predicate_key(pred).ok()?).cloned()
+    }
+
+    fn single_predicate(&self, program: &Program, pred: &V) -> PredicateEvaluation {
+        let result = compute(&self.raw, &self.ids, Some(pred), Some(program));
+        PredicateEvaluation {
+            holds: result["predicate"]["holds_on_current_values"].as_bool(),
+            error: result["error"].as_str().unwrap_or("").to_owned(),
+        }
+    }
+
+    fn predicate_batch(&self, program: &Program) -> BTreeMap<String, PredicateEvaluation> {
+        let predicates = self
+            .raw
+            .iter()
+            .filter_map(|(id, body)| {
+                let fields = map(body).ok()?;
+                fields
+                    .contains_key(text(&self.fields["deps"]).ok()?)
+                    .then(|| {
+                        let pred = predicate_of(body, &self.fields);
+                        matches!(pred, V::Map(_)).then_some((id.clone(), pred))
+                    })
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        if predicates.is_empty() {
+            return BTreeMap::new();
+        }
+        let evaluated = (|| -> Result<J> {
+            let mut record = crate::ordinary_value::compute_record(&self.raw, &self.ids)?.value;
+            let nodes = record["nodes"]
+                .as_object_mut()
+                .ok_or_else(|| Error("invalid ordinary batch graph".into()))?;
+            let assessment_fields = json_value(&V::Map(self.fields.clone()), 0)?;
+            let dependency_field = text(&self.fields["deps"])?;
+            let mut edges = Vec::new();
+            for (id, node) in nodes.iter_mut() {
+                let body = node["body"].clone();
+                let judgment = body
+                    .as_object()
+                    .is_some_and(|body| body.contains_key(dependency_field));
+                node["kind"] = json!(if judgment { "judgment" } else { "entry" });
+                node["states"] = json!(if self.knowledge_conflicts.contains(id) {
+                    vec!["contested"]
+                } else {
+                    Vec::<&str>::new()
+                });
+                if !judgment {
+                    continue;
+                }
+                let mut assessed = body.clone();
+                for (role, canonical) in [
+                    ("deps", "rests_on"),
+                    ("snapshot", "seen"),
+                    ("predicate", "wrong_if"),
+                ] {
+                    if let Some(field) = self.fields.get(role).and_then(|value| text(value).ok()) {
+                        assessed[canonical] = body.get(field).cloned().unwrap_or(J::Null);
+                    }
+                }
+                node["assessment_body"] = assessed;
+                node["assessment_fields"] = assessment_fields.clone();
+                for dependency in body
+                    .get(dependency_field)
+                    .and_then(J::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(J::as_str)
+                {
+                    edges.push(json!({"from":id,"rel":"rests_on","to":dependency}));
+                }
+            }
+            record["edges"] = json!(edges);
+            record["project_context"] = json!("ordinary-reader-batch");
+            program.scan(&record, &OperationalBounds::default())
+        })();
+        let mut outcomes = BTreeMap::new();
+        match evaluated {
+            Ok(scan) => {
+                for (id, pred) in predicates {
+                    let executable = &scan["conditions"][&id]["executable"];
+                    let result =
+                        if executable.is_object() && executable["reason"] != "assessment_error" {
+                            PredicateEvaluation {
+                                holds: executable["holds_on_current_values"].as_bool(),
+                                error: executable["error"].as_str().unwrap_or("").to_owned(),
+                            }
+                        } else {
+                            self.single_predicate(program, &pred)
+                        };
+                    if let Ok(key) = predicate_key(&pred) {
+                        outcomes.insert(key, result);
+                    }
+                }
+            }
+            Err(_) => {
+                for (_, pred) in predicates {
+                    if let Ok(key) = predicate_key(&pred) {
+                        outcomes.insert(key, self.single_predicate(program, &pred));
+                    }
+                }
+            }
+        }
+        outcomes
     }
 }
 
@@ -550,6 +704,51 @@ pub(crate) fn arrangement(reader: &Reader<'_>, body: &V) -> bool {
 mod tests {
     use super::*;
     use crate::ordinary_value::{Map, NonFiniteFloat};
+
+    #[cfg(unix)]
+    #[test]
+    fn structured_recorded_predicates_share_one_batch_evaluation() {
+        let counter = tempfile::tempdir().unwrap();
+        let counter_path = counter.path().join("calls");
+        let response = serde_json::json!({
+            "counts": {},
+            "events": {},
+            "conditions": {
+                "d.one": {"executable": {"holds_on_current_values": true}},
+                "d.two": {"executable": {"holds_on_current_values": false}}
+            },
+            "assessments": [],
+            "errors": []
+        })
+        .to_string();
+        let script = format!(
+            "#!/bin/sh\nprintf x >> '{}'\nprintf '%s' '{}'\n",
+            counter_path.display(),
+            response
+        );
+        let (_program_dir, program) = crate::ordinary_runtime::scripted_program(script.as_bytes());
+        let runtime_cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(runtime_cache.path())
+            .with_ordinary_program(program);
+        let document = V::from_json(&serde_json::json!({
+            "schema": {"deps":"rests_on","snapshot":"seen","predicate":"wrong_if"},
+            "known": {"p.value":{"v":5}},
+            "judgments": {
+                "d.one": {"verdict":"one","rests_on":["p.value"],"seen":{"p.value":5},"wrong_if":{"expr":"p.value > 3"}},
+                "d.two": {"verdict":"two","rests_on":["p.value"],"seen":{"p.value":5},"wrong_if":{"expr":"p.value < 3"}}
+            }
+        }))
+        .unwrap();
+        let reader = Reader::new(&document, Some(&runtime)).unwrap();
+        let one = predicate_of(&reader.raw["d.one"], &reader.fields);
+        let two = predicate_of(&reader.raw["d.two"], &reader.fields);
+
+        assert_eq!(reader.predicate(&one).unwrap(), Some(true));
+        assert_eq!(reader.predicate(&two).unwrap(), Some(false));
+        assert_eq!(reader.predicate(&one).unwrap(), Some(true));
+        assert_eq!(std::fs::read_to_string(counter_path).unwrap(), "x");
+    }
+
     #[test]
     fn source_nonfinite_plain_comparisons_and_derivative_calculations_match_python() {
         let program = crate::ordinary_reader::tests::program();

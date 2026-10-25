@@ -11,7 +11,7 @@ use std::{
 
 const RECORD: &str = "meta:\n  name: Adapter fixture\n  scope: Opening through a host adapter\nsources:\n  source.request: {asked: \"Check the deadline\", name: \"Current request\"}\nknown:\n  deadline.days: {v: 7, from: source.request, name: \"Days remaining\"}\n";
 const OPENING: &str = "Opening through a host adapter\n2 entries, 0 judgments";
-const GEMINI_UNOPENED: &str = "kpopper could not open the record; check it before relying on it.";
+const GEMINI_UNOPENED: &str = "kpopper could not open the record; retry through the kpopper reader or report it unavailable, and never read the YAML directly.";
 
 /// A project directory and the private state of one host session.
 struct Session {

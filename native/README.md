@@ -47,6 +47,27 @@ Run validation separately from other compilation jobs to avoid resource contenti
 nextest, in one pool across all the test binaries, with the `ci` profile of
 `.config/nextest.toml`: `cargo nextest run --locked --profile ci` runs them as CI does.
 
+## CI platform coverage
+
+A broad pull request runs the complete test suite on Linux x86_64 and macOS ARM64.
+Linux covers the main CLI and browser integration checks; Apple Silicon covers the
+native macOS path and the initially supported model-plugin host. Intel macOS and
+Linux ARM64 use the same POSIX interfaces, while native Windows supports a narrower
+reader/runtime path and requires WSL for history writes (see the root README).
+Their repeated full suites are reserved for release candidates and explicit diagnostics.
+Windows-specific changes still select the Linux/Windows test pair.
+
+The distribution jobs continue to build and run public installation/acceptance flows
+on every selected platform, including all five platforms for broad changes and every
+release: Linux x86_64/ARM64, macOS ARM64/Intel, and Windows x86_64. This policy reduces
+test duplication without removing any download. Release test selection still uses
+all changes since the previous release; selected secondary suites are restored there.
+
+For a full diagnostic, dispatch `check.yml`, or dispatch `native-rust.yml` with
+`target=all` and `extended_tests=true` (the manual default). Named target scopes remain
+available. macOS ARM64 jobs use `macos-15`; Intel jobs use `macos-15-intel`. Keep these
+architecture labels distinct when updating runner images.
+
 The full integration suite needs the same verified reasoning resources as a runtime
 bundle. For a macOS ARM64 bundle, run (use its matching target directory elsewhere):
 

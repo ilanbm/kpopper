@@ -221,6 +221,7 @@ jobs:
     with:
       target: ${{ needs.changes.outputs.platforms }}
       validation: ${{ needs.changes.outputs.validation }}
+      extended_tests: ${{ github.event_name == 'workflow_dispatch' }}
       publish: ${{ needs.changes.outputs.release == 'true' }}
       source_ref: ${{ needs.changes.outputs.source }}
       audit: true

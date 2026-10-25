@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Fixed
+
+- Ordinary record reads evaluate recorded structured conditions together and reuse
+  their results within the same captured world. This removes repeated full-record
+  evaluator launches from opening, checks and attention on larger records, while
+  preserving the existing per-condition evaluator when a batch cannot be used.
+- Skills, host adapters and hook recovery guidance direct agents and delegated
+  workers through the bounded kpopper reader. An unavailable reader is reported
+  explicitly instead of prompting direct loading or searching of the record YAML.
+  Existing records require no migration.
+
+### Changed
+
+- A plugin copy without its own native runtime now uses the machine-wide install of
+  the same version, so one install per version serves every copy a host makes, such
+  as a fresh copy per session or a cache per version. Only the copy's exact version
+  is used, from the directory the installer marked with it under
+  `~/.local/lib/kpopper`. Another version, an unmarked directory or a `kpop` found
+  on `PATH` never stands in, and hooks still never download or install a runtime.
+  When neither runtime is present, the session opener names both installs. Copies
+  of earlier versions keep their own resolver and still need a runtime in the copy.
+  On Windows the install is found when the hook shell's `HOME` is the directory
+  `install.ps1` installed under. See
+  [Install the native runtime](docs/plugin-runtime.md#install-the-native-runtime).
+
+## 0.17.1 — 2026-10-24
+
 - Claude and Codex receive a bounded knowledge-handoff reminder during the current turn,
   including for research and evidence saved outside the repository. It asks for verified
   retention or an explicit unresolved outcome without creating a Stop continuation.
@@ -19,17 +46,14 @@
 - Routine recording no longer requires an unrelated maintenance proposal or health paragraph.
   Readback and hook advice use the same scope. Relevant declared reliability limits and
   requests for ongoing checking remain visible, within the existing opening budgets.
-- A plugin copy without its own native runtime now uses the machine-wide install of
-  the same version, so one install per version serves every copy a host makes, such
-  as a fresh copy per session or a cache per version. Only the copy's exact version
-  is used, from the directory the installer marked with it under
-  `~/.local/lib/kpopper`. Another version, an unmarked directory or a `kpop` found
-  on `PATH` never stands in, and hooks still never download or install a runtime.
-  When neither runtime is present, the session opener names both installs. Copies
-  of earlier versions keep their own resolver and still need a runtime in the copy.
-  On Windows the install is found when the hook shell's `HOME` is the directory
-  `install.ps1` installed under. See
-  [Install the native runtime](docs/plugin-runtime.md#install-the-native-runtime).
+
+### Included changes
+
+- Fix task knowledge retention and report recovery
+- Give the Intel macOS test job three hours (#313)
+- Name the missing record or unknown id when same, distinct, migrate or assess refuse (#309)
+
+Decisions recorded: d.maintenance_advice_stays_on_task, d.task_knowledge_handoff
 
 ## 0.17.0 — 2026-10-18
 

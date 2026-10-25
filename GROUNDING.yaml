@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-10-24
+  updated: 2026-10-25
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -948,6 +948,38 @@ known:
     at: "python -m unittest discover -s tests on this tree, against the 598 successful check jobs of
          1-17 September 2026"
     as_of: "2026-09-18"
+  m.g2next_check_after_batch_seconds:
+    v: 3.19
+    name: "g2next check wall time after structured-predicate batching, seconds"
+    scope: "Local release candidate on this Mac with installed 0.17.1 reasoning resources; output
+            matched installed 0.17.1 byte for byte"
+    from: s.2026_10_25_reader_boundary_regression
+    at: "local release candidate exact check benchmark"
+    of: "2026-10-25"
+  m.g2next_check_before_batch_seconds:
+    v: 104.35
+    name: "g2next check wall time before structured-predicate batching, seconds"
+    scope: "Installed kpopper 0.17.1 on this Mac against the 2026-10-25 g2next record"
+    from: s.2026_10_25_reader_boundary_regression
+    at: "installed 0.17.1 exact check benchmark"
+    of: "2026-10-25"
+    distinct_from: m.g2next_check_after_batch_seconds
+    # distinct 2026-10-25: Separate before/after benchmarks of the same check implementation boundary.
+  m.g2next_session_start_after_batch_seconds:
+    v: 7.43
+    name: "g2next SessionStart wall time after structured-predicate batching, seconds"
+    scope: "Local release candidate on this Mac with installed 0.17.1 reasoning resources"
+    from: s.2026_10_25_reader_boundary_regression
+    at: "local release candidate SessionStart benchmark"
+    of: "2026-10-25"
+  m.g2next_session_start_before_batch:
+    quoted: ">60 seconds without output before the probe was terminated"
+    name: "Lower bound for the stalled g2next SessionStart before structured-predicate batching"
+    from: s.2026_10_25_reader_boundary_regression
+    at: "installed 0.17.1 SessionStart probe"
+    of: "2026-10-25"
+    distinct_from: m.g2next_session_start_after_batch_seconds
+    # distinct 2026-10-25: Separate before/after benchmarks of the SessionStart path; the first is a lower-bound observation and the second a completed duration.
   m.grounding_line_prefix_guesses:
     v: 182
     unit: trials
@@ -5115,6 +5147,26 @@ judgments:
                                     to keep - as a line on the prompt, and as one stop on the turn
                                     after a line went unanswered; the gate still yields after one
                                     bounce"
+  d.record_yaml_is_reader_boundary:
+    verdict: "Agents, subagents, hooks and adapter prompts read a project record through kpopper
+              interfaces; reader failure remains unavailable and never authorizes loading or
+              searching GROUNDING.yaml or PROVENANCE.yaml directly. Explicit kpopper implementation
+              debugging is the narrow exception."
+    because: "A stalled reader left sessions facing a path to the YAML and encouraged minutes of
+              agent-side interpretation—the opposite of the fixed-slot reader design. The skill,
+              hook, adapter and failure contracts now keep the file behind the reader boundary."
+    rests_on: [d.open_is_a_slot, s.2026_09_11_read_once, s.2026_10_25_reader_boundary_regression]
+    reopened_by: "A supported host cannot retrieve required evidence through any bounded kpopper
+                  interface and a reviewed replacement boundary is accepted."
+    seen:
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
+      s.2026_09_11_read_once: "read 2026-09-11"
+      s.2026_10_25_reader_boundary_regression: "read 2026-10-25"
+    distinct_from: "d.checked_session_is_optional, d.gate_and_opener_against_the_mark, d.hooks_carry_pointers"
+    # distinct 2026-10-25: The reader boundary permits ordinary and checked kpopper interfaces; the separate decision says checked-session mode itself remains optional.
+    # distinct 2026-10-25: The reader boundary governs how agents access records; the gate/opener decision governs session baseline comparison.
+    # distinct 2026-10-25: The reader boundary forbids direct YAML interpretation; hook pointers specify what hooks carry through that boundary.
   d.reframe_preserves_subject:
     name: "Keep representation changes separate from factual changes"
     rests_on: [s.representation_evolution_contract]
@@ -5749,6 +5801,30 @@ judgments:
                                       its neighbours - the entries whose ids share its head - and a
                                       write to an entry goes into the file that holds it; a record in
                                       one file answers that file to all of it"
+  d.structured_predicates_batch_once:
+    verdict: "For one immutable ordinary-reader world, evaluate recorded structured predicates in
+              one batch and reuse the results; if batching fails, retain the original per-predicate
+              evaluator as the correctness fallback."
+    because: "The g2next record turned repeated full-record launches into a 104-second check and a
+              SessionStart that produced nothing for more than a minute; one cached batch preserved
+              byte-identical check output while cutting the local release-candidate check to 3.19
+              seconds."
+    rests_on: [d.open_is_a_slot, m.g2next_check_before_batch_seconds, m.g2next_check_after_batch_seconds, m.g2next_session_start_before_batch, m.g2next_session_start_after_batch_seconds]
+    blocked_on: "Release packaging and supported-platform validation are not established by this
+                 local candidate."
+    reopened_by: "A supported-platform or regression fixture shows non-equivalent reader results,
+                  stale cache reuse, or unacceptable latency."
+    seen:
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
+      m.g2next_check_before_batch_seconds: 104.35
+      m.g2next_check_after_batch_seconds: 3.19
+      m.g2next_session_start_before_batch: ">60 seconds without output before the probe was
+                                            terminated"
+      m.g2next_session_start_after_batch_seconds: 7.43
+    distinct_from: "d.hooks_carry_pointers, d.no_feed_of_other_branches"
+    # distinct 2026-10-25: Structured-predicate batching is evaluator reuse and latency; hook pointers are the delivery shape.
+    # distinct 2026-10-25: Structured-predicate batching is local reader evaluation; branch-feed policy governs cross-branch knowledge.
   d.task_knowledge_handoff:
     name: "Retain current-task knowledge without taking over the conversation"
     rests_on: [doc.task_knowledge_handoff, d.gate_asks_once_after_work, d.gate_reminds]
@@ -8008,6 +8084,15 @@ sources:
          machine-wide installs of 0.9.0 to 0.15.1, which no copy used, while the Claude Code cache
          copies of 0.15.0 and 0.16.1 each held their own."
     read: "2026-10-20"
+  s.2026_10_25_reader_boundary_regression:
+    asked: "Diagnose why kpopper currently feels broken, verify CLI performance on the g2next
+            record, and make the reader interface—not direct GROUNDING.yaml parsing—the explicit path
+            for sessions, agents, subagents and hooks."
+    name: "The session that found repeated full-record predicate evaluation behind the g2next stall
+           and made the reader the explicit agent boundary"
+    of: "2026-10-25, installed 0.17.1 against /Users/ilanbm/docs/g2next/GROUNDING.yaml and the local
+         candidate at 9917e29c plus this task’s uncommitted changes"
+    read: "2026-10-25"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"

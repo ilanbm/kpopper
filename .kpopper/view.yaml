@@ -53,7 +53,8 @@ groups:
 tabs:
   - title: Now
     occasion: "you are picking up this project and need what is still open, and what the sessions before you were asked for"
-    serves: [s.native_default_release, s.2026_09_19_native_live_bootstrap_continuation,
+    serves: [s.2026_10_25_reader_boundary_regression,
+             s.native_default_release, s.2026_09_19_native_live_bootstrap_continuation,
              s.2026_09_19_native_temporal_continuation,
              s.2026_09_19_native_temporal_authoring,
              s.2026_09_19_native_ordinary_authoring,
@@ -64,6 +65,12 @@ tabs:
              s.2026_09_25_source_reference_windows_ci,
              s.2026_09_19_native_hypothesis_edit_continuation]
     sections:
+      - title: Bounded record reads
+        why: the reader's measured latency and direct-file boundary govern sessions resuming large records
+        pick: [d.record_yaml_is_reader_boundary, d.structured_predicates_batch_once,
+               m.g2next_check_before_batch_seconds, m.g2next_check_after_batch_seconds,
+               m.g2next_session_start_before_batch, m.g2next_session_start_after_batch_seconds]
+        as: lines
       - title: Native prelaunch release
         why: the selected runtime and distribution channels define which installation to use
         pick: [p.native_distribution_contract, d.crates_io_every_release]

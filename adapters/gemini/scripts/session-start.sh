@@ -32,7 +32,7 @@ if REPORT=$(sh "$RUNTIME" --path 2>&1 >/dev/null); then
   if [ -n "$OUT" ]; then
     printf '%s\n' "$OUT"
   else
-    context 'kpopper could not open the record; check it before relying on it.'
+    context 'kpopper could not open the record; retry through the kpopper reader or report it unavailable, and never read the YAML directly.'
   fi
   exit 0
 fi

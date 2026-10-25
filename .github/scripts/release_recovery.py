@@ -27,7 +27,7 @@ class RecoveryError(ValueError):
 TARGETS = {
     "linux-x86_64": "ubuntu-24.04, linux-x86_64, kpop",
     "linux-aarch64": "ubuntu-24.04-arm, linux-aarch64, kpop",
-    "darwin-arm64": "macos-14, darwin-arm64, kpop",
+    "darwin-arm64": "macos-15, darwin-arm64, kpop",
     "darwin-x86_64": "macos-15-intel, darwin-x86_64, kpop",
     "windows-x86_64": "windows-2022, windows-x86_64, kpop.exe",
 }

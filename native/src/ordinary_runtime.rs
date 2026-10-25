@@ -397,22 +397,29 @@ impl Program {
 }
 
 #[cfg(all(test, unix))]
+pub(crate) fn scripted_program(bytes: &[u8]) -> (tempfile::TempDir, Program) {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let binary = temp.path().join("epistemic-core");
+    fs::write(&binary, bytes).unwrap();
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+    let manifest = serde_json::json!({"source_sha256":env!("KPOP_ORDINARY_SOURCE_SHA256"),"binary_sha256":sha256(bytes)});
+    fs::write(
+        temp.path().join("build.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let program = Program::open(temp.path()).unwrap();
+    (temp, program)
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
     fn scripted(bytes: &[u8]) -> (tempfile::TempDir, Program) {
-        let temp = tempfile::tempdir().unwrap();
-        let binary = temp.path().join("epistemic-core");
-        fs::write(&binary, bytes).unwrap();
-        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
-        let manifest = serde_json::json!({"source_sha256":env!("KPOP_ORDINARY_SOURCE_SHA256"),"binary_sha256":sha256(bytes)});
-        fs::write(
-            temp.path().join("build.json"),
-            serde_json::to_vec(&manifest).unwrap(),
-        )
-        .unwrap();
-        let program = Program::open(temp.path()).unwrap();
-        (temp, program)
+        scripted_program(bytes)
     }
 
     #[test]

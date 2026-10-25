@@ -9,6 +9,10 @@ on:
       target:
         type: string
         default: all
+      extended_tests:
+        description: Run the secondary architecture test suites in the selected platform scope.
+        type: boolean
+        default: false
       source_ref:
         description: Exact candidate commit selected by the calling workflow.
         type: string
@@ -23,6 +27,10 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      extended_tests:
+        description: Include secondary architecture test suites for this diagnostic run.
+        type: boolean
+        default: true
       validation:
         description: Test scope (final-fixes supplements the full 1e75c2c platform run)
         required: false
@@ -59,6 +67,8 @@ jobs:
   tests:
     # A distribution builds and accepts the release alone.
     if: inputs.validation != 'distribution'
+    # Routine broad checks run complete suites on Linux x86_64 and Apple Silicon.
+    # Releases and explicit diagnostics restore secondary suites; named targets remain available.
     # Intel and Windows need room for compilation and the full suite on slower runners;
     # the Intel test step alone has taken 61-118 minutes.
     # Per-test deadlines still fail hangs long before this job limit.
@@ -75,13 +85,17 @@ jobs:
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
             || inputs.target == 'linux-windows'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+            || inputs.target == 'linux-macos' && (inputs.publish || inputs.extended_tests)
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
             || inputs.target == 'linux-macos'
-            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"}]'
             || inputs.target == 'windows-x86_64'
             && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
             || inputs.target == 'without-darwin-x86_64'
-            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
-            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]') }}
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+            || (inputs.publish || inputs.extended_tests)
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"}]') }}
     runs-on: ${{ matrix.runner }}
     env:
       KPOPPER_CI_VALIDATION: ${{ inputs.validation || 'full' }}
@@ -417,13 +431,14 @@ jobs:
     if: inputs.validation != 'readers'
     # A cold Intel macOS build can take 41 minutes before acceptance and packaging.
     timeout-minutes: ${{ matrix.target == 'darwin-x86_64' && 60 || 45 }}
-    # Tests and release acceptance use the same selected targets. The older manual
+    # Distribution acceptance retains every selected target even when routine test suites
+    # use only the primary platforms. Publication always builds all five binaries. The older manual
     # without-darwin-x86_64 scope retains its Linux-only release build for compatibility.
     strategy:
       fail-fast: false
       matrix:
         include: >-
-          ${{ fromJSON(inputs.publish && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
+          ${{ fromJSON(inputs.publish && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
             || inputs.target == 'darwin-x86_64'
             && '[{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
             || inputs.target == 'linux-x86_64'
@@ -431,12 +446,12 @@ jobs:
             || inputs.target == 'linux-windows'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
             || inputs.target == 'linux-macos'
-            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
+            && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"}]'
             || inputs.target == 'windows-x86_64'
             && '[{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]'
             || inputs.target == 'without-darwin-x86_64'
             && '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"}]'
-            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-14","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]') }}
+            || '[{"runner":"ubuntu-24.04","target":"linux-x86_64","binary":"kpop"},{"runner":"ubuntu-24.04-arm","target":"linux-aarch64","binary":"kpop"},{"runner":"macos-15","target":"darwin-arm64","binary":"kpop"},{"runner":"macos-15-intel","target":"darwin-x86_64","binary":"kpop"},{"runner":"windows-2022","target":"windows-x86_64","binary":"kpop.exe"}]') }}
     runs-on: ${{ matrix.runner }}
     env:
       KPOPPER_CI_VALIDATION: ${{ inputs.validation || 'full' }}
