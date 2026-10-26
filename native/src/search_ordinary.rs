@@ -546,7 +546,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                     PathBuf::from(filename)
                 }
             } else {
-                C::expanded(base, Path::new(filename))?
+                C::source_path(filename, base, &roots)?
             };
             let path_text = name(&path)?.to_owned();
             if bundle.is_none()

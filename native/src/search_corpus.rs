@@ -183,7 +183,10 @@ pub(super) fn roots(
     requested: &[PathBuf],
     cwd: &Path,
 ) -> crate::Result<Vec<PathBuf>> {
-    let roots = std::iter::once(record.parent().unwrap().to_owned())
+    let record_parent = record.parent().unwrap().to_owned();
+    let owner_root = generated_owner_root(record, cwd)?;
+    let roots = std::iter::once(record_parent)
+        .chain(owner_root)
         .chain(
             requested
                 .iter()
@@ -196,6 +199,52 @@ pub(super) fn roots(
         "source roots must be existing directories",
     )?;
     Ok(roots.into_iter().collect())
+}
+
+/// Generated Simple records may resolve project-relative sources from the
+/// central record parent and the invoking checkout that owns the binding. An
+/// unrelated cwd is intentionally not treated as an owner.
+fn generated_owner_root(record: &Path, cwd: &Path) -> crate::Result<Option<PathBuf>> {
+    let owner = crate::project_modes::project_for(&[record.to_owned()], cwd)?;
+    if !owner.generated_default(None)? {
+        return Ok(None);
+    }
+    let current = crate::project_modes::Project::open(cwd)?;
+    let same_owner = match (&owner.common, &current.common) {
+        (Some(a), Some(b)) => a == b,
+        (None, None) => owner.root == current.root,
+        _ => false,
+    };
+    Ok(same_owner.then_some(current.root))
+}
+
+pub(super) fn source_path(
+    filename: &str,
+    base: &Path,
+    roots: &[PathBuf],
+) -> crate::Result<PathBuf> {
+    let locator = if filename.starts_with("~/") {
+        expanded(base, Path::new(filename))?
+    } else {
+        PathBuf::from(filename)
+    };
+    if locator.is_absolute() {
+        return crate::project_modes::resolved(&locator);
+    }
+    let existing = roots
+        .iter()
+        .map(|root| root.join(&locator))
+        .filter(|path| path.is_file())
+        .map(|path| crate::project_modes::resolved(&path))
+        .collect::<crate::Result<BTreeSet<_>>>()?;
+    crate::require(
+        existing.len() <= 1,
+        &format!("source_origin_ambiguous: {filename}"),
+    )?;
+    Ok(existing
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| base.join(locator)))
 }
 pub(super) fn text_suffix(path: &Path) -> bool {
     path.extension().and_then(|v| v.to_str()).is_some_and(|v| {
