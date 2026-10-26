@@ -792,6 +792,10 @@ impl Project {
         {
             // This branch legitimately predates the record. Keep it legacy
             // Advanced/local and let the first write create its branch-local record.
+            let path = self.root.join("GROUNDING.yaml");
+            if !path.exists() {
+                atomic_bytes(&path, b"known: {}\n")?;
+            }
             return Ok(());
         }
         require(
