@@ -119,6 +119,39 @@ fn fresh_git_advanced_check_does_not_bind_and_actual_transition_uses_root_record
 }
 
 #[test]
+fn advanced_rejects_simple_mode_and_recovery_or_guidance_flags_before_dispatch() {
+    for args in [
+        vec!["--mode", "simple"],
+        vec!["--rebind"],
+        vec!["--new-project"],
+        vec!["--guidance", "off"],
+    ] {
+        let fixture = Fixture::new(true, false);
+        let mut command = vec!["experimental", "advanced"];
+        command.extend(args.iter().copied());
+        let output = fixture.run(&fixture.root, &command);
+        assert!(!output.status.success(), "accepted advanced flags: {args:?}");
+        assert!(fixture.root.join(".kpopper/project.json").exists() == false);
+        assert!(fs::read_dir(&fixture.projects).unwrap().next().is_none());
+    }
+}
+
+#[test]
+fn provisional_preview_cannot_be_adopted_by_new_config_or_first_write() {
+    let fixture = Fixture::new(true, false);
+    let preview = fixture.json(&fixture.root, &["config", "--check", "--json"]);
+    let preview_path = preview["project"]["record"].as_str().unwrap().to_owned();
+    assert!(preview_path.contains("-unbound-"));
+    let output = fixture.run(
+        &fixture.root,
+        &["config", "--mode", "simple", "--record", preview_path.as_str(), "--json"],
+    );
+    assert!(!output.status.success(), "adopted provisional path {preview_path}");
+    assert!(!fixture.root.join(".kpopper/project.json").exists());
+    assert!(fs::read_dir(&fixture.projects).unwrap().next().is_none());
+}
+
+#[test]
 fn explicit_local_simple_binding_stays_portable_after_relocation() {
     let fixture = Fixture::new(false, false);
     let configured = fixture.run(

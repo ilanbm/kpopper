@@ -551,6 +551,18 @@ fn persist_transition(
 fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     let guard = project.lock()?;
     let current = to_json(guard.config())?;
+    if let Some(record) = options.record.as_deref() {
+        let candidate = resolved(&project.root.join(record))?;
+        let already_configured = project.config_path.is_file()
+            && current
+                .get("record")
+                .and_then(J::as_str)
+                .is_some_and(|configured| configured == candidate.to_string_lossy().as_ref());
+        require(
+            already_configured || !Project::is_provisional_record_path(&candidate),
+            "provisional record paths are suggestions only; choose a concrete record path",
+        )?;
+    }
     if let Some(expected) = options.expected_generation {
         require(
             generation(&current)? == expected,

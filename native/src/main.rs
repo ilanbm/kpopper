@@ -177,8 +177,35 @@ enum Application {
 }
 #[derive(clap::Args)]
 struct AdvancedOptions {
-    #[command(flatten)]
-    config: kpop_native::public_config::Options,
+    /// Select the record path for the validated Advanced transition.
+    #[arg(long)]
+    record: Option<String>,
+    /// Inspect the transition without writing configuration or records.
+    #[arg(long)]
+    check: bool,
+    /// Require this configuration generation before transitioning.
+    #[arg(long)]
+    expected_generation: Option<u64>,
+    /// Supply the verified migration receipt required for an explicit transition.
+    #[arg(long)]
+    migration_receipt: Option<PathBuf>,
+    /// Roll back using the supplied verified migration receipt.
+    #[arg(long)]
+    rollback: bool,
+}
+
+impl AdvancedOptions {
+    fn config(&self) -> kpop_native::public_config::Options {
+        kpop_native::public_config::Options {
+            mode: Some("advanced".into()),
+            record: self.record.clone(),
+            check: self.check,
+            expected_generation: self.expected_generation,
+            migration_receipt: self.migration_receipt.clone(),
+            rollback: self.rollback,
+            ..Default::default()
+        }
+    }
 }
 #[derive(Clone, clap::ValueEnum)]
 enum Envelope {
@@ -1253,8 +1280,7 @@ fn main() {
             .workspace
             .clone()
             .unwrap_or_else(|| std::env::current_dir().expect("current directory"));
-        let mut config = options.config.clone();
-        config.mode = Some("advanced".into());
+        let config = options.config();
         let output = kpop_native::public_config::dispatch(&config, &cwd, args.json);
         print!("{}", output.stdout);
         eprint!("{}", output.stderr);

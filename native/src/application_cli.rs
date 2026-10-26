@@ -20,7 +20,7 @@ pub fn catalog() -> Value {
         {"name":"advanced","layer":"feature","status":"experimental","extra":"configuration",
          "command":"kpop experimental advanced","aliases":[],"display_name":"Advanced mode",
          "description":"Opt into the existing Git-backed Advanced configuration mode.",
-         "usage":"[--record PATH] [--check] [--expected-generation N]"}
+         "usage":"[--record PATH] [--check] [--expected-generation N] [--migration-receipt PATH] [--rollback]"}
     ],"applications":[
         {"name":"hub","layer":"application","status":"experimental","extra":"html",
          "command":"kpop experimental hub","aliases":["page"],"display_name":"kpopper Hub",
