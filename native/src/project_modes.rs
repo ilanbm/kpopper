@@ -1143,8 +1143,18 @@ pub struct WriteRoute {
 }
 impl WriteRoute {
     pub fn capture_mutation(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
+        Self::capture_mutation_with_creation(paths, cwd, true)
+    }
+    pub fn capture_mutation_with_creation(
+        paths: &[PathBuf],
+        cwd: &Path,
+        allow_creation: bool,
+    ) -> Result<Self> {
         let project = project_for(paths, cwd)?;
         let first = resolved(paths.first().ok_or_else(|| error("missing_record_path"))?)?;
+        if !allow_creation && !first.is_file() {
+            return Err(error("mutation_record_not_owned"));
+        }
         let owned = if project.config_path.exists() {
             let config = project.config()?;
             let record = project.record(Some(&config))?;
