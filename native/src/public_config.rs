@@ -1003,6 +1003,31 @@ mod tests {
         assert!(project.config_path.is_file());
         assert!(!project.state.join("mode-history").exists());
     }
+
+    #[test]
+    fn explicit_transition_drops_generated_default_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let record = dir.path().join("GROUNDING.yaml");
+        fs::write(&record, b"known: {}\n").unwrap();
+        assert!(Command::new("git")
+            .args(["init", "-q", "-b", "main"])
+            .current_dir(dir.path())
+            .status()
+            .unwrap()
+            .success());
+        let project = Project::open(dir.path()).unwrap();
+        let mut current = project.config().unwrap().to_json().unwrap();
+        current["default_identity"] = json!({
+            "version": 1,
+            "token": "00000000-0000-4000-8000-000000000000",
+            "owner_anchor": dir.path().to_string_lossy(),
+            "kind": "git"
+        });
+        let guard = project.lock().unwrap();
+        let report = transition_report(&project, &current, "advanced", None, None, false).unwrap();
+        let next = persist_transition(&project, &guard, &current, &report).unwrap();
+        assert!(next.get("default_identity").is_none());
+    }
     #[test]
     fn check_reports_blockers_without_writing_policy() {
         let dir = tempfile::tempdir().unwrap();
