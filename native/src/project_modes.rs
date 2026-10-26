@@ -833,7 +833,10 @@ impl Project {
             ]),
         );
         atomic_bytes(&self.config_path, &json_line(&next)?)?;
-        self.finish_generated_binding(&next, false)?;
+        if let Err(error) = self.finish_generated_binding(&next, false) {
+            let _ = fs::remove_file(&self.config_path);
+            return Err(error);
+        }
         if let Some(previous) = previous_record {
             eprintln!(
                 "Existing local record with this readable name: {}. Review its owner before restoring or migrating it.",
