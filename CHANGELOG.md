@@ -2,14 +2,6 @@
 
 ## Unreleased
 
-### Fixed
-
-- Core references can read a judgment's authored `verdict` as a premise. This
-  removes incorrect `missing_reference` findings when one judgment depends on
-  another, preserves change detection when the verdict changes, and keeps the
-  conclusion's truth and acceptance separate from reading its text. Existing
-  records require no migration.
-
 ### Changed
 
 - A plugin copy without its own native runtime now uses the machine-wide install of
@@ -23,6 +15,20 @@
   On Windows the install is found when the hook shell's `HOME` is the directory
   `install.ps1` installed under. See
   [Install the native runtime](docs/plugin-runtime.md#install-the-native-runtime).
+
+## 0.17.3 — 2026-10-26
+
+### Fixed
+
+- Core references can read a judgment's authored `verdict` as a premise. This
+  removes incorrect `missing_reference` findings when one judgment depends on
+  another, preserves change detection when the verdict changes, and keeps the
+  conclusion's truth and acceptance separate from reading its text. Existing
+  records require no migration.
+
+### Included changes
+
+- Fix core references to authored judgment verdicts (#320)
 
 ## 0.17.2 — 2026-10-25
 
