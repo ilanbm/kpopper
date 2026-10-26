@@ -8,10 +8,16 @@ use std::{
 fn run(root: &Path, args: &[&str]) -> Output {
     command(root).args(args).output().unwrap()
 }
+fn run_with_projects(root: &Path, projects: &Path, args: &[&str]) -> Output {
+    command(root)
+        .env("KPOPPER_PROJECTS_DIR", projects)
+        .args(args)
+        .output()
+        .unwrap()
+}
 fn run_unbundled(root: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
-        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"))
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
         .env_remove("KPOPPER_NATIVE_RESOURCES")
@@ -639,19 +645,20 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
 fn default_git_project_uses_compact_history_for_normal_local_work() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
+    let projects = tempfile::tempdir().unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
     fs::write(root.join(".gitattributes"), "user.txt text\n").unwrap();
-    success(run(&root, &["add", "p.x", "v=1", "--as-of", "2026-01-01"]));
-    success(run(&root, &["add", "p.y", "v=2"]));
-    success(run(&root, &["set", "p.x", "2", "--as-of", "2026-01-02", "--why", "new observation"]));
-    success(run(&root, &["add", "d.small", "verdict=small", "rests_on=[p.x]", "wrong_if=p.x > 3"]));
-    success(run(&root, &["review", "d.small", "--why", "checked source"]));
-    success(run(&root, &["add", "p.alternative", "v=3", "--hypothesis", "alternative"]));
-    success(run(&root, &["consolidate", "alternative", "--dry-run"]));
-    success(run(&root, &["consolidate", "alternative"]));
-    let status: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
+    success(run_with_projects(&root, projects.path(), &["add", "p.x", "v=1", "--as-of", "2026-01-01"]));
+    success(run_with_projects(&root, projects.path(), &["add", "p.y", "v=2"]));
+    success(run_with_projects(&root, projects.path(), &["set", "p.x", "2", "--as-of", "2026-01-02", "--why", "new observation"]));
+    success(run_with_projects(&root, projects.path(), &["add", "d.small", "verdict=small", "rests_on=[p.x]", "wrong_if=p.x > 3"]));
+    success(run_with_projects(&root, projects.path(), &["review", "d.small", "--why", "checked source"]));
+    success(run_with_projects(&root, projects.path(), &["add", "p.alternative", "v=3", "--hypothesis", "alternative"]));
+    success(run_with_projects(&root, projects.path(), &["consolidate", "alternative", "--dry-run"]));
+    success(run_with_projects(&root, projects.path(), &["consolidate", "alternative"]));
+    let status: Value = serde_json::from_str(&success(run_with_projects(&root, projects.path(), &["history", "status"]))).unwrap();
     assert_eq!(status["authority"]["profile"], "node-history/v1");
     assert_eq!(status["subjects"]["p.alternative"]["acceptance"], "accepted");
     assert!(fs::read_to_string(root.join(".gitattributes")).unwrap().starts_with("user.txt text\n"));

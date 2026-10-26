@@ -9,7 +9,6 @@ use std::{
 fn run(root: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
-        .env("KPOPPER_PROJECTS_DIR", root.join("projects"))
         .args(args)
         .output()
         .unwrap()

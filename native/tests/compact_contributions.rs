@@ -52,7 +52,7 @@ fn run(fixture: &Fixture, args: &[&str]) -> Output {
         .env("KPOPPER_NATIVE_RESOURCES", resources)
         .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
         .env("KPOPPER_PRIVATE_HOME", &fixture.private)
-        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"))
+        .env("KPOPPER_PROJECTS_DIR", fixture.private.join("projects"))
         .args(args)
         .output()
         .unwrap()
