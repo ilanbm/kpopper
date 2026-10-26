@@ -275,7 +275,7 @@ fn git_has_head_record(root: &Path, name: &str) -> Result<bool> {
             .any(|line| line.trim() == name)
     }))
 }
-fn git_has_head_any_record(root: &Path) -> Result<bool> {
+pub(crate) fn git_has_head_any_record(root: &Path) -> Result<bool> {
     Ok(git(root, &["ls-tree", "-r", "--name-only", "HEAD", "--", "GROUNDING.yaml", "PROVENANCE.yaml"], true)?
         .is_some_and(|raw| String::from_utf8_lossy(&raw).lines().any(|line| {
             matches!(line.trim(), "GROUNDING.yaml" | "PROVENANCE.yaml")
@@ -422,6 +422,14 @@ impl Project {
                 } else {
                     portable_path(&record)?;
                 }
+            } else if !roots.iter().any(|r| r.join(name).exists())
+                && !git_has_head_record(&self.root, name)?
+                && git_has_record_history(&self.root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
+            {
+                // A branch that predates a record remains Advanced and births
+                // its own root record on first write; never mint central state.
+                record = name.to_owned();
+                mode = "advanced";
             } else if !roots.iter().any(|r| r.join(name).exists())
                 && !git_has_head_record(&self.root, name)?
             {
@@ -791,11 +799,7 @@ impl Project {
             && git_has_record_history(&self.root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
         {
             // This branch legitimately predates the record. Keep it legacy
-            // Advanced/local and let the first write create its branch-local record.
-            let path = self.root.join("GROUNDING.yaml");
-            if !path.exists() {
-                atomic_bytes(&path, b"known: {}\n")?;
-            }
+            // Advanced/local; history birth creates the file with its entry.
             return Ok(());
         }
         require(

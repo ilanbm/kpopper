@@ -161,6 +161,7 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     let record = project.record(None)?;
     if project.is_git()
         && !record.is_file()
+        && crate::project_modes::git_has_head_any_record(&project.root)?
         && crate::history_contract::string_is(
             &crate::history_contract::map(&project.config()?)?["mode"],
             "advanced",
