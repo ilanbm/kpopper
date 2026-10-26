@@ -340,6 +340,7 @@ fn native_build_gate_rejects_removed_history_and_tampered_view() {
 fn rejects_machine_local_project_policy_in_portable_model() {
     for local in [
         ".kpopper/project.json",
+        ".kpopper/owner.json",
         ".kpopper/mode-history/previous.json",
     ] {
         let policy = format!("knowledge/venue-rates/{local}");

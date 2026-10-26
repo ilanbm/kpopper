@@ -308,6 +308,7 @@ pub fn build(
                 .to_string_lossy();
             local == ".kpopper/project.lock"
                 || local == ".kpopper/project.json"
+                || local == ".kpopper/owner.json"
                 || local == ".kpopper/mode-history"
                 || local.starts_with(".kpopper/mode-history/")
                 || local == ".kpopper/.history-local"
