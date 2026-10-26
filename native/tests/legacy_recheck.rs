@@ -9,7 +9,7 @@ fn command(root: &Path, args: &[&str], zone: &str) -> Output {
     cmd.current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
-        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"))
+        .env("KPOPPER_PROJECTS_DIR", root.parent().unwrap().join(".test-projects"))
         .env("TZ", zone)
         .args(args);
     if args.first() == Some(&"add") && !root.join("GROUNDING.yaml").exists() {
@@ -90,18 +90,18 @@ fn default_dates_follow_the_local_timezone_for_set_review_and_first_add() {
     ] {
         for operation in ["set", "review", "first-add"] {
             let temp = tempfile::tempdir().unwrap();
-            let record = temp.path().join("GROUNDING.yaml");
+            let legacy_record = temp.path().join("GROUNDING.yaml");
             let args = match operation {
                 "set" => {
                     fs::write(
-                        &record,
+                        &legacy_record,
                         "meta: {updated: 2026-01-01}\nknown:\n  p.a: {v: 1, of: 2026-01-01}\n",
                     )
                     .unwrap();
                     vec!["set", "p.a", "2", "GROUNDING.yaml"]
                 }
                 "review" => {
-                    fs::write(&record,"meta: {updated: 2026-01-01}\nknown:\n  p.a: {v: 1}\njudgments:\n  d.a:\n    verdict: continue\n    rests_on: [p.a]\n    seen: {p.a: 1}\n    wrong_if: p.a > 9\n    reviewed: 2026-01-01\n").unwrap();
+                    fs::write(&legacy_record,"meta: {updated: 2026-01-01}\nknown:\n  p.a: {v: 1}\njudgments:\n  d.a:\n    verdict: continue\n    rests_on: [p.a]\n    seen: {p.a: 1}\n    wrong_if: p.a > 9\n    reviewed: 2026-01-01\n").unwrap();
                     vec!["review", "d.a", "GROUNDING.yaml"]
                 }
                 _ => vec!["add", "p.a", "v=2"],
@@ -121,6 +121,14 @@ fn default_dates_follow_the_local_timezone_for_set_review_and_first_add() {
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
+            let record = if operation == "first-add" {
+                kpop_native::project_modes::Project::open(temp.path())
+                    .unwrap()
+                    .record(None)
+                    .unwrap()
+            } else {
+                legacy_record.clone()
+            };
             let value =
                 kpop_native::history_yaml::decode_document(&fs::read(&record).unwrap()).unwrap();
             fn date_at(value: &kpop_native::value::TypedValue, path: &[&str]) -> String {

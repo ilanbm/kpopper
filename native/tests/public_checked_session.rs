@@ -34,6 +34,9 @@ fn fixture() -> tempfile::TempDir {
     root
 }
 fn command(root: &Path, operation: &str, runtime: bool) -> Command {
+    command_with_input(root, operation, runtime, Path::new("GROUNDING.yaml"))
+}
+fn command_with_input(root: &Path, operation: &str, runtime: bool, input: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
     #[cfg(unix)]
     command.env("PATH", root.join("tools"));
@@ -47,7 +50,7 @@ fn command(root: &Path, operation: &str, runtime: bool) -> Command {
         .args([
             "--no-settings",
             "--input",
-            "GROUNDING.yaml",
+            input.to_str().unwrap(),
             "--project",
             "fixture",
             "--state",
@@ -110,10 +113,14 @@ fn unknown_core_session_revision_tells_the_reader_to_reopen() {
         .env_remove("CODEX_THREAD_ID")
         .output()
         .unwrap());
-    ok(command(root, "open", true).output().unwrap());
+    let record = kpop_native::project_modes::Project::open(root)
+        .unwrap()
+        .record(None)
+        .unwrap();
+    ok(command_with_input(root, "open", true, &record).output().unwrap());
     let (revision, retained) = saved(root);
     let before = fs::read(&retained).unwrap();
-    let output = command(root, "read", false)
+    let output = command_with_input(root, "read", false, &record)
         .args(["--ref", "/", "--revision", &"0".repeat(64)])
         .output()
         .unwrap();
@@ -123,7 +130,7 @@ fn unknown_core_session_revision_tells_the_reader_to_reopen() {
         serde_json::from_slice::<Value>(&output.stderr).unwrap(),
         json!({"error": "unknown core session revision; reopen"})
     );
-    ok(command(root, "read", false)
+    ok(command_with_input(root, "read", false, &record)
         .args(["--ref", "/", "--revision", &revision])
         .output()
         .unwrap());
