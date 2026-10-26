@@ -42,28 +42,41 @@ fn orphan_member(directory: &Path) -> Option<PathBuf> {
         .map(|name| directory.join(name))
         .find(|path| path.symlink_metadata().is_ok())
 }
+fn empty_legacy_history_residue(path: &Path) -> bool {
+    path.is_dir()
+        && path.file_name().and_then(|name| name.to_str()).is_some_and(|name| {
+            matches!(name, "history" | "history-commits" | "history-cancellations")
+        })
+        && std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
+}
 fn competing_generated_record(project: &Project, cwd: &Path) -> Result<Option<PathBuf>> {
     if !project.config_path.exists() || !project.generated_default(None)? {
         return Ok(None);
     }
-    let mut roots = project.worktrees()?;
-    roots.push(cwd.to_owned());
-    for root in roots {
-        let mut current = root.canonicalize()?;
-        loop {
-            for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
-                let path = current.join(name);
-                if path.symlink_metadata().is_ok() {
-                    return Ok(Some(path));
-                }
+    // A nested legacy record is independently selectable and must not be
+    // treated as a competing root record for the generated project.
+    let mut current = cwd.canonicalize()?;
+    while current != project.root && current.starts_with(&project.root) {
+        if ["GROUNDING.yaml", "PROVENANCE.yaml"]
+            .iter()
+            .any(|name| current.join(name).symlink_metadata().is_ok())
+        {
+            return Ok(None);
+        }
+        current = current
+            .parent()
+            .ok_or_else(|| error("project_directory_unavailable"))?
+            .to_owned();
+    }
+    for root in project.worktrees()? {
+        for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+            let path = root.join(name);
+            if path.symlink_metadata().is_ok() {
+                return Ok(Some(path));
             }
-            if current == project.root || !current.starts_with(&project.root) {
-                break;
-            }
-            let Some(parent) = current.parent() else {
-                break;
-            };
-            current = parent.to_owned();
+        }
+        if let Some(path) = orphan_member(&root) {
+            return Ok(Some(path));
         }
     }
     Ok(None)
@@ -93,6 +106,23 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
             &path,
         ));
     }
+    // A real nested record takes precedence over a generated root binding.
+    // It is an independently selectable legacy record, not a root conflict.
+    if project.config_path.exists() && cwd.starts_with(&project.root) && cwd != project.root {
+        let mut current = cwd.clone();
+        while current != project.root {
+            for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+                let path = current.join(name);
+                if path.is_file() {
+                    return Ok(vec![path]);
+                }
+            }
+            current = current
+                .parent()
+                .ok_or_else(|| error("project_directory_unavailable"))?
+                .to_owned();
+        }
+    }
     if project.config_path.exists() {
         let record = project.record(None)?;
         if record.symlink_metadata().is_ok() && !record.is_file() {
@@ -116,10 +146,40 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
             }
         }
         if let Some(path) = orphan_member(&current) {
-            return Err(unavailable(
-                "A record-bearing sidecar exists without its primary record.",
-                &path,
-            ));
+            let other_orphan = [
+                ".kpopper/hypotheses",
+                ".kpopper/view.yaml",
+                ".kpopper/measure.yaml",
+                ".kpopper/replaced.yaml",
+                ".kpopper/history.yaml",
+                "PROVENANCE.d",
+                "PROVENANCE.view.yaml",
+                "PROVENANCE.measure.yaml",
+                "PROVENANCE.replaced.yaml",
+                "PROVENANCE.history",
+                "PROVENANCE.history-commits",
+                "PROVENANCE.history.yaml",
+                "PROVENANCE.history-cancellations",
+            ]
+            .iter()
+            .map(|name| current.join(name))
+            .any(|candidate| candidate.symlink_metadata().is_ok());
+            let legacy_birth = !project.config_path.exists()
+                && project.is_git()
+                && current == project.root
+                && !crate::project_modes::git_has_head_any_record(&project.root)?
+                && crate::project_modes::git_has_record_history(
+                    &project.root,
+                    &["GROUNDING.yaml", "PROVENANCE.yaml"],
+                )?
+                && !other_orphan
+                && empty_legacy_history_residue(&path);
+            if !legacy_birth {
+                return Err(unavailable(
+                    "A record-bearing sidecar exists without its primary record.",
+                    &path,
+                ));
+            }
         }
         let Some(parent) = current.parent() else {
             break;
@@ -138,6 +198,7 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     let record = project.record(None)?;
     if project.is_git()
         && !record.is_file()
+        && crate::project_modes::git_has_head_any_record(&project.root)?
         && crate::history_contract::string_is(
             &crate::history_contract::map(&project.config()?)?["mode"],
             "advanced",
