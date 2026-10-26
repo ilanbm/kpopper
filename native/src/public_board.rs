@@ -128,6 +128,17 @@ pub fn status(workspace: &Path) -> Result<Value> {
     let guidance = onboarding::guidance()?;
     // Kept in the JSON surface for compatibility; ordinary onboarding never offers a mode.
     let mode_offer = false;
+    let record = project.record(None)?;
+    let record_exists = record.is_file();
+    let record_location = if config["mode"] == "simple" && !configured && !generated {
+        "unbound"
+    } else if generated {
+        "bound"
+    } else if config["mode"] == "advanced" && !configured {
+        "legacy"
+    } else {
+        "selected"
+    };
     let cached = pending_control::load_state(&project.state.join("publication.json"))?.to_json()?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -173,7 +184,8 @@ pub fn status(workspace: &Path) -> Result<Value> {
         json!({"name":"kpopper Board","mode":config["mode"],"is_git":project.is_git(),"generation":config["generation"],
         "choice":chosen,"offer":advanced && publication.is_null() && chosen.is_null() && saved["shown"] != true && guidance,
         "mode_offer":mode_offer,"mode_selected":mode_selected,"mode_origin":mode_origin,"advanced_experimental":true,
-        "record":project.record(None)?,"simple_record_suggestion":simple_record_suggestion(&project)?,
+        "record":record,"record_exists":record_exists,"record_location":record_location,
+        "simple_record_suggestion":simple_record_suggestion(&project)?,
         "standing_permission":granted,"publication":publication,"remotes":remotes,
         "paused":cached["paused"],"pr":cached["pr"],"failures":cached["failures"],"retry_at":cached["retry_at"],
         "retry_state":retry_state,
@@ -184,9 +196,10 @@ pub fn status(workspace: &Path) -> Result<Value> {
 
 fn simple_record_suggestion(project: &Project) -> Result<Option<PathBuf>> {
     let config = project.config()?.to_json()?;
-    Ok((config["mode"] == "simple")
-        .then(|| project.record(None))
-        .transpose()?)
+    if config["mode"] != "simple" || !project.config_path.is_file() {
+        return Ok(None);
+    }
+    Ok(Some(project.record(Some(&project.config()?))?))
 }
 
 fn inspect(project: &Project, remote: Option<&str>, target: Option<&str>) -> Result<Value> {

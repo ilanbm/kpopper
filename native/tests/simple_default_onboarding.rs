@@ -154,16 +154,22 @@ fn fresh_git_and_non_git_projects_have_silent_simple_onboarding() {
         assert_eq!(status["mode_origin"], "automatic", "git={git}: {status}");
         assert_eq!(status["offer"], false, "git={git}: {status}");
         assert_eq!(status["standing_permission"], false, "git={git}: {status}");
+        assert_eq!(status["record_location"], "unbound", "git={git}: {status}");
+        assert_eq!(status["record_exists"], false, "git={git}: {status}");
+        assert!(status["simple_record_suggestion"].is_null(), "git={git}: {status}");
         assert!(
-            status["simple_record_suggestion"]
-                .as_str()
-                .is_none_or(|path| !path.ends_with("-knowledge/GROUNDING.yaml")),
+            status["record"].as_str().is_some_and(|path| path.contains("-unbound-")),
             "stale sibling suggestion: {status}"
         );
 
         let opened = fixture.session_start();
         assert!(opened.status.success(), "{}", text(&opened));
         let output = text(&opened);
+        if git {
+            assert!(output.contains("proposed Simple record location"), "{output}");
+            assert!(output.contains("unbound and not selected or stored yet"), "{output}");
+            assert!(!output.contains("the selected record is"), "{output}");
+        }
         assert!(!output.contains("KPOPPER_MODE_OFFER"), "{output}");
         assert!(
             !output.contains("Simple (recommended) or Advanced"),
@@ -252,6 +258,8 @@ fn auto_bound_simple_projects_remain_automatic_and_have_no_board_authority() {
     assert_eq!(status["mode"], "simple");
     assert_eq!(status["mode_selected"], false);
     assert_eq!(status["mode_origin"], "automatic");
+    assert_eq!(status["record_location"], "bound");
+    assert_eq!(status["record_exists"], true);
     assert_eq!(status["standing_permission"], false);
     assert_eq!(status["offer"], false);
     assert!(status["simple_record_suggestion"].is_string());
