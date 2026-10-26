@@ -206,7 +206,7 @@ pub(super) fn roots(
 /// unrelated cwd is intentionally not treated as an owner.
 pub(super) fn generated_owner_root(record: &Path, cwd: &Path) -> crate::Result<Option<PathBuf>> {
     let owner = crate::project_modes::project_for(&[record.to_owned()], cwd)?;
-    if !owner.generated_default(None)? {
+    if !owner.generated_default(None)? || owner.record(None)? != record {
         return Ok(None);
     }
     let current = crate::project_modes::Project::open(cwd)?;
@@ -253,6 +253,11 @@ pub(super) fn text_suffix(path: &Path) -> bool {
         ]
         .contains(&v.to_lowercase().as_str())
     })
+}
+
+pub(super) fn source_text_suffix(path: &Path, generated_owner: bool) -> bool {
+    text_suffix(path)
+        || (generated_owner && path.extension().is_some_and(|extension| extension == "rs"))
 }
 pub(super) fn py_error(e: &std::io::Error, path: &Path) -> String {
     let code = e.raw_os_error().unwrap_or(5);
@@ -426,6 +431,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
         options.state_dir.is_none(),
         "core_profile_option_unsupported: --state-dir",
     )?;
+    let generated_owner = generated_owner_root(record, cwd)?.is_some();
     let roots = roots(record, &options.source_roots, cwd)?;
     let runtime = crate::public_workspace::core_runtime()?;
     let capture =
@@ -522,7 +528,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
                         .into(),
                 );
             }
-            if !text_suffix(&path) {
+            if !source_text_suffix(&path, generated_owner) {
                 return Err("only local UTF-8 text sources are indexed".into());
             }
             read_text(&path)

@@ -573,7 +573,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                 {
                     return Err("outside allowed source roots; pass --source-root for an authorized directory".into());
                 }
-                if !C::text_suffix(&path) {
+                if !C::source_text_suffix(&path, generated_owner) {
                     return Err("only local UTF-8 text sources are indexed".into());
                 }
                 if let Some(bundle) = bundle {

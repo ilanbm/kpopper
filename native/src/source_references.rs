@@ -137,8 +137,16 @@ pub(crate) fn notes(
     inventory: &mut Inventory,
 ) -> Result<Vec<String>> {
     let project = Project::open(workspace)?;
-    let generated_owner = project.generated_default(None)?;
-    if !project.is_git() && !generated_owner {
+    let requested = crate::project_modes::resolved(&record_root.join("GROUNDING.yaml"))?;
+    let owner = crate::project_modes::project_for(std::slice::from_ref(&requested), workspace)?;
+    let same_owner = match (&owner.common, &project.common) {
+        (Some(a), Some(b)) => a == b,
+        (None, None) => owner.root == project.root,
+        _ => false,
+    };
+    let generated_binding = owner.generated_default(None)? && owner.record(None)? == requested;
+    let generated_owner = generated_binding && same_owner;
+    if !project.is_git() && !generated_binding {
         return Ok(vec![]);
     }
     let source_roots = if generated_owner {
@@ -228,6 +236,12 @@ pub(crate) fn notes(
                 continue;
             }
             if local_exists {
+                continue;
+            }
+            if generated_binding && !generated_owner {
+                notes.push(format!(
+                    "{id}: source locator {locator} is unresolved outside the identified owning workspace"
+                ));
                 continue;
             }
             if inside_candidates.is_empty() {
