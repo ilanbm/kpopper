@@ -275,6 +275,12 @@ fn git_has_head_record(root: &Path, name: &str) -> Result<bool> {
             .any(|line| line.trim() == name)
     }))
 }
+fn git_has_head_any_record(root: &Path) -> Result<bool> {
+    Ok(git(root, &["ls-tree", "-r", "--name-only", "HEAD", "--", "GROUNDING.yaml", "PROVENANCE.yaml"], true)?
+        .is_some_and(|raw| String::from_utf8_lossy(&raw).lines().any(|line| {
+            matches!(line.trim(), "GROUNDING.yaml" | "PROVENANCE.yaml")
+        })))
+}
 fn git_has_record_history(root: &Path, names: &[&str]) -> Result<bool> {
     Ok(git(root, &["log", "--all", "-1", "--", names[0], names[1]], true)?
         .is_some_and(|raw| !raw.is_empty()))
@@ -291,6 +297,7 @@ fn rollback_empty_candidate(record: &Path) {
     let Some(parent) = record.parent() else { return };
     let receipt = parent.join(OWNER_RECEIPT);
     let _ = fs::remove_file(receipt);
+    let _ = fs::remove_file(parent.join(".kpopper/owner.lock"));
     let control = parent.join(".kpopper");
     if fs::read_dir(&control).is_ok_and(|mut entries| entries.next().is_none()) {
         let _ = fs::remove_dir(&control);
@@ -313,6 +320,19 @@ pub struct Project {
     pub config_path: PathBuf,
 }
 impl Project {
+    /// True only for the read-only placeholder emitted before a generated
+    /// central record has been allocated.
+    pub fn is_provisional_record_path(record: &Path) -> bool {
+        record.file_name().and_then(|name| name.to_str()) == Some("GROUNDING.yaml")
+            && record
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.rsplit_once("-unbound-"))
+                .is_some_and(|(_, suffix)| {
+                    suffix.len() == 32 && suffix.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+    }
     pub fn open(cwd: &Path) -> Result<Self> {
         let cwd = resolved(cwd)?;
         require(cwd.is_dir(), "project_directory_unavailable")?;
@@ -633,12 +653,28 @@ impl Project {
             private_directory(parent)?;
         }
         let receipt = Self::owner_receipt_path(&record);
+        let owner_dir = receipt
+            .parent()
+            .ok_or_else(|| error("invalid_path"))?;
+        private_directory(owner_dir)?;
+        let owner_lock_path = owner_dir.join("owner.lock");
+        let owner_lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&owner_lock_path)?;
+        FileExt::lock_exclusive(&owner_lock)?;
         if let Some(raw) = bounded(&receipt)? {
             let old: serde_json::Value = serde_json::from_slice(&raw)?;
             require(
                 old["token"].as_str() == Some(token),
                 "generated_owner_receipt_conflict",
             )?;
+            if old["owner_anchor"].as_str() != Some(&expected_anchor.to_string_lossy())
+                && old["owner_anchor"].as_str().is_some_and(|anchor| Path::new(anchor).exists())
+            {
+                return Err(error("generated_binding_copy_requires_recovery: run kpop config --new-project"));
+            }
         } else {
             // A process can die after creating the candidate directory but
             // before the receipt rename. Only an empty candidate (apart from
@@ -649,8 +685,12 @@ impl Project {
                     return Ok(false);
                 }
                 let name = entry.file_name();
-                if name == ".kpopper" && entry.file_type()?.is_dir() {
-                    Ok(fs::read_dir(entry.path())?.next().is_none())
+                if name == "owner.lock" && entry.file_type()?.is_file() {
+                    Ok(true)
+                } else if name == ".kpopper" && entry.file_type()?.is_dir() {
+                    Ok(fs::read_dir(entry.path())?.all(|child| {
+                        child.ok().is_some_and(|child| child.file_name() == "owner.lock")
+                    }))
                 } else {
                     Ok(false)
                 }
@@ -667,7 +707,9 @@ impl Project {
             "owner_path": self.root,
             "config_path": self.config_path,
         });
-        atomic_bytes(&receipt, serde_json::to_string(&value)?.as_bytes())
+        let result = atomic_bytes(&receipt, serde_json::to_string(&value)?.as_bytes());
+        let _ = FileExt::unlock(&owner_lock);
+        result
     }
     fn normalize_generated_move(&self, config: &mut V) -> Result<()> {
         let (identity, token) = self.generated_binding(config)?;
@@ -747,14 +789,20 @@ impl Project {
         if candidate.is_file() || registered {
             return Ok(());
         }
-        if self.is_git()
-            && !self.root.join("GROUNDING.yaml").is_file()
-            && !self.root.join("PROVENANCE.yaml").is_file()
-            && git_has_record_history(&self.root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
+        if self.is_git() && !self.root.join("GROUNDING.yaml").is_file() && !self.root.join("PROVENANCE.yaml").is_file()
+            && git_has_head_any_record(&self.root)?
         {
             return Err(error(
                 "legacy_record_unavailable: restore the configured record before writing",
             ));
+        }
+        if self.is_git()
+            && !git_has_head_any_record(&self.root)?
+            && git_has_record_history(&self.root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
+        {
+            // This branch legitimately predates the record. Keep it legacy
+            // Advanced/local and let the first write create its branch-local record.
+            return Ok(());
         }
         require(
             string_is(&map(&proposal)?["mode"], "simple"),
@@ -1083,7 +1131,9 @@ pub(crate) fn simple_record(paths: &[PathBuf], cwd: &Path) -> Result<Option<Path
         }
         if project.generated_default(Some(&config))? {
             let proposal = project.defaults()?;
-            if text(field(map(&proposal)?, "record")?).is_ok_and(|path| Path::new(path) == first) {
+            if text(field(map(&proposal)?, "record")?).is_ok_and(|path| {
+                Path::new(path) == first && !Project::is_provisional_record_path(Path::new(path))
+            }) {
                 return Ok(Some(record));
             }
         }
@@ -1124,7 +1174,9 @@ impl WriteRoute {
             });
             first == project.root.join("GROUNDING.yaml")
                 || first == project.root.join("PROVENANCE.yaml")
-                || proposal.is_some_and(|path| path == first)
+                || proposal.is_some_and(|path| {
+                    path == first && Project::is_provisional_record_path(&path)
+                })
         };
         require(owned, "mutation_record_not_owned")?;
         let nested_legacy = first.is_file()
