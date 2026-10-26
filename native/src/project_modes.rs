@@ -1161,7 +1161,12 @@ impl WriteRoute {
                     .and_then(|value| text(value).ok())
                     .map(PathBuf::from)
             });
-            first == project.root.join("GROUNDING.yaml")
+            let nested_legacy = first.is_file()
+                && matches!(first.file_name().and_then(|n| n.to_str()), Some("GROUNDING.yaml" | "PROVENANCE.yaml"))
+                && first != project.root.join("GROUNDING.yaml")
+                && first != project.root.join("PROVENANCE.yaml");
+            nested_legacy
+                || first == project.root.join("GROUNDING.yaml")
                 || first == project.root.join("PROVENANCE.yaml")
                 || proposal.is_some_and(|path| {
                     path == first && Project::is_provisional_record_path(&path)
