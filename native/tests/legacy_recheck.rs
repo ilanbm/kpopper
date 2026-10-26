@@ -9,6 +9,7 @@ fn command(root: &Path, args: &[&str], zone: &str) -> Output {
     cmd.current_dir(root)
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
+        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"))
         .env("TZ", zone)
         .args(args);
     if args.first() == Some(&"add") && !root.join("GROUNDING.yaml").exists() {

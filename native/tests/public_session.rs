@@ -68,7 +68,8 @@ impl Fixture {
             .env("TMPDIR", self.private.path())
             .env("KPOPPER_NATIVE_RESOURCES", &self.resources)
             .env("KPOPPER_NATIVE_CACHE", self.private.path().join("cache"))
-            .env("XDG_STATE_HOME", self.private.path().join("state"));
+            .env("XDG_STATE_HOME", self.private.path().join("state"))
+            .env("KPOPPER_PROJECTS_DIR", self.private.path().join("projects"));
         command
     }
     fn run(&self, args: &[&str]) -> Output {

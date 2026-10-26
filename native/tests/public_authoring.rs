@@ -11,6 +11,7 @@ fn run(root: &Path, args: &[&str]) -> Output {
 fn run_unbundled(root: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
+        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"))
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
         .env_remove("KPOPPER_NATIVE_RESOURCES")
@@ -35,7 +36,8 @@ fn command(root: &Path) -> Command {
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
         .env("KPOPPER_NATIVE_RESOURCES", resources)
-        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"));
+        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
+        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"));
     command
 }
 fn success(output: Output) -> String {

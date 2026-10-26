@@ -198,6 +198,7 @@ fn invoke(program: &Path, oracle: Option<&Path>, root: &Path, args: &[&str]) -> 
         .env("KPOPPER_NO_CACHE", "1")
         .env_remove("KPOPPER_READ_MODE")
         .env("XDG_STATE_HOME", root.join("state"))
+        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"))
         .env("KPOPPER_PRIVATE_HOME", private_home(root))
         .env("KPOPPER_NATIVE_CACHE", root.parent().unwrap().join("cache"))
         .output()

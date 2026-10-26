@@ -64,6 +64,7 @@ impl Fixture {
             .arg("--workspace")
             .arg(root)
             .env("XDG_STATE_HOME", self.private.join("state"))
+            .env("KPOPPER_PROJECTS_DIR", self.private.join("projects"))
             .env("TMPDIR", &self.private)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")

@@ -101,6 +101,7 @@ fn unknown_core_session_revision_tells_the_reader_to_reopen() {
     ok(Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
         .args(["add", "p.start", "v=1"])
+        .env("KPOPPER_PROJECTS_DIR", root.join("projects"))
         .env("KPOPPER_NATIVE_RESOURCES", root.join("resources"))
         .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
         .env("XDG_STATE_HOME", root.join("private-state"))

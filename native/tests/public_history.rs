@@ -9,6 +9,7 @@ use std::{
 fn run(root: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_kpop"))
         .current_dir(root)
+        .env("KPOPPER_PROJECTS_DIR", root.join("projects"))
         .args(args)
         .output()
         .unwrap()
@@ -75,6 +76,7 @@ fn public_first_write_and_report_update_preserve_dates_and_recovery_checkpoint()
             .env_remove("KPOPPER_AGENT_SESSION")
             .env_remove("CODEX_THREAD_ID")
             .env("KPOPPER_PRIVATE_HOME", root.join("private"))
+            .env("KPOPPER_PROJECTS_DIR", root.join("projects"))
             .env("XDG_STATE_HOME", root.join("state"))
             .env("KPOPPER_NATIVE_RESOURCES", &resources)
             .env("KPOPPER_NATIVE_CACHE", root.join("native-cache"));
