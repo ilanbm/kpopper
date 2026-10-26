@@ -560,15 +560,64 @@ impl Project {
         });
         atomic_bytes(&receipt, serde_json::to_string(&value)?.as_bytes())
     }
+    fn normalize_generated_move(&self, config: &mut V) -> Result<()> {
+        let (identity, token) = self.generated_binding(config)?;
+        let expected = self.common.as_ref().unwrap_or(&self.root);
+        let old_anchor = PathBuf::from(text(
+            identity
+                .get("owner_anchor")
+                .ok_or_else(|| error("generated_binding_invalid"))?,
+        )?);
+        if old_anchor == *expected {
+            return Ok(());
+        }
+        let record = self.record(Some(config))?;
+        let receipt = Self::owner_receipt_path(&record);
+        if let Some(raw) = bounded(&receipt)? {
+            let value: serde_json::Value = serde_json::from_slice(&raw)?;
+            require(
+                value["token"].as_str() == Some(token),
+                "generated_owner_receipt_mismatch",
+            )?;
+            if let Some(owner) = value["owner_path"].as_str() {
+                let owner = Path::new(owner);
+                let same_git = self.common.is_some()
+                    && value["owner_anchor"]
+                        .as_str()
+                        .is_some_and(|anchor| Path::new(anchor) == self.common.as_ref().unwrap());
+                if owner.exists() && owner != self.root && !same_git {
+                    return Err(error(
+                        "generated_binding_copy_requires_recovery: run kpop config --new-project",
+                    ));
+                }
+            }
+        } else if old_anchor.exists() {
+            return Err(error(
+                "generated_binding_copy_requires_recovery: run kpop config --new-project",
+            ));
+        }
+        let identity = map_mut(
+            map_mut(config)?
+                .get_mut("default_identity")
+                .ok_or_else(|| error("generated_binding_invalid"))?,
+        )?;
+        identity.insert(
+            "owner_anchor".into(),
+            V::Text(expected.to_string_lossy().into_owned()),
+        );
+        atomic_bytes(&self.config_path, &json_line(config)?)
+    }
     pub fn bind_for_mutation(&self) -> Result<()> {
         let guard = self.lock()?;
         if guard.raw.is_some() {
             if self.generated_default(Some(&guard.config))? {
-                let receipt = Self::owner_receipt_path(&self.record(Some(&guard.config))?);
+                let mut next = guard.config.clone();
+                self.normalize_generated_move(&mut next)?;
+                let receipt = Self::owner_receipt_path(&self.record(Some(&next))?);
                 if bounded(&receipt)?.is_some() {
-                    self.verify_generated_owner(&guard.config, true)?;
+                    self.verify_generated_owner(&next, true)?;
                 }
-                return self.finish_generated_binding(&guard.config, false);
+                return self.finish_generated_binding(&next, false);
             }
             return Ok(());
         }
@@ -626,12 +675,14 @@ impl Project {
             self.generated_default(Some(&guard.config))?,
             "generated_binding_required",
         )?;
-        let record = self.record(Some(&guard.config))?;
+        let mut config = guard.config.clone();
+        self.normalize_generated_move(&mut config)?;
+        let record = self.record(Some(&config))?;
         require(
             record.is_absolute() && record.parent().is_some(),
             "generated_binding_invalid",
         )?;
-        let (_, token) = self.generated_binding(&guard.config)?;
+        let (_, token) = self.generated_binding(&config)?;
         require(
             record
                 .parent()
@@ -642,9 +693,9 @@ impl Project {
         )?;
         require(record.is_file(), "generated_binding_record_missing")?;
         if bounded(&Self::owner_receipt_path(&record))?.is_some() {
-            self.verify_generated_owner(&guard.config, true)?;
+            self.verify_generated_owner(&config, true)?;
         }
-        self.finish_generated_binding(&guard.config, true)
+        self.finish_generated_binding(&config, true)
     }
 
     /// Start a fresh generated identity for a genuine copied workspace. The
@@ -1190,6 +1241,30 @@ mod tests {
         fs::copy(&project.config_path, copy.join(".kpopper/project.json")).unwrap();
         let copied = Project::open(&copy).unwrap();
         assert_eq!(copied.generated_source_workspace(&copy).unwrap(), None);
+    }
+
+    #[test]
+    fn moved_directory_binding_updates_owner_anchor_without_copying_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("old");
+        let new = dir.path().join("new");
+        fs::create_dir(&old).unwrap();
+        let project = Project::open(&old).unwrap();
+        project.bind_for_mutation().unwrap();
+        fs::rename(&old, &new).unwrap();
+        let moved = Project::open(&new).unwrap();
+        moved.bind_for_mutation().unwrap();
+        let config = moved.config().unwrap();
+        assert_eq!(
+            text(
+                map(&map(&config).unwrap()["default_identity"])
+                    .unwrap()
+                    .get("owner_anchor")
+                    .unwrap()
+            )
+            .unwrap(),
+            new.to_string_lossy()
+        );
     }
 
     #[test]
