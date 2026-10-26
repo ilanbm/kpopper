@@ -510,12 +510,17 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
         .as_deref()
         .or_else(|| current.get("mode").and_then(J::as_str))
         .unwrap();
+    let selected_record = options.record.as_deref().or_else(|| {
+        (mode == "advanced"
+            && current.get("mode").and_then(J::as_str) == Some("simple"))
+        .then_some("GROUNDING.yaml")
+    }).or_else(|| current.get("record").and_then(J::as_str));
     let mut paths = project
         .worktrees()?
         .into_iter()
         .flat_map(|root| {
             let mut paths = vec![root.join(current["record"].as_str().unwrap())];
-            if let Some(record) = &options.record {
+            if let Some(record) = selected_record {
                 paths.push(root.join(record));
             }
             paths
@@ -526,7 +531,7 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
             project,
             &current,
             mode,
-            options.record.as_deref(),
+            selected_record,
             options.migration_receipt.as_deref(),
             options.rollback,
         )?;
@@ -554,7 +559,7 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
         project,
         &current,
         mode,
-        options.record.as_deref(),
+        selected_record,
         options.migration_receipt.as_deref(),
         options.rollback,
     )?;
