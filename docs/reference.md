@@ -108,9 +108,11 @@ See [the followups guide](../skills/kpopper/FOLLOWUPS.md) for the full input con
 task-system routing, recovery and daily workflow. Scheduling metadata is kept outside
 `GROUNDING.yaml`; scanning and finishing tasks do not rewrite knowledge or `seen`.
 
-`GROUNDING.yaml` lives in the project's working directory, and everything the record keeps
-beside itself - hypotheses, the page's brief, the measurement recipes, the session profile,
-what is built from it - lives in `.kpopper/` next to it. A record born under the earlier name,
+New unconfigured projects bind `GROUNDING.yaml` in private central Simple storage on first
+mutation; legacy and explicit projects retain the existing working-directory or registered
+location. Everything the record keeps beside itself - hypotheses, the page's brief, the
+measurement recipes, the session profile, what is built from it - lives in `.kpopper/` next to
+it. A record born under the earlier name,
 `PROVENANCE.yaml`, is read as it is, with `PROVENANCE.d/`, `PROVENANCE.view.yaml`,
 `PROVENANCE.measure.yaml` and `PROVENANCE.session.json` beside it, and is never created again.
 A record moved by half - renamed with those files left under the earlier names, or a `.kpopper/`

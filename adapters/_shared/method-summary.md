@@ -2,8 +2,9 @@
 
 Start with the user's goal: planning, research, coordination, decisions or software.
 Keep one GROUNDING.yaml entry point (an existing PROVENANCE.yaml is that entry point too,
-read as it is) in the project's working directory for work that
-will be revisited. Git is optional; sources may span documents, conversations, calendars,
+read as it is). New unconfigured projects bind it in private central Simple storage on first
+mutation; legacy and explicit projects retain their existing working-directory or registered
+location. Git is optional; sources may span documents, conversations, calendars,
 task systems, files and earlier sessions. Record three things while working:
 
 Treat that entry file as the reader's implementation boundary. Agents, subagents and hooks use

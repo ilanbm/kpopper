@@ -2,7 +2,14 @@
 
 A model is a dedicated native record plus its history, byte-preservation rules and cited local sources. Keep it separate from any ordinary project record. When adding a model inside an existing repository, first author in a new private directory outside all Git repositories, then copy the complete generated model closure into its selected model directory. A first add from a nested repository path can resolve to the repository's ordinary project record. The global workspace selector alone does not select a separate nested model file.
 
-In a new empty private model directory, place cited source files beneath the model root and make the first kpop add with workspace set to that exact directory. The first add creates its GROUNDING.yaml there. Do not call kpop init for an ordinary model; that command initializes the separate native feasibility store. After the first add, pass the absolute model GROUNDING.yaml path as the final positional selector on every add that supports it.
+In a new empty private non-Git model directory, place cited source files beneath the model root,
+explicitly configure its local Simple owner with `kpop config --mode simple --record
+/ABS/PATH/TO/MODEL/GROUNDING.yaml`. This is local machine policy, so use the model's absolute
+record path, then make the first kpop add with workspace set to that exact directory. This
+preserves a model-local portable closure; the selector alone cannot create the first record.
+Do not fall back to Advanced. Do not call kpop init for an ordinary model; that command
+initializes the separate native feasibility store. After the first add, pass the absolute model
+GROUNDING.yaml path as the final positional selector on every add that supports it.
 
 Record the source itself before claims that cite it. A source entry is a mapping with a name, a local file or URL, a read date, a location and the source text or a bounded quotation. A fact carries v, from and at; use --as-of for its date. Use exact source IDs and locations. A passing kpop check is structural evidence, not proof that the source is true or the model is complete.
 
@@ -19,6 +26,6 @@ Replace the illustrative source text, value and dates with what your source actu
 supports. These forms explain native authoring; the [packaging walkthrough](../../../docs/model-plugins.md#try-the-complete-example)
 starts from an already-authored fixture. Never overlay that fixture's history on your own model.
 
-Set KPOPPER_AGENT_SESSION only from an actual host-provided session identity, when available. Keep native caches and read state outside the portable model closure. Run native check and history capture against the model before packaging. Copy the complete authored model root, including .gitattributes, .kpopper/history.yaml, all required history members and cited source files; exclude transient .kpopper/project.lock and .kpopper/.history-local/.
+Set KPOPPER_AGENT_SESSION only from an actual host-provided session identity, when available. Keep native caches and read state outside the portable model closure. Run native check and history capture against the model before packaging. Copy the complete authored model root, including `.gitattributes`, `.kpopper/history.yaml`, all required history members and cited source files; exclude transient `.kpopper/project.lock`, `.kpopper/.history-local/`, `.kpopper/project.json` and `.kpopper/mode-history/`.
 
 Use examples/model-plugin/model-package.json as a descriptor example. Keep independent expected questions and answers in evaluator-only files; do not copy them into the model package or creator-visible prompt. Build only with the release-qualified prebuilt kpop-model tool and exact complete engine archive. Never substitute a locally compiled binary or a global kpop executable for the declared toolchain.

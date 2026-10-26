@@ -118,8 +118,9 @@ printing a task to a terminal does not perform a mapping.
 Record discovery checks the current directory and its ancestors. It stops at a Git repository
 boundary or, for other workspaces, before leaving the user's home or reaching the filesystem
 root. It never searches sibling folders or connected accounts. A Git-registered external
-record is also supported. A registered path that is empty, broken or unavailable is reported
-as a location problem; it does not invite creation of a replacement record.
+record and a generated central binding are also supported. A registered path that is empty,
+broken or unavailable is reported as a location problem; it does not invite creation of a
+replacement record.
 
 Preferences live under `$XDG_STATE_HOME/kpopper/first-use`, or
 `~/.local/state/kpopper/first-use`. Choices are stored per workspace, shared across worktrees
