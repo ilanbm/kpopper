@@ -467,4 +467,25 @@ mod discovery_tests {
         let result = records(root.path());
         assert!(result.unwrap_err().0.contains("record-bearing sidecar"));
     }
+
+    #[test]
+    fn generated_binding_refuses_primary_added_after_binding() {
+        let root = tempfile::tempdir().unwrap();
+        let central = tempfile::tempdir().unwrap();
+        let token = "00000000-0000-4000-8000-000000000001";
+        let record = central.path().join(format!("repo-{token}/GROUNDING.yaml"));
+        std::fs::create_dir_all(record.parent().unwrap().join(".kpopper")).unwrap();
+        let anchor = root.path().canonicalize().unwrap();
+        let config = serde_json::json!({
+            "version": 1, "mode": "simple", "record": record,
+            "publication": null, "generation": 0,
+            "default_identity": {"version": 1, "token": token,
+                "owner_anchor": anchor, "kind": "directory"}
+        });
+        std::fs::create_dir_all(root.path().join(".kpopper")).unwrap();
+        std::fs::write(root.path().join(".kpopper/project.json"), serde_json::to_vec(&config).unwrap()).unwrap();
+        std::fs::write(root.path().join("GROUNDING.yaml"), b"known: {}\n").unwrap();
+        let result = records(root.path());
+        assert!(result.unwrap_err().0.contains("generated binding conflicts"));
+    }
 }
