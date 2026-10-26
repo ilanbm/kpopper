@@ -229,6 +229,20 @@ fn project_slug(project: &Project) -> String {
     }
     slug(&project.root)
 }
+fn validate_central_store(project: &Project, store: &Path) -> Result<PathBuf> {
+    let store = resolved(store)?;
+    let mut forbidden = project.worktrees()?;
+    if let Some(common) = &project.common {
+        forbidden.push(common.clone());
+    }
+    require(
+        !forbidden
+            .iter()
+            .any(|root| store == *root || store.starts_with(root)),
+        "central_store_inside_workspace: choose a central root outside this checkout",
+    )?;
+    Ok(store)
+}
 
 fn existing_named_record(store: &Path, name: &str) -> Option<PathBuf> {
     let prefix = format!("{name}-");
@@ -382,7 +396,7 @@ impl Project {
             {
                 let anchor = self.common.as_ref().unwrap_or(&self.root);
                 mode = "simple";
-                let record_path = central_root()?.join(format!(
+                let record_path = validate_central_store(self, &central_root()?)?.join(format!(
                     "{}-unbound-{}/GROUNDING.yaml",
                     project_slug(self),
                     provisional_hash(anchor)
@@ -405,7 +419,7 @@ impl Project {
         } else {
             let anchor = self.common.as_ref().unwrap_or(&self.root);
             mode = "simple";
-            let record_path = central_root()?.join(format!(
+            let record_path = validate_central_store(self, &central_root()?)?.join(format!(
                 "{}-unbound-{}/GROUNDING.yaml",
                 project_slug(self),
                 provisional_hash(anchor)
@@ -711,7 +725,7 @@ impl Project {
         }
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
-        let store = central_root()?;
+        let store = validate_central_store(self, &central_root()?)?;
         let name = project_slug(self);
         let previous_record = existing_named_record(&store, &name);
         let final_record = store.join(format!("{name}-{token}/GROUNDING.yaml"));
@@ -800,7 +814,8 @@ impl Project {
         )?;
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
-        let record = central_root()?.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
+        let store = validate_central_store(self, &central_root()?)?;
+        let record = store.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
         let mut next = guard.config.clone();
         let m = map_mut(&mut next)?;
         m.insert(
