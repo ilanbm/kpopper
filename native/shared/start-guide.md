@@ -37,9 +37,12 @@ current owning workspace and retain actual path, digest and branch/revision prov
 duplicate matches are ambiguous, and outside an identified owner they remain unresolved.
 
 On binding, an old same-slug store receives only a recovery hint; it is never read or adopted.
-Copied bindings refuse writes with the exact recovery command. A moved owner can be diagnosed
-read-only and repaired by the next mutation or `kpop config --rebind`; `--new-project` creates
-a fresh empty binding without copying data or history. Known `CLAUDE_CODE_REMOTE=true` requires
+An interrupted binding repairs itself only when the candidate is absent or empty (or already
+has a matching receipt). A completed nonempty candidate whose receipt is lost refuses ordinary
+mutation. Copied bindings refuse writes with the exact recovery command. A moved owner can be
+diagnosed read-only; explicit `kpop config --rebind` validates the move or receipt repair, while
+`--new-project` creates a fresh empty binding without copying data or history. Known
+`CLAUDE_CODE_REMOTE=true` requires
 an explicitly configured absolute durable `KPOPPER_PROJECTS_DIR` before a fresh central
 mutation; otherwise stop with an actionable no-write error. Do not claim universal VM
 detection or fall back to Advanced.

@@ -45,9 +45,11 @@ Captured sources remain beside the central record. Branch/revision provenance is
 and a central record must not be used to guess files from another worktree.
 
 If an old same-slug central record exists, first binding reports a recovery hint without
-reading, adopting or deleting it. A copied binding refuses writes with an exact recovery
-command. If the original owner disappeared, the next mutation can update the owner receipt;
-`kpop config --rebind` validates that move explicitly, while `kpop config --new-project`
+reading, adopting or deleting it. An interrupted binding may repair itself only when the
+candidate is absent or empty (or already has a matching receipt); a completed nonempty
+candidate whose receipt is lost refuses ordinary mutation. A copied binding refuses writes
+with an exact recovery command. When the original owner disappeared, explicit
+`kpop config --rebind` validates the move or receipt repair; `kpop config --new-project`
 creates a fresh empty binding without copying data or history. Existing legacy records,
 including nested records discovered by the normal root walk, win during unconfigured
 discovery. After a generated binding exists, a later competing record or sidecar is an
