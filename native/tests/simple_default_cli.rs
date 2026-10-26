@@ -242,6 +242,7 @@ fn rebind_repairs_a_move_but_new_project_recovers_a_copy_without_touching_origin
     let original_bytes = fs::read(&original_record).unwrap();
     let moved = fixture._temp.path().join("moved");
     fs::rename(&fixture.root, &moved).unwrap();
+    let moved = moved.canonicalize().unwrap();
 
     let repair = fixture.run(&moved, &["config", "--rebind", "--json"]);
     assert!(

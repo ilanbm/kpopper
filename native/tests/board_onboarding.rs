@@ -147,12 +147,16 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
         status["remotes"][0]["repository"],
         "https://github.invalid/fixture/repo.git"
     );
-    assert!(
-        status["illustration"]
-            .as_str()
-            .unwrap()
-            .ends_with("two-working-modes.png")
-    );
+    if let Some(illustration) = status["illustration"].as_str() {
+        assert!(Path::new(illustration).is_file());
+    } else {
+        let illustration = f.cli(&["board", "illustration"]);
+        assert_eq!(illustration["source"], "bundled");
+        assert_eq!(
+            fs::read(illustration["illustration"].as_str().unwrap()).unwrap(),
+            include_bytes!("../shared/board.png")
+        );
+    }
     assert!(!f.root.join(".git/kpopper/project/project.json").exists());
     assert!(f.opener().contains("kpopper Board"));
     f.cli(&["config", "--mode", "advanced", "--json"]);
@@ -566,10 +570,10 @@ fn simple_setup_does_not_hide_a_record_on_an_unopened_branch() {
 #[test]
 fn frozen_unavailable_and_first_write_guidance_are_not_suppressed_by_onboarding() {
     let f = Fixture::new();
+    f.cli(&["config", "--mode", "advanced", "--json"]);
     fs::remove_file(f.root.join("GROUNDING.yaml")).unwrap();
     f.cli(&["board", "shown", "--mode"]);
     assert!(!f.opener().contains("KPOPPER_MODE_OFFER"));
-    f.cli(&["config", "--mode", "advanced", "--json"]);
     assert!(f.opener().contains("first write creates"));
     fs::remove_file(f.root.join(".git/kpopper/project/project.json")).unwrap();
     fs::write(
@@ -605,6 +609,12 @@ fn submodule_has_no_unsafe_default_location_and_runtime_exports_its_own_image() 
             .unwrap(),
     ))
     .unwrap();
+    assert_eq!(status["mode"], "advanced");
+    assert!(status["simple_record_suggestion"].is_null());
+    assert_eq!(
+        Path::new(status["record"].as_str().unwrap()),
+        f.root.join("vendor/lib/GROUNDING.yaml").canonicalize().unwrap()
+    );
     if status["illustration"].is_null() {
         let image = f.cli(&["board", "illustration"]);
         assert_eq!(image["source"], "bundled");

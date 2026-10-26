@@ -34,9 +34,10 @@ fn run(root: &Path, home: &Path, projects: &Path, args: &[&str]) -> Output {
 #[test]
 fn concurrent_first_writers_share_one_binding_and_retain_both_entries() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("repo");
-    let home = temp.path().join("home");
-    let projects = temp.path().join("projects");
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("repo");
+    let home = base.join("home");
+    let projects = base.join("projects");
     fs::create_dir_all(&root).unwrap();
     fs::create_dir_all(&home).unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
