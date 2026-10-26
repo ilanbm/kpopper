@@ -217,6 +217,26 @@ fn project_slug(project: &Project) -> String {
     }
     slug(&project.root)
 }
+
+fn existing_named_record(store: &Path, name: &str) -> Option<PathBuf> {
+    let prefix = format!("{name}-");
+    fs::read_dir(store)
+        .ok()?
+        .take(4096)
+        .filter_map(std::result::Result::ok)
+        .find_map(|entry| {
+            let filename = entry.file_name();
+            let suffix = filename.to_str()?.strip_prefix(&prefix)?;
+            if uuid::Uuid::parse_str(suffix).is_err() || !entry.file_type().ok()?.is_dir() {
+                return None;
+            }
+            let record = entry.path().join("GROUNDING.yaml");
+            fs::symlink_metadata(&record)
+                .ok()
+                .filter(|metadata| metadata.is_file())
+                .map(|_| record)
+        })
+}
 fn git_has_head_record(root: &Path, name: &str) -> Result<bool> {
     Ok(git(
         root,
@@ -679,8 +699,10 @@ impl Project {
         }
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
-        let final_record =
-            central_root()?.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
+        let store = central_root()?;
+        let name = project_slug(self);
+        let previous_record = existing_named_record(&store, &name);
+        let final_record = store.join(format!("{name}-{token}/GROUNDING.yaml"));
         let mut next = guard.config.clone();
         let m = map_mut(&mut next)?;
         m.insert(
@@ -697,7 +719,14 @@ impl Project {
             ]),
         );
         atomic_bytes(&self.config_path, &json_line(&next)?)?;
-        self.finish_generated_binding(&next, false)
+        self.finish_generated_binding(&next, false)?;
+        if let Some(previous) = previous_record {
+            eprintln!(
+                "Existing local record with this readable name: {}. Review its owner before restoring or migrating it.",
+                previous.display()
+            );
+        }
+        Ok(())
     }
 
     /// Validate and repair a generated binding explicitly, including a

@@ -2,6 +2,9 @@
 //!
 //! These cases deliberately exercise the executable rather than private resolver
 //! functions. The fixtures describe generated-owner source-root invariants.
+#[path = "support/simple_runtime.rs"]
+mod simple_runtime;
+
 use serde_json::Value;
 use std::{
     fs,
@@ -35,7 +38,7 @@ impl Fixture {
             home,
             resources: resource_root,
         };
-        resources(&fixture.resources);
+        simple_runtime::resources(&fixture.resources);
         if git {
             fixture.git(&["init", "-q"]);
             fixture.git(&["config", "user.email", "test@example.invalid"]);
@@ -97,38 +100,6 @@ impl Fixture {
         );
         let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
         PathBuf::from(envelope["output"].as_str().unwrap().trim())
-    }
-}
-
-fn resources(root: &Path) {
-    let target = kpop_native::reasoning_runtime::target_name().unwrap();
-    fs::create_dir_all(root.join("reasoning")).unwrap();
-    fs::copy(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../scripts/reasoning/native")
-            .join(format!("{target}.kpopper-runtime")),
-        root.join("reasoning").join(format!("{target}.zip")),
-    )
-    .unwrap();
-    let program = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap())
-                .join(".cache/kpopper/lean")
-                .join(&target)
-                .join(env!("KPOP_ORDINARY_SOURCE_SHA256"))
-        });
-    let destination = root.join("ordinary").join(&target);
-    fs::create_dir_all(&destination).unwrap();
-    for filename in [
-        "build.json",
-        if cfg!(windows) {
-            "epistemic-core.exe"
-        } else {
-            "epistemic-core"
-        },
-    ] {
-        fs::copy(program.join(filename), destination.join(filename)).unwrap();
     }
 }
 
@@ -305,6 +276,8 @@ fn central_record_outside_identified_owner_does_not_guess_project_relative_sourc
         .env("KPOPPER_PRIVATE_HOME", &fixture.home)
         .env("HOME", &fixture.home)
         .env("XDG_STATE_HOME", fixture.home.join("state"))
+        .env("KPOPPER_NATIVE_RESOURCES", &fixture.resources)
+        .env("KPOPPER_NATIVE_CACHE", fixture.home.join("cache"))
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();

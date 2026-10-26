@@ -3,7 +3,10 @@
 //! These deliberately exercise only temporary fixtures and give every process its
 //! own HOME, state directory, and central projects root.
 
-use serde_json::{json, Value};
+#[path = "support/simple_runtime.rs"]
+mod simple_runtime;
+
+use serde_json::{Value, json};
 use std::{
     fs,
     io::Write,
@@ -28,6 +31,7 @@ impl Fixture {
         let projects = temp.path().join("projects");
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&home).unwrap();
+        simple_runtime::resources(&home.join("resources"));
         fs::create_dir_all(&state).unwrap();
         fs::create_dir_all(&projects).unwrap();
         let fixture = Self {
@@ -69,6 +73,8 @@ impl Fixture {
             .env("HOME", &self.home)
             .env("XDG_STATE_HOME", &self.state)
             .env("KPOPPER_PROJECTS_DIR", &self.projects)
+            .env("KPOPPER_NATIVE_RESOURCES", self.home.join("resources"))
+            .env("KPOPPER_NATIVE_CACHE", self.home.join("cache"))
             .env("TMPDIR", self._temp.path())
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -198,10 +204,12 @@ fn previews_and_guidance_disabled_do_not_bind_a_fresh_project() {
         .unwrap();
     assert!(checked.status.success(), "{}", text(&checked));
     assert_eq!(tree(&fixture.projects), before_projects);
-    assert!(!fixture
-        .root
-        .join(".git/kpopper/project/project.json")
-        .exists());
+    assert!(
+        !fixture
+            .root
+            .join(".git/kpopper/project/project.json")
+            .exists()
+    );
 
     let disabled = fixture.cli(&["config", "--guidance", "off"]);
     assert_eq!(disabled["guidance"], false);
@@ -210,10 +218,12 @@ fn previews_and_guidance_disabled_do_not_bind_a_fresh_project() {
     assert_eq!(status["offer"], false);
     assert_eq!(status["standing_permission"], false);
     assert_eq!(tree(&fixture.projects), before_projects);
-    assert!(!fixture
-        .root
-        .join(".git/kpopper/project/project.json")
-        .exists());
+    assert!(
+        !fixture
+            .root
+            .join(".git/kpopper/project/project.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -221,30 +231,20 @@ fn fresh_simple_board_local_does_not_select_advanced_or_create_project_config() 
     let fixture = Fixture::new(true);
     let output = fixture.command(&["board", "local"]).output().unwrap();
     assert!(!output.status.success(), "{}", text(&output));
-    assert!(!fixture
-        .root
-        .join(".git/kpopper/project/project.json")
-        .exists());
+    assert!(
+        !fixture
+            .root
+            .join(".git/kpopper/project/project.json")
+            .exists()
+    );
     assert!(fs::read_dir(&fixture.projects).unwrap().next().is_none());
 }
 
 #[test]
 fn auto_bound_simple_projects_remain_automatic_and_have_no_board_authority() {
     let fixture = Fixture::new(true);
-    let resources = fixture._temp.path().join("resources");
-    fs::create_dir_all(resources.join("reasoning")).unwrap();
-    let target = kpop_native::reasoning_runtime::target_name().unwrap();
-    fs::copy(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../scripts/reasoning/native")
-            .join(format!("{target}.kpopper-runtime")),
-        resources.join("reasoning").join(format!("{target}.zip")),
-    )
-    .unwrap();
     let added = fixture
         .command(&["add", "fixture.value", "v=1"])
-        .env("KPOPPER_NATIVE_RESOURCES", &resources)
-        .env("KPOPPER_NATIVE_CACHE", fixture._temp.path().join("cache"))
         .output()
         .unwrap();
     assert!(added.status.success(), "{}", text(&added));

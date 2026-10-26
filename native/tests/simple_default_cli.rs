@@ -3,6 +3,9 @@
 //! Every invocation gets a private HOME and central root so a failed experiment
 //! cannot touch the operator's state.
 
+#[path = "support/simple_runtime.rs"]
+mod simple_runtime;
+
 use serde_json::Value;
 use std::{
     fs,
@@ -25,6 +28,7 @@ impl Fixture {
         let projects = temp.path().join("projects");
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&home).unwrap();
+        simple_runtime::resources(&home.join("resources"));
         fs::create_dir_all(&projects).unwrap();
         if record {
             fs::write(root.join("GROUNDING.yaml"), "known: {}\n").unwrap();
@@ -56,6 +60,8 @@ impl Fixture {
             .arg(cwd)
             .env("HOME", &self.home)
             .env("KPOPPER_PROJECTS_DIR", &self.projects)
+            .env("KPOPPER_NATIVE_RESOURCES", self.home.join("resources"))
+            .env("KPOPPER_NATIVE_CACHE", self.home.join("cache"))
             .env("XDG_STATE_HOME", self.home.join("state"))
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
