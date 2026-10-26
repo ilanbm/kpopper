@@ -491,7 +491,9 @@ pub fn node_expression(node: &V) -> Result<J> {
     if let Some(rule) = m.get("rule").filter(|v| **v != V::Null) {
         return lower(rule);
     }
-    for key in ["v", "quoted"] {
+    // A judgment can be a premise of another judgment. Its authored verdict is
+    // the referenced value; evaluating that text does not assess its truth.
+    for key in ["v", "quoted", "verdict"] {
         if let Some(v) = m.get(key) {
             return literal(v);
         }

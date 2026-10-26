@@ -5,6 +5,43 @@ use kpop_native::{
     value::TypedValue as V,
 };
 #[test]
+fn judgment_dependencies_compare_verdicts_and_detect_changed_conclusions() {
+    use kpop_native::{reasoning_assessment::dependency_result, reasoning_evaluate::Evaluator};
+    let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scripts/reasoning/native")
+        .join(format!("{}.kpopper-runtime", target_name().unwrap()));
+    let cache = tempfile::tempdir().unwrap();
+    let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
+    let mut fingerprints = Vec::new();
+    for verdict in ["proposal only", "withdraw proposal"] {
+        let doc = V::from_json(&serde_json::json!({
+            "known": {"observation": {"v": 3}},
+            "judgments": {"conclusion": {
+                "verdict": verdict,
+                "rests_on": ["observation"], "seen": {"observation": 3},
+                "blocked_on": "observational"
+            }}
+        }))
+        .unwrap();
+        let snapshot = Snapshot::from_data(&doc, Default::default()).unwrap();
+        let mut engine =
+            Evaluator::new(&snapshot, Some(&runtime), None, Default::default()).unwrap();
+        let reading = dependency_result(&snapshot, "conclusion", &mut engine).unwrap();
+        assert_eq!(reading["status"], "ok");
+        assert_eq!(
+            reading["value"],
+            serde_json::json!({"type": "text", "value": verdict})
+        );
+        assert_eq!(reading["diagnostics"], serde_json::json!([]));
+        fingerprints.push(reading["basis"]["digest"].clone());
+        let missing = dependency_result(&snapshot, "absent", &mut engine).unwrap();
+        assert_ne!(missing["status"], "ok");
+        assert!(missing["value"].is_null());
+    }
+    assert_ne!(fingerprints[0], fingerprints[1]);
+}
+
+#[test]
 fn historical_typed_values_require_a_version_and_evaluators_match_the_snapshot() {
     use kpop_native::{
         reasoning_assessment::{dependency_result, history},

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Core references can read a judgment's authored `verdict` as a premise. This
+  removes incorrect `missing_reference` findings when one judgment depends on
+  another, preserves change detection when the verdict changes, and keeps the
+  conclusion's truth and acceptance separate from reading its text. Existing
+  records require no migration.
+
 ### Changed
 
 - A plugin copy without its own native runtime now uses the machine-wide install of
