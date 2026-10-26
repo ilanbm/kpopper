@@ -1,8 +1,7 @@
 //! Black-box contract tests for the simple-default onboarding surface.
 //!
 //! These deliberately exercise only temporary fixtures and give every process its
-//! own HOME, state directory, and central projects root.  They are expected to be
-//! red until the simple-default onboarding implementation lands.
+//! own HOME, state directory, and central projects root.
 
 use serde_json::{json, Value};
 use std::{
@@ -70,7 +69,7 @@ impl Fixture {
             .env("HOME", &self.home)
             .env("XDG_STATE_HOME", &self.state)
             .env("KPOPPER_PROJECTS_DIR", &self.projects)
-            .env("TMPDIR", &self._temp)
+            .env("TMPDIR", self._temp.path())
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
             .env_remove("KPOPPER_AGENT_SESSION")
