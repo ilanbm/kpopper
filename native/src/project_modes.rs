@@ -1114,9 +1114,7 @@ pub(crate) fn simple_record(paths: &[PathBuf], cwd: &Path) -> Result<Option<Path
         }
         if project.generated_default(Some(&config))? {
             let proposal = project.defaults()?;
-            if text(field(map(&proposal)?, "record")?).is_ok_and(|path| {
-                Path::new(path) == first && !Project::is_provisional_record_path(Path::new(path))
-            }) {
+            if text(field(map(&proposal)?, "record")?).is_ok_and(|path| Path::new(path) == first) {
                 return Ok(Some(record));
             }
         }
