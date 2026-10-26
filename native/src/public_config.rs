@@ -36,6 +36,27 @@ pub struct Options {
     pub migration_receipt: Option<PathBuf>,
     #[arg(long)]
     pub rollback: bool,
+    #[arg(long)]
+    pub rebind: bool,
+    #[arg(long = "new-project")]
+    pub new_project: bool,
+}
+
+fn validate_recovery_options(options: &Options) -> Result<()> {
+    require(
+        !(options.rebind && options.new_project),
+        "--rebind and --new-project are mutually exclusive",
+    )?;
+    if options.rebind || options.new_project {
+        require(!options.check, "recovery options cannot be combined with --check")?;
+        require(options.mode.is_none(), "recovery options cannot be combined with --mode")?;
+        require(options.record.is_none(), "recovery options cannot be combined with --record")?;
+        require(options.guidance.is_none(), "recovery options cannot be combined with --guidance")?;
+        require(options.expected_generation.is_none(), "recovery options cannot be combined with --expected-generation")?;
+        require(options.migration_receipt.is_none(), "recovery options cannot be combined with --migration-receipt")?;
+        require(!options.rollback, "recovery options cannot be combined with --rollback")?;
+    }
+    Ok(())
 }
 
 fn state_dir() -> Result<PathBuf> {
@@ -609,6 +630,7 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
 }
 
 pub fn run(options: &Options, cwd: &Path) -> Result<V> {
+    validate_recovery_options(options)?;
     let state = state_dir()?;
     let mut guidance = guidance_at(&state)?;
     if let Some(value) = &options.guidance
@@ -618,7 +640,14 @@ pub fn run(options: &Options, cwd: &Path) -> Result<V> {
         set_guidance_at(&state, guidance)?;
     }
     let project = Project::open(cwd)?;
-    let (policy, report) = if options.check || options.mode.is_some() || options.record.is_some() {
+    if options.rebind {
+        project.rebind_generated()?;
+    } else if options.new_project {
+        project.new_generated_project()?;
+    }
+    let (policy, report) = if options.rebind || options.new_project {
+        (to_json(&project.config()?)?, None)
+    } else if options.check || options.mode.is_some() || options.record.is_some() {
         configure(options, &project)?
     } else {
         (to_json(&project.config()?)?, None)

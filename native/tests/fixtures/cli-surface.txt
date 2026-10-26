@@ -21,7 +21,7 @@ kpop board inspect --remote= --target=
 kpop board local
 kpop board status
 kpop check --budget= --chars= --from= --history --profile=
-kpop config --check --expected-generation= --guidance= --migration-receipt= --mode= --record= --rollback
+kpop config --check --expected-generation= --guidance= --migration-receipt= --mode= --new-project --rebind --record= --rollback
 kpop consolidate --as-of= --as= --by= --choose= --drop= --dry-run --from= --refute= --resolve --source-revision= --take=
 kpop context --assessment-profile= --depth= --direction= --encoding= --input= --max-nodes= --no-settings --normalized --profile= --project= --revision= --state= --tokens=
 kpop correct --unset= --why=
@@ -37,7 +37,7 @@ kpop experimental annotated-doc build --html= --manifest= --out= --overwrite --r
 kpop experimental annotated-doc guide
 kpop experimental annotated-doc inspect
 kpop experimental annotated-doc refresh --out= --overwrite --root= --sources=
-kpop experimental advanced --check --expected-generation= --guidance= --migration-receipt= --mode= --record= --rollback
+kpop experimental advanced --check --expected-generation= --guidance= --migration-receipt= --mode= --new-project --rebind --record= --rollback
 kpop experimental hub --brief= --checks --open --out= --profile= --tree --verify
 kpop export --depth= --details --direction= --format= --max-nodes= --profile= --record=
 kpop expressions

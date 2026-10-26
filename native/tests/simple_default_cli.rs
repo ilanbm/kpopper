@@ -259,6 +259,26 @@ fn rebind_repairs_a_move_but_new_project_recovers_a_copy_without_touching_origin
     assert_eq!(fs::read(&original_record).unwrap(), original_bytes);
 }
 
+#[test]
+fn recovery_check_conflict_is_rejected_before_mutation() {
+    let fixture = Fixture::new(false, false);
+    let added = fixture.run(&fixture.root, &["add", "p.original", "v=1"]);
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let record = fixture.json(&fixture.root, &["--json", "where"])["output"]
+        .as_str()
+        .unwrap()
+        .trim()
+        .to_owned();
+    let before = fs::read(&record).unwrap();
+    let refused = fixture.run(&fixture.root, &["config", "--rebind", "--check", "--json"]);
+    assert!(!refused.status.success());
+    assert_eq!(fs::read(record).unwrap(), before);
+}
+
 fn copy_tree(source: &Path, destination: &Path) {
     fs::create_dir_all(destination).unwrap();
     for entry in fs::read_dir(source).unwrap() {
