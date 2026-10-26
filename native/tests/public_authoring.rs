@@ -46,6 +46,32 @@ fn command(root: &Path) -> Command {
         .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"));
     command
 }
+
+/// Resolve the record actually selected by the project. Fresh unconfigured
+/// workspaces now keep the record (and its node-history sidecars) in the
+/// central project store; explicitly configured/legacy fixtures remain local.
+fn record_path(root: &Path) -> std::path::PathBuf {
+    let local = root.join("GROUNDING.yaml");
+    if local.exists() {
+        return local;
+    }
+    let output = command(root).args(["--json", "where"]).output().unwrap();
+    assert!(
+        output.status.success(),
+        "where: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
+    Path::new(envelope["output"].as_str().unwrap().trim()).to_path_buf()
+}
+
+fn hypothesis_path(root: &Path, name: &str) -> std::path::PathBuf {
+    record_path(root)
+        .parent()
+        .unwrap()
+        .join(".kpopper/hypotheses")
+        .join(format!("{name}.yaml"))
+}
 fn success(output: Output) -> String {
     assert!(
         output.status.success(),
@@ -98,7 +124,7 @@ fn pending_manifest(root: &Path, revision: &str) -> kpop_native::value::TypedVal
 fn advanced_explicit_add_captures_without_mutating_the_record_and_replays() {
     use kpop_native::value::TypedValue as V;
     let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let args = [
         "add",
         "p.new",
@@ -117,7 +143,7 @@ fn advanced_explicit_add_captures_without_mutating_the_record_and_replays() {
     let first: Value = serde_json::from_str(&success(run_unbundled(&root, &args))).unwrap();
     assert_eq!(first["state"], "captured");
     assert_eq!(first["replay"], false);
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     let revision = first["revision"].as_str().unwrap();
     let manifest = pending_manifest(&root, revision);
     let V::Map(manifest) = manifest else {
@@ -168,6 +194,7 @@ fn advanced_first_explicit_add_enters_pending_without_creating_a_record() {
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
+    success(run_unbundled(&root, &["config", "--mode", "advanced", "--json"]));
     let receipt: Value = serde_json::from_str(&success(run_unbundled(
         &root,
         &[
@@ -251,7 +278,7 @@ fn advanced_history_add_captures_a_version_three_contribution() {
     // An existing core/v1 record keeps the v3 transport; compact records use
     // the v4 semantic closure covered by tests/compact_contributions.rs.
     legacy_history_record(&root);
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let args = [
         "add",
         "p.history",
@@ -267,7 +294,7 @@ fn advanced_history_add_captures_a_version_three_contribution() {
     ];
     let receipt: Value = serde_json::from_str(&success(run(&root, &args))).unwrap();
     assert_eq!(receipt["state"], "captured");
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     let manifest = pending_manifest(&root, receipt["revision"].as_str().unwrap());
     let V::Map(manifest) = manifest else {
         panic!("manifest")
@@ -306,7 +333,7 @@ fn advanced_history_add_captures_a_version_three_contribution() {
         set_manifest["version"],
         V::Integer(kpop_native::value::Integer::new("3").unwrap())
     );
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
 }
 
 #[test]
@@ -326,7 +353,7 @@ fn advanced_local_scopes_are_written_and_project_review_is_refused() {
             "checkout",
         ],
     ));
-    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    let record = fs::read_to_string(record_path(&root)).unwrap();
     assert!(record.contains("kind: feature"));
     assert!(record.contains("environment: checkout"));
     let review = run_unbundled(
@@ -356,7 +383,7 @@ fn advanced_scoped_flow_set_matches_python_field_order() {
         &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
-        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        fs::read_to_string(record_path(&root)).unwrap(),
         "known:\n  p.base:\n    name: \"Package count\"\n    v: 5\n    at: \"line 2\"\n    of: \"2026-09-20\"\n    scope: {kind: feature, environment: x}\n"
     );
 }
@@ -371,7 +398,7 @@ fn advanced_scoped_block_set_quotes_multiword_name_like_python() {
         &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
-        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        fs::read_to_string(record_path(&root)).unwrap(),
         "known:\n  p.base:\n    name: \"Package count\"\n    v: 5\n    of: \"2026-09-20\"\n    scope: {kind: feature, environment: x}\n"
     );
 }
@@ -386,7 +413,7 @@ fn advanced_scoped_block_set_quotes_multiword_at_like_python() {
         &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
-        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        fs::read_to_string(record_path(&root)).unwrap(),
         "known:\n  p.base:\n    v: 5\n    of: \"2026-09-20\"\n    at: \"line 2\"\n    scope: {kind: feature, environment: x}\n"
     );
 }
@@ -397,7 +424,7 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
     let (_temp, root) = advanced_ordinary(
         "known:\n  p.base: {v: 1}\njudgments:\n  d.old:\n    verdict: proceed\n    rests_on: [p.base]\n    reopened_by: new reading\n    seen: {p.base: 1}\n",
     );
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let set: Value = serde_json::from_str(&success(run_unbundled(
         &root,
         &[
@@ -475,7 +502,7 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
         seen["p.base"],
         V::Integer(kpop_native::value::Integer::new("1").unwrap())
     );
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
 }
 
 #[test]
@@ -548,7 +575,7 @@ fn advanced_private_and_code_routes_never_enter_the_pending_queue() {
             commit,
         ],
     ));
-    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    let record = fs::read_to_string(record_path(&root)).unwrap();
     assert!(record.contains("kind: code"));
     assert!(record.contains(commit));
 }
@@ -592,7 +619,7 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     assert!(first.contains("born with its first entry"));
     let before: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     assert_eq!(before["authority"]["profile"], "node-history/v1");
-    let first_view = kpop_native::history_yaml::decode_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
+    let first_view = kpop_native::history_yaml::decode_document(&fs::read(record_path(&root)).unwrap()).unwrap();
     let kpop_native::value::TypedValue::Map(first_view) = first_view else { panic!("record mapping") };
     let kpop_native::value::TypedValue::Map(meta) = &first_view["meta"] else { panic!("record metadata") };
     assert!(meta.contains_key("node_history"));
@@ -703,7 +730,7 @@ fn history_add_names_the_nearest_existing_entries_once_before_the_commit() {
         "nearest existing:\n  p.hours: same from (src.c)\n  one subject: same <id> p.rate folds it in · two: distinct p.rate <id> \"why\" keeps them apart\n"
     );
     assert!(committed.ends_with(" (add p.rate)\n"), "{output}");
-    let record = kpop_native::history_yaml::decode_source_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
+    let record = kpop_native::history_yaml::decode_source_document(&fs::read(record_path(&root)).unwrap()).unwrap();
     let body = record.get("known").unwrap().get("p.rate").unwrap().typed();
     assert_eq!(body.to_json().unwrap(), serde_json::json!({"from":"src.c","v":50}));
 
@@ -853,7 +880,7 @@ fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
             .contains("(review d.named)")
     );
     let record = kpop_native::history_yaml::decode_source_document(
-        &fs::read(root.join("GROUNDING.yaml")).unwrap(),
+        &fs::read(record_path(&root)).unwrap(),
     )
     .unwrap();
     let known = record.get("known").unwrap();
@@ -891,7 +918,7 @@ fn first_named_add_bootstraps_a_proposal_without_accepting_it() {
     ));
     assert!(output.contains("born with its first entry"));
     let record = kpop_native::history_yaml::decode_source_document(
-        &fs::read(root.join("GROUNDING.yaml")).unwrap(),
+        &fs::read(record_path(&root)).unwrap(),
     )
     .unwrap();
     assert!(record.get("known").unwrap().get("p.first").is_none());
@@ -907,9 +934,9 @@ fn named_hypothesis_rejects_invalid_and_physical_authority_names() {
     let invalid = run(&root, &["add", "p.bad", "v=2", "--hypothesis", "../bad"]);
     assert!(!invalid.status.success());
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("invalid_history_hypothesis"));
-    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::create_dir_all(hypothesis_path(&root, "taken").parent().unwrap()).unwrap();
     fs::write(
-        root.join(".kpopper/hypotheses/taken.yaml"),
+        hypothesis_path(&root, "taken"),
         "known: {p.physical: {v: 3}}\n",
     )
     .unwrap();
@@ -928,7 +955,7 @@ fn named_privacy_checks_use_hypothesis_only_dependencies() {
         &root,
         &["add", "p.only", "v=2", "--hypothesis", "alpha"],
     ));
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let output = command(&root)
         .env("KPOPPER_PRIVATE_HOME", private.path())
         .args([
@@ -944,7 +971,7 @@ fn named_privacy_checks_use_hypothesis_only_dependencies() {
         .unwrap();
     let result: Value = serde_json::from_str(&success(output)).unwrap();
     assert_eq!(result["state"], "private draft");
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     assert!(!success(run(&root, &["history", "status"])).contains("d.private"));
 }
 #[test]
@@ -1045,7 +1072,11 @@ fn a_private_first_or_later_add_stays_outside_the_record() {
                     .success()
             );
         }
-        let path = root.join("GROUNDING.yaml");
+        let path = if existing {
+            record_path(&root)
+        } else {
+            root.join("GROUNDING.yaml")
+        };
         let before = fs::read(&path).ok();
         let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(&root)
@@ -1089,7 +1120,7 @@ fn explicit_core_acts_and_proposals_need_only_the_core_program() {
         .unwrap();
         assert_eq!(result["state"], "committed");
     }
-    let record = root.join("GROUNDING.yaml");
+    let record = record_path(&root);
     let mut document = kpop_native::history_yaml::decode_document(&fs::read(&record).unwrap()).unwrap();
     let kpop_native::value::TypedValue::Map(doc) = &mut document else { panic!("record") };
     let kpop_native::value::TypedValue::Map(known) = doc.get_mut("known").unwrap() else { panic!("known") };
@@ -1119,7 +1150,7 @@ fn unresolved_candidate_references_reach_the_authoring_diagnostic() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();
     success(run(&root, &["add", "p.seed", "v=1"]));
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     for (args, expected) in [
         (
             vec!["add", "d.bad", "verdict=stop", "rests_on=[p.missing]"],
@@ -1135,7 +1166,7 @@ fn unresolved_candidate_references_reach_the_authoring_diagnostic() {
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(error.contains(expected), "{error}");
         assert!(!error.contains("missing_contribution_dependency"));
-        assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+        assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     }
 }
 
@@ -1153,7 +1184,7 @@ fn session_receipts_follow_successful_publication_and_cannot_break_a_write() {
             .unwrap()
     };
     success(call(&["add", "p.x", "v=1"]));
-    let record = root.join("GROUNDING.yaml");
+    let record = record_path(&root);
     let key = kpop_native::identity::sha256(record.to_str().unwrap().as_bytes());
     let receipt = sessions
         .path()
@@ -1233,7 +1264,7 @@ fn simple_workspace(source: &str) -> (tempfile::TempDir, std::path::PathBuf) {
 }
 
 fn record(root: &Path) -> String {
-    fs::read_to_string(root.join("GROUNDING.yaml")).unwrap()
+    fs::read_to_string(record_path(&root)).unwrap()
 }
 
 // The expected records in the tests below are what the Python writer leaves
@@ -1312,7 +1343,7 @@ fn a_record_without_snapshots_is_set_reviewed_and_proposed_to_as_the_python_writ
     );
     assert_eq!(record(&root), format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
     assert_eq!(
-        fs::read_to_string(root.join(".kpopper/hypotheses/proposal.yaml")).unwrap(),
+        fs::read_to_string(hypothesis_path(&root, "proposal")).unwrap(),
         "hypothesis: {born: \"2026-01-01\"}\n\njudgments:\n  d.z:\n    verdict: x\n    requires: [api.limit]\n    fails_if: \"api.limit > 50\"\n    seen: {api.limit: 10}\n"
     );
 }
@@ -1377,7 +1408,7 @@ fn a_review_in_a_named_hypothesis_writes_inside_the_braces_of_a_one_line_judgmen
         ] {
             let base = format!("known:\n{indent}api.limit: {{v: 10}}\n");
             let (_temp, root) = simple_workspace(&base);
-            let path = root.join(".kpopper/hypotheses/limit.yaml");
+            let path = hypothesis_path(&root, "limit");
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             let head =
                 format!("hypothesis: {{born: \"2025-12-01\"}}\n\njudgments:\n{indent}d.w: {{");
@@ -1428,7 +1459,7 @@ fn a_snapshot_written_by_hand_is_replaced_in_place_as_the_python_writer_does() {
     success(run_unbundled(&root, &add));
     assert_eq!(record(&root), format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
     assert_eq!(
-        fs::read_to_string(root.join(".kpopper/hypotheses/proposal.yaml")).unwrap(),
+        fs::read_to_string(hypothesis_path(&root, "proposal")).unwrap(),
         format!("hypothesis: {{born: \"2026-01-01\"}}\n\njudgments:\n{judgment}")
     );
 }
@@ -1437,7 +1468,7 @@ fn a_snapshot_written_by_hand_is_replaced_in_place_as_the_python_writer_does() {
 fn custom_field_roles_contribute_what_the_python_writer_captures() {
     use kpop_native::value::{Integer, TypedValue as V};
     let (_temp, root) = advanced_ordinary(&format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let mut args = CUSTOM_JUDGMENT.to_vec();
     args.extend([
         "--shareability",
@@ -1457,7 +1488,7 @@ fn custom_field_roles_contribute_what_the_python_writer_captures() {
         receipt["revision"],
         "ee81ab5b470e7b3ffe1bcb11c73da80058ea74de93492fbdb8557c39dfcf4e93"
     );
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     let V::Map(manifest) = pending_manifest(&root, receipt["revision"].as_str().unwrap()) else {
         panic!("manifest")
     };
@@ -1741,7 +1772,7 @@ fn review_in_a_hypothesis_keeps_a_snapshot_named_reviewed() {
     let trail = format!("{proposal}{NAMED_TRAIL}");
     for (source, open) in [(proposal, String::new()), (trail, stays_open("2026-01-01"))] {
         let (_temp, root) = simple_workspace(&base);
-        let path = root.join(".kpopper/hypotheses/limit.yaml");
+        let path = hypothesis_path(&root, "limit");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, &source).unwrap();
         assert_eq!(
