@@ -146,6 +146,24 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
             }
         }
         if let Some(path) = orphan_member(&current) {
+            let other_orphan = [
+                ".kpopper/hypotheses",
+                ".kpopper/view.yaml",
+                ".kpopper/measure.yaml",
+                ".kpopper/replaced.yaml",
+                ".kpopper/history.yaml",
+                "PROVENANCE.d",
+                "PROVENANCE.view.yaml",
+                "PROVENANCE.measure.yaml",
+                "PROVENANCE.replaced.yaml",
+                "PROVENANCE.history",
+                "PROVENANCE.history-commits",
+                "PROVENANCE.history.yaml",
+                "PROVENANCE.history-cancellations",
+            ]
+            .iter()
+            .map(|name| current.join(name))
+            .any(|candidate| candidate.symlink_metadata().is_ok());
             let legacy_birth = !project.config_path.exists()
                 && project.is_git()
                 && current == project.root
@@ -154,6 +172,7 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
                     &project.root,
                     &["GROUNDING.yaml", "PROVENANCE.yaml"],
                 )?
+                && !other_orphan
                 && empty_legacy_history_residue(&path);
             if !legacy_birth {
                 return Err(unavailable(
