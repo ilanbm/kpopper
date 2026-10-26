@@ -170,7 +170,8 @@ structure and declared conditions, not source truth or completeness.
 
 Copy the complete authored model into its chosen source directory: `GROUNDING.yaml`,
 `.gitattributes`, native history and all cited local files. Exclude transient
-`.kpopper/project.lock`, `.kpopper/.history-local/`, `.kpopper/project.json`, `.kpopper/owner.json` and
+`.kpopper/project.lock`, `.kpopper/.history-local/`, `.kpopper/project.json`,
+`.kpopper/owner.json` and
 `.kpopper/mode-history/`. Do not copy the example's model
 or history over your own record. Use its descriptor and skill only as format examples:
 set your own ID/version, model path, skill path, product-file allowlist and smoke entry.

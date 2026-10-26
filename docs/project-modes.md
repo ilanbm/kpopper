@@ -32,15 +32,18 @@ non-empty `KPOPPER_PROJECTS_DIR` value when configured, otherwise `~/.kpopper/pr
 UUID is generated only for the first mutation. The root and HOME are validated lazily only
 when a fresh central location is needed: invalid values do not break legacy records or an
 already-bound explicit path. A read-only preview may show a clearly provisional
-`<slug>-unbound-<canonical-anchor-path-hash>/GROUNDING.yaml`, but that path is never created
-or adopted as a record. Existing records and explicit configurations retain their location.
+`<slug>-unbound-<canonical-anchor-path-hash>/GROUNDING.yaml`; it is never created, selected,
+stored or adopted as a permanent record. Existing records and explicit configurations retain
+their location.
 
 Central Simple is local only: it provides no remote/team synchronization and never grants
 Board permission. For a non-Git project, an unmarked cwd is the initial owner root; the first
 write creates its owner marker, and descendant invocations then resolve that marker as the
-owner boundary. The central record parent is never promoted into a wider project. Relative project
-sources resolve against the current owning workspace; duplicate matches are an explicit
-ambiguity, and outside an identified owner they remain unresolved rather than guessed.
+owner boundary. The central record parent is never promoted into a wider project. Generated
+relative project sources resolve only against the central record parent and the validated
+current owning workspace; `--source-root` authorizes reads but never rebases a relative locator.
+Duplicate matches are an explicit ambiguity, and outside an identified owner they remain
+unresolved rather than guessed.
 Captured sources remain beside the central record. Branch/revision provenance is retained,
 and a central record must not be used to guess files from another worktree.
 
@@ -50,10 +53,22 @@ candidate is absent or empty (or already has a matching receipt); a completed no
 candidate whose receipt is lost refuses ordinary mutation. A copied binding refuses writes
 with an exact recovery command. When the original owner disappeared, explicit
 `kpop config --rebind` validates the move or receipt repair; `kpop config --new-project`
-creates a fresh empty binding without copying data or history. Existing legacy records,
-including nested records discovered by the normal root walk, win during unconfigured
-discovery. After a generated binding exists, a later competing record or sidecar is an
-ambiguity refusal; it must never silently switch ownership or swallow that record.
+creates a fresh empty binding without copying data or history. Failed allocation must leave no
+unusable published binding; a proven no-data failed binding may be reset, while data-bearing
+records are never deleted or overwritten. Existing legacy records—including independent nested
+records discovered by the normal root walk—remain selectable, readable and writable before and
+after a generated root binding. Only a new root record or competing record-bearing state at the
+generated root is refused; nested records are not swallowed. A known legacy Git record found in
+history but absent on the current branch keeps its branch-local Advanced behavior; a record
+tracked at the current HEAD but missing physically is unavailable and must be restored or
+refused. No legacy record is converted automatically.
+
+Ownership is anchored to the Git common directory (or the non-Git owner anchor) plus its
+matching binding token; the last writer's worktree path is diagnostic, not authority. On a
+known `CLAUDE_CODE_REMOTE=true` host, every fresh allocation or no-data reset—including
+`--new-project`—requires an explicit durable absolute `KPOPPER_PROJECTS_DIR`; there is no
+universal remote/VM detection claim and no Advanced fallback. Existing valid stores remain
+usable.
 
 ## Choose Advanced explicitly, then connect the Board
 
@@ -64,7 +79,9 @@ an [open design question](advanced-mode-merging.md).
 
 Advanced is an explicit experimental feature. Use `kpop experimental advanced` to enter it
 through the validated configuration transition path; `config --mode advanced` remains a
-compatibility alias with a concise Experimental notice. It keeps the record with each
+compatibility alias with a concise Experimental notice. The bounded command accepts only its
+supported record/check/generation/migration/rollback options and global JSON; unrelated
+`--mode`, recovery and guidance flags are rejected before changes. It keeps the record with each
 branch and includes the optional kpopper Board for shared findings. `kpop board` reports
 publication separately; central Simple never enables it. Mode transitions never silently
 copy, migrate or remove records, and generated identity fields are cleared only by an

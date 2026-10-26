@@ -266,9 +266,10 @@ migration. [New records also preserve immutable history](#how-it-works).
 
 New unconfigured projects use one private central `GROUNDING.yaml` record automatically on
 the first actual mutation. Its absolute location is bound under `KPOPPER_PROJECTS_DIR`, or
-`~/.kpopper/projects` when no override is configured; a read-only preview never creates the
-provisional path. Existing records keep their location. The central store is local only: it
-does not synchronize clones or teams and does not grant Board permission.
+`~/.kpopper/projects` when no override is configured; a read-only preview never creates,
+selects, stores or adopts its provisional path. Existing records keep their location. The
+central store is local only: it does not synchronize clones or teams and does not grant Board
+permission.
 
 ```mermaid
 flowchart LR
@@ -342,10 +343,14 @@ whose sharing permission is unclear stay in a structured private draft.
 
 New projects use `<central>/<slug>-<uuid>/GROUNDING.yaml`, with `KPOPPER_PROJECTS_DIR` taking
 precedence over `~/.kpopper/projects`; read-only discovery may show only a provisional unbound
-path. Existing records and explicit configurations keep their current location and behavior.
+path, never a selected or stored record. Existing records and explicit configurations keep
+their current location and behavior.
 Advanced is an explicit Experimental feature (`kpop experimental advanced`; the old
 `config --mode advanced` spelling remains a compatibility alias). Central storage is local,
 does not synchronize clones or teams, and never grants Board permission.
+On a known `CLAUDE_CODE_REMOTE=true` host, fresh allocation or no-data reset—including
+`--new-project`—requires an explicit durable absolute `KPOPPER_PROJECTS_DIR`; no Advanced
+fallback is implied.
 
 See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
 and the publication lifecycle, and [consolidation](skills/consolidate/SKILL.md) for the

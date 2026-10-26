@@ -316,7 +316,8 @@ An implicit first `add` creates a compact node-history record, in both Simple an
 Advanced projects. New unconfigured projects use private central Simple automatically;
 there is no storage choice prompt or ordinary mode announcement. The first mutation binds
 `<central>/<slug>-<uuid>/GROUNDING.yaml`, using absolute `KPOPPER_PROJECTS_DIR` before
-`~/.kpopper/projects`; read-only discovery never creates that path. A reserved identity without
+`~/.kpopper/projects`; read-only discovery never creates, selects or stores its provisional
+path. A reserved identity without
 a first committed entry is not an empty published record; an interrupted creation
 can be retried or recovered through the same guarded publication path.
 Core authoring needs the selected core runtime archive; it does not
