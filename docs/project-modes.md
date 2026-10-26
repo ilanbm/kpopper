@@ -36,8 +36,9 @@ already-bound explicit path. A read-only preview may show a clearly provisional
 or adopted as a record. Existing records and explicit configurations retain their location.
 
 Central Simple is local only: it provides no remote/team synchronization and never grants
-Board permission. For a non-Git project, the discovered root is the owner boundary; do not
-promote an arbitrary cwd or the central record parent into a wider project. Relative project
+Board permission. For a non-Git project, an unmarked cwd is the initial owner root; the first
+write creates its owner marker, and descendant invocations then resolve that marker as the
+owner boundary. The central record parent is never promoted into a wider project. Relative project
 sources resolve against the current owning workspace; duplicate matches are an explicit
 ambiguity, and outside an identified owner they remain unresolved rather than guessed.
 Captured sources remain beside the central record. Branch/revision provenance is retained,

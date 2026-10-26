@@ -264,9 +264,6 @@ migration. [New records also preserve immutable history](#how-it-works).
 
 ### Simple by default
 
-The difference is **whether sessions share one project context or work against different
-versions of the code**. Both modes support several sessions and competing hypotheses.
-
 New unconfigured projects use one private central `GROUNDING.yaml` record automatically on
 the first actual mutation. Its absolute location is bound under `KPOPPER_PROJECTS_DIR`, or
 `~/.kpopper/projects` when no override is configured; a read-only preview never creates the
