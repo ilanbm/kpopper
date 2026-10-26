@@ -192,7 +192,7 @@ pub(super) fn roots(
 ) -> crate::Result<SourceRoots> {
     let record_parent = record.parent().unwrap().to_owned();
     let owner_root = generated_owner_root(record, cwd)?;
-    let generated = owner_root.is_some();
+    let generated = generated_record(record, cwd)?;
     let requested = requested
         .iter()
         .map(|p| expanded(cwd, p))
@@ -230,6 +230,11 @@ pub(super) fn generated_owner_root(record: &Path, cwd: &Path) -> crate::Result<O
         return Ok(None);
     }
     owner.generated_source_workspace(cwd)
+}
+
+pub(super) fn generated_record(record: &Path, cwd: &Path) -> crate::Result<bool> {
+    let owner = crate::project_modes::project_for(&[record.to_owned()], cwd)?;
+    Ok(owner.generated_default(None)? && owner.record(None)? == record)
 }
 
 pub(super) fn source_path(
@@ -544,6 +549,9 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
             }
             if !source_text_suffix(&path, generated_owner) {
                 return Err("only local UTF-8 text sources are indexed".into());
+            }
+            if !path.is_file() {
+                return Err("local source file is unavailable".into());
             }
             read_text(&path)
         })();

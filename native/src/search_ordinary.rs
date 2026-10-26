@@ -212,6 +212,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
     } else {
         selected.to_owned()
     };
+    let generated = C::generated_record(&record, cwd)?;
     let generated_owner = C::generated_owner_root(&record, cwd)?.is_some();
     let roots = C::roots(&record, &options.source_roots, cwd)?;
     let runtime = crate::public_workspace::runtime()?;
@@ -547,8 +548,8 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                     PathBuf::from(filename)
                 }
             } else {
-                if generated_owner {
-                    C::source_path(filename, base, &roots.resolution)?
+                if generated {
+                    C::source_path(filename, record.parent().unwrap(), &roots.resolution)?
                 } else {
                     C::expanded(base, Path::new(filename))?
                 }

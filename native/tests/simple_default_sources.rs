@@ -334,6 +334,8 @@ fn central_record_outside_identified_owner_does_not_guess_project_relative_sourc
             "search",
             "--record",
             record.to_str().unwrap(),
+            "--source-root",
+            unrelated.to_str().unwrap(),
             "wrong",
         ])
         .env("KPOPPER_PROJECTS_DIR", &fixture.projects)
@@ -377,6 +379,8 @@ fn copied_generated_config_has_no_project_source_context_for_read() {
             "search",
             "--record",
             record.to_str().unwrap(),
+            "--source-root",
+            copy.to_str().unwrap(),
             "copied",
         ])
         .env("KPOPPER_PROJECTS_DIR", &fixture.projects)
@@ -391,6 +395,11 @@ fn copied_generated_config_has_no_project_source_context_for_read() {
     assert!(
         !text.contains("copied owner text"),
         "copied config supplied source context: {text}"
+    );
+    let text = text + &String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
+    assert!(
+        text.contains("unavailable") || text.contains("unresolved") || text.contains("owner"),
+        "copied config missing-source diagnostic absent: {text}"
     );
 }
 
