@@ -406,10 +406,17 @@ fn transition_report(
         if old_hashes.is_empty() && project.is_git() && targets.iter().any(|target| !target.exists()) {
             // An unopened branch (or prior recorded history) is not an empty
             // project. Include custom configured paths and both legacy names.
-            let (available, history) = crate::pending_control::git(&project.root, &[
-                "log", "--all", "--format=%H", "-1", "--",
-                current["record"].as_str().unwrap(), "GROUNDING.yaml", "PROVENANCE.yaml",
-            ])?;
+            let mut history_paths = vec!["GROUNDING.yaml".to_owned(), "PROVENANCE.yaml".to_owned()];
+            let current_path = resolved(&project.root.join(current["record"].as_str().unwrap()))?;
+            if let Ok(relative) = current_path.strip_prefix(&project.root)
+                && let Some(relative) = relative.to_str()
+                && !history_paths.iter().any(|path| path == relative)
+            {
+                history_paths.push(relative.to_owned());
+            }
+            let mut git_args = vec!["log", "--all", "--format=%H", "-1", "--"];
+            git_args.extend(history_paths.iter().map(String::as_str));
+            let (available, history) = crate::pending_control::git(&project.root, &git_args)?;
             require(available, "record history could not be inspected before changing mode")?;
             if !history.is_empty() {
                 blockers.push("record history exists outside the current worktrees; reconcile it before selecting an empty destination".into());

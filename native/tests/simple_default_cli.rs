@@ -72,8 +72,9 @@ impl Fixture {
         let output = self.run(cwd, args);
         assert!(
             output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
+            "stderr: {}\nstdout: {}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
         );
         serde_json::from_slice(&output.stdout).unwrap()
     }
@@ -135,8 +136,9 @@ fn explicit_local_simple_binding_stays_portable_after_relocation() {
     let added = fixture.run(&fixture.root, &["add", "p.local", "v=1"]);
     assert!(
         added.status.success(),
-        "{}",
-        String::from_utf8_lossy(&added.stderr)
+        "stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&added.stderr),
+        String::from_utf8_lossy(&added.stdout)
     );
     let local_record = fixture.root.join("GROUNDING.yaml");
     assert!(local_record.is_file());
@@ -184,7 +186,8 @@ fn advanced_requires_a_git_in_tree_workspace() {
     let fixture = Fixture::new(false, false);
     let output = fixture.run(&fixture.root, &["experimental", "advanced", "--json"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Git"));
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(envelope["error"].as_str().unwrap().contains("Git"));
 }
 
 #[test]
@@ -246,7 +249,21 @@ fn rebind_repairs_a_move_but_new_project_recovers_a_copy_without_touching_origin
         "{}",
         String::from_utf8_lossy(&repair.stderr)
     );
-    assert!(String::from_utf8_lossy(&repair.stdout).contains("rebind"));
+    let repaired: Value = serde_json::from_slice(&repair.stdout).unwrap();
+    assert_eq!(
+        repaired["project"]["record"].as_str(),
+        Some(original_record.to_str().unwrap())
+    );
+    assert_eq!(fs::read(&original_record).unwrap(), original_bytes);
+    let receipt = original_record
+        .parent()
+        .unwrap()
+        .join(".kpopper/owner.json");
+    let receipt: Value = serde_json::from_slice(&fs::read(receipt).unwrap()).unwrap();
+    assert_eq!(
+        receipt["owner_path"].as_str(),
+        Some(moved.to_str().unwrap())
+    );
 
     let copy = fixture._temp.path().join("copy");
     copy_tree(&moved, &copy);
