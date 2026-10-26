@@ -9,6 +9,7 @@ use crate::{
     value::TypedValue as V,
 };
 use fs2::FileExt;
+use serde_json::json;
 use std::{
     fs::{self, File, OpenOptions},
     io::Read,
@@ -17,6 +18,7 @@ use std::{
     time::Duration,
 };
 const CONFIG_LIMIT: usize = 1024 * 1024;
+const OWNER_RECEIPT: &str = ".kpopper/owner.json";
 fn git(root: &Path, args: &[&str], missing: bool) -> Result<Option<Vec<u8>>> {
     let mut command = Command::new("git");
     command
@@ -114,6 +116,25 @@ fn bounded(path: &Path) -> Result<Option<Vec<u8>>> {
     require(raw.len() <= CONFIG_LIMIT, "project_config_limit")?;
     Ok(Some(raw))
 }
+fn private_directory(path: &Path) -> Result<()> {
+    #[cfg(unix)] { use std::os::unix::fs::{DirBuilderExt, PermissionsExt}; let mut b=fs::DirBuilder::new(); b.recursive(true).mode(0o700); b.create(path)?; fs::set_permissions(path, fs::Permissions::from_mode(0o700))?; }
+    #[cfg(not(unix))] fs::create_dir_all(path)?;
+    Ok(())
+}
+fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent=path.parent().ok_or_else(|| error("invalid_path"))?; private_directory(parent)?;
+    let temporary=parent.join(format!(".{}.{}.tmp",path.file_name().and_then(|v|v.to_str()).unwrap_or("kpopper"),std::process::id()));
+    let mut o=OpenOptions::new(); o.write(true).create_new(true); #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; o.mode(0o600); }
+    let result=(|| -> Result<()> { let mut f=o.open(&temporary)?; std::io::Write::write_all(&mut f,bytes)?; f.sync_all()?; drop(f); fs::rename(&temporary,path)?; File::open(parent)?.sync_all()?; Ok(()) })();
+    if result.is_err(){let _=fs::remove_file(&temporary);} result
+}
+fn central_root() -> Result<PathBuf> {
+    if let Some(raw)=std::env::var_os("KPOPPER_PROJECTS_DIR") { let p=PathBuf::from(raw); require(p.is_absolute()&&!p.as_os_str().is_empty(),"KPOPPER_PROJECTS_DIR must be an absolute non-empty path")?; return Ok(resolved(&p)?); }
+    let home=std::env::var_os("HOME").or_else(||std::env::var_os("USERPROFILE")).ok_or_else(||error("HOME is unavailable; set absolute KPOPPER_PROJECTS_DIR"))?; let home=PathBuf::from(home); require(home.is_absolute(),"HOME must be an absolute non-empty path")?; resolved(&home.join(".kpopper/projects"))
+}
+fn slug(path:&Path)->String { let raw=path.file_name().and_then(|v|v.to_str()).unwrap_or("project").to_ascii_lowercase(); let mut out=String::new(); for c in raw.bytes(){if c.is_ascii_alphanumeric(){out.push(c as char)}else if !out.ends_with('-'){out.push('-')}} let out=out.trim_matches('-').chars().take(48).collect::<String>(); if out.is_empty(){"project".into()}else{out} }
+fn provisional_hash(anchor:&Path)->String { crate::identity::sha256(anchor.to_string_lossy().as_bytes())[..32].into() }
+fn json_line(value:&V)->Result<Vec<u8>> { let mut b=serde_json::to_vec(&value.to_json()?)?; b.push(b'\n'); Ok(b) }
 #[derive(Clone, Debug)]
 pub struct Project {
     pub cwd: PathBuf,
@@ -193,7 +214,7 @@ impl Project {
             .find(|name| roots.iter().any(|r| r.join(name).exists()))
             .unwrap_or("GROUNDING.yaml");
         let mut record = name.to_owned();
-        let mut mode = if self.is_git() { "advanced" } else { "simple" };
+        let mut mode = "simple";
         if let Some(common) = &self.common {
             if let Some(raw) = bounded(&common.join("kpopper-record"))? {
                 record = string(raw)?.trim().into();
@@ -216,11 +237,15 @@ impl Project {
                     portable_path(&record)?;
                 }
             }
-        } else {
+        } else if roots.iter().any(|r| r.join(name).exists()) {
             record = resolved(&self.root.join(record))?
                 .to_str()
                 .ok_or_else(|| error("nonportable_project_path"))?
                 .into();
+        } else {
+            let anchor = self.common.as_ref().unwrap_or(&self.root);
+            let record_path = central_root()?.join(format!("{}-unbound-{}/GROUNDING.yaml", slug(&self.root), provisional_hash(anchor)));
+            record = record_path.to_str().ok_or_else(|| error("nonportable_project_path"))?.into();
         }
         Ok(obj([
             ("version", n("1")),
@@ -253,6 +278,15 @@ impl Project {
             require(self.is_git(), "advanced_requires_git")?;
             portable_path(text(&m["record"])?)?;
         }
+        if m.contains_key("default_identity") {
+            require(string_is(&m["mode"], "simple"), "generated_binding_invalid")?;
+            let i=map(&m["default_identity"])?;
+            require(is_int(i.get("version").ok_or_else(||error("generated_binding_invalid"))?,"1"),"generated_binding_invalid")?;
+            require(uuid::Uuid::parse_str(text(i.get("token").ok_or_else(||error("generated_binding_invalid"))?)?).is_ok(),"generated_binding_invalid")?;
+            require(Path::new(text(i.get("owner_anchor").ok_or_else(||error("generated_binding_invalid"))?)?).is_absolute(),"generated_binding_invalid")?;
+            require(matches!(i.get("kind"),Some(v) if string_is(v,"git")||string_is(v,"directory")),"generated_binding_invalid")?;
+            require(Path::new(text(&m["record"])?).is_absolute(),"generated_binding_invalid")?;
+        }
         if let Some(publication) = m.get("publication").filter(|v| **v != V::Null) {
             let p = schema(
                 publication,
@@ -278,6 +312,12 @@ impl Project {
     pub fn config(&self) -> Result<V> {
         self.decode_config(bounded(&self.config_path)?.as_deref())
     }
+    pub fn generated_default(&self, config: Option<&V>) -> Result<bool> { let c=config.cloned().unwrap_or(self.config()?); let m=map(&c)?; Ok(string_is(m.get("mode").unwrap_or(&V::Null),"simple")&&m.contains_key("default_identity")) }
+    fn owner_receipt_path(record:&Path)->PathBuf { record.parent().unwrap_or(record).join(OWNER_RECEIPT) }
+    fn generated_binding(&self, config:&V)->Result<(&Map,&str)> { let i=map(map(config)?.get("default_identity").ok_or_else(||error("generated_binding_missing"))?)?; require(is_int(i.get("version").ok_or_else(||error("generated_binding_invalid"))?,"1"),"generated_binding_invalid")?; let token=text(i.get("token").ok_or_else(||error("generated_binding_invalid"))?)?; require(uuid::Uuid::parse_str(token).is_ok(),"generated_binding_invalid")?; Ok((i,token)) }
+    fn verify_generated_owner(&self, config:&V, mutation:bool)->Result<()> { let (_,token)=self.generated_binding(config)?; let receipt=Self::owner_receipt_path(&self.record(Some(config))?); let raw=bounded(&receipt)?.ok_or_else(||error("generated_owner_receipt_missing"))?; let v:serde_json::Value=serde_json::from_slice(&raw)?; require(v["token"].as_str()==Some(token),"generated_owner_receipt_mismatch")?; if let Some(p)=v["owner_path"].as_str().map(PathBuf::from){if p!=self.root&&p.exists(){return Err(error(if mutation{"generated_binding_copy_requires_recovery"}else{"generated_binding_copy_conflict"}))}} Ok(()) }
+    fn finish_generated_binding(&self, config:&V)->Result<()> { let (_,token)=self.generated_binding(config)?; let record=self.record(Some(config))?; let parent=record.parent().ok_or_else(||error("invalid_path"))?; if fs::symlink_metadata(parent).is_ok()&&!parent.is_dir(){return Err(error("central_record_parent_unavailable"))} private_directory(parent)?; let receipt=Self::owner_receipt_path(&record); let v=json!({"version":1,"token":token,"record":record,"owner_anchor":self.common.as_ref().unwrap_or(&self.root),"owner_path":self.root,"config_path":self.config_path}); if let Some(raw)=bounded(&receipt)?{let old:serde_json::Value=serde_json::from_slice(&raw)?; require(old["token"].as_str()==Some(token),"generated_owner_receipt_conflict")?;} atomic_bytes(&receipt,serde_json::to_string(&v)?.as_bytes())?; Ok(()) }
+    pub fn bind_for_mutation(&self)->Result<()> { let guard=self.lock()?; if guard.raw.is_some(){if self.generated_default(Some(&guard.config))?{self.verify_generated_owner(&guard.config,true)?; let c=guard.config.clone(); drop(guard); return self.finish_generated_binding(&c);} return Ok(());} let proposal=self.defaults()?; require(self.record(Some(&guard.config))?==PathBuf::from(text(field(map(&proposal)?,"record")?)?),"default_binding_changed")?; let token=uuid::Uuid::new_v4().to_string(); let anchor=self.common.as_ref().unwrap_or(&self.root); let final_record=central_root()?.join(format!("{}-{token}/GROUNDING.yaml",slug(&self.root))); let mut next=guard.config.clone(); let m=map_mut(&mut next)?; m.insert("record".into(),V::Text(final_record.to_string_lossy().into_owned())); m.insert("default_identity".into(),obj([("version",n("1")),("token",s(&token)),("owner_anchor",s(&anchor.to_string_lossy())),("kind",s(if self.is_git(){"git"}else{"directory"}))])); atomic_bytes(&self.config_path,&json_line(&next)?)?; drop(guard); self.finish_generated_binding(&next) }
     pub fn record(&self, config: Option<&V>) -> Result<PathBuf> {
         let config = if let Some(v) = config {
             v.clone()
@@ -361,15 +401,14 @@ impl Drop for PolicyGuard {
 pub fn project_for(paths: &[PathBuf], cwd: &Path) -> Result<Project> {
     let first = resolved(paths.first().ok_or_else(|| error("missing_record_path"))?)?;
     let parent = first.parent().ok_or_else(|| error("invalid_path"))?;
-    let project = Project::open(parent)?;
-    if project.is_git() {
-        return Ok(project);
-    }
     let current = Project::open(cwd)?;
-    if current.is_git() && current.config_path.exists() && current.record(None)? == first {
+    if current.config_path.exists() && current.record(None)? == first {
+        Ok(current)
+    } else if !current.config_path.exists() && current.defaults().is_ok_and(|v| text(field(map(&v).unwrap(),"record")).is_ok_and(|p|Path::new(p)==first)) {
         Ok(current)
     } else {
-        Ok(project)
+        if let Some(raw)=bounded(&Project::owner_receipt_path(&first))? { let v:serde_json::Value=serde_json::from_slice(&raw)?; if let (Some(owner),Some(config))=(v["owner_path"].as_str(),v["config_path"].as_str()){let p=Project::open(Path::new(owner))?; if p.config_path==Path::new(config)&&p.record(None)?==first{return Ok(p)}} }
+        Ok(Project::open(parent)?)
     }
 }
 pub fn write_paths(paths: &[PathBuf], cwd: &Path) -> Result<Vec<PathBuf>> {
@@ -410,6 +449,7 @@ pub struct WriteRoute {
     cwd: PathBuf,
 }
 impl WriteRoute {
+    pub fn capture_mutation(paths:&[PathBuf], cwd:&Path)->Result<Self> { project_for(paths,cwd)?.bind_for_mutation()?; Self::capture(paths,cwd) }
     pub fn capture(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
         let project = project_for(paths, cwd)?;
         let policy = project.lock()?;

@@ -1233,7 +1233,7 @@ fn run_bound_as(
     } else {
         crate::public_workspace::records(cwd)?
     };
-    let route = WriteRoute::capture(&original, cwd)?;
+    let route = WriteRoute::capture_mutation(&original, cwd)?;
     crate::require(
         route.paths().len() == 1,
         "ingestion requires one record path",

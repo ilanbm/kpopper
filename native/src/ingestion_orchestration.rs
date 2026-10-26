@@ -324,7 +324,11 @@ pub fn capture(
     start: bool,
 ) -> Result<J> {
     let envelope = validate_envelope(raw)?;
-    let (record, policy, project_root) = selected_record(record, cwd)?;
+    let (record, _policy, _project_root) = selected_record(record, cwd)?;
+    let owner = crate::project_modes::project_for(std::slice::from_ref(&record), cwd)?;
+    owner.bind_for_mutation()?;
+    let bound_record = owner.record(None)?;
+    let (record, policy, project_root) = selected_record(Some(&bound_record), cwd)?;
     let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let record = layout.record.clone();
     let (target_snapshot, capture_issue) =
