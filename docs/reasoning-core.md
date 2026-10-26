@@ -80,6 +80,10 @@ options and preserve unknown/error independently from false. The core session ha
 project identity, Snapshot, findings and consumer-view version; follow-up reads reuse its retained
 source-free context and recapture only to reject staleness.
 
+A reference to a judgment with an authored `verdict` reads that verdict as a value, including
+when another judgment lists it as a premise. This does not establish that the conclusion is true;
+its acceptance, grounds and falsifier remain separate findings. An absent value stays unavailable.
+
 Followups read declared core and history-backed records through the same captured assessment.
 Conditions compare exact scalar readings; `changed` also observes their computational basis and
 history evidence. A judgment supplies its authored verdict, with acceptance, falsifier, support

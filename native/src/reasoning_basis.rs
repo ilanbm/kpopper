@@ -98,7 +98,7 @@ fn normalize(node: &V, nodes: &Map) -> Normalized {
         let raw = if let V::Map(body) = body {
             V::Map(
                 body.iter()
-                    .filter(|(k, _)| ["rule", "v", "quoted"].contains(&k.as_str()))
+                    .filter(|(k, _)| ["rule", "v", "quoted", "verdict"].contains(&k.as_str()))
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect(),
             )
