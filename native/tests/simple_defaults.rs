@@ -153,3 +153,61 @@ fn first_binding_reports_an_existing_same_name_without_adopting_it() {
         previous.join("GROUNDING.yaml")
     );
 }
+
+#[test]
+fn private_home_default_obeys_remote_guard_and_keeps_existing_bindings_usable() {
+    let temp = TempDir::new().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("repo");
+    let home = base.join("home");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    simple_runtime::resources(&home.join("resources"));
+    git(&root, &["init", "-q", "-b", "main"]);
+    fs::write(root.join("README.md"), "fixture source\n").unwrap();
+    let command = |args: &[&str], remote: &str| {
+        Command::new(binary())
+            .args(args)
+            .current_dir(&root)
+            .env("HOME", &home)
+            .env("XDG_STATE_HOME", home.join("state"))
+            .env("KPOPPER_NATIVE_RESOURCES", home.join("resources"))
+            .env("KPOPPER_NATIVE_CACHE", home.join("cache"))
+            .env("CLAUDE_CODE_REMOTE", remote)
+            .env_remove("KPOPPER_PROJECTS_DIR")
+            .env_remove("KPOPPER_AGENT_SESSION")
+            .env_remove("CODEX_THREAD_ID")
+            .output()
+            .unwrap()
+    };
+    let store = home.join(".kpopper/projects");
+    let preview = command(&["config", "--json"], "false");
+    assert!(preview.status.success());
+    let preview: Value = serde_json::from_slice(&preview.stdout).unwrap();
+    assert!(Path::new(preview["record"].as_str().unwrap()).starts_with(&store));
+    assert!(!store.exists());
+
+    let refused = command(&["add", "source.first", "file=README.md"], "true");
+    assert!(!refused.status.success());
+    assert!(!root.join(".git/kpopper/project/project.json").exists());
+    assert!(!store.exists());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("KPOPPER_PROJECTS_DIR"));
+
+    let added = command(&["add", "source.first", "file=README.md"], "false");
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let policy = command(&["config", "--json"], "false");
+    let policy: Value = serde_json::from_slice(&policy.stdout).unwrap();
+    let record = Path::new(policy["record"].as_str().unwrap());
+    assert!(record.starts_with(&store));
+    assert!(record.is_file());
+    let existing = command(&["add", "source.next", "file=README.md"], "true");
+    assert!(
+        existing.status.success(),
+        "{}",
+        String::from_utf8_lossy(&existing.stderr)
+    );
+}

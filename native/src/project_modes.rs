@@ -162,6 +162,18 @@ fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
     }
     result
 }
+#[cfg(test)]
+std::thread_local! {
+    static UNIT_PROJECTS_DIRECTORY: tempfile::TempDir =
+        tempfile::tempdir().expect("create isolated unit project store");
+}
+
+#[cfg(test)]
+fn central_root() -> Result<PathBuf> {
+    UNIT_PROJECTS_DIRECTORY.with(|directory| resolved(&directory.path().join("projects")))
+}
+
+#[cfg(not(test))]
 fn central_root() -> Result<PathBuf> {
     if let Some(raw) = std::env::var_os("KPOPPER_PROJECTS_DIR") {
         let p = PathBuf::from(raw);
@@ -1229,7 +1241,7 @@ mod tests {
     #[test]
     fn deleted_head_record_remains_unavailable_legacy_location() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("repo");
+        let root = dir.path().canonicalize().unwrap().join("repo");
         fs::create_dir(&root).unwrap();
         command(&root, &["init", "-b", "main"]);
         write(&root.join("GROUNDING.yaml"), b"known: {}\n");
@@ -1348,8 +1360,9 @@ mod tests {
     #[test]
     fn moved_directory_binding_updates_owner_anchor_without_copying_record() {
         let dir = tempfile::tempdir().unwrap();
-        let old = dir.path().join("old");
-        let new = dir.path().join("new");
+        let base = dir.path().canonicalize().unwrap();
+        let old = base.join("old");
+        let new = base.join("new");
         fs::create_dir(&old).unwrap();
         let project = Project::open(&old).unwrap();
         project.bind_for_mutation().unwrap();
