@@ -325,7 +325,11 @@ pub fn capture(
 ) -> Result<J> {
     let envelope = validate_envelope(raw)?;
     let (record, _policy, _project_root) = selected_record(record, cwd)?;
-    let route = crate::project_modes::WriteRoute::capture_mutation(std::slice::from_ref(&record), cwd)?;
+    let route = crate::project_modes::WriteRoute::capture_mutation_with_creation(
+        std::slice::from_ref(&record),
+        cwd,
+        false,
+    )?;
     let bound_record = route
         .paths()
         .first()
