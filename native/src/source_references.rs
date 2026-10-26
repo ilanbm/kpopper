@@ -140,13 +140,17 @@ pub(crate) fn notes(
     let requested = crate::project_modes::resolved(&record_root.join("GROUNDING.yaml"))?;
     let owner = crate::project_modes::project_for(std::slice::from_ref(&requested), workspace)?;
     let generated_binding = owner.generated_default(None)? && owner.record(None)? == requested;
-    let generated_owner =
-        generated_binding && owner.generated_source_workspace(workspace)?.is_some();
+    let generated_workspace = if generated_binding {
+        owner.generated_source_workspace(workspace)?
+    } else {
+        None
+    };
+    let generated_owner = generated_workspace.is_some();
     if !project.is_git() && !generated_binding {
         return Ok(vec![]);
     }
     let source_roots = if generated_owner {
-        vec![record_root.to_owned(), project.root.clone()]
+        vec![record_root.to_owned(), generated_workspace.unwrap()]
     } else {
         vec![record_root.to_owned()]
     };

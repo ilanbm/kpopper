@@ -178,27 +178,47 @@ pub(super) fn full_source_body<'a>(
 ) -> Option<&'a crate::ordinary_source::Source> {
     full_source_bodies(source).get(id).copied()
 }
+pub(super) struct SourceRoots {
+    /// Bases used to resolve project-relative locators.
+    pub(super) resolution: Vec<PathBuf>,
+    /// Locations authorized for reading (including explicit --source-root values).
+    pub(super) authorized: Vec<PathBuf>,
+}
+
 pub(super) fn roots(
     record: &Path,
     requested: &[PathBuf],
     cwd: &Path,
-) -> crate::Result<Vec<PathBuf>> {
+) -> crate::Result<SourceRoots> {
     let record_parent = record.parent().unwrap().to_owned();
     let owner_root = generated_owner_root(record, cwd)?;
-    let roots = std::iter::once(record_parent)
-        .chain(owner_root)
-        .chain(
-            requested
-                .iter()
-                .map(|p| expanded(cwd, p))
-                .collect::<crate::Result<Vec<_>>>()?,
-        )
+    let generated = owner_root.is_some();
+    let requested = requested
+        .iter()
+        .map(|p| expanded(cwd, p))
+        .collect::<crate::Result<Vec<_>>>()?;
+    let resolution = if generated {
+        std::iter::once(record_parent.clone())
+            .chain(owner_root)
+            .collect::<BTreeSet<_>>()
+    } else {
+        std::iter::once(record_parent.clone())
+            .chain(requested.iter().cloned())
+            .collect::<BTreeSet<_>>()
+    };
+    let authorized = resolution
+        .iter()
+        .cloned()
+        .chain(requested)
         .collect::<BTreeSet<_>>();
     crate::require(
-        roots.iter().all(|p| p.is_dir()),
+        authorized.iter().all(|p| p.is_dir()),
         "source roots must be existing directories",
     )?;
-    Ok(roots.into_iter().collect())
+    Ok(SourceRoots {
+        resolution: resolution.into_iter().collect(),
+        authorized: authorized.into_iter().collect(),
+    })
 }
 
 /// Generated Simple records may resolve project-relative sources from the
@@ -511,12 +531,12 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
             }
             continue;
         };
-        let path = core_source_path(filename, record, &snapshot, &roots)?;
+        let path = core_source_path(filename, record, &snapshot, &roots.resolution)?;
         let content = (|| {
             if mode == ReadMode::Frozen && !path.starts_with(record.parent().unwrap()) {
                 return Err("external evidence".into());
             }
-            if !roots.iter().any(|root| path.starts_with(root)) {
+            if !roots.authorized.iter().any(|root| path.starts_with(root)) {
                 return Err(
                     "outside allowed source roots; pass --source-root for an authorized directory"
                         .into(),
@@ -560,7 +580,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
             "source changed during search; retry",
         )?;
     }
-    let secondary = json!({"record":record,"source_files":stamps,"source_roots":roots,"rows":rows,"unindexed":diagnostics});
+    let secondary = json!({"record":record,"source_files":stamps,"source_roots":roots.authorized,"rows":rows,"unindexed":diagnostics});
     let revision=sha256(crate::public_search_rank::encode(&json!({"snapshot_id":context.snapshot_id(),"findings_revision":context.findings_revision(),"corpus":secondary}))?.as_bytes());
     let files = if let V::List(a) = get(get(&snapshot, "authored_revision"), "files") {
         a.as_slice()

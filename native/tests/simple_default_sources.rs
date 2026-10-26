@@ -91,6 +91,19 @@ impl Fixture {
         self.command(&["--json", "search", "--limit", "10", query])
     }
 
+    fn search_with_source_root(&self, source_root: &Path, query: &str) -> Output {
+        let source_root = source_root.to_string_lossy().into_owned();
+        self.command(&[
+            "--json",
+            "search",
+            "--limit",
+            "10",
+            "--source-root",
+            &source_root,
+            query,
+        ])
+    }
+
     fn where_record(&self) -> PathBuf {
         let output = self.command(&["--json", "where"]);
         assert!(
@@ -215,6 +228,57 @@ fn generated_source_resolution_refuses_duplicate_different_matches() {
     assert!(
         text.contains("ambiguous"),
         "ambiguity was not diagnosed: {text}"
+    );
+}
+
+#[test]
+fn generated_source_root_authorizes_reads_without_rebasing_relative_locator() {
+    let fixture = Fixture::new(false);
+    fs::write(fixture.root.join("README.md"), "owner README text\n").unwrap();
+    fixture.add_source("s.readme", "README.md");
+    let other = fixture.root.parent().unwrap().join("other");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(other.join("README.md"), "unrelated README text\n").unwrap();
+
+    let output = fixture.search_with_source_root(&other, "README");
+    assert!(
+        output.status.success(),
+        "search: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        text.contains("owner README text"),
+        "owner source was not used: {text}"
+    );
+    assert!(
+        !text.contains("unrelated README text"),
+        "source-root rebased locator: {text}"
+    );
+}
+
+#[test]
+fn generated_source_root_does_not_supply_missing_relative_locator() {
+    let fixture = Fixture::new(false);
+    fixture.add_source("s.readme", "README.md");
+    let other = fixture.root.parent().unwrap().join("other");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(other.join("README.md"), "unrelated README text\n").unwrap();
+
+    let output = fixture.search_with_source_root(&other, "unrelated");
+    assert!(
+        output.status.success(),
+        "search: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+    assert!(
+        !text.contains("unrelated readme text"),
+        "source-root supplied missing locator: {text}"
+    );
+    assert!(
+        text.contains("unavailable") || text.contains("unresolved"),
+        "missing owner source was not diagnosed: {text}"
     );
 }
 

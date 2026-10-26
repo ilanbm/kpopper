@@ -548,7 +548,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                 }
             } else {
                 if generated_owner {
-                    C::source_path(filename, base, &roots)?
+                    C::source_path(filename, base, &roots.resolution)?
                 } else {
                     C::expanded(base, Path::new(filename))?
                 }
@@ -569,7 +569,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                     && !captured
                         .as_ref()
                         .is_some_and(|c| c.files.contains_key(&path_text))
-                    && !roots.iter().any(|r| path.starts_with(r))
+                    && !roots.authorized.iter().any(|r| path.starts_with(r))
                 {
                     return Err("outside allowed source roots; pass --source-root for an authorized directory".into());
                 }
@@ -657,7 +657,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
         .collect::<crate::Result<serde_json::Map<_, _>>>()?;
     let context = json!({"read_mode":if mode==ReadMode::Frozen{"frozen"}else{"live"},"contributions":json_value(get(&context,"contributions"))?,"conflicts":conflicts,"target_unavailable":json_value(get(&context,"target_unavailable"))?});
     let mut preimage = context.as_object().unwrap().clone();
-    preimage.extend(json!({"record":record,"files":stamps,"rows":rows,"unindexed":diagnostics,"source_roots":roots}).as_object().unwrap().clone());
+    preimage.extend(json!({"record":record,"files":stamps,"rows":rows,"unindexed":diagnostics,"source_roots":roots.authorized}).as_object().unwrap().clone());
     let revision = sha256(crate::public_search_rank::encode(&J::Object(preimage))?.as_bytes());
     let mut result = context.as_object().unwrap().clone();
     result.extend(json!({"record":record,"revision":revision,"revision_kind":"search-corpus","record_sha256":stamps.get(name(&record)?),"rows":rows,"unindexed":diagnostics}).as_object().unwrap().clone());
