@@ -282,12 +282,22 @@ impl Project {
             false,
         )?
         .ok_or_else(|| error("project_git_unavailable"))?;
-        let mut paths = vec![];
+        // `git worktree list` can expose a submodule's administrative
+        // directory as a worktree. Always retain the verified project root,
+        // and accept reported paths only when Git identifies that path as its
+        // actual toplevel checkout.
+        let mut paths = vec![self.root.clone()];
         for field in raw.split(|b| *b == 0) {
             if let Some(path) = field.strip_prefix(b"worktree ") {
                 let path = PathBuf::from(string(path.to_vec())?);
                 if path.is_dir() {
-                    paths.push(resolved(&path)?);
+                    let path = resolved(&path)?;
+                    let verified = git(&path, &["rev-parse", "--show-toplevel"], true)?
+                        .and_then(|raw| string(raw).ok())
+                        .and_then(|top| resolved(Path::new(top.trim())).ok());
+                    if verified.as_ref() == Some(&path) && !paths.contains(&path) {
+                        paths.push(path);
+                    }
                 }
             }
         }
