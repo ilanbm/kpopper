@@ -212,6 +212,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
     } else {
         selected.to_owned()
     };
+    let generated_owner = C::generated_owner_root(&record, cwd)?.is_some();
     let roots = C::roots(&record, &options.source_roots, cwd)?;
     let runtime = crate::public_workspace::runtime()?;
     let capture = capture_ordinary_source_with_runtime(
@@ -546,7 +547,11 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                     PathBuf::from(filename)
                 }
             } else {
-                C::source_path(filename, base, &roots)?
+                if generated_owner {
+                    C::source_path(filename, base, &roots)?
+                } else {
+                    C::expanded(base, Path::new(filename))?
+                }
             };
             let path_text = name(&path)?.to_owned();
             if bundle.is_none()

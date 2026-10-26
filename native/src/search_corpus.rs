@@ -204,7 +204,7 @@ pub(super) fn roots(
 /// Generated Simple records may resolve project-relative sources from the
 /// central record parent and the invoking checkout that owns the binding. An
 /// unrelated cwd is intentionally not treated as an owner.
-fn generated_owner_root(record: &Path, cwd: &Path) -> crate::Result<Option<PathBuf>> {
+pub(super) fn generated_owner_root(record: &Path, cwd: &Path) -> crate::Result<Option<PathBuf>> {
     let owner = crate::project_modes::project_for(&[record.to_owned()], cwd)?;
     if !owner.generated_default(None)? {
         return Ok(None);

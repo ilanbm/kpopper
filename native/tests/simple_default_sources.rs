@@ -335,3 +335,39 @@ fn explicit_legacy_record_keeps_manual_external_source_semantics_and_no_central_
         "legacy explicit record created generated central state"
     );
 }
+
+#[test]
+fn legacy_source_root_does_not_rebase_manual_relative_locator() {
+    let fixture = Fixture::new(false);
+    let external = fixture.root.join("external");
+    fs::create_dir_all(&external).unwrap();
+    fs::write(fixture.root.join("README.md"), "workspace source text\n").unwrap();
+    fs::write(external.join("README.md"), "requested-root source text\n").unwrap();
+    fs::write(
+        fixture.root.join("GROUNDING.yaml"),
+        "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  s.manual: {file: README.md}\n",
+    )
+    .unwrap();
+    let external_arg = external.to_string_lossy().into_owned();
+    let output = fixture.command(&[
+        "--json",
+        "search",
+        "--source-root",
+        &external_arg,
+        "workspace",
+    ]);
+    assert!(
+        output.status.success(),
+        "legacy search changed semantics: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        text.contains("workspace source text"),
+        "legacy locator was rebased: {text}"
+    );
+    assert!(
+        !text.contains("requested-root source text"),
+        "requested root replaced legacy base: {text}"
+    );
+}

@@ -138,6 +138,9 @@ pub(crate) fn notes(
 ) -> Result<Vec<String>> {
     let project = Project::open(workspace)?;
     let generated_owner = project.generated_default(None)?;
+    if !project.is_git() && !generated_owner {
+        return Ok(vec![]);
+    }
     let source_roots = if generated_owner {
         vec![record_root.to_owned(), project.root.clone()]
     } else {
