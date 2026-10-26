@@ -337,6 +337,12 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
         record = Some(project.record(Some(&config))?);
         status = "pending";
     }
+    // A fresh project has no in-workspace primary. Keep orientation consistent
+    // with records(): its read-only location is the clearly provisional central
+    // proposal, never a checkout path that a caller might accidentally create.
+    if record.is_none() {
+        record = Some(project.record(Some(&config))?);
+    }
     let identity = if let Some(common) = &project.common {
         let relative = workspace
             .strip_prefix(&project.root)

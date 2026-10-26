@@ -525,17 +525,13 @@ impl Project {
         let guard = self.lock()?;
         if guard.raw.is_some() {
             if self.generated_default(Some(&guard.config))? {
-                self.verify_generated_owner(&guard.config, true)?;
+                let receipt = Self::owner_receipt_path(&self.record(Some(&guard.config))?);
+                if bounded(&receipt)?.is_some() {
+                    self.verify_generated_owner(&guard.config, true)?;
+                }
                 return self.finish_generated_binding(&guard.config);
             }
             return Ok(());
-        }
-        if std::env::var_os("CLAUDE_CODE_REMOTE").is_some()
-            && std::env::var_os("KPOPPER_PROJECTS_DIR").is_none()
-        {
-            return Err(error(
-                "fresh_default_requires_absolute_KPOPPER_PROJECTS_DIR",
-            ));
         }
         let proposal = self.defaults()?;
         let proposal_record = PathBuf::from(text(field(map(&proposal)?, "record")?)?);
@@ -545,8 +541,20 @@ impl Project {
         )?;
         // A pre-existing in-tree or registered record is legacy state. It must
         // remain in place and must never acquire a generated central identity.
-        if proposal_record.is_file() {
+        let candidate = resolved(&self.root.join(expanded(&proposal_record)?))?;
+        let registered = self
+            .common
+            .as_ref()
+            .is_some_and(|common| common.join("kpopper-record").is_file());
+        if candidate.is_file() || registered {
             return Ok(());
+        }
+        if std::env::var_os("CLAUDE_CODE_REMOTE").is_some_and(|v| v == "true")
+            && std::env::var_os("KPOPPER_PROJECTS_DIR").is_none()
+        {
+            return Err(error(
+                "fresh_default_requires_absolute_KPOPPER_PROJECTS_DIR",
+            ));
         }
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
@@ -654,7 +662,7 @@ pub fn project_for(paths: &[PathBuf], cwd: &Path) -> Result<Project> {
     let first = resolved(paths.first().ok_or_else(|| error("missing_record_path"))?)?;
     let parent = first.parent().ok_or_else(|| error("invalid_path"))?;
     let current = Project::open(cwd)?;
-    if current.config_path.exists() {
+    let current_matches = if current.config_path.exists() {
         let configured = current.record(None)?;
         let generated_alias = current.generated_default(None)?
             && (first == current.root.join("GROUNDING.yaml")
@@ -665,12 +673,8 @@ pub fn project_for(paths: &[PathBuf], cwd: &Path) -> Result<Project> {
                     .and_then(|v| map(&v).ok().and_then(|m| m.get("record").cloned()))
                     .and_then(|v| text(&v).ok().map(PathBuf::from))
                     .is_some_and(|proposal| proposal == first));
-        if configured == first || generated_alias {
-            Ok(current)
-        } else {
-            Ok(Project::open(parent)?)
-        }
-    } else if !current.config_path.exists() {
+        configured == first || generated_alias
+    } else {
         let matches = current.defaults().ok().is_some_and(|value| {
             map(&value)
                 .ok()
@@ -678,25 +682,22 @@ pub fn project_for(paths: &[PathBuf], cwd: &Path) -> Result<Project> {
                 .and_then(|value| text(value).ok())
                 .is_some_and(|path| Path::new(path) == first)
         });
-        if matches {
-            Ok(current)
-        } else {
-            Ok(Project::open(parent)?)
-        }
-    } else {
-        if let Some(raw) = bounded(&Project::owner_receipt_path(&first))? {
-            let v: serde_json::Value = serde_json::from_slice(&raw)?;
-            if let (Some(owner), Some(config)) =
-                (v["owner_path"].as_str(), v["config_path"].as_str())
-            {
-                let p = Project::open(Path::new(owner))?;
+        matches
+    };
+    if current_matches {
+        return Ok(current);
+    }
+    if let Some(raw) = bounded(&Project::owner_receipt_path(&first))? {
+        let v: serde_json::Value = serde_json::from_slice(&raw)?;
+        if let (Some(owner), Some(config)) = (v["owner_path"].as_str(), v["config_path"].as_str()) {
+            if let Ok(p) = Project::open(Path::new(owner)) {
                 if p.config_path == Path::new(config) && p.record(None)? == first {
                     return Ok(p);
                 }
             }
         }
-        Ok(Project::open(parent)?)
     }
+    Ok(Project::open(parent)?)
 }
 pub fn write_paths(paths: &[PathBuf], cwd: &Path) -> Result<Vec<PathBuf>> {
     let mut result = paths.to_vec();
@@ -743,7 +744,28 @@ pub struct WriteRoute {
 }
 impl WriteRoute {
     pub fn capture_mutation(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
-        project_for(paths, cwd)?.bind_for_mutation()?;
+        let project = project_for(paths, cwd)?;
+        let first = resolved(paths.first().ok_or_else(|| error("missing_record_path"))?)?;
+        let owned = if project.config_path.exists() {
+            let config = project.config()?;
+            let record = project.record(Some(&config))?;
+            first == record
+                || first == project.root.join("GROUNDING.yaml")
+                || first == project.root.join("PROVENANCE.yaml")
+        } else {
+            let proposal = project.defaults().ok().and_then(|value| {
+                map(&value)
+                    .ok()
+                    .and_then(|m| m.get("record"))
+                    .and_then(|value| text(value).ok())
+                    .map(PathBuf::from)
+            });
+            first == project.root.join("GROUNDING.yaml")
+                || first == project.root.join("PROVENANCE.yaml")
+                || proposal.is_some_and(|path| path == first)
+        };
+        require(owned, "mutation_record_not_owned")?;
+        project.bind_for_mutation()?;
         Self::capture(paths, cwd)
     }
     pub fn capture(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
