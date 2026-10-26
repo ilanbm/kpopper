@@ -18,6 +18,54 @@ pub const UNAVAILABLE_CONFIGURED: &str = "The configured record is unavailable."
 fn unavailable(reason: &str, record: &Path) -> crate::Error {
     error(&format!("{reason} {}", record.display()))
 }
+fn orphan_member(directory: &Path) -> Option<PathBuf> {
+    const MEMBERS: &[&str] = &[
+        ".kpopper/hypotheses",
+        ".kpopper/view.yaml",
+        ".kpopper/measure.yaml",
+        ".kpopper/replaced.yaml",
+        ".kpopper/history",
+        ".kpopper/history-commits",
+        ".kpopper/history.yaml",
+        ".kpopper/history-cancellations",
+        "PROVENANCE.d",
+        "PROVENANCE.view.yaml",
+        "PROVENANCE.measure.yaml",
+        "PROVENANCE.replaced.yaml",
+        "PROVENANCE.history",
+        "PROVENANCE.history-commits",
+        "PROVENANCE.history.yaml",
+        "PROVENANCE.history-cancellations",
+    ];
+    MEMBERS
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|path| path.symlink_metadata().is_ok())
+}
+fn competing_generated_record(project: &Project, cwd: &Path) -> Result<Option<PathBuf>> {
+    if !project.config_path.exists() || !project.generated_default(None)? {
+        return Ok(None);
+    }
+    let mut roots = project.worktrees()?;
+    roots.push(cwd.to_owned());
+    for root in roots {
+        let mut current = root.canonicalize()?;
+        loop {
+            for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+                let path = current.join(name);
+                if path.symlink_metadata().is_ok() {
+                    return Ok(Some(path));
+                }
+            }
+            if current == project.root || !current.starts_with(&project.root) {
+                break;
+            }
+            let Some(parent) = current.parent() else { break };
+            current = parent.to_owned();
+        }
+    }
+    Ok(None)
+}
 /// Whether a failure is the refusal of a record whose location cannot be read.
 pub fn refuses_unavailable(failure: &crate::Error) -> bool {
     [
@@ -37,6 +85,9 @@ pub fn refuses_unavailable(failure: &crate::Error) -> bool {
 pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
+    if let Some(path) = competing_generated_record(&project, &cwd)? {
+        return Err(unavailable("A generated binding conflicts with this workspace record.", &path));
+    }
     if project.config_path.exists() {
         let record = project.record(None)?;
         if record.symlink_metadata().is_ok() && !record.is_file() {
@@ -58,6 +109,9 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
                 }
                 return Ok(vec![path]);
             }
+        }
+        if let Some(path) = orphan_member(&current) {
+            return Err(unavailable("A record-bearing sidecar exists without its primary record.", &path));
         }
         let Some(parent) = current.parent() else {
             break;
@@ -247,6 +301,9 @@ pub struct Location {
 pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Location> {
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
+    if let Some(path) = competing_generated_record(&project, &cwd)? {
+        return Err(unavailable("A generated binding conflicts with this workspace record.", &path));
+    }
     let mut workspace = if project.is_git() {
         project.root.clone()
     } else {
@@ -395,5 +452,19 @@ mod installed_resource_tests {
             selection.core,
             Some(format!("reasoning/{target}.kpopper-runtime"))
         );
+    }
+}
+
+#[cfg(test)]
+mod discovery_tests {
+    use super::*;
+
+    #[test]
+    fn record_bearing_sidecar_without_primary_is_not_treated_as_fresh() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join(".kpopper")).unwrap();
+        std::fs::write(root.path().join(".kpopper/history.yaml"), b"version: 3\n").unwrap();
+        let result = records(root.path());
+        assert!(result.unwrap_err().0.contains("record-bearing sidecar"));
     }
 }

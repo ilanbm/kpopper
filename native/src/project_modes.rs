@@ -205,6 +205,18 @@ fn slug(path: &Path) -> String {
 fn provisional_hash(anchor: &Path) -> String {
     crate::identity::sha256(anchor.to_string_lossy().as_bytes())[..32].into()
 }
+fn project_slug(project: &Project) -> String {
+    if project.is_git() {
+        if let Ok(roots) = project.worktrees() {
+            if let Some(primary) = roots.into_iter().find(|root| {
+                fs::symlink_metadata(root.join(".git")).is_ok_and(|meta| meta.is_dir())
+            }) {
+                return slug(&primary);
+            }
+        }
+    }
+    slug(&project.root)
+}
 fn json_line(value: &V) -> Result<Vec<u8>> {
     let mut b = serde_json::to_vec(&value.to_json()?)?;
     b.push(b'\n');
@@ -316,7 +328,7 @@ impl Project {
                 mode = "simple";
                 let record_path = central_root()?.join(format!(
                     "{}-unbound-{}/GROUNDING.yaml",
-                    slug(&self.root),
+                    project_slug(self),
                     provisional_hash(anchor)
                 ));
                 record = record_path
@@ -334,7 +346,7 @@ impl Project {
             mode = "simple";
             let record_path = central_root()?.join(format!(
                 "{}-unbound-{}/GROUNDING.yaml",
-                slug(&self.root),
+                project_slug(self),
                 provisional_hash(anchor)
             ));
             record = record_path
@@ -586,7 +598,7 @@ impl Project {
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
         let final_record =
-            central_root()?.join(format!("{}-{token}/GROUNDING.yaml", slug(&self.root)));
+            central_root()?.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
         let mut next = guard.config.clone();
         let m = map_mut(&mut next)?;
         m.insert(
@@ -663,7 +675,7 @@ impl Project {
         )?;
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
-        let record = central_root()?.join(format!("{}-{token}/GROUNDING.yaml", slug(&self.root)));
+        let record = central_root()?.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
         let mut next = guard.config.clone();
         let m = map_mut(&mut next)?;
         m.insert(
