@@ -46,24 +46,30 @@ fn competing_generated_record(project: &Project, cwd: &Path) -> Result<Option<Pa
     if !project.config_path.exists() || !project.generated_default(None)? {
         return Ok(None);
     }
-    let mut roots = project.worktrees()?;
-    roots.push(cwd.to_owned());
-    for root in roots {
-        let mut current = root.canonicalize()?;
-        loop {
-            for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
-                let path = current.join(name);
-                if path.symlink_metadata().is_ok() {
-                    return Ok(Some(path));
-                }
+    // A nested legacy record is independently selectable and must not be
+    // treated as a competing root record for the generated project.
+    let mut current = cwd.canonicalize()?;
+    while current != project.root && current.starts_with(&project.root) {
+        if ["GROUNDING.yaml", "PROVENANCE.yaml"]
+            .iter()
+            .any(|name| current.join(name).symlink_metadata().is_ok())
+        {
+            return Ok(None);
+        }
+        current = current
+            .parent()
+            .ok_or_else(|| error("project_directory_unavailable"))?
+            .to_owned();
+    }
+    for root in project.worktrees()? {
+        for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+            let path = root.join(name);
+            if path.symlink_metadata().is_ok() {
+                return Ok(Some(path));
             }
-            if current == project.root || !current.starts_with(&project.root) {
-                break;
-            }
-            let Some(parent) = current.parent() else {
-                break;
-            };
-            current = parent.to_owned();
+        }
+        if let Some(path) = orphan_member(&root) {
+            return Ok(Some(path));
         }
     }
     Ok(None)
@@ -92,6 +98,23 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
             "A generated binding conflicts with this workspace record.",
             &path,
         ));
+    }
+    // A real nested record takes precedence over a generated root binding.
+    // It is an independently selectable legacy record, not a root conflict.
+    if project.config_path.exists() && cwd.starts_with(&project.root) && cwd != project.root {
+        let mut current = cwd.clone();
+        while current != project.root {
+            for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+                let path = current.join(name);
+                if path.is_file() {
+                    return Ok(vec![path]);
+                }
+            }
+            current = current
+                .parent()
+                .ok_or_else(|| error("project_directory_unavailable"))?
+                .to_owned();
+        }
     }
     if project.config_path.exists() {
         let record = project.record(None)?;

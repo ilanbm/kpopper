@@ -275,6 +275,30 @@ fn git_has_head_record(root: &Path, name: &str) -> Result<bool> {
             .any(|line| line.trim() == name)
     }))
 }
+fn git_has_record_history(root: &Path, names: &[&str]) -> Result<bool> {
+    Ok(git(root, &["log", "--all", "-1", "--", names[0], names[1]], true)?
+        .is_some_and(|raw| !raw.is_empty()))
+}
+fn require_fresh_store_override() -> Result<()> {
+    if std::env::var_os("CLAUDE_CODE_REMOTE").is_some_and(|v| v == "true")
+        && std::env::var_os("KPOPPER_PROJECTS_DIR").is_none()
+    {
+        return Err(error("fresh_default_requires_absolute_KPOPPER_PROJECTS_DIR"));
+    }
+    Ok(())
+}
+fn rollback_empty_candidate(record: &Path) {
+    let Some(parent) = record.parent() else { return };
+    let receipt = parent.join(OWNER_RECEIPT);
+    let _ = fs::remove_file(receipt);
+    let control = parent.join(".kpopper");
+    if fs::read_dir(&control).is_ok_and(|mut entries| entries.next().is_none()) {
+        let _ = fs::remove_dir(&control);
+    }
+    if fs::read_dir(parent).is_ok_and(|mut entries| entries.next().is_none()) {
+        let _ = fs::remove_dir(parent);
+    }
+}
 fn json_line(value: &V) -> Result<Vec<u8>> {
     let mut b = serde_json::to_vec(&value.to_json()?)?;
     b.push(b'\n');
@@ -554,6 +578,7 @@ impl Project {
     }
     fn verify_generated_owner(&self, config: &V, mutation: bool) -> Result<()> {
         let (_, token) = self.generated_binding(config)?;
+        let expected_anchor = self.common.as_ref().unwrap_or(&self.root);
         let receipt = Self::owner_receipt_path(&self.record(Some(config))?);
         let raw = bounded(&receipt)?.ok_or_else(|| error("generated_owner_receipt_missing"))?;
         let value: serde_json::Value = serde_json::from_slice(&raw)?;
@@ -561,6 +586,15 @@ impl Project {
             value["token"].as_str() == Some(token),
             "generated_owner_receipt_mismatch",
         )?;
+        if value["owner_anchor"].as_str() != Some(&expected_anchor.to_string_lossy()) {
+            if value["owner_anchor"].as_str().is_some_and(|anchor| Path::new(anchor).exists()) {
+                return Err(error(if mutation {
+                    "generated_binding_copy_requires_recovery: run kpop config --new-project"
+                } else {
+                    "generated_binding_copy_conflict: run kpop config --new-project"
+                }));
+            }
+        }
         if let Some(path) = value["owner_path"].as_str().map(PathBuf::from) {
             let same_git_owner = self.common.as_ref().is_some_and(|common| {
                 value["owner_anchor"]
@@ -646,6 +680,11 @@ impl Project {
         if old_anchor == *expected {
             return Ok(());
         }
+        if old_anchor.exists() {
+            return Err(error(
+                "generated_binding_copy_requires_recovery: run kpop config --new-project",
+            ));
+        }
         let record = self.record(Some(config))?;
         let receipt = Self::owner_receipt_path(&record);
         if let Some(raw) = bounded(&receipt)? {
@@ -708,6 +747,15 @@ impl Project {
         if candidate.is_file() || registered {
             return Ok(());
         }
+        if self.is_git()
+            && !self.root.join("GROUNDING.yaml").is_file()
+            && !self.root.join("PROVENANCE.yaml").is_file()
+            && git_has_record_history(&self.root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
+        {
+            return Err(error(
+                "legacy_record_unavailable: restore the configured record before writing",
+            ));
+        }
         require(
             string_is(&map(&proposal)?["mode"], "simple"),
             "legacy_record_unavailable: restore the configured record before writing",
@@ -716,13 +764,7 @@ impl Project {
             self.record(Some(&guard.config))? == proposal_record,
             "default_binding_changed",
         )?;
-        if std::env::var_os("CLAUDE_CODE_REMOTE").is_some_and(|v| v == "true")
-            && std::env::var_os("KPOPPER_PROJECTS_DIR").is_none()
-        {
-            return Err(error(
-                "fresh_default_requires_absolute_KPOPPER_PROJECTS_DIR",
-            ));
-        }
+        require_fresh_store_override()?;
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
         let store = validate_central_store(self, &central_root()?)?;
@@ -744,8 +786,11 @@ impl Project {
                 ("kind", s(if self.is_git() { "git" } else { "directory" })),
             ]),
         );
-        atomic_bytes(&self.config_path, &json_line(&next)?)?;
         self.finish_generated_binding(&next, false)?;
+        if let Err(error) = atomic_bytes(&self.config_path, &json_line(&next)?) {
+            rollback_empty_candidate(&final_record);
+            return Err(error);
+        }
         if let Some(previous) = previous_record {
             eprintln!(
                 "Existing local record with this readable name: {}. Review its owner before restoring or migrating it.",
@@ -796,24 +841,38 @@ impl Project {
         )?;
         let old_record = self.record(Some(&guard.config))?;
         let receipt = Self::owner_receipt_path(&old_record);
-        let raw = bounded(&receipt)?.ok_or_else(|| error("generated_owner_receipt_missing"))?;
-        let value: serde_json::Value = serde_json::from_slice(&raw)?;
+        let raw = bounded(&receipt)?;
+        let value: Option<serde_json::Value> = raw.as_deref().map(serde_json::from_slice).transpose()?;
+        if value.is_none() {
+            require(!old_record.exists(), "generated_owner_receipt_missing")?;
+            if let Some(parent) = old_record.parent() {
+                let clean = if parent.exists() {
+                    fs::read_dir(parent)?.all(|entry| {
+                        entry.ok().is_some_and(|entry| {
+                            entry.file_name() == ".kpopper"
+                                && entry.file_type().is_ok_and(|t| t.is_dir())
+                        })
+                    })
+                } else {
+                    true
+                };
+                require(clean, "generated_binding_candidate_conflict")?;
+            }
+        }
         let owner = PathBuf::from(
-            value["owner_path"]
-                .as_str()
-                .ok_or_else(|| error("generated_owner_receipt_invalid"))?,
+            value.as_ref().and_then(|v| v["owner_path"].as_str()).unwrap_or("")
         );
         let same_git_owner = self.common.as_ref().is_some_and(|common| {
-            value["owner_anchor"]
+            value.as_ref().is_some_and(|v| v["owner_anchor"]
                 .as_str()
-                .is_some_and(|anchor| Path::new(anchor) == common)
+                .is_some_and(|anchor| Path::new(anchor) == common))
         });
-        require(
-            owner != self.root && owner.exists() && !same_git_owner,
-            "generated_binding_not_copy",
-        )?;
+        if value.is_some() {
+            require(owner != self.root && owner.exists() && !same_git_owner, "generated_binding_not_copy")?;
+        }
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
+        require_fresh_store_override()?;
         let store = validate_central_store(self, &central_root()?)?;
         let record = store.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
         let mut next = guard.config.clone();
@@ -831,8 +890,12 @@ impl Project {
                 ("kind", s(if self.is_git() { "git" } else { "directory" })),
             ]),
         );
-        atomic_bytes(&self.config_path, &json_line(&next)?)?;
-        self.finish_generated_binding(&next, false)
+        self.finish_generated_binding(&next, false)?;
+        if let Err(error) = atomic_bytes(&self.config_path, &json_line(&next)?) {
+            rollback_empty_candidate(&record);
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Return the current workspace root only when generated ownership is
@@ -1043,7 +1106,12 @@ impl WriteRoute {
         let owned = if project.config_path.exists() {
             let config = project.config()?;
             let record = project.record(Some(&config))?;
-            first == record
+            let nested_legacy = first.is_file()
+                && matches!(first.file_name().and_then(|n| n.to_str()), Some("GROUNDING.yaml" | "PROVENANCE.yaml"))
+                && first != record
+                && first != project.root.join("GROUNDING.yaml")
+                && first != project.root.join("PROVENANCE.yaml");
+            nested_legacy || first == record
                 || first == project.root.join("GROUNDING.yaml")
                 || first == project.root.join("PROVENANCE.yaml")
         } else {
@@ -1059,7 +1127,14 @@ impl WriteRoute {
                 || proposal.is_some_and(|path| path == first)
         };
         require(owned, "mutation_record_not_owned")?;
-        project.bind_for_mutation()?;
+        let nested_legacy = first.is_file()
+            && matches!(first.file_name().and_then(|n| n.to_str()), Some("GROUNDING.yaml" | "PROVENANCE.yaml"))
+            && first != project.root.join("GROUNDING.yaml")
+            && first != project.root.join("PROVENANCE.yaml")
+            && project.record(None).map(|r| r != first).unwrap_or(true);
+        if !nested_legacy {
+            project.bind_for_mutation()?;
+        }
         Self::capture(paths, cwd)
     }
     pub fn capture(paths: &[PathBuf], cwd: &Path) -> Result<Self> {

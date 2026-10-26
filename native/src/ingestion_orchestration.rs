@@ -325,9 +325,9 @@ pub fn capture(
 ) -> Result<J> {
     let envelope = validate_envelope(raw)?;
     let (record, _policy, _project_root) = selected_record(record, cwd)?;
-    let owner = crate::project_modes::project_for(std::slice::from_ref(&record), cwd)?;
-    owner.bind_for_mutation()?;
-    let bound_record = owner.record(None)?;
+    let route = crate::project_modes::WriteRoute::capture_mutation(std::slice::from_ref(&record), cwd)?;
+    let bound_record = route.project().record(Some(route.config()))?;
+    drop(route);
     let (record, policy, project_root) = selected_record(Some(&bound_record), cwd)?;
     let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let record = layout.record.clone();
