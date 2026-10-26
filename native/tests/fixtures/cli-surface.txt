@@ -32,7 +32,7 @@ kpop document guide
 kpop document inspect
 kpop document refresh --out= --overwrite --root= --sources=
 kpop experimental
-kpop experimental advanced --check --expected-generation= --guidance= --migration-receipt= --mode= --new-project --rebind --record= --rollback
+kpop experimental advanced --check --expected-generation= --migration-receipt= --record= --rollback
 kpop experimental annotated-doc
 kpop experimental annotated-doc build --html= --manifest= --out= --overwrite --root=
 kpop experimental annotated-doc guide

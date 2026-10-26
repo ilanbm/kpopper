@@ -328,7 +328,7 @@ fn central_record_outside_identified_owner_does_not_guess_project_relative_sourc
     fs::create_dir_all(&unrelated).unwrap();
     fs::write(unrelated.join("README.md"), "wrong workspace text\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
-        .current_dir(unrelated)
+        .current_dir(&unrelated)
         .args([
             "--json",
             "search",

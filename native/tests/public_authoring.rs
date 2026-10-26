@@ -5,6 +5,15 @@ use std::{
     process::{Command, Output},
 };
 
+fn workspace(temp: &tempfile::TempDir) -> std::path::PathBuf {
+    let root = temp.path().join("workspace");
+    fs::create_dir(&root).unwrap();
+    root.canonicalize().unwrap()
+}
+fn projects(root: &Path) -> std::path::PathBuf {
+    root.parent().unwrap().join("test-projects")
+}
+
 fn run(root: &Path, args: &[&str]) -> Output {
     command(root).args(args).output().unwrap()
 }
@@ -21,6 +30,7 @@ fn run_unbundled(root: &Path, args: &[&str]) -> Output {
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
         .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env("KPOPPER_PROJECTS_DIR", projects(root))
         .args(args)
         .output()
         .unwrap()
@@ -43,7 +53,7 @@ fn command(root: &Path) -> Command {
         .env_remove("CODEX_THREAD_ID")
         .env("KPOPPER_NATIVE_RESOURCES", resources)
         .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
-        .env("KPOPPER_PROJECTS_DIR", root.join(".test-projects"));
+        .env("KPOPPER_PROJECTS_DIR", projects(root));
     command
 }
 
@@ -271,7 +281,7 @@ fn legacy_history_record(root: &Path) {
 fn advanced_history_add_captures_a_version_three_contribution() {
     use kpop_native::value::TypedValue as V;
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
@@ -513,6 +523,7 @@ fn advanced_private_and_code_routes_never_enter_the_pending_queue() {
         .current_dir(&root)
         .env_remove("KPOPPER_NATIVE_RESOURCES")
         .env("KPOPPER_PRIVATE_HOME", private.path())
+        .env("KPOPPER_PROJECTS_DIR", projects(&root))
         .args([
             "add",
             "p.secret",
@@ -582,7 +593,7 @@ fn advanced_private_and_code_routes_never_enter_the_pending_queue() {
 #[test]
 fn empty_tmpdir_keeps_publication_receipts_outside_the_workspace() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let sessions = tempfile::tempdir().unwrap();
     let sid = format!(
         "empty-tmp-{}",
@@ -613,7 +624,7 @@ fn empty_tmpdir_keeps_publication_receipts_outside_the_workspace() {
 #[test]
 fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let first = success(run(&root, &["add", "p.x", "v=1"]));
     assert!(first.contains("history committed:"));
     assert!(first.contains("born with its first entry"));
@@ -646,7 +657,7 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     let after: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     assert_eq!(after["commits"], 2);
     assert_ne!(after["subjects"]["p.x"]["heads"][0], old);
-    let current = kpop_native::history_node_capture::Capture::read(&root).unwrap();
+    let current = kpop_native::history_node_capture::Capture::read(record_path(&root).parent().unwrap()).unwrap();
     let kpop_native::value::TypedValue::Map(document) = current.document() else { panic!("record mapping") };
     let kpop_native::value::TypedValue::Map(known) = &document["known"] else { panic!("known mapping") };
     let kpop_native::value::TypedValue::Map(body) = &known["p.x"] else { panic!("reading body") };
@@ -671,7 +682,7 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
 #[test]
 fn default_git_project_uses_compact_history_for_normal_local_work() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let projects = tempfile::tempdir().unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
@@ -694,7 +705,7 @@ fn default_git_project_uses_compact_history_for_normal_local_work() {
 
 fn history_record_with_one_source() -> (tempfile::TempDir, std::path::PathBuf) {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     fs::create_dir(root.join("notes")).unwrap();
     fs::write(root.join("notes/c.txt"), "Hours: 10\nRate: 50\n").unwrap();
     fs::write(root.join("notes/d.txt"), "Days: 3\n").unwrap();
@@ -856,7 +867,7 @@ fn history_writes_with_nothing_near_say_only_the_commit() {
 #[test]
 fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.base", "v=10"]));
     success(run(
         &root,
@@ -911,7 +922,7 @@ fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
 #[test]
 fn first_named_add_bootstraps_a_proposal_without_accepting_it() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let output = success(run(
         &root,
         &["add", "p.first", "v=1", "--hypothesis", "opening"],
@@ -929,7 +940,7 @@ fn first_named_add_bootstraps_a_proposal_without_accepting_it() {
 #[test]
 fn named_hypothesis_rejects_invalid_and_physical_authority_names() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.base", "v=1"]));
     let invalid = run(&root, &["add", "p.bad", "v=2", "--hypothesis", "../bad"]);
     assert!(!invalid.status.success());
@@ -948,7 +959,7 @@ fn named_hypothesis_rejects_invalid_and_physical_authority_names() {
 #[test]
 fn named_privacy_checks_use_hypothesis_only_dependencies() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let private = tempfile::tempdir().unwrap();
     success(run(&root, &["add", "p.base", "v=1"]));
     success(run(
@@ -958,6 +969,7 @@ fn named_privacy_checks_use_hypothesis_only_dependencies() {
     let before = fs::read(record_path(&root)).unwrap();
     let output = command(&root)
         .env("KPOPPER_PRIVATE_HOME", private.path())
+        .env("KPOPPER_PROJECTS_DIR", projects(&root))
         .args([
             "add",
             "d.private",
@@ -977,8 +989,9 @@ fn named_privacy_checks_use_hypothesis_only_dependencies() {
 #[test]
 fn refused_first_add_leaves_no_partial_record_or_authority() {
     let temp = tempfile::tempdir().unwrap();
+    let root = workspace(&temp);
     let output = run(
-        temp.path(),
+        &root,
         &[
             "add",
             "d.bad",
@@ -987,8 +1000,8 @@ fn refused_first_add_leaves_no_partial_record_or_authority() {
         ],
     );
     assert!(!output.status.success());
-    assert!(!temp.path().join("GROUNDING.yaml").exists());
-    assert!(!temp.path().join(".kpopper/history.yaml").exists());
+    assert!(!root.join("GROUNDING.yaml").exists());
+    assert!(!root.join(".kpopper/history.yaml").exists());
 }
 
 #[test]
@@ -1001,7 +1014,7 @@ fn public_recovery_finishes_or_cancels_a_retained_first_write() {
     };
     for rollback in [false, true] {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = workspace(&temp);
         let entry = root.join("GROUNDING.yaml");
         let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
@@ -1015,6 +1028,8 @@ fn public_recovery_finishes_or_cancels_a_retained_first_write() {
             OperationalBounds::default(),
         )
         .unwrap();
+        // This is a retained legacy local journal, not a new default binding.
+        success(run(&root, &["config", "--mode", "simple", "--record", "GROUNDING.yaml"]));
         let policy = kpop_native::project_modes::Project::open(&root)
             .unwrap()
             .config()
@@ -1060,7 +1075,7 @@ fn public_recovery_finishes_or_cancels_a_retained_first_write() {
 fn a_private_first_or_later_add_stays_outside_the_record() {
     for existing in [false, true] {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = workspace(&temp);
         let private = tempfile::tempdir().unwrap();
         // Initialize only the explicitly selected test runtime if no record exists.
         if existing {
@@ -1083,6 +1098,7 @@ fn a_private_first_or_later_add_stays_outside_the_record() {
             .env("KPOPPER_NATIVE_RESOURCES", root.join(".test-runtime"))
             .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
             .env("KPOPPER_PRIVATE_HOME", private.path())
+            .env("KPOPPER_PROJECTS_DIR", projects(&root))
             .args(["add", "p.private", "v=secret", "private=true"])
             .output()
             .unwrap();
@@ -1099,7 +1115,7 @@ fn a_private_first_or_later_add_stays_outside_the_record() {
 #[test]
 fn explicit_core_acts_and_proposals_need_only_the_core_program() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.x", "v=1"]));
     let state: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     let version = state["subjects"]["p.x"]["heads"][0].as_str().unwrap();
@@ -1148,7 +1164,7 @@ fn explicit_core_acts_and_proposals_need_only_the_core_program() {
 #[test]
 fn unresolved_candidate_references_reach_the_authoring_diagnostic() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.seed", "v=1"]));
     let before = fs::read(record_path(&root)).unwrap();
     for (args, expected) in [
@@ -1173,7 +1189,7 @@ fn unresolved_candidate_references_reach_the_authoring_diagnostic() {
 #[test]
 fn session_receipts_follow_successful_publication_and_cannot_break_a_write() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let sessions = tempfile::tempdir().unwrap();
     let call = |args: &[&str]| {
         command(&root)
@@ -1258,7 +1274,7 @@ const CUSTOM_JUDGMENT: &[&str] = &[
 
 fn simple_workspace(source: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     fs::write(root.join("GROUNDING.yaml"), source).unwrap();
     (temp, root)
 }

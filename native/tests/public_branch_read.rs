@@ -163,7 +163,8 @@ fn import(root: &Path, shareability: &str) {
     );
     assert!(
         output.status.success(),
-        "{}",
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -373,6 +374,7 @@ fn without_private_home(root: &Path, args: &[&str]) -> Output {
         .current_dir(root)
         .args(args)
         .env_remove("HOME")
+        .env("KPOPPER_PROJECTS_DIR", root.parent().unwrap().join("test-projects"))
         .env_remove("KPOPPER_PRIVATE_HOME")
         .env_remove("KPOPPER_READ_MODE")
         .env("KPOPPER_SESSION_DISABLE", "1")
