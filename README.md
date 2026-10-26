@@ -327,10 +327,10 @@ to merge. It appears alongside their branch record; reading it does not adopt it
 their recorded premises. Their consolidation dry run tests it against that record too, and turns
 red when accepting it would break a recorded decision, until a person decides the finding.
 
-**kpopper Board** is this continuing shared-findings area. At the start of meaningful work
-in an unconfigured Git project, kpopper offers **Simple (recommended)** with a chosen external
-shared record, or **Advanced (experimental)** with branch-specific knowledge. The illustration
-above explains both. Advanced can keep Board findings local or publish them to a named
+**kpopper Board** is this continuing shared-findings area. An unconfigured project, including
+Git, uses private central **Simple** automatically on the first actual record mutation; there
+is no mode-choice prompt or ordinary mode announcement. The illustration above explains both
+context models. Advanced can keep Board findings local or publish them to a named
 repository and target through one continuing knowledge PR. A publication choice enables
 branch and PR updates, not merging; it is remembered across local worktrees. `kpop board`
 shows the current mode, selection and publication state.
@@ -347,10 +347,12 @@ remains a hypothesis. Merging means the team accepted the contribution; it does 
 the claim, increase confidence or refresh its last review. Private material and information
 whose sharing permission is unclear stay in a structured private draft.
 
-Projects without Git start in Simple; new Git projects currently start in experimental
-Advanced mode, including those with only one checkout. Simple can also be configured for
-a Git project with one external shared record. Existing registered shared records keep their current location and behavior;
-changing mode requires explicit reconciliation.
+New projects use `<central>/<slug>-<uuid>/GROUNDING.yaml`, with `KPOPPER_PROJECTS_DIR` taking
+precedence over `~/.kpopper/projects`; read-only discovery may show only a provisional unbound
+path. Existing records and explicit configurations keep their current location and behavior.
+Advanced is an explicit Experimental feature (`kpop experimental advanced`; the old
+`config --mode advanced` spelling remains a compatibility alias). Central storage is local,
+does not synchronize clones or teams, and never grants Board permission.
 
 See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
 and the publication lifecycle, and [consolidation](skills/consolidate/SKILL.md) for the
@@ -1630,7 +1632,7 @@ read-only assessment and the packaged Windows reasoning runtime remain available
 | Core | Available | CLI and focused Markdown exports with optional Mermaid. |
 | Application | Experimental, optional | kpopper Hub and Annotated Documents, with selected evidence and copy updates. |
 | Core | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
-| Workflow | Experimental; default for new Git projects | Advanced mode: branch records and shared findings. [Record merge conflicts and repeated CI remain an open design problem](docs/advanced-mode-merging.md). |
+| Workflow | Default for new unconfigured projects | Advanced mode: experimental branch records and shared findings. [Record merge conflicts and repeated CI remain an open design problem](docs/advanced-mode-merging.md). |
 | Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |

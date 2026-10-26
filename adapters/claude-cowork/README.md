@@ -19,6 +19,14 @@ Cowork runs work inside an isolated virtual machine, so host paths and dependenc
 available to a local Claude Code session must not be assumed to exist there.
 [Cowork execution environment](https://claude.com/docs/plugins/overview)
 
+For a new unconfigured project, central Simple is selected automatically only when the
+first real mutation has a verified durable store. `CLAUDE_CODE_REMOTE=true` requires an
+explicit absolute `KPOPPER_PROJECTS_DIR` before that mutation; otherwise stop with a
+no-write diagnostic rather than falling back to Experimental Advanced. This adapter does
+not claim universal VM/remote detection or end-to-end Cowork persistence. Existing explicit
+configurations remain usable, and central storage never grants team synchronization or Board
+permission.
+
 ## First-use check
 
 1. Confirm the installed skills appear and ask Cowork to open the project's

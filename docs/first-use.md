@@ -7,14 +7,19 @@ offered here. The timing of that offer - once, at a suitable moment in real work
 greeting - is the [map skill](../skills/map/SKILL.md)'s. The opener creates no record and
 scans no materials by itself.
 
-For an unconfigured Git project, the first offer is **Simple (recommended)** or **Advanced
-(experimental)**, with the existing README illustration. Simple uses one external record at
-a location you choose, shared by local worktrees. Advanced keeps records with their code
-branches, and can use kpopper Board for shared findings. Parallel branch records can produce
-merge conflicts and repeated CI; see the [open merge question](advanced-mode-merging.md).
-Existing mode choices are preserved. Choosing a local Board is not the same as Simple.
-See [mode and Board setup](project-modes.md#choose-a-mode-then-connect-the-board) for the
-location, migration and publication boundaries.
+For every unconfigured project, including Git projects, the first real record mutation uses
+private central **Simple** storage automatically. There is no mode-choice prompt or ordinary
+mode announcement. The central path is `<central>/<slug>-<uuid>/GROUNDING.yaml`; an absolute
+`KPOPPER_PROJECTS_DIR` wins over `~/.kpopper/projects`, and the first mutation's environment
+binds the path. Read-only discovery may show a provisional unbound path, but creates no
+directory or record. Existing records and explicit configurations keep their current routing.
+
+**Advanced (experimental)** is available only by explicit `kpop experimental advanced`
+(with `config --mode advanced` retained as a compatibility alias). It keeps records with
+branches and can use kpopper Board for shared findings. Board publication is always a
+separate explicit permission; central Simple supplies no synchronization or Board grant.
+See [project modes](project-modes.md) for ownership, source scope, move/copy recovery and
+publication boundaries.
 
 For a non-Git project, choose **Learn while working**, **Initial map**, or **Deeper investigation** in the conversation.
 An initial map covers your goals, current situation, commitments, decisions, evidence and
@@ -27,11 +32,10 @@ task may finish without creating a record. During work that will be revisited, t
 starts with an actual useful finding and its source. Conclusions are added when there is
 something to conclude, and their snapshots are filled by the existing writer.
 
-New Git projects currently start in **experimental Advanced mode**. It keeps knowledge
-with each branch, but parallel PRs can conflict on `GROUNDING.yaml` and require repeated
-CI after resolution. Read the [open merge design question](advanced-mode-merging.md) and
-[working modes](project-modes.md) when choosing how to use it. Projects without Git start
-in Simple mode; existing registered shared records keep their configured behavior.
+New projects do not start in Advanced. They use central Simple on first mutation. Existing
+legacy records retain their locations. Use the explicit Experimental command only when
+branch-local records are wanted; read the [open merge design question](advanced-mode-merging.md)
+and [working modes](project-modes.md) for its tradeoffs.
 
 ## Formatters and commit hooks
 
@@ -71,12 +75,13 @@ kpop config --guidance on
 kpop board
 ```
 
-`open` reads the current context. When no record exists it explains the starting options;
-it creates no file. `map` returns a concrete task to the calling agent, which accepts it,
-performs the mapping with its tools and reports the result. `--deep` requests a deeper
-investigation. `config` reads preferences or updates the guidance setting. Learning during
-ordinary work is the default. Git onboarding selects where that record will live; no empty
-record is created by setup. `board` inspects the mode choice and publication state locally.
+`open` reads the current context. When no record exists it explains the optional learning
+choices; it creates no file or central binding. `map` returns a concrete task to the calling
+agent, which accepts it, performs the mapping with its tools and reports the result. `--deep`
+requests a deeper investigation. `config` reads preferences or updates guidance; explicit
+Advanced configuration uses the validated transition path. Learning during ordinary work is
+the default. `board` inspects mode and publication state locally; central Simple never grants
+Board permission.
 
 Select the working directory before the operation:
 

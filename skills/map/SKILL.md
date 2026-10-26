@@ -16,14 +16,13 @@ An unavailable registered record is a location problem, not a new project.
 
 ## The starting offer, once
 
-In a Git project, use the mode and Board onboarding from `kpopper _agent guide`.
-Inspect `kpop board`: `mode_offer` means offer **Simple (recommended)** with a chosen
-external shared record location, or **Advanced (experimental)** with branch records.
-Explain Advanced's possible record merge conflicts and repeated CI, and use the existing
-README illustration. `offer` is the separate Board publication choice after mode selection;
-keeping Board local does not select Simple. Reuse any already-approved publication scope.
-Honor saved choices across worktrees and never stack the generic introduction below onto
-this flow. Mapping and deeper investigation remain available whenever requested.
+In a Git project, use the routing and Board information from `kpopper _agent guide`.
+An unconfigured project already uses private central Simple; mapping is not a reason to ask
+about storage mode. `kpop board` reports publication state separately. Advanced is available
+only through the explicit Experimental command, and silence never counts as consent. A
+read-only map must not bind a provisional central path or create a record. Preserve existing
+records until a validated transition. Mapping and deeper investigation remain available
+whenever requested.
 
 For non-Git Simple projects where a workspace has no record and the work is clearly going to be revisited, offer the three
 starting choices once, briefly, at the first suitable moment in real work: **learn while working**

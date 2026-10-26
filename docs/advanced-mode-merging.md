@@ -9,10 +9,12 @@ is a workflow that is simple for people using kpopper, including people without 
 Actions. Moving work from a merge conflict into setup, background automation or a separate
 filing step is a cost, not automatically a solution.
 
-Advanced remains the low-level fallback for unconfigured Git projects. First-use onboarding
-now offers an explicit choice of Simple or Advanced (experimental); it does not silently
-migrate existing records or make the core checks optional. See [project modes](project-modes.md)
-for the implemented behavior and [history](history-contract.md) for its preservation rules.
+Advanced is an explicit Experimental feature for projects that need branch-local records.
+Unconfigured projects use private central Simple automatically; onboarding does not ask a
+mode question or silently migrate existing records. Enter Advanced with
+`kpop experimental advanced` (`config --mode advanced` is a compatibility alias). See
+[project modes](project-modes.md) for routing and [history](history-contract.md) for
+preservation rules.
 
 This is a living problem statement. Alternatives below are proposals, not shipped features
 or a roadmap commitment. A useful contribution can refine a constraint, provide a small
