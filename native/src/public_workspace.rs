@@ -60,7 +60,9 @@ fn competing_generated_record(project: &Project, cwd: &Path) -> Result<Option<Pa
             if current == project.root || !current.starts_with(&project.root) {
                 break;
             }
-            let Some(parent) = current.parent() else { break };
+            let Some(parent) = current.parent() else {
+                break;
+            };
             current = parent.to_owned();
         }
     }
@@ -86,7 +88,10 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
     if let Some(path) = competing_generated_record(&project, &cwd)? {
-        return Err(unavailable("A generated binding conflicts with this workspace record.", &path));
+        return Err(unavailable(
+            "A generated binding conflicts with this workspace record.",
+            &path,
+        ));
     }
     if project.config_path.exists() {
         let record = project.record(None)?;
@@ -111,7 +116,10 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
             }
         }
         if let Some(path) = orphan_member(&current) {
-            return Err(unavailable("A record-bearing sidecar exists without its primary record.", &path));
+            return Err(unavailable(
+                "A record-bearing sidecar exists without its primary record.",
+                &path,
+            ));
         }
         let Some(parent) = current.parent() else {
             break;
@@ -128,6 +136,15 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     // Project defaults validate the registered external location, including a
     // refusal for competing in-tree records. Never invent a duplicate beside it.
     let record = project.record(None)?;
+    if project.is_git()
+        && !record.is_file()
+        && crate::history_contract::string_is(
+            &crate::history_contract::map(&project.config()?)?["mode"],
+            "advanced",
+        )
+    {
+        return Err(unavailable(UNAVAILABLE_REGISTERED, &record));
+    }
     if project
         .common
         .as_ref()
@@ -302,7 +319,10 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
     if let Some(path) = competing_generated_record(&project, &cwd)? {
-        return Err(unavailable("A generated binding conflicts with this workspace record.", &path));
+        return Err(unavailable(
+            "A generated binding conflicts with this workspace record.",
+            &path,
+        ));
     }
     let mut workspace = if project.is_git() {
         project.root.clone()
@@ -483,9 +503,18 @@ mod discovery_tests {
                 "owner_anchor": anchor, "kind": "directory"}
         });
         std::fs::create_dir_all(root.path().join(".kpopper")).unwrap();
-        std::fs::write(root.path().join(".kpopper/project.json"), serde_json::to_vec(&config).unwrap()).unwrap();
+        std::fs::write(
+            root.path().join(".kpopper/project.json"),
+            serde_json::to_vec(&config).unwrap(),
+        )
+        .unwrap();
         std::fs::write(root.path().join("GROUNDING.yaml"), b"known: {}\n").unwrap();
         let result = records(root.path());
-        assert!(result.unwrap_err().0.contains("generated binding conflicts"));
+        assert!(
+            result
+                .unwrap_err()
+                .0
+                .contains("generated binding conflicts")
+        );
     }
 }

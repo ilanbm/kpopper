@@ -217,6 +217,18 @@ fn project_slug(project: &Project) -> String {
     }
     slug(&project.root)
 }
+fn git_has_head_record(root: &Path, name: &str) -> Result<bool> {
+    Ok(git(
+        root,
+        &["ls-tree", "-r", "--name-only", "HEAD", "--", name],
+        true,
+    )?
+    .is_some_and(|raw| {
+        String::from_utf8_lossy(&raw)
+            .lines()
+            .any(|line| line.trim() == name)
+    }))
+}
 fn json_line(value: &V) -> Result<Vec<u8>> {
     let mut b = serde_json::to_vec(&value.to_json()?)?;
     b.push(b'\n');
@@ -333,7 +345,9 @@ impl Project {
                 } else {
                     portable_path(&record)?;
                 }
-            } else if !roots.iter().any(|r| r.join(name).exists()) {
+            } else if !roots.iter().any(|r| r.join(name).exists())
+                && !git_has_head_record(&self.root, name)?
+            {
                 let anchor = self.common.as_ref().unwrap_or(&self.root);
                 mode = "simple";
                 let record_path = central_root()?.join(format!(
@@ -347,6 +361,11 @@ impl Project {
                     .into();
             }
         } else if roots.iter().any(|r| r.join(name).exists()) {
+            record = resolved(&self.root.join(record))?
+                .to_str()
+                .ok_or_else(|| error("nonportable_project_path"))?
+                .into();
+        } else if self.is_git() && git_has_head_record(&self.root, name)? {
             record = resolved(&self.root.join(record))?
                 .to_str()
                 .ok_or_else(|| error("nonportable_project_path"))?
@@ -643,6 +662,10 @@ impl Project {
         if candidate.is_file() || registered {
             return Ok(());
         }
+        require(
+            string_is(&map(&proposal)?["mode"], "simple"),
+            "legacy_record_unavailable: restore the configured record before writing",
+        )?;
         require(
             self.record(Some(&guard.config))? == proposal_record,
             "default_binding_changed",
@@ -1172,6 +1195,46 @@ mod tests {
         );
         project.bind_for_mutation().unwrap();
         assert!(!project.config_path.exists());
+    }
+
+    #[test]
+    fn deleted_head_record_remains_unavailable_legacy_location() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("repo");
+        fs::create_dir(&root).unwrap();
+        command(&root, &["init", "-b", "main"]);
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        command(
+            &root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "add",
+                "GROUNDING.yaml",
+            ],
+        );
+        command(
+            &root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "commit",
+                "-m",
+                "record",
+            ],
+        );
+        fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+        let project = Project::open(&root).unwrap();
+        assert_eq!(project.record(None).unwrap(), root.join("GROUNDING.yaml"));
+        assert!(!project.config_path.exists());
+        assert_eq!(
+            project.bind_for_mutation().unwrap_err().0,
+            "legacy_record_unavailable: restore the configured record before writing"
+        );
     }
 
     #[test]
