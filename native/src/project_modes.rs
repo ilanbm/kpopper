@@ -153,6 +153,7 @@ fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
         f.sync_all()?;
         drop(f);
         fs::rename(&temporary, path)?;
+        #[cfg(unix)]
         File::open(parent)?.sync_all()?;
         Ok(())
     })();
@@ -481,15 +482,15 @@ impl Project {
             });
             if path != self.root && path.exists() && !same_git_owner {
                 return Err(error(if mutation {
-                    "generated_binding_copy_requires_recovery"
+                    "generated_binding_copy_requires_recovery: run kpop config --new-project"
                 } else {
-                    "generated_binding_copy_conflict"
+                    "generated_binding_copy_conflict: run kpop config --new-project"
                 }));
             }
         }
         Ok(())
     }
-    fn finish_generated_binding(&self, config: &V) -> Result<()> {
+    fn finish_generated_binding(&self, config: &V, allow_nonempty: bool) -> Result<()> {
         let (identity, token) = self.generated_binding(config)?;
         let record = self.record(Some(config))?;
         let expected_anchor = self.common.as_ref().unwrap_or(&self.root);
@@ -533,7 +534,7 @@ impl Project {
                     Ok(false)
                 }
             })?;
-            if !clean {
+            if !clean && !allow_nonempty {
                 return Err(error("generated_binding_candidate_conflict"));
             }
         }
@@ -555,7 +556,7 @@ impl Project {
                 if bounded(&receipt)?.is_some() {
                     self.verify_generated_owner(&guard.config, true)?;
                 }
-                return self.finish_generated_binding(&guard.config);
+                return self.finish_generated_binding(&guard.config, false);
             }
             return Ok(());
         }
@@ -602,7 +603,122 @@ impl Project {
             ]),
         );
         atomic_bytes(&self.config_path, &json_line(&next)?)?;
-        self.finish_generated_binding(&next)
+        self.finish_generated_binding(&next, false)
+    }
+
+    /// Validate and repair a generated binding explicitly, including a
+    /// completed record whose receipt was lost. This never migrates history.
+    pub fn rebind_generated(&self) -> Result<()> {
+        let guard = self.lock()?;
+        require(
+            self.generated_default(Some(&guard.config))?,
+            "generated_binding_required",
+        )?;
+        let record = self.record(Some(&guard.config))?;
+        require(
+            record.is_absolute() && record.parent().is_some(),
+            "generated_binding_invalid",
+        )?;
+        let (_, token) = self.generated_binding(&guard.config)?;
+        require(
+            record
+                .parent()
+                .unwrap()
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().contains(token)),
+            "generated_binding_invalid",
+        )?;
+        require(record.is_file(), "generated_binding_record_missing")?;
+        if bounded(&Self::owner_receipt_path(&record))?.is_some() {
+            self.verify_generated_owner(&guard.config, true)?;
+        }
+        self.finish_generated_binding(&guard.config, true)
+    }
+
+    /// Start a fresh generated identity for a genuine copied workspace. The
+    /// original owner and record are left untouched; no data is copied.
+    pub fn new_generated_project(&self) -> Result<()> {
+        let guard = self.lock()?;
+        require(
+            self.generated_default(Some(&guard.config))?,
+            "generated_binding_required",
+        )?;
+        let old_record = self.record(Some(&guard.config))?;
+        let receipt = Self::owner_receipt_path(&old_record);
+        let raw = bounded(&receipt)?.ok_or_else(|| error("generated_owner_receipt_missing"))?;
+        let value: serde_json::Value = serde_json::from_slice(&raw)?;
+        let owner = PathBuf::from(
+            value["owner_path"]
+                .as_str()
+                .ok_or_else(|| error("generated_owner_receipt_invalid"))?,
+        );
+        let same_git_owner = self.common.as_ref().is_some_and(|common| {
+            value["owner_anchor"]
+                .as_str()
+                .is_some_and(|anchor| Path::new(anchor) == common)
+        });
+        require(
+            owner != self.root && owner.exists() && !same_git_owner,
+            "generated_binding_not_copy",
+        )?;
+        let token = uuid::Uuid::new_v4().to_string();
+        let anchor = self.common.as_ref().unwrap_or(&self.root);
+        let record = central_root()?.join(format!("{}-{token}/GROUNDING.yaml", slug(&self.root)));
+        let mut next = guard.config.clone();
+        let m = map_mut(&mut next)?;
+        m.insert(
+            "record".into(),
+            V::Text(record.to_string_lossy().into_owned()),
+        );
+        m.insert(
+            "default_identity".into(),
+            obj([
+                ("version", n("1")),
+                ("token", s(&token)),
+                ("owner_anchor", s(&anchor.to_string_lossy())),
+                ("kind", s(if self.is_git() { "git" } else { "directory" })),
+            ]),
+        );
+        atomic_bytes(&self.config_path, &json_line(&next)?)?;
+        self.finish_generated_binding(&next, false)
+    }
+
+    /// Return the current workspace root only when generated ownership is
+    /// validated. This is read-only and intentionally returns `None` for
+    /// copied or unreachable owner contexts.
+    pub fn generated_source_workspace(&self, cwd: &Path) -> Result<Option<PathBuf>> {
+        let current = Project::open(cwd)?;
+        if !current.config_path.exists() || !current.generated_default(None)? {
+            return Ok(None);
+        }
+        let config = current.config()?;
+        let (identity, token) = current.generated_binding(&config)?;
+        let anchor = PathBuf::from(text(
+            identity
+                .get("owner_anchor")
+                .ok_or_else(|| error("generated_binding_invalid"))?,
+        )?);
+        let expected = current.common.as_ref().unwrap_or(&current.root);
+        if anchor != *expected {
+            return Ok(None);
+        }
+        let record = current.record(Some(&config))?;
+        let receipt = Self::owner_receipt_path(&record);
+        if let Some(raw) = bounded(&receipt)? {
+            let value: serde_json::Value = serde_json::from_slice(&raw)?;
+            if value["token"].as_str() != Some(token) {
+                return Ok(None);
+            }
+            if let Some(owner) = value["owner_path"].as_str() {
+                let owner = Path::new(owner);
+                if owner.exists() && owner != current.root && current.common.is_none() {
+                    return Ok(None);
+                }
+            }
+        } else if !record.is_file() {
+            return Ok(None);
+        }
+        Ok(Some(current.root))
     }
     pub fn record(&self, config: Option<&V>) -> Result<PathBuf> {
         let config = if let Some(v) = config {
@@ -1037,6 +1153,33 @@ mod tests {
             "generated_binding_candidate_conflict"
         );
     }
+
+    #[test]
+    fn explicit_rebind_repairs_completed_record_and_copy_has_no_source_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        let config = project.config().unwrap();
+        let record = project.record(Some(&config)).unwrap();
+        fs::write(&record, b"known: {}\n").unwrap();
+        let receipt = Project::owner_receipt_path(&record);
+        fs::remove_file(&receipt).unwrap();
+        project.rebind_generated().unwrap();
+        assert!(receipt.is_file());
+        assert_eq!(
+            project.generated_source_workspace(&root).unwrap(),
+            Some(root.clone())
+        );
+
+        let copy = dir.path().join("copy");
+        fs::create_dir(&copy).unwrap();
+        fs::create_dir(copy.join(".kpopper")).unwrap();
+        fs::copy(&project.config_path, copy.join(".kpopper/project.json")).unwrap();
+        let copied = Project::open(&copy).unwrap();
+        assert_eq!(copied.generated_source_workspace(&copy).unwrap(), None);
+    }
+
     #[test]
     fn common_policy_and_registered_record_are_shared_across_worktrees() {
         let dir = tempfile::tempdir().unwrap();
