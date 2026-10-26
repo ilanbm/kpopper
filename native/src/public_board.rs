@@ -109,13 +109,22 @@ fn export_illustration() -> Result<Value> {
 
 pub fn status(workspace: &Path) -> Result<Value> {
     let project = Project::open(workspace)?;
-    let config = project.config()?.to_json()?;
+    let policy = project.config()?;
+    let config = policy.to_json()?;
     let advanced = project.is_git() && config["mode"] == "advanced";
     let saved = preference(&project)?;
-    // Mode selection is no longer an onboarding decision.  Fresh projects use
-    // the Simple default; an existing Advanced record remains explicit and
-    // retains its Board flow.
-    let mode_selected = true;
+    let configured = project.config_path.is_file();
+    let generated = project.generated_default(Some(&policy))?;
+    let legacy_board_local = config["mode_origin"] == "legacy";
+    let automatic = generated || (!configured && !advanced);
+    let mode_selected = configured && !generated && !legacy_board_local;
+    let mode_origin = if automatic {
+        "automatic"
+    } else if mode_selected {
+        "configured"
+    } else {
+        "legacy"
+    };
     let guidance = onboarding::guidance()?;
     // Kept in the JSON surface for compatibility; ordinary onboarding never offers a mode.
     let mode_offer = false;
@@ -162,8 +171,8 @@ pub fn status(workspace: &Path) -> Result<Value> {
     }
     Ok(
         json!({"name":"kpopper Board","mode":config["mode"],"is_git":project.is_git(),"generation":config["generation"],
-        "choice":chosen,"offer":advanced && mode_selected && publication.is_null() && chosen.is_null() && saved["shown"] != true && guidance,
-        "mode_offer":mode_offer,"mode_selected":mode_selected,"advanced_experimental":true,
+        "choice":chosen,"offer":advanced && publication.is_null() && chosen.is_null() && saved["shown"] != true && guidance,
+        "mode_offer":mode_offer,"mode_selected":mode_selected,"mode_origin":mode_origin,"advanced_experimental":true,
         "record":project.record(None)?,"simple_record_suggestion":simple_record_suggestion(&project)?,
         "standing_permission":granted,"publication":publication,"remotes":remotes,
         "paused":cached["paused"],"pr":cached["pr"],"failures":cached["failures"],"retry_at":cached["retry_at"],
@@ -217,6 +226,9 @@ fn remember(project: &Project, local: bool) -> Result<()> {
     if local
         && (previous["choice"] != "local" || config["publication"]["standing_permission"] == true)
     {
+        if !project.config_path.is_file() {
+            config["mode_origin"] = json!("legacy");
+        }
         if config["publication"].is_object() {
             config["publication"]["standing_permission"] = json!(false);
         }

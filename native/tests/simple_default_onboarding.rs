@@ -144,6 +144,8 @@ fn fresh_git_and_non_git_projects_have_silent_simple_onboarding() {
         let status = fixture.cli(&["board"]);
         assert_eq!(status["mode"], "simple", "git={git}: {status}");
         assert_eq!(status["mode_offer"], false, "git={git}: {status}");
+        assert_eq!(status["mode_selected"], false, "git={git}: {status}");
+        assert_eq!(status["mode_origin"], "automatic", "git={git}: {status}");
         assert_eq!(status["offer"], false, "git={git}: {status}");
         assert_eq!(status["standing_permission"], false, "git={git}: {status}");
         assert!(
@@ -224,4 +226,33 @@ fn fresh_simple_board_local_does_not_select_advanced_or_create_project_config() 
         .join(".git/kpopper/project/project.json")
         .exists());
     assert!(tree(&fixture.projects).is_empty());
+}
+
+#[test]
+fn auto_bound_simple_projects_remain_automatic_and_have_no_board_authority() {
+    let fixture = Fixture::new(true);
+    let resources = fixture._temp.path().join("resources");
+    fs::create_dir_all(resources.join("reasoning")).unwrap();
+    let target = kpop_native::reasoning_runtime::target_name().unwrap();
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(format!("{target}.kpopper-runtime")),
+        resources.join("reasoning").join(format!("{target}.zip")),
+    )
+    .unwrap();
+    let added = fixture
+        .command(&["add", "fixture.value", "v=1"])
+        .env("KPOPPER_NATIVE_RESOURCES", &resources)
+        .env("KPOPPER_NATIVE_CACHE", fixture._temp.path().join("cache"))
+        .output()
+        .unwrap();
+    assert!(added.status.success(), "{}", text(&added));
+    let status = fixture.cli(&["board"]);
+    assert_eq!(status["mode"], "simple");
+    assert_eq!(status["mode_selected"], false);
+    assert_eq!(status["mode_origin"], "automatic");
+    assert_eq!(status["standing_permission"], false);
+    assert_eq!(status["offer"], false);
+    assert!(status["simple_record_suggestion"].is_string());
 }

@@ -139,6 +139,8 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
     let status = f.cli(&["board"]);
     assert_eq!(status["mode"], "advanced");
     assert_eq!(status["mode_offer"], false);
+    assert_eq!(status["mode_selected"], false);
+    assert_eq!(status["mode_origin"], "legacy");
     assert_eq!(status["offer"], true);
     assert_eq!(status["advanced_experimental"], true);
     assert_eq!(
@@ -236,6 +238,8 @@ fn fresh_simple_selection_pins_one_external_home_without_creating_an_empty_recor
     .unwrap();
     assert_eq!(second["record"], result["record"]);
     assert_eq!(f.cli(&["board"])["mode_offer"], false);
+    assert_eq!(f.cli(&["board"])["mode_selected"], true);
+    assert_eq!(f.cli(&["board"])["mode_origin"], "configured");
     assert_eq!(f.cli(&["board"])["offer"], false);
     // First real finding creates the external record, visible from both worktrees.
     let resources = f.private.join("resources");
