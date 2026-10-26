@@ -289,6 +289,19 @@ pub struct Project {
     pub config_path: PathBuf,
 }
 impl Project {
+    /// True only for the read-only placeholder emitted before a generated
+    /// central record has been allocated.
+    pub fn is_provisional_record_path(record: &Path) -> bool {
+        record.file_name().and_then(|name| name.to_str()) == Some("GROUNDING.yaml")
+            && record
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.rsplit_once("-unbound-"))
+                .is_some_and(|(_, suffix)| {
+                    suffix.len() == 32 && suffix.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+    }
     pub fn open(cwd: &Path) -> Result<Self> {
         let cwd = resolved(cwd)?;
         require(cwd.is_dir(), "project_directory_unavailable")?;
