@@ -112,6 +112,51 @@ fn fresh_git_advanced_check_does_not_bind_and_actual_transition_uses_root_record
 }
 
 #[test]
+fn explicit_local_simple_binding_stays_portable_after_relocation() {
+    let fixture = Fixture::new(false, false);
+    let configured = fixture.run(
+        &fixture.root,
+        &[
+            "config",
+            "--mode",
+            "simple",
+            "--record",
+            "GROUNDING.yaml",
+            "--json",
+        ],
+    );
+    assert!(
+        configured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&configured.stderr)
+    );
+    let added = fixture.run(&fixture.root, &["add", "p.local", "v=1"]);
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let local_record = fixture.root.join("GROUNDING.yaml");
+    assert!(local_record.is_file());
+    assert!(fs::read_dir(&fixture.projects).unwrap().next().is_none());
+
+    let relocated = fixture._temp.path().join("relocated");
+    copy_portable(&fixture.root, &relocated);
+    let read = fixture.run(&relocated, &["open"]);
+    assert!(
+        read.status.success(),
+        "{}",
+        String::from_utf8_lossy(&read.stderr)
+    );
+    let checked = fixture.run(&relocated, &["check"]);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+}
+
+#[test]
 fn config_mode_advanced_remains_a_compatibility_alias_with_notice() {
     let fixture = Fixture::new(true, true);
     let output = fixture.run(&fixture.root, &["config", "--mode", "advanced", "--json"]);
@@ -214,6 +259,27 @@ fn copy_tree(source: &Path, destination: &Path) {
         let target = destination.join(entry.file_name());
         if entry.file_type().unwrap().is_dir() {
             copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+fn copy_portable(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).unwrap();
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if matches!(
+            name.as_ref(),
+            "project.json" | "project.lock" | "mode-history" | ".history-local"
+        ) {
+            continue;
+        }
+        let target = destination.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_portable(&entry.path(), &target);
         } else {
             fs::copy(entry.path(), target).unwrap();
         }

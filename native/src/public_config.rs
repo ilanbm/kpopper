@@ -179,6 +179,29 @@ fn has_hypotheses(record: &Path) -> Result<bool> {
     }
     Ok(false)
 }
+fn has_record_layout_members(record: &Path) -> Result<bool> {
+    let name = record
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| Error("nonportable project path".into()))?;
+    let layout = crate::history_transaction::Layout::for_entry(name)?;
+    let parent = record
+        .parent()
+        .ok_or_else(|| Error("invalid path".into()))?;
+    Ok([
+        layout.hypotheses,
+        layout.view,
+        layout.replaced,
+        layout.authority,
+        layout.objects,
+        layout.commits,
+        layout.cancellations,
+        layout.retained,
+        layout.journal,
+    ]
+    .into_iter()
+    .any(|member| parent.join(member).exists()))
+}
 fn truthy(value: Option<&V>) -> bool {
     match value {
         None | Some(V::Null) | Some(V::Bool(false)) => false,
@@ -320,8 +343,7 @@ fn transition_report(
         } else {
             digest(&path)?
         };
-        if hash.is_none() && path.parent().is_some_and(|parent|
-            parent.join(".kpopper").exists() || parent.join("PROVENANCE.d").exists()) {
+        if hash.is_none() && has_record_layout_members(&path)? {
             blockers.push(format!("record is missing but its sidecars remain; reconcile before changing mode: {}", path.display()));
         }
         snapshots.insert(path_string(&path)?, hash);
@@ -388,8 +410,7 @@ fn transition_report(
                 ));
             } else if !target.parent().is_some_and(Path::is_dir) {
                 blockers.push(format!("prepare the selected record directory before configuring its first write: {}", target.display()));
-            } else if target.parent().is_some_and(|parent| parent.join(".kpopper").exists()
-                || parent.join("PROVENANCE.d").exists()) {
+            } else if has_record_layout_members(target)? {
                 blockers.push(format!("destination has existing record sidecars; reconcile before changing mode: {}", target.display()));
             }
             snapshots.entry(path_string(target)?).or_insert(hash);
