@@ -622,11 +622,7 @@ pub fn context_with_mode(
     }
     if string("status") == "missing" && board["is_git"] == true {
         let path = serde_json::to_string(&current["record"])?;
-        if board["mode_selected"] == true {
-            lines.push(format!("Recording context for the agent: the selected record is {path}. For the first authorized sourced finding, use the record skill and `kpop add`; the first write creates it. No additional onboarding is needed. Do not create an empty template or narrate this reminder."));
-        } else {
-            lines.push(format!("Recording context for the agent: no mode/location has been selected yet (current fallback: {path}). Continue the user's work. When an authorized record write is next needed, obtain a concrete Simple location or Advanced choice; a skipped tutorial or disabled guidance is not a permanent recording ban and is not consent to Advanced. Use `kpop config --mode ...` and the record skill. Do not repeatedly offer a tutorial."));
-        }
+        lines.push(format!("Recording context for the agent: the selected record is {path}. For the first authorized sourced finding, use the record skill and `kpop add`; the first write creates it. No additional onboarding is needed. Do not create an empty template or narrate this reminder."));
     }
     if matches!(string("mapping"), "ready" | "running") {
         lines.push(format!("A mapping task is {} for session {} (request {}). Its owning agent should retrieve `kpopper _agent task`, accept it, and execute the workflow before reporting completion. Preserve the agreed scope. A returned task is not completed work.", string("mapping"), string("owner"), string("request")));

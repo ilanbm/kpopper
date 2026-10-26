@@ -112,9 +112,13 @@ pub fn status(workspace: &Path) -> Result<Value> {
     let config = project.config()?.to_json()?;
     let advanced = project.is_git() && config["mode"] == "advanced";
     let saved = preference(&project)?;
-    let mode_selected = project.config_path.is_file() || !advanced;
+    // Mode selection is no longer an onboarding decision.  Fresh projects use
+    // the Simple default; an existing Advanced record remains explicit and
+    // retains its Board flow.
+    let mode_selected = true;
     let guidance = onboarding::guidance()?;
-    let mode_offer = advanced && !mode_selected && saved["mode_shown"] != true && guidance;
+    // Kept in the JSON surface for compatibility; ordinary onboarding never offers a mode.
+    let mode_offer = false;
     let cached = pending_control::load_state(&project.state.join("publication.json"))?.to_json()?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -160,7 +164,7 @@ pub fn status(workspace: &Path) -> Result<Value> {
         json!({"name":"kpopper Board","mode":config["mode"],"is_git":project.is_git(),"generation":config["generation"],
         "choice":chosen,"offer":advanced && mode_selected && publication.is_null() && chosen.is_null() && saved["shown"] != true && guidance,
         "mode_offer":mode_offer,"mode_selected":mode_selected,"advanced_experimental":true,
-        "record":project.record(None)?,"simple_record_suggestion":simple_record_suggestion(&project),
+        "record":project.record(None)?,"simple_record_suggestion":simple_record_suggestion(&project)?,
         "standing_permission":granted,"publication":publication,"remotes":remotes,
         "paused":cached["paused"],"pr":cached["pr"],"failures":cached["failures"],"retry_at":cached["retry_at"],
         "retry_state":retry_state,
@@ -169,20 +173,11 @@ pub fn status(workspace: &Path) -> Result<Value> {
     )
 }
 
-fn simple_record_suggestion(project: &Project) -> Option<PathBuf> {
-    let common = project.common.as_ref()?;
-    if common.file_name()? != ".git" {
-        return None;
-    }
-    let primary = common.parent()?;
-    let name = primary.file_name()?.to_str()?;
-    // A sibling of the primary checkout is stable across ephemeral worktrees.
-    Some(
-        primary
-            .parent()?
-            .join(format!("{name}-knowledge"))
-            .join("GROUNDING.yaml"),
-    )
+fn simple_record_suggestion(project: &Project) -> Result<Option<PathBuf>> {
+    let config = project.config()?.to_json()?;
+    Ok((config["mode"] == "simple")
+        .then(|| project.record(None))
+        .transpose()?)
 }
 
 fn inspect(project: &Project, remote: Option<&str>, target: Option<&str>) -> Result<Value> {
@@ -321,12 +316,6 @@ pub fn run(options: &Options, workspace: &Path) -> Result<Value> {
 }
 
 pub fn opening(state: &Value) -> Result<Option<String>> {
-    if state["mode_offer"] == true {
-        return Ok(Some(format!(
-            "KPOPPER_MODE_OFFER {}\nAt the first suitable moment in meaningful user work, offer Simple (recommended) or Advanced (experimental), using the existing README illustration and the user's language. Simple uses one shared record outside all Git checkouts; show the suggested path and let the user choose another. Advanced keeps GROUNDING.yaml with each branch and supports kpopper Board, but merging can cause record conflicts and repeated CI. Explain local consolidation/resolution without promising automatic resolution of disputed claims. Read the start guide for the exact safe setup and migration flow. A Git default is not a saved user choice. After actually showing the mode offer run `board shown --mode`; silence changes no mode or permissions. Keep doing the user's work and never offer on a greeting, during urgent work or in background tasks.",
-            serde_json::to_string(state)?
-        )));
-    }
     if state["offer"] != true {
         if state["standing_permission"] == true && state["retry_state"] != "ready" {
             return Ok(Some(format!(
