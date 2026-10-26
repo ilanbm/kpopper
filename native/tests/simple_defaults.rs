@@ -111,6 +111,46 @@ fn concurrent_first_writers_share_one_binding_and_retain_both_entries() {
 }
 
 #[test]
+fn central_override_inside_checkout_is_rejected_even_through_symlink_alias() {
+    let temp = TempDir::new().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("repo");
+    let home = base.join("home");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    simple_runtime::resources(&home.join("resources"));
+    git(&root, &["init", "-q", "-b", "main"]);
+    fs::write(root.join("README.md"), "fixture source text\n").unwrap();
+
+    let inside = root.join("inside-store");
+    fs::create_dir_all(&inside).unwrap();
+    let direct = run(
+        &root,
+        &home,
+        &inside,
+        &["add", "source.one", "file=README.md"],
+    );
+    assert!(!direct.status.success());
+    assert!(String::from_utf8_lossy(&direct.stderr).contains("central_store_inside_workspace"));
+    assert!(!root.join(".git/kpopper/project/project.json").exists());
+
+    let alias = base.join("store-alias");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&inside, &alias).unwrap();
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(&inside, &alias).unwrap();
+    let linked = run(
+        &root,
+        &home,
+        &alias,
+        &["add", "source.two", "file=README.md"],
+    );
+    assert!(!linked.status.success());
+    assert!(String::from_utf8_lossy(&linked.stderr).contains("central_store_inside_workspace"));
+    assert!(!root.join("GROUNDING.yaml").exists());
+}
+
+#[test]
 fn first_binding_reports_an_existing_same_name_without_adopting_it() {
     let temp = TempDir::new().unwrap();
     let base = temp.path().canonicalize().unwrap();
