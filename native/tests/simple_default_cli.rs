@@ -130,6 +130,8 @@ fn explicit_local_simple_binding_stays_portable_after_relocation() {
         "{}",
         String::from_utf8_lossy(&configured.stderr)
     );
+    let configured_policy: Value = serde_json::from_slice(&configured.stdout).unwrap();
+    assert_eq!(configured_policy["project"]["mode_origin"], "configured");
     let added = fixture.run(&fixture.root, &["add", "p.local", "v=1"]);
     assert!(
         added.status.success(),
@@ -142,6 +144,11 @@ fn explicit_local_simple_binding_stays_portable_after_relocation() {
 
     let relocated = fixture._temp.path().join("relocated");
     copy_portable(&fixture.root, &relocated);
+    fs::rename(
+        &fixture.root,
+        fixture._temp.path().join("author-unavailable"),
+    )
+    .unwrap();
     let read = fixture.run(&relocated, &["open"]);
     assert!(
         read.status.success(),

@@ -512,6 +512,9 @@ fn persist_transition(
             map.remove("default_identity");
         }
     }
+    if let Some(origin) = report.get("mode_origin") {
+        next["mode_origin"] = origin.clone();
+    }
     guard.verify()?;
     atomic_bytes(&project.config_path, &canonical_json_line(&next)?)?;
     Ok(next)
@@ -576,7 +579,7 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     for directory in directories {
         directory_guards.push(DirectoryGuard::acquire(&directory, true)?);
     }
-    let report = transition_report(
+    let mut report = transition_report(
         project,
         &current,
         mode,
@@ -596,6 +599,9 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     }
     if options.check {
         return Ok((current, Some(report)));
+    }
+    if options.mode.is_some() {
+        report["mode_origin"] = J::String("configured".into());
     }
     let next = persist_transition(project, &guard, &current, &report)?;
     drop(directory_guards);
