@@ -138,8 +138,8 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
     let f = Fixture::new();
     let status = f.cli(&["board"]);
     assert_eq!(status["mode"], "advanced");
-    assert_eq!(status["mode_offer"], true);
-    assert_eq!(status["offer"], false);
+    assert_eq!(status["mode_offer"], false);
+    assert_eq!(status["offer"], true);
     assert_eq!(status["advanced_experimental"], true);
     assert_eq!(
         status["remotes"][0]["repository"],
@@ -510,18 +510,18 @@ fn a_later_local_choice_invalidates_an_earlier_connection_offer() {
 }
 
 #[test]
-fn board_local_requires_an_explicit_mode_and_leaves_the_mode_offer_available() {
+fn legacy_advanced_board_local_is_safe_without_selecting_a_mode() {
     let f = Fixture::new();
-    assert!(
-        !f.command_at(&f.root)
-            .args(["board", "local"])
-            .output()
-            .unwrap()
-            .status
-            .success()
-    );
-    assert_eq!(f.cli(&["board"])["mode_offer"], true);
-    assert!(!f.root.join(".git/kpopper/project/project.json").exists());
+    assert!(f
+        .command_at(&f.root)
+        .args(["board", "local"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    assert_eq!(f.cli(&["board"])["mode_offer"], false);
+    assert_eq!(f.cli(&["board"])["choice"], "local");
+    assert_eq!(f.cli(&["config"])["project"]["mode"], "advanced");
 }
 
 #[test]
@@ -564,7 +564,7 @@ fn frozen_unavailable_and_first_write_guidance_are_not_suppressed_by_onboarding(
     let f = Fixture::new();
     fs::remove_file(f.root.join("GROUNDING.yaml")).unwrap();
     f.cli(&["board", "shown", "--mode"]);
-    assert!(f.opener().contains("next needed"));
+    assert!(!f.opener().contains("KPOPPER_MODE_OFFER"));
     f.cli(&["config", "--mode", "advanced", "--json"]);
     assert!(f.opener().contains("first write creates"));
     fs::remove_file(f.root.join(".git/kpopper/project/project.json")).unwrap();

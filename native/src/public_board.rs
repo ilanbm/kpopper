@@ -206,9 +206,10 @@ fn inspect(project: &Project, remote: Option<&str>, target: Option<&str>) -> Res
 
 fn remember(project: &Project, local: bool) -> Result<()> {
     require(project.is_git(), "Board choices belong to a Git project")?;
+    let mode = project.config()?.to_json()?["mode"].clone();
     require(
-        !local || project.config_path.is_file(),
-        "choose Simple or Advanced explicitly before setting Board publication; board local does not select a mode",
+        !local || mode == "advanced",
+        "Board local is an Experimental Advanced choice; Simple projects keep the default without a Board selection",
     )?;
     let policy = project.lock()?;
     let previous = preference(project)?;

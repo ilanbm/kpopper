@@ -213,3 +213,15 @@ fn previews_and_guidance_disabled_do_not_bind_a_fresh_project() {
         .join(".git/kpopper/project/project.json")
         .exists());
 }
+
+#[test]
+fn fresh_simple_board_local_does_not_select_advanced_or_create_project_config() {
+    let fixture = Fixture::new(true);
+    let output = fixture.command(&["board", "local"]).output().unwrap();
+    assert!(!output.status.success(), "{}", text(&output));
+    assert!(!fixture
+        .root
+        .join(".git/kpopper/project/project.json")
+        .exists());
+    assert!(tree(&fixture.projects).is_empty());
+}
