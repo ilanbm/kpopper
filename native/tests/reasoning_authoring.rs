@@ -138,7 +138,7 @@ fn run(c: &J, runtime: &Runtime) -> Result<V> {
     }
 }
 #[test]
-fn writer_values_history_normalization_and_admission_match_pinned_python() {
+fn writer_values_history_normalization_and_admission_match_pinned_python_except_verdict_values() {
     let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/reasoning/native")
         .join(format!("{}.kpopper-runtime", target_name().unwrap()));
@@ -147,9 +147,34 @@ fn writer_values_history_normalization_and_admission_match_pinned_python() {
     let corpus: J =
         serde_json::from_str(include_str!("fixtures/reasoning-authoring.json")).unwrap();
     let mut failures = vec![];
+    let mut verdict_cases = 0;
     for c in corpus["cases"].as_array().unwrap() {
         match run(c, &runtime) {
             Ok(mut output) => {
+                // The frozen Python reference returned no value for an authored
+                // verdict. Keep that corpus intact and assert this intentional
+                // compatibility correction independently of its old output.
+                if c["name"] == "value-d.a" {
+                    assert_eq!(output, V::Text("holds".into()));
+                    verdict_cases += 1;
+                    continue;
+                }
+                if c["name"] == "result-d.a" {
+                    let result = output.to_json().unwrap();
+                    assert_eq!(result["status"], "ok");
+                    assert_eq!(
+                        result["value"],
+                        serde_json::json!({"type":"text","value":"holds"})
+                    );
+                    assert_eq!(result["diagnostics"], serde_json::json!([]));
+                    assert_eq!(
+                        result["basis"]["expression"],
+                        serde_json::json!({"ref":"d.a"})
+                    );
+                    assert_eq!(result["potential_ids"], serde_json::json!(["d.a"]));
+                    verdict_cases += 1;
+                    continue;
+                }
                 if let Some(expected) = c.get("output") {
                     let mut expected = V::from_tagged(expected).unwrap();
                     normalize(&mut output);
@@ -199,5 +224,6 @@ fn writer_values_history_normalization_and_admission_match_pinned_python() {
             }
         }
     }
+    assert_eq!(verdict_cases, 2);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
