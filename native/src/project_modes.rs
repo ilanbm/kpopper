@@ -293,19 +293,6 @@ fn require_fresh_store_override() -> Result<()> {
     }
     Ok(())
 }
-fn rollback_empty_candidate(record: &Path) {
-    let Some(parent) = record.parent() else { return };
-    let receipt = parent.join(OWNER_RECEIPT);
-    let _ = fs::remove_file(receipt);
-    let _ = fs::remove_file(parent.join(".kpopper/owner.lock"));
-    let control = parent.join(".kpopper");
-    if fs::read_dir(&control).is_ok_and(|mut entries| entries.next().is_none()) {
-        let _ = fs::remove_dir(&control);
-    }
-    if fs::read_dir(parent).is_ok_and(|mut entries| entries.next().is_none()) {
-        let _ = fs::remove_dir(parent);
-    }
-}
 fn json_line(value: &V) -> Result<Vec<u8>> {
     let mut b = serde_json::to_vec(&value.to_json()?)?;
     b.push(b'\n');
@@ -657,7 +644,7 @@ impl Project {
             .parent()
             .ok_or_else(|| error("invalid_path"))?;
         private_directory(owner_dir)?;
-        let owner_lock_path = owner_dir.join("owner.lock");
+        let owner_lock_path = parent.join(".owner.lock");
         let owner_lock = OpenOptions::new()
             .read(true)
             .write(true)
@@ -685,7 +672,9 @@ impl Project {
                     return Ok(false);
                 }
                 let name = entry.file_name();
-                if name == "owner.lock" && entry.file_type()?.is_file() {
+                if matches!(name.to_str(), Some("owner.lock" | ".owner.lock"))
+                    && entry.file_type()?.is_file()
+                {
                     Ok(true)
                 } else if name == ".kpopper" && entry.file_type()?.is_dir() {
                     Ok(fs::read_dir(entry.path())?.all(|child| {
@@ -709,6 +698,7 @@ impl Project {
         });
         let result = atomic_bytes(&receipt, serde_json::to_string(&value)?.as_bytes());
         let _ = FileExt::unlock(&owner_lock);
+        let _ = fs::remove_file(&owner_lock_path);
         result
     }
     fn normalize_generated_move(&self, config: &mut V) -> Result<()> {
@@ -834,11 +824,8 @@ impl Project {
                 ("kind", s(if self.is_git() { "git" } else { "directory" })),
             ]),
         );
+        atomic_bytes(&self.config_path, &json_line(&next)?)?;
         self.finish_generated_binding(&next, false)?;
-        if let Err(error) = atomic_bytes(&self.config_path, &json_line(&next)?) {
-            rollback_empty_candidate(&final_record);
-            return Err(error);
-        }
         if let Some(previous) = previous_record {
             eprintln!(
                 "Existing local record with this readable name: {}. Review its owner before restoring or migrating it.",
@@ -938,12 +925,8 @@ impl Project {
                 ("kind", s(if self.is_git() { "git" } else { "directory" })),
             ]),
         );
-        self.finish_generated_binding(&next, false)?;
-        if let Err(error) = atomic_bytes(&self.config_path, &json_line(&next)?) {
-            rollback_empty_candidate(&record);
-            return Err(error);
-        }
-        Ok(())
+        atomic_bytes(&self.config_path, &json_line(&next)?)?;
+        self.finish_generated_binding(&next, false)
     }
 
     /// Return the current workspace root only when generated ownership is
