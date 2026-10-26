@@ -20,10 +20,11 @@ struct Fixture {
 impl Fixture {
     fn new(git: bool) -> Self {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("workspace");
-        let projects = temp.path().join("projects");
-        let home = temp.path().join("home");
-        let resource_root = temp.path().join("resources");
+        let base = fs::canonicalize(temp.path()).unwrap();
+        let root = base.join("workspace");
+        let projects = base.join("projects");
+        let home = base.join("home");
+        let resource_root = base.join("resources");
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&projects).unwrap();
         fs::create_dir_all(&home).unwrap();
