@@ -42,6 +42,13 @@ fn orphan_member(directory: &Path) -> Option<PathBuf> {
         .map(|name| directory.join(name))
         .find(|path| path.symlink_metadata().is_ok())
 }
+fn empty_legacy_history_residue(path: &Path) -> bool {
+    path.is_dir()
+        && path.file_name().and_then(|name| name.to_str()).is_some_and(|name| {
+            matches!(name, "history" | "history-commits" | "history-cancellations")
+        })
+        && std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
+}
 fn competing_generated_record(project: &Project, cwd: &Path) -> Result<Option<PathBuf>> {
     if !project.config_path.exists() || !project.generated_default(None)? {
         return Ok(None);
@@ -139,10 +146,21 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
             }
         }
         if let Some(path) = orphan_member(&current) {
-            return Err(unavailable(
-                "A record-bearing sidecar exists without its primary record.",
-                &path,
-            ));
+            let legacy_birth = !project.config_path.exists()
+                && project.is_git()
+                && current == project.root
+                && !crate::project_modes::git_has_head_any_record(&project.root)?
+                && crate::project_modes::git_has_record_history(
+                    &project.root,
+                    &["GROUNDING.yaml", "PROVENANCE.yaml"],
+                )?
+                && empty_legacy_history_residue(&path);
+            if !legacy_birth {
+                return Err(unavailable(
+                    "A record-bearing sidecar exists without its primary record.",
+                    &path,
+                ));
+            }
         }
         let Some(parent) = current.parent() else {
             break;

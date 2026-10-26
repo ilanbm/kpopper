@@ -281,7 +281,7 @@ pub(crate) fn git_has_head_any_record(root: &Path) -> Result<bool> {
             matches!(line.trim(), "GROUNDING.yaml" | "PROVENANCE.yaml")
         })))
 }
-fn git_has_record_history(root: &Path, names: &[&str]) -> Result<bool> {
+pub(crate) fn git_has_record_history(root: &Path, names: &[&str]) -> Result<bool> {
     Ok(git(root, &["log", "--all", "-1", "--", names[0], names[1]], true)?
         .is_some_and(|raw| !raw.is_empty()))
 }
