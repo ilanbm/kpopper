@@ -337,6 +337,30 @@ fn native_build_gate_rejects_removed_history_and_tampered_view() {
 }
 
 #[test]
+fn rejects_machine_local_project_policy_in_portable_model() {
+    for local in [
+        ".kpopper/project.json",
+        ".kpopper/mode-history/previous.json",
+    ] {
+        let policy = format!("knowledge/venue-rates/{local}");
+        let source = committed_source(|root| put(root, &policy, b"{}\n"));
+        let output = tempfile::tempdir().unwrap();
+        let target = output.path().join("policy-rejected");
+        let error = build(
+            source.path(),
+            Path::new("model-package.json"),
+            Path::new("unused-engine-archive"),
+            None,
+            &target,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains(&policy), "policy was not rejected: {error}");
+        assert!(!target.exists(), "a rejected model must not be published");
+    }
+}
+
+#[test]
 fn diagnoses_tracked_transient_and_untracked_model_paths() {
     let tracked = committed_source(|root| {
         put(
