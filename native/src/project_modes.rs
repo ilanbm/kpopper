@@ -490,8 +490,17 @@ impl Project {
         Ok(())
     }
     fn finish_generated_binding(&self, config: &V) -> Result<()> {
-        let (_, token) = self.generated_binding(config)?;
+        let (identity, token) = self.generated_binding(config)?;
         let record = self.record(Some(config))?;
+        let expected_anchor = self.common.as_ref().unwrap_or(&self.root);
+        require(
+            text(
+                identity
+                    .get("owner_anchor")
+                    .ok_or_else(|| error("generated_binding_invalid"))?,
+            )? == expected_anchor.to_string_lossy(),
+            "generated_binding_owner_conflict",
+        )?;
         let parent = record.parent().ok_or_else(|| error("invalid_path"))?;
         if let Ok(meta) = fs::symlink_metadata(parent) {
             require(
@@ -508,8 +517,25 @@ impl Project {
                 old["token"].as_str() == Some(token),
                 "generated_owner_receipt_conflict",
             )?;
-        } else if fs::read_dir(parent)?.next().is_some() {
-            return Err(error("generated_binding_candidate_conflict"));
+        } else {
+            // A process can die after creating the candidate directory but
+            // before the receipt rename. Only an empty candidate (apart from
+            // harmless empty control directories) is safe to repair.
+            let clean = fs::read_dir(parent)?.try_fold(true, |clean, entry| -> Result<bool> {
+                let entry = entry?;
+                if !clean {
+                    return Ok(false);
+                }
+                let name = entry.file_name();
+                if name == ".kpopper" && entry.file_type()?.is_dir() {
+                    Ok(fs::read_dir(entry.path())?.next().is_none())
+                } else {
+                    Ok(false)
+                }
+            })?;
+            if !clean {
+                return Err(error("generated_binding_candidate_conflict"));
+            }
         }
         let value = json!({
             "version": 1,
@@ -535,10 +561,6 @@ impl Project {
         }
         let proposal = self.defaults()?;
         let proposal_record = PathBuf::from(text(field(map(&proposal)?, "record")?)?);
-        require(
-            self.record(Some(&guard.config))? == proposal_record,
-            "default_binding_changed",
-        )?;
         // A pre-existing in-tree or registered record is legacy state. It must
         // remain in place and must never acquire a generated central identity.
         let candidate = resolved(&self.root.join(expanded(&proposal_record)?))?;
@@ -549,6 +571,10 @@ impl Project {
         if candidate.is_file() || registered {
             return Ok(());
         }
+        require(
+            self.record(Some(&guard.config))? == proposal_record,
+            "default_binding_changed",
+        )?;
         if std::env::var_os("CLAUDE_CODE_REMOTE").is_some_and(|v| v == "true")
             && std::env::var_os("KPOPPER_PROJECTS_DIR").is_none()
         {
@@ -940,6 +966,26 @@ mod tests {
     }
 
     #[test]
+    fn legacy_git_record_and_missing_registration_are_not_bound() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("repo");
+        fs::create_dir(&root).unwrap();
+        command(&root, &["init", "-b", "main"]);
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        assert!(!project.config_path.exists());
+        fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+        let missing = dir.path().join("missing.yaml");
+        write(
+            &project.common.as_ref().unwrap().join("kpopper-record"),
+            missing.to_str().unwrap().as_bytes(),
+        );
+        project.bind_for_mutation().unwrap();
+        assert!(!project.config_path.exists());
+    }
+
+    #[test]
     fn first_mutation_persists_token_and_receipt_then_reuses_it() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
@@ -959,6 +1005,37 @@ mod tests {
         );
         project.bind_for_mutation().unwrap();
         assert_eq!(project.record(None).unwrap(), record);
+    }
+
+    #[test]
+    fn interrupted_empty_binding_repairs_same_token_but_nonempty_refuses() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        let config = project.config().unwrap();
+        let record = project.record(Some(&config)).unwrap();
+        let parent = record.parent().unwrap();
+        let receipt = parent.join(".kpopper/owner.json");
+        let token = text(
+            map(map(&config).unwrap().get("default_identity").unwrap())
+                .unwrap()
+                .get("token")
+                .unwrap(),
+        )
+        .unwrap()
+        .to_owned();
+        fs::remove_file(&receipt).unwrap();
+        project.bind_for_mutation().unwrap();
+        let repaired: serde_json::Value =
+            serde_json::from_slice(&fs::read(&receipt).unwrap()).unwrap();
+        assert_eq!(repaired["token"].as_str(), Some(token.as_str()));
+        fs::remove_file(&receipt).unwrap();
+        fs::write(parent.join("unexpected"), b"foreign").unwrap();
+        assert_eq!(
+            project.bind_for_mutation().unwrap_err().0,
+            "generated_binding_candidate_conflict"
+        );
     }
     #[test]
     fn common_policy_and_registered_record_are_shared_across_worktrees() {
