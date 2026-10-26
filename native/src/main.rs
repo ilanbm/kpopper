@@ -166,12 +166,19 @@ enum Command {
 }
 #[derive(Subcommand)]
 enum Application {
+    /// Opt into the existing Git-backed Advanced configuration mode.
+    Advanced(AdvancedOptions),
     /// Build or verify the optional record Hub.
     #[command(alias = "page")]
     Hub(kpop_native::public_hub::Options),
     /// Standalone HTML documents with embedded evidence and source checks.
     #[command(alias = "document")]
     AnnotatedDoc(kpop_native::public_annotated_document::Options),
+}
+#[derive(clap::Args)]
+struct AdvancedOptions {
+    #[command(flatten)]
+    config: kpop_native::public_config::Options,
 }
 #[derive(Clone, clap::ValueEnum)]
 enum Envelope {
@@ -1237,6 +1244,21 @@ fn main() {
             eprint!("{error}");
         }
         std::process::exit(code);
+    }
+    if let Command::Experimental {
+        application: Application::Advanced(options),
+    } = &args.command
+    {
+        let cwd = args
+            .workspace
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().expect("current directory"));
+        let mut config = options.config.clone();
+        config.mode = Some("advanced".into());
+        let output = kpop_native::public_config::dispatch(&config, &cwd, args.json);
+        print!("{}", output.stdout);
+        eprint!("{}", output.stderr);
+        std::process::exit(output.code);
     }
     if let Command::Document(options)
     | Command::Experimental {

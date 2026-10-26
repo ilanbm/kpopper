@@ -84,13 +84,11 @@ fn experimental_advanced_uses_the_validated_configuration_transition() {
     let fixture = Fixture::new(true, true);
     let output = fixture.json(&fixture.root, &["experimental", "advanced", "--json"]);
     assert_eq!(output["project"]["mode"], "advanced");
-    assert_eq!(
-        output["project"]["record"]
-            .as_str()
-            .map(Path::new)
-            .unwrap()
-            .exists(),
-        true
+    assert!(
+        fixture
+            .root
+            .join(output["project"]["record"].as_str().unwrap())
+            .exists()
     );
 }
 
@@ -132,7 +130,7 @@ fn check_is_read_only_and_does_not_bind_a_fresh_workspace() {
 }
 
 #[test]
-fn explicit_transition_clears_generated_identity_fields() {
+fn blocked_transition_preserves_generated_binding_and_data() {
     let fixture = Fixture::new(true, false);
     let added = fixture.run(&fixture.root, &["add", "p.generated", "v=1"]);
     assert!(
@@ -140,8 +138,16 @@ fn explicit_transition_clears_generated_identity_fields() {
         "{}",
         String::from_utf8_lossy(&added.stderr)
     );
-    let output = fixture.json(&fixture.root, &["config", "--mode", "advanced", "--json"]);
-    assert!(output["project"].get("default_identity").is_none());
+    let record = fixture.json(&fixture.root, &["--json", "where"])["output"]
+        .as_str()
+        .unwrap()
+        .trim()
+        .to_owned();
+    let before = fs::read(&record).unwrap();
+    let output = fixture.run(&fixture.root, &["config", "--mode", "advanced", "--json"]);
+    assert!(!output.status.success());
+    assert!(!output.stderr.is_empty());
+    assert_eq!(fs::read(record).unwrap(), before);
 }
 
 #[test]

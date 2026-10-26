@@ -486,6 +486,11 @@ fn persist_transition(
     next["mode"] = report["mode"].clone();
     next["record"] = report["record"].clone();
     next["generation"] = (generation(current)? + 1).into();
+    if report["changed"] == true {
+        if let Some(map) = next.as_object_mut() {
+            map.remove("default_identity");
+        }
+    }
     guard.verify()?;
     atomic_bytes(&project.config_path, &canonical_json_line(&next)?)?;
     Ok(next)
@@ -1007,8 +1012,6 @@ mod tests {
     #[test]
     fn explicit_transition_drops_generated_default_identity() {
         let dir = tempfile::tempdir().unwrap();
-        let record = dir.path().join("GROUNDING.yaml");
-        fs::write(&record, b"known: {}\n").unwrap();
         assert!(Command::new("git")
             .args(["init", "-q", "-b", "main"])
             .current_dir(dir.path())
@@ -1016,15 +1019,18 @@ mod tests {
             .unwrap()
             .success());
         let project = Project::open(dir.path()).unwrap();
-        let mut current = project.config().unwrap().to_json().unwrap();
-        current["default_identity"] = json!({
-            "version": 1,
-            "token": "00000000-0000-4000-8000-000000000000",
-            "owner_anchor": dir.path().to_string_lossy(),
-            "kind": "git"
-        });
+        project.bind_for_mutation().unwrap();
+        let current = project.config().unwrap().to_json().unwrap();
         let guard = project.lock().unwrap();
-        let report = transition_report(&project, &current, "advanced", None, None, false).unwrap();
+        let report = transition_report(
+            &project,
+            &current,
+            "advanced",
+            Some("GROUNDING.yaml"),
+            None,
+            false,
+        )
+        .unwrap();
         let next = persist_transition(&project, &guard, &current, &report).unwrap();
         assert!(next.get("default_identity").is_none());
     }
