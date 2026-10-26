@@ -209,13 +209,7 @@ pub(super) fn generated_owner_root(record: &Path, cwd: &Path) -> crate::Result<O
     if !owner.generated_default(None)? || owner.record(None)? != record {
         return Ok(None);
     }
-    let current = crate::project_modes::Project::open(cwd)?;
-    let same_owner = match (&owner.common, &current.common) {
-        (Some(a), Some(b)) => a == b,
-        (None, None) => owner.root == current.root,
-        _ => false,
-    };
-    Ok(same_owner.then_some(current.root))
+    owner.generated_source_workspace(cwd)
 }
 
 pub(super) fn source_path(

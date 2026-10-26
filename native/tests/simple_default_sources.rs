@@ -319,6 +319,44 @@ fn central_record_outside_identified_owner_does_not_guess_project_relative_sourc
 }
 
 #[test]
+fn copied_generated_config_has_no_project_source_context_for_read() {
+    let fixture = Fixture::new(false);
+    fs::write(fixture.root.join("README.md"), "original owner text\n").unwrap();
+    fixture.add_source("s.readme", "README.md");
+    let record = fixture.where_record();
+    let copy = fixture.root.parent().unwrap().join("copied");
+    fs::create_dir_all(copy.join(".kpopper")).unwrap();
+    fs::copy(
+        fixture.root.join(".kpopper/project.json"),
+        copy.join(".kpopper/project.json"),
+    )
+    .unwrap();
+    fs::write(copy.join("README.md"), "copied owner text\n").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
+        .current_dir(&copy)
+        .args([
+            "--json",
+            "search",
+            "--record",
+            record.to_str().unwrap(),
+            "copied",
+        ])
+        .env("KPOPPER_PROJECTS_DIR", &fixture.projects)
+        .env("KPOPPER_PRIVATE_HOME", &fixture.home)
+        .env("HOME", &fixture.home)
+        .env("XDG_STATE_HOME", fixture.home.join("state"))
+        .env("KPOPPER_NATIVE_RESOURCES", &fixture.resources)
+        .env("KPOPPER_NATIVE_CACHE", fixture.home.join("cache"))
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+    assert!(
+        !text.contains("copied owner text"),
+        "copied config supplied source context: {text}"
+    );
+}
+
+#[test]
 fn explicit_legacy_record_keeps_manual_external_source_semantics_and_no_central_write() {
     let fixture = Fixture::new(false);
     fs::write(fixture.root.join("GROUNDING.yaml"), "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  s.external: {file: /tmp/legacy-external.txt}\n").unwrap();
