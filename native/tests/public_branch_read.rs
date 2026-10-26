@@ -420,6 +420,12 @@ fn native_history_profile_refusal_precedes_private_draft_access() {
     )
     .unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
+    fs::create_dir_all(root.join(".git/kpopper/project")).unwrap();
+    fs::write(
+        root.join(".git/kpopper/project/project.json"),
+        r#"{"version":1,"generation":0,"mode":"advanced","record":"GROUNDING.yaml"}"#,
+    )
+    .unwrap();
     let added = run(&root, &["add", "p.value", "v=1"]);
     assert!(
         added.status.success(),
