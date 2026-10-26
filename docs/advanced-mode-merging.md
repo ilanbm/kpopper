@@ -16,6 +16,18 @@ mode question or silently migrate existing records. Enter Advanced with
 [project modes](project-modes.md) for routing and [history](history-contract.md) for
 preservation rules.
 
+The detailed comparison illustration remains here because it describes the experimental
+branch workflow, not the ordinary project default:
+
+<p align="center">
+  <a href="../assets/diagrams/two-working-modes.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../assets/diagrams/two-working-modes-mobile.png">
+      <img src="../assets/diagrams/two-working-modes.png" alt="Experimental Advanced branch records and the separate kpopper Board publication path, compared with central Simple.">
+    </picture>
+  </a>
+</p>
+
 This is a living problem statement. Alternatives below are proposals, not shipped features
 or a roadmap commitment. A useful contribution can refine a constraint, provide a small
 reproduction or disprove a proposed solution; it need not implement a new storage engine.

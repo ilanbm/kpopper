@@ -27,15 +27,20 @@ the previous policy are retained as rollback evidence.
 
 An ordinary unconfigured project is routed to private central **Simple** storage on its
 first real record mutation. There is no mode-choice prompt or announcement. The record is
-stored at `<central>/<slug>-<uuid>/GROUNDING.yaml`, where `<central>` is the absolute
-`KPOPPER_PROJECTS_DIR` value when configured, otherwise `~/.kpopper/projects`; the UUID is
-generated only for the first mutation. A read-only preview may show a clearly provisional
+stored at `<central>/<slug>-<uuid>/GROUNDING.yaml`, where `<central>` is the absolute,
+non-empty `KPOPPER_PROJECTS_DIR` value when configured, otherwise `~/.kpopper/projects`; the
+UUID is generated only for the first mutation. The root and HOME are validated lazily only
+when a fresh central location is needed: invalid values do not break legacy records or an
+already-bound explicit path. A read-only preview may show a clearly provisional
 `<slug>-unbound-<canonical-anchor-path-hash>/GROUNDING.yaml`, but that path is never created
 or adopted as a record. Existing records and explicit configurations retain their location.
 
 Central Simple is local only: it provides no remote/team synchronization and never grants
-Board permission. Relative project sources resolve against the current owning workspace;
-captured sources remain beside the central record. Branch/revision provenance is retained,
+Board permission. For a non-Git project, the discovered root is the owner boundary; do not
+promote an arbitrary cwd or the central record parent into a wider project. Relative project
+sources resolve against the current owning workspace; duplicate matches are an explicit
+ambiguity, and outside an identified owner they remain unresolved rather than guessed.
+Captured sources remain beside the central record. Branch/revision provenance is retained,
 and a central record must not be used to guess files from another worktree.
 
 If an old same-slug central record exists, first binding reports a recovery hint without
@@ -43,8 +48,9 @@ reading, adopting or deleting it. A copied binding refuses writes with an exact 
 command. If the original owner disappeared, the next mutation can update the owner receipt;
 `kpop config --rebind` validates that move explicitly, while `kpop config --new-project`
 creates a fresh empty binding without copying data or history. Existing legacy records,
-including nested records discovered by the normal root walk, always win over generated
-central defaults.
+including nested records discovered by the normal root walk, win during unconfigured
+discovery. After a generated binding exists, a later competing record or sidecar is an
+ambiguity refusal; it must never silently switch ownership or swallow that record.
 
 ## Choose Advanced explicitly, then connect the Board
 

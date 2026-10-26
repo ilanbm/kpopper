@@ -52,9 +52,11 @@ After finding relevant IDs, prefer `context <id>` for declared dependencies and 
 Use `pull` for concise reads or if the checked reader is unavailable. Trace changes with
 `affects <changed-id>` or `context <changed-id> --direction impact`; gate on `check`.
 
-Use the project's mode: Simple shares one graph with named hypotheses across sessions;
-Advanced adds branch contexts and `pending_grounding` for shareable findings independent
-of a feature, even with one checkout. Several sessions may work on the same hypothesis.
+Use the project's mode: new unconfigured projects use private central Simple automatically,
+sharing one graph with named hypotheses across sessions; Advanced is an explicit Experimental
+feature that adds branch contexts and `pending_grounding` for shareable findings independent
+of a feature, even with one checkout. Central storage is local only and never grants Board
+permission. Several sessions may work on the same hypothesis.
 Private or unclear sharing permission means a structured private draft outside Git.
 Ordinary reads include relevant pending contributions with their scope and state; use an
 explicit frozen read for committed PR/CI evidence. A measurement of an unmerged commit is

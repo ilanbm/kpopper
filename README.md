@@ -262,29 +262,26 @@ declares and the inputs deliberately measured or recorded. The examples on this 
 retain their compact legacy records, which the native runtime continues to read without
 migration. [New records also preserve immutable history](#how-it-works).
 
-### Two working modes
+### Simple by default
 
 The difference is **whether sessions share one project context or work against different
 versions of the code**. Both modes support several sessions and competing hypotheses.
 
-**`GROUNDING.yaml` is the readable project record shown below:** one shared context in
-Simple, and a version kept with each branch, including `main`, in Advanced. New
-history-backed records also keep their supporting history in `.kpopper/`; carry
-that directory with the YAML when sharing or versioning the record.
+New unconfigured projects use one private central `GROUNDING.yaml` record automatically on
+the first actual mutation. Its absolute location is bound under `KPOPPER_PROJECTS_DIR`, or
+`~/.kpopper/projects` when no override is configured; a read-only preview never creates the
+provisional path. Existing records keep their location. The central store is local only: it
+does not synchronize clones or teams and does not grant Board permission.
 
-<p align="center">
-  <a href="assets/diagrams/two-working-modes.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/two-working-modes-mobile.png">
-      <img src="assets/diagrams/two-working-modes.png" alt="Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced (experimental): Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing kpopper Board, shared findings pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.">
-    </picture>
-  </a>
-</p>
+```mermaid
+flowchart LR
+  work[Current project workspace] --> simple[Central Simple record]
+  simple --> sources[Current workspace sources + branch/revision provenance]
+  advanced[Explicit Experimental Advanced] --> branches[Branch-local records]
+```
 
-[Phone layout](assets/diagrams/two-working-modes-mobile.png)
-
-[View the full-size illustration](assets/diagrams/two-working-modes.png) ·
-[View the vertical version](assets/diagrams/two-working-modes-mobile.png)
+Advanced is described separately in [the Experimental mode documentation](docs/project-modes.md)
+and is never selected by ordinary onboarding.
 
 **Simple — one shared context.** Sessions read and contribute to the same project graph.
 Competing ideas are named hypotheses beside it: several sessions can examine the same
@@ -328,9 +325,8 @@ their recorded premises. Their consolidation dry run tests it against that recor
 red when accepting it would break a recorded decision, until a person decides the finding.
 
 **kpopper Board** is this continuing shared-findings area. An unconfigured project, including
-Git, uses private central **Simple** automatically on the first actual record mutation; there
-is no mode-choice prompt or ordinary mode announcement. The illustration above explains both
-context models. Advanced can keep Board findings local or publish them to a named
+Git, uses private central **Simple** automatically on the first actual record mutation. The
+illustration above explains both context models. Advanced can keep Board findings local or publish them to a named
 repository and target through one continuing knowledge PR. A publication choice enables
 branch and PR updates, not merging; it is remembered across local worktrees. `kpop board`
 shows the current mode, selection and publication state.
@@ -1632,7 +1628,8 @@ read-only assessment and the packaged Windows reasoning runtime remain available
 | Core | Available | CLI and focused Markdown exports with optional Mermaid. |
 | Application | Experimental, optional | kpopper Hub and Annotated Documents, with selected evidence and copy updates. |
 | Core | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
-| Workflow | Default for new unconfigured projects | Advanced mode: experimental branch records and shared findings. [Record merge conflicts and repeated CI remain an open design problem](docs/advanced-mode-merging.md). |
+| Workflow | Default | Central Simple record for new unconfigured projects; existing routing is preserved. |
+| Workflow | Experimental, opt-in | Advanced mode: branch records and shared findings. [Record merge conflicts and repeated CI remain an open design problem](docs/advanced-mode-merging.md). |
 | Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |

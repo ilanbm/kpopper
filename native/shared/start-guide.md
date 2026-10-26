@@ -24,13 +24,17 @@ contexts. Never describe Board-local as Simple. Existing records retain their ro
 `mode_selected: false` is not a reason to ask a mode question. Do not silently change an
 existing project.
 
-The central record is `<central>/<slug>-<uuid>/GROUNDING.yaml`, with an absolute
-`KPOPPER_PROJECTS_DIR` taking precedence over `~/.kpopper/projects`. Read-only discovery may
+The central record is `<central>/<slug>-<uuid>/GROUNDING.yaml`, with an absolute, non-empty
+`KPOPPER_PROJECTS_DIR` taking precedence over `~/.kpopper/projects`. These roots are validated
+only when fresh central storage is needed; invalid values do not break legacy or already-bound
+explicit paths. Read-only discovery may
 show `<slug>-unbound-<canonical-anchor-path-hash>/GROUNDING.yaml`, but that provisional path
-must never be created or adopted. Existing explicit, registered and nested legacy records
-always win. Central storage is local only: it provides no team/clone synchronization and
-never grants Board permission. Relative sources use the current owning workspace and retain
-actual path, digest and branch/revision provenance; captured sources remain beside the record.
+must never be created or adopted. Existing explicit, registered and nested legacy records win
+during unconfigured discovery; after a generated binding exists, a competing record is an
+ambiguity refusal, never a silent ownership switch. Central storage is local only: it provides
+no team/clone synchronization and never grants Board permission. Relative sources use the
+current owning workspace and retain actual path, digest and branch/revision provenance;
+duplicate matches are ambiguous, and outside an identified owner they remain unresolved.
 
 On binding, an old same-slug store receives only a recovery hint; it is never read or adopted.
 Copied bindings refuse writes with the exact recovery command. A moved owner can be diagnosed
