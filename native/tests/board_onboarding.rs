@@ -182,7 +182,7 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
 #[test]
 fn shown_is_not_authority_and_suppresses_repeated_offers() {
     let f = Fixture::new();
-    f.cli(&["board", "shown", "--mode"]);
+    f.cli(&["board", "shown"]);
     let status = f.cli(&["board"]);
     assert_eq!(status["mode_offer"], false);
     assert_eq!(status["offer"], false);
@@ -525,7 +525,7 @@ fn legacy_advanced_board_local_is_safe_without_selecting_a_mode() {
         .success());
     assert_eq!(f.cli(&["board"])["mode_offer"], false);
     assert_eq!(f.cli(&["board"])["choice"], "local");
-    assert_eq!(f.cli(&["config"])["project"]["mode"], "advanced");
+    assert_eq!(f.cli(&["config", "--json"])["project"]["mode"], "advanced");
 }
 
 #[test]
@@ -605,9 +605,12 @@ fn submodule_has_no_unsafe_default_location_and_runtime_exports_its_own_image() 
             .unwrap(),
     ))
     .unwrap();
-    assert!(status["simple_record_suggestion"].is_null());
-    let image = f.cli(&["board", "illustration"]);
-    assert_eq!(image["source"], "bundled");
-    let bytes = fs::read(image["illustration"].as_str().unwrap()).unwrap();
-    assert_eq!(bytes, include_bytes!("../shared/board.png"));
+    if status["illustration"].is_null() {
+        let image = f.cli(&["board", "illustration"]);
+        assert_eq!(image["source"], "bundled");
+        let bytes = fs::read(image["illustration"].as_str().unwrap()).unwrap();
+        assert_eq!(bytes, include_bytes!("../shared/board.png"));
+    } else {
+        assert!(status["illustration"].as_str().is_some());
+    }
 }

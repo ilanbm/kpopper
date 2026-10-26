@@ -225,7 +225,7 @@ fn fresh_simple_board_local_does_not_select_advanced_or_create_project_config() 
         .root
         .join(".git/kpopper/project/project.json")
         .exists());
-    assert!(tree(&fixture.projects).is_empty());
+    assert!(fs::read_dir(&fixture.projects).unwrap().next().is_none());
 }
 
 #[test]
