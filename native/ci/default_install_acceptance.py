@@ -95,34 +95,57 @@ def main():
         result = run(name, [executable, "--version"], env=native_environment)
         if result.stdout.strip() != "kpop " + args.version:
             raise RuntimeError("wrong installed version: " + result.stdout)
-    preview = run("04-record-preview", [binary, "where"], env=native_environment)
-    if preview.stderr or not preview.stdout.strip():
-        raise RuntimeError("installed default did not preview its record location cleanly")
-    entry = Path(preview.stdout.strip()).resolve()
-    if project.resolve() in entry.parents or entry == project.resolve():
-        raise RuntimeError("installed default preview selected a workspace record")
-    try:
-        entry.relative_to(home.resolve())
-    except ValueError:
-        raise RuntimeError("installed default preview escaped the isolated home")
-    config = run("04-config-preview", [binary, "config"], env=native_environment)
-    if (config.stderr or "mode: simple" not in config.stdout.lower()
-            or ("record: " + str(entry)).lower() not in config.stdout.lower()):
-        raise RuntimeError("installed default config preview disagreed with its record location")
-    if (project / ".kpopper/project.json").exists() or entry.exists() or entry.parent.exists():
+    projects_root = (home / ".kpopper/projects").resolve()
+    owner_marker = project / ".kpopper/project.json"
+
+    def central_location(value):
+        # Rust preserves Windows verbatim prefixes; Python's temporary home does not.
+        if windows and value.startswith("\\\\?\\UNC\\"):
+            value = "\\\\" + value[8:]
+        elif windows and value.startswith("\\\\?\\"):
+            value = value[4:]
+        location = Path(value)
+        if not location.is_absolute() or location.name != "GROUNDING.yaml":
+            raise RuntimeError("installed default did not report an absolute record path")
+        location = location.resolve()
+        if location.parent.parent != projects_root:
+            raise RuntimeError("installed default record escaped its isolated central store")
+        return location
+
+    def record_location(name):
+        result = run(name, [binary, "where"], env=native_environment)
+        if result.stderr or not result.stdout.strip():
+            raise RuntimeError("installed default did not report its record location cleanly")
+        return central_location(result.stdout.strip())
+
+    def check_configuration(name, entry=None):
+        result = run(name, [binary, "config", "--json"], env=native_environment)
+        configuration = json.loads(result.stdout)
+        if (result.stderr or configuration["project"]["mode"] != "simple"
+                or configuration["project"]["publication"] is not None):
+            raise RuntimeError("installed default configuration disagreed with its private record")
+        location = central_location(configuration["record"])
+        if entry is not None and location != entry:
+            raise RuntimeError("installed default configuration changed its record location")
+        return location
+
+    absent = run("04-record-absent", [binary, "where"], env=native_environment, expected=(1,))
+    if absent.stdout or absent.stderr:
+        raise RuntimeError("installed locator reported a record before its first write")
+    preview_entry = check_configuration("04-config-preview")
+    if owner_marker.exists() or projects_root.exists():
         raise RuntimeError("read-only default preview created a binding or central record")
 
     run("04-source", [binary, "add", "s.smoke", "name=Installed source", "read=2026-09-01"], env=native_environment)
+    entry = record_location("04-bound-location")
+    check_configuration("04-config-bound", entry)
+    if entry == preview_entry or preview_entry.exists():
+        raise RuntimeError("installed default adopted or created its provisional record")
+    if not owner_marker.is_file() or not entry.is_file():
+        raise RuntimeError("installed default did not retain its owner marker and central record")
     run("05-reading", [alias, "add", "p.seats", "v=17", "from=s.smoke", "name=Installed seats", "--as-of", "2026-09-01"], env=native_environment)
-    location = run("05-record-location", [binary, "where"], env=native_environment)
-    if location.stderr or not location.stdout.strip():
-        raise RuntimeError("installed default did not select its record location cleanly")
-    if Path(location.stdout.strip()).resolve() != entry:
+    if record_location("05-record-location") != entry:
         raise RuntimeError("installed default record location changed after its first write")
-    if not (project / ".kpopper/project.json").is_file():
-        raise RuntimeError("installed default did not retain its workspace owner marker")
-    if not entry.is_file():
-        raise RuntimeError("installed default did not retain the selected central record")
     update = {"event_id": "installed-smoke", "date": "2026-09-02",
               "source_quote": "There are 19 installed seats.", "source": "s.smoke",
               "at": "installation acceptance", "record_sha256": hashlib.sha256(entry.read_bytes()).hexdigest(),
