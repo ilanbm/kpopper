@@ -13,11 +13,7 @@ In ordinary conversation, name the product **kpopper** and describe the action i
 
 ## The first write
 
-For an unconfigured project, use private central Simple automatically; do not ask a mode
-question or announce the default. The first actual mutation mints the central UUID binding;
-read-only previews never bind or create central state. Advanced is available only through
-the explicit Experimental command. Preserve existing legacy records and explicit paths until
-a validated transition. Central storage is local and never grants Board permission.
+New, unconfigured projects use private central Simple without a mode question or announcement. The first valid record-creating `add` binds a UUID location; read-only previews create no central state. Advanced requires explicit Experimental selection. Preserve legacy records and explicit paths until a validated transition; local storage grants no Board permission.
 
 Simple shares one graph; Advanced keeps branch context and kpopper Board for feature-independent findings. Private or unclear sharing permission takes priority and retains a private draft. Keep exact source, scope and commit; unmerged measurements are scoped facts, not automatically hypotheses. Capture, proposal and acceptance differ; merge neither proves truth nor refreshes `seen`. See [project modes](../../docs/project-modes.md). **Route before writing:** an authorized shared report needs `shareability: "project"` and `scope: {"kind": "external", "environment": "service/account"}` (or project scope). Verify `project_captured` and its receipt. `applied` means local writing; an unannotated report does not feed the Board. Code/feature findings stay with the branch. Neither a remote nor confident wording grants sharing rights.
 
@@ -25,11 +21,7 @@ If hypotheses cause `needs_primary`, review the retained report. An independent 
 
 Record the first useful finding within the user's authorization. Sources and facts are valid alone; `add` fills `seen` for actual judgments. After a semantic refusal, reconsider the representation, not just the value's format: follow [live representation evolution](../kpopper/EVOLUTION.md), then execute supported corrections within the task's authority. Installation creates no record, and a one-off can finish without one.
 
-Where no record resolves for the workspace, `kpop add` creates the central record at its
-bound `<slug>-<uuid>/GROUNDING.yaml` location with that first entry, and later `add` extends
-it. A registered record that is unavailable is a location problem: restore it rather than
-starting another. The [shape reference](../kpopper/references/shape.md) shows the sections,
-pointer records and how a record lives outside a tree that cannot hold it.
+In automatic Simple storage, `kpop add` creates the bound `<slug>-<uuid>/GROUNDING.yaml` with the first entry; later adds extend it. Restore an unavailable registered record instead of starting another. The [shape reference](../kpopper/references/shape.md) describes sections, pointer records and external locations.
 
 **Make a new record useful to its reader.** When creating or arranging a record, put sections devoted to sources, sessions or conversations last, after knowledge, judgments and open questions, whatever their names. Recommend `sources` for new records; preserve existing names and grouping. This is an authoring convention; update commands preserve the existing order. Link and briefly explain the finding when its explanation is due. Show the optional experimental hub only on an explicit request or standing preference.
 
