@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-10-25
+  updated: 2026-10-27
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -138,6 +138,13 @@ known:
     from: s.followups_state
     at: "Store.__init__, Store.setup and Store._register"
     of: "2026-09-10"
+  hyp.simple_default_storage_policy:
+    v: "superseded malformed draft"
+    name: "Superseded storage-policy draft with literal quotation characters"
+    from: run.simple_default_storage_checks
+    at: "Only the draft field encoding was rejected. The automatic-storage decision remains accepted
+         and is represented by the corrected entries."
+    of: "2026-10-27"
   m.blocked_on_implementation:
     v: 4
     name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
@@ -1484,6 +1491,17 @@ known:
          parse cache as a user gets it; the call counts wrap knowledge_views.overlay from outside and
          count pending_grounding.semantic_roles"
     of: "2026-09-18"
+  m.pending_only_birth_visibility_limit:
+    name: "Existing pending visibility limitation after first local compact record"
+    v: "With only refs/kpopper/pending_grounding present, both f59edbde and 640a1250 exposed the
+        pending entry before the first local add. The add created a local Advanced record without
+        generated policy, preserved the pending ref and allowed the local entry to be pulled, but
+        ordinary pull of the pending entry then returned 1 in both versions."
+    from: run.simple_default_storage_checks
+    at: "BASE-native-authored pending contribution, identical separate workspaces. This is an
+         observed baseline limitation; automatic-storage work neither adopted nor repaired the
+         pending overlay."
+    of: "2026-10-27"
   m.prompt_hook_10x_kept:
     v: 0.15
     unit: s
@@ -1959,6 +1977,29 @@ known:
     at: "ScopeCapture probe at faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1;
          scripts/reasoning/snapshot.py:316-398 and scripts/reasoning/evaluate.py:157-167"
     of: "2026-09-16"
+
+  m.simple_default_history_walks:
+    name: "Legacy-history discovery cost for bound projects"
+    v: "In synthetic repositories with 1 and 100000 commits, an unbound board or first add each made
+        one legacy-history walk; bound add, pull and check each made zero. Bound add made 110 Git
+        process calls in both fixtures."
+    from: run.simple_default_storage_checks
+    at: "Frozen 8112f8ff binary; Git process and full-history invocation counts. Timings were
+         affected by concurrent compilation and are not a latency guarantee."
+    of: "2026-10-27"
+
+  m.simple_default_storage_checks:
+    name: "Native acceptance on the integrated storage implementation"
+    v: "1852 passed, 0 failed and 91 pre-existing ignores across 189 test targets; source remained
+        clean and unchanged and neither the isolated fallback store nor the real default central
+        store was created. After the final cache-fingerprint fallback correction, all 17 project-mode
+        units and 22 Simple regressions passed on 9ff9f5fe; the full suite was not repeated for that
+        localized correction."
+    from: run.simple_default_storage_checks
+    at: "cargo test --manifest-path native/Cargo.toml --locked --offline --no-fail-fast; commit
+         8112f8ffcd05d257c3892f8a59fb9dfd424d7e67, macOS arm64. This does not establish an installed
+         release or other-platform execution."
+    of: "2026-10-27"
 
   m.skill_bytes_before:
     v: 64011
@@ -2572,31 +2613,38 @@ judgments:
                                dotted prefix with, in id order among them, and at a collection's tail
                                only when id order puts it there"
   d.brand_on_the_directory:
-    verdict: "the brand goes on the directory, the verbs, the check's name and the head line of a
-              born record; the concept goes on the entry file's name"
-    because: "A file named for a tool becomes a standard when the tool already dominates its niche;
-              a file named for the concept becomes one when many vendors are the aim from the first
-              day, which {{goal.portable}} says this is - and this tool renamed itself twice while
-              the file's name survived both. The brand is still an asset: {{lit.name_risk}} says
-              qualified search works, both registries hold the name, and it shows to an adopter where
-              the hosts show theirs - the directory in every repository that adopts, visible and
-              searchable; the check on every pull request; the first line of a record someone finds,
-              which said nothing before; the commands and the skill namespace, which already carry
-              it. The file's name is {{d.entry_file_is_grounding}}."
+    because: "The concept-named entry file supports {{goal.portable}} even when a tool changes its
+              name. The historical name assessment {{lit.name_risk}} motivates keeping the brand on
+              the owned storage directory, commands, skills, checks and identifying record line.
+              Under {{d.simple_default_project_storage}}, the owned storage can be central rather
+              than a directory of record data in every repository; existing layouts remain valid. The
+              entry filename remains {{d.entry_file_is_grounding}}."
+    distinct_from: d.named_for_popper
     reopened_by: "a person who met a record in a tree and could not find the tool that keeps it from
                   the tree alone, or an adopter who took the directory's name for the format's"
-    rests_on: [s.2026_09_12_layout, goal.portable, lit.name_risk, d.entry_file_is_grounding]
+    rests_on: [s.2026_09_12_layout, goal.portable, lit.name_risk, d.entry_file_is_grounding, d.simple_default_project_storage]
+    verdict: "the brand goes on the directory, the verbs, the check's name and the head line of a
+              born record; the concept goes on the entry file's name"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-10-27"]
+    reviewed: "2026-10-27"
     seen:
       s.2026_09_12_layout: "read 2026-09-12"
       goal.portable: "usable by any session, in any project, with no author present"
       lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken; every
                       package registry is free; qualified search works"
-      d.entry_file_is_grounding: "the record's entry file is GROUNDING.yaml: the first add creates
-                                  it at the workspace root, the locator finds it first and a record
-                                  kept under the earlier name after it, wherever that record already
-                                  is, and no command creates the earlier name again"
-    distinct_from: d.named_for_popper
-    # distinct 2026-09-12: one is where the brand shows in an adopter's tree, the other is what the tool is called; both read the name's cost
+      d.entry_file_is_grounding: "The entry file is GROUNDING.yaml at the resolved project-record
+                                  location: private central storage for a new automatic Simple
+                                  project, or the existing configured or legacy location. The locator
+                                  continues to recognize PROVENANCE.yaml for existing records;
+                                  ordinary new records use GROUNDING.yaml."
+      d.simple_default_project_storage: "New projects use private central Simple storage
+                                         automatically, without a mode prompt or announcement. The
+                                         first valid record-creating add binds a stable project
+                                         identity under ~/.kpopper/projects/<slug>-<uuid>, or an
+                                         explicit absolute KPOPPER_PROJECTS_DIR. Advanced is an
+                                         explicitly selected Experimental feature. Existing records,
+                                         explicit targets and legacy branch contexts retain their
+                                         semantics until a validated transition."
   d.browser_code_in_browser_files:
     rests_on: [m.page_string_lines, prior.strings_lose_tooling]
     verdict: "the page's CSS and JS live in their own files under scripts/page/, read whole at
@@ -3154,10 +3202,6 @@ judgments:
                                           the base"
       p.union_tests: 1
   d.entry_file_is_grounding:
-    rests_on: [s.2026_09_12_layout, goal.portable, d.prefix_is_a_word, d.reasoning_in_record, p.entry_names]
-    verdict: "the record's entry file is GROUNDING.yaml: the first add creates it at the workspace
-              root, the locator finds it first and a record kept under the earlier name after it,
-              wherever that record already is, and no command creates the earlier name again"
     because: "The name is the one thing a session with no author present reads before anything else,
               and {{goal.portable}} is the bar: a file named for what it does for the session - what
               its answers stand on - carries its own instruction, where provenance named the half of
@@ -3167,14 +3211,22 @@ judgments:
               the link a question takes into the record. Reasoning, the pitch word, names a process
               and one field, {{d.reasoning_in_record}}, not the state the file holds. The earlier
               name stays read so that no record has to move, and {{p.entry_names}} counts the names
-              the locator knows - a third would be a second convention."
+              the locator knows - a third would be a second convention. The filename remains the
+              concept; the owner binding, rather than a universal workspace-root assumption,
+              determines where a new record lives under {{d.simple_default_project_storage}}."
     reopened_by: "a session with no author present that found the file and did not read it before
                   answering from memory, or an adopter who asked what the file is, or a live record
                   the locator stopped finding under its earlier name; a third name the locator
                   answers to, or a command that creates the earlier name again; a third name the
                   locator answers to, or a command that creates the earlier name again; a third name
                   the locator answers to, or a command that creates the earlier name again"
-    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23"]
+    rests_on: [s.2026_09_12_layout, goal.portable, d.prefix_is_a_word, d.reasoning_in_record, p.entry_names, d.simple_default_project_storage]
+    verdict: "The entry file is GROUNDING.yaml at the resolved project-record location: private
+              central storage for a new automatic Simple project, or the existing configured or
+              legacy location. The locator continues to recognize PROVENANCE.yaml for existing
+              records; ordinary new records use GROUNDING.yaml."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-23", "the standing judgment holds, and a person takes this over it by name on 2026-10-27"]
+    reviewed: "2026-10-27"
     seen:
       s.2026_09_12_layout: "read 2026-09-12"
       goal.portable: "usable by any session, in any project, with no author present"
@@ -3188,6 +3240,14 @@ judgments:
                               the page's connective text lives in the brief; both resolve references
                               at build and both carry seen"
       p.entry_names: 2
+      d.simple_default_project_storage: "New projects use private central Simple storage
+                                         automatically, without a mode prompt or announcement. The
+                                         first valid record-creating add binds a stable project
+                                         identity under ~/.kpopper/projects/<slug>-<uuid>, or an
+                                         explicit absolute KPOPPER_PROJECTS_DIR. Advanced is an
+                                         explicitly selected Experimental feature. Existing records,
+                                         explicit targets and legacy branch contexts retain their
+                                         semantics until a validated transition."
   d.every_worker_test_waits_for_the_lease:
     from: s.2026_09_15_batch_test_race
     name: "Every test that starts the detached worker waits for its lease"
@@ -3235,28 +3295,41 @@ judgments:
       d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
                           person; only a predicate that holds fails the build"
   d.first_add_is_the_birth:
-    verdict: "where no record resolves, the first add creates GROUNDING.yaml at the workspace root
-              with that entry, under one line that says what keeps it; no other command creates one,
-              and an unavailable registered record is refused, never replaced"
-    because: "The write occasion had no mechanical first step: add refused where no record existed,
-              so every first record was a hand-written file. Installation alone still creates
-              nothing; the first finding does, and on a surface that can publish the record is met as
-              its page ({{d.first_meeting_artifact}}). The file it creates carries the name
-              {{d.entry_file_is_grounding}} gives it, and one line saying what keeps it, so a record
-              found without its author leads back to the tool."
+    because: "Installation alone creates no record; the first authorized finding does.
+              {{d.simple_default_project_storage}} resolves private central storage for new projects
+              while preserving legacy and explicit locations. The file carries the name from
+              {{d.entry_file_is_grounding}} and a line identifying the tool. Creating it does not
+              activate a presentation: {{d.first_meeting_artifact}} keeps the optional page behind an
+              explicit request or standing preference."
     reopened_by: "a record born by a first add where a registered one was meant; or a session that
                   writes the file by hand rather than through add once this exists; or a first add
                   that created the earlier name"
-    rests_on: [s.2026_09_10_skills_split, s.2026_09_12_layout, d.first_meeting_artifact, d.entry_file_is_grounding]
+    rests_on: [s.2026_09_10_skills_split, s.2026_09_12_layout, d.first_meeting_artifact, d.entry_file_is_grounding, d.simple_default_project_storage]
+    verdict: "The first valid record-creating add creates GROUNDING.yaml with its first entry at the
+              resolved project-record location. Installation, reads, previews and updates of a
+              missing target do not create another record. A registered or current-HEAD record that
+              is unavailable is refused rather than replaced."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-10-27"]
+    reviewed: "2026-10-27"
     seen:
       s.2026_09_10_skills_split: "read 2026-09-10"
       s.2026_09_12_layout: "read 2026-09-12"
-      d.first_meeting_artifact: "a record born in this session, on a surface that can publish, is
-                                 rendered and shown as a live artifact without asking"
-      d.entry_file_is_grounding: "the record's entry file is GROUNDING.yaml: the first add creates
-                                  it at the workspace root, the locator finds it first and a record
-                                  kept under the earlier name after it, wherever that record already
-                                  is, and no command creates the earlier name again"
+      d.first_meeting_artifact: "Show the optional experimental record page only on an explicit
+                                 request or a standing preference; creating a record or finishing a
+                                 map does not activate it."
+      d.entry_file_is_grounding: "The entry file is GROUNDING.yaml at the resolved project-record
+                                  location: private central storage for a new automatic Simple
+                                  project, or the existing configured or legacy location. The locator
+                                  continues to recognize PROVENANCE.yaml for existing records;
+                                  ordinary new records use GROUNDING.yaml."
+      d.simple_default_project_storage: "New projects use private central Simple storage
+                                         automatically, without a mode prompt or announcement. The
+                                         first valid record-creating add binds a stable project
+                                         identity under ~/.kpopper/projects/<slug>-<uuid>, or an
+                                         explicit absolute KPOPPER_PROJECTS_DIR. Advanced is an
+                                         explicitly selected Experimental feature. Existing records,
+                                         explicit targets and legacy branch contexts retain their
+                                         semantics until a validated transition."
   d.fold_passes_the_one_door:
     rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, s.2026_09_15_verdict_conflicts_decided, s.2026_09_15_branch_verdict_conflicts, d.contradiction_by_id_and_day, p.supersede_doors, m.door.unfired_flips_named_reversed, m.door.unfired_flips_folded_clean]
     verdict: "a folded reading passes the one door a written one does, asked with the base's own
@@ -4985,22 +5058,25 @@ judgments:
       s.2026_09_13_process_illustrations: "read 2026-09-13"
       s.2026_09_13_worker_and_research: "read 2026-09-13"
   d.readme_working_modes:
+    because: "{{d.simple_default_project_storage}} removes a storage choice from ordinary
+              onboarding. The branch-specific path remains useful as an explicit Experimental
+              feature, with its merge limitations stated. A generic review box would still hide
+              comparison of subjects, conflicting claims and combined dependencies, so the
+              consolidation and publication distinctions remain. These are explanatory design
+              choices; reader comprehension has not been measured."
     from: s.2026_09_14_working_modes
-    name: "Explain shared contexts, branch contexts and explicit consolidation"
-    rests_on: [s.working_modes_explanation, d.readme_layered_explanation, d.consolidation_is_a_test]
-    verdict: "Explain Simple as one shared context and Advanced as branch contexts plus a continuing
-              path for shared findings. Show consolidation explicitly in both modes, with folding,
-              refutation and unresolved proposals distinguished. Show local reads of pending findings
-              separately from publication and acceptance into main."
-    because: "A branch-only picture hides findings that outlive the feature which discovered them. A
-              generic review box hides comparison of subjects, conflicting claims and combined
-              dependencies. The shared path and consolidation cycle explain how knowledge becomes
-              available, is reconciled and is retained, while the vendor API example gives that
-              separation a concrete use. These are explanatory design choices; reader comprehension
-              has not been measured."
+    name: "Explain automatic storage first and Experimental Advanced separately"
     reopened_by: "An uncoached reader interprets pending findings as already accepted, assumes every
                   finding applies to every branch, cannot explain what consolidation changes, or
                   reads a connector as automatic adoption or publication."
+    rests_on: [s.working_modes_explanation, d.readme_layered_explanation, d.consolidation_is_a_test, d.simple_default_project_storage]
+    verdict: "Lead with ordinary recording and automatic private shared project storage, without
+              asking readers to select a mode. Explain Advanced separately as an explicit
+              Experimental branch context with shared project contributions. Keep consolidation
+              visible, distinguish folding, refutation and unresolved proposals, and separate local
+              pending reads from publication and acceptance."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-10-27"]
+    reviewed: "2026-10-27"
     seen:
       s.working_modes_explanation: "read 2026-09-14"
       d.readme_layered_explanation: "Lead with recorded dependencies between decisions, evidence and
@@ -5014,6 +5090,14 @@ judgments:
                                   worked on the same world: premises re-checked, falsifiers
                                   evaluated, contradictions stopped - as a dry run at any moment, and
                                   as a step on every pull request"
+      d.simple_default_project_storage: "New projects use private central Simple storage
+                                         automatically, without a mode prompt or announcement. The
+                                         first valid record-creating add binds a stable project
+                                         identity under ~/.kpopper/projects/<slug>-<uuid>, or an
+                                         explicit absolute KPOPPER_PROJECTS_DIR. Advanced is an
+                                         explicitly selected Experimental feature. Existing records,
+                                         explicit targets and legacy branch contexts retain their
+                                         semantics until a validated transition."
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work
@@ -5557,6 +5641,27 @@ judgments:
                                        prefixes nothing picks, spill, drift, the recent streak - and
                                        nothing in the mechanism acts on a number"
       p.coverage_thresholds: 0
+  d.simple_default_project_storage:
+    name: "Start with a private project record without a mode choice"
+    verdict: "New projects use private central Simple storage automatically, without a mode prompt
+              or announcement. The first valid record-creating add binds a stable project identity
+              under ~/.kpopper/projects/<slug>-<uuid>, or an explicit absolute KPOPPER_PROJECTS_DIR.
+              Advanced is an explicitly selected Experimental feature. Existing records, explicit
+              targets and legacy branch contexts retain their semantics until a validated
+              transition."
+    because: "Ordinary recording should not require a storage-design decision. A stable owner
+              identity lets related worktrees use one record while separate clones and copied
+              projects cannot silently claim each other. Reads and missing-target updates do not
+              allocate a permanent binding. Known legacy primaries, history, pending findings and
+              orphan record sidecars must be accounted for before a fresh central record is created.
+              Recovery must preserve data, source provenance and publication boundaries; central
+              storage alone grants neither synchronization nor publication."
+    rests_on: [doc.simple_default_storage]
+    reopened_by: "An ordinary new project is asked to choose a mode, a read allocates a durable
+                  record, a copy can take a live owner record, an existing or explicitly selected
+                  record becomes inaccessible, or relative sources resolve against a different
+                  project without an explicit ambiguity."
+    seen: {doc.simple_default_storage: "read 2026-10-27"}
   d.skill_is_an_occasion:
     rests_on: [s.2026_09_10_skills_split, p.skills_shipped, m.skill_bytes_largest, m.skill_bytes_before, d.open_is_a_slot]
     verdict: "a skill is one occasion - the moment a session is in, said in its description - and
@@ -8864,6 +8969,15 @@ sources:
     at: "Originally read 2026-09-17. Re-read PredicateLiteralContract setup, required-core behavior,
          expression preservation and native assessment assertions in tests/test_predicate_literals.py
          at python-final on 2026-09-25."
+  doc.simple_default_storage:
+    name: "Automatic private storage and explicit Experimental Advanced"
+    file: "docs/project-modes.md"
+    at: "Project knowledge storage; New projects use Simple automatically; Choose Advanced
+         explicitly"
+    of: "Local source 9ff9f5fe95693e78fbb86e24cd897260cfe2da6c; full native suite tested at
+         8112f8ffcd05d257c3892f8a59fb9dfd424d7e67, followed by focused validation of the cache
+         correction at 9ff9f5fe. This is not installed or released runtime evidence."
+    read: "2026-10-27"
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html
@@ -8957,6 +9071,19 @@ sources:
     of: "this record as main held it, the page fixture, and two live records outside this
          repository, 2026-09-03"
     read: "2026-09-03"
+
+  run.simple_default_storage_checks:
+    name: "Local automatic-storage acceptance checks"
+    of: "2026-10-27 native suite on clean commit 8112f8ffcd05d257c3892f8a59fb9dfd424d7e67, using
+         frozen binary SHA256 38f72bc8b93db343371c4e012c222f6842655f7651a98518f78792fa219a6290;
+         focused compatibility probes compare baseline f59edbde7e3cf0e340a95accf2c6b64d2e3a6b72 with
+         candidate 640a125035596317ff66b4f50b84af1fa0ef1b1f where explicitly named. The
+         cache-fingerprint correction at 9ff9f5fe95693e78fbb86e24cd897260cfe2da6c passed 17
+         project-mode units and 22 Simple regressions with binary SHA256
+         09448d77f8dc0a8ca16c60b852c729c0c1879c17b4fc319ab467c88eb51c1e6d. The same local acceptance
+         work includes source-scoped record readback and correction of literal quotation characters
+         in an uncommitted draft."
+    read: "2026-10-27"
 
   run.verdict_conflicts_tests:
     from: s.2026_09_15_verdict_conflicts_decided
