@@ -12,6 +12,8 @@ use crate::{
 use fs2::FileExt;
 use serde_json::json;
 use std::{
+    cell::RefCell,
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
     path::{Component, Path, PathBuf},
@@ -333,19 +335,98 @@ pub(crate) fn git_has_head_any_record(root: &Path) -> Result<bool> {
             .any(|line| matches!(line.trim(), "GROUNDING.yaml" | "PROVENANCE.yaml"))
     }))
 }
-pub(crate) fn git_has_record_history(root: &Path, names: &[&str]) -> Result<bool> {
-    Ok(git(
+// History classification is expensive on repositories with no record history.
+// Only a CLI invocation opts into reuse; library callers remain uncached. Ref/HEAD
+// fingerprints invalidate history results, while config, worktrees, primary files
+// and pending state are always observed independently at their existing checks.
+std::thread_local! {
+    static INVOCATION_HISTORY: RefCell<Option<HashMap<PathBuf, (Vec<u8>, bool)>>> = const { RefCell::new(None) };
+}
+pub struct InvocationHistoryScope;
+pub fn invocation_history_scope() -> InvocationHistoryScope {
+    INVOCATION_HISTORY.with(|cache| *cache.borrow_mut() = Some(HashMap::new()));
+    InvocationHistoryScope
+}
+impl Drop for InvocationHistoryScope {
+    fn drop(&mut self) {
+        INVOCATION_HISTORY.with(|cache| *cache.borrow_mut() = None);
+    }
+}
+fn history_fingerprint(root: &Path) -> Result<Option<Vec<u8>>> {
+    let Some(mut refs) = git(
         root,
-        &["log", "--all", "-1", "--", names[0], names[1]],
+        &[
+            "rev-parse",
+            "--git-common-dir",
+            "--revs-only",
+            "--all",
+            "HEAD",
+        ],
         true,
     )?
-    .is_some_and(|raw| !raw.is_empty()))
+    else {
+        return Ok(None);
+    };
+    let common = string(
+        refs.split(|byte| *byte == b'\n')
+            .next()
+            .unwrap_or_default()
+            .to_vec(),
+    )?;
+    let common = resolved(&root.join(common.trim()))?;
+    // Deepening a shallow checkout or changing grafts can expose old record
+    // history without moving any ref. Include those graph boundaries too.
+    for name in ["shallow", "info/grafts"] {
+        let raw = bounded(&common.join(name))?.unwrap_or_default();
+        refs.extend_from_slice(&(raw.len() as u64).to_le_bytes());
+        refs.extend_from_slice(&raw);
+    }
+    Ok(Some(refs))
+}
+fn git_has_record_history(root: &Path) -> Result<bool> {
+    let active = INVOCATION_HISTORY.with(|cache| cache.borrow().is_some());
+    let fingerprint = if active {
+        history_fingerprint(root)?
+    } else {
+        None
+    };
+    if let Some(refs) = &fingerprint {
+        if let Some(found) = INVOCATION_HISTORY.with(|cache| {
+            cache
+                .borrow()
+                .as_ref()
+                .and_then(|entries| entries.get(root))
+                .filter(|(before, _)| before == refs)
+                .map(|(_, found)| *found)
+        }) {
+            return Ok(found);
+        }
+    }
+    let history = git(
+        root,
+        &[
+            "log",
+            "--all",
+            "-1",
+            "--",
+            "GROUNDING.yaml",
+            "PROVENANCE.yaml",
+        ],
+        true,
+    )?;
+    let found = history.as_ref().is_some_and(|raw| !raw.is_empty());
+    if let Some(refs) = fingerprint.filter(|_| history.is_some()) {
+        INVOCATION_HISTORY.with(|cache| {
+            if let Some(entries) = cache.borrow_mut().as_mut() {
+                entries.insert(root.to_owned(), (refs, found));
+            }
+        });
+    }
+    Ok(found)
 }
 pub(crate) fn git_has_legacy_knowledge(root: &Path) -> Result<bool> {
-    Ok(
-        git_has_record_history(root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
-            || crate::pending_state::resolve(root, crate::pending_state::REF)?.is_some(),
-    )
+    Ok(git_has_record_history(root)?
+        || crate::pending_state::resolve(root, crate::pending_state::REF)?.is_some())
 }
 fn require_fresh_store_override() -> Result<()> {
     if std::env::var_os("CLAUDE_CODE_REMOTE").is_some_and(|v| v == "true")
@@ -457,7 +538,29 @@ impl Project {
         require(!paths.is_empty(), "project_worktrees_unavailable")?;
         Ok(paths)
     }
+    pub(crate) fn has_legacy_knowledge(&self) -> Result<bool> {
+        if !self.is_git() {
+            return Ok(false);
+        }
+        let roots = self.worktrees()?;
+        Ok(roots.iter().any(|root| {
+            ["GROUNDING.yaml", "PROVENANCE.yaml"]
+                .iter()
+                .any(|name| root.join(name).is_file())
+        }) || git_has_head_any_record(&self.root)?
+            || git_has_legacy_knowledge(&self.root)?)
+    }
+    fn provisional_record(&self) -> Result<PathBuf> {
+        Ok(central_root()?.join(format!(
+            "{}-unbound-{}/GROUNDING.yaml",
+            project_slug(self),
+            provisional_hash(self.common.as_ref().unwrap_or(&self.root))
+        )))
+    }
     pub fn defaults(&self) -> Result<V> {
+        if let Some(raw) = bounded(&self.config_path)? {
+            return self.decode_config(Some(&raw));
+        }
         let roots = self.worktrees()?;
         let mut name = ["GROUNDING.yaml", "PROVENANCE.yaml"]
             .into_iter()
@@ -496,7 +599,7 @@ impl Project {
                 }
             } else if !roots.iter().any(|r| r.join(name).exists())
                 && !git_has_head_record(&self.root, name)?
-                && git_has_legacy_knowledge(&self.root)?
+                && self.has_legacy_knowledge()?
             {
                 // Existing history or pending knowledge keeps its Advanced
                 // context and local first birth; never mint central state.
@@ -507,7 +610,7 @@ impl Project {
             {
                 let anchor = self.common.as_ref().unwrap_or(&self.root);
                 mode = "simple";
-                let record_path = validate_central_store(self, &central_root()?)?.join(format!(
+                let record_path = central_root()?.join(format!(
                     "{}-unbound-{}/GROUNDING.yaml",
                     project_slug(self),
                     provisional_hash(anchor)
@@ -530,7 +633,7 @@ impl Project {
         } else {
             let anchor = self.common.as_ref().unwrap_or(&self.root);
             mode = "simple";
-            let record_path = validate_central_store(self, &central_root()?)?.join(format!(
+            let record_path = central_root()?.join(format!(
                 "{}-unbound-{}/GROUNDING.yaml",
                 project_slug(self),
                 provisional_hash(anchor)
@@ -632,8 +735,48 @@ impl Project {
     pub fn config(&self) -> Result<V> {
         self.decode_config(bounded(&self.config_path)?.as_deref())
     }
+    /// Existing independent inputs retain the legacy policy context; resolving
+    /// their policy is not a request for a fresh default storage location.
+    pub(crate) fn config_for_input(&self, input: &Path) -> Result<V> {
+        if self.config_path.exists()
+            || !input.is_file()
+            || ["GROUNDING.yaml", "PROVENANCE.yaml"]
+                .iter()
+                .any(|name| self.root.join(name).exists())
+            || self
+                .common
+                .as_ref()
+                .is_some_and(|common| common.join("kpopper-record").exists())
+        {
+            return self.config();
+        }
+        let record = if self.is_git() {
+            "GROUNDING.yaml".into()
+        } else {
+            self.root
+                .join("GROUNDING.yaml")
+                .to_str()
+                .ok_or_else(|| error("nonportable_project_path"))?
+                .to_owned()
+        };
+        Ok(obj([
+            ("version", n("1")),
+            ("mode", s(if self.is_git() { "advanced" } else { "simple" })),
+            ("record", s(&record)),
+            ("publication", V::Null),
+            ("generation", n("0")),
+        ]))
+    }
     pub fn generated_default(&self, config: Option<&V>) -> Result<bool> {
-        let c = config.cloned().unwrap_or(self.config()?);
+        let c = match config {
+            Some(config) => config.clone(),
+            None => {
+                let Some(raw) = bounded(&self.config_path)? else {
+                    return Ok(false);
+                };
+                self.decode_config(Some(&raw))?
+            }
+        };
         let m = map(&c)?;
         Ok(string_is(m.get("mode").unwrap_or(&V::Null), "simple")
             && m.contains_key("default_identity"))
@@ -879,10 +1022,7 @@ impl Project {
                 "legacy_record_unavailable: restore the configured record before writing",
             ));
         }
-        if self.is_git()
-            && !git_has_head_any_record(&self.root)?
-            && git_has_legacy_knowledge(&self.root)?
-        {
+        if self.is_git() && !git_has_head_any_record(&self.root)? && self.has_legacy_knowledge()? {
             // Legacy history or a durable pending queue keeps local birth on
             // this branch; creating its first record never mints central state.
             return Ok(());
@@ -896,6 +1036,7 @@ impl Project {
             "default_binding_changed",
         )?;
         require_fresh_store_override()?;
+        crate::public_workspace::require_fresh_workspace_state(self)?;
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
         let store = validate_central_store(self, &central_root()?)?;
@@ -996,11 +1137,10 @@ impl Project {
                 .parent()
                 .and_then(|parent| parent.file_name())
                 .is_some_and(|name| name.to_string_lossy().ends_with(&format!("-{old_token}")));
-        if owns_empty {
-            if value.is_some() {
-                self.verify_generated_owner(&guard.config, true)?;
-            }
-        } else {
+        // A matching token and strict no-data state suffice for an owner's
+        // reset, even if a live copy claimed the old receipt while it was away.
+        // The old receipt/store are left untouched by the separate identity.
+        if !owns_empty {
             let value = value
                 .as_ref()
                 .ok_or_else(|| error("generated_binding_candidate_conflict"))?;
@@ -1016,6 +1156,7 @@ impl Project {
         let token = uuid::Uuid::new_v4().to_string();
         let anchor = self.common.as_ref().unwrap_or(&self.root);
         require_fresh_store_override()?;
+        crate::public_workspace::require_fresh_workspace_state(self)?;
         let store = validate_central_store(self, &central_root()?)?;
         let record = store.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
         let mut next = guard.config.clone();
@@ -1085,6 +1226,13 @@ impl Project {
     }
     /// Hold through final publication and call verify to reject policy changes.
     pub fn lock(&self) -> Result<PolicyGuard> {
+        self.lock_for_input(None)
+    }
+    fn lock_for_input(&self, input: Option<&Path>) -> Result<PolicyGuard> {
+        let input = input
+            .filter(|path| path.is_file())
+            .map(resolved)
+            .transpose()?;
         let (anchor, relative) = if let Some(common) = &self.common {
             (common.as_path(), "kpopper/project/project.lock")
         } else {
@@ -1111,12 +1259,20 @@ impl Project {
         let file = options.open(path)?;
         FileExt::lock_exclusive(&file)?;
         let raw = bounded(&self.config_path)?;
-        let config = self.decode_config(raw.as_deref())?;
+        let config = if raw.is_none() {
+            match input.as_deref() {
+                Some(input) => self.config_for_input(input)?,
+                None => self.defaults()?,
+            }
+        } else {
+            self.decode_config(raw.as_deref())?
+        };
         Ok(PolicyGuard {
             file,
             project: self.clone(),
             raw,
             config,
+            input,
         })
     }
 }
@@ -1125,6 +1281,7 @@ pub struct PolicyGuard {
     project: Project,
     raw: Option<Vec<u8>>,
     config: V,
+    input: Option<PathBuf>,
 }
 impl PolicyGuard {
     pub fn config(&self) -> &V {
@@ -1142,10 +1299,11 @@ impl PolicyGuard {
             bounded(&self.project.config_path)? == self.raw,
             "project_policy_changed",
         )?;
-        require(
-            self.project.config()? == self.config,
-            "project_policy_changed",
-        )
+        let config = match self.input.as_deref() {
+            Some(input) => self.project.config_for_input(input)?,
+            None => self.project.config()?,
+        };
+        require(config == self.config, "project_policy_changed")
     }
 }
 impl Drop for PolicyGuard {
@@ -1159,26 +1317,24 @@ pub fn project_for(paths: &[PathBuf], cwd: &Path) -> Result<Project> {
     let parent = first.parent().ok_or_else(|| error("invalid_path"))?;
     let current = Project::open(cwd)?;
     let current_matches = if current.config_path.exists() {
-        let configured = current.record(None)?;
-        let generated_alias = current.generated_default(None)?
+        let config = current.config()?;
+        let configured = current.record(Some(&config))?;
+        if configured == first {
+            return Ok(current);
+        }
+        current.generated_default(Some(&config))?
             && (first == current.root.join("GROUNDING.yaml")
                 || first == current.root.join("PROVENANCE.yaml")
-                || current
-                    .defaults()
-                    .ok()
-                    .and_then(|v| map(&v).ok().and_then(|m| m.get("record").cloned()))
-                    .and_then(|v| text(&v).ok().map(PathBuf::from))
-                    .is_some_and(|proposal| proposal == first));
-        configured == first || generated_alias
+                || (Project::is_provisional_record_path(&first)
+                    && current.provisional_record()? == first))
     } else {
-        let matches = current.defaults().ok().is_some_and(|value| {
+        current.defaults().ok().is_some_and(|value| {
             map(&value)
                 .ok()
                 .and_then(|m| m.get("record"))
                 .and_then(|value| text(value).ok())
                 .is_some_and(|path| Path::new(path) == first)
-        });
-        matches
+        })
     };
     if current_matches {
         return Ok(current);
@@ -1220,11 +1376,11 @@ pub(crate) fn simple_record(paths: &[PathBuf], cwd: &Path) -> Result<Option<Path
         {
             return Ok(Some(record));
         }
-        if project.generated_default(Some(&config))? {
-            let proposal = project.defaults()?;
-            if text(field(map(&proposal)?, "record")?).is_ok_and(|path| Path::new(path) == first) {
-                return Ok(Some(record));
-            }
+        if Project::is_provisional_record_path(&first)
+            && project.generated_default(Some(&config))?
+            && project.provisional_record()? == first
+        {
+            return Ok(Some(record));
         }
     }
     Ok(None)
@@ -1309,7 +1465,7 @@ impl WriteRoute {
     }
     pub fn capture(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
         let project = project_for(paths, cwd)?;
-        let policy = project.lock()?;
+        let policy = project.lock_for_input(paths.first().map(PathBuf::as_path))?;
         let selected = write_paths(paths, cwd)?;
         let route = Self {
             policy,
@@ -1440,6 +1596,88 @@ mod tests {
                 assert!(result.is_err(), "accepted {}", c["name"]);
             }
         }
+    }
+
+    #[test]
+    fn invocation_history_cache_invalidates_when_refs_change_and_ends_with_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        command(&root, &["init", "-b", "main"]);
+        let scope = invocation_history_scope();
+        // An unborn repository is also reusable, without inventing history.
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        assert_eq!(
+            INVOCATION_HISTORY.with(|cache| cache.borrow().as_ref().unwrap().len()),
+            1
+        );
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        command(&root, &["add", "GROUNDING.yaml"]);
+        command(
+            &root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "commit",
+                "-m",
+                "record",
+            ],
+        );
+        fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+        assert!(git_has_legacy_knowledge(&root).unwrap());
+        drop(scope);
+        assert!(INVOCATION_HISTORY.with(|cache| cache.borrow().is_none()));
+    }
+
+    #[test]
+    fn invocation_history_cache_invalidates_when_shallow_boundary_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        command(&root, &["init", "-b", "main"]);
+        let commit = || {
+            command(
+                &root,
+                &[
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.test",
+                    "commit",
+                    "-m",
+                    "fixture",
+                ],
+            )
+        };
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        command(&root, &["add", "GROUNDING.yaml"]);
+        commit();
+        command(&root, &["rm", "GROUNDING.yaml"]);
+        commit();
+        write(&root.join("README.md"), b"fixture\n");
+        command(&root, &["add", "README.md"]);
+        commit();
+        let head = git(&root, &["rev-parse", "HEAD"], false).unwrap().unwrap();
+        let shallow = root.join(".git/shallow");
+        fs::write(&shallow, head).unwrap();
+        let _scope = invocation_history_scope();
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        fs::remove_file(&shallow).unwrap();
+        assert!(git_has_legacy_knowledge(&root).unwrap());
+    }
+
+    #[test]
+    fn supplied_generated_config_does_not_decode_unrelated_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        assert!(!project.generated_default(None).unwrap());
+        let config = project.defaults().unwrap();
+        fs::create_dir_all(&project.state).unwrap();
+        fs::write(&project.config_path, b"invalid json").unwrap();
+        assert!(!project.generated_default(Some(&config)).unwrap());
+        assert!(project.generated_default(None).is_err());
     }
 
     #[test]

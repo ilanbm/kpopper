@@ -43,8 +43,9 @@ impl Fixture {
         fixture
     }
 
-    fn command_at(&self, cwd: &Path, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_kpop"))
+    fn builder_at(&self, cwd: &Path, args: &[&str]) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_kpop"));
+        command
             .args(args)
             .current_dir(cwd)
             .env("HOME", &self.home)
@@ -58,9 +59,12 @@ impl Fixture {
             .env_remove("KPOPPER_AGENT_SESSION")
             .env_remove("CODEX_THREAD_ID")
             .env_remove("CLAUDE_CODE_REMOTE")
-            .env_remove("KPOPPER_READ_MODE")
-            .output()
-            .unwrap()
+            .env_remove("KPOPPER_READ_MODE");
+        command
+    }
+
+    fn command_at(&self, cwd: &Path, args: &[&str]) -> Output {
+        self.builder_at(cwd, args).output().unwrap()
     }
 
     fn command(&self, args: &[&str]) -> Output {
@@ -719,6 +723,90 @@ fn legacy_pending_only_project_keeps_read_context_and_local_first_birth() {
 }
 
 #[test]
+fn orphaned_sibling_record_state_refuses_new_central_allocation() {
+    for member in [".kpopper/hypotheses/kept.yaml", "PROVENANCE.d/kept.yaml"] {
+        let f = Fixture::new();
+        fs::write(f.root.join("README.md"), "fixture\n").unwrap();
+        f.git(&["add", "README.md"]);
+        f.git(&["commit", "-qm", "base"]);
+        let linked = f.home.parent().unwrap().join("orphan-linked");
+        f.git(&[
+            "worktree",
+            "add",
+            "-qb",
+            "orphan-linked",
+            linked.to_str().unwrap(),
+        ]);
+        let orphan = linked.join(member);
+        fs::create_dir_all(orphan.parent().unwrap()).unwrap();
+        let before = b"known: {p.kept: {v: 99}}\n";
+        fs::write(&orphan, before).unwrap();
+        let refused = f.command(&["add", "p.main", "v=1"]);
+        assert!(!refused.status.success(), "{}", text(&refused));
+        assert!(!f.policy().exists());
+        assert!(!f.root.join("GROUNDING.yaml").exists());
+        assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+        assert_eq!(fs::read(&orphan).unwrap(), before);
+    }
+}
+
+#[test]
+fn sibling_lock_and_ui_metadata_do_not_block_a_genuinely_new_project() {
+    let f = Fixture::new();
+    fs::write(f.root.join("README.md"), "fixture\n").unwrap();
+    f.git(&["add", "README.md"]);
+    f.git(&["commit", "-qm", "base"]);
+    let linked = f.home.parent().unwrap().join("metadata-linked");
+    f.git(&[
+        "worktree",
+        "add",
+        "-qb",
+        "metadata-linked",
+        linked.to_str().unwrap(),
+    ]);
+    fs::create_dir_all(linked.join(".kpopper")).unwrap();
+    fs::write(linked.join(".kpopper/project.lock"), b"").unwrap();
+    fs::write(linked.join(".kpopper/ui-state.json"), b"{\"seen\":true}\n").unwrap();
+    f.add(&["add", "p.main", "v=1"]);
+    assert!(f.policy().is_file());
+    assert!(!f.root.join("GROUNDING.yaml").exists());
+    assert!(!linked.join("GROUNDING.yaml").exists());
+    assert_eq!(
+        fs::read(linked.join(".kpopper/ui-state.json")).unwrap(),
+        b"{\"seen\":true}\n"
+    );
+}
+
+#[test]
+fn broken_sibling_does_not_block_established_legacy_writes() {
+    let f = Fixture::new();
+    fs::write(f.root.join("README.md"), "fixture\n").unwrap();
+    f.git(&["add", "README.md"]);
+    f.git(&["commit", "-qm", "base"]);
+    let configured = f.command(&["experimental", "advanced"]);
+    assert!(configured.status.success(), "{}", text(&configured));
+    f.add(&["add", "p.main", "v=1"]);
+    fs::remove_file(f.policy()).unwrap();
+    let linked = f.home.parent().unwrap().join("broken-linked");
+    f.git(&[
+        "worktree",
+        "add",
+        "-qb",
+        "broken-linked",
+        linked.to_str().unwrap(),
+    ]);
+    let orphan = linked.join(".kpopper/hypotheses/kept.yaml");
+    fs::create_dir_all(orphan.parent().unwrap()).unwrap();
+    let before = b"known: {p.kept: {v: 99}}\n";
+    fs::write(&orphan, before).unwrap();
+    f.add(&["add", "p.main_after", "v=2"]);
+    assert!(f.command(&["pull", "p.main_after"]).status.success());
+    assert!(!f.policy().exists());
+    assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+    assert_eq!(fs::read(&orphan).unwrap(), before);
+}
+
+#[test]
 fn configured_simple_alias_preflights_the_selected_existing_record() {
     let f = Fixture::new();
     let actual = f.home.parent().unwrap().join("model/GROUNDING.yaml");
@@ -740,4 +828,296 @@ fn configured_simple_alias_preflights_the_selected_existing_record() {
     assert_eq!(document["known"]["p.x"]["v"], 2);
     assert!(!f.root.join("GROUNDING.yaml").exists());
     assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+}
+
+#[test]
+fn uncommitted_sibling_record_keeps_worktree_first_birth_local() {
+    let f = Fixture::new();
+    fs::write(f.root.join("README.md"), "fixture\n").unwrap();
+    f.git(&["add", "README.md"]);
+    f.git(&["commit", "-qm", "before record"]);
+    let configured = f.command(&["experimental", "advanced"]);
+    assert!(configured.status.success(), "{}", text(&configured));
+    f.add(&["add", "p.main", "v=1"]);
+    fs::remove_file(f.policy()).unwrap();
+    let before = fs::read(f.root.join("GROUNDING.yaml")).unwrap();
+    assert!(
+        f.git(&[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "HEAD",
+            "--",
+            "GROUNDING.yaml",
+            "PROVENANCE.yaml"
+        ])
+        .stdout
+        .is_empty()
+    );
+    assert!(
+        f.git(&[
+            "log",
+            "--all",
+            "-1",
+            "--",
+            "GROUNDING.yaml",
+            "PROVENANCE.yaml"
+        ])
+        .stdout
+        .is_empty()
+    );
+    let linked = f.home.parent().unwrap().join("legacy-linked");
+    f.git(&[
+        "worktree",
+        "add",
+        "-qb",
+        "legacy-linked",
+        linked.to_str().unwrap(),
+    ]);
+    let born = f.command_at(&linked, &["add", "p.branch", "v=2"]);
+    assert!(born.status.success(), "{}", text(&born));
+    assert!(linked.join("GROUNDING.yaml").is_file());
+    assert!(!f.policy().exists());
+    assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+    assert_eq!(fs::read(f.root.join("GROUNDING.yaml")).unwrap(), before);
+    f.add(&["add", "p.main_after", "v=3"]);
+    assert!(f.command(&["pull", "p.main_after"]).status.success());
+}
+
+#[test]
+fn update_missing_target_never_binds_but_existing_record_is_accepted() {
+    for git in [true, false] {
+        let f = Fixture::new();
+        if !git {
+            fs::remove_dir_all(f.root.join(".git")).unwrap();
+        }
+        let report = f.root.join("report.json");
+        fs::write(&report, r#"{"event_id":"u1","date":"2026-10-27","source_quote":"There are 19 hours.","source":"s.smoke","at":"entire captured report","target":"p.hours","value":19,"kind":"report"}"#).unwrap();
+        let args = ["update", "--file", "report.json"];
+        let refused = f.command(&args);
+        assert!(!refused.status.success(), "{}", text(&refused));
+        assert!(
+            text(&refused).contains("missing_record"),
+            "{}",
+            text(&refused)
+        );
+        assert!(!f.policy().exists());
+        assert!(!f.root.join(".kpopper/project.json").exists());
+        assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+        assert!(!f.root.join("GROUNDING.yaml").exists());
+        assert!(!f.home.join("state/kpopper/ingestion").exists());
+        f.add(&[
+            "add",
+            "s.smoke",
+            "url=https://example.test/report",
+            "read=2026-10-27",
+        ]);
+        f.add(&["add", "p.hours", "v=10"]);
+        let located = f.command(&["where"]);
+        assert!(located.status.success(), "{}", text(&located));
+        let record = PathBuf::from(String::from_utf8(located.stdout).unwrap().trim());
+        let mut content: Value = serde_json::from_slice(&fs::read(&report).unwrap()).unwrap();
+        content["record_sha256"] =
+            Value::String(kpop_native::identity::sha256(&fs::read(record).unwrap()));
+        fs::write(&report, serde_json::to_vec(&content).unwrap()).unwrap();
+        let accepted = f.command(&args);
+        assert!(accepted.status.success(), "{}", text(&accepted));
+    }
+}
+
+#[test]
+fn empty_original_owner_can_reset_after_copy_claimed_its_receipt() {
+    let f = Fixture::new();
+    assert!(
+        !f.command(&["add", "d.bad", "rests_on=[missing]"])
+            .status
+            .success()
+    );
+    let policy: Value = serde_json::from_slice(&fs::read(f.policy()).unwrap()).unwrap();
+    let old_record = PathBuf::from(policy["record"].as_str().unwrap());
+    let receipt = old_record.parent().unwrap().join(".kpopper/owner.json");
+    let copy = f.home.parent().unwrap().join("copy");
+    copy_tree(&f.root, &copy);
+    let away = f.home.parent().unwrap().join("original-away");
+    fs::rename(&f.root, &away).unwrap();
+    assert!(
+        !f.command_at(&copy, &["add", "d.copy", "rests_on=[missing]"])
+            .status
+            .success()
+    );
+    let copy_receipt = fs::read(&receipt).unwrap();
+    let claimed: Value = serde_json::from_slice(&copy_receipt).unwrap();
+    assert_eq!(
+        claimed["owner_anchor"],
+        copy.join(".git").to_string_lossy().as_ref()
+    );
+    fs::rename(&away, &f.root).unwrap();
+    let refused = f.command(&["add", "p.original", "v=1"]);
+    assert!(!refused.status.success());
+    assert!(text(&refused).contains("copy_requires_recovery"));
+    let reset = f.command(&["config", "--new-project"]);
+    assert!(reset.status.success(), "{}", text(&reset));
+    let next: Value = serde_json::from_slice(&fs::read(f.policy()).unwrap()).unwrap();
+    assert_ne!(next["record"], policy["record"]);
+    assert_eq!(fs::read(&receipt).unwrap(), copy_receipt);
+    assert!(!old_record.exists());
+    f.add(&["add", "p.recovered", "v=1"]);
+}
+
+#[test]
+fn explicit_external_simple_target_keeps_precedence_over_nested_record() {
+    let f = Fixture::new();
+    let nested = f.root.join("models/m");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(
+        nested.join("GROUNDING.yaml"),
+        "known:\n  p.nested:\n    v: 1\n",
+    )
+    .unwrap();
+    f.git(&["add", "models"]);
+    f.git(&["commit", "-qm", "nested record"]);
+    let external = f.home.parent().unwrap().join("external/GROUNDING.yaml");
+    fs::create_dir_all(external.parent().unwrap()).unwrap();
+    let configured = f.command(&[
+        "config",
+        "--mode",
+        "simple",
+        "--record",
+        external.to_str().unwrap(),
+    ]);
+    assert!(configured.status.success(), "{}", text(&configured));
+    let before = fs::read(nested.join("GROUNDING.yaml")).unwrap();
+    let added = f.command_at(&nested, &["add", "p.external", "v=2"]);
+    assert!(added.status.success(), "{}", text(&added));
+    assert!(
+        fs::read_to_string(&external)
+            .unwrap()
+            .contains("p.external")
+    );
+    assert_eq!(fs::read(nested.join("GROUNDING.yaml")).unwrap(), before);
+}
+
+#[test]
+fn unused_store_settings_do_not_break_explicit_or_nested_records() {
+    for setting in ["inside", "relative", "home"] {
+        let f = Fixture::new();
+        // A generated root and an independent nested record must both remain readable.
+        f.add(&["add", "p.root", "v=1"]);
+        let nested = f.root.join("models/m");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(
+            nested.join("GROUNDING.yaml"),
+            "known:\n  p.nested:\n    v: 1\n",
+        )
+        .unwrap();
+        let custom = f.home.join("custom.yml");
+        fs::write(&custom, "known:\n  p.custom:\n    v: 1\n").unwrap();
+        for (cwd, args) in [
+            (&nested, vec!["check"]),
+            (&nested, vec!["set", "p.nested", "v=2"]),
+            (&f.home, vec!["check", custom.to_str().unwrap()]),
+            (&f.home, vec!["pull", "p.custom", custom.to_str().unwrap()]),
+        ] {
+            let mut command = f.builder_at(cwd, &args);
+            match setting {
+                "inside" => {
+                    command.env("KPOPPER_PROJECTS_DIR", f.root.join("store"));
+                }
+                "relative" => {
+                    command.env("KPOPPER_PROJECTS_DIR", "relative-store");
+                }
+                _ => {
+                    command.env_remove("KPOPPER_PROJECTS_DIR");
+                }
+            }
+            let out = command.output().unwrap();
+            assert!(out.status.success(), "{setting} {args:?}: {}", text(&out));
+        }
+    }
+}
+
+#[test]
+fn bound_commands_skip_history_and_unbound_commands_probe_once() {
+    let f = Fixture::new();
+    fs::write(f.root.join("README.md"), "fixture\n").unwrap();
+    f.git(&["add", "README.md"]);
+    f.git(&["commit", "-qm", "base"]);
+    for (label, args, expected) in [
+        ("unbound", vec!["board"], 1),
+        ("first", vec!["add", "p.seed", "v=1"], 1),
+        ("bound-add", vec!["add", "p.next", "v=2"], 0),
+        ("bound-pull", vec!["pull", "p.seed"], 0),
+        ("bound-check", vec!["check"], 0),
+    ] {
+        let trace = f.home.join(format!("{label}-git-trace.jsonl"));
+        let output = f
+            .builder_at(&f.root, &args)
+            .env("GIT_TRACE2_EVENT", &trace)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{label}: {}", text(&output));
+        let walks = fs::read_to_string(trace)
+            .unwrap()
+            .lines()
+            .filter(|line| {
+                let event: Value = serde_json::from_str(line).unwrap();
+                event["event"] == "start"
+                    && event["argv"].as_array().is_some_and(|args| {
+                        args.iter().any(|arg| arg == "log") && args.iter().any(|arg| arg == "--all")
+                    })
+            })
+            .count();
+        assert_eq!(walks, expected, "{label}: unexpected legacy history walks");
+    }
+}
+
+#[test]
+fn unbound_nested_writes_ignore_unused_relative_store_but_fresh_allocation_refuses_it() {
+    let f = Fixture::new();
+    let author = f.home.parent().unwrap().join("relative-author");
+    fs::create_dir_all(&author).unwrap();
+    let configured = f.command_at(
+        &author,
+        &["config", "--mode", "simple", "--record", "GROUNDING.yaml"],
+    );
+    assert!(configured.status.success(), "{}", text(&configured));
+    let added = f.command_at(&author, &["add", "p.nested", "v=1"]);
+    assert!(added.status.success(), "{}", text(&added));
+    let nested = f.root.join("models/m");
+    fs::create_dir_all(nested.parent().unwrap()).unwrap();
+    copy_tree(&author, &nested);
+    for name in [
+        ".kpopper/project.json",
+        ".kpopper/project.lock",
+        ".kpopper/mode-history",
+        ".kpopper/.history-local",
+    ] {
+        let path = nested.join(name);
+        if path.is_file() {
+            fs::remove_file(path).unwrap();
+        }
+    }
+    f.git(&["add", "models"]);
+    f.git(&["commit", "-qm", "nested record"]);
+    let out = f
+        .builder_at(&nested, &["set", "p.nested", "v=2"])
+        .env("KPOPPER_PROJECTS_DIR", "relative/store")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!f.policy().exists());
+    assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+    let out = f
+        .builder_at(&f.root, &["add", "p.root", "v=1"])
+        .env("KPOPPER_PROJECTS_DIR", "relative/store")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(
+        text(&out).contains("absolute non-empty path"),
+        "{}",
+        text(&out)
+    );
+    assert!(!f.policy().exists());
+    assert!(!f.home.join(".kpopper/projects").exists());
 }

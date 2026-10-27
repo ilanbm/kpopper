@@ -18,29 +18,55 @@ pub const UNAVAILABLE_CONFIGURED: &str = "The configured record is unavailable."
 fn unavailable(reason: &str, record: &Path) -> crate::Error {
     error(&format!("{reason} {}", record.display()))
 }
+const RECORD_BEARING_MEMBERS: &[&str] = &[
+    ".kpopper/hypotheses",
+    ".kpopper/view.yaml",
+    ".kpopper/measure.yaml",
+    ".kpopper/replaced.yaml",
+    ".kpopper/history",
+    ".kpopper/history-commits",
+    ".kpopper/history.yaml",
+    ".kpopper/history-cancellations",
+    "PROVENANCE.d",
+    "PROVENANCE.view.yaml",
+    "PROVENANCE.measure.yaml",
+    "PROVENANCE.replaced.yaml",
+    "PROVENANCE.history",
+    "PROVENANCE.history-commits",
+    "PROVENANCE.history.yaml",
+    "PROVENANCE.history-cancellations",
+];
 fn orphan_member(directory: &Path) -> Option<PathBuf> {
-    const MEMBERS: &[&str] = &[
-        ".kpopper/hypotheses",
-        ".kpopper/view.yaml",
-        ".kpopper/measure.yaml",
-        ".kpopper/replaced.yaml",
-        ".kpopper/history",
-        ".kpopper/history-commits",
-        ".kpopper/history.yaml",
-        ".kpopper/history-cancellations",
-        "PROVENANCE.d",
-        "PROVENANCE.view.yaml",
-        "PROVENANCE.measure.yaml",
-        "PROVENANCE.replaced.yaml",
-        "PROVENANCE.history",
-        "PROVENANCE.history-commits",
-        "PROVENANCE.history.yaml",
-        "PROVENANCE.history-cancellations",
-    ];
-    MEMBERS
+    RECORD_BEARING_MEMBERS
         .iter()
         .map(|name| directory.join(name))
         .find(|path| path.symlink_metadata().is_ok())
+}
+pub(crate) fn require_fresh_workspace_state(project: &Project) -> Result<()> {
+    for root in project.worktrees()? {
+        for name in ["GROUNDING.yaml", "PROVENANCE.yaml"]
+            .into_iter()
+            .chain(RECORD_BEARING_MEMBERS.iter().copied())
+        {
+            let path = root.join(name);
+            match path.symlink_metadata() {
+                Ok(_) => {
+                    return Err(unavailable(
+                        "Workspace record-bearing state exists before a new central allocation.",
+                        &path,
+                    ));
+                }
+                Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => {
+                    return Err(unavailable(
+                        "Workspace record-bearing state cannot be inspected before a new central allocation.",
+                        &path,
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 fn empty_legacy_history_residue(path: &Path) -> bool {
     path.is_dir()
@@ -108,7 +134,7 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     }
     // A real nested record takes precedence over a generated root binding.
     // It is an independently selectable legacy record, not a root conflict.
-    if project.config_path.exists() && cwd.starts_with(&project.root) && cwd != project.root {
+    if project.generated_default(None)? && cwd.starts_with(&project.root) && cwd != project.root {
         let mut current = cwd.clone();
         while current != project.root {
             for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
@@ -168,7 +194,7 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
                 && project.is_git()
                 && current == project.root
                 && !crate::project_modes::git_has_head_any_record(&project.root)?
-                && crate::project_modes::git_has_legacy_knowledge(&project.root)?
+                && project.has_legacy_knowledge()?
                 && !other_orphan
                 && empty_legacy_history_residue(&path);
             if !legacy_birth {
@@ -374,6 +400,16 @@ pub struct Location {
 }
 /// Public orientation keeps the deliberate subproject boundary used for host state.
 pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Location> {
+    locate_for_input(cwd, mode, None)
+}
+/// A named input needs no fresh default when the workspace has no selected record.
+/// Keep its location honest, including missing-file diagnostics, without consulting
+/// an unused central-store setting. Policy and discovered-primary checks stay live.
+pub(crate) fn locate_for_input(
+    cwd: &Path,
+    mode: crate::source_capture::ReadMode,
+    input: Option<&Path>,
+) -> Result<Location> {
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
     if let Some(path) = competing_generated_record(&project, &cwd)? {
@@ -441,9 +477,14 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
             record = Some(path);
         }
     }
-    let config = project.config()?;
+    let independent_input = input.filter(|_| record.is_none() && !project.config_path.exists());
+    let config = if independent_input.is_some() {
+        None
+    } else {
+        Some(project.config()?)
+    };
     if project.config_path.exists() {
-        let path = project.record(Some(&config))?;
+        let path = project.record(config.as_ref())?;
         status = if path.is_file() {
             "found"
         } else if path.symlink_metadata().is_ok() {
@@ -461,22 +502,35 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
     if status == "missing"
         && mode == crate::source_capture::ReadMode::Live
         && project.is_git()
-        && crate::history_contract::string_is(
-            &crate::history_contract::map(&config)?["mode"],
-            "advanced",
-        )
+        && config.as_ref().is_some_and(|config| {
+            crate::history_contract::map(config)
+                .is_ok_and(|fields| crate::history_contract::string_is(&fields["mode"], "advanced"))
+        })
         && crate::pending_state::Ledger::capture(&project)?
             .head
             .is_some()
     {
-        record = Some(project.record(Some(&config))?);
+        record = Some(project.record(config.as_ref())?);
         status = "pending";
     }
     // A fresh project has no in-workspace primary. Keep orientation consistent
     // with records(): its read-only location is the clearly provisional central
     // proposal, never a checkout path that a caller might accidentally create.
     if record.is_none() {
-        record = Some(project.record(Some(&config))?);
+        if let Some(input) = independent_input {
+            let path = crate::source_inventory::absolute(input)?;
+            status = if path.is_file() {
+                "found"
+            } else if path.symlink_metadata().is_ok() {
+                reason = UNREADABLE_ENTRY.into();
+                "unavailable"
+            } else {
+                "missing"
+            };
+            record = Some(path);
+        } else {
+            record = Some(project.record(config.as_ref())?);
+        }
     }
     let identity = if let Some(common) = &project.common {
         let relative = workspace

@@ -779,6 +779,7 @@ fn wrapped_refusal(argv: &[std::ffi::OsString], error: &clap::Error) -> Option<&
     command.filter(|_| json)
 }
 fn main() {
+    let _history_scope = kpop_native::project_modes::invocation_history_scope();
     let argv =
         kpop_native::public_expressions::preprocess_argv(&std::env::args_os().collect::<Vec<_>>());
     let application = kpop_native::application_cli::inspect(&argv);

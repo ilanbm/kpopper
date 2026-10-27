@@ -103,45 +103,7 @@ fn policy_bytes(path: &Path) -> Result<Option<Vec<u8>>> {
 fn observation(paths: &[PathBuf], cwd: &Path, mode: ReadMode) -> Result<Routing> {
     let project = M::project_for(paths, cwd)?;
     let config_bytes = policy_bytes(&project.config_path)?;
-    // An existing explicit input is not a request to allocate this directory's
-    // default record. Preserve its legacy read context without consulting an
-    // unused central-store override (which may be inside this input's parent).
-    let independent_input = config_bytes.is_none()
-        && paths.first().is_some_and(|path| path.is_file())
-        && !["GROUNDING.yaml", "PROVENANCE.yaml"]
-            .iter()
-            .any(|name| project.root.join(name).exists())
-        && !project
-            .common
-            .as_ref()
-            .is_some_and(|common| common.join("kpopper-record").exists());
-    let config = if independent_input {
-        object([
-            ("version", V::Integer(crate::value::Integer::new("1")?)),
-            (
-                "mode",
-                s(if project.is_git() {
-                    "advanced"
-                } else {
-                    "simple"
-                }),
-            ),
-            // Keep the legacy routing identity for an independently selected
-            // input; selecting custom.yml did not redefine the project record.
-            (
-                "record",
-                if project.is_git() {
-                    s("GROUNDING.yaml")
-                } else {
-                    s(name(&project.root.join("GROUNDING.yaml"))?)
-                },
-            ),
-            ("publication", V::Null),
-            ("generation", V::Integer(crate::value::Integer::new("0")?)),
-        ])
-    } else {
-        project.config()?
-    };
+    let config = project.config_for_input(&paths[0])?;
     let pending = if mode == ReadMode::Live
         && project.is_git()
         && string_is(&map(&config)?["mode"], "advanced")
