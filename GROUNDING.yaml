@@ -1988,6 +1988,21 @@ known:
          affected by concurrent compilation and are not a latency guarantee."
     of: "2026-10-27"
 
+  m.simple_default_installed_acceptance:
+    name: "Temporary installed CLI, plugin and hook validation for central records"
+    from: run.simple_default_installed_acceptance
+    of: "2026-10-27"
+    at: "45 commands in the installed acceptance fixture at
+         9327520bbc5be81739bcb66f7df8418714a11da0, with isolated HOME, USERPROFILE and XDG
+         configuration/state; packaged programs ran without Python, Node or Rust tools on their
+         PATH."
+    v: "Passed in 16.65 seconds on macOS arm64. Fresh where reported no record; the configuration
+        preview created no binding or central store; first add selected a distinct bound central
+        record and retained the workspace owner marker; the second add reused that record. Update,
+        reasoning, read/check, copied plugin, MCP and hook diagnostics completed with their expected
+        outcomes. The real default store and outer home/config sentinels remained absent. This is an
+        isolated installation test, not a user installation, release or cross-platform CI receipt."
+
   m.simple_default_storage_checks:
     name: "Native acceptance on the integrated storage implementation"
     v: "1852 passed, 0 failed and 91 pre-existing ignores across 189 test targets; source remained
@@ -9071,6 +9086,18 @@ sources:
     of: "this record as main held it, the page fixture, and two live records outside this
          repository, 2026-09-03"
     read: "2026-09-03"
+
+  run.simple_default_installed_acceptance:
+    name: "Installed archive acceptance for automatic central storage"
+    file: "native/ci/default_install_acceptance.py"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/40472379603/job/122082758926"
+    read: "2026-10-27"
+    of: "CI head 0bf692de1d16fab9fecb9bdc4b24d17842789331, merge source
+         b802f091e1a6838e6489a19a6b5fb652399cbf2d. The inspected Linux, macOS arm64 and Windows
+         acceptance failures tried to read the old workspace/GROUNDING.yaml location after automatic
+         central creation. The corrected fixture at 9327520bbc5be81739bcb66f7df8418714a11da0 was
+         exercised on macOS arm64 with the identical CI-built 0.17.3 archive, SHA256
+         369c893d55a03ee83f25a236f76e1b1d16d6c0554fd54b908d2a4d73fa748b94."
 
   run.simple_default_storage_checks:
     name: "Local automatic-storage acceptance checks"
