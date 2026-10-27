@@ -28,10 +28,17 @@ def main():
     project.mkdir()
     private_tmp = root / "private-tmp"
     private_tmp.mkdir()
-    environment = dict(os.environ, KPOPPER_PRIVATE_HOME=str(root / "private"),
+    home = root / "home"
+    home.mkdir()
+    environment = dict(os.environ, HOME=str(home), USERPROFILE=str(home),
+                       KPOPPER_PRIVATE_HOME=str(root / "private"),
                        XDG_STATE_HOME=str(root / "state"), TMPDIR=str(private_tmp),
                        KPOPPER_NATIVE_CACHE=str(root / "native-cache"))
-    for key in ("KPOPPER_RUNTIME", "KPOPPER_NATIVE_RESOURCES", "KPOPPER_READ_MODE", "KPOPPER_AGENT_SESSION"):
+    for key in ("KPOPPER_RUNTIME", "KPOPPER_NATIVE_RESOURCES", "KPOPPER_READ_MODE",
+                "KPOPPER_AGENT_SESSION", "KPOPPER_PROJECTS_DIR", "KPOPPER_SESSION_CONFIG",
+                "KPOPPER_SESSION_DISABLE", "KPOPPER_CANONICAL_VIEW",
+                "KPOPPER_CANONICAL_VIEW_FORMAT", "KPOPPER_PROFILE_VIEW",
+                "KPOPPER_WATCH_DETACH"):
         environment.pop(key, None)
     records = []
 
@@ -90,7 +97,20 @@ def main():
             raise RuntimeError("wrong installed version: " + result.stdout)
     run("04-source", [binary, "add", "s.smoke", "name=Installed source", "read=2026-09-01"], env=native_environment)
     run("05-reading", [alias, "add", "p.seats", "v=17", "from=s.smoke", "name=Installed seats", "--as-of", "2026-09-01"], env=native_environment)
-    entry = project / "GROUNDING.yaml"
+    location = run("05-record-location", [binary, "where"], env=native_environment)
+    if location.stderr or not location.stdout.strip():
+        raise RuntimeError("installed default did not select its record location cleanly")
+    entry = Path(location.stdout.strip()).resolve()
+    if project.resolve() in entry.parents or entry == project.resolve():
+        raise RuntimeError("installed default stored the record inside the workspace")
+    try:
+        entry.relative_to(home.resolve())
+    except ValueError:
+        raise RuntimeError("installed default record escaped the isolated home")
+    if (project / ".kpopper/project.json").exists():
+        raise RuntimeError("installed default created a workspace binding")
+    if not entry.is_file():
+        raise RuntimeError("installed default did not retain the selected record")
     update = {"event_id": "installed-smoke", "date": "2026-09-02",
               "source_quote": "There are 19 installed seats.", "source": "s.smoke",
               "at": "installation acceptance", "record_sha256": hashlib.sha256(entry.read_bytes()).hexdigest(),
