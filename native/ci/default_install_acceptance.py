@@ -38,7 +38,7 @@ def main():
                 "KPOPPER_AGENT_SESSION", "KPOPPER_PROJECTS_DIR", "KPOPPER_SESSION_CONFIG",
                 "KPOPPER_SESSION_DISABLE", "KPOPPER_CANONICAL_VIEW",
                 "KPOPPER_CANONICAL_VIEW_FORMAT", "KPOPPER_PROFILE_VIEW",
-                "KPOPPER_WATCH_DETACH"):
+                "KPOPPER_WATCH_DETACH", "CLAUDE_CODE_REMOTE"):
         environment.pop(key, None)
     records = []
 
@@ -95,22 +95,34 @@ def main():
         result = run(name, [executable, "--version"], env=native_environment)
         if result.stdout.strip() != "kpop " + args.version:
             raise RuntimeError("wrong installed version: " + result.stdout)
+    preview = run("04-record-preview", [binary, "where"], env=native_environment)
+    if preview.stderr or not preview.stdout.strip():
+        raise RuntimeError("installed default did not preview its record location cleanly")
+    entry = Path(preview.stdout.strip()).resolve()
+    if project.resolve() in entry.parents or entry == project.resolve():
+        raise RuntimeError("installed default preview selected a workspace record")
+    try:
+        entry.relative_to(home.resolve())
+    except ValueError:
+        raise RuntimeError("installed default preview escaped the isolated home")
+    config = run("04-config-preview", [binary, "config"], env=native_environment)
+    if (config.stderr or "mode: simple" not in config.stdout.lower()
+            or ("record: " + str(entry)).lower() not in config.stdout.lower()):
+        raise RuntimeError("installed default config preview disagreed with its record location")
+    if (project / ".kpopper/project.json").exists() or entry.exists() or entry.parent.exists():
+        raise RuntimeError("read-only default preview created a binding or central record")
+
     run("04-source", [binary, "add", "s.smoke", "name=Installed source", "read=2026-09-01"], env=native_environment)
     run("05-reading", [alias, "add", "p.seats", "v=17", "from=s.smoke", "name=Installed seats", "--as-of", "2026-09-01"], env=native_environment)
     location = run("05-record-location", [binary, "where"], env=native_environment)
     if location.stderr or not location.stdout.strip():
         raise RuntimeError("installed default did not select its record location cleanly")
-    entry = Path(location.stdout.strip()).resolve()
-    if project.resolve() in entry.parents or entry == project.resolve():
-        raise RuntimeError("installed default stored the record inside the workspace")
-    try:
-        entry.relative_to(home.resolve())
-    except ValueError:
-        raise RuntimeError("installed default record escaped the isolated home")
-    if (project / ".kpopper/project.json").exists():
-        raise RuntimeError("installed default created a workspace binding")
+    if Path(location.stdout.strip()).resolve() != entry:
+        raise RuntimeError("installed default record location changed after its first write")
+    if not (project / ".kpopper/project.json").is_file():
+        raise RuntimeError("installed default did not retain its workspace owner marker")
     if not entry.is_file():
-        raise RuntimeError("installed default did not retain the selected record")
+        raise RuntimeError("installed default did not retain the selected central record")
     update = {"event_id": "installed-smoke", "date": "2026-09-02",
               "source_quote": "There are 19 installed seats.", "source": "s.smoke",
               "at": "installation acceptance", "record_sha256": hashlib.sha256(entry.read_bytes()).hexdigest(),
