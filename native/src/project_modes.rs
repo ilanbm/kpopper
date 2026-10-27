@@ -386,7 +386,9 @@ fn history_fingerprint(root: &Path) -> Result<Option<Vec<u8>>> {
 fn git_has_record_history(root: &Path) -> Result<bool> {
     let active = INVOCATION_HISTORY.with(|cache| cache.borrow().is_some());
     let fingerprint = if active {
-        history_fingerprint(root)?
+        // The cache is optional: oversized or unavailable fingerprint metadata
+        // must not prevent the real history query or reuse an unchecked entry.
+        history_fingerprint(root).ok().flatten()
     } else {
         None
     };
@@ -1664,6 +1666,47 @@ mod tests {
         let _scope = invocation_history_scope();
         assert!(!git_has_legacy_knowledge(&root).unwrap());
         fs::remove_file(&shallow).unwrap();
+        assert!(git_has_legacy_knowledge(&root).unwrap());
+    }
+
+    #[test]
+    fn unavailable_history_fingerprint_falls_back_to_live_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        command(&root, &["init", "-b", "main"]);
+        let commit = || {
+            command(
+                &root,
+                &[
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.test",
+                    "commit",
+                    "-m",
+                    "fixture",
+                ],
+            )
+        };
+        write(&root.join("README.md"), b"fixture\n");
+        command(&root, &["add", "README.md"]);
+        commit();
+        let _scope = invocation_history_scope();
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+
+        // A valid ignored Git comment exceeds the cache's bounded metadata read.
+        // This must neither refuse the command nor reuse the earlier false result.
+        let mut grafts = vec![b'#'; 1024 * 1024 + 1];
+        grafts.push(b'\n');
+        write(&root.join(".git/info/grafts"), &grafts);
+        assert_eq!(
+            history_fingerprint(&root).unwrap_err().0,
+            "project_config_limit"
+        );
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        command(&root, &["add", "GROUNDING.yaml"]);
+        commit();
         assert!(git_has_legacy_knowledge(&root).unwrap());
     }
 

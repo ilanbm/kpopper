@@ -65,7 +65,7 @@ refused. No legacy record is converted automatically.
 
 Before allocating a new central record, supported record sidecars at verified worktree roots
 must be accounted for. Orphaned knowledge is refused for recovery; harmless locks, UI metadata
-and empty directories do not block creation. This check does not prevent an established legacy
+and an empty `.kpopper/` directory do not block creation. This check does not prevent an established legacy
 branch from continuing its own record.
 
 Ownership is anchored to the Git common directory (or the non-Git owner anchor) plus its
