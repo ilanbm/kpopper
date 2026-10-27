@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.17.3 — 2026-10-26
+
+### Fixed
+
+- Core references can read a judgment's authored `verdict` as a premise. This
+  removes incorrect `missing_reference` findings when one judgment depends on
+  another, preserves change detection when the verdict changes, and keeps the
+  conclusion's truth and acceptance separate from reading its text. Existing
+  records require no migration.
+
+### Included changes
+
+- Fix core references to authored judgment verdicts (#320)
+
 ## 0.17.2 — 2026-10-25
 
 ### Fixed

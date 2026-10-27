@@ -1,6 +1,31 @@
 use kpop_native::{reasoning_language as L, value::TypedValue as V};
 use serde::Deserialize;
 #[test]
+fn judgment_references_read_the_recorded_verdict_without_reinterpreting_it() {
+    let node = V::from_json(&serde_json::json!({"body": {
+        "verdict": "test the proposal; not an approved release",
+        "rests_on": ["observation"],
+        "seen": {"observation": 3},
+        "blocked_on": "observational"
+    }}))
+    .unwrap();
+    assert_eq!(
+        L::node_expression(&node).unwrap(),
+        serde_json::json!({
+            "text": "test the proposal; not an approved release"
+        })
+    );
+    // An absent entry/value must still remain unavailable, not turn into a title.
+    let source = V::from_json(&serde_json::json!({"body": {"name": "source"}})).unwrap();
+    assert_eq!(
+        L::node_expression(&source).unwrap(),
+        serde_json::json!({
+            "unavailable": "missing_reference"
+        })
+    );
+}
+
+#[test]
 fn authored_expression_lowering_matches_the_pinned_python_grammar() {
     let mut decoder =
         serde_json::Deserializer::from_str(include_str!("fixtures/reasoning-language.json"));
