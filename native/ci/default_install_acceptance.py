@@ -32,6 +32,7 @@ def main():
     home.mkdir()
     environment = dict(os.environ, HOME=str(home), USERPROFILE=str(home),
                        KPOPPER_PRIVATE_HOME=str(root / "private"),
+                       XDG_CONFIG_HOME=str(root / "config"),
                        XDG_STATE_HOME=str(root / "state"), TMPDIR=str(private_tmp),
                        KPOPPER_NATIVE_CACHE=str(root / "native-cache"))
     for key in ("KPOPPER_RUNTIME", "KPOPPER_NATIVE_RESOURCES", "KPOPPER_READ_MODE",
@@ -133,13 +134,15 @@ def main():
     if absent.stdout or absent.stderr:
         raise RuntimeError("installed locator reported a record before its first write")
     preview_entry = check_configuration("04-config-preview")
+    if "-unbound-" not in preview_entry.parent.name:
+        raise RuntimeError("installed default preview did not identify its provisional location")
     if owner_marker.exists() or projects_root.exists():
         raise RuntimeError("read-only default preview created a binding or central record")
 
     run("04-source", [binary, "add", "s.smoke", "name=Installed source", "read=2026-09-01"], env=native_environment)
     entry = record_location("04-bound-location")
     check_configuration("04-config-bound", entry)
-    if entry == preview_entry or preview_entry.exists():
+    if entry == preview_entry or "-unbound-" in entry.parent.name or preview_entry.exists():
         raise RuntimeError("installed default adopted or created its provisional record")
     if not owner_marker.is_file() or not entry.is_file():
         raise RuntimeError("installed default did not retain its owner marker and central record")
