@@ -154,9 +154,11 @@ its source edition, assumptions, coverage and unknowns. Derive expected answers
 independently from the sources and keep maintenance tests in the source repository.
 They need not ship in the consumer plugin.
 
-Author a new native record in a fresh private directory outside Git, with cited local
-source files beneath that root. A first `kpop add` inside a repository can resolve to
-its project record; `--workspace` alone does not select a separate nested model.
+Author a new native record in a fresh private non-Git directory outside Git, with cited local
+source files beneath that root. Before the first add, explicitly configure local Simple with
+`kpop config --mode simple --record /ABS/PATH/TO/MODEL/GROUNDING.yaml`; this is local machine
+policy, and `--workspace` alone does not select a
+separate nested model or create its first record, and Advanced is not a fallback.
 Set `XDG_CACHE_HOME` to a writable private directory outside the model, within the
 task's existing allowed paths. The native engine needs its cache even with `--no-cache`.
 
@@ -168,7 +170,9 @@ structure and declared conditions, not source truth or completeness.
 
 Copy the complete authored model into its chosen source directory: `GROUNDING.yaml`,
 `.gitattributes`, native history and all cited local files. Exclude transient
-`.kpopper/project.lock` and `.kpopper/.history-local/`. Do not copy the example's model
+`.kpopper/project.lock`, `.kpopper/.history-local/`, `.kpopper/project.json`,
+`.kpopper/owner.json` and
+`.kpopper/mode-history/`. Do not copy the example's model
 or history over your own record. Use its descriptor and skill only as format examples:
 set your own ID/version, model path, skill path, product-file allowlist and smoke entry.
 Every smoke/read ID must exist in your model. Commit that selected closure before

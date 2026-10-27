@@ -385,7 +385,19 @@ fn run_inner(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             }
             contribution_routing::Outcome::Local(action) => action,
         };
-    let route = WriteRoute::capture(&original, &cwd)?;
+    let route = WriteRoute::capture_mutation_with_creation(
+        &original,
+        &cwd,
+        kind == "add" && implicit,
+    )
+    .map_err(|failure| {
+        crate::public_readers::explain_missing(
+            failure,
+            files.iter().filter_map(|path| path.to_str()),
+            &cwd,
+            true,
+        )
+    })?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];
     let _lock =

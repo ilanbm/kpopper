@@ -84,7 +84,8 @@ fn command(root: &Path, session: Option<&str>) -> Command {
         .env_remove("CODEX_THREAD_ID")
         .env("TMPDIR", &private)
         .env("KPOPPER_NATIVE_RESOURCES", resources())
-        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"));
+        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
+        .env("KPOPPER_PROJECTS_DIR", root.parent().unwrap().join("projects"));
     if let Some(session) = session {
         command.env("KPOPPER_AGENT_SESSION", session);
     }
@@ -608,6 +609,9 @@ fn correct_leaves_a_hypothesis_to_the_fold() {
 #[test]
 fn history_records_mark_the_corrected_version_and_pin_the_answer() {
     let (_temp, root) = repository();
+    // The final refusal is about a record committed to Git, so keep this
+    // fixture in the explicit Git-backed mode.
+    success(run(&root, &["experimental", "advanced"]));
     born(&root);
     success(run(
         &root,

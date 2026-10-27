@@ -464,6 +464,7 @@ fn the_command_finds_the_record_from_a_subdirectory() {
 fn a_missing_or_misnamed_record_is_refused_as_the_reference_refuses_it() {
     let (_temp, root) = checkout("GROUNDING.yaml", "known: {}\n", "echo: [./recipe]\n", "1");
     fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+    fs::remove_file(root.join(".kpopper/measure.yaml")).unwrap();
     let hint = ": no record here. Run this from the directory the record sits in, or name the record file as an argument.\n";
     for (record, said) in [
         (None, format!("GROUNDING.yaml{hint}")),

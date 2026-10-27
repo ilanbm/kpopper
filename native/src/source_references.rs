@@ -59,24 +59,28 @@ fn repo_relative_pin_path(
     if !target.starts_with(project_root) {
         return Ok(None);
     }
-    Ok(resolved_path.strip_prefix(project_root).ok().map(|relative| {
-        relative
-            .components()
-            .map(|component| component.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/")
-    }))
+    Ok(resolved_path
+        .strip_prefix(project_root)
+        .ok()
+        .map(|relative| {
+            relative
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/")
+        }))
 }
 
 fn tree_blob_status(output: &[u8], path: &str) -> PinnedFileStatus {
-    for entry in output.split(|byte| *byte == 0).filter(|entry| !entry.is_empty()) {
+    for entry in output
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
         let Some(separator) = entry.iter().position(|byte| *byte == b'\t') else {
             return PinnedFileStatus::Unavailable;
         };
         let mut metadata = entry[..separator].split(|byte| byte.is_ascii_whitespace());
-        let kind = metadata
-            .nth(1)
-            .filter(|field| !field.is_empty());
+        let kind = metadata.nth(1).filter(|field| !field.is_empty());
         let Some(kind) = kind else {
             return PinnedFileStatus::Unavailable;
         };
@@ -133,9 +137,23 @@ pub(crate) fn notes(
     inventory: &mut Inventory,
 ) -> Result<Vec<String>> {
     let project = Project::open(workspace)?;
-    if !project.is_git() {
+    let requested = crate::project_modes::resolved(&record_root.join("GROUNDING.yaml"))?;
+    let owner = crate::project_modes::project_for(std::slice::from_ref(&requested), workspace)?;
+    let generated_binding = owner.generated_default(None)? && owner.record(None)? == requested;
+    let generated_workspace = if generated_binding {
+        owner.generated_source_workspace(workspace)?
+    } else {
+        None
+    };
+    let generated_owner = generated_workspace.is_some();
+    if !project.is_git() && !generated_binding {
         return Ok(vec![]);
     }
+    let source_roots = if generated_owner {
+        vec![record_root.to_owned(), generated_workspace.unwrap()]
+    } else {
+        vec![record_root.to_owned()]
+    };
     let collections = crate::ordinary_fields::collections(document)?;
     let ids = collections
         .values()
@@ -191,19 +209,39 @@ pub(crate) fn notes(
             let candidates = locator_candidates(locator);
             let mut inside_candidates = Vec::new();
             let mut local_exists = false;
+            let mut local_matches = BTreeSet::new();
             for candidate in &candidates {
-                let path = absolute(&record_root.join(Path::new(candidate)))?;
-                let resolved = crate::project_modes::resolved(&path)?;
-                if !resolved.starts_with(&project.root) {
-                    continue;
-                }
-                inside_candidates.push(*candidate);
-                if inventory.exists(&path)? {
-                    local_exists = true;
-                    break;
+                for root in &source_roots {
+                    let path = absolute(&root.join(Path::new(candidate)))?;
+                    let resolved = crate::project_modes::resolved(&path)?;
+                    if generated_owner {
+                        let allowed = resolved.starts_with(root);
+                        if !allowed {
+                            continue;
+                        }
+                    } else if !resolved.starts_with(&project.root) {
+                        continue;
+                    }
+                    inside_candidates.push(*candidate);
+                    if inventory.exists(&path)? {
+                        local_exists = true;
+                        local_matches.insert(resolved);
+                    }
                 }
             }
+            if local_matches.len() > 1 {
+                notes.push(format!(
+                    "{id}: source locator {locator} is ambiguous across allowed project roots"
+                ));
+                continue;
+            }
             if local_exists {
+                continue;
+            }
+            if generated_binding && !generated_owner {
+                notes.push(format!(
+                    "{id}: source locator {locator} is unresolved outside the identified owning workspace"
+                ));
                 continue;
             }
             if inside_candidates.is_empty() {
@@ -214,7 +252,7 @@ pub(crate) fn notes(
             let mut ambiguous_pin: Option<(&str, &str)> = None;
             let mut unavailable_pin: Option<PinnedFileStatus> = None;
             let mut pin_available = false;
-            if !Path::new(locator).is_absolute() {
+            if project.is_git() && !Path::new(locator).is_absolute() {
                 for candidate in &candidates {
                     let Some((revision, pinned_path)) = candidate.split_once(':') else {
                         continue;

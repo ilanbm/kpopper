@@ -228,6 +228,22 @@ fn create_with_probe(
 mod tests {
     use super::*;
 
+    fn local_simple_policy(root: &Path, original: &[std::path::PathBuf]) {
+        fs::create_dir_all(root.join(".kpopper")).unwrap();
+        fs::write(
+            root.join(".kpopper/project.json"),
+            serde_json::json!({
+                "version": 1,
+                "mode": "simple",
+                "record": original[0].to_string_lossy(),
+                "publication": null,
+                "generation": 0
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
     fn action(named: bool) -> V {
         let mut action = obj([
             ("kind", s("add")),
@@ -251,6 +267,7 @@ mod tests {
             let temp = tempfile::tempdir().unwrap();
             let root = temp.path().canonicalize().unwrap();
             let original = vec![root.join("GROUNDING.yaml")];
+            local_simple_policy(&root, &original);
             let route = WriteRoute::capture(&original, &root).unwrap();
             let runtime = crate::history_authoring::tests::runtime(&root.join("runtime"));
             let action = V::from_tagged(&case["action"]).unwrap();
@@ -322,6 +339,7 @@ mod tests {
                 let temp = tempfile::tempdir().unwrap();
                 let root = temp.path().canonicalize().unwrap();
                 let original = vec![root.join("GROUNDING.yaml")];
+                local_simple_policy(&root, &original);
                 let route = WriteRoute::capture(&original, &root).unwrap();
                 let runtime = crate::history_authoring::tests::runtime(&root.join("runtime"));
                 let mut reached = false;
@@ -386,6 +404,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let original = vec![root.join("GROUNDING.yaml")];
+        local_simple_policy(&root, &original);
         let route = WriteRoute::capture(&original, &root).unwrap();
         let runtime = crate::history_authoring::tests::runtime(&root.join("runtime"));
         fs::write(root.join(".gitattributes"), "user.txt text\n").unwrap();

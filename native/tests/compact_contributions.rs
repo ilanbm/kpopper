@@ -13,6 +13,8 @@ struct Fixture {
     private: PathBuf,
 }
 
+const ADVANCED: &str = r#"{"version":1,"generation":0,"mode":"advanced","record":"GROUNDING.yaml"}"#;
+
 fn fixture(config: Option<&str>) -> Fixture {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap().join("repo");
@@ -52,6 +54,7 @@ fn run(fixture: &Fixture, args: &[&str]) -> Output {
         .env("KPOPPER_NATIVE_RESOURCES", resources)
         .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
         .env("KPOPPER_PRIVATE_HOME", &fixture.private)
+        .env("KPOPPER_PROJECTS_DIR", fixture.private.join("projects"))
         .args(args)
         .output()
         .unwrap()
@@ -144,7 +147,7 @@ fn tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
 
 #[test]
 fn compact_private_and_local_scopes_keep_their_routes() {
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     success(run(&fixture, &["add", "p.base", "v=1"]));
     let before = tree(&fixture.root);
     let draft: Value = serde_json::from_str(&success(run(
@@ -191,7 +194,7 @@ fn compact_private_and_local_scopes_keep_their_routes() {
 
 #[test]
 fn pending_reading_captured_before_the_record_stays_an_alternative() {
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     let receipt: Value = serde_json::from_str(&success(run(
         &fixture,
         &[
@@ -278,7 +281,7 @@ fn pending_reading_captured_before_the_record_stays_an_alternative() {
 fn legacy_subset_transport_cannot_name_a_compact_source() {
     // Why compact records do not reuse v3: its origin binds a history/v1 authority,
     // so naming the real compact source is refused and anything else would misstate it.
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     success(run(&fixture, &["add", "p.base", "v=1"]));
     let marker = kpop_native::history_yaml::decode_document(
         &fs::read(fixture.root.join(".kpopper/history.yaml")).unwrap(),
@@ -373,7 +376,7 @@ fn subjects(bundle: &V) -> Vec<String> {
 
 #[test]
 fn scoped_add_and_set_capture_v4_selected_closures_and_replay() {
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     success(run(&fixture, &["add", "p.base", "v=1"]));
     success(run(&fixture, &["add", "p.other", "v=7"]));
     let before = tree(&fixture.root);
@@ -500,7 +503,7 @@ fn scoped_add_and_set_capture_v4_selected_closures_and_replay() {
 
 #[test]
 fn v4_tamper_unknown_versions_and_masquerade_refuse() {
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     success(run(&fixture, &["add", "p.base", "v=1"]));
     let receipt = json(run(
         &fixture,
@@ -597,7 +600,7 @@ fn v4_tamper_unknown_versions_and_masquerade_refuse() {
 #[test]
 fn private_evidence_in_the_retained_closure_becomes_a_private_draft() {
     for private_field in ["from=/Users/someone/notes.txt", "private=true"] {
-        let fixture = fixture(None);
+        let fixture = fixture(Some(ADVANCED));
         if private_field == "private=true" {
             // The public authoring route correctly drafts a newly private input.
             // Seed retained private data through the native local writer so this
@@ -662,7 +665,7 @@ fn private_evidence_in_the_retained_closure_becomes_a_private_draft() {
 
 #[test]
 fn a_v4_contribution_refuses_a_legacy_target_without_mutating_it() {
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     success(run(&fixture, &["add", "p.base", "v=1"]));
     let receipt = json(run(
         &fixture,
@@ -704,7 +707,7 @@ fn a_v4_contribution_refuses_a_legacy_target_without_mutating_it() {
 
 #[test]
 fn v4_materializes_compactly_and_adopts_with_explicit_choices() {
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     success(run(&fixture, &["add", "p.base", "v=1"]));
     let added = json(run(
         &fixture,
@@ -906,7 +909,7 @@ fn legacy_history_record(root: &Path) {
 
 #[test]
 fn legacy_v3_stays_readable_and_materializes_and_adopts_compactly() {
-    let fixture = fixture(None);
+    let fixture = fixture(Some(ADVANCED));
     legacy_history_record(&fixture.root);
     let receipt = json(run(
         &fixture,

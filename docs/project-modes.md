@@ -1,10 +1,8 @@
-# Two working modes
+# Project knowledge storage
 
-**Advanced mode is experimental.** Parallel branches can make compatible knowledge changes
-that still conflict as text in `GROUNDING.yaml`. A PR that already passed checks can then
-need a conflict-resolution commit and another CI run. The current format and defaults
-remain in place while [the merge design question](advanced-mode-merging.md) is open.
-That document records the alternatives, evidence, tradeoffs and unresolved questions.
+New projects keep one shared record in private central storage automatically. Ordinary
+work starts without choosing or announcing a mode. Existing records keep their location
+and policy; branch-specific storage remains available through experimental Advanced.
 
 The mode belongs to the project. Sessions do not choose different storage rules or create
 a new graph whenever they start.
@@ -14,7 +12,7 @@ a new graph whenever they start.
 | Knowledge context | One shared project graph | A graph for the branch's code world, with shared project contributions |
 | Concurrent proposals | Named hypotheses beside the shared graph | Named hypotheses within the branch context |
 | Session ownership | Several sessions can work on one proposal | Several sessions can work on one proposal in the same context |
-| Default | Projects without Git; existing registered shared records | New Git projects, including a single checkout |
+| Default | New unconfigured projects, including Git projects | Explicit `kpop experimental advanced` only |
 | Review | Reconcile proposals against the shared graph | Reconcile branch changes and pending project contributions |
 
 Checkout count is not a mode. Simple can be explicitly configured for a Git project with
@@ -23,24 +21,76 @@ silently copies or removes records. Different branch records, unresolved hypothe
 unsettled publication obligations must be reconciled first. Original record bytes and
 the previous policy are retained as rollback evidence.
 
-## Choose a mode, then connect the Board
+## New projects use Simple automatically
+
+An ordinary unconfigured project is routed to private central **Simple** storage on its
+first valid record-creating `add`. There is no mode-choice prompt or announcement. The record is
+stored at `<central>/<slug>-<uuid>/GROUNDING.yaml`, where `<central>` is the absolute,
+non-empty `KPOPPER_PROJECTS_DIR` value when configured, otherwise `~/.kpopper/projects`; the
+UUID is generated only for the first mutation. The root and HOME are validated lazily only
+when a fresh central location is needed: invalid values do not break legacy records or an
+already-bound explicit path. A read-only preview may show a clearly provisional
+`<slug>-unbound-<canonical-anchor-path-hash>/GROUNDING.yaml`; it is never created, selected,
+stored or adopted as a permanent record. Existing records and explicit configurations retain
+their location.
+
+Central Simple is local only: it provides no remote/team synchronization and never grants
+Board permission. For a non-Git project, an unmarked cwd is the initial owner root; the first
+write creates its owner marker, and descendant invocations then resolve that marker as the
+owner boundary. The central record parent is never promoted into a wider project. Generated
+relative project sources resolve only against the central record parent and the validated
+current owning workspace; `--source-root` authorizes reads but never rebases a relative locator.
+Duplicate matches are an explicit ambiguity, and outside an identified owner they remain
+unresolved rather than guessed.
+Captured sources remain beside the central record. Branch/revision provenance is retained,
+and a central record must not be used to guess files from another worktree.
+
+If an old same-slug central record exists, first binding reports a recovery hint without
+reading, adopting or deleting it. An interrupted binding may repair itself only when the
+candidate is absent or empty (or already has a matching receipt); a completed nonempty
+candidate whose receipt is lost refuses ordinary mutation. A copied binding refuses writes
+with an exact recovery command. When the original owner disappeared, explicit
+`kpop config --rebind` validates the move or receipt repair; `kpop config --new-project`
+creates a fresh empty binding without copying data or history. Failed allocation must leave no
+unusable published binding; a proven no-data failed binding may be reset, while data-bearing
+records are never deleted or overwritten. Existing legacy records—including independent nested
+records discovered by the normal root walk—remain selectable, readable and writable before and
+after a generated root binding. This nested precedence applies to generated bindings; a manually
+configured external record remains the selected target. Only a new root record or competing
+record-bearing state at the generated root is refused; nested records are not swallowed. A known
+legacy Git record found in history or at a verified sibling worktree root keeps its branch-local
+Advanced behavior when absent on the current branch; a record
+tracked at the current HEAD but missing physically is unavailable and must be restored or
+refused. No legacy record is converted automatically.
+
+Before allocating a new central record, supported record sidecars at verified worktree roots
+must be accounted for. Orphaned knowledge is refused for recovery; harmless locks, UI metadata
+and an empty `.kpopper/` directory do not block creation. This check does not prevent an established legacy
+branch from continuing its own record.
+
+Ownership is anchored to the Git common directory (or the non-Git owner anchor) plus its
+matching binding token; the last writer's worktree path is diagnostic, not authority. On a
+known `CLAUDE_CODE_REMOTE=true` host, every fresh allocation or no-data reset—including
+`--new-project`—requires an explicit durable absolute `KPOPPER_PROJECTS_DIR`; there is no
+universal remote/VM detection claim and no Advanced fallback. Existing valid stores remain
+usable.
+
+## Choose Advanced explicitly, then connect the Board
 
 **Advanced is experimental.** Independent entries can collide in `GROUNDING.yaml` when
 parallel PRs merge; resolving a record conflict can lead to another CI run. The readable
 record and existing history formats remain unchanged. The problem and alternatives remain
 an [open design question](advanced-mode-merging.md).
 
-The first meaningful user session offers **Simple (recommended)** or **Advanced
-(experimental)** with the existing README illustration. `kpop board` reports the mode,
-whether it was explicitly selected, and a suggested external Simple record path. Advanced
-remains the low-level fallback for an unconfigured Git project; detection does not count
-as consent and onboarding never silently switches modes or moves existing records.
-
-Simple uses one shared record outside all checkouts, at a location chosen by the owner.
-For a new project, prepare its parent directory and use `config --mode simple --record PATH
---expected-generation N`; no empty record is created. The first useful sourced write creates
-it. Existing records, history and pending contributions need reconciliation before changing
-mode. A gitignored file inside the primary checkout is not a supported Simple destination.
+Advanced is an explicit experimental feature. Use `kpop experimental advanced` to enter it
+through the validated configuration transition path; `config --mode advanced` remains a
+compatibility alias with a concise Experimental notice. The bounded command accepts only its
+supported record/check/generation/migration/rollback options and global JSON; unrelated
+`--mode`, recovery and guidance flags are rejected before changes. It keeps the record with each
+branch and includes the optional kpopper Board for shared findings. `kpop board` reports
+publication separately; central Simple never enables it. Mode transitions never silently
+copy, migrate or remove records, and generated identity fields are cleared only by an
+actual validated transition.
 
 Advanced keeps the record with each branch and includes **kpopper Board** for shared findings.
 The Board can remain local or connect to an exact remote repository and target. Mode selection

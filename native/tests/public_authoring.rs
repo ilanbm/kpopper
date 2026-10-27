@@ -5,8 +5,24 @@ use std::{
     process::{Command, Output},
 };
 
+fn workspace(temp: &tempfile::TempDir) -> std::path::PathBuf {
+    let root = temp.path().join("workspace");
+    fs::create_dir(&root).unwrap();
+    root.canonicalize().unwrap()
+}
+fn projects(root: &Path) -> std::path::PathBuf {
+    root.parent().unwrap().join("test-projects")
+}
+
 fn run(root: &Path, args: &[&str]) -> Output {
     command(root).args(args).output().unwrap()
+}
+fn run_with_projects(root: &Path, projects: &Path, args: &[&str]) -> Output {
+    command(root)
+        .env("KPOPPER_PROJECTS_DIR", projects)
+        .args(args)
+        .output()
+        .unwrap()
 }
 fn run_unbundled(root: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_kpop"))
@@ -14,6 +30,7 @@ fn run_unbundled(root: &Path, args: &[&str]) -> Output {
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
         .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env("KPOPPER_PROJECTS_DIR", projects(root))
         .args(args)
         .output()
         .unwrap()
@@ -35,8 +52,35 @@ fn command(root: &Path) -> Command {
         .env_remove("KPOPPER_AGENT_SESSION")
         .env_remove("CODEX_THREAD_ID")
         .env("KPOPPER_NATIVE_RESOURCES", resources)
-        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"));
+        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
+        .env("KPOPPER_PROJECTS_DIR", projects(root));
     command
+}
+
+/// Resolve the record actually selected by the project. Fresh unconfigured
+/// workspaces now keep the record (and its node-history sidecars) in the
+/// central project store; explicitly configured/legacy fixtures remain local.
+fn record_path(root: &Path) -> std::path::PathBuf {
+    let local = root.join("GROUNDING.yaml");
+    if local.exists() {
+        return local;
+    }
+    let output = command(root).args(["--json", "where"]).output().unwrap();
+    assert!(
+        output.status.success(),
+        "where: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
+    Path::new(envelope["output"].as_str().unwrap().trim()).to_path_buf()
+}
+
+fn hypothesis_path(root: &Path, name: &str) -> std::path::PathBuf {
+    record_path(root)
+        .parent()
+        .unwrap()
+        .join(".kpopper/hypotheses")
+        .join(format!("{name}.yaml"))
 }
 fn success(output: Output) -> String {
     assert!(
@@ -90,7 +134,7 @@ fn pending_manifest(root: &Path, revision: &str) -> kpop_native::value::TypedVal
 fn advanced_explicit_add_captures_without_mutating_the_record_and_replays() {
     use kpop_native::value::TypedValue as V;
     let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let args = [
         "add",
         "p.new",
@@ -109,7 +153,7 @@ fn advanced_explicit_add_captures_without_mutating_the_record_and_replays() {
     let first: Value = serde_json::from_str(&success(run_unbundled(&root, &args))).unwrap();
     assert_eq!(first["state"], "captured");
     assert_eq!(first["replay"], false);
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     let revision = first["revision"].as_str().unwrap();
     let manifest = pending_manifest(&root, revision);
     let V::Map(manifest) = manifest else {
@@ -160,6 +204,7 @@ fn advanced_first_explicit_add_enters_pending_without_creating_a_record() {
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
+    success(run_unbundled(&root, &["config", "--mode", "advanced", "--json"]));
     let receipt: Value = serde_json::from_str(&success(run_unbundled(
         &root,
         &[
@@ -236,14 +281,14 @@ fn legacy_history_record(root: &Path) {
 fn advanced_history_add_captures_a_version_three_contribution() {
     use kpop_native::value::TypedValue as V;
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
     // An existing core/v1 record keeps the v3 transport; compact records use
     // the v4 semantic closure covered by tests/compact_contributions.rs.
     legacy_history_record(&root);
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let args = [
         "add",
         "p.history",
@@ -259,7 +304,7 @@ fn advanced_history_add_captures_a_version_three_contribution() {
     ];
     let receipt: Value = serde_json::from_str(&success(run(&root, &args))).unwrap();
     assert_eq!(receipt["state"], "captured");
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     let manifest = pending_manifest(&root, receipt["revision"].as_str().unwrap());
     let V::Map(manifest) = manifest else {
         panic!("manifest")
@@ -298,7 +343,7 @@ fn advanced_history_add_captures_a_version_three_contribution() {
         set_manifest["version"],
         V::Integer(kpop_native::value::Integer::new("3").unwrap())
     );
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
 }
 
 #[test]
@@ -318,7 +363,7 @@ fn advanced_local_scopes_are_written_and_project_review_is_refused() {
             "checkout",
         ],
     ));
-    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    let record = fs::read_to_string(record_path(&root)).unwrap();
     assert!(record.contains("kind: feature"));
     assert!(record.contains("environment: checkout"));
     let review = run_unbundled(
@@ -348,7 +393,7 @@ fn advanced_scoped_flow_set_matches_python_field_order() {
         &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
-        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        fs::read_to_string(record_path(&root)).unwrap(),
         "known:\n  p.base:\n    name: \"Package count\"\n    v: 5\n    at: \"line 2\"\n    of: \"2026-09-20\"\n    scope: {kind: feature, environment: x}\n"
     );
 }
@@ -363,7 +408,7 @@ fn advanced_scoped_block_set_quotes_multiword_name_like_python() {
         &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
-        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        fs::read_to_string(record_path(&root)).unwrap(),
         "known:\n  p.base:\n    name: \"Package count\"\n    v: 5\n    of: \"2026-09-20\"\n    scope: {kind: feature, environment: x}\n"
     );
 }
@@ -378,7 +423,7 @@ fn advanced_scoped_block_set_quotes_multiword_at_like_python() {
         &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x", "--as-of", "2026-09-20"],
     ));
     assert_eq!(
-        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        fs::read_to_string(record_path(&root)).unwrap(),
         "known:\n  p.base:\n    v: 5\n    of: \"2026-09-20\"\n    at: \"line 2\"\n    scope: {kind: feature, environment: x}\n"
     );
 }
@@ -389,7 +434,7 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
     let (_temp, root) = advanced_ordinary(
         "known:\n  p.base: {v: 1}\njudgments:\n  d.old:\n    verdict: proceed\n    rests_on: [p.base]\n    reopened_by: new reading\n    seen: {p.base: 1}\n",
     );
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let set: Value = serde_json::from_str(&success(run_unbundled(
         &root,
         &[
@@ -467,7 +512,7 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
         seen["p.base"],
         V::Integer(kpop_native::value::Integer::new("1").unwrap())
     );
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
 }
 
 #[test]
@@ -478,6 +523,7 @@ fn advanced_private_and_code_routes_never_enter_the_pending_queue() {
         .current_dir(&root)
         .env_remove("KPOPPER_NATIVE_RESOURCES")
         .env("KPOPPER_PRIVATE_HOME", private.path())
+        .env("KPOPPER_PROJECTS_DIR", projects(&root))
         .args([
             "add",
             "p.secret",
@@ -540,14 +586,14 @@ fn advanced_private_and_code_routes_never_enter_the_pending_queue() {
             commit,
         ],
     ));
-    let record = fs::read_to_string(root.join("GROUNDING.yaml")).unwrap();
+    let record = fs::read_to_string(record_path(&root)).unwrap();
     assert!(record.contains("kind: code"));
     assert!(record.contains(commit));
 }
 #[test]
 fn empty_tmpdir_keeps_publication_receipts_outside_the_workspace() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let sessions = tempfile::tempdir().unwrap();
     let sid = format!(
         "empty-tmp-{}",
@@ -578,13 +624,13 @@ fn empty_tmpdir_keeps_publication_receipts_outside_the_workspace() {
 #[test]
 fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let first = success(run(&root, &["add", "p.x", "v=1"]));
     assert!(first.contains("history committed:"));
     assert!(first.contains("born with its first entry"));
     let before: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     assert_eq!(before["authority"]["profile"], "node-history/v1");
-    let first_view = kpop_native::history_yaml::decode_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
+    let first_view = kpop_native::history_yaml::decode_document(&fs::read(record_path(&root)).unwrap()).unwrap();
     let kpop_native::value::TypedValue::Map(first_view) = first_view else { panic!("record mapping") };
     let kpop_native::value::TypedValue::Map(meta) = &first_view["meta"] else { panic!("record metadata") };
     assert!(meta.contains_key("node_history"));
@@ -611,7 +657,7 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     let after: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     assert_eq!(after["commits"], 2);
     assert_ne!(after["subjects"]["p.x"]["heads"][0], old);
-    let current = kpop_native::history_node_capture::Capture::read(&root).unwrap();
+    let current = kpop_native::history_node_capture::Capture::read(record_path(&root).parent().unwrap()).unwrap();
     let kpop_native::value::TypedValue::Map(document) = current.document() else { panic!("record mapping") };
     let kpop_native::value::TypedValue::Map(known) = &document["known"] else { panic!("known mapping") };
     let kpop_native::value::TypedValue::Map(body) = &known["p.x"] else { panic!("reading body") };
@@ -636,20 +682,21 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
 #[test]
 fn default_git_project_uses_compact_history_for_normal_local_work() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
+    let projects = tempfile::tempdir().unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
     git(&root, &["config", "user.name", "Fixture"]);
     git(&root, &["config", "user.email", "fixture@example.test"]);
     fs::write(root.join(".gitattributes"), "user.txt text\n").unwrap();
-    success(run(&root, &["add", "p.x", "v=1", "--as-of", "2026-01-01"]));
-    success(run(&root, &["add", "p.y", "v=2"]));
-    success(run(&root, &["set", "p.x", "2", "--as-of", "2026-01-02", "--why", "new observation"]));
-    success(run(&root, &["add", "d.small", "verdict=small", "rests_on=[p.x]", "wrong_if=p.x > 3"]));
-    success(run(&root, &["review", "d.small", "--why", "checked source"]));
-    success(run(&root, &["add", "p.alternative", "v=3", "--hypothesis", "alternative"]));
-    success(run(&root, &["consolidate", "alternative", "--dry-run"]));
-    success(run(&root, &["consolidate", "alternative"]));
-    let status: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
+    success(run_with_projects(&root, projects.path(), &["add", "p.x", "v=1", "--as-of", "2026-01-01"]));
+    success(run_with_projects(&root, projects.path(), &["add", "p.y", "v=2"]));
+    success(run_with_projects(&root, projects.path(), &["set", "p.x", "2", "--as-of", "2026-01-02", "--why", "new observation"]));
+    success(run_with_projects(&root, projects.path(), &["add", "d.small", "verdict=small", "rests_on=[p.x]", "wrong_if=p.x > 3"]));
+    success(run_with_projects(&root, projects.path(), &["review", "d.small", "--why", "checked source"]));
+    success(run_with_projects(&root, projects.path(), &["add", "p.alternative", "v=3", "--hypothesis", "alternative"]));
+    success(run_with_projects(&root, projects.path(), &["consolidate", "alternative", "--dry-run"]));
+    success(run_with_projects(&root, projects.path(), &["consolidate", "alternative"]));
+    let status: Value = serde_json::from_str(&success(run_with_projects(&root, projects.path(), &["history", "status"]))).unwrap();
     assert_eq!(status["authority"]["profile"], "node-history/v1");
     assert_eq!(status["subjects"]["p.alternative"]["acceptance"], "accepted");
     assert!(fs::read_to_string(root.join(".gitattributes")).unwrap().starts_with("user.txt text\n"));
@@ -658,7 +705,7 @@ fn default_git_project_uses_compact_history_for_normal_local_work() {
 
 fn history_record_with_one_source() -> (tempfile::TempDir, std::path::PathBuf) {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     fs::create_dir(root.join("notes")).unwrap();
     fs::write(root.join("notes/c.txt"), "Hours: 10\nRate: 50\n").unwrap();
     fs::write(root.join("notes/d.txt"), "Days: 3\n").unwrap();
@@ -694,7 +741,7 @@ fn history_add_names_the_nearest_existing_entries_once_before_the_commit() {
         "nearest existing:\n  p.hours: same from (src.c)\n  one subject: same <id> p.rate folds it in · two: distinct p.rate <id> \"why\" keeps them apart\n"
     );
     assert!(committed.ends_with(" (add p.rate)\n"), "{output}");
-    let record = kpop_native::history_yaml::decode_source_document(&fs::read(root.join("GROUNDING.yaml")).unwrap()).unwrap();
+    let record = kpop_native::history_yaml::decode_source_document(&fs::read(record_path(&root)).unwrap()).unwrap();
     let body = record.get("known").unwrap().get("p.rate").unwrap().typed();
     assert_eq!(body.to_json().unwrap(), serde_json::json!({"from":"src.c","v":50}));
 
@@ -820,7 +867,7 @@ fn history_writes_with_nothing_near_say_only_the_commit() {
 #[test]
 fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.base", "v=10"]));
     success(run(
         &root,
@@ -844,7 +891,7 @@ fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
             .contains("(review d.named)")
     );
     let record = kpop_native::history_yaml::decode_source_document(
-        &fs::read(root.join("GROUNDING.yaml")).unwrap(),
+        &fs::read(record_path(&root)).unwrap(),
     )
     .unwrap();
     let known = record.get("known").unwrap();
@@ -875,14 +922,14 @@ fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
 #[test]
 fn first_named_add_bootstraps_a_proposal_without_accepting_it() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let output = success(run(
         &root,
         &["add", "p.first", "v=1", "--hypothesis", "opening"],
     ));
     assert!(output.contains("born with its first entry"));
     let record = kpop_native::history_yaml::decode_source_document(
-        &fs::read(root.join("GROUNDING.yaml")).unwrap(),
+        &fs::read(record_path(&root)).unwrap(),
     )
     .unwrap();
     assert!(record.get("known").unwrap().get("p.first").is_none());
@@ -893,14 +940,14 @@ fn first_named_add_bootstraps_a_proposal_without_accepting_it() {
 #[test]
 fn named_hypothesis_rejects_invalid_and_physical_authority_names() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.base", "v=1"]));
     let invalid = run(&root, &["add", "p.bad", "v=2", "--hypothesis", "../bad"]);
     assert!(!invalid.status.success());
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("invalid_history_hypothesis"));
-    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::create_dir_all(hypothesis_path(&root, "taken").parent().unwrap()).unwrap();
     fs::write(
-        root.join(".kpopper/hypotheses/taken.yaml"),
+        hypothesis_path(&root, "taken"),
         "known: {p.physical: {v: 3}}\n",
     )
     .unwrap();
@@ -912,16 +959,17 @@ fn named_hypothesis_rejects_invalid_and_physical_authority_names() {
 #[test]
 fn named_privacy_checks_use_hypothesis_only_dependencies() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let private = tempfile::tempdir().unwrap();
     success(run(&root, &["add", "p.base", "v=1"]));
     success(run(
         &root,
         &["add", "p.only", "v=2", "--hypothesis", "alpha"],
     ));
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let output = command(&root)
         .env("KPOPPER_PRIVATE_HOME", private.path())
+        .env("KPOPPER_PROJECTS_DIR", projects(&root))
         .args([
             "add",
             "d.private",
@@ -935,14 +983,15 @@ fn named_privacy_checks_use_hypothesis_only_dependencies() {
         .unwrap();
     let result: Value = serde_json::from_str(&success(output)).unwrap();
     assert_eq!(result["state"], "private draft");
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     assert!(!success(run(&root, &["history", "status"])).contains("d.private"));
 }
 #[test]
 fn refused_first_add_leaves_no_partial_record_or_authority() {
     let temp = tempfile::tempdir().unwrap();
+    let root = workspace(&temp);
     let output = run(
-        temp.path(),
+        &root,
         &[
             "add",
             "d.bad",
@@ -951,8 +1000,8 @@ fn refused_first_add_leaves_no_partial_record_or_authority() {
         ],
     );
     assert!(!output.status.success());
-    assert!(!temp.path().join("GROUNDING.yaml").exists());
-    assert!(!temp.path().join(".kpopper/history.yaml").exists());
+    assert!(!root.join("GROUNDING.yaml").exists());
+    assert!(!root.join(".kpopper/history.yaml").exists());
 }
 
 #[test]
@@ -965,7 +1014,7 @@ fn public_recovery_finishes_or_cancels_a_retained_first_write() {
     };
     for rollback in [false, true] {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = workspace(&temp);
         let entry = root.join("GROUNDING.yaml");
         let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
@@ -979,6 +1028,8 @@ fn public_recovery_finishes_or_cancels_a_retained_first_write() {
             OperationalBounds::default(),
         )
         .unwrap();
+        // This is a retained legacy local journal, not a new default binding.
+        success(run(&root, &["config", "--mode", "simple", "--record", "GROUNDING.yaml"]));
         let policy = kpop_native::project_modes::Project::open(&root)
             .unwrap()
             .config()
@@ -1024,7 +1075,7 @@ fn public_recovery_finishes_or_cancels_a_retained_first_write() {
 fn a_private_first_or_later_add_stays_outside_the_record() {
     for existing in [false, true] {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = workspace(&temp);
         let private = tempfile::tempdir().unwrap();
         // Initialize only the explicitly selected test runtime if no record exists.
         if existing {
@@ -1036,13 +1087,18 @@ fn a_private_first_or_later_add_stays_outside_the_record() {
                     .success()
             );
         }
-        let path = root.join("GROUNDING.yaml");
+        let path = if existing {
+            record_path(&root)
+        } else {
+            root.join("GROUNDING.yaml")
+        };
         let before = fs::read(&path).ok();
         let output = Command::new(env!("CARGO_BIN_EXE_kpop"))
             .current_dir(&root)
             .env("KPOPPER_NATIVE_RESOURCES", root.join(".test-runtime"))
             .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
             .env("KPOPPER_PRIVATE_HOME", private.path())
+            .env("KPOPPER_PROJECTS_DIR", projects(&root))
             .args(["add", "p.private", "v=secret", "private=true"])
             .output()
             .unwrap();
@@ -1059,7 +1115,7 @@ fn a_private_first_or_later_add_stays_outside_the_record() {
 #[test]
 fn explicit_core_acts_and_proposals_need_only_the_core_program() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.x", "v=1"]));
     let state: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
     let version = state["subjects"]["p.x"]["heads"][0].as_str().unwrap();
@@ -1080,7 +1136,7 @@ fn explicit_core_acts_and_proposals_need_only_the_core_program() {
         .unwrap();
         assert_eq!(result["state"], "committed");
     }
-    let record = root.join("GROUNDING.yaml");
+    let record = record_path(&root);
     let mut document = kpop_native::history_yaml::decode_document(&fs::read(&record).unwrap()).unwrap();
     let kpop_native::value::TypedValue::Map(doc) = &mut document else { panic!("record") };
     let kpop_native::value::TypedValue::Map(known) = doc.get_mut("known").unwrap() else { panic!("known") };
@@ -1108,9 +1164,9 @@ fn explicit_core_acts_and_proposals_need_only_the_core_program() {
 #[test]
 fn unresolved_candidate_references_reach_the_authoring_diagnostic() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     success(run(&root, &["add", "p.seed", "v=1"]));
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     for (args, expected) in [
         (
             vec!["add", "d.bad", "verdict=stop", "rests_on=[p.missing]"],
@@ -1126,14 +1182,14 @@ fn unresolved_candidate_references_reach_the_authoring_diagnostic() {
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(error.contains(expected), "{error}");
         assert!(!error.contains("missing_contribution_dependency"));
-        assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+        assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     }
 }
 
 #[test]
 fn session_receipts_follow_successful_publication_and_cannot_break_a_write() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     let sessions = tempfile::tempdir().unwrap();
     let call = |args: &[&str]| {
         command(&root)
@@ -1144,7 +1200,7 @@ fn session_receipts_follow_successful_publication_and_cannot_break_a_write() {
             .unwrap()
     };
     success(call(&["add", "p.x", "v=1"]));
-    let record = root.join("GROUNDING.yaml");
+    let record = record_path(&root);
     let key = kpop_native::identity::sha256(record.to_str().unwrap().as_bytes());
     let receipt = sessions
         .path()
@@ -1218,13 +1274,13 @@ const CUSTOM_JUDGMENT: &[&str] = &[
 
 fn simple_workspace(source: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = workspace(&temp);
     fs::write(root.join("GROUNDING.yaml"), source).unwrap();
     (temp, root)
 }
 
 fn record(root: &Path) -> String {
-    fs::read_to_string(root.join("GROUNDING.yaml")).unwrap()
+    fs::read_to_string(record_path(&root)).unwrap()
 }
 
 // The expected records in the tests below are what the Python writer leaves
@@ -1303,7 +1359,7 @@ fn a_record_without_snapshots_is_set_reviewed_and_proposed_to_as_the_python_writ
     );
     assert_eq!(record(&root), format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
     assert_eq!(
-        fs::read_to_string(root.join(".kpopper/hypotheses/proposal.yaml")).unwrap(),
+        fs::read_to_string(hypothesis_path(&root, "proposal")).unwrap(),
         "hypothesis: {born: \"2026-01-01\"}\n\njudgments:\n  d.z:\n    verdict: x\n    requires: [api.limit]\n    fails_if: \"api.limit > 50\"\n    seen: {api.limit: 10}\n"
     );
 }
@@ -1368,7 +1424,7 @@ fn a_review_in_a_named_hypothesis_writes_inside_the_braces_of_a_one_line_judgmen
         ] {
             let base = format!("known:\n{indent}api.limit: {{v: 10}}\n");
             let (_temp, root) = simple_workspace(&base);
-            let path = root.join(".kpopper/hypotheses/limit.yaml");
+            let path = hypothesis_path(&root, "limit");
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             let head =
                 format!("hypothesis: {{born: \"2025-12-01\"}}\n\njudgments:\n{indent}d.w: {{");
@@ -1419,7 +1475,7 @@ fn a_snapshot_written_by_hand_is_replaced_in_place_as_the_python_writer_does() {
     success(run_unbundled(&root, &add));
     assert_eq!(record(&root), format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
     assert_eq!(
-        fs::read_to_string(root.join(".kpopper/hypotheses/proposal.yaml")).unwrap(),
+        fs::read_to_string(hypothesis_path(&root, "proposal")).unwrap(),
         format!("hypothesis: {{born: \"2026-01-01\"}}\n\njudgments:\n{judgment}")
     );
 }
@@ -1428,7 +1484,7 @@ fn a_snapshot_written_by_hand_is_replaced_in_place_as_the_python_writer_does() {
 fn custom_field_roles_contribute_what_the_python_writer_captures() {
     use kpop_native::value::{Integer, TypedValue as V};
     let (_temp, root) = advanced_ordinary(&format!("{CUSTOM_ROLES}{CUSTOM_RECORD}"));
-    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let before = fs::read(record_path(&root)).unwrap();
     let mut args = CUSTOM_JUDGMENT.to_vec();
     args.extend([
         "--shareability",
@@ -1448,7 +1504,7 @@ fn custom_field_roles_contribute_what_the_python_writer_captures() {
         receipt["revision"],
         "ee81ab5b470e7b3ffe1bcb11c73da80058ea74de93492fbdb8557c39dfcf4e93"
     );
-    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert_eq!(fs::read(record_path(&root)).unwrap(), before);
     let V::Map(manifest) = pending_manifest(&root, receipt["revision"].as_str().unwrap()) else {
         panic!("manifest")
     };
@@ -1732,7 +1788,7 @@ fn review_in_a_hypothesis_keeps_a_snapshot_named_reviewed() {
     let trail = format!("{proposal}{NAMED_TRAIL}");
     for (source, open) in [(proposal, String::new()), (trail, stays_open("2026-01-01"))] {
         let (_temp, root) = simple_workspace(&base);
-        let path = root.join(".kpopper/hypotheses/limit.yaml");
+        let path = hypothesis_path(&root, "limit");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, &source).unwrap();
         assert_eq!(

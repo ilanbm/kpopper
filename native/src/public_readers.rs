@@ -120,6 +120,20 @@ fn files(options: &Options, cwd: &Path, command: &str) -> Result<(Vec<PathBuf>, 
     }
     Ok((paths, seeds))
 }
+fn locate_input(
+    command: &str,
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+) -> Result<W::Location> {
+    let input = options
+        .subjects
+        .iter()
+        .find(|name| names_a_file(command, name))
+        .map(|name| located(name, cwd))
+        .transpose()?;
+    W::locate_for_input(cwd, mode, input.as_deref())
+}
 fn mapping(location: &W::Location, inventory: &mut Inventory) -> Result<Option<J>> {
     let state = std::env::var_os("XDG_STATE_HOME")
         .filter(|s| !s.is_empty())
@@ -651,7 +665,7 @@ fn unopened(
     let (message, code) = failure("open", options, error);
     let located = || -> Result<J> {
         let cwd = cwd.canonicalize()?;
-        let location = W::locate(&cwd, mode)?;
+        let location = locate_input("open", options, &cwd, mode)?;
         let (paths, seeds) = read_paths("open", options, &cwd, &location)?;
         let mut inventory = Inventory::default();
         let mut data = opening_fields(
@@ -710,7 +724,7 @@ fn run_with_continuity(
 ) -> Result<ReadResult> {
     let as_json = reply == Reply::Json;
     let cwd = cwd.canonicalize()?;
-    let location = W::locate(&cwd, mode)?;
+    let location = locate_input(command, options, &cwd, mode)?;
     let (paths, seeds) = read_paths(command, options, &cwd, &location)?;
     let mut inventory = Inventory::default();
     let mut data =
@@ -748,7 +762,7 @@ fn run_with_continuity(
             data[if unavailable { "error" } else { "message" }] = json!(message);
             inventory.verify()?;
             crate::require(
-                W::locate(&cwd, mode)? == location,
+                locate_input(command, options, &cwd, mode)? == location,
                 "workspace changed while opening it; retry",
             )?;
             return Ok(plain(C::Output {
@@ -795,7 +809,7 @@ fn run_with_continuity(
         capture.verify()?;
         inventory.verify()?;
         crate::require(
-            W::locate(&cwd, mode)? == location,
+            locate_input(command, options, &cwd, mode)? == location,
             "workspace changed while reading it; retry",
         )?;
         return Ok(plain(output));
@@ -873,7 +887,7 @@ fn run_with_continuity(
                 capture.verify()?;
                 inventory.verify()?;
                 crate::require(
-                    W::locate(&cwd, mode)? == location,
+                    locate_input(command, options, &cwd, mode)? == location,
                     "workspace changed while reading it; retry",
                 )?;
                 return Ok(plain(C::Output { text, code }));
@@ -950,7 +964,7 @@ fn run_with_continuity(
         capture.verify()?;
         inventory.verify()?;
         crate::require(
-            W::locate(&cwd, mode)? == location,
+            locate_input(command, options, &cwd, mode)? == location,
             "workspace changed while reading it; retry",
         )?;
         if command == "open" {
@@ -1076,7 +1090,7 @@ fn run_with_continuity(
     capture.verify()?;
     inventory.verify()?;
     crate::require(
-        W::locate(&cwd, mode)? == location,
+        locate_input(command, options, &cwd, mode)? == location,
         "workspace changed while reading it; retry",
     )?;
     Ok(ReadResult { output, continuity, discovery })

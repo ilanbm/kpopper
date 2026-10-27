@@ -432,6 +432,7 @@ fn dispatch_with_runtime(
     if !options.from_refs.is_empty() {
         return branch::run(options, &route, &paths, runtime, probe);
     }
+    require(route.paths()[0].is_file(), "missing_record")?;
     let lock = F::DirectoryGuard::acquire(
         route.paths()[0]
             .parent()

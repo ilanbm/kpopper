@@ -5,8 +5,9 @@
 
 Start with the user's goal: planning, research, coordination, decisions or software.
 Keep one GROUNDING.yaml entry point (an existing PROVENANCE.yaml is that entry point too,
-read as it is) in the project's working directory for work that
-will be revisited. Git is optional; sources may span documents, conversations, calendars,
+read as it is). New unconfigured projects bind it in private central Simple storage on first
+mutation; legacy and explicit projects retain their existing working-directory or registered
+location. Git is optional; sources may span documents, conversations, calendars,
 task systems, files and earlier sessions. Record three things while working:
 
 Treat that entry file as the reader's implementation boundary. Agents, subagents and hooks use
@@ -52,9 +53,17 @@ After finding relevant IDs, prefer `context <id>` for declared dependencies and 
 Use `pull` for concise reads or if the checked reader is unavailable. Trace changes with
 `affects <changed-id>` or `context <changed-id> --direction impact`; gate on `check`.
 
-Use the project's mode: Simple shares one graph with named hypotheses across sessions;
-Advanced adds branch contexts and `pending_grounding` for shareable findings independent
-of a feature, even with one checkout. Several sessions may work on the same hypothesis.
+Use the project's mode: new unconfigured projects use private central Simple automatically,
+sharing one graph with named hypotheses across sessions; Advanced is an explicit Experimental
+feature that adds branch contexts and `pending_grounding` for shareable findings independent
+of a feature, even with one checkout. Central storage is local only and never grants Board
+permission. Several sessions may work on the same hypothesis. A read-only provisional path is
+never created, selected or stored. Existing nested records remain independently selectable,
+readable and writable before and after a generated root binding; only a new competing root
+record is refused. A current-HEAD record that is missing on disk is unavailable; a legacy Git
+record found only in history keeps branch-local behavior, and no legacy record is auto-converted.
+Relative generated sources use the central record parent or validated owning workspace only;
+`--source-root` authorizes reads and never rebases them.
 Private or unclear sharing permission means a structured private draft outside Git.
 Ordinary reads include relevant pending contributions with their scope and state; use an
 explicit frozen read for committed PR/CI evidence. A measurement of an unmerged commit is

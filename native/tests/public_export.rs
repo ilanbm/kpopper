@@ -36,14 +36,15 @@ fn install_runtime(root: &Path) -> Runtime {
     } else {
         std::env::consts::ARCH
     };
-    let ordinary = PathBuf::from(
-        std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .unwrap(),
-    )
-    .join(".cache/kpopper/lean")
-    .join(format!("{os}-{arch}"))
-    .join(env!("KPOP_ORDINARY_SOURCE_SHA256"));
+    let ordinary = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(
+            std::env::var_os("HOME")
+                .or_else(|| std::env::var_os("USERPROFILE"))
+                .unwrap(),
+        ).join(".cache/kpopper/lean")
+        .join(format!("{os}-{arch}"))
+        .join(env!("KPOP_ORDINARY_SOURCE_SHA256")));
     runtime.with_ordinary_program(Program::open(&ordinary).unwrap())
 }
 

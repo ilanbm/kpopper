@@ -76,6 +76,8 @@ fn configure_cli_matches_python_output_and_exact_policy_files() {
     let remote = temp.path().join("remote.git");
     std::fs::create_dir(&root).unwrap();
     git(&root, &["init", "-b", "trunk"], None);
+    // The frozen policy oracle exercises a legacy Git record's Advanced context.
+    std::fs::write(root.join("GROUNDING.yaml"), "known: {}\n").unwrap();
     git(
         temp.path(),
         &["init", "--bare", remote.to_str().unwrap()],
@@ -91,6 +93,7 @@ fn configure_cli_matches_python_output_and_exact_policy_files() {
         let entry = named(&oracle, name);
         let mut command = Process::new(binary);
         command.args(["--workspace", root.to_str().unwrap(), "pending"]);
+        command.env("KPOPPER_PROJECTS_DIR", temp.path().join("projects"));
         command.args(
             entry["argv"]
                 .as_array()

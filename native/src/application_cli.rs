@@ -16,7 +16,12 @@ pub struct Routing {
 }
 
 pub fn catalog() -> Value {
-    json!({"applications":[
+    json!({"features":[
+        {"name":"advanced","layer":"feature","status":"experimental","extra":"configuration",
+         "command":"kpop experimental advanced","aliases":[],"display_name":"Advanced mode",
+         "description":"Opt into the existing Git-backed Advanced configuration mode.",
+         "usage":"[--record PATH] [--check] [--expected-generation N] [--migration-receipt PATH] [--rollback]"}
+    ],"applications":[
         {"name":"hub","layer":"application","status":"experimental","extra":"html",
          "command":"kpop experimental hub","aliases":["page"],"display_name":"kpopper Hub",
          "description":"Render or verify the record's HTML page.",
@@ -81,7 +86,7 @@ pub fn inspect(argv: &[OsString]) -> Routing {
             } else {
                 // Rendering is included in the native package, so no Python
                 // installation commands are advertised by this catalog.
-                "usage: kpop experimental APPLICATION [OPTIONS]\n\nExperimental applications:\n  kpop experimental hub          Render or verify the record's HTML page.\n  kpop experimental annotated-doc Author and refresh standalone HTML with evidence.\n\nInterfaces and artifact formats may change. Use APPLICATION --help for details.\n".into()
+                "usage: kpop experimental APPLICATION [OPTIONS]\n\nExperimental features and applications:\n  kpop experimental advanced      Opt into the existing Git-backed Advanced mode.\n\nExperimental applications:\n  kpop experimental hub            Render or verify the record's HTML page.\n  kpop experimental annotated-doc Author and refresh standalone HTML with evidence.\n\nInterfaces and artifact formats may change. Use APPLICATION --help for details.\n".into()
             };
             return Routing {
                 early: Some(Output {
@@ -95,7 +100,7 @@ pub fn inspect(argv: &[OsString]) -> Routing {
         let Some(name) = argv.get(at).and_then(|s| s.to_str()) else {
             return Routing::default();
         };
-        if !["hub", "annotated-doc", "page", "document"].contains(&name) {
+        if !["advanced", "hub", "annotated-doc", "page", "document"].contains(&name) {
             return error(format!("unknown experimental application: {name}"));
         }
         name
@@ -108,12 +113,20 @@ pub fn inspect(argv: &[OsString]) -> Routing {
         command
     };
     let canonical = match requested {
+        "advanced" => "advanced",
         "page" => "hub",
         "document" => "annotated-doc",
         "hub" | "annotated-doc" => requested,
+        "config" => "config",
         _ => return Routing::default(),
     };
-    let notice=(requested!=canonical).then(||format!("kpop {}{requested} is a compatibility alias; use kpop experimental {canonical} (experimental application).\n",if explicit{"experimental "}else{""}));
+    let notice = (requested != canonical).then(|| format!("kpop {}{requested} is a compatibility alias; use kpop experimental {canonical} (experimental application).\n", if explicit { "experimental " } else { "" }));
+    let notice = notice.or_else(|| {
+        (requested == "config"
+            && (argv.windows(2).any(|args| args[0] == "--mode" && args[1] == "advanced")
+                || argv.iter().any(|arg| arg == "--mode=advanced")))
+            .then(|| "kpop config --mode advanced is a compatibility alias for kpop experimental advanced (Experimental feature).\n".into())
+    });
     Routing {
         early: None,
         requested: Some(requested.into()),

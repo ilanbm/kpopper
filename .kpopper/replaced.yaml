@@ -443,6 +443,42 @@ d.entry_file_is_grounding:
     p.entry_names: 2
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-23'
+- rests_on:
+  - s.2026_09_12_layout
+  - goal.portable
+  - d.prefix_is_a_word
+  - d.reasoning_in_record
+  - p.entry_names
+  verdict: 'the record''s entry file is GROUNDING.yaml: the first add creates it at the workspace root,
+    the locator finds it first and a record kept under the earlier name after it, wherever that record
+    already is, and no command creates the earlier name again'
+  because: 'The name is the one thing a session with no author present reads before anything else, and
+    {{goal.portable}} is the bar: a file named for what it does for the session - what its answers stand
+    on - carries its own instruction, where provenance named the half of the content that is sources and
+    readings and reads, in software now, as a supply-chain attestation. Grounding is the word the method
+    already uses in its skill, its opener and its grounding line, and {{d.prefix_is_a_word}} is the same
+    rule one level up: a name is the link a question takes into the record. Reasoning, the pitch word,
+    names a process and one field, {{d.reasoning_in_record}}, not the state the file holds. The earlier
+    name stays read so that no record has to move, and {{p.entry_names}} counts the names the locator
+    knows - a third would be a second convention.'
+  reopened_by: a session with no author present that found the file and did not read it before answering
+    from memory, or an adopter who asked what the file is, or a live record the locator stopped finding
+    under its earlier name; a third name the locator answers to, or a command that creates the earlier
+    name again; a third name the locator answers to, or a command that creates the earlier name again;
+    a third name the locator answers to, or a command that creates the earlier name again
+  seen:
+    s.2026_09_12_layout: read 2026-09-12
+    goal.portable: usable by any session, in any project, with no author present
+    d.prefix_is_a_word: a prefix born from now is a word - the subject a question would name, or the kind
+      spelled out where a record is about one thing - never a letter; an entry joins the prefix its record
+      already holds for its subject, so a record kept under letters keeps them and declares what they
+      stand for in meta.prefixes, which the opener and the page print beside the namespace; check does
+      not fail a letter
+    d.reasoning_in_record: reasoning is the because of the judgment it belongs to, in the record; the
+      page's connective text lives in the brief; both resolve references at build and both carry seen
+    p.entry_names: 2
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-10-27'
 d.hypotheses_read_beside_the_base:
 - rests_on:
   - s.2026_09_03_hypotheses
@@ -842,3 +878,90 @@ d.release_is_one_tree:
     s.2026_09_14_publish_review: read 2026-09-14
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-24'
+d.brand_on_the_directory:
+- verdict: the brand goes on the directory, the verbs, the check's name and the head line of a born record;
+    the concept goes on the entry file's name
+  because: 'A file named for a tool becomes a standard when the tool already dominates its niche; a file
+    named for the concept becomes one when many vendors are the aim from the first day, which {{goal.portable}}
+    says this is - and this tool renamed itself twice while the file''s name survived both. The brand
+    is still an asset: {{lit.name_risk}} says qualified search works, both registries hold the name, and
+    it shows to an adopter where the hosts show theirs - the directory in every repository that adopts,
+    visible and searchable; the check on every pull request; the first line of a record someone finds,
+    which said nothing before; the commands and the skill namespace, which already carry it. The file''s
+    name is {{d.entry_file_is_grounding}}.'
+  reopened_by: a person who met a record in a tree and could not find the tool that keeps it from the
+    tree alone, or an adopter who took the directory's name for the format's
+  rests_on:
+  - s.2026_09_12_layout
+  - goal.portable
+  - lit.name_risk
+  - d.entry_file_is_grounding
+  seen:
+    s.2026_09_12_layout: read 2026-09-12
+    goal.portable: usable by any session, in any project, with no author present
+    lit.name_risk: bare-term search is owned by a fandom; the org and handle are taken; every package
+      registry is free; qualified search works
+    d.entry_file_is_grounding: 'the record''s entry file is GROUNDING.yaml: the first add creates it at
+      the workspace root, the locator finds it first and a record kept under the earlier name after it,
+      wherever that record already is, and no command creates the earlier name again'
+  distinct_from: d.named_for_popper
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-10-27'
+d.first_add_is_the_birth:
+- verdict: where no record resolves, the first add creates GROUNDING.yaml at the workspace root with that
+    entry, under one line that says what keeps it; no other command creates one, and an unavailable registered
+    record is refused, never replaced
+  because: 'The write occasion had no mechanical first step: add refused where no record existed, so every
+    first record was a hand-written file. Installation alone still creates nothing; the first finding
+    does, and on a surface that can publish the record is met as its page ({{d.first_meeting_artifact}}).
+    The file it creates carries the name {{d.entry_file_is_grounding}} gives it, and one line saying what
+    keeps it, so a record found without its author leads back to the tool.'
+  reopened_by: a record born by a first add where a registered one was meant; or a session that writes
+    the file by hand rather than through add once this exists; or a first add that created the earlier
+    name
+  rests_on:
+  - s.2026_09_10_skills_split
+  - s.2026_09_12_layout
+  - d.first_meeting_artifact
+  - d.entry_file_is_grounding
+  seen:
+    s.2026_09_10_skills_split: read 2026-09-10
+    s.2026_09_12_layout: read 2026-09-12
+    d.first_meeting_artifact: a record born in this session, on a surface that can publish, is rendered
+      and shown as a live artifact without asking
+    d.entry_file_is_grounding: 'the record''s entry file is GROUNDING.yaml: the first add creates it at
+      the workspace root, the locator finds it first and a record kept under the earlier name after it,
+      wherever that record already is, and no command creates the earlier name again'
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-10-27'
+d.readme_working_modes:
+- from: s.2026_09_14_working_modes
+  name: Explain shared contexts, branch contexts and explicit consolidation
+  rests_on:
+  - s.working_modes_explanation
+  - d.readme_layered_explanation
+  - d.consolidation_is_a_test
+  verdict: Explain Simple as one shared context and Advanced as branch contexts plus a continuing path
+    for shared findings. Show consolidation explicitly in both modes, with folding, refutation and unresolved
+    proposals distinguished. Show local reads of pending findings separately from publication and acceptance
+    into main.
+  because: A branch-only picture hides findings that outlive the feature which discovered them. A generic
+    review box hides comparison of subjects, conflicting claims and combined dependencies. The shared
+    path and consolidation cycle explain how knowledge becomes available, is reconciled and is retained,
+    while the vendor API example gives that separation a concrete use. These are explanatory design choices;
+    reader comprehension has not been measured.
+  reopened_by: An uncoached reader interprets pending findings as already accepted, assumes every finding
+    applies to every branch, cannot explain what consolidation changes, or reads a connector as automatic
+    adoption or publication.
+  seen:
+    s.working_modes_explanation: read 2026-09-14
+    d.readme_layered_explanation: Lead with recorded dependencies between decisions, evidence and assumptions,
+      and the conditions for review. Use descriptive story headings and visible record excerpts, with
+      complete records, state tables and diagrams in the example guides. Distinguish shared reasoning
+      roles from mandatory sections, spell the name kpopper, and link to Popper's idea without explaining
+      every part of the visual joke.
+    d.consolidation_is_a_test: 'consolidating hypotheses into the base tests whether the writers worked
+      on the same world: premises re-checked, falsifiers evaluated, contradictions stopped - as a dry
+      run at any moment, and as a step on every pull request'
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-10-27'
