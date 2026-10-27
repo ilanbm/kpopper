@@ -163,7 +163,8 @@ fn import(root: &Path, shareability: &str) {
     );
     assert!(
         output.status.success(),
-        "{}",
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
 }
@@ -198,6 +199,16 @@ fn invoke(program: &Path, oracle: Option<&Path>, root: &Path, args: &[&str]) -> 
         .env("KPOPPER_NO_CACHE", "1")
         .env_remove("KPOPPER_READ_MODE")
         .env("XDG_STATE_HOME", root.join("state"))
+        .env(
+            "KPOPPER_PROJECTS_DIR",
+            root.parent().unwrap().join(
+                root.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+                    + ".test-projects",
+            ),
+        )
         .env("KPOPPER_PRIVATE_HOME", private_home(root))
         .env("KPOPPER_NATIVE_CACHE", root.parent().unwrap().join("cache"))
         .output()
@@ -363,6 +374,7 @@ fn without_private_home(root: &Path, args: &[&str]) -> Output {
         .current_dir(root)
         .args(args)
         .env_remove("HOME")
+        .env("KPOPPER_PROJECTS_DIR", root.parent().unwrap().join("test-projects"))
         .env_remove("KPOPPER_PRIVATE_HOME")
         .env_remove("KPOPPER_READ_MODE")
         .env("KPOPPER_SESSION_DISABLE", "1")
@@ -410,6 +422,12 @@ fn native_history_profile_refusal_precedes_private_draft_access() {
     )
     .unwrap();
     git(&root, &["init", "-q", "-b", "main"]);
+    fs::create_dir_all(root.join(".git/kpopper/project")).unwrap();
+    fs::write(
+        root.join(".git/kpopper/project/project.json"),
+        r#"{"version":1,"generation":0,"mode":"advanced","record":"GROUNDING.yaml"}"#,
+    )
+    .unwrap();
     let added = run(&root, &["add", "p.value", "v=1"]);
     assert!(
         added.status.success(),

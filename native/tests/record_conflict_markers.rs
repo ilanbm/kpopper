@@ -17,6 +17,7 @@ fn kpop(root: &Path, resources: Option<&Path>, args: &[&str]) -> Output {
         .env_remove("GIT_INDEX_FILE")
         .env("KPOPPER_PRIVATE_HOME", root.with_extension("private"))
         .env("KPOPPER_NATIVE_CACHE", root.with_extension("cache"))
+        .env("KPOPPER_PROJECTS_DIR", root.with_extension("projects"))
         .env("XDG_STATE_HOME", root.with_extension("state"));
     if let Some(resources) = resources {
         command.env("KPOPPER_NATIVE_RESOURCES", resources);
@@ -166,6 +167,10 @@ fn history_merge() -> (tempfile::TempDir, PathBuf, PathBuf) {
     .unwrap();
     let add = |args: &[&str]| ok(kpop(&root, Some(&resources), args), "kpop add");
     ok(git(&root, &["init", "-q", "-b", "main"]), "git init");
+    // This fixture intentionally merges a local compact history in Git.
+    let config = root.join(".git/kpopper/project/project.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, r#"{"version":1,"mode":"simple","record":"GROUNDING.yaml","generation":0,"publication":null}"#).unwrap();
     add(&["add", "p.base", "v=0"]);
     assert!(root.join(".kpopper/history.yaml").is_file());
     commit(&root);

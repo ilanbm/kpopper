@@ -103,7 +103,7 @@ fn policy_bytes(path: &Path) -> Result<Option<Vec<u8>>> {
 fn observation(paths: &[PathBuf], cwd: &Path, mode: ReadMode) -> Result<Routing> {
     let project = M::project_for(paths, cwd)?;
     let config_bytes = policy_bytes(&project.config_path)?;
-    let config = project.config()?;
+    let config = project.config_for_input(&paths[0])?;
     let pending = if mode == ReadMode::Live
         && project.is_git()
         && string_is(&map(&config)?["mode"], "advanced")

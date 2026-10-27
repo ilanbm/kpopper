@@ -33,6 +33,19 @@
           "description": "Author and refresh standalone HTML with evidence.",
           "usage": "guide|build|inspect|refresh [OPTIONS]"
         }
+      ],
+      "features": [
+        {
+          "name": "advanced",
+          "layer": "feature",
+          "status": "experimental",
+          "extra": "configuration",
+          "command": "kpop experimental advanced",
+          "aliases": [],
+          "display_name": "Advanced mode",
+          "description": "Opt into the existing Git-backed Advanced configuration mode.",
+          "usage": "[--record PATH] [--check] [--expected-generation N] [--migration-receipt PATH] [--rollback]"
+        }
       ]
     },
     "stderr": ""
@@ -42,7 +55,7 @@
       "experimental"
     ],
     "code": 0,
-    "stdout": "usage: kpop experimental APPLICATION [OPTIONS]\n\nExperimental applications:\n  kpop experimental hub          Render or verify the record's HTML page.\n  kpop experimental annotated-doc Author and refresh standalone HTML with evidence.\n\nInterfaces and artifact formats may change. Use APPLICATION --help for details.\n",
+    "stdout": "usage: kpop experimental APPLICATION [OPTIONS]\n\nExperimental features and applications:\n  kpop experimental advanced      Opt into the existing Git-backed Advanced mode.\n\nExperimental applications:\n  kpop experimental hub            Render or verify the record's HTML page.\n  kpop experimental annotated-doc Author and refresh standalone HTML with evidence.\n\nInterfaces and artifact formats may change. Use APPLICATION --help for details.\n",
     "stderr": ""
   },
   {
@@ -51,7 +64,7 @@
       "--help"
     ],
     "code": 0,
-    "stdout": "usage: kpop experimental APPLICATION [OPTIONS]\n\nExperimental applications:\n  kpop experimental hub          Render or verify the record's HTML page.\n  kpop experimental annotated-doc Author and refresh standalone HTML with evidence.\n\nInterfaces and artifact formats may change. Use APPLICATION --help for details.\n",
+    "stdout": "usage: kpop experimental APPLICATION [OPTIONS]\n\nExperimental features and applications:\n  kpop experimental advanced      Opt into the existing Git-backed Advanced mode.\n\nExperimental applications:\n  kpop experimental hub            Render or verify the record's HTML page.\n  kpop experimental annotated-doc Author and refresh standalone HTML with evidence.\n\nInterfaces and artifact formats may change. Use APPLICATION --help for details.\n",
     "stderr": ""
   },
   {

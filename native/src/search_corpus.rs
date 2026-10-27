@@ -178,24 +178,92 @@ pub(super) fn full_source_body<'a>(
 ) -> Option<&'a crate::ordinary_source::Source> {
     full_source_bodies(source).get(id).copied()
 }
+pub(super) struct SourceRoots {
+    /// Bases used to resolve project-relative locators.
+    pub(super) resolution: Vec<PathBuf>,
+    /// Locations authorized for reading (including explicit --source-root values).
+    pub(super) authorized: Vec<PathBuf>,
+}
+
 pub(super) fn roots(
     record: &Path,
     requested: &[PathBuf],
     cwd: &Path,
-) -> crate::Result<Vec<PathBuf>> {
-    let roots = std::iter::once(record.parent().unwrap().to_owned())
-        .chain(
-            requested
-                .iter()
-                .map(|p| expanded(cwd, p))
-                .collect::<crate::Result<Vec<_>>>()?,
-        )
+) -> crate::Result<SourceRoots> {
+    let record_parent = record.parent().unwrap().to_owned();
+    let owner_root = generated_owner_root(record, cwd)?;
+    let generated = generated_record(record, cwd)?;
+    let requested = requested
+        .iter()
+        .map(|p| expanded(cwd, p))
+        .collect::<crate::Result<Vec<_>>>()?;
+    let resolution = if generated {
+        std::iter::once(record_parent.clone())
+            .chain(owner_root)
+            .collect::<BTreeSet<_>>()
+    } else {
+        std::iter::once(record_parent.clone())
+            .chain(requested.iter().cloned())
+            .collect::<BTreeSet<_>>()
+    };
+    let authorized = resolution
+        .iter()
+        .cloned()
+        .chain(requested)
         .collect::<BTreeSet<_>>();
     crate::require(
-        roots.iter().all(|p| p.is_dir()),
+        authorized.iter().all(|p| p.is_dir()),
         "source roots must be existing directories",
     )?;
-    Ok(roots.into_iter().collect())
+    Ok(SourceRoots {
+        resolution: resolution.into_iter().collect(),
+        authorized: authorized.into_iter().collect(),
+    })
+}
+
+/// Generated Simple records may resolve project-relative sources from the
+/// central record parent and the invoking checkout that owns the binding. An
+/// unrelated cwd is intentionally not treated as an owner.
+pub(super) fn generated_owner_root(record: &Path, cwd: &Path) -> crate::Result<Option<PathBuf>> {
+    let owner = crate::project_modes::project_for(&[record.to_owned()], cwd)?;
+    if !owner.generated_default(None)? || owner.record(None)? != record {
+        return Ok(None);
+    }
+    owner.generated_source_workspace(cwd)
+}
+
+pub(super) fn generated_record(record: &Path, cwd: &Path) -> crate::Result<bool> {
+    let owner = crate::project_modes::project_for(&[record.to_owned()], cwd)?;
+    Ok(owner.generated_default(None)? && owner.record(None)? == record)
+}
+
+pub(super) fn source_path(
+    filename: &str,
+    base: &Path,
+    roots: &[PathBuf],
+) -> crate::Result<PathBuf> {
+    let locator = if filename.starts_with("~/") {
+        expanded(base, Path::new(filename))?
+    } else {
+        PathBuf::from(filename)
+    };
+    if locator.is_absolute() {
+        return crate::project_modes::resolved(&locator);
+    }
+    let existing = roots
+        .iter()
+        .map(|root| root.join(&locator))
+        .filter(|path| path.is_file())
+        .map(|path| crate::project_modes::resolved(&path))
+        .collect::<crate::Result<BTreeSet<_>>>()?;
+    crate::require(
+        existing.len() <= 1,
+        &format!("source_origin_ambiguous: {filename}"),
+    )?;
+    Ok(existing
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| base.join(locator)))
 }
 pub(super) fn text_suffix(path: &Path) -> bool {
     path.extension().and_then(|v| v.to_str()).is_some_and(|v| {
@@ -204,6 +272,11 @@ pub(super) fn text_suffix(path: &Path) -> bool {
         ]
         .contains(&v.to_lowercase().as_str())
     })
+}
+
+pub(super) fn source_text_suffix(path: &Path, generated_owner: bool) -> bool {
+    text_suffix(path)
+        || (generated_owner && path.extension().is_some_and(|extension| extension == "rs"))
 }
 pub(super) fn py_error(e: &std::io::Error, path: &Path) -> String {
     let code = e.raw_os_error().unwrap_or(5);
@@ -377,6 +450,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
         options.state_dir.is_none(),
         "core_profile_option_unsupported: --state-dir",
     )?;
+    let generated_owner = generated_owner_root(record, cwd)?.is_some();
     let roots = roots(record, &options.source_roots, cwd)?;
     let runtime = crate::public_workspace::core_runtime()?;
     let capture =
@@ -462,19 +536,22 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
             }
             continue;
         };
-        let path = core_source_path(filename, record, &snapshot, &roots)?;
+        let path = core_source_path(filename, record, &snapshot, &roots.resolution)?;
         let content = (|| {
             if mode == ReadMode::Frozen && !path.starts_with(record.parent().unwrap()) {
                 return Err("external evidence".into());
             }
-            if !roots.iter().any(|root| path.starts_with(root)) {
+            if !roots.authorized.iter().any(|root| path.starts_with(root)) {
                 return Err(
                     "outside allowed source roots; pass --source-root for an authorized directory"
                         .into(),
                 );
             }
-            if !text_suffix(&path) {
+            if !source_text_suffix(&path, generated_owner) {
                 return Err("only local UTF-8 text sources are indexed".into());
+            }
+            if !path.is_file() {
+                return Err("local source file is unavailable".into());
             }
             read_text(&path)
         })();
@@ -511,7 +588,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
             "source changed during search; retry",
         )?;
     }
-    let secondary = json!({"record":record,"source_files":stamps,"source_roots":roots,"rows":rows,"unindexed":diagnostics});
+    let secondary = json!({"record":record,"source_files":stamps,"source_roots":roots.authorized,"rows":rows,"unindexed":diagnostics});
     let revision=sha256(crate::public_search_rank::encode(&json!({"snapshot_id":context.snapshot_id(),"findings_revision":context.findings_revision(),"corpus":secondary}))?.as_bytes());
     let files = if let V::List(a) = get(get(&snapshot, "authored_revision"), "files") {
         a.as_slice()

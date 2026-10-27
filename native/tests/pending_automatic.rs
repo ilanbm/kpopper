@@ -305,7 +305,7 @@ fn granted_capture_starts_the_real_publisher_without_changing_feature_files() {
 #[test]
 fn board_onboarding_connects_once_and_the_first_finding_opens_the_knowledge_pr() {
     let f = Fixture::new();
-    assert_eq!(f.cli(&["board"])["mode_offer"], true);
+    assert_eq!(f.cli(&["board"])["mode_offer"], false);
     f.cli(&[
         "config",
         "--mode",

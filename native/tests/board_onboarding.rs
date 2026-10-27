@@ -64,6 +64,7 @@ impl Fixture {
             .arg("--workspace")
             .arg(root)
             .env("XDG_STATE_HOME", self.private.join("state"))
+            .env("KPOPPER_PROJECTS_DIR", self.private.join("projects"))
             .env("TMPDIR", &self.private)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -138,19 +139,25 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
     let f = Fixture::new();
     let status = f.cli(&["board"]);
     assert_eq!(status["mode"], "advanced");
-    assert_eq!(status["mode_offer"], true);
-    assert_eq!(status["offer"], false);
+    assert_eq!(status["mode_offer"], false);
+    assert_eq!(status["mode_selected"], false);
+    assert_eq!(status["mode_origin"], "legacy");
+    assert_eq!(status["offer"], true);
     assert_eq!(status["advanced_experimental"], true);
     assert_eq!(
         status["remotes"][0]["repository"],
         "https://github.invalid/fixture/repo.git"
     );
-    assert!(
-        status["illustration"]
-            .as_str()
-            .unwrap()
-            .ends_with("two-working-modes.png")
-    );
+    if let Some(illustration) = status["illustration"].as_str() {
+        assert!(Path::new(illustration).is_file());
+    } else {
+        let illustration = f.cli(&["board", "illustration"]);
+        assert_eq!(illustration["source"], "bundled");
+        assert_eq!(
+            fs::read(illustration["illustration"].as_str().unwrap()).unwrap(),
+            include_bytes!("../shared/board.png")
+        );
+    }
     assert!(!f.root.join(".git/kpopper/project/project.json").exists());
     assert!(f.opener().contains("kpopper Board"));
     f.cli(&["config", "--mode", "advanced", "--json"]);
@@ -180,7 +187,7 @@ fn board_offer_is_read_only_and_local_choice_is_shared_by_worktrees() {
 #[test]
 fn shown_is_not_authority_and_suppresses_repeated_offers() {
     let f = Fixture::new();
-    f.cli(&["board", "shown", "--mode"]);
+    f.cli(&["board", "shown"]);
     let status = f.cli(&["board"]);
     assert_eq!(status["mode_offer"], false);
     assert_eq!(status["offer"], false);
@@ -236,6 +243,8 @@ fn fresh_simple_selection_pins_one_external_home_without_creating_an_empty_recor
     .unwrap();
     assert_eq!(second["record"], result["record"]);
     assert_eq!(f.cli(&["board"])["mode_offer"], false);
+    assert_eq!(f.cli(&["board"])["mode_selected"], true);
+    assert_eq!(f.cli(&["board"])["mode_origin"], "configured");
     assert_eq!(f.cli(&["board"])["offer"], false);
     // First real finding creates the external record, visible from both worktrees.
     let resources = f.private.join("resources");
@@ -510,18 +519,18 @@ fn a_later_local_choice_invalidates_an_earlier_connection_offer() {
 }
 
 #[test]
-fn board_local_requires_an_explicit_mode_and_leaves_the_mode_offer_available() {
+fn legacy_advanced_board_local_is_safe_without_selecting_a_mode() {
     let f = Fixture::new();
-    assert!(
-        !f.command_at(&f.root)
-            .args(["board", "local"])
-            .output()
-            .unwrap()
-            .status
-            .success()
-    );
-    assert_eq!(f.cli(&["board"])["mode_offer"], true);
-    assert!(!f.root.join(".git/kpopper/project/project.json").exists());
+    assert!(f
+        .command_at(&f.root)
+        .args(["board", "local"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    assert_eq!(f.cli(&["board"])["mode_offer"], false);
+    assert_eq!(f.cli(&["board"])["choice"], "local");
+    assert_eq!(f.cli(&["config", "--json"])["project"]["mode"], "advanced");
 }
 
 #[test]
@@ -562,10 +571,10 @@ fn simple_setup_does_not_hide_a_record_on_an_unopened_branch() {
 #[test]
 fn frozen_unavailable_and_first_write_guidance_are_not_suppressed_by_onboarding() {
     let f = Fixture::new();
+    f.cli(&["config", "--mode", "advanced", "--json"]);
     fs::remove_file(f.root.join("GROUNDING.yaml")).unwrap();
     f.cli(&["board", "shown", "--mode"]);
-    assert!(f.opener().contains("next needed"));
-    f.cli(&["config", "--mode", "advanced", "--json"]);
+    assert!(!f.opener().contains("KPOPPER_MODE_OFFER"));
     assert!(f.opener().contains("first write creates"));
     fs::remove_file(f.root.join(".git/kpopper/project/project.json")).unwrap();
     fs::write(
@@ -601,9 +610,18 @@ fn submodule_has_no_unsafe_default_location_and_runtime_exports_its_own_image() 
             .unwrap(),
     ))
     .unwrap();
+    assert_eq!(status["mode"], "advanced");
     assert!(status["simple_record_suggestion"].is_null());
-    let image = f.cli(&["board", "illustration"]);
-    assert_eq!(image["source"], "bundled");
-    let bytes = fs::read(image["illustration"].as_str().unwrap()).unwrap();
-    assert_eq!(bytes, include_bytes!("../shared/board.png"));
+    assert_eq!(
+        Path::new(status["record"].as_str().unwrap()),
+        f.root.join("vendor/lib/GROUNDING.yaml").canonicalize().unwrap()
+    );
+    if status["illustration"].is_null() {
+        let image = f.cli(&["board", "illustration"]);
+        assert_eq!(image["source"], "bundled");
+        let bytes = fs::read(image["illustration"].as_str().unwrap()).unwrap();
+        assert_eq!(bytes, include_bytes!("../shared/board.png"));
+    } else {
+        assert!(status["illustration"].as_str().is_some());
+    }
 }

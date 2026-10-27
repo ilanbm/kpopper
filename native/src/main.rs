@@ -166,12 +166,46 @@ enum Command {
 }
 #[derive(Subcommand)]
 enum Application {
+    /// Opt into the existing Git-backed Advanced configuration mode.
+    Advanced(AdvancedOptions),
     /// Build or verify the optional record Hub.
     #[command(alias = "page")]
     Hub(kpop_native::public_hub::Options),
     /// Standalone HTML documents with embedded evidence and source checks.
     #[command(alias = "document")]
     AnnotatedDoc(kpop_native::public_annotated_document::Options),
+}
+#[derive(clap::Args)]
+struct AdvancedOptions {
+    /// Select the record path for the validated Advanced transition.
+    #[arg(long)]
+    record: Option<String>,
+    /// Inspect the transition without writing configuration or records.
+    #[arg(long)]
+    check: bool,
+    /// Require this configuration generation before transitioning.
+    #[arg(long)]
+    expected_generation: Option<u64>,
+    /// Supply the verified migration receipt required for an explicit transition.
+    #[arg(long)]
+    migration_receipt: Option<PathBuf>,
+    /// Roll back using the supplied verified migration receipt.
+    #[arg(long)]
+    rollback: bool,
+}
+
+impl AdvancedOptions {
+    fn config(&self) -> kpop_native::public_config::Options {
+        kpop_native::public_config::Options {
+            mode: Some("advanced".into()),
+            record: self.record.clone(),
+            check: self.check,
+            expected_generation: self.expected_generation,
+            migration_receipt: self.migration_receipt.clone(),
+            rollback: self.rollback,
+            ..Default::default()
+        }
+    }
 }
 #[derive(Clone, clap::ValueEnum)]
 enum Envelope {
@@ -745,6 +779,7 @@ fn wrapped_refusal(argv: &[std::ffi::OsString], error: &clap::Error) -> Option<&
     command.filter(|_| json)
 }
 fn main() {
+    let _history_scope = kpop_native::project_modes::invocation_history_scope();
     let argv =
         kpop_native::public_expressions::preprocess_argv(&std::env::args_os().collect::<Vec<_>>());
     let application = kpop_native::application_cli::inspect(&argv);
@@ -1237,6 +1272,20 @@ fn main() {
             eprint!("{error}");
         }
         std::process::exit(code);
+    }
+    if let Command::Experimental {
+        application: Application::Advanced(options),
+    } = &args.command
+    {
+        let cwd = args
+            .workspace
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().expect("current directory"));
+        let config = options.config();
+        let output = kpop_native::public_config::dispatch(&config, &cwd, args.json);
+        print!("{}", output.stdout);
+        eprint!("{}", output.stderr);
+        std::process::exit(output.code);
     }
     if let Command::Document(options)
     | Command::Experimental {

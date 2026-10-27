@@ -39,7 +39,9 @@ impl Fixture {
             .current_dir(self.root.path()).env("HOME", self.root.path())
             .env("XDG_STATE_HOME", self.root.path().join("state"))
             .env("KPOPPER_NATIVE_CACHE", self.runtime.path().join("cache"))
-            .env("KPOPPER_NATIVE_RESOURCES", self.runtime.path()).output().unwrap()
+            .env("KPOPPER_NATIVE_RESOURCES", self.runtime.path())
+            .env("KPOPPER_PROJECTS_DIR", self.runtime.path().join("projects"))
+            .output().unwrap()
     }
     fn ok(&self, args: &[&str]) -> String {
         let output = self.run(args);
@@ -63,11 +65,13 @@ fn scalar_reframe_is_guarded_and_numeric_updates_drive_the_original_boolean() {
     }
     f.ok(&["add", "tank.at_seven", "v=true", "--as-of", "2025-01-01"]);
     f.ok(&["add", "tank.level", "v=7", "--as-of", "2025-01-02"]);
-    let record = f.root.path().join("GROUNDING.yaml");
+    let selected: serde_json::Value = serde_json::from_str(&f.ok(&["where", "--json"])).unwrap();
+    let record = PathBuf::from(selected["output"].as_str().unwrap().trim());
+    let record_root = record.parent().unwrap();
     let before = fs::read(&record).unwrap();
-    let history = images(&f.root.path().join(".kpopper/history-commits"));
+    let history = images(&record_root.join(".kpopper/history-commits"));
     assert!(!history.is_empty());
-    let captured = kpop_native::history_node_capture::Capture::read(f.root.path()).unwrap();
+    let captured = kpop_native::history_node_capture::Capture::read(record_root).unwrap();
     let state = captured.state().to_json().unwrap();
     let originals = ["tank.at_seven", "tank.level"].map(|subject| {
         let id = state["subjects"][subject]["head"].as_str().unwrap().to_owned();
@@ -89,7 +93,7 @@ fn scalar_reframe_is_guarded_and_numeric_updates_drive_the_original_boolean() {
            "--expected-record-sha256", &expected]);
     assert!(f.ok(&["pull", "tank.at_seven"]).to_lowercase().contains("true"));
     for (path, bytes) in history { assert_eq!(fs::read(path).unwrap(), bytes); }
-    let captured = kpop_native::history_node_capture::Capture::read(f.root.path()).unwrap();
+    let captured = kpop_native::history_node_capture::Capture::read(record_root).unwrap();
     for (subject, id, object) in originals {
         assert_eq!(captured.object(subject, &id).unwrap(), object);
     }

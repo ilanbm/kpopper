@@ -81,10 +81,26 @@ mod tests {
             String::from_utf8_lossy(&result.stderr)
         );
     }
+    fn local_simple_policy(root: &Path, original: &[std::path::PathBuf]) {
+        fs::create_dir_all(root.join(".kpopper")).unwrap();
+        fs::write(
+            root.join(".kpopper/project.json"),
+            serde_json::json!({
+                "version": 1,
+                "mode": "simple",
+                "record": original[0].to_string_lossy(),
+                "publication": null,
+                "generation": 0
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
     fn fixture() -> (tempfile::TempDir, Vec<u8>) {
         let root = tempfile::tempdir().unwrap();
         let runtime = crate::history_authoring::tests::runtime(&root.path().join("runtime"));
         let original = vec![root.path().join("GROUNDING.yaml")];
+        local_simple_policy(root.path(), &original);
         let route = crate::project_modes::WriteRoute::capture(&original, root.path()).unwrap();
         crate::history_node_birth::create(
             &route,

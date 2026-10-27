@@ -598,11 +598,14 @@ fn a_live_copy_retains_the_pending_observation_without_folding_or_advancing_it()
             .env_remove("KPOPPER_READ_MODE")
             .env("KPOPPER_NATIVE_RESOURCES", &resources)
             .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
+            .env("KPOPPER_PROJECTS_DIR", root.join("projects"))
             .env("KPOPPER_PRIVATE_HOME", root.join("private"))
             .args(args)
             .output()
             .unwrap()
     };
+    // Pending Git contributions belong to explicit Advanced mode.
+    ok(kpop(&["experimental", "advanced", "--json"]));
     // A project reading captured as pending before the ordinary record exists.
     let captured = ok(kpop(&[
         "add",

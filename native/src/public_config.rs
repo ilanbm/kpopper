@@ -36,6 +36,27 @@ pub struct Options {
     pub migration_receipt: Option<PathBuf>,
     #[arg(long)]
     pub rollback: bool,
+    #[arg(long)]
+    pub rebind: bool,
+    #[arg(long = "new-project")]
+    pub new_project: bool,
+}
+
+fn validate_recovery_options(options: &Options) -> Result<()> {
+    require(
+        !(options.rebind && options.new_project),
+        "--rebind and --new-project are mutually exclusive",
+    )?;
+    if options.rebind || options.new_project {
+        require(!options.check, "recovery options cannot be combined with --check")?;
+        require(options.mode.is_none(), "recovery options cannot be combined with --mode")?;
+        require(options.record.is_none(), "recovery options cannot be combined with --record")?;
+        require(options.guidance.is_none(), "recovery options cannot be combined with --guidance")?;
+        require(options.expected_generation.is_none(), "recovery options cannot be combined with --expected-generation")?;
+        require(options.migration_receipt.is_none(), "recovery options cannot be combined with --migration-receipt")?;
+        require(!options.rollback, "recovery options cannot be combined with --rollback")?;
+    }
+    Ok(())
 }
 
 fn state_dir() -> Result<PathBuf> {
@@ -179,6 +200,29 @@ fn has_hypotheses(record: &Path) -> Result<bool> {
     }
     Ok(false)
 }
+fn has_record_layout_members(record: &Path) -> Result<bool> {
+    let name = record
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| Error("nonportable project path".into()))?;
+    let layout = crate::history_transaction::Layout::for_entry(name)?;
+    let parent = record
+        .parent()
+        .ok_or_else(|| Error("invalid path".into()))?;
+    Ok([
+        layout.hypotheses,
+        layout.view,
+        layout.replaced,
+        layout.authority,
+        layout.objects,
+        layout.commits,
+        layout.cancellations,
+        layout.retained,
+        layout.journal,
+    ]
+    .into_iter()
+    .any(|member| parent.join(member).exists()))
+}
 fn truthy(value: Option<&V>) -> bool {
     match value {
         None | Some(V::Null) | Some(V::Bool(false)) => false,
@@ -320,8 +364,7 @@ fn transition_report(
         } else {
             digest(&path)?
         };
-        if hash.is_none() && path.parent().is_some_and(|parent|
-            parent.join(".kpopper").exists() || parent.join("PROVENANCE.d").exists()) {
+        if hash.is_none() && has_record_layout_members(&path)? {
             blockers.push(format!("record is missing but its sidecars remain; reconcile before changing mode: {}", path.display()));
         }
         snapshots.insert(path_string(&path)?, hash);
@@ -363,10 +406,17 @@ fn transition_report(
         if old_hashes.is_empty() && project.is_git() && targets.iter().any(|target| !target.exists()) {
             // An unopened branch (or prior recorded history) is not an empty
             // project. Include custom configured paths and both legacy names.
-            let (available, history) = crate::pending_control::git(&project.root, &[
-                "log", "--all", "--format=%H", "-1", "--",
-                current["record"].as_str().unwrap(), "GROUNDING.yaml", "PROVENANCE.yaml",
-            ])?;
+            let mut history_paths = vec!["GROUNDING.yaml".to_owned(), "PROVENANCE.yaml".to_owned()];
+            let current_path = resolved(&project.root.join(current["record"].as_str().unwrap()))?;
+            if let Ok(relative) = current_path.strip_prefix(&project.root)
+                && let Some(relative) = relative.to_str()
+                && !history_paths.iter().any(|path| path == relative)
+            {
+                history_paths.push(relative.to_owned());
+            }
+            let mut git_args = vec!["log", "--all", "--format=%H", "-1", "--"];
+            git_args.extend(history_paths.iter().map(String::as_str));
+            let (available, history) = crate::pending_control::git(&project.root, &git_args)?;
             require(available, "record history could not be inspected before changing mode")?;
             if !history.is_empty() {
                 blockers.push("record history exists outside the current worktrees; reconcile it before selecting an empty destination".into());
@@ -388,8 +438,7 @@ fn transition_report(
                 ));
             } else if !target.parent().is_some_and(Path::is_dir) {
                 blockers.push(format!("prepare the selected record directory before configuring its first write: {}", target.display()));
-            } else if target.parent().is_some_and(|parent| parent.join(".kpopper").exists()
-                || parent.join("PROVENANCE.d").exists()) {
+            } else if has_record_layout_members(target)? {
                 blockers.push(format!("destination has existing record sidecars; reconcile before changing mode: {}", target.display()));
             }
             snapshots.entry(path_string(target)?).or_insert(hash);
@@ -486,6 +535,14 @@ fn persist_transition(
     next["mode"] = report["mode"].clone();
     next["record"] = report["record"].clone();
     next["generation"] = (generation(current)? + 1).into();
+    if report["changed"] == true {
+        if let Some(map) = next.as_object_mut() {
+            map.remove("default_identity");
+        }
+    }
+    if let Some(origin) = report.get("mode_origin") {
+        next["mode_origin"] = origin.clone();
+    }
     guard.verify()?;
     atomic_bytes(&project.config_path, &canonical_json_line(&next)?)?;
     Ok(next)
@@ -494,6 +551,18 @@ fn persist_transition(
 fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     let guard = project.lock()?;
     let current = to_json(guard.config())?;
+    if let Some(record) = options.record.as_deref() {
+        let candidate = resolved(&project.root.join(record))?;
+        let already_configured = project.config_path.is_file()
+            && current
+                .get("record")
+                .and_then(J::as_str)
+                .is_some_and(|configured| configured == candidate.to_string_lossy().as_ref());
+        require(
+            already_configured || !Project::is_provisional_record_path(&candidate),
+            "provisional record paths are suggestions only; choose a concrete record path",
+        )?;
+    }
     if let Some(expected) = options.expected_generation {
         require(
             generation(&current)? == expected,
@@ -505,12 +574,17 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
         .as_deref()
         .or_else(|| current.get("mode").and_then(J::as_str))
         .unwrap();
+    let selected_record = options.record.as_deref().or_else(|| {
+        (mode == "advanced"
+            && current.get("mode").and_then(J::as_str) == Some("simple"))
+        .then_some("GROUNDING.yaml")
+    }).or_else(|| current.get("record").and_then(J::as_str));
     let mut paths = project
         .worktrees()?
         .into_iter()
         .flat_map(|root| {
             let mut paths = vec![root.join(current["record"].as_str().unwrap())];
-            if let Some(record) = &options.record {
+            if let Some(record) = selected_record {
                 paths.push(root.join(record));
             }
             paths
@@ -521,7 +595,7 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
             project,
             &current,
             mode,
-            options.record.as_deref(),
+            selected_record,
             options.migration_receipt.as_deref(),
             options.rollback,
         )?;
@@ -545,11 +619,11 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     for directory in directories {
         directory_guards.push(DirectoryGuard::acquire(&directory, true)?);
     }
-    let report = transition_report(
+    let mut report = transition_report(
         project,
         &current,
         mode,
-        options.record.as_deref(),
+        selected_record,
         options.migration_receipt.as_deref(),
         options.rollback,
     )?;
@@ -566,12 +640,16 @@ fn configure(options: &Options, project: &Project) -> Result<(J, Option<J>)> {
     if options.check {
         return Ok((current, Some(report)));
     }
+    if options.mode.is_some() {
+        report["mode_origin"] = J::String("configured".into());
+    }
     let next = persist_transition(project, &guard, &current, &report)?;
     drop(directory_guards);
     Ok((next, None))
 }
 
 pub fn run(options: &Options, cwd: &Path) -> Result<V> {
+    validate_recovery_options(options)?;
     let state = state_dir()?;
     let mut guidance = guidance_at(&state)?;
     if let Some(value) = &options.guidance
@@ -581,7 +659,14 @@ pub fn run(options: &Options, cwd: &Path) -> Result<V> {
         set_guidance_at(&state, guidance)?;
     }
     let project = Project::open(cwd)?;
-    let (policy, report) = if options.check || options.mode.is_some() || options.record.is_some() {
+    if options.rebind {
+        project.rebind_generated()?;
+    } else if options.new_project {
+        project.new_generated_project()?;
+    }
+    let (policy, report) = if options.rebind || options.new_project {
+        (to_json(&project.config()?)?, None)
+    } else if options.check || options.mode.is_some() || options.record.is_some() {
         configure(options, &project)?
     } else {
         (to_json(&project.config()?)?, None)
@@ -892,10 +977,11 @@ mod tests {
             project.config().unwrap().to_json().unwrap()["mode"],
             "simple"
         );
-        assert_eq!(
-            project.record(None).unwrap(),
-            dir.path().canonicalize().unwrap().join("GROUNDING.yaml")
-        );
+        let record = project.record(None).unwrap();
+        assert!(Project::is_provisional_record_path(&record));
+        assert!(record.is_absolute());
+        assert!(!record.starts_with(dir.path().canonicalize().unwrap()));
+        assert!(!record.exists());
         assert!(!project.config_path.exists());
         assert!(!project.state.exists());
     }
@@ -1002,6 +1088,32 @@ mod tests {
         assert!(report.is_none());
         assert!(project.config_path.is_file());
         assert!(!project.state.join("mode-history").exists());
+    }
+
+    #[test]
+    fn explicit_transition_drops_generated_default_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(Command::new("git")
+            .args(["init", "-q", "-b", "main"])
+            .current_dir(dir.path())
+            .status()
+            .unwrap()
+            .success());
+        let project = Project::open(dir.path()).unwrap();
+        project.bind_for_mutation().unwrap();
+        let current = project.config().unwrap().to_json().unwrap();
+        let guard = project.lock().unwrap();
+        let report = transition_report(
+            &project,
+            &current,
+            "advanced",
+            Some("GROUNDING.yaml"),
+            None,
+            false,
+        )
+        .unwrap();
+        let next = persist_transition(&project, &guard, &current, &report).unwrap();
+        assert!(next.get("default_identity").is_none());
     }
     #[test]
     fn check_reports_blockers_without_writing_policy() {

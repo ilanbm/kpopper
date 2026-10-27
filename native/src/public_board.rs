@@ -109,12 +109,36 @@ fn export_illustration() -> Result<Value> {
 
 pub fn status(workspace: &Path) -> Result<Value> {
     let project = Project::open(workspace)?;
-    let config = project.config()?.to_json()?;
+    let policy = project.config()?;
+    let config = policy.to_json()?;
     let advanced = project.is_git() && config["mode"] == "advanced";
     let saved = preference(&project)?;
-    let mode_selected = project.config_path.is_file() || !advanced;
+    let configured = project.config_path.is_file();
+    let generated = project.generated_default(Some(&policy))?;
+    let legacy_board_local = config["mode_origin"] == "legacy";
+    let automatic = generated || (!configured && !advanced);
+    let mode_selected = configured && !generated && !legacy_board_local;
+    let mode_origin = if automatic {
+        "automatic"
+    } else if mode_selected {
+        "configured"
+    } else {
+        "legacy"
+    };
     let guidance = onboarding::guidance()?;
-    let mode_offer = advanced && !mode_selected && saved["mode_shown"] != true && guidance;
+    // Kept in the JSON surface for compatibility; ordinary onboarding never offers a mode.
+    let mode_offer = false;
+    let record = project.record(None)?;
+    let record_exists = record.is_file();
+    let record_location = if config["mode"] == "simple" && !configured && !generated {
+        "unbound"
+    } else if generated {
+        "bound"
+    } else if config["mode"] == "advanced" && !configured {
+        "legacy"
+    } else {
+        "selected"
+    };
     let cached = pending_control::load_state(&project.state.join("publication.json"))?.to_json()?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -158,9 +182,10 @@ pub fn status(workspace: &Path) -> Result<Value> {
     }
     Ok(
         json!({"name":"kpopper Board","mode":config["mode"],"is_git":project.is_git(),"generation":config["generation"],
-        "choice":chosen,"offer":advanced && mode_selected && publication.is_null() && chosen.is_null() && saved["shown"] != true && guidance,
-        "mode_offer":mode_offer,"mode_selected":mode_selected,"advanced_experimental":true,
-        "record":project.record(None)?,"simple_record_suggestion":simple_record_suggestion(&project),
+        "choice":chosen,"offer":advanced && publication.is_null() && chosen.is_null() && saved["shown"] != true && guidance,
+        "mode_offer":mode_offer,"mode_selected":mode_selected,"mode_origin":mode_origin,"advanced_experimental":true,
+        "record":record,"record_exists":record_exists,"record_location":record_location,
+        "simple_record_suggestion":simple_record_suggestion(&project)?,
         "standing_permission":granted,"publication":publication,"remotes":remotes,
         "paused":cached["paused"],"pr":cached["pr"],"failures":cached["failures"],"retry_at":cached["retry_at"],
         "retry_state":retry_state,
@@ -169,20 +194,12 @@ pub fn status(workspace: &Path) -> Result<Value> {
     )
 }
 
-fn simple_record_suggestion(project: &Project) -> Option<PathBuf> {
-    let common = project.common.as_ref()?;
-    if common.file_name()? != ".git" {
-        return None;
+fn simple_record_suggestion(project: &Project) -> Result<Option<PathBuf>> {
+    let config = project.config()?.to_json()?;
+    if config["mode"] != "simple" || !project.config_path.is_file() {
+        return Ok(None);
     }
-    let primary = common.parent()?;
-    let name = primary.file_name()?.to_str()?;
-    // A sibling of the primary checkout is stable across ephemeral worktrees.
-    Some(
-        primary
-            .parent()?
-            .join(format!("{name}-knowledge"))
-            .join("GROUNDING.yaml"),
-    )
+    Ok(Some(project.record(Some(&project.config()?))?))
 }
 
 fn inspect(project: &Project, remote: Option<&str>, target: Option<&str>) -> Result<Value> {
@@ -211,9 +228,10 @@ fn inspect(project: &Project, remote: Option<&str>, target: Option<&str>) -> Res
 
 fn remember(project: &Project, local: bool) -> Result<()> {
     require(project.is_git(), "Board choices belong to a Git project")?;
+    let mode = project.config()?.to_json()?["mode"].clone();
     require(
-        !local || project.config_path.is_file(),
-        "choose Simple or Advanced explicitly before setting Board publication; board local does not select a mode",
+        !local || mode == "advanced",
+        "Board local is an Experimental Advanced choice; Simple projects keep the default without a Board selection",
     )?;
     let policy = project.lock()?;
     let previous = preference(project)?;
@@ -221,6 +239,9 @@ fn remember(project: &Project, local: bool) -> Result<()> {
     if local
         && (previous["choice"] != "local" || config["publication"]["standing_permission"] == true)
     {
+        if !project.config_path.is_file() {
+            config["mode_origin"] = json!("legacy");
+        }
         if config["publication"].is_object() {
             config["publication"]["standing_permission"] = json!(false);
         }
@@ -321,12 +342,6 @@ pub fn run(options: &Options, workspace: &Path) -> Result<Value> {
 }
 
 pub fn opening(state: &Value) -> Result<Option<String>> {
-    if state["mode_offer"] == true {
-        return Ok(Some(format!(
-            "KPOPPER_MODE_OFFER {}\nAt the first suitable moment in meaningful user work, offer Simple (recommended) or Advanced (experimental), using the existing README illustration and the user's language. Simple uses one shared record outside all Git checkouts; show the suggested path and let the user choose another. Advanced keeps GROUNDING.yaml with each branch and supports kpopper Board, but merging can cause record conflicts and repeated CI. Explain local consolidation/resolution without promising automatic resolution of disputed claims. Read the start guide for the exact safe setup and migration flow. A Git default is not a saved user choice. After actually showing the mode offer run `board shown --mode`; silence changes no mode or permissions. Keep doing the user's work and never offer on a greeting, during urgent work or in background tasks.",
-            serde_json::to_string(state)?
-        )));
-    }
     if state["offer"] != true {
         if state["standing_permission"] == true && state["retry_state"] != "ready" {
             return Ok(Some(format!(

@@ -34,7 +34,7 @@ separate from optional project knowledge and case data.
 ## Three things worth keeping
 
 **Simple** shares one graph with named competing hypotheses; **Advanced** adds branch contexts and `pending_grounding` for shareable, feature-independent contributions, even with one checkout. Several sessions may work on one hypothesis.
-Non-Git projects default to Simple; new Git projects to Advanced; existing registered shared records retain their behavior. Mode changes are explicit and preserve records.
+New unconfigured projects default to private central Simple, including Git projects; Advanced is an explicit Experimental feature. Existing records and explicit configurations retain their behavior. Central storage is local only and never grants Board permission.
 Private or unclear permission means a structured private draft outside Git. Preserve the exact scope of measured facts. Merge incorporates content without proving truth or refreshing `seen`.
 Ordinary reads show relevant pending knowledge; committed artifacts use explicit frozen reads. See [project modes](../../docs/project-modes.md).
 

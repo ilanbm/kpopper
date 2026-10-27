@@ -414,6 +414,7 @@ impl Node {
             .current_dir(&self.root)
             .args(args)
             .env("KPOPPER_NATIVE_RESOURCES", &self.resources)
+            .env("KPOPPER_PROJECTS_DIR", self.root.parent().unwrap().join("projects"))
             .env("KPOPPER_NATIVE_CACHE", self.root.parent().unwrap().join("cache"))
             .env("XDG_STATE_HOME", self.root.parent().unwrap().join("state"))
             .env_remove("KPOPPER_READ_MODE")
@@ -486,14 +487,13 @@ fn node_merge_at(ours: &[&[&str]], theirs: &[&[&str]], record: &str) -> Node {
     .unwrap();
     let node = Node { _temp: temp, root, resources };
     ok(&node.root, &["init", "-q", "-b", "main"]);
-    if record != "GROUNDING.yaml" {
-        let config = node.root.join(".git/kpopper/project/project.json");
-        fs::create_dir_all(config.parent().unwrap()).unwrap();
-        fs::create_dir_all(node.root.join(record).parent().unwrap()).unwrap();
-        fs::write(config, serde_json::to_vec(&serde_json::json!({
-            "version":1, "mode":"simple", "generation":0, "record":record, "publication":null
-        })).unwrap()).unwrap();
-    }
+    // These merge tests exercise an explicitly local compact record closure.
+    let config = node.root.join(".git/kpopper/project/project.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::create_dir_all(node.root.join(record).parent().unwrap()).unwrap();
+    fs::write(config, serde_json::to_vec(&serde_json::json!({
+        "version":1, "mode":"simple", "generation":0, "record":record, "publication":null
+    })).unwrap()).unwrap();
     node.succeeds(&["add", "p.base", "v=0"]);
     assert!(fs::read_to_string(node.root.join(record).parent().unwrap().join(".kpopper/history.yaml")).unwrap().contains("node-history/v1"));
     commit(&node.root);

@@ -18,6 +18,95 @@ pub const UNAVAILABLE_CONFIGURED: &str = "The configured record is unavailable."
 fn unavailable(reason: &str, record: &Path) -> crate::Error {
     error(&format!("{reason} {}", record.display()))
 }
+const RECORD_BEARING_MEMBERS: &[&str] = &[
+    ".kpopper/hypotheses",
+    ".kpopper/view.yaml",
+    ".kpopper/measure.yaml",
+    ".kpopper/replaced.yaml",
+    ".kpopper/history",
+    ".kpopper/history-commits",
+    ".kpopper/history.yaml",
+    ".kpopper/history-cancellations",
+    "PROVENANCE.d",
+    "PROVENANCE.view.yaml",
+    "PROVENANCE.measure.yaml",
+    "PROVENANCE.replaced.yaml",
+    "PROVENANCE.history",
+    "PROVENANCE.history-commits",
+    "PROVENANCE.history.yaml",
+    "PROVENANCE.history-cancellations",
+];
+fn orphan_member(directory: &Path) -> Option<PathBuf> {
+    RECORD_BEARING_MEMBERS
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|path| path.symlink_metadata().is_ok())
+}
+pub(crate) fn require_fresh_workspace_state(project: &Project) -> Result<()> {
+    for root in project.worktrees()? {
+        for name in ["GROUNDING.yaml", "PROVENANCE.yaml"]
+            .into_iter()
+            .chain(RECORD_BEARING_MEMBERS.iter().copied())
+        {
+            let path = root.join(name);
+            match path.symlink_metadata() {
+                Ok(_) => {
+                    return Err(unavailable(
+                        "Workspace record-bearing state exists before a new central allocation.",
+                        &path,
+                    ));
+                }
+                Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => {
+                    return Err(unavailable(
+                        "Workspace record-bearing state cannot be inspected before a new central allocation.",
+                        &path,
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+fn empty_legacy_history_residue(path: &Path) -> bool {
+    path.is_dir()
+        && path.file_name().and_then(|name| name.to_str()).is_some_and(|name| {
+            matches!(name, "history" | "history-commits" | "history-cancellations")
+        })
+        && std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
+}
+fn competing_generated_record(project: &Project, cwd: &Path) -> Result<Option<PathBuf>> {
+    if !project.config_path.exists() || !project.generated_default(None)? {
+        return Ok(None);
+    }
+    // A nested legacy record is independently selectable and must not be
+    // treated as a competing root record for the generated project.
+    let mut current = cwd.canonicalize()?;
+    while current != project.root && current.starts_with(&project.root) {
+        if ["GROUNDING.yaml", "PROVENANCE.yaml"]
+            .iter()
+            .any(|name| current.join(name).symlink_metadata().is_ok())
+        {
+            return Ok(None);
+        }
+        current = current
+            .parent()
+            .ok_or_else(|| error("project_directory_unavailable"))?
+            .to_owned();
+    }
+    for root in project.worktrees()? {
+        for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+            let path = root.join(name);
+            if path.symlink_metadata().is_ok() {
+                return Ok(Some(path));
+            }
+        }
+        if let Some(path) = orphan_member(&root) {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
 /// Whether a failure is the refusal of a record whose location cannot be read.
 pub fn refuses_unavailable(failure: &crate::Error) -> bool {
     [
@@ -37,6 +126,29 @@ pub fn refuses_unavailable(failure: &crate::Error) -> bool {
 pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
+    if let Some(path) = competing_generated_record(&project, &cwd)? {
+        return Err(unavailable(
+            "A generated binding conflicts with this workspace record.",
+            &path,
+        ));
+    }
+    // A real nested record takes precedence over a generated root binding.
+    // It is an independently selectable legacy record, not a root conflict.
+    if project.generated_default(None)? && cwd.starts_with(&project.root) && cwd != project.root {
+        let mut current = cwd.clone();
+        while current != project.root {
+            for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+                let path = current.join(name);
+                if path.is_file() {
+                    return Ok(vec![path]);
+                }
+            }
+            current = current
+                .parent()
+                .ok_or_else(|| error("project_directory_unavailable"))?
+                .to_owned();
+        }
+    }
     if project.config_path.exists() {
         let record = project.record(None)?;
         if record.symlink_metadata().is_ok() && !record.is_file() {
@@ -59,6 +171,39 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
                 return Ok(vec![path]);
             }
         }
+        if let Some(path) = orphan_member(&current) {
+            let other_orphan = [
+                ".kpopper/hypotheses",
+                ".kpopper/view.yaml",
+                ".kpopper/measure.yaml",
+                ".kpopper/replaced.yaml",
+                ".kpopper/history.yaml",
+                "PROVENANCE.d",
+                "PROVENANCE.view.yaml",
+                "PROVENANCE.measure.yaml",
+                "PROVENANCE.replaced.yaml",
+                "PROVENANCE.history",
+                "PROVENANCE.history-commits",
+                "PROVENANCE.history.yaml",
+                "PROVENANCE.history-cancellations",
+            ]
+            .iter()
+            .map(|name| current.join(name))
+            .any(|candidate| candidate.symlink_metadata().is_ok());
+            let legacy_birth = !project.config_path.exists()
+                && project.is_git()
+                && current == project.root
+                && !crate::project_modes::git_has_head_any_record(&project.root)?
+                && project.has_legacy_knowledge()?
+                && !other_orphan
+                && empty_legacy_history_residue(&path);
+            if !legacy_birth {
+                return Err(unavailable(
+                    "A record-bearing sidecar exists without its primary record.",
+                    &path,
+                ));
+            }
+        }
         let Some(parent) = current.parent() else {
             break;
         };
@@ -74,6 +219,16 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
     // Project defaults validate the registered external location, including a
     // refusal for competing in-tree records. Never invent a duplicate beside it.
     let record = project.record(None)?;
+    if project.is_git()
+        && !record.is_file()
+        && crate::project_modes::git_has_head_any_record(&project.root)?
+        && crate::history_contract::string_is(
+            &crate::history_contract::map(&project.config()?)?["mode"],
+            "advanced",
+        )
+    {
+        return Err(unavailable(UNAVAILABLE_REGISTERED, &record));
+    }
     if project
         .common
         .as_ref()
@@ -245,8 +400,24 @@ pub struct Location {
 }
 /// Public orientation keeps the deliberate subproject boundary used for host state.
 pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Location> {
+    locate_for_input(cwd, mode, None)
+}
+/// A named input needs no fresh default when the workspace has no selected record.
+/// Keep its location honest, including missing-file diagnostics, without consulting
+/// an unused central-store setting. Policy and discovered-primary checks stay live.
+pub(crate) fn locate_for_input(
+    cwd: &Path,
+    mode: crate::source_capture::ReadMode,
+    input: Option<&Path>,
+) -> Result<Location> {
     let cwd = cwd.canonicalize()?;
     let project = Project::open(&cwd)?;
+    if let Some(path) = competing_generated_record(&project, &cwd)? {
+        return Err(unavailable(
+            "A generated binding conflicts with this workspace record.",
+            &path,
+        ));
+    }
     let mut workspace = if project.is_git() {
         project.root.clone()
     } else {
@@ -306,9 +477,14 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
             record = Some(path);
         }
     }
-    let config = project.config()?;
+    let independent_input = input.filter(|_| record.is_none() && !project.config_path.exists());
+    let config = if independent_input.is_some() {
+        None
+    } else {
+        Some(project.config()?)
+    };
     if project.config_path.exists() {
-        let path = project.record(Some(&config))?;
+        let path = project.record(config.as_ref())?;
         status = if path.is_file() {
             "found"
         } else if path.symlink_metadata().is_ok() {
@@ -326,16 +502,35 @@ pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Locat
     if status == "missing"
         && mode == crate::source_capture::ReadMode::Live
         && project.is_git()
-        && crate::history_contract::string_is(
-            &crate::history_contract::map(&config)?["mode"],
-            "advanced",
-        )
+        && config.as_ref().is_some_and(|config| {
+            crate::history_contract::map(config)
+                .is_ok_and(|fields| crate::history_contract::string_is(&fields["mode"], "advanced"))
+        })
         && crate::pending_state::Ledger::capture(&project)?
             .head
             .is_some()
     {
-        record = Some(project.record(Some(&config))?);
+        record = Some(project.record(config.as_ref())?);
         status = "pending";
+    }
+    // A fresh project has no in-workspace primary. Keep orientation consistent
+    // with records(): its read-only location is the clearly provisional central
+    // proposal, never a checkout path that a caller might accidentally create.
+    if record.is_none() {
+        if let Some(input) = independent_input {
+            let path = crate::source_inventory::absolute(input)?;
+            status = if path.is_file() {
+                "found"
+            } else if path.symlink_metadata().is_ok() {
+                reason = UNREADABLE_ENTRY.into();
+                "unavailable"
+            } else {
+                "missing"
+            };
+            record = Some(path);
+        } else {
+            record = Some(project.record(config.as_ref())?);
+        }
     }
     let identity = if let Some(common) = &project.common {
         let relative = workspace
@@ -388,6 +583,50 @@ mod installed_resource_tests {
         assert_eq!(
             selection.core,
             Some(format!("reasoning/{target}.kpopper-runtime"))
+        );
+    }
+}
+
+#[cfg(test)]
+mod discovery_tests {
+    use super::*;
+
+    #[test]
+    fn record_bearing_sidecar_without_primary_is_not_treated_as_fresh() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join(".kpopper")).unwrap();
+        std::fs::write(root.path().join(".kpopper/history.yaml"), b"version: 3\n").unwrap();
+        let result = records(root.path());
+        assert!(result.unwrap_err().0.contains("record-bearing sidecar"));
+    }
+
+    #[test]
+    fn generated_binding_refuses_primary_added_after_binding() {
+        let root = tempfile::tempdir().unwrap();
+        let central = tempfile::tempdir().unwrap();
+        let token = "00000000-0000-4000-8000-000000000001";
+        let record = central.path().join(format!("repo-{token}/GROUNDING.yaml"));
+        std::fs::create_dir_all(record.parent().unwrap().join(".kpopper")).unwrap();
+        let anchor = root.path().canonicalize().unwrap();
+        let config = serde_json::json!({
+            "version": 1, "mode": "simple", "record": record,
+            "publication": null, "generation": 0,
+            "default_identity": {"version": 1, "token": token,
+                "owner_anchor": anchor, "kind": "directory"}
+        });
+        std::fs::create_dir_all(root.path().join(".kpopper")).unwrap();
+        std::fs::write(
+            root.path().join(".kpopper/project.json"),
+            serde_json::to_vec(&config).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(root.path().join("GROUNDING.yaml"), b"known: {}\n").unwrap();
+        let result = records(root.path());
+        assert!(
+            result
+                .unwrap_err()
+                .0
+                .contains("generated binding conflicts")
         );
     }
 }

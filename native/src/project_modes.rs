@@ -5,11 +5,15 @@ use crate::{
     history_authoring::{n, obj, s},
     history_branch::portable_path,
     history_contract::*,
+    history_view::map_mut,
     require,
     value::TypedValue as V,
 };
 use fs2::FileExt;
+use serde_json::json;
 use std::{
+    cell::RefCell,
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
     path::{Component, Path, PathBuf},
@@ -17,6 +21,7 @@ use std::{
     time::Duration,
 };
 const CONFIG_LIMIT: usize = 1024 * 1024;
+const OWNER_RECEIPT: &str = ".kpopper/owner.json";
 fn git(root: &Path, args: &[&str], missing: bool) -> Result<Option<Vec<u8>>> {
     let mut command = Command::new("git");
     command
@@ -114,6 +119,332 @@ fn bounded(path: &Path) -> Result<Option<Vec<u8>>> {
     require(raw.len() <= CONFIG_LIMIT, "project_config_limit")?;
     Ok(Some(raw))
 }
+fn private_directory(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        let mut b = fs::DirBuilder::new();
+        b.recursive(true).mode(0o700);
+        b.create(path)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(unix))]
+    fs::create_dir_all(path)?;
+    Ok(())
+}
+fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path.parent().ok_or_else(|| error("invalid_path"))?;
+    private_directory(parent)?;
+    let temporary = parent.join(format!(
+        ".{}.{}.tmp",
+        path.file_name()
+            .and_then(|v| v.to_str())
+            .unwrap_or("kpopper"),
+        std::process::id()
+    ));
+    let mut o = OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let result = (|| -> Result<()> {
+        let mut f = o.open(&temporary)?;
+        std::io::Write::write_all(&mut f, bytes)?;
+        f.sync_all()?;
+        drop(f);
+        fs::rename(&temporary, path)?;
+        #[cfg(unix)]
+        File::open(parent)?.sync_all()?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+#[cfg(test)]
+std::thread_local! {
+    static UNIT_PROJECTS_DIRECTORY: tempfile::TempDir =
+        tempfile::tempdir().expect("create isolated unit project store");
+}
+
+#[cfg(test)]
+fn central_root() -> Result<PathBuf> {
+    UNIT_PROJECTS_DIRECTORY.with(|directory| resolved(&directory.path().join("projects")))
+}
+
+#[cfg(not(test))]
+fn central_root() -> Result<PathBuf> {
+    if let Some(raw) = std::env::var_os("KPOPPER_PROJECTS_DIR") {
+        let p = PathBuf::from(raw);
+        require(
+            p.is_absolute() && !p.as_os_str().is_empty(),
+            "KPOPPER_PROJECTS_DIR must be an absolute non-empty path",
+        )?;
+        return Ok(resolved(&p)?);
+    }
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .ok_or_else(|| error("HOME is unavailable; set absolute KPOPPER_PROJECTS_DIR"))?;
+    let home = PathBuf::from(home);
+    require(
+        home.is_absolute(),
+        "HOME must be an absolute non-empty path",
+    )?;
+    resolved(&home.join(".kpopper/projects"))
+}
+fn slug(path: &Path) -> String {
+    let raw = path
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("project")
+        .to_ascii_lowercase();
+    let mut out = String::new();
+    for c in raw.bytes() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c as char)
+        } else if !out.ends_with('-') {
+            out.push('-')
+        }
+    }
+    let out = out.trim_matches('-').chars().take(48).collect::<String>();
+    if out.is_empty() {
+        "project".into()
+    } else {
+        out
+    }
+}
+fn provisional_hash(anchor: &Path) -> String {
+    crate::identity::sha256(anchor.to_string_lossy().as_bytes())[..32].into()
+}
+fn project_slug(project: &Project) -> String {
+    if project.is_git() {
+        if let Ok(roots) = project.worktrees() {
+            if let Some(primary) = roots.into_iter().find(|root| {
+                fs::symlink_metadata(root.join(".git")).is_ok_and(|meta| meta.is_dir())
+            }) {
+                return slug(&primary);
+            }
+        }
+    }
+    slug(&project.root)
+}
+fn validate_central_store(project: &Project, store: &Path) -> Result<PathBuf> {
+    let store = resolved(store)?;
+    let mut forbidden = project.worktrees()?;
+    if let Some(common) = &project.common {
+        forbidden.push(common.clone());
+    }
+    require(
+        !forbidden
+            .iter()
+            .any(|root| store == *root || store.starts_with(root)),
+        "central_store_inside_workspace: choose a central root outside this checkout",
+    )?;
+    Ok(store)
+}
+
+fn generated_candidate_has_no_data(record: &Path) -> Result<bool> {
+    if record.symlink_metadata().is_ok() {
+        return Ok(false);
+    }
+    let parent = record.parent().ok_or_else(|| error("invalid_path"))?;
+    let metadata = match parent.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+        Err(error) => return Err(error.into()),
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Ok(false);
+    }
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let name = entry.file_name();
+        if matches!(name.to_str(), Some(".owner.lock" | "owner.lock")) && kind.is_file() {
+            continue;
+        }
+        if name != ".kpopper" || !kind.is_dir() {
+            return Ok(false);
+        }
+        for control in fs::read_dir(entry.path())? {
+            let control = control?;
+            if !control.file_type()?.is_file()
+                || !matches!(
+                    control.file_name().to_str(),
+                    Some("owner.json" | "owner.lock")
+                )
+            {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+fn existing_named_record(store: &Path, name: &str) -> Option<PathBuf> {
+    let prefix = format!("{name}-");
+    fs::read_dir(store)
+        .ok()?
+        .take(4096)
+        .filter_map(std::result::Result::ok)
+        .find_map(|entry| {
+            let filename = entry.file_name();
+            let suffix = filename.to_str()?.strip_prefix(&prefix)?;
+            if uuid::Uuid::parse_str(suffix).is_err() || !entry.file_type().ok()?.is_dir() {
+                return None;
+            }
+            let record = entry.path().join("GROUNDING.yaml");
+            fs::symlink_metadata(&record)
+                .ok()
+                .filter(|metadata| metadata.is_file())
+                .map(|_| record)
+        })
+}
+fn git_has_head_record(root: &Path, name: &str) -> Result<bool> {
+    Ok(git(
+        root,
+        &["ls-tree", "-r", "--name-only", "HEAD", "--", name],
+        true,
+    )?
+    .is_some_and(|raw| {
+        String::from_utf8_lossy(&raw)
+            .lines()
+            .any(|line| line.trim() == name)
+    }))
+}
+pub(crate) fn git_has_head_any_record(root: &Path) -> Result<bool> {
+    Ok(git(
+        root,
+        &[
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "HEAD",
+            "--",
+            "GROUNDING.yaml",
+            "PROVENANCE.yaml",
+        ],
+        true,
+    )?
+    .is_some_and(|raw| {
+        String::from_utf8_lossy(&raw)
+            .lines()
+            .any(|line| matches!(line.trim(), "GROUNDING.yaml" | "PROVENANCE.yaml"))
+    }))
+}
+// History classification is expensive on repositories with no record history.
+// Only a CLI invocation opts into reuse; library callers remain uncached. Ref/HEAD
+// fingerprints invalidate history results, while config, worktrees, primary files
+// and pending state are always observed independently at their existing checks.
+std::thread_local! {
+    static INVOCATION_HISTORY: RefCell<Option<HashMap<PathBuf, (Vec<u8>, bool)>>> = const { RefCell::new(None) };
+}
+pub struct InvocationHistoryScope;
+pub fn invocation_history_scope() -> InvocationHistoryScope {
+    INVOCATION_HISTORY.with(|cache| *cache.borrow_mut() = Some(HashMap::new()));
+    InvocationHistoryScope
+}
+impl Drop for InvocationHistoryScope {
+    fn drop(&mut self) {
+        INVOCATION_HISTORY.with(|cache| *cache.borrow_mut() = None);
+    }
+}
+fn history_fingerprint(root: &Path) -> Result<Option<Vec<u8>>> {
+    let Some(mut refs) = git(
+        root,
+        &[
+            "rev-parse",
+            "--git-common-dir",
+            "--revs-only",
+            "--all",
+            "HEAD",
+        ],
+        true,
+    )?
+    else {
+        return Ok(None);
+    };
+    let common = string(
+        refs.split(|byte| *byte == b'\n')
+            .next()
+            .unwrap_or_default()
+            .to_vec(),
+    )?;
+    let common = resolved(&root.join(common.trim()))?;
+    // Deepening a shallow checkout or changing grafts can expose old record
+    // history without moving any ref. Include those graph boundaries too.
+    for name in ["shallow", "info/grafts"] {
+        let raw = bounded(&common.join(name))?.unwrap_or_default();
+        refs.extend_from_slice(&(raw.len() as u64).to_le_bytes());
+        refs.extend_from_slice(&raw);
+    }
+    Ok(Some(refs))
+}
+fn git_has_record_history(root: &Path) -> Result<bool> {
+    let active = INVOCATION_HISTORY.with(|cache| cache.borrow().is_some());
+    let fingerprint = if active {
+        // The cache is optional: oversized or unavailable fingerprint metadata
+        // must not prevent the real history query or reuse an unchecked entry.
+        history_fingerprint(root).ok().flatten()
+    } else {
+        None
+    };
+    if let Some(refs) = &fingerprint {
+        if let Some(found) = INVOCATION_HISTORY.with(|cache| {
+            cache
+                .borrow()
+                .as_ref()
+                .and_then(|entries| entries.get(root))
+                .filter(|(before, _)| before == refs)
+                .map(|(_, found)| *found)
+        }) {
+            return Ok(found);
+        }
+    }
+    let history = git(
+        root,
+        &[
+            "log",
+            "--all",
+            "-1",
+            "--",
+            "GROUNDING.yaml",
+            "PROVENANCE.yaml",
+        ],
+        true,
+    )?;
+    let found = history.as_ref().is_some_and(|raw| !raw.is_empty());
+    if let Some(refs) = fingerprint.filter(|_| history.is_some()) {
+        INVOCATION_HISTORY.with(|cache| {
+            if let Some(entries) = cache.borrow_mut().as_mut() {
+                entries.insert(root.to_owned(), (refs, found));
+            }
+        });
+    }
+    Ok(found)
+}
+pub(crate) fn git_has_legacy_knowledge(root: &Path) -> Result<bool> {
+    Ok(git_has_record_history(root)?
+        || crate::pending_state::resolve(root, crate::pending_state::REF)?.is_some())
+}
+fn require_fresh_store_override() -> Result<()> {
+    if std::env::var_os("CLAUDE_CODE_REMOTE").is_some_and(|v| v == "true")
+        && std::env::var_os("KPOPPER_PROJECTS_DIR").is_none()
+    {
+        return Err(error(
+            "fresh_default_requires_absolute_KPOPPER_PROJECTS_DIR",
+        ));
+    }
+    Ok(())
+}
+fn json_line(value: &V) -> Result<Vec<u8>> {
+    let mut b = serde_json::to_vec(&value.to_json()?)?;
+    b.push(b'\n');
+    Ok(b)
+}
 #[derive(Clone, Debug)]
 pub struct Project {
     pub cwd: PathBuf,
@@ -123,6 +454,19 @@ pub struct Project {
     pub config_path: PathBuf,
 }
 impl Project {
+    /// True only for the read-only placeholder emitted before a generated
+    /// central record has been allocated.
+    pub fn is_provisional_record_path(record: &Path) -> bool {
+        record.file_name().and_then(|name| name.to_str()) == Some("GROUNDING.yaml")
+            && record
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.rsplit_once("-unbound-"))
+                .is_some_and(|(_, suffix)| {
+                    suffix.len() == 32 && suffix.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+    }
     pub fn open(cwd: &Path) -> Result<Self> {
         let cwd = resolved(cwd)?;
         require(cwd.is_dir(), "project_directory_unavailable")?;
@@ -174,24 +518,64 @@ impl Project {
             false,
         )?
         .ok_or_else(|| error("project_git_unavailable"))?;
-        let mut paths = vec![];
+        // `git worktree list` can expose a submodule's administrative
+        // directory as a worktree. Always retain the verified project root,
+        // and accept reported paths only when Git identifies that path as its
+        // actual toplevel checkout.
+        let mut paths = vec![self.root.clone()];
         for field in raw.split(|b| *b == 0) {
             if let Some(path) = field.strip_prefix(b"worktree ") {
                 let path = PathBuf::from(string(path.to_vec())?);
                 if path.is_dir() {
-                    paths.push(resolved(&path)?);
+                    let path = resolved(&path)?;
+                    let verified = git(&path, &["rev-parse", "--show-toplevel"], true)?
+                        .and_then(|raw| string(raw).ok())
+                        .and_then(|top| resolved(Path::new(top.trim())).ok());
+                    if verified.as_ref() == Some(&path) && !paths.contains(&path) {
+                        paths.push(path);
+                    }
                 }
             }
         }
         require(!paths.is_empty(), "project_worktrees_unavailable")?;
         Ok(paths)
     }
-    pub fn defaults(&self) -> Result<V> {
+    pub(crate) fn has_legacy_knowledge(&self) -> Result<bool> {
+        if !self.is_git() {
+            return Ok(false);
+        }
         let roots = self.worktrees()?;
-        let name = ["GROUNDING.yaml", "PROVENANCE.yaml"]
+        Ok(roots.iter().any(|root| {
+            ["GROUNDING.yaml", "PROVENANCE.yaml"]
+                .iter()
+                .any(|name| root.join(name).is_file())
+        }) || git_has_head_any_record(&self.root)?
+            || git_has_legacy_knowledge(&self.root)?)
+    }
+    fn provisional_record(&self) -> Result<PathBuf> {
+        Ok(central_root()?.join(format!(
+            "{}-unbound-{}/GROUNDING.yaml",
+            project_slug(self),
+            provisional_hash(self.common.as_ref().unwrap_or(&self.root))
+        )))
+    }
+    pub fn defaults(&self) -> Result<V> {
+        if let Some(raw) = bounded(&self.config_path)? {
+            return self.decode_config(Some(&raw));
+        }
+        let roots = self.worktrees()?;
+        let mut name = ["GROUNDING.yaml", "PROVENANCE.yaml"]
             .into_iter()
             .find(|name| roots.iter().any(|r| r.join(name).exists()))
             .unwrap_or("GROUNDING.yaml");
+        if self.is_git() && !roots.iter().any(|root| root.join(name).exists()) {
+            for candidate in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+                if git_has_head_record(&self.root, candidate)? {
+                    name = candidate;
+                    break;
+                }
+            }
+        }
         let mut record = name.to_owned();
         let mut mode = if self.is_git() { "advanced" } else { "simple" };
         if let Some(common) = &self.common {
@@ -215,9 +599,48 @@ impl Project {
                 } else {
                     portable_path(&record)?;
                 }
+            } else if !roots.iter().any(|r| r.join(name).exists())
+                && !git_has_head_record(&self.root, name)?
+                && self.has_legacy_knowledge()?
+            {
+                // Existing history or pending knowledge keeps its Advanced
+                // context and local first birth; never mint central state.
+                record = name.to_owned();
+                mode = "advanced";
+            } else if !roots.iter().any(|r| r.join(name).exists())
+                && !git_has_head_record(&self.root, name)?
+            {
+                let anchor = self.common.as_ref().unwrap_or(&self.root);
+                mode = "simple";
+                let record_path = central_root()?.join(format!(
+                    "{}-unbound-{}/GROUNDING.yaml",
+                    project_slug(self),
+                    provisional_hash(anchor)
+                ));
+                record = record_path
+                    .to_str()
+                    .ok_or_else(|| error("nonportable_project_path"))?
+                    .into();
             }
-        } else {
+        } else if roots.iter().any(|r| r.join(name).exists()) {
             record = resolved(&self.root.join(record))?
+                .to_str()
+                .ok_or_else(|| error("nonportable_project_path"))?
+                .into();
+        } else if self.is_git() && git_has_head_record(&self.root, name)? {
+            record = resolved(&self.root.join(record))?
+                .to_str()
+                .ok_or_else(|| error("nonportable_project_path"))?
+                .into();
+        } else {
+            let anchor = self.common.as_ref().unwrap_or(&self.root);
+            mode = "simple";
+            let record_path = central_root()?.join(format!(
+                "{}-unbound-{}/GROUNDING.yaml",
+                project_slug(self),
+                provisional_hash(anchor)
+            ));
+            record = record_path
                 .to_str()
                 .ok_or_else(|| error("nonportable_project_path"))?
                 .into();
@@ -253,6 +676,42 @@ impl Project {
             require(self.is_git(), "advanced_requires_git")?;
             portable_path(text(&m["record"])?)?;
         }
+        if m.contains_key("default_identity") {
+            require(string_is(&m["mode"], "simple"), "generated_binding_invalid")?;
+            let i = map(&m["default_identity"])?;
+            require(
+                is_int(
+                    i.get("version")
+                        .ok_or_else(|| error("generated_binding_invalid"))?,
+                    "1",
+                ),
+                "generated_binding_invalid",
+            )?;
+            require(
+                uuid::Uuid::parse_str(text(
+                    i.get("token")
+                        .ok_or_else(|| error("generated_binding_invalid"))?,
+                )?)
+                .is_ok(),
+                "generated_binding_invalid",
+            )?;
+            require(
+                Path::new(text(
+                    i.get("owner_anchor")
+                        .ok_or_else(|| error("generated_binding_invalid"))?,
+                )?)
+                .is_absolute(),
+                "generated_binding_invalid",
+            )?;
+            require(
+                matches!(i.get("kind"),Some(v) if string_is(v,"git")||string_is(v,"directory")),
+                "generated_binding_invalid",
+            )?;
+            require(
+                Path::new(text(&m["record"])?).is_absolute(),
+                "generated_binding_invalid",
+            )?;
+        }
         if let Some(publication) = m.get("publication").filter(|v| **v != V::Null) {
             let p = schema(
                 publication,
@@ -278,6 +737,486 @@ impl Project {
     pub fn config(&self) -> Result<V> {
         self.decode_config(bounded(&self.config_path)?.as_deref())
     }
+    /// Existing independent inputs retain the legacy policy context; resolving
+    /// their policy is not a request for a fresh default storage location.
+    pub(crate) fn config_for_input(&self, input: &Path) -> Result<V> {
+        if self.config_path.exists()
+            || !input.is_file()
+            || ["GROUNDING.yaml", "PROVENANCE.yaml"]
+                .iter()
+                .any(|name| self.root.join(name).exists())
+            || self
+                .common
+                .as_ref()
+                .is_some_and(|common| common.join("kpopper-record").exists())
+        {
+            return self.config();
+        }
+        let record = if self.is_git() {
+            "GROUNDING.yaml".into()
+        } else {
+            self.root
+                .join("GROUNDING.yaml")
+                .to_str()
+                .ok_or_else(|| error("nonportable_project_path"))?
+                .to_owned()
+        };
+        Ok(obj([
+            ("version", n("1")),
+            ("mode", s(if self.is_git() { "advanced" } else { "simple" })),
+            ("record", s(&record)),
+            ("publication", V::Null),
+            ("generation", n("0")),
+        ]))
+    }
+    pub fn generated_default(&self, config: Option<&V>) -> Result<bool> {
+        let c = match config {
+            Some(config) => config.clone(),
+            None => {
+                let Some(raw) = bounded(&self.config_path)? else {
+                    return Ok(false);
+                };
+                self.decode_config(Some(&raw))?
+            }
+        };
+        let m = map(&c)?;
+        Ok(string_is(m.get("mode").unwrap_or(&V::Null), "simple")
+            && m.contains_key("default_identity"))
+    }
+    fn owner_receipt_path(record: &Path) -> PathBuf {
+        record.parent().unwrap_or(record).join(OWNER_RECEIPT)
+    }
+    fn generated_binding<'a>(&self, config: &'a V) -> Result<(&'a Map, &'a str)> {
+        let i = map(map(config)?
+            .get("default_identity")
+            .ok_or_else(|| error("generated_binding_missing"))?)?;
+        require(
+            is_int(
+                i.get("version")
+                    .ok_or_else(|| error("generated_binding_invalid"))?,
+                "1",
+            ),
+            "generated_binding_invalid",
+        )?;
+        let token = text(
+            i.get("token")
+                .ok_or_else(|| error("generated_binding_invalid"))?,
+        )?;
+        require(
+            uuid::Uuid::parse_str(token).is_ok(),
+            "generated_binding_invalid",
+        )?;
+        Ok((i, token))
+    }
+    fn verify_generated_owner(&self, config: &V, mutation: bool) -> Result<()> {
+        let (_, token) = self.generated_binding(config)?;
+        let expected_anchor = self.common.as_ref().unwrap_or(&self.root);
+        let receipt = Self::owner_receipt_path(&self.record(Some(config))?);
+        let raw = bounded(&receipt)?.ok_or_else(|| error("generated_owner_receipt_missing"))?;
+        let value: serde_json::Value = serde_json::from_slice(&raw)?;
+        require(
+            value["token"].as_str() == Some(token),
+            "generated_owner_receipt_mismatch",
+        )?;
+        if value["owner_anchor"].as_str() != Some(&expected_anchor.to_string_lossy()) {
+            if value["owner_anchor"]
+                .as_str()
+                .is_some_and(|anchor| Path::new(anchor).exists())
+            {
+                return Err(error(if mutation {
+                    "generated_binding_copy_requires_recovery: run kpop config --new-project"
+                } else {
+                    "generated_binding_copy_conflict: run kpop config --new-project"
+                }));
+            }
+        }
+        if let Some(path) = value["owner_path"].as_str().map(PathBuf::from) {
+            let same_git_owner = self.common.as_ref().is_some_and(|common| {
+                value["owner_anchor"]
+                    .as_str()
+                    .is_some_and(|anchor| Path::new(anchor) == common)
+            });
+            if path != self.root && path.exists() && !same_git_owner {
+                return Err(error(if mutation {
+                    "generated_binding_copy_requires_recovery: run kpop config --new-project"
+                } else {
+                    "generated_binding_copy_conflict: run kpop config --new-project"
+                }));
+            }
+        }
+        Ok(())
+    }
+    fn finish_generated_binding(&self, config: &V, allow_nonempty: bool) -> Result<()> {
+        let (identity, token) = self.generated_binding(config)?;
+        let record = self.record(Some(config))?;
+        let expected_anchor = self.common.as_ref().unwrap_or(&self.root);
+        require(
+            text(
+                identity
+                    .get("owner_anchor")
+                    .ok_or_else(|| error("generated_binding_invalid"))?,
+            )? == expected_anchor.to_string_lossy(),
+            "generated_binding_owner_conflict",
+        )?;
+        let parent = record.parent().ok_or_else(|| error("invalid_path"))?;
+        if let Ok(meta) = fs::symlink_metadata(parent) {
+            require(
+                meta.is_dir() && !meta.file_type().is_symlink(),
+                "central_record_parent_unavailable",
+            )?;
+        } else {
+            private_directory(parent)?;
+        }
+        let receipt = Self::owner_receipt_path(&record);
+        let owner_dir = receipt.parent().ok_or_else(|| error("invalid_path"))?;
+        private_directory(owner_dir)?;
+        let owner_lock_path = parent.join(".owner.lock");
+        let owner_lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&owner_lock_path)?;
+        FileExt::lock_exclusive(&owner_lock)?;
+        if let Some(raw) = bounded(&receipt)? {
+            let old: serde_json::Value = serde_json::from_slice(&raw)?;
+            require(
+                old["token"].as_str() == Some(token),
+                "generated_owner_receipt_conflict",
+            )?;
+            if old["owner_anchor"].as_str() != Some(&expected_anchor.to_string_lossy())
+                && old["owner_anchor"]
+                    .as_str()
+                    .is_some_and(|anchor| Path::new(anchor).exists())
+            {
+                return Err(error(
+                    "generated_binding_copy_requires_recovery: run kpop config --new-project",
+                ));
+            }
+        } else {
+            // A process can die after creating the candidate directory but
+            // before the receipt rename. Only an empty candidate (apart from
+            // harmless empty control directories) is safe to repair.
+            let clean = fs::read_dir(parent)?.try_fold(true, |clean, entry| -> Result<bool> {
+                let entry = entry?;
+                if !clean {
+                    return Ok(false);
+                }
+                let name = entry.file_name();
+                if matches!(name.to_str(), Some("owner.lock" | ".owner.lock"))
+                    && entry.file_type()?.is_file()
+                {
+                    Ok(true)
+                } else if name == ".kpopper" && entry.file_type()?.is_dir() {
+                    Ok(fs::read_dir(entry.path())?.all(|child| {
+                        child
+                            .ok()
+                            .is_some_and(|child| child.file_name() == "owner.lock")
+                    }))
+                } else {
+                    Ok(false)
+                }
+            })?;
+            if !clean && !allow_nonempty {
+                return Err(error("generated_binding_candidate_conflict"));
+            }
+        }
+        let value = json!({
+            "version": 1,
+            "token": token,
+            "record": record,
+            "owner_anchor": self.common.as_ref().unwrap_or(&self.root),
+            "owner_path": self.root,
+            "config_path": self.config_path,
+        });
+        let result = atomic_bytes(&receipt, serde_json::to_string(&value)?.as_bytes());
+        let _ = FileExt::unlock(&owner_lock);
+        let _ = fs::remove_file(&owner_lock_path);
+        result
+    }
+    fn normalize_generated_move(&self, config: &mut V) -> Result<()> {
+        let (identity, token) = self.generated_binding(config)?;
+        let expected = self.common.as_ref().unwrap_or(&self.root);
+        let old_anchor = PathBuf::from(text(
+            identity
+                .get("owner_anchor")
+                .ok_or_else(|| error("generated_binding_invalid"))?,
+        )?);
+        if old_anchor == *expected {
+            return Ok(());
+        }
+        if old_anchor.exists() {
+            return Err(error(
+                "generated_binding_copy_requires_recovery: run kpop config --new-project",
+            ));
+        }
+        let record = self.record(Some(config))?;
+        let receipt = Self::owner_receipt_path(&record);
+        if let Some(raw) = bounded(&receipt)? {
+            let value: serde_json::Value = serde_json::from_slice(&raw)?;
+            require(
+                value["token"].as_str() == Some(token),
+                "generated_owner_receipt_mismatch",
+            )?;
+            if let Some(owner) = value["owner_path"].as_str() {
+                let owner = Path::new(owner);
+                let same_git = self.common.is_some()
+                    && value["owner_anchor"]
+                        .as_str()
+                        .is_some_and(|anchor| Path::new(anchor) == self.common.as_ref().unwrap());
+                if owner.exists() && owner != self.root && !same_git {
+                    return Err(error(
+                        "generated_binding_copy_requires_recovery: run kpop config --new-project",
+                    ));
+                }
+            }
+        } else if old_anchor.exists() {
+            return Err(error(
+                "generated_binding_copy_requires_recovery: run kpop config --new-project",
+            ));
+        }
+        let identity = map_mut(
+            map_mut(config)?
+                .get_mut("default_identity")
+                .ok_or_else(|| error("generated_binding_invalid"))?,
+        )?;
+        identity.insert(
+            "owner_anchor".into(),
+            V::Text(expected.to_string_lossy().into_owned()),
+        );
+        Ok(())
+    }
+    pub fn bind_for_mutation(&self) -> Result<()> {
+        let guard = self.lock()?;
+        if guard.raw.is_some() {
+            if self.generated_default(Some(&guard.config))? {
+                let mut next = guard.config.clone();
+                self.normalize_generated_move(&mut next)?;
+                let receipt = Self::owner_receipt_path(&self.record(Some(&next))?);
+                if bounded(&receipt)?.is_some() {
+                    self.verify_generated_owner(&next, true)?;
+                }
+                self.finish_generated_binding(&next, false)?;
+                if next != guard.config {
+                    atomic_bytes(&self.config_path, &json_line(&next)?)?;
+                }
+                return Ok(());
+            }
+            return Ok(());
+        }
+        let proposal = self.defaults()?;
+        let proposal_record = PathBuf::from(text(field(map(&proposal)?, "record")?)?);
+        // A pre-existing in-tree or registered record is legacy state. It must
+        // remain in place and must never acquire a generated central identity.
+        let candidate = resolved(&self.root.join(expanded(&proposal_record)?))?;
+        let registered = self
+            .common
+            .as_ref()
+            .is_some_and(|common| common.join("kpopper-record").is_file());
+        if candidate.is_file() || registered {
+            return Ok(());
+        }
+        if self.is_git()
+            && !self.root.join("GROUNDING.yaml").is_file()
+            && !self.root.join("PROVENANCE.yaml").is_file()
+            && git_has_head_any_record(&self.root)?
+        {
+            return Err(error(
+                "legacy_record_unavailable: restore the configured record before writing",
+            ));
+        }
+        if self.is_git() && !git_has_head_any_record(&self.root)? && self.has_legacy_knowledge()? {
+            // Legacy history or a durable pending queue keeps local birth on
+            // this branch; creating its first record never mints central state.
+            return Ok(());
+        }
+        require(
+            string_is(&map(&proposal)?["mode"], "simple"),
+            "legacy_record_unavailable: restore the configured record before writing",
+        )?;
+        require(
+            self.record(Some(&guard.config))? == proposal_record,
+            "default_binding_changed",
+        )?;
+        require_fresh_store_override()?;
+        crate::public_workspace::require_fresh_workspace_state(self)?;
+        let token = uuid::Uuid::new_v4().to_string();
+        let anchor = self.common.as_ref().unwrap_or(&self.root);
+        let store = validate_central_store(self, &central_root()?)?;
+        let name = project_slug(self);
+        let previous_record = existing_named_record(&store, &name);
+        let final_record = store.join(format!("{name}-{token}/GROUNDING.yaml"));
+        let mut next = guard.config.clone();
+        let m = map_mut(&mut next)?;
+        m.insert(
+            "record".into(),
+            V::Text(final_record.to_string_lossy().into_owned()),
+        );
+        m.insert(
+            "default_identity".into(),
+            obj([
+                ("version", n("1")),
+                ("token", s(&token)),
+                ("owner_anchor", s(&anchor.to_string_lossy())),
+                ("kind", s(if self.is_git() { "git" } else { "directory" })),
+            ]),
+        );
+        self.finish_generated_binding(&next, false)?;
+        atomic_bytes(&self.config_path, &json_line(&next)?)?;
+        if let Some(previous) = previous_record {
+            eprintln!(
+                "Existing local record with this readable name: {}. Review its owner before restoring or migrating it.",
+                previous.display()
+            );
+        }
+        Ok(())
+    }
+
+    /// Validate and repair a generated binding explicitly, including a
+    /// completed record whose receipt was lost. This never migrates history.
+    pub fn rebind_generated(&self) -> Result<()> {
+        let guard = self.lock()?;
+        require(
+            self.generated_default(Some(&guard.config))?,
+            "generated_binding_required",
+        )?;
+        let mut config = guard.config.clone();
+        self.normalize_generated_move(&mut config)?;
+        let record = self.record(Some(&config))?;
+        require(
+            record.is_absolute() && record.parent().is_some(),
+            "generated_binding_invalid",
+        )?;
+        let (_, token) = self.generated_binding(&config)?;
+        require(
+            record
+                .parent()
+                .unwrap()
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().contains(token)),
+            "generated_binding_invalid",
+        )?;
+        require(record.is_file(), "generated_binding_record_missing")?;
+        if bounded(&Self::owner_receipt_path(&record))?.is_some() {
+            self.verify_generated_owner(&config, true)?;
+        }
+        self.finish_generated_binding(&config, true)?;
+        if config != guard.config {
+            atomic_bytes(&self.config_path, &json_line(&config)?)?;
+        }
+        Ok(())
+    }
+
+    /// Start a fresh identity for a genuine copy or a proven data-free failed
+    /// first binding. Existing owner state is left untouched; no data is copied.
+    pub fn new_generated_project(&self) -> Result<()> {
+        let guard = self.lock()?;
+        require(
+            self.generated_default(Some(&guard.config))?,
+            "generated_binding_required",
+        )?;
+        let old_record = self.record(Some(&guard.config))?;
+        let (identity, old_token) = self.generated_binding(&guard.config)?;
+        let expected_anchor = self.common.as_ref().unwrap_or(&self.root);
+        let receipt = Self::owner_receipt_path(&old_record);
+        let raw = bounded(&receipt)?;
+        let value: Option<serde_json::Value> =
+            raw.as_deref().map(serde_json::from_slice).transpose()?;
+        if let Some(value) = &value {
+            require(
+                value["token"].as_str() == Some(old_token),
+                "generated_owner_receipt_mismatch",
+            )?;
+        }
+        let no_data = generated_candidate_has_no_data(&old_record)?;
+        let owns_empty = no_data
+            && text(
+                identity
+                    .get("owner_anchor")
+                    .ok_or_else(|| error("generated_binding_invalid"))?,
+            )? == expected_anchor.to_string_lossy()
+            && old_record.file_name().and_then(|name| name.to_str()) == Some("GROUNDING.yaml")
+            && old_record
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .is_some_and(|name| name.to_string_lossy().ends_with(&format!("-{old_token}")));
+        // A matching token and strict no-data state suffice for an owner's
+        // reset, even if a live copy claimed the old receipt while it was away.
+        // The old receipt/store are left untouched by the separate identity.
+        if !owns_empty {
+            let value = value
+                .as_ref()
+                .ok_or_else(|| error("generated_binding_candidate_conflict"))?;
+            let owner_anchor = value["owner_anchor"]
+                .as_str()
+                .map(Path::new)
+                .ok_or_else(|| error("generated_owner_receipt_invalid"))?;
+            require(
+                owner_anchor != expected_anchor && owner_anchor.exists(),
+                "generated_binding_not_copy",
+            )?;
+        }
+        let token = uuid::Uuid::new_v4().to_string();
+        let anchor = self.common.as_ref().unwrap_or(&self.root);
+        require_fresh_store_override()?;
+        crate::public_workspace::require_fresh_workspace_state(self)?;
+        let store = validate_central_store(self, &central_root()?)?;
+        let record = store.join(format!("{}-{token}/GROUNDING.yaml", project_slug(self)));
+        let mut next = guard.config.clone();
+        let m = map_mut(&mut next)?;
+        m.insert(
+            "record".into(),
+            V::Text(record.to_string_lossy().into_owned()),
+        );
+        m.insert(
+            "default_identity".into(),
+            obj([
+                ("version", n("1")),
+                ("token", s(&token)),
+                ("owner_anchor", s(&anchor.to_string_lossy())),
+                ("kind", s(if self.is_git() { "git" } else { "directory" })),
+            ]),
+        );
+        self.finish_generated_binding(&next, false)?;
+        atomic_bytes(&self.config_path, &json_line(&next)?)
+    }
+
+    /// Return the current workspace root only when generated ownership is
+    /// validated. This is read-only and intentionally returns `None` for
+    /// copied or unreachable owner contexts.
+    pub fn generated_source_workspace(&self, cwd: &Path) -> Result<Option<PathBuf>> {
+        let current = Project::open(cwd)?;
+        if !current.config_path.exists() || !current.generated_default(None)? {
+            return Ok(None);
+        }
+        let config = current.config()?;
+        let (identity, token) = current.generated_binding(&config)?;
+        let anchor = PathBuf::from(text(
+            identity
+                .get("owner_anchor")
+                .ok_or_else(|| error("generated_binding_invalid"))?,
+        )?);
+        let expected = current.common.as_ref().unwrap_or(&current.root);
+        if anchor != *expected {
+            return Ok(None);
+        }
+        let record = current.record(Some(&config))?;
+        let receipt = Self::owner_receipt_path(&record);
+        if let Some(raw) = bounded(&receipt)? {
+            let value: serde_json::Value = serde_json::from_slice(&raw)?;
+            if value["token"].as_str() != Some(token) {
+                return Ok(None);
+            }
+            if let Some(owner) = value["owner_path"].as_str() {
+                let owner = Path::new(owner);
+                if owner.exists() && owner != current.root && current.common.is_none() {
+                    return Ok(None);
+                }
+            }
+        } else if !record.is_file() {
+            return Ok(None);
+        }
+        Ok(Some(current.root))
+    }
     pub fn record(&self, config: Option<&V>) -> Result<PathBuf> {
         let config = if let Some(v) = config {
             v.clone()
@@ -289,6 +1228,13 @@ impl Project {
     }
     /// Hold through final publication and call verify to reject policy changes.
     pub fn lock(&self) -> Result<PolicyGuard> {
+        self.lock_for_input(None)
+    }
+    fn lock_for_input(&self, input: Option<&Path>) -> Result<PolicyGuard> {
+        let input = input
+            .filter(|path| path.is_file())
+            .map(resolved)
+            .transpose()?;
         let (anchor, relative) = if let Some(common) = &self.common {
             (common.as_path(), "kpopper/project/project.lock")
         } else {
@@ -315,12 +1261,20 @@ impl Project {
         let file = options.open(path)?;
         FileExt::lock_exclusive(&file)?;
         let raw = bounded(&self.config_path)?;
-        let config = self.decode_config(raw.as_deref())?;
+        let config = if raw.is_none() {
+            match input.as_deref() {
+                Some(input) => self.config_for_input(input)?,
+                None => self.defaults()?,
+            }
+        } else {
+            self.decode_config(raw.as_deref())?
+        };
         Ok(PolicyGuard {
             file,
             project: self.clone(),
             raw,
             config,
+            input,
         })
     }
 }
@@ -329,6 +1283,7 @@ pub struct PolicyGuard {
     project: Project,
     raw: Option<Vec<u8>>,
     config: V,
+    input: Option<PathBuf>,
 }
 impl PolicyGuard {
     pub fn config(&self) -> &V {
@@ -346,10 +1301,11 @@ impl PolicyGuard {
             bounded(&self.project.config_path)? == self.raw,
             "project_policy_changed",
         )?;
-        require(
-            self.project.config()? == self.config,
-            "project_policy_changed",
-        )
+        let config = match self.input.as_deref() {
+            Some(input) => self.project.config_for_input(input)?,
+            None => self.project.config()?,
+        };
+        require(config == self.config, "project_policy_changed")
     }
 }
 impl Drop for PolicyGuard {
@@ -361,16 +1317,41 @@ impl Drop for PolicyGuard {
 pub fn project_for(paths: &[PathBuf], cwd: &Path) -> Result<Project> {
     let first = resolved(paths.first().ok_or_else(|| error("missing_record_path"))?)?;
     let parent = first.parent().ok_or_else(|| error("invalid_path"))?;
-    let project = Project::open(parent)?;
-    if project.is_git() {
-        return Ok(project);
-    }
     let current = Project::open(cwd)?;
-    if current.is_git() && current.config_path.exists() && current.record(None)? == first {
-        Ok(current)
+    let current_matches = if current.config_path.exists() {
+        let config = current.config()?;
+        let configured = current.record(Some(&config))?;
+        if configured == first {
+            return Ok(current);
+        }
+        current.generated_default(Some(&config))?
+            && (first == current.root.join("GROUNDING.yaml")
+                || first == current.root.join("PROVENANCE.yaml")
+                || (Project::is_provisional_record_path(&first)
+                    && current.provisional_record()? == first))
     } else {
-        Ok(project)
+        current.defaults().ok().is_some_and(|value| {
+            map(&value)
+                .ok()
+                .and_then(|m| m.get("record"))
+                .and_then(|value| text(value).ok())
+                .is_some_and(|path| Path::new(path) == first)
+        })
+    };
+    if current_matches {
+        return Ok(current);
     }
+    if let Some(raw) = bounded(&Project::owner_receipt_path(&first))? {
+        let v: serde_json::Value = serde_json::from_slice(&raw)?;
+        if let (Some(owner), Some(config)) = (v["owner_path"].as_str(), v["config_path"].as_str()) {
+            if let Ok(p) = Project::open(Path::new(owner)) {
+                if p.config_path == Path::new(config) && p.record(None)? == first {
+                    return Ok(p);
+                }
+            }
+        }
+    }
+    Ok(Project::open(parent)?)
 }
 pub fn write_paths(paths: &[PathBuf], cwd: &Path) -> Result<Vec<PathBuf>> {
     let mut result = paths.to_vec();
@@ -397,6 +1378,12 @@ pub(crate) fn simple_record(paths: &[PathBuf], cwd: &Path) -> Result<Option<Path
         {
             return Ok(Some(record));
         }
+        if Project::is_provisional_record_path(&first)
+            && project.generated_default(Some(&config))?
+            && project.provisional_record()? == first
+        {
+            return Ok(Some(record));
+        }
     }
     Ok(None)
 }
@@ -410,9 +1397,77 @@ pub struct WriteRoute {
     cwd: PathBuf,
 }
 impl WriteRoute {
+    pub fn capture_mutation(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
+        Self::capture_mutation_with_creation(paths, cwd, true)
+    }
+    pub fn capture_mutation_with_creation(
+        paths: &[PathBuf],
+        cwd: &Path,
+        allow_creation: bool,
+    ) -> Result<Self> {
+        let selected = write_paths(paths, cwd)?;
+        let project = project_for(&selected, cwd)?;
+        let first = resolved(
+            selected
+                .first()
+                .ok_or_else(|| error("missing_record_path"))?,
+        )?;
+        if !allow_creation && !first.is_file() {
+            return Err(error("missing_record"));
+        }
+        let owned = if project.config_path.exists() {
+            let config = project.config()?;
+            let record = project.record(Some(&config))?;
+            let nested_legacy = first.is_file()
+                && matches!(
+                    first.file_name().and_then(|n| n.to_str()),
+                    Some("GROUNDING.yaml" | "PROVENANCE.yaml")
+                )
+                && first != record
+                && first != project.root.join("GROUNDING.yaml")
+                && first != project.root.join("PROVENANCE.yaml");
+            nested_legacy
+                || first == record
+                || first == project.root.join("GROUNDING.yaml")
+                || first == project.root.join("PROVENANCE.yaml")
+        } else {
+            let proposal = project.defaults().ok().and_then(|value| {
+                map(&value)
+                    .ok()
+                    .and_then(|m| m.get("record"))
+                    .and_then(|value| text(value).ok())
+                    .map(PathBuf::from)
+            });
+            let nested_legacy = first.is_file()
+                && matches!(
+                    first.file_name().and_then(|n| n.to_str()),
+                    Some("GROUNDING.yaml" | "PROVENANCE.yaml")
+                )
+                && first != project.root.join("GROUNDING.yaml")
+                && first != project.root.join("PROVENANCE.yaml");
+            nested_legacy
+                || first == project.root.join("GROUNDING.yaml")
+                || first == project.root.join("PROVENANCE.yaml")
+                || proposal
+                    .is_some_and(|path| path == first && Project::is_provisional_record_path(&path))
+        };
+        require(owned, "mutation_record_not_owned")?;
+        let nested_legacy = first.is_file()
+            && matches!(
+                first.file_name().and_then(|n| n.to_str()),
+                Some("GROUNDING.yaml" | "PROVENANCE.yaml")
+            )
+            && first != project.root.join("GROUNDING.yaml")
+            && first != project.root.join("PROVENANCE.yaml")
+            && project.record(None).map(|r| r != first).unwrap_or(true);
+        if !nested_legacy {
+            project.bind_for_mutation()?;
+        }
+        Self::capture(paths, cwd)
+    }
     pub fn capture(paths: &[PathBuf], cwd: &Path) -> Result<Self> {
         let project = project_for(paths, cwd)?;
-        let policy = project.lock()?;
+        let policy = project.lock_for_input(paths.first().map(PathBuf::as_path))?;
         let selected = write_paths(paths, cwd)?;
         let route = Self {
             policy,
@@ -516,16 +1571,156 @@ mod tests {
                 )
             })();
             if let Some(expected) = c.get("output") {
-                assert_eq!(
-                    result.unwrap_or_else(|e| panic!("{}: {e}", c["name"])),
-                    *expected,
-                    "{}",
-                    c["name"]
-                );
+                let actual = result.unwrap_or_else(|e| panic!("{}: {e}", c["name"]));
+                if c["name"] == "plain" || c["name"] == "git-default" {
+                    assert_eq!(actual["config"]["mode"], "simple");
+                    assert!(
+                        actual["config"]["record"]
+                            .as_str()
+                            .unwrap()
+                            .contains("-unbound-")
+                    );
+                    assert_eq!(actual["record"], actual["config"]["record"]);
+                    assert!(!Path::new(actual["record"].as_str().unwrap()).exists());
+                    if c["name"] == "git-default" {
+                        assert!(actual["common"].as_str().unwrap().ends_with("/.git"));
+                        assert!(
+                            actual["state"]
+                                .as_str()
+                                .unwrap()
+                                .ends_with("/.git/kpopper/project")
+                        );
+                    }
+                } else {
+                    assert_eq!(actual, *expected, "{}", c["name"]);
+                }
             } else {
                 assert!(result.is_err(), "accepted {}", c["name"]);
             }
         }
+    }
+
+    #[test]
+    fn invocation_history_cache_invalidates_when_refs_change_and_ends_with_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        command(&root, &["init", "-b", "main"]);
+        let scope = invocation_history_scope();
+        // An unborn repository is also reusable, without inventing history.
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        assert_eq!(
+            INVOCATION_HISTORY.with(|cache| cache.borrow().as_ref().unwrap().len()),
+            1
+        );
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        command(&root, &["add", "GROUNDING.yaml"]);
+        command(
+            &root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.test",
+                "commit",
+                "-m",
+                "record",
+            ],
+        );
+        fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+        assert!(git_has_legacy_knowledge(&root).unwrap());
+        drop(scope);
+        assert!(INVOCATION_HISTORY.with(|cache| cache.borrow().is_none()));
+    }
+
+    #[test]
+    fn invocation_history_cache_invalidates_when_shallow_boundary_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        command(&root, &["init", "-b", "main"]);
+        let commit = || {
+            command(
+                &root,
+                &[
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.test",
+                    "commit",
+                    "-m",
+                    "fixture",
+                ],
+            )
+        };
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        command(&root, &["add", "GROUNDING.yaml"]);
+        commit();
+        command(&root, &["rm", "GROUNDING.yaml"]);
+        commit();
+        write(&root.join("README.md"), b"fixture\n");
+        command(&root, &["add", "README.md"]);
+        commit();
+        let head = git(&root, &["rev-parse", "HEAD"], false).unwrap().unwrap();
+        let shallow = root.join(".git/shallow");
+        fs::write(&shallow, head).unwrap();
+        let _scope = invocation_history_scope();
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        fs::remove_file(&shallow).unwrap();
+        assert!(git_has_legacy_knowledge(&root).unwrap());
+    }
+
+    #[test]
+    fn unavailable_history_fingerprint_falls_back_to_live_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        command(&root, &["init", "-b", "main"]);
+        let commit = || {
+            command(
+                &root,
+                &[
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.test",
+                    "commit",
+                    "-m",
+                    "fixture",
+                ],
+            )
+        };
+        write(&root.join("README.md"), b"fixture\n");
+        command(&root, &["add", "README.md"]);
+        commit();
+        let _scope = invocation_history_scope();
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+
+        // A valid ignored Git comment exceeds the cache's bounded metadata read.
+        // This must neither refuse the command nor reuse the earlier false result.
+        let mut grafts = vec![b'#'; 1024 * 1024 + 1];
+        grafts.push(b'\n');
+        write(&root.join(".git/info/grafts"), &grafts);
+        assert_eq!(
+            history_fingerprint(&root).unwrap_err().0,
+            "project_config_limit"
+        );
+        assert!(!git_has_legacy_knowledge(&root).unwrap());
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        command(&root, &["add", "GROUNDING.yaml"]);
+        commit();
+        assert!(git_has_legacy_knowledge(&root).unwrap());
+    }
+
+    #[test]
+    fn supplied_generated_config_does_not_decode_unrelated_policy() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        assert!(!project.generated_default(None).unwrap());
+        let config = project.defaults().unwrap();
+        fs::create_dir_all(&project.state).unwrap();
+        fs::write(&project.config_path, b"invalid json").unwrap();
+        assert!(!project.generated_default(Some(&config)).unwrap());
+        assert!(project.generated_default(None).is_err());
     }
 
     #[test]
@@ -539,6 +1734,187 @@ mod tests {
             "invalid_project_config"
         );
     }
+
+    #[test]
+    fn fresh_defaults_are_provisional_and_do_not_create_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        let config = project.config().unwrap();
+        assert!(project.generated_default(Some(&config)).unwrap() == false);
+        let record = project.record(Some(&config)).unwrap();
+        assert!(record.to_string_lossy().contains("-unbound-"));
+        assert!(!record.exists());
+        assert!(!project.config_path.exists());
+    }
+
+    #[test]
+    fn legacy_record_is_not_rebound_to_central_storage() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        assert!(!project.config_path.exists());
+        assert_eq!(project.record(None).unwrap(), root.join("GROUNDING.yaml"));
+    }
+
+    #[test]
+    fn legacy_git_record_and_missing_registration_are_not_bound() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("repo");
+        fs::create_dir(&root).unwrap();
+        command(&root, &["init", "-b", "main"]);
+        write(&root.join("GROUNDING.yaml"), b"known: {}\n");
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        assert!(!project.config_path.exists());
+        fs::remove_file(root.join("GROUNDING.yaml")).unwrap();
+        let missing = dir.path().join("missing.yaml");
+        write(
+            &project.common.as_ref().unwrap().join("kpopper-record"),
+            missing.to_str().unwrap().as_bytes(),
+        );
+        project.bind_for_mutation().unwrap();
+        assert!(!project.config_path.exists());
+    }
+
+    #[test]
+    fn deleted_head_record_remains_unavailable_legacy_location() {
+        for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path().canonicalize().unwrap().join("repo");
+            fs::create_dir(&root).unwrap();
+            command(&root, &["init", "-b", "main"]);
+            write(&root.join(name), b"known: {}\n");
+            command(&root, &["add", name]);
+            command(
+                &root,
+                &[
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.test",
+                    "commit",
+                    "-m",
+                    "record",
+                ],
+            );
+            fs::remove_file(root.join(name)).unwrap();
+            let project = Project::open(&root).unwrap();
+            assert_eq!(project.record(None).unwrap(), root.join(name));
+            assert!(!project.config_path.exists());
+            assert_eq!(
+                project.bind_for_mutation().unwrap_err().0,
+                "legacy_record_unavailable: restore the configured record before writing"
+            );
+        }
+    }
+
+    #[test]
+    fn first_mutation_persists_token_and_receipt_then_reuses_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        let first = project.config().unwrap();
+        let record = project.record(Some(&first)).unwrap();
+        let identity = map(&first).unwrap().get("default_identity").unwrap();
+        let token = text(map(identity).unwrap().get("token").unwrap()).unwrap();
+        assert!(uuid::Uuid::parse_str(token).is_ok());
+        assert!(
+            record
+                .parent()
+                .unwrap()
+                .join(".kpopper/owner.json")
+                .is_file()
+        );
+        project.bind_for_mutation().unwrap();
+        assert_eq!(project.record(None).unwrap(), record);
+    }
+
+    #[test]
+    fn interrupted_empty_binding_repairs_same_token_but_nonempty_refuses() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        let config = project.config().unwrap();
+        let record = project.record(Some(&config)).unwrap();
+        let parent = record.parent().unwrap();
+        let receipt = parent.join(".kpopper/owner.json");
+        let token = text(
+            map(map(&config).unwrap().get("default_identity").unwrap())
+                .unwrap()
+                .get("token")
+                .unwrap(),
+        )
+        .unwrap()
+        .to_owned();
+        fs::remove_file(&receipt).unwrap();
+        project.bind_for_mutation().unwrap();
+        let repaired: serde_json::Value =
+            serde_json::from_slice(&fs::read(&receipt).unwrap()).unwrap();
+        assert_eq!(repaired["token"].as_str(), Some(token.as_str()));
+        fs::remove_file(&receipt).unwrap();
+        fs::write(parent.join("unexpected"), b"foreign").unwrap();
+        assert_eq!(
+            project.bind_for_mutation().unwrap_err().0,
+            "generated_binding_candidate_conflict"
+        );
+    }
+
+    #[test]
+    fn explicit_rebind_repairs_completed_record_and_copy_has_no_source_context() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        project.bind_for_mutation().unwrap();
+        let config = project.config().unwrap();
+        let record = project.record(Some(&config)).unwrap();
+        fs::write(&record, b"known: {}\n").unwrap();
+        let receipt = Project::owner_receipt_path(&record);
+        fs::remove_file(&receipt).unwrap();
+        project.rebind_generated().unwrap();
+        assert!(receipt.is_file());
+        assert_eq!(
+            project.generated_source_workspace(&root).unwrap(),
+            Some(root.clone())
+        );
+
+        let copy = dir.path().join("copy");
+        fs::create_dir(&copy).unwrap();
+        fs::create_dir(copy.join(".kpopper")).unwrap();
+        fs::copy(&project.config_path, copy.join(".kpopper/project.json")).unwrap();
+        let copied = Project::open(&copy).unwrap();
+        assert_eq!(copied.generated_source_workspace(&copy).unwrap(), None);
+    }
+
+    #[test]
+    fn moved_directory_binding_updates_owner_anchor_without_copying_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().canonicalize().unwrap();
+        let old = base.join("old");
+        let new = base.join("new");
+        fs::create_dir(&old).unwrap();
+        let project = Project::open(&old).unwrap();
+        project.bind_for_mutation().unwrap();
+        fs::rename(&old, &new).unwrap();
+        let moved = Project::open(&new).unwrap();
+        moved.bind_for_mutation().unwrap();
+        let config = moved.config().unwrap();
+        assert_eq!(
+            text(
+                map(&map(&config).unwrap()["default_identity"])
+                    .unwrap()
+                    .get("owner_anchor")
+                    .unwrap()
+            )
+            .unwrap(),
+            new.to_string_lossy()
+        );
+    }
+
     #[test]
     fn common_policy_and_registered_record_are_shared_across_worktrees() {
         let dir = tempfile::tempdir().unwrap();
@@ -619,7 +1995,7 @@ mod tests {
         command(&root, &["init", "-b", "main"]);
         let paths = vec![root.join("GROUNDING.yaml")];
         let route = WriteRoute::capture(&paths, &root).unwrap();
-        assert!(route.pending_required().unwrap());
+        assert!(!route.pending_required().unwrap());
         route.verify().unwrap();
         let competing = OpenOptions::new()
             .read(true)

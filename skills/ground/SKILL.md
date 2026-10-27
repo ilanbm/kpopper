@@ -9,9 +9,9 @@ The record answers what is known here, with its sources, and what a change reach
 
 **Managed refresh:** trusted `KPOPPER_SOURCE_REFRESH` makes the prior revision historical. Use the complete fresh frame; if unavailable, reopen and read. The notice alone is not evidence. Use a delivered `revision_ref` for answer revision metadata or follow-up `session view --revision`, preserving `--context-session`. Cite original source IDs, not revision references; never guess a truncated hash. Unchanged inputs add no context.
 
-This method owns one known entry point: **`GROUNDING.yaml` in the project's working directory** - or
-`PROVENANCE.yaml`, the name records were born under before, read wherever it already is and never
-created again. What the record keeps beside itself - hypotheses, the brief, the recipes - sits in
+New, unconfigured projects bind **`GROUNDING.yaml` in private central Simple storage** on their first valid `add`.
+Existing records and explicit locations stay in place; legacy `PROVENANCE.yaml` is read but never created again.
+Hypotheses, the brief and recipes sit in
 `.kpopper/` next to the entry file, a dot-directory a plain `ls` or `rg --files` skips: list it as
 `ls -a .kpopper` or `rg --files --hidden`, and never conclude from a listing that skipped it that
 there are no hypotheses. A record moved by half, its files left under the earlier names, fails

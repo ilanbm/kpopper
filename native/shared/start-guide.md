@@ -14,40 +14,52 @@ files and prior agent sessions can all be sources. Code, commits and pull reques
 sources for software projects. An account or folder is a clue, not a complete definition of
 the project. Use the user's language and their names for the work.
 
-## Git projects: choose Simple or Advanced (experimental)
+## Git projects: Simple by default; Advanced is experimental
 
-`kpop board` reports both mode selection and Board publication. These are different choices:
+`kpop board` reports mode and Board publication separately. An unconfigured project uses
+private central **Simple** automatically on its first actual record mutation; there is no
+mode-choice prompt or ordinary mode announcement.
 Simple uses one shared project context; keeping the Board local still uses Advanced branch
-contexts. Never describe Board-local as Simple. The existing Git fallback is Advanced, but
-`mode_selected: false` means the owner has not configured a mode yet. Do not silently change
-an existing project because Advanced is now experimental.
+contexts. Never describe Board-local as Simple. Existing records retain their routing, and
+`mode_selected: false` is not a reason to ask a mode question. Do not silently change an
+existing project.
 
-At the first suitable moment in meaningful user work, if `mode_offer` is true, show the
-existing Simple/Advanced README illustration with an enlargement link and two mode choices.
-If `illustration` is null, run `kpop board illustration` to export the exact image bundled
-with this runtime and use its returned local path. Do not substitute an older release URL.
-Use the user's language. Explain the following before accepting the choice:
+The central record is `<central>/<slug>-<uuid>/GROUNDING.yaml`, with an absolute, non-empty
+`KPOPPER_PROJECTS_DIR` taking precedence over `~/.kpopper/projects`. These roots are validated
+only when fresh central storage is needed; invalid values do not break legacy or already-bound
+explicit paths. Read-only discovery may
+show `<slug>-unbound-<canonical-anchor-path-hash>/GROUNDING.yaml`, but that provisional path
+must never be created or adopted. Existing explicit, registered and nested legacy records win
+during unconfigured discovery; after a generated binding exists, a competing record is an
+ambiguity refusal, never a silent ownership switch. Central storage is local only: it provides
+no team/clone synchronization and never grants Board permission. Relative sources use the
+current owning workspace and retain actual path, digest and branch/revision provenance;
+duplicate matches are ambiguous, and outside an identified owner they remain unresolved.
 
-> **How should this Git project keep its knowledge?**
->
-> **Simple (recommended)** — all local sessions and worktrees share one record outside the
-> code checkouts. We can keep it at **SUGGESTED_PATH**, or use another location you choose.
-> The record is not tied to a branch and is not included in your code PRs. Keep exact commit
-> scope on code measurements; one shared context does not make every claim apply to every branch.
->
-> **Advanced (experimental)** — each branch carries its own `GROUNDING.yaml`, preserving
-> the knowledge that belongs to that code. Independent findings can also go on kpopper Board.
-> Parallel PRs can conflict in the record even when their code merges cleanly; resolving the
-> record can require another CI run. kpopper can help consolidate and resolve, but conflicting
-> claims still need a decision.
+On binding, an old same-slug store receives only a recovery hint; it is never read or adopted.
+An interrupted binding repairs itself only when the candidate is absent or empty (or already
+has a matching receipt). A completed nonempty candidate whose receipt is lost refuses ordinary
+mutation. Copied bindings refuse writes with the exact recovery command. A moved owner can be
+diagnosed read-only; explicit `kpop config --rebind` validates the move or receipt repair, while
+`--new-project` creates a fresh empty binding without copying data or history. Known
+`CLAUDE_CODE_REMOTE=true` requires
+an explicitly configured absolute durable `KPOPPER_PROJECTS_DIR` before a fresh central
+mutation; otherwise stop with an actionable no-write error. Do not claim universal VM
+detection or fall back to Advanced.
 
-Use `simple_record_suggestion` as a proposed location, not as permission to create it. The
+Do not show a Simple/Advanced choice during ordinary onboarding. The optional project-learning
+choices remain separate and may be offered only at a suitable moment.
+The old illustration and two-choice card remain available only when explaining an explicit
+Advanced transition or an existing legacy configuration; never present them as a required
+first-use choice for an unconfigured project.
+
+For legacy explicit Simple configuration, use `simple_record_suggestion` as a proposed location, not as permission to create it. The
 owner may choose another path outside every checkout. An ignored file in the primary checkout
 is not supported by the current Simple routing: ignore rules alone do not change branch
 ownership or stop tracking a tracked file. Do not offer that as a working alternative.
 For existing Simple projects, show the resolved location when asked and preserve it.
 
-**Apply Simple after its location is selected.** If no record or sidecar closure exists yet,
+**Apply an explicit Simple transition only when requested.** If no record or sidecar closure exists yet,
 create only the chosen parent directory, then run `kpop config --mode simple --record PATH
 --expected-generation N` and read `config --json` back. The setup creates no empty YAML;
 the first authorized sourced finding creates the record. If a record already exists, inspect
@@ -56,24 +68,23 @@ history, sources and hypotheses before switching; a missing destination, differi
 records or pending publication must not be bypassed. Do not silently copy only GROUNDING.yaml
 or discard a branch's knowledge. A blocked transition is not a completed mode selection.
 
-**Apply Advanced after the owner selects it.** Run `kpop config --mode advanced
+**Apply Advanced only after an explicit request.** Run `kpop experimental advanced` (with
+`kpop config --mode advanced` retained as a compatibility alias) through the validated
+transition path. Run `kpop config --mode advanced
 --expected-generation N`, using `--record GROUNDING.yaml` when transitioning from an external
 Simple record. Existing-record transitions still require preparation and reconciliation.
 Read `config --json` back; then handle the Board choice below. Advanced selection alone
 never grants remote publication permission.
 
-After actually showing the mode choices, run `kpop board shown --mode`. It records display,
+Do not run `kpop board shown --mode` for an unprompted default. It records display,
 not consent. Skipping or silence changes neither mode nor publication permission. Keep doing
 independent work; setup is not a prerequisite for the requested task. Never offer on a greeting,
 during urgent work or in a background task. Choices are shared by the repository's worktrees;
 a saved choice is not announced again. Mapping remains available on request without another
 onboarding questionnaire.
-A dismissed tutorial or disabled guidance does not permanently prevent recording. If no
-mode has been selected when the next authorized record write is needed, obtain just the
-concrete mode/location choice then. Do not repeat the tutorial or infer Advanced consent.
-When `mode_selected` is true and neither offer is due, respond only to the user's actual
-task. Do not mention the saved mode, record path or Board, or announce that setup is being
-skipped, unless the user asks about them.
+A dismissed tutorial or disabled guidance does not prevent recording. If an explicit Advanced
+transition is requested, obtain only the concrete validated configuration then. Never infer
+Advanced consent from silence.
 
 For a stopped Git merge, the companion consolidation interface is `kpop consolidate --resolve
 --dry-run`, then `kpop consolidate --resolve` after reviewing the proposed result. Resolve

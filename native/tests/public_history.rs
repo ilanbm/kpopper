@@ -75,6 +75,7 @@ fn public_first_write_and_report_update_preserve_dates_and_recovery_checkpoint()
             .env_remove("KPOPPER_AGENT_SESSION")
             .env_remove("CODEX_THREAD_ID")
             .env("KPOPPER_PRIVATE_HOME", root.join("private"))
+            .env("KPOPPER_PROJECTS_DIR", root.parent().unwrap().join("projects"))
             .env("XDG_STATE_HOME", root.join("state"))
             .env("KPOPPER_NATIVE_RESOURCES", &resources)
             .env("KPOPPER_NATIVE_CACHE", root.join("native-cache"));
@@ -87,10 +88,13 @@ fn public_first_write_and_report_update_preserve_dates_and_recovery_checkpoint()
         let output = command().args(args).output().unwrap();
         assert!(output.status.success(), "{} {}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     }
-    let capture = kpop_native::history_node_capture::Capture::read(&root).unwrap();
+    let project = kpop_native::project_modes::Project::open(&root).unwrap();
+    let record = project.record(None).unwrap();
+    let record_root = record.parent().unwrap();
+    let capture = kpop_native::history_node_capture::Capture::read(record_root).unwrap();
     assert_eq!(capture.document().to_json().unwrap()["known"]["p.hours"]["v"], 10);
-    let checkpoint = fs::read(root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap();
-    assert_eq!(checkpoint, fs::read(root.join("GROUNDING.yaml")).unwrap());
+    let checkpoint = fs::read(record_root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap();
+    assert_eq!(checkpoint, fs::read(&record).unwrap());
     let report = serde_json::json!({
         "event_id":"installed-update", "date":"2026-09-02",
         "source_quote":"There are 19 installed hours.", "source":"s.smoke",
@@ -106,12 +110,12 @@ fn public_first_write_and_report_update_preserve_dates_and_recovery_checkpoint()
     use std::io::Write;
     child.stdin.take().unwrap().write_all(serde_json::to_string(&report).unwrap().as_bytes()).unwrap();
     assert_eq!(ok(child.wait_with_output().unwrap())["state"], "applied");
-    let capture = kpop_native::history_node_capture::Capture::read(&root).unwrap();
+    let capture = kpop_native::history_node_capture::Capture::read(record_root).unwrap();
     let document = capture.document().to_json().unwrap();
     assert_eq!(document["meta"]["updated"], "2026-09-02");
     assert_eq!(document["known"]["p.hours"]["v"], 19);
     assert_eq!(document["known"]["p.hours"]["of"], "2026-09-02");
-    assert_eq!(fs::read(root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap(), fs::read(root.join("GROUNDING.yaml")).unwrap());
+    assert_eq!(fs::read(record_root.join(".kpopper/.history-local/accepted-node-view.yaml")).unwrap(), fs::read(&record).unwrap());
 }
 
 #[test]
