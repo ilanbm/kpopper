@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- New projects automatically keep one private local record under
+  `~/.kpopper/projects/<project>-<uuid>/`, or an absolute `KPOPPER_PROJECTS_DIR`.
+  The first valid record-creating write selects its location without a mode-choice
+  prompt or announcement. Reads and previews do not create a record or binding.
+- Existing records and explicit configurations retain their location and behavior.
+  Related worktrees share a stable project identity; copied projects require explicit
+  recovery before writing another owner's record. No existing record is migrated
+  automatically. Central storage does not provide remote synchronization or publication
+  permission. See [project knowledge storage](docs/project-modes.md) for recovery,
+  source resolution and remote-environment requirements.
+
+### Experimental
+
+- Advanced branch-specific storage is explicitly selected with
+  `kpop experimental advanced`. `config --mode advanced` remains a compatibility
+  alias. Existing Advanced projects continue to work; their record merge limitations
+  remain documented separately.
+
 ## 0.17.3 — 2026-10-26
 
 ### Fixed
