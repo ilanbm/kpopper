@@ -977,10 +977,11 @@ mod tests {
             project.config().unwrap().to_json().unwrap()["mode"],
             "simple"
         );
-        assert_eq!(
-            project.record(None).unwrap(),
-            dir.path().canonicalize().unwrap().join("GROUNDING.yaml")
-        );
+        let record = project.record(None).unwrap();
+        assert!(Project::is_provisional_record_path(&record));
+        assert!(record.is_absolute());
+        assert!(!record.starts_with(dir.path().canonicalize().unwrap()));
+        assert!(!record.exists());
         assert!(!project.config_path.exists());
         assert!(!project.state.exists());
     }

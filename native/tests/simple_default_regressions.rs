@@ -663,3 +663,81 @@ fn no_data_failed_binding_can_reset_but_unknown_state_is_preserved_and_refused()
         assert!(f.command(&["pull", "retry.valid"]).status.success());
     }
 }
+
+#[test]
+fn legacy_pending_only_project_keeps_read_context_and_local_first_birth() {
+    let f = Fixture::new();
+    // Build a valid pending queue using the supported Advanced writer, then
+    // retain the pending-only legacy shape: no policy and no primary record.
+    let configured = f.command(&["experimental", "advanced", "--json"]);
+    assert!(configured.status.success(), "{}", text(&configured));
+    let captured = f.command(&[
+        "add",
+        "p.pending",
+        "v=9",
+        "--shareability",
+        "project",
+        "--scope",
+        "project",
+        "--environment",
+        "workspace",
+        "--event-id",
+        "before-record",
+    ]);
+    assert!(captured.status.success(), "{}", text(&captured));
+    let packet: Value = serde_json::from_slice(&captured.stdout).unwrap();
+    assert_eq!(packet["state"], "captured");
+    fs::remove_file(f.policy()).unwrap();
+    assert!(!f.root.join("GROUNDING.yaml").exists());
+    let pending = f
+        .git(&["rev-parse", "refs/kpopper/pending_grounding"])
+        .stdout;
+    let config = f.command(&["config", "--json"]);
+    assert!(config.status.success(), "{}", text(&config));
+    let config: Value = serde_json::from_slice(&config.stdout).unwrap();
+    assert_eq!(config["project"]["mode"], "advanced");
+    assert_eq!(
+        config["record"],
+        f.root.join("GROUNDING.yaml").to_string_lossy().as_ref()
+    );
+    let pulled = f.command(&["pull", "p.pending"]);
+    assert!(pulled.status.success(), "{}", text(&pulled));
+    assert!(text(&pulled).contains("PENDING "));
+    assert!(text(&pulled).contains("p.pending: 9"));
+    assert!(!f.policy().exists());
+    assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+    f.add(&["add", "p.local", "v=1"]);
+    assert!(f.root.join("GROUNDING.yaml").is_file());
+    assert!(!f.policy().exists());
+    assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+    assert_eq!(
+        f.git(&["rev-parse", "refs/kpopper/pending_grounding"])
+            .stdout,
+        pending
+    );
+    assert!(f.command(&["pull", "p.local"]).status.success());
+}
+
+#[test]
+fn configured_simple_alias_preflights_the_selected_existing_record() {
+    let f = Fixture::new();
+    let actual = f.home.parent().unwrap().join("model/GROUNDING.yaml");
+    fs::create_dir_all(actual.parent().unwrap()).unwrap();
+    let configured = f.command(&[
+        "config",
+        "--mode",
+        "simple",
+        "--record",
+        actual.to_str().unwrap(),
+    ]);
+    assert!(configured.status.success(), "{}", text(&configured));
+    f.add(&["add", "p.x", "v=1"]);
+    let changed = f.command(&["set", "p.x", "2", "GROUNDING.yaml"]);
+    assert!(changed.status.success(), "{}", text(&changed));
+    let captured =
+        kpop_native::history_node_capture::Capture::read(actual.parent().unwrap()).unwrap();
+    let document = captured.document().to_json().unwrap();
+    assert_eq!(document["known"]["p.x"]["v"], 2);
+    assert!(!f.root.join("GROUNDING.yaml").exists());
+    assert!(fs::read_dir(&f.projects).unwrap().next().is_none());
+}

@@ -168,10 +168,7 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
                 && project.is_git()
                 && current == project.root
                 && !crate::project_modes::git_has_head_any_record(&project.root)?
-                && crate::project_modes::git_has_record_history(
-                    &project.root,
-                    &["GROUNDING.yaml", "PROVENANCE.yaml"],
-                )?
+                && crate::project_modes::git_has_legacy_knowledge(&project.root)?
                 && !other_orphan
                 && empty_legacy_history_residue(&path);
             if !legacy_birth {

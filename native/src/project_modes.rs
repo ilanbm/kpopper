@@ -341,6 +341,12 @@ pub(crate) fn git_has_record_history(root: &Path, names: &[&str]) -> Result<bool
     )?
     .is_some_and(|raw| !raw.is_empty()))
 }
+pub(crate) fn git_has_legacy_knowledge(root: &Path) -> Result<bool> {
+    Ok(
+        git_has_record_history(root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
+            || crate::pending_state::resolve(root, crate::pending_state::REF)?.is_some(),
+    )
+}
 fn require_fresh_store_override() -> Result<()> {
     if std::env::var_os("CLAUDE_CODE_REMOTE").is_some_and(|v| v == "true")
         && std::env::var_os("KPOPPER_PROJECTS_DIR").is_none()
@@ -490,10 +496,10 @@ impl Project {
                 }
             } else if !roots.iter().any(|r| r.join(name).exists())
                 && !git_has_head_record(&self.root, name)?
-                && git_has_record_history(&self.root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
+                && git_has_legacy_knowledge(&self.root)?
             {
-                // A branch that predates a record remains Advanced and births
-                // its own root record on first write; never mint central state.
+                // Existing history or pending knowledge keeps its Advanced
+                // context and local first birth; never mint central state.
                 record = name.to_owned();
                 mode = "advanced";
             } else if !roots.iter().any(|r| r.join(name).exists())
@@ -875,10 +881,10 @@ impl Project {
         }
         if self.is_git()
             && !git_has_head_any_record(&self.root)?
-            && git_has_record_history(&self.root, &["GROUNDING.yaml", "PROVENANCE.yaml"])?
+            && git_has_legacy_knowledge(&self.root)?
         {
-            // This branch legitimately predates the record. Keep it legacy
-            // Advanced/local; history birth creates the file with its entry.
+            // Legacy history or a durable pending queue keeps local birth on
+            // this branch; creating its first record never mints central state.
             return Ok(());
         }
         require(
@@ -1241,10 +1247,15 @@ impl WriteRoute {
         cwd: &Path,
         allow_creation: bool,
     ) -> Result<Self> {
-        let project = project_for(paths, cwd)?;
-        let first = resolved(paths.first().ok_or_else(|| error("missing_record_path"))?)?;
+        let selected = write_paths(paths, cwd)?;
+        let project = project_for(&selected, cwd)?;
+        let first = resolved(
+            selected
+                .first()
+                .ok_or_else(|| error("missing_record_path"))?,
+        )?;
         if !allow_creation && !first.is_file() {
-            return Err(error("mutation_record_not_owned"));
+            return Err(error("missing_record"));
         }
         let owned = if project.config_path.exists() {
             let config = project.config()?;

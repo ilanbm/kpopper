@@ -126,7 +126,16 @@ fn observation(paths: &[PathBuf], cwd: &Path, mode: ReadMode) -> Result<Routing>
                     "simple"
                 }),
             ),
-            ("record", s(name(&absolute(&paths[0])?)?)),
+            // Keep the legacy routing identity for an independently selected
+            // input; selecting custom.yml did not redefine the project record.
+            (
+                "record",
+                if project.is_git() {
+                    s("GROUNDING.yaml")
+                } else {
+                    s(name(&project.root.join("GROUNDING.yaml"))?)
+                },
+            ),
             ("publication", V::Null),
             ("generation", V::Integer(crate::value::Integer::new("0")?)),
         ])
