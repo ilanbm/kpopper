@@ -1,10 +1,8 @@
-# Two working modes
+# Project knowledge storage
 
-**Advanced mode is experimental.** Parallel branches can make compatible knowledge changes
-that still conflict as text in `GROUNDING.yaml`. A PR that already passed checks can then
-need a conflict-resolution commit and another CI run. The current format and defaults
-remain in place while [the merge design question](advanced-mode-merging.md) is open.
-That document records the alternatives, evidence, tradeoffs and unresolved questions.
+New projects keep one shared record in private central storage automatically. Ordinary
+work starts without choosing or announcing a mode. Existing records keep their location
+and policy; branch-specific storage remains available through experimental Advanced.
 
 The mode belongs to the project. Sessions do not choose different storage rules or create
 a new graph whenever they start.
@@ -26,7 +24,7 @@ the previous policy are retained as rollback evidence.
 ## New projects use Simple automatically
 
 An ordinary unconfigured project is routed to private central **Simple** storage on its
-first real record mutation. There is no mode-choice prompt or announcement. The record is
+first valid record-creating `add`. There is no mode-choice prompt or announcement. The record is
 stored at `<central>/<slug>-<uuid>/GROUNDING.yaml`, where `<central>` is the absolute,
 non-empty `KPOPPER_PROJECTS_DIR` value when configured, otherwise `~/.kpopper/projects`; the
 UUID is generated only for the first mutation. The root and HOME are validated lazily only
@@ -57,11 +55,18 @@ creates a fresh empty binding without copying data or history. Failed allocation
 unusable published binding; a proven no-data failed binding may be reset, while data-bearing
 records are never deleted or overwritten. Existing legacy records—including independent nested
 records discovered by the normal root walk—remain selectable, readable and writable before and
-after a generated root binding. Only a new root record or competing record-bearing state at the
-generated root is refused; nested records are not swallowed. A known legacy Git record found in
-history but absent on the current branch keeps its branch-local Advanced behavior; a record
+after a generated root binding. This nested precedence applies to generated bindings; a manually
+configured external record remains the selected target. Only a new root record or competing
+record-bearing state at the generated root is refused; nested records are not swallowed. A known
+legacy Git record found in history or at a verified sibling worktree root keeps its branch-local
+Advanced behavior when absent on the current branch; a record
 tracked at the current HEAD but missing physically is unavailable and must be restored or
 refused. No legacy record is converted automatically.
+
+Before allocating a new central record, supported record sidecars at verified worktree roots
+must be accounted for. Orphaned knowledge is refused for recovery; harmless locks, UI metadata
+and empty directories do not block creation. This check does not prevent an established legacy
+branch from continuing its own record.
 
 Ownership is anchored to the Git common directory (or the non-Git owner anchor) plus its
 matching binding token; the last writer's worktree path is diagnostic, not authority. On a
