@@ -14,6 +14,17 @@
   automatically. Central storage does not provide remote synchronization or publication
   permission. See [project knowledge storage](docs/project-modes.md) for recovery,
   source resolution and remote-environment requirements.
+- A plugin copy without its own native runtime now uses the machine-wide install of
+  the same version, so one install per version serves every copy a host makes, such
+  as a fresh copy per session or a cache per version. Only the copy's exact version
+  is used, from the directory the installer marked with it under
+  `~/.local/lib/kpopper`. Another version, an unmarked directory or a `kpop` found
+  on `PATH` never stands in, and hooks still never download or install a runtime.
+  When neither runtime is present, the session opener names both installs. Copies
+  of earlier versions keep their own resolver and still need a runtime in the copy.
+  On Windows the install is found when the hook shell's `HOME` is the directory
+  `install.ps1` installed under. See
+  [Install the native runtime](docs/plugin-runtime.md#install-the-native-runtime).
 
 ### Experimental
 
