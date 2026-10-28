@@ -2,6 +2,8 @@
 //!
 //! These cases deliberately exercise the executable rather than private resolver
 //! functions. The fixtures describe generated-owner source-root invariants.
+#[path = "support/git_path.rs"]
+mod git_path;
 #[path = "support/simple_runtime.rs"]
 mod simple_runtime;
 
@@ -290,7 +292,7 @@ fn linked_worktree_reads_current_branch_source_without_cross_worktree_fallback()
     fixture.git(&["commit", "-qm", "main source"]);
     fixture.add_source("s.readme", "README.md");
     let linked = fixture.root.parent().unwrap().join("linked");
-    let linked_text = linked.to_string_lossy().into_owned();
+    let linked_text = git_path::argument(&linked);
     let output = fixture.git(&["worktree", "add", "-q", "-b", "linked-source", &linked_text]);
     assert!(
         output.status.success(),

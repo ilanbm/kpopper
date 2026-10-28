@@ -1583,12 +1583,10 @@ mod tests {
                     assert_eq!(actual["record"], actual["config"]["record"]);
                     assert!(!Path::new(actual["record"].as_str().unwrap()).exists());
                     if c["name"] == "git-default" {
-                        assert!(actual["common"].as_str().unwrap().ends_with("/.git"));
+                        assert!(Path::new(actual["common"].as_str().unwrap()).ends_with(".git"));
                         assert!(
-                            actual["state"]
-                                .as_str()
-                                .unwrap()
-                                .ends_with("/.git/kpopper/project")
+                            Path::new(actual["state"].as_str().unwrap())
+                                .ends_with(Path::new(".git/kpopper/project"))
                         );
                     }
                 } else {
