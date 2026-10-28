@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 — 2026-10-28
 
 ### Changed
 
@@ -21,6 +21,13 @@
   `kpop experimental advanced`. `config --mode advanced` remains a compatibility
   alias. Existing Advanced projects continue to work; their record merge limitations
   remain documented separately.
+
+### Included changes
+
+- Fix cross-platform Git path fixtures
+- Default new projects to Simple storage; make Advanced experimental (#322)
+
+Decisions recorded: d.simple_default_project_storage
 
 ## 0.17.3 — 2026-10-26
 
