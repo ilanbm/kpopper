@@ -137,9 +137,10 @@ fn copied_linked_worktree_cannot_steal_live_owner_and_original_remains_writable(
     let envelope: Value = serde_json::from_slice(&where_output.stdout).unwrap();
     let original_record = PathBuf::from(envelope["output"].as_str().unwrap().trim());
     let linked = f.home.parent().unwrap().join("linked");
+    let linked_git = simple_runtime::git_path(&linked);
     let out = Command::new("git")
         .args(["worktree", "add", "-q", "-b", "writer"])
-        .arg(&linked)
+        .arg(&linked_git)
         .current_dir(&f.root)
         .output()
         .unwrap();
@@ -153,7 +154,7 @@ fn copied_linked_worktree_cannot_steal_live_owner_and_original_remains_writable(
     let before = fs::read(&original_record).unwrap();
     let remove = Command::new("git")
         .args(["worktree", "remove", "--force"])
-        .arg(&linked)
+        .arg(&linked_git)
         .current_dir(&f.root)
         .output()
         .unwrap();
@@ -735,7 +736,7 @@ fn orphaned_sibling_record_state_refuses_new_central_allocation() {
             "add",
             "-qb",
             "orphan-linked",
-            linked.to_str().unwrap(),
+            &simple_runtime::git_path(&linked),
         ]);
         let orphan = linked.join(member);
         fs::create_dir_all(orphan.parent().unwrap()).unwrap();
@@ -762,7 +763,7 @@ fn sibling_lock_and_ui_metadata_do_not_block_a_genuinely_new_project() {
         "add",
         "-qb",
         "metadata-linked",
-        linked.to_str().unwrap(),
+        &simple_runtime::git_path(&linked),
     ]);
     fs::create_dir_all(linked.join(".kpopper")).unwrap();
     fs::write(linked.join(".kpopper/project.lock"), b"").unwrap();
@@ -793,7 +794,7 @@ fn broken_sibling_does_not_block_established_legacy_writes() {
         "add",
         "-qb",
         "broken-linked",
-        linked.to_str().unwrap(),
+        &simple_runtime::git_path(&linked),
     ]);
     let orphan = linked.join(".kpopper/hypotheses/kept.yaml");
     fs::create_dir_all(orphan.parent().unwrap()).unwrap();
@@ -872,7 +873,7 @@ fn uncommitted_sibling_record_keeps_worktree_first_birth_local() {
         "add",
         "-qb",
         "legacy-linked",
-        linked.to_str().unwrap(),
+        &simple_runtime::git_path(&linked),
     ]);
     let born = f.command_at(&linked, &["add", "p.branch", "v=2"]);
     assert!(born.status.success(), "{}", text(&born));
@@ -1052,7 +1053,7 @@ fn bound_commands_skip_history_and_unbound_commands_probe_once() {
         let trace = f.home.join(format!("{label}-git-trace.jsonl"));
         let output = f
             .builder_at(&f.root, &args)
-            .env("GIT_TRACE2_EVENT", &trace)
+            .env("GIT_TRACE2_EVENT", simple_runtime::git_path(&trace))
             .output()
             .unwrap();
         assert!(output.status.success(), "{label}: {}", text(&output));
