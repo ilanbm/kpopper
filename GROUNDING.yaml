@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-10-27
+  updated: 2026-10-28
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -1946,6 +1946,21 @@ known:
     name: "Entry ids that two sessions chose for different things"
     from: run.multisession_survey
     at: "the namespaces the four writers added that day, compared by hand"
+
+  m.release_018_windows_fixture_failures:
+    name: "Fixture path failures in the initial 0.18.0 Windows candidate"
+    v: 8
+    from: run.release_018_windows_baseline
+    of: "2026-10-27"
+    at: "Six worktree setup failures passed Windows verbatim paths to Git; one trace test could not
+         read the GIT_TRACE2_EVENT file; one library fixture required literal Unix path separators.
+         These are the failures of the named initial candidate, not the current release status."
+    remediation: "Keep canonical paths for filesystem and product assertions, use the existing
+                  support/git_path.rs formatter at Git argv/trace boundaries, and compare Path
+                  components. Local macOS validation passed the affected library case at c98562b3
+                  and22 regression plus11 source tests at2267ce37; this does not establish Windows
+                  execution. The existing recovery shortcut excludes this library/shared-fixture
+                  change, so publication requires a fresh normal candidate check."
 
   m.remeasure.midnight_failures:
     v: 3
@@ -9086,6 +9101,14 @@ sources:
     of: "this record as main held it, the page fixture, and two live records outside this
          repository, 2026-09-03"
     read: "2026-09-03"
+
+  run.release_018_windows_baseline:
+    name: "Initial 0.18.0 Windows candidate validation"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/40496920958/job/122164746037"
+    read: "2026-10-28"
+    of: "Candidate 7667ab723e425f650d6728cee054f70ede4782a1, executed 2026-10-27. Windows reported
+         1727 executed tests:1719 passed,8 failed,60 skipped. All five package/install jobs and the
+         other four native test platforms succeeded."
 
   run.simple_default_installed_acceptance:
     name: "Installed archive acceptance for automatic central storage"
