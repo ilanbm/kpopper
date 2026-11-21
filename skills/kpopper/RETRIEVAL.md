@@ -58,9 +58,17 @@ claim's state comes from the existing reader; unevaluated falsifiers remain unkn
 Rule references are followed as dependencies. Structured rules are computed by the shared
 Lean core; legacy textual rules remain unevaluated. Search does not infer formulas from prose.
 
-The SQLite FTS5 index exists only in the command's memory and is rebuilt from authoritative
-inputs. The shared reader may maintain its derived parse cache outside the project; use
-`kpop --no-cache search ...` to bypass it. Search does not change records or ingestion
-state and makes no network/model calls.
+The first default live search creates a private SQLite FTS5 index in the native cache.
+After a record write, the publisher refreshes changed index rows and affected calculations
+after releasing the record locks. Search verifies current inputs, including referenced
+local files edited outside kpopper. Frozen reads and searches with explicit source grants,
+state directories or profiles use a fresh view. Use `kpop --no-cache search ...` for a
+full comparison. Search leaves the record and ingestion state intact and runs locally.
+If the cache is busy or unavailable, the same query can use a fresh in-memory index.
+
+Ordinary records reuse entries through their dependency closure. Changes to field roles,
+conflicting layers or an unsupported expression require the full projection. Core
+assessments rebind findings to the current snapshot and reuse verified computation
+responses only for identical evaluator inputs and implementations.
 The tool call and returned text still occupy model context. Keep reads focused, batch
 related updates, and surface only findings that matter to the user's work.

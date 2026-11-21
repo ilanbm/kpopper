@@ -455,6 +455,7 @@ fn dispatch_with_runtime(
     })
 }
 pub fn run(options: &Options, cwd: &Path) -> Result<String> {
+    let _index = crate::public_search::writing(cwd);
     let output = dispatch_with_runtime(options, cwd, None, &mut |_| Ok(()))?;
     if output.code == 0 {
         Ok(output.stdout)

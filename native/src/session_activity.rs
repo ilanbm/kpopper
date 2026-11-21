@@ -46,6 +46,7 @@ fn choose_temporary_directory(candidates: &[Option<PathBuf>], system: PathBuf) -
 }
 
 pub fn published(root: &Path, files: &[FileImage], subjects: Option<&BTreeSet<String>>) {
+    crate::public_search::published(root, files);
     let sid = env::var("KPOPPER_AGENT_SESSION")
         .ok()
         .filter(|s| !s.is_empty())

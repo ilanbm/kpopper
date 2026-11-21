@@ -706,6 +706,8 @@ impl Runtime {
         )?;
         let mut payload = Vec::new();
         let mut protocols = Vec::new();
+        let mut input_bytes: usize = 0;
+        let mut cached_bytes: usize = 0;
         for (request_index, request) in requests.iter().enumerate() {
             require(request_index < bounds.batch_requests, "batch_request_limit")?;
             let implementation = self.implementation_for(request)?;
@@ -714,39 +716,60 @@ impl Runtime {
             if implementation["protocol"] != "KP4" {
                 line.push(b'\n');
             }
+            input_bytes = input_bytes
+                .checked_add(line.len())
+                .ok_or_else(|| Error("batch_input_limit".into()))?;
             require(
-                line.len() <= MAX_REQUEST_BYTES && payload.len() + line.len() <= bounds.input_bytes,
+                line.len() <= MAX_REQUEST_BYTES && input_bytes <= bounds.input_bytes,
                 "batch_input_limit",
             )?;
-            payload.extend(line);
-            protocols.push(if implementation["protocol"] == "KP3" {
+            let (key, frame) = crate::search_index::lookup_frame(&implementation, &line)
+                .map(|(key, frame)| (Some(key), frame))
+                .unwrap_or_default();
+            if let Some(cached) = &frame {
+                cached_bytes = cached_bytes
+                    .checked_add(cached.len())
+                    .ok_or_else(|| Error("output_limit".into()))?;
+                require(cached_bytes <= bounds.output_bytes, "output_limit")?;
+            } else {
+                payload.extend(line);
+            }
+            let protocol = if implementation["protocol"] == "KP3" {
                 "KR3"
             } else if implementation["protocol"] == "KP4" {
                 "KR4"
             } else {
                 "KR2"
-            });
+            };
+            protocols.push((protocol, key, frame));
         }
-        let output = run_bounded(
-            &self.binary,
-            &[],
-            payload,
-            bounds.timeout,
-            bounds.output_bytes,
-        )?;
+        require(cached_bytes <= bounds.output_bytes, "output_limit")?;
+        let output = if payload.is_empty() {
+            Vec::new()
+        } else {
+            run_bounded(
+                &self.binary,
+                &[],
+                payload,
+                bounds.timeout,
+                bounds.output_bytes - cached_bytes,
+            )?
+        };
         require(
             self.verify_files()? == self.observed,
             "runtime changed during evaluation",
         )?;
         let mut position = 0;
         let mut decoded = Vec::new();
-        for protocol in protocols {
-            let size = output[position..]
+        let mut fresh = Vec::new();
+        for (protocol, key, cached) in protocols {
+            let input = cached.as_deref().unwrap_or(&output[position..]);
+            let size = input
                 .iter()
                 .position(|b| *b == b'\n')
                 .ok_or_else(|| Error("native response count does not match requests".into()))?;
-            if protocol == "KR4" {
-                let header = &output[position..position + size];
+            let consumed = if protocol == "KR4" {
+                let header = &input[..size];
                 require(
                     header.starts_with(b"KR4 "),
                     "native response protocol does not match request",
@@ -762,26 +785,32 @@ impl Runtime {
                 let length = length
                     .parse::<usize>()
                     .map_err(|_| Error("truncated native KR4 frame".into()))?;
-                let stop = (position + size + 1)
+                let stop = (size + 1)
                     .checked_add(length)
                     .ok_or_else(|| Error("truncated native KR4 frame".into()))?;
                 require(
-                    stop < output.len() && output[stop] == b'\n',
+                    stop < input.len() && input[stop] == b'\n',
                     "truncated native KR4 frame",
                 )?;
-                decoded.push(reasoning_transport::decode_response(
-                    &output[position..=stop],
-                )?);
-                position = stop + 1;
-                continue;
+                decoded.push(reasoning_transport::decode_response(&input[..=stop])?);
+                stop + 1
+            } else {
+                let frame = &input[..size];
+                require(
+                    frame.split(|b| *b == b'\t').next() == Some(protocol.as_bytes()),
+                    "native response protocol does not match request",
+                )?;
+                decoded.push(reasoning_transport::decode_response(frame)?);
+                size + 1
+            };
+            if cached.is_some() {
+                require(input.len() == consumed, "invalid cached frame length")?;
+            } else {
+                if let Some(key) = key {
+                    fresh.push((key, position..position + consumed));
+                }
+                position += consumed;
             }
-            let frame = &output[position..position + size];
-            require(
-                frame.split(|b| *b == b'\t').next() == Some(protocol.as_bytes()),
-                "native response protocol does not match request",
-            )?;
-            decoded.push(reasoning_transport::decode_response(frame)?);
-            position += size + 1;
         }
         require(
             position == output.len(),
@@ -799,6 +828,9 @@ impl Runtime {
                         .ok_or_else(|| Error("invalid native response".into()))?,
                 )?;
             }
+        }
+        for (key, range) in fresh {
+            crate::search_index::save_frame(key, &output[range]);
         }
         Ok(decoded)
     }

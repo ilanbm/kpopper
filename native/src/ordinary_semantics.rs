@@ -178,6 +178,10 @@ pub(crate) fn number(v: &V) -> Option<f64> {
 pub(crate) fn json_value(v: &V, _depth: usize) -> Result<J> {
     v.json_value()
 }
+thread_local! { static FAILED_REQUESTS: std::cell::Cell<u64> = const {std::cell::Cell::new(0)}; }
+pub(crate) fn failed_requests() -> u64 {
+    FAILED_REQUESTS.get()
+}
 /// Request legacy computations without promoting the document or creating an assessment.
 /// Runtime failure is returned as an unavailable result, as in expressions.compute.
 pub fn compute(
@@ -201,7 +205,12 @@ pub fn compute(
         let request = json!({"operation":"compute","record":nodes,"predicate":pred.as_ref().map(|p|json_value(p,0)).transpose()?.unwrap_or(J::Null),"dependencies":predicate.map(refs).unwrap_or_default()});
         program.request(&request, &OperationalBounds::default())
     })();
-    result.unwrap_or_else(|e|json!({"values":{},"predicate":{"holds_on_current_values":null,"reason":e.0},"error":e.0}))
+    result.unwrap_or_else(|e| {
+        if program.is_some() {
+            FAILED_REQUESTS.set(FAILED_REQUESTS.get().wrapping_add(1));
+        }
+        json!({"values":{},"predicate":{"holds_on_current_values":null,"reason":e.0},"error":e.0})
+    })
 }
 pub fn value_of(
     raw: &Map,
@@ -323,6 +332,10 @@ pub(crate) struct EvaluationCache {
     // Scan its structured falsifiers once instead of launching the full program
     // again from every surface and for every judgment.
     predicates: OnceCell<BTreeMap<String, PredicateEvaluation>>,
+    focused: bool,
+    search_values: bool,
+    values: std::cell::RefCell<BTreeMap<String, J>>,
+    focused_predicates: std::cell::RefCell<BTreeMap<String, PredicateEvaluation>>,
 }
 
 pub(crate) type SharedEvaluation = Rc<EvaluationCache>;
@@ -397,6 +410,29 @@ impl<'a> Reader<'a> {
         Self::with_roles(document, fields, runtime)
     }
 
+    pub(crate) fn search_inputs(document: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
+        let fields = Self::roles(document)?.ok_or_else(|| F::unreadable(document))?;
+        Self::inputs_with_roles(document, fields, runtime)
+    }
+
+    pub(crate) fn prepare_search(&mut self, counts: bool, focused: bool) -> Result<()> {
+        self.evaluation = Rc::new(EvaluationCache {
+            focused,
+            search_values: true,
+            ..Default::default()
+        });
+        if counts {
+            let counts = crate::ordinary_domain_counts::builtins(self)?;
+            self.raw.extend(counts);
+            self.evaluation = Rc::new(EvaluationCache {
+                focused,
+                search_values: true,
+                ..Default::default()
+            });
+        }
+        Ok(())
+    }
+
     /// The field roles of an ordinary record, or none when they cannot be read.
     fn roles(document: &V) -> Result<Option<Map>> {
         require(
@@ -409,6 +445,13 @@ impl<'a> Reader<'a> {
     }
 
     fn with_roles(document: &V, fields: Map, runtime: Option<&'a Runtime>) -> Result<Self> {
+        let mut reader = Self::inputs_with_roles(document, fields, runtime)?;
+        let builtins = crate::ordinary_domain_counts::builtins(&reader)?;
+        reader.raw.extend(builtins);
+        reader.evaluation = Rc::new(EvaluationCache::default());
+        Ok(reader)
+    }
+    fn inputs_with_roles(document: &V, fields: Map, runtime: Option<&'a Runtime>) -> Result<Self> {
         let raw = map(document)?
             .iter()
             .filter(|(k, _)| !["meta", "schema", "record", "also"].contains(&k.as_str()))
@@ -447,7 +490,7 @@ impl<'a> Reader<'a> {
                 }
             }
         }
-        let mut reader = Self {
+        Ok(Self {
             document: document.clone(),
             fields,
             raw,
@@ -456,11 +499,7 @@ impl<'a> Reader<'a> {
             knowledge_conflicts: BTreeSet::new(),
             runtime,
             evaluation: Rc::new(EvaluationCache::default()),
-        };
-        let builtins = crate::ordinary_domain_counts::builtins(&reader)?;
-        reader.raw.extend(builtins);
-        reader.evaluation = Rc::new(EvaluationCache::default());
-        Ok(reader)
+        })
     }
     /// Supply already captured hypothesis documents and conflict IDs explicitly.
     /// These affect reader counters/guards; they never activate accepted history.
@@ -500,11 +539,58 @@ impl<'a> Reader<'a> {
         &self.raw
     }
     pub fn value(&self, key: &str) -> Result<V> {
+        if self.evaluation.search_values
+            && self
+                .raw
+                .get(key)
+                .and_then(|v| map(v).ok())
+                .is_some_and(|m| matches!(m.get("rule"), Some(V::Map(_))))
+        {
+            return V::from_json(&self.calculation(key)["value"]);
+        }
         value_of(&self.raw, &self.ids, key, self.program())
+    }
+    pub(crate) fn calculation(&self, id: &str) -> J {
+        if let Some(result) = self.evaluation.values.borrow().get(id) {
+            return result.clone();
+        }
+        let computed = if self.evaluation.focused {
+            let (raw, ids) = crate::search_dependencies::calculation_inputs(
+                &self.raw,
+                &self.ids,
+                vec![id.to_owned()],
+            );
+            compute(&raw, &ids, None, self.program())
+        } else {
+            compute(&self.raw, &self.ids, None, self.program())
+        };
+        if let Some(values) = computed["values"].as_object() {
+            let mut cached = self.evaluation.values.borrow_mut();
+            cached.extend(values.iter().map(|(k, v)| (k.clone(), v.clone())));
+        }
+        self.evaluation.values.borrow().get(id).cloned().unwrap_or_else(||
+            json!({"value":null,"reason":computed.get("error").cloned().unwrap_or(json!("unavailable"))}))
     }
     pub fn predicate(&self, pred: &V) -> Result<Option<bool>> {
         if let Some(result) = self.cached_predicate(pred) {
             return Ok(result.holds);
+        }
+        if self.evaluation.focused
+            && let V::Text(source) = pred
+            && let Some(parts) = CMP.captures(source)
+            && [&parts[1], parts[3].trim()].iter().any(|id| {
+                self.raw
+                    .get(id)
+                    .and_then(|v| map(v).ok())
+                    .is_some_and(|m| matches!(m.get("rule"), Some(V::Map(_))))
+            })
+        {
+            let (raw, ids) = crate::search_dependencies::calculation_inputs(
+                &self.raw,
+                &self.ids,
+                vec![parts[1].to_owned(), parts[3].trim().to_owned()],
+            );
+            return evaluate(pred, &raw, &ids, self.program());
         }
         evaluate(pred, &self.raw, &self.ids, self.program())
     }
@@ -514,6 +600,24 @@ impl<'a> Reader<'a> {
             return None;
         }
         let program = self.program()?;
+        if self.evaluation.focused {
+            let key = predicate_key(pred).ok()?;
+            if let Some(result) = self.evaluation.focused_predicates.borrow().get(&key) {
+                return Some(result.clone());
+            }
+            let (raw, ids) =
+                crate::search_dependencies::calculation_inputs(&self.raw, &self.ids, refs(pred));
+            let result = compute(&raw, &ids, Some(pred), Some(program));
+            let value = PredicateEvaluation {
+                holds: result["predicate"]["holds_on_current_values"].as_bool(),
+                error: result["error"].as_str().unwrap_or("").to_owned(),
+            };
+            self.evaluation
+                .focused_predicates
+                .borrow_mut()
+                .insert(key, value.clone());
+            return Some(value);
+        }
         let outcomes = self
             .evaluation
             .predicates

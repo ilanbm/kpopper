@@ -12,6 +12,8 @@ use serde_json::{Value as J, json};
 use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, clap::Args)]
 pub struct Options {
+    #[arg(skip)]
+    pub no_cache: bool,
     #[arg(allow_negative_numbers = true)]
     pub query: Option<String>,
     #[arg(long)]
@@ -38,6 +40,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            no_cache: false,
             query: None,
             record: None,
             state_dir: None,
@@ -95,7 +98,59 @@ pub struct Output {
     pub code: i32,
 }
 pub fn corpus(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
-    search_corpus::corpus(options, cwd, mode)
+    let record = search_corpus::record(options, cwd)?;
+    search_corpus::corpus(&record, options, cwd, mode, None)
+}
+
+thread_local! {
+    static WRITE_INDEX: std::cell::RefCell<(usize,std::collections::BTreeSet<PathBuf>)> = Default::default();
+    static DISABLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[doc(hidden)]
+pub fn disable_write_cache(disabled: bool) {
+    DISABLED.set(disabled);
+}
+
+/// Enclose publication, never its locks. Nested paths join the outer operation.
+pub(crate) struct WriteIndex<'a>(&'a Path);
+pub(crate) fn writing(cwd: &Path) -> WriteIndex<'_> {
+    WRITE_INDEX.with_borrow_mut(|state| state.0 += 1);
+    WriteIndex(cwd)
+}
+
+pub(crate) fn published(root: &Path, files: &[crate::history_transaction::FileImage]) {
+    if DISABLED.get() {
+        return;
+    }
+    WRITE_INDEX.with_borrow_mut(|state| {
+        if state.0 != 0 {
+            for file in files {
+                state.1.insert(root.join(&file.path));
+            }
+        }
+    });
+}
+impl Drop for WriteIndex<'_> {
+    fn drop(&mut self) {
+        let mut paths = WRITE_INDEX.with_borrow_mut(|state| {
+            state.0 -= 1;
+            if state.0 == 0 {
+                std::mem::take(&mut state.1)
+            } else {
+                Default::default()
+            }
+        });
+        if paths.is_empty() {
+            return;
+        }
+        if let Ok(default) = crate::public_workspace::records(self.0) {
+            paths.extend(default);
+        }
+        for path in paths {
+            refresh(&path, self.0);
+        }
+    }
 }
 fn validate(options: &Options) -> Result<()> {
     if options.reference.as_deref().is_some_and(|r| !r.is_empty()) {
@@ -122,7 +177,42 @@ fn validate(options: &Options) -> Result<()> {
     Ok(())
 }
 fn run_validated(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
-    let data = corpus(options, cwd, mode)?;
+    let record = search_corpus::record(options, cwd)?;
+    let mut index = (!options.no_cache
+        && mode == ReadMode::Live
+        && options.source_roots.is_empty()
+        && options.state_dir.is_none()
+        && options.profile.is_none())
+    .then(|| {
+        crate::project_modes::write_paths(std::slice::from_ref(&record), cwd)
+            .ok()
+            .and_then(|paths| crate::search_index::Index::open(paths.first()?, true))
+    })
+    .flatten();
+    let mut attempts = 0;
+    let data = loop {
+        match search_corpus::corpus(&record, options, cwd, mode, index.as_mut()) {
+            Err(e)
+                if attempts < 2
+                    && matches!(
+                        e.message.as_str(),
+                        "snapshot_changed"
+                            | "record changed during search; retry"
+                            | "capture state changed during search; retry"
+                            | "source changed during search; retry"
+                    ) =>
+            {
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(20 * attempts));
+            }
+            result => break result?,
+        }
+    };
+    let hits = index.as_mut().and_then(|i| {
+        i.synchronize(&data, options.query.as_deref())
+            .ok()
+            .flatten()
+    });
     if let Some(reference) = options.reference.as_deref().filter(|r| !r.is_empty()) {
         Ok(crate::public_search_rank::read(
             &data,
@@ -132,12 +222,41 @@ fn run_validated(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
             options.length,
         )?)
     } else {
-        Ok(crate::public_search_rank::search(
+        Ok(crate::public_search_rank::search_ranked(
             data,
             options.query.as_deref().unwrap_or(""),
             options.limit,
             options.chars,
+            hits,
         )?)
+    }
+}
+
+/// Refresh a previously searched default view after canonical publication.
+/// Explicit grants and frozen reads never enter this shared default index.
+pub(crate) fn refresh(record: &Path, cwd: &Path) {
+    let options = Options {
+        record: Some(record.to_owned()),
+        ..Default::default()
+    };
+    for _ in 0..3 {
+        let Some(mut index) = crate::search_index::Index::open(record, false) else {
+            return;
+        };
+        match search_corpus::corpus(record, &options, cwd, ReadMode::Live, Some(&mut index)) {
+            Ok(data) if matches!(index.synchronize(&data, None), Ok(None)) => continue,
+            Err(e)
+                if matches!(
+                    e.message.as_str(),
+                    "snapshot_changed"
+                        | "record changed during search; retry"
+                        | "capture state changed during search; retry"
+                ) =>
+            {
+                continue;
+            }
+            _ => return,
+        }
     }
 }
 pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {

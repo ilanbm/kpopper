@@ -255,6 +255,9 @@ pub mod public_remeasure;
 pub mod public_search;
 mod public_search_rank;
 pub mod public_session;
+mod report_basis;
+mod search_dependencies;
+mod search_index;
 
 pub mod application_cli;
 pub mod followup_daily;

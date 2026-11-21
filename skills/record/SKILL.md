@@ -11,6 +11,10 @@ In ordinary conversation, name the product **kpopper** and describe the action i
 
 **For a source report in an existing single-file record, use `kpop update --file -` where POSIX file locking is available.** Send one `updates` list with everything already known from that report; one item is enough. Record it while the context is fresh, without waiting for unrelated facts or session end. Read the returned state before relying on it. **On native Windows, use ordinary `add`/`set` instead;** verify each result, since separate writes are not an atomic batch. A locking error means the report was not retained. [INGESTION.md](../kpopper/INGESTION.md) gives the contract and layouts. Structured expressions and snapshots require compatible CLI/plugin/CI versions; check [reader compatibility](../kpopper/EXPRESSIONS.md#reader-compatibility) before writing. First writes, other layouts and deliberate judgment reviews retain their ordinary commands.
 
+When sessions are editing independent entries, `kpop update --prepare --file report.json`
+can bind the report to its targets, sources and named premises. Apply the returned envelope
+with `kpop update --file`. See the concurrent report example in [INGESTION.md](../kpopper/INGESTION.md).
+
 ## The first write
 
 New, unconfigured projects use private central Simple without a mode question or announcement. The first valid record-creating `add` binds a UUID location; read-only previews create no central state. Advanced requires explicit Experimental selection. Preserve legacy records and explicit paths until a validated transition; local storage grants no Board permission.

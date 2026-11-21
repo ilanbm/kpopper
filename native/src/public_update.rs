@@ -34,6 +34,8 @@ const FIELDS: &[&str] = &[
     "reason",
     "updates",
     "record_sha256",
+    "write_basis",
+    "read_ids",
     "shareability",
     "privacy",
     "scope",
@@ -92,6 +94,35 @@ fn parse(raw: &[u8]) -> Result<Report> {
         &format!("unknown envelope fields: {}", unknown.join(", ")),
     )?;
     let quote = required_text(top, "source_quote")?;
+    if let Some(ids) = top.get("read_ids") {
+        crate::require(
+            ids.as_array().is_some_and(|items| {
+                items.len() <= 256
+                    && items
+                        .iter()
+                        .all(|v| v.as_str().is_some_and(|s| !s.is_empty() && s.len() <= 1024))
+            }),
+            "read_ids must contain up to 256 nonempty record IDs",
+        )?;
+        crate::require(
+            top.get("write_basis").is_some() || top.get("record_sha256").is_some_and(J::is_string),
+            "read_ids require a prepared write_basis or the record_sha256 from your read",
+        )?;
+    }
+    if let Some(basis) = top.get("write_basis") {
+        crate::require(
+            !top.contains_key("record_sha256"),
+            "choose either write_basis or record_sha256",
+        )?;
+        crate::require(
+            basis["format"] == "entries/v1"
+                && basis["record"].is_string()
+                && basis["route"].is_string()
+                && basis["schema"].is_string()
+                && basis["entries"].is_object(),
+            "invalid scoped report basis",
+        )?;
+    }
     if let Some(event) = top.get("event_id").filter(|v| !v.is_null()) {
         let event = event
             .as_str()
@@ -204,6 +235,41 @@ pub fn validate_report(raw: &[u8]) -> Result<J> {
 /// Inspect one routed target without retaining an event or applying a report.
 pub fn capture_target(envelope: &J, record: &Path, cwd: &Path) -> Result<J> {
     let report = parse(&serde_json::to_vec(envelope)?)?;
+    inspect_report(&report, record, cwd, false)
+}
+
+/// Capture the report's read and write set while its original record pin still
+/// holds. A subsequent disjoint publication can then use the prepared envelope.
+pub fn prepare(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output> {
+    let bytes = if options.file == "-" {
+        stdin
+            .ok_or_else(|| error("missing standard input"))?
+            .to_vec()
+    } else {
+        fs::read(cwd.join(&options.file))?
+    };
+    let report = parse(&bytes)?;
+    crate::require(
+        report.raw.get("write_basis").is_none(),
+        "a prepared report must be reread before preparing again",
+    )?;
+    let selected = if let Some(path) = &options.record {
+        vec![cwd.join(path)]
+    } else {
+        crate::public_workspace::records(cwd)?
+    };
+    crate::require(selected.len() == 1, "choose one record for the report")?;
+    let basis = inspect_report(&report, &selected[0], cwd, true)?;
+    let mut result = report.raw;
+    result.as_object_mut().unwrap().remove("record_sha256");
+    result["write_basis"] = basis;
+    Ok(Output {
+        text: format!("{}\n", serde_json::to_string(&result)?),
+        code: 0,
+    })
+}
+
+fn inspect_report(report: &Report, record: &Path, cwd: &Path, prepare: bool) -> Result<J> {
     let original = vec![cwd.join(record)];
     let paths = crate::project_modes::write_paths(&original, cwd)?
         .iter()
@@ -211,13 +277,28 @@ pub fn capture_target(envelope: &J, record: &Path, cwd: &Path) -> Result<J> {
         .collect::<Result<Vec<_>>>()?;
     crate::require(paths.len() == 1, "ingestion requires one record path")?;
     let routing = crate::source_capture::routing_observation(&original, cwd)?;
+    let inspect = |document: &V, bytes: &[u8]| -> Result<J> {
+        let snapshot = crate::ingestion_target::snapshot(document, bytes, &report.raw)?;
+        let record = crate::report_basis::record_key(&paths[0])?;
+        let route = routing.digest()?;
+        if let Some(b) = report.raw.get("write_basis") {
+            crate::require(
+                b["record"] == record && b["route"] == route,
+                "write conflict: report project or record changed",
+            )?;
+        }
+        if !prepare {
+            return Ok(snapshot);
+        }
+        let mut basis = crate::report_basis::for_report(document, &report.raw)?;
+        basis["record"] = json!(record);
+        basis["route"] = json!(route);
+        basis["format"] = json!("entries/v1");
+        Ok(basis)
+    };
     if crate::history_node_publication::selected(&paths[0])? {
         let captured = crate::history_node_capture::Capture::read(paths[0].parent().unwrap())?;
-        let snapshot = crate::ingestion_target::snapshot(
-            captured.document(),
-            captured.entry_bytes(),
-            &report.raw,
-        )?;
+        let snapshot = inspect(captured.document(), captured.entry_bytes())?;
         captured.verify_current(paths[0].parent().unwrap())?;
         crate::require(
             crate::source_capture::routing_observation(&original, cwd)? == routing,
@@ -239,8 +320,7 @@ pub fn capture_target(envelope: &J, record: &Path, cwd: &Path) -> Result<J> {
         .files
         .get(&paths[0])
         .ok_or_else(|| error("snapshot_changed"))?;
-    let snapshot =
-        crate::ingestion_target::snapshot(&captured.source.projected(), bytes, &report.raw)?;
+    let snapshot = inspect(&captured.source.projected(), bytes)?;
     inventory.verify()?;
     crate::require(
         crate::project_modes::write_paths(&original, cwd)?
@@ -1037,6 +1117,7 @@ impl ReportAttribution {
         Self::new(report, event, journal["writer_session"].as_str())
     }
     fn published(&self, root: &Path, files: &[crate::history_transaction::FileImage]) {
+        crate::public_search::published(root, files);
         if let Some(writer) = &self.writer {
             crate::session_activity::published_for_session(writer, root, files, &self.subjects);
         }
@@ -1220,6 +1301,7 @@ fn run_bound_as(
     expected_target: Option<&J>, supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
     recording_session: Option<&str>, probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<Output> {
+    let _index = crate::public_search::writing(cwd);
     let raw = if options.file == "-" {
         stdin
             .ok_or_else(|| error("missing standard input"))?
@@ -1239,6 +1321,14 @@ fn run_bound_as(
         "ingestion requires one record path",
     )?;
     let record = route.paths()[0].clone();
+    if let Some(b) = report.raw.get("write_basis") {
+        crate::require(
+            b["record"] == crate::report_basis::record_key(&record)?
+                && b["route"]
+                    == crate::source_capture::routing_observation(&original, cwd)?.digest()?,
+            "write conflict: report project or record changed",
+        )?;
+    }
     let event = match event_override {
         Some(event) => {
             crate::require(
@@ -1600,8 +1690,9 @@ fn run_bound_as(
                 &report,
                 expected_target,
             )?;
-            if report.raw.get("source").is_some()
-                || report.updates.iter().any(|u| u["kind"] == "add")
+            if report.raw.get("write_basis").is_none()
+                && (report.raw.get("source").is_some()
+                    || report.updates.iter().any(|u| u["kind"] == "add"))
             {
                 let expected = report.raw.get("record_sha256").and_then(J::as_str)
                     .ok_or_else(|| error("new entries and existing source citations require record_sha256 from the primary's prior read"))?;
@@ -1676,7 +1767,10 @@ fn run_bound_as(
         let captured = store.capture()?;
         let document = crate::history_authoring::document(&captured)?;
         verify_captured_target(&document, &captured.entry_bytes, &report, expected_target)?;
-        if report.raw.get("source").is_some() || report.updates.iter().any(|u| u["kind"] == "add") {
+        if report.raw.get("write_basis").is_none()
+            && (report.raw.get("source").is_some()
+                || report.updates.iter().any(|u| u["kind"] == "add"))
+        {
             let expected = report.raw.get("record_sha256").and_then(J::as_str)
                 .ok_or_else(|| error("new entries and existing source citations require record_sha256 from the primary's prior read"))?;
             crate::require(

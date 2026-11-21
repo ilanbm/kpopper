@@ -509,6 +509,9 @@ impl Project {
         self.common.is_some()
     }
     pub fn worktrees(&self) -> Result<Vec<PathBuf>> {
+        self.matching_worktrees(|_| true)
+    }
+    fn matching_worktrees(&self, relevant: impl Fn(&Path) -> bool) -> Result<Vec<PathBuf>> {
         if !self.is_git() {
             return Ok(vec![self.root.clone()]);
         }
@@ -526,7 +529,7 @@ impl Project {
         for field in raw.split(|b| *b == 0) {
             if let Some(path) = field.strip_prefix(b"worktree ") {
                 let path = PathBuf::from(string(path.to_vec())?);
-                if path.is_dir() {
+                if relevant(&path) && path.is_dir() {
                     let path = resolved(&path)?;
                     let verified = git(&path, &["rev-parse", "--show-toplevel"], true)?
                         .and_then(|raw| string(raw).ok())
@@ -540,11 +543,16 @@ impl Project {
         require(!paths.is_empty(), "project_worktrees_unavailable")?;
         Ok(paths)
     }
+    fn record_worktrees(&self) -> Result<Vec<PathBuf>> {
+        self.matching_worktrees(|path| {
+            path.join("GROUNDING.yaml").exists() || path.join("PROVENANCE.yaml").exists()
+        })
+    }
     pub(crate) fn has_legacy_knowledge(&self) -> Result<bool> {
         if !self.is_git() {
             return Ok(false);
         }
-        let roots = self.worktrees()?;
+        let roots = self.record_worktrees()?;
         Ok(roots.iter().any(|root| {
             ["GROUNDING.yaml", "PROVENANCE.yaml"]
                 .iter()
@@ -563,12 +571,23 @@ impl Project {
         if let Some(raw) = bounded(&self.config_path)? {
             return self.decode_config(Some(&raw));
         }
-        let roots = self.worktrees()?;
+        let registration = self
+            .common
+            .as_ref()
+            .map(|common| bounded(&common.join("kpopper-record")))
+            .transpose()?
+            .flatten();
+        // An established registration already names the record. For both legacy
+        // discovery and ambiguity checks, only roots with a candidate matter.
+        let roots = self.record_worktrees()?;
         let mut name = ["GROUNDING.yaml", "PROVENANCE.yaml"]
             .into_iter()
             .find(|name| roots.iter().any(|r| r.join(name).exists()))
             .unwrap_or("GROUNDING.yaml");
-        if self.is_git() && !roots.iter().any(|root| root.join(name).exists()) {
+        if registration.is_none()
+            && self.is_git()
+            && !roots.iter().any(|root| root.join(name).exists())
+        {
             for candidate in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
                 if git_has_head_record(&self.root, candidate)? {
                     name = candidate;
@@ -578,8 +597,8 @@ impl Project {
         }
         let mut record = name.to_owned();
         let mut mode = if self.is_git() { "advanced" } else { "simple" };
-        if let Some(common) = &self.common {
-            if let Some(raw) = bounded(&common.join("kpopper-record"))? {
+        if self.is_git() {
+            if let Some(raw) = registration {
                 record = string(raw)?.trim().into();
                 require(!record.is_empty(), "registered_record_empty")?;
                 let registered = resolved(&self.root.join(expanded(Path::new(&record))?))?;

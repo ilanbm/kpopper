@@ -509,6 +509,7 @@ impl<'a> Evaluator<'a> {
             })();
             match executed {
                 Err(e) => {
+                    crate::search_index::discard_frames();
                     if ["batch_request_limit", "batch_input_limit", "output_limit"]
                         .contains(&e.0.as_str())
                     {

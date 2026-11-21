@@ -567,8 +567,9 @@ pub(crate) fn capture(
         report,
         context.expected_target,
     )?;
-    if report.raw.get("source").is_some()
-        || report.updates.iter().any(|update| update["kind"] == "add")
+    if report.raw.get("write_basis").is_none()
+        && (report.raw.get("source").is_some()
+            || report.updates.iter().any(|update| update["kind"] == "add"))
     {
         let expected = report
             .raw

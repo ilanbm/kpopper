@@ -98,8 +98,12 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
     let explicit_source = object.get("source").and_then(J::as_str);
     let source_home = explicit_source.map(|source| source_collection(&shape.entries, &shape.homes, &shape.deps, source)).transpose()?;
     let updates = object.get("updates").and_then(J::as_array);
-    let additions = updates.is_some_and(|updates| updates.iter().any(|operation| operation["kind"] == "add"));
-    if additions || explicit_source.is_some() {
+    let additions =
+        updates.is_some_and(|updates| updates.iter().any(|operation| operation["kind"] == "add"));
+    if object.contains_key("write_basis") {
+        crate::report_basis::verify(document, envelope)?;
+    }
+    if !object.contains_key("write_basis") && (additions || explicit_source.is_some()) {
         object.get("record_sha256").and_then(J::as_str).ok_or_else(|| error(if additions { "new entries require record_sha256 from the primary's prior open --json or search" } else { "an existing source citation requires record_sha256 from the primary's prior open --json or search" }))?;
     }
     let shared_at = object.get("at").and_then(|value| V::from_json(value).ok())
@@ -166,9 +170,20 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
     {
         source_homes.insert("sources".into());
     }
-    require(source_homes.len() == 1, "the batch needs one unambiguous existing source collection")?;
-    let fingerprint = if additions { crate::identity::sha256(entry_bytes) } else { body_hash(&V::Map(bodies))? };
-    Ok(json!({"body_sha256":fingerprint,"source_collection":source_homes.into_iter().next().unwrap(),"type":"batch"}))
+    require(
+        source_homes.len() == 1,
+        "the batch needs one unambiguous existing source collection",
+    )?;
+    let fingerprint = if let Some(basis) = object.get("write_basis") {
+        crate::identity::sha256(&serde_json::to_vec(basis)?)
+    } else if additions {
+        crate::identity::sha256(entry_bytes)
+    } else {
+        body_hash(&V::Map(bodies))?
+    };
+    Ok(
+        json!({"body_sha256":fingerprint,"source_collection":source_homes.into_iter().next().unwrap(),"type":"batch"}),
+    )
 }
 
 #[cfg(test)]

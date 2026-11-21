@@ -649,15 +649,42 @@ pub fn capture_ordinary_source_with_runtime(
     as_of: Option<V>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<OrdinaryCapture> {
-    capture_ordinary_with(
-        paths,
-        cwd,
-        mode,
-        as_of,
-        &mut |_, _| Ok(()),
-        runtime,
-        Reading::Own,
-    )
+    let capture = || {
+        capture_ordinary_with(
+            paths,
+            cwd,
+            mode,
+            as_of.clone(),
+            &mut |_, _| Ok(()),
+            runtime,
+            Reading::Own,
+        )
+    };
+    for attempt in 0..3 {
+        match capture() {
+            Err(e)
+                if mode == ReadMode::Live
+                    && attempt < 2
+                    && matches!(e.0.as_str(), "snapshot_changed" | "recovery_required") =>
+            {
+                // A journal may belong to a live publisher. Wait at the same
+                // kernel lock, release it, then validate a completely fresh view.
+                // An abandoned journal remains an error on the next inspection.
+                for path in crate::project_modes::write_paths(paths, cwd)? {
+                    let path = cwd.join(path);
+                    if let Some(parent) = path.parent().filter(|p| p.is_dir())
+                        && crate::history_transaction_fs::DirectoryGuard::acquire(parent, false)
+                            .is_err()
+                    {
+                        return Err(e);
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(15 * (attempt + 1)));
+            }
+            result => return result,
+        }
+    }
+    unreachable!()
 }
 /// A record read to be laid over another, as another branch's committed record is: its
 /// document and hypotheses, with no snapshot of its own, so its field roles are left to
