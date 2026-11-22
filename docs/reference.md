@@ -311,6 +311,7 @@ the command cannot call host tools itself. Persistent writes require POSIX locki
 
 ```sh
 kpop update --file report.json        # apply one report now and return its receipt
+kpop update --prepare --file report.json  # read and bind premises for a concurrent report
 kpop ingest capture --file report.json
 kpop ingest status --event-id EVENT_ID
 kpop ingest pending

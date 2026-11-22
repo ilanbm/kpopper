@@ -218,6 +218,22 @@ a recorded commit is later changed or reverted.
 A revised report uses a new `event_id`. Exact retries reuse the original envelope, including
 its hash; changing its content under an existing ID is refused.
 
+For concurrent work, prepare an entry-scoped report from the revision you read. List
+any additional record premises you used in a `read_ids` array. Targets, sources and
+their declared dependencies are included automatically.
+
+```sh
+kpop update --prepare --file report.json > prepared.json
+kpop update --file prepared.json
+```
+
+Preparation reads without writing. It checks the report's existing full-record pin,
+when present, and returns a `write_basis` for the observed entries and project.
+The writer checks it under the publication locks. Independent edits can commit in
+either order. A changed target, premise or schema requires a fresh review. Use the
+full-record pin for a conclusion that depends on the entire graph. File contents
+outside the record retain their own evidence and freshness checks.
+
 Existing judgments cannot be replaced or reviewed in a batch. New judgments about the
 reader's own `graph.*`/page counts also require ordinary primary authoring, as those counts
 can change during the batch itself. Structured rules are computed by the local Lean core;

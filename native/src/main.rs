@@ -74,7 +74,7 @@ enum Command {
     /// Fix an entry not yet in any commit (outside git: one this session wrote).
     Correct(kpop_native::public_amend::CorrectOptions),
     /// Apply one source report atomically and return its durable receipt.
-    Update(kpop_native::public_update::Options),
+    Update(ReportCommand),
     /// Capture, process and inspect durable asynchronous source reports.
     Ingest(kpop_native::public_ingestion::CommandOptions),
     /// Deliver bounded ingestion attention through a host hook payload.
@@ -163,6 +163,15 @@ enum Command {
     HistoryCapture {
         entry: PathBuf,
     },
+}
+
+#[derive(clap::Args)]
+struct ReportCommand {
+    #[command(flatten)]
+    report: kpop_native::public_update::Options,
+    /// Read the named premises and output a report conditional on those entries.
+    #[arg(long)]
+    prepare: bool,
 }
 #[derive(Subcommand)]
 enum Application {
@@ -806,6 +815,7 @@ fn main() {
             error.exit();
         }
     };
+    kpop_native::public_search::disable_write_cache(args.no_cache);
     if let Command::Hook {
         kind,
         host,
@@ -865,7 +875,9 @@ fn main() {
                 } else {
                     kpop_native::source_capture::ReadMode::Live
                 };
-                let output = kpop_native::public_search::dispatch(options, &cwd, mode, args.json);
+                let mut options = options.clone();
+                options.no_cache = args.no_cache;
+                let output = kpop_native::public_search::dispatch(&options, &cwd, mode, args.json);
                 (output.stdout, output.stderr, output.code)
             }
             Command::Config(options) => {
@@ -1315,7 +1327,8 @@ fn main() {
         }
         std::process::exit(code);
     }
-    if let Command::Update(options) = &args.command {
+    if let Command::Update(command) = &args.command {
+        let options = &command.report;
         let result = (|| {
             let cwd = args
                 .workspace
@@ -1323,6 +1336,9 @@ fn main() {
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
             let input = (options.file == "-").then(stdin_bytes).transpose()?;
+            if command.prepare {
+                return kpop_native::public_update::prepare(options, &cwd, input.as_deref());
+            }
             kpop_native::public_update::run(options, &cwd, input.as_deref())
         })();
         match result {

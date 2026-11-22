@@ -206,7 +206,14 @@ fn layer(base: &V, hyp: &V) -> crate::Result<V> {
     }
     Ok(out)
 }
-pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
+pub(super) fn corpus(
+    selected: &Path,
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    mut index: Option<&mut crate::search_index::Index>,
+) -> Result<J> {
+    let failed_requests = R::failed_requests();
     let record = if mode == ReadMode::Live {
         crate::project_modes::write_paths(&[selected.to_owned()], cwd)?[0].clone()
     } else {
@@ -242,13 +249,36 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
     let base_bodies = C::full_source_bodies(capture.source());
     let context = V::from_typed(&capture.knowledge_status_context());
     let conflicts = map(get(&context, "conflicts"))?;
-    let projection = Projection::new(
-        document,
-        map(capture.hypotheses())?,
-        conflicts,
-        vec![],
-        runtime.as_ref(),
-    )?;
+    let mut incremental = None;
+    if let Some(store) = index.as_deref_mut() {
+        store.inputs.clear();
+        store.world.clear();
+        if map(capture.hypotheses())?.is_empty()
+            && conflicts.is_empty()
+            && sort_error(capture.source()).is_none()
+        {
+            let mut reader = R::Reader::search_inputs(document, runtime.as_ref())?;
+            if let Some(changes) = crate::search_dependencies::changes(store, &reader) {
+                reader.prepare_search(changes.needs_counts, !store.previous.is_empty())?;
+                incremental = Some((World::from_reader(reader, Some(&changes.dirty))?, changes));
+            }
+        }
+    }
+    let projection = if incremental.is_none() {
+        Some(Projection::new(
+            document,
+            map(capture.hypotheses())?,
+            conflicts,
+            vec![],
+            runtime.as_ref(),
+        )?)
+    } else {
+        None
+    };
+    let base_world = incremental
+        .as_ref()
+        .map(|(world, _)| world)
+        .unwrap_or_else(|| &projection.as_ref().expect("full projection").base);
     let mut inventory = Inventory::default();
     let mut stamps = BTreeMap::new();
     for path in capture.members() {
@@ -384,10 +414,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
         } else {
             None
         };
-        let world = alternate
-            .as_ref()
-            .map(|p| &p.base)
-            .unwrap_or(&projection.base);
+        let world = alternate.as_ref().map(|p| &p.base).unwrap_or(base_world);
         let own = if let Some(hyp) = hyp {
             if let V::List(ids) = get(hyp, "ids") {
                 names(&V::List(ids.clone()))
@@ -448,6 +475,12 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
             None
         };
         let world = guarded.as_ref().map(|p| &p.base).unwrap_or(world);
+        if guarded.is_some()
+            && let Some(store) = index.as_deref_mut()
+        {
+            store.world.clear();
+            store.inputs.clear();
+        }
         for id in own {
             if F::BUILTINS.contains(&id.as_str()) {
                 continue;
@@ -477,57 +510,81 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                     continue;
                 }
             }
-            let sources = source_ids(&id, world);
-            let judgment = world.judgments.contains_key(&id);
-            let (tag, reason) = if judgment {
-                world.state(&id)?
+            let original = physical_bodies.get(&id).copied();
+            let identity = if let Some(hyp) = hyp {
+                text(get(hyp, "path"))
+                    .ok()
+                    .and_then(|p| identity_documents.get(Path::new(p)))
             } else {
-                ("RECORDED".into(), String::new())
+                body_files
+                    .get(&id)
+                    .and_then(|path| identity_documents.get(path))
             };
-            let reference = if scope == "record" {
-                format!("node:{id}")
+            let content = match identity
+                .map(|doc| doc.dump(&id, body))
+                .transpose()?
+                .flatten()
+            {
+                Some(content) => content,
+                None => C::dump_full(body, original)?,
+            };
+            let reused = incremental
+                .as_ref()
+                .filter(|_| guarded.is_none())
+                .filter(|(_, changes)| !changes.dirty.contains(&id))
+                .and_then(|_| index.as_deref()?.previous.get(&id));
+            let row = if let Some((_, old)) = reused {
+                let mut current = old.clone();
+                current["content"] = J::String(content);
+                current
             } else {
-                format!("{scope}:node:{id}")
-            };
-            let deps = if judgment {
-                names(get(body, text(&world.reader.fields()["deps"])?))
-            } else {
-                vec![]
-            };
-            let mut row = json!({"ref":reference,"id":id,"kind":if judgment{"judgment"}else{"entry"},"scope":scope,"status":if publication.is_some(){"PENDING"}else if scope=="record"{&tag}else{"HYPOTHESIS"},"name":A::named(body),"sources":sources,"dependencies":deps,"reason":reason,"rule_dependencies":if judgment{vec![]}else{rule_ids(&id,body,&world.reader.ids)},"content":if let Some(document)=if let Some(hyp)=hyp{text(get(hyp,"path")).ok().and_then(|path|identity_documents.get(Path::new(path)))}else{body_files.get(&id).and_then(|path|identity_documents.get(path))}{match document.dump(&id,body)?{Some(text)=>text,None=>C::dump_full(body,physical.as_ref().and_then(|s|C::full_source_body(s,&id)))?}}else{C::dump_full(body,physical.as_ref().and_then(|s|C::full_source_body(s,&id)))?}});
-            if let Some(publication) = publication {
-                row["publication"] = json_value(publication)?;
-                row["assessment"] = json!(tag);
-            }
-            if conflicts.contains_key(&id) {
-                row["conflict"] = json!(true);
-            }
-            if judgment {
-                row["assessment"] = json!(tag);
-                row["falsifier_holds"] = json!(
-                    world
-                        .reader
-                        .predicate(&R::predicate_of(body, world.reader.fields()))?
-                );
-            } else if matches!(get(body, "rule"), V::Map(_)) {
-                let computed = R::compute(
-                    world.reader.raw(),
-                    &world.reader.ids,
-                    None,
-                    runtime.as_ref().and_then(|r| r.ordinary_program()),
-                );
-                row["calculation"] = if let Some(error) = &compute_error {
-                    json!({"value":null,"reason":error})
+                let sources = source_ids(&id, world);
+                let judgment = world.judgments.contains_key(&id);
+                let (tag, reason) = if judgment {
+                    world.state(&id)?
                 } else {
-                    computed["values"][&id].clone()
+                    ("RECORDED".into(), String::new())
                 };
-                if row["calculation"].is_null() {
-                    row["calculation"] = json!({"value":null,"reason":computed.get("error").cloned().unwrap_or(json!("unavailable"))});
+                let reference = if scope == "record" {
+                    format!("node:{id}")
+                } else {
+                    format!("{scope}:node:{id}")
+                };
+                let deps = if judgment {
+                    names(get(body, text(&world.reader.fields()["deps"])?))
+                } else {
+                    vec![]
+                };
+                let mut row = json!({"ref":reference,"id":id,"kind":if judgment{"judgment"}else{"entry"},"scope":scope,"status":if publication.is_some(){"PENDING"}else if scope=="record"{&tag}else{"HYPOTHESIS"},"name":A::named(body),"sources":sources,"dependencies":deps,"reason":reason,"rule_dependencies":if judgment{vec![]}else{rule_ids(&id,body,&world.reader.ids)},"content":content});
+                if let Some(publication) = publication {
+                    row["publication"] = json_value(publication)?;
+                    row["assessment"] = json!(tag);
                 }
-                row["formula"] = json!(P::predicate_text(get(body, "rule")));
-            }
+                if conflicts.contains_key(&id) {
+                    row["conflict"] = json!(true);
+                }
+                if judgment {
+                    row["assessment"] = json!(tag);
+                    row["falsifier_holds"] = json!(
+                        world
+                            .reader
+                            .predicate(&R::predicate_of(body, world.reader.fields()))?
+                    );
+                } else if matches!(get(body, "rule"), V::Map(_)) {
+                    row["calculation"] = if let Some(error) = &compute_error {
+                        json!({"value":null,"reason":error})
+                    } else {
+                        world.reader.calculation(&id)
+                    };
+                    row["formula"] = json!(P::predicate_text(get(body, "rule")));
+                }
+                row
+            };
+            let is_source = row["sources"]
+                .as_array()
+                .is_some_and(|sources| sources.iter().any(|source| source.as_str() == Some(&id)));
             rows.push(row);
-            if !matches!(body, V::Map(_)) || !sources.contains(&id) {
+            if !matches!(body, V::Map(_)) || !is_source {
                 continue;
             }
             let reference = if scope == "record" {
@@ -662,5 +719,12 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
     let revision = sha256(crate::public_search_rank::encode(&J::Object(preimage))?.as_bytes());
     let mut result = context.as_object().unwrap().clone();
     result.extend(json!({"record":record,"revision":revision,"revision_kind":"search-corpus","record_sha256":stamps.get(name(&record)?),"rows":rows,"unindexed":diagnostics}).as_object().unwrap().clone());
+    // A recorded unknown is stable; a failure to execute a computation is not.
+    if R::failed_requests() != failed_requests
+        && let Some(store) = index
+    {
+        store.world.clear();
+        store.inputs.clear();
+    }
     Ok(J::Object(result))
 }

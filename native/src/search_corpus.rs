@@ -172,12 +172,6 @@ pub(super) fn full_source_bodies(
     }
     out
 }
-pub(super) fn full_source_body<'a>(
-    source: &'a crate::ordinary_source::Source,
-    id: &str,
-) -> Option<&'a crate::ordinary_source::Source> {
-    full_source_bodies(source).get(id).copied()
-}
 pub(super) struct SourceRoots {
     /// Bases used to resolve project-relative locators.
     pub(super) resolution: Vec<PathBuf>,
@@ -445,7 +439,13 @@ fn core_source_path(
         .map(Ok)
         .unwrap_or_else(|| crate::project_modes::resolved(&record.parent().unwrap().join(locator)))
 }
-fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
+fn core(
+    record: &Path,
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    index: Option<&crate::search_index::Index>,
+) -> Result<J> {
     crate::require(
         options.state_dir.is_none(),
         "core_profile_option_unsupported: --state-dir",
@@ -463,6 +463,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
             .to_data(),
     )
     .map_err(|e| Failure::captured(e, "capture"))?;
+    let computation_scope = index.map(|i| i.computing());
     let context = CapturedAssessment::from_snapshot(
         snapshot,
         None,
@@ -472,6 +473,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
         None,
     )
     .map_err(|e| Failure::captured(e, "assessment"))?;
+    drop(computation_scope);
     let assessment = context.assessment();
     let view = json_value(context.view())?;
     let snapshot = context.snapshot().to_data();
@@ -623,14 +625,22 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
         json!({"read_mode":if mode==ReadMode::Frozen{"frozen"}else{"live"},"record":record,"revision":revision,"revision_kind":"search-corpus","corpus_revision":revision,"snapshot_id":context.snapshot_id(),"findings_revision":context.findings_revision(),"record_sha256":record_sha,"rows":rows,"unindexed":diagnostics}),
     )
 }
-pub(super) fn corpus(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J> {
-    let record = match &options.record {
+pub(super) fn record(options: &Options, cwd: &Path) -> Result<PathBuf> {
+    Ok(match &options.record {
         Some(path) => expanded(cwd, path)?,
         None => crate::public_workspace::records(cwd)?
             .into_iter()
             .next()
             .ok_or_else(|| crate::Error("ingestion requires one record path".into()))?,
-    };
+    })
+}
+pub(super) fn corpus(
+    record: &Path,
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    index: Option<&mut crate::search_index::Index>,
+) -> Result<J> {
     crate::require(
         options.profile.as_deref().is_none_or(|p| p == "core/v1"),
         "unsupported search profile",
@@ -639,7 +649,7 @@ pub(super) fn corpus(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J>
         true
     } else if record.is_file() {
         let mut inv = Inventory::default();
-        let doc = crate::ordinary_document::load(std::slice::from_ref(&record), &mut inv, false)?;
+        let doc = crate::ordinary_document::load(&[record.to_owned()], &mut inv, false)?;
         use crate::ordinary_value::{Value, map};
         let value = doc.source.projected();
         map(&value)
@@ -654,9 +664,9 @@ pub(super) fn corpus(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J>
         false
     };
     if selected {
-        core(&record, options, cwd, mode)
+        core(record, options, cwd, mode, index.as_deref())
     } else {
-        super::search_ordinary::corpus(&record, options, cwd, mode)
+        super::search_ordinary::corpus(record, options, cwd, mode, index)
     }
 }
 

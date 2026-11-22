@@ -137,7 +137,7 @@ kpop session-context --event= --host=
 kpop session-start --copilot --cursor --gemini --host=
 kpop session-stop --event= --host=
 kpop set --as-of= --at= --by= --commit= --contribution-id= --disclose-locator= --drop= --environment= --event-id= --evidence-root= --expected-record-sha256= --expected-revision= --hypothesis= --in= --on= --operation= --profile= --reframe --scope= --shareability= --source= --value= --why=
-kpop update --file= --record= --state-dir=
+kpop update --file= --prepare --record= --state-dir=
 kpop watch
 kpop watch complete-delivery --outcome= --token=
 kpop watch pause

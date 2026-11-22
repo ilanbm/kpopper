@@ -184,8 +184,14 @@ impl<'a> World<'a> {
         conflicts: &BTreeSet<String>,
         runtime: Option<&'a Runtime>,
     ) -> Result<Self> {
-        let mut reader =
-            Reader::new(doc, runtime)?.with_layers(layers.clone(), conflicts.clone())?;
+        let reader = Reader::new(doc, runtime)?.with_layers(layers.clone(), conflicts.clone())?;
+        Self::from_reader(reader, None)
+    }
+
+    pub(crate) fn from_reader(
+        mut reader: Reader<'a>,
+        changed: Option<&BTreeSet<String>>,
+    ) -> Result<Self> {
         // Public text views walk entry IDs lexically. Only this lookup table is
         // ordered here; each source body retains its original mapping order.
         reader.raw = std::mem::take(&mut reader.raw)
@@ -205,6 +211,7 @@ impl<'a> World<'a> {
         }
         let states = judgments
             .iter()
+            .filter(|(id, _)| changed.is_none_or(|dirty| dirty.contains(*id)))
             .map(|(id, b)| Ok((id.clone(), A::judgment_state(&reader, b)?)))
             .collect::<Result<Map>>()?;
         Ok(Self {

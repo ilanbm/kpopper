@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Search
+
+- Repeated local searches reuse a private index across CLI invocations. After a record
+  write, kpopper refreshes affected rows and calculations. It also checks referenced
+  files for edits made outside kpopper. Use `kpop --no-cache search` for a fresh index.
+- Projects with a registered record check only Git worktrees that contain a competing
+  record when resolving its location.
+
+### Concurrent updates
+
+- Readers wait for an active publisher and retry a fresh capture. An abandoned write
+  journal still requires recovery.
+- `kpop update --prepare --file report.json` binds a report to its targets, sources
+  and named premises. Independent reports can commit in either order. If a premise
+  changes, the writer identifies the conflict. See the [report guide](skills/kpopper/INGESTION.md).
+
 ## 0.18.0 — 2026-10-28
 
 ### Changed

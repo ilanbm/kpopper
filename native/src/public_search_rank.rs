@@ -52,7 +52,52 @@ fn sql_error(error: rusqlite::Error) -> Error {
     Error(error.to_string())
 }
 
-pub(crate) fn search(mut corpus: Value, query: &str, limit: i64, chars: i64) -> Result<Value> {
+pub(crate) fn search_text(row: &Value) -> Result<String> {
+    let mut text = row["content"]
+        .as_str()
+        .ok_or_else(|| Error("invalid search content".into()))?
+        .to_owned();
+    if let Some(value) = row["value_text"].as_str() {
+        text.push('\n');
+        text.push_str(value);
+    } else if !row["calculation"]["value"].is_null() {
+        text.push('\n');
+        text.push_str(&crate::public_ordinary_readers::display(
+            &TypedValue::from_json(&row["calculation"]["value"])?,
+        ));
+    }
+    Ok(text)
+}
+
+pub(crate) fn expression(terms: &[String]) -> String {
+    terms
+        .iter()
+        .map(|t| format!("\"{}\"", t.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
+
+pub(crate) fn terms(query: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    crate::session_search::terms(query)
+        .into_iter()
+        .filter(|t| seen.insert(t.clone()))
+        .take(32)
+        .collect()
+}
+
+#[cfg(test)]
+pub(crate) fn search(corpus: Value, query: &str, limit: i64, chars: i64) -> Result<Value> {
+    search_ranked(corpus, query, limit, chars, None)
+}
+
+pub(crate) fn search_ranked(
+    mut corpus: Value,
+    query: &str,
+    limit: i64,
+    chars: i64,
+    ranked: Option<Vec<usize>>,
+) -> Result<Value> {
     require(
         !query.trim().is_empty() && query.chars().count() <= 2000,
         "query must contain 1..2000 characters",
@@ -61,12 +106,7 @@ pub(crate) fn search(mut corpus: Value, query: &str, limit: i64, chars: i64) -> 
         (1..=50).contains(&limit) && (500..=100000).contains(&chars),
         "limit must be 1..50; chars must be 500..100000",
     )?;
-    let mut seen = BTreeSet::new();
-    let terms = crate::session_search::terms(query)
-        .into_iter()
-        .filter(|t| seen.insert(t.clone()))
-        .take(32)
-        .collect::<Vec<_>>();
+    let terms = terms(query);
     let rows = corpus
         .as_object_mut()
         .ok_or_else(|| Error("invalid search corpus".into()))?
@@ -74,7 +114,13 @@ pub(crate) fn search(mut corpus: Value, query: &str, limit: i64, chars: i64) -> 
         .and_then(|rows| rows.as_array().cloned())
         .ok_or_else(|| Error("invalid search corpus rows".into()))?;
     let mut hits = vec![];
-    if !terms.is_empty() {
+    if let Some(ranked) = ranked {
+        require(
+            ranked.iter().all(|i| *i > 0 && *i <= rows.len()),
+            "invalid search index position",
+        )?;
+        hits = ranked;
+    } else if !terms.is_empty() {
         let connection = rusqlite::Connection::open_in_memory().map_err(sql_error)?;
         connection.execute("CREATE VIRTUAL TABLE evidence USING fts5(identity, name, content, tokenize='unicode61')", []).map_err(sql_error)?;
         {
@@ -82,19 +128,7 @@ pub(crate) fn search(mut corpus: Value, query: &str, limit: i64, chars: i64) -> 
                 .prepare("INSERT INTO evidence(rowid, identity, name, content) VALUES (?, ?, ?, ?)")
                 .map_err(sql_error)?;
             for (i, row) in rows.iter().enumerate() {
-                let mut text = row["content"]
-                    .as_str()
-                    .ok_or_else(|| Error("invalid search content".into()))?
-                    .to_owned();
-                if let Some(value) = row["value_text"].as_str() {
-                    text.push('\n');
-                    text.push_str(value);
-                } else if !row["calculation"]["value"].is_null() {
-                    text.push('\n');
-                    text.push_str(&crate::public_ordinary_readers::display(
-                        &TypedValue::from_json(&row["calculation"]["value"])?,
-                    ));
-                }
+                let text = search_text(row)?;
                 insert
                     .execute(rusqlite::params![
                         i + 1,
@@ -105,11 +139,7 @@ pub(crate) fn search(mut corpus: Value, query: &str, limit: i64, chars: i64) -> 
                     .map_err(sql_error)?;
             }
         }
-        let expression = terms
-            .iter()
-            .map(|t| format!("\"{}\"", t.replace('"', "\"\"")))
-            .collect::<Vec<_>>()
-            .join(" OR ");
+        let expression = expression(&terms);
         let mut statement = connection.prepare("SELECT rowid FROM evidence WHERE evidence MATCH ? ORDER BY bm25(evidence, 8, 4, 1), rowid").map_err(sql_error)?;
         hits = statement
             .query_map([expression], |r| r.get::<_, usize>(0))

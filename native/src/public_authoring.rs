@@ -326,6 +326,7 @@ fn entry_is_legacy_or_pending(route: &WriteRoute) -> Result<bool> {
         && crate::legacy_authoring::authority_route(&route.paths()[0])? == crate::legacy_authoring::AuthorityRoute::Legacy))
 }
 pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
+    let _index = crate::public_search::writing(cwd);
     let mut output = run_inner(kind, options, cwd)?;
     if let Some(notice) = crate::onboarding::continuity_notice(
         cwd,

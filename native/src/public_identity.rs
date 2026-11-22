@@ -176,6 +176,7 @@ fn selected_privacy(context: &HA::Context, request: &Request) -> Result<V> {
 }
 
 pub fn run_same(options: &SameOptions, cwd: &Path) -> Result<String> {
+    let _index = crate::public_search::writing(cwd);
     run(
         Request {
             a: options.a.clone(),
@@ -191,6 +192,7 @@ pub fn run_same(options: &SameOptions, cwd: &Path) -> Result<String> {
 }
 
 pub fn run_distinct(options: &DistinctOptions, cwd: &Path) -> Result<String> {
+    let _index = crate::public_search::writing(cwd);
     run(
         Request {
             a: options.a.clone(),
