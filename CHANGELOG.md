@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 — 2026-11-22
 
 ### Search
 
@@ -17,6 +17,10 @@
 - `kpop update --prepare --file report.json` binds a report to its targets, sources
   and named premises. Independent reports can commit in either order. If a premise
   changes, the writer identifies the conflict. See the [report guide](skills/kpopper/INGESTION.md).
+
+### Included changes
+
+- Reuse search indexes and support concurrent report updates (#326)
 
 ## 0.18.0 — 2026-10-28
 
