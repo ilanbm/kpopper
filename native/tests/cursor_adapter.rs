@@ -52,6 +52,7 @@ fn open(script: &Path, cwd: &Path, payload: &Value, tmp: &Path, runtime: Option<
         .env("TMPDIR", tmp)
         .env("XDG_STATE_HOME", tmp)
         .env("XDG_CONFIG_HOME", tmp)
+        .env("HOME", tmp)
         .env_remove("KPOPPER_SESSION_CONFIG")
         .env_remove("KPOPPER_ROOT")
         .stdin(Stdio::piped())
@@ -161,10 +162,21 @@ fn a_missing_runtime_is_reported_to_the_agent_with_its_install_command() {
         "{text}"
     );
     assert!(
+        text.contains(&format!(
+            "Or install once for every copy of this version: sh \"{}/install.sh\" --version {}",
+            fs::canonicalize(root.path()).unwrap().display(),
+            fs::read_to_string(repo().join("VERSION")).unwrap().trim()
+        )),
+        "{text}"
+    );
+    assert!(
         text.contains("its hooks never download or install the runtime"),
         "{text}"
     );
-    assert!(text.contains("Offer to run the command above"), "{text}");
+    assert!(
+        text.contains("Offer to run an install command above"),
+        "{text}"
+    );
 }
 
 #[test]

@@ -11,14 +11,14 @@ if [ "$SCRIPT" != session_start.py ]; then
 elif ! BINARY=$(sh "$HERE/native_runtime.sh" --path 2>/dev/null); then
   # Claude Code and Codex add a SessionStart hook's standard output to the model's context
   # and never show the model its standard error. So the opener alone reports a missing
-  # runtime on standard output, with the command that installs it; the other hooks stay
+  # runtime on standard output, with the commands that install it; the other hooks stay
   # silent. The diagnostic is collected apart from the path, so no warning joins the path.
   REPORT=$(sh "$HERE/native_runtime.sh" --path 2>&1 >/dev/null)
   printf '%s\n' "$REPORT" \
     'kpopper did not open this session, and its hooks never download or install the runtime.'
   case "$REPORT" in
     *'Install this active copy: '*)
-      printf '%s %s\n' "Offer to run the command above (it downloads this version's runtime from" \
+      printf '%s %s\n' "Offer to run an install command above (it downloads this version's runtime from" \
         'the kpopper GitHub release and checks its SHA-256), then ask the user to start a new session.' ;;
   esac
   exit 0

@@ -52,7 +52,7 @@ if ! REPORT=$(sh "$RUNTIME" --path 2>&1 >/dev/null); then
     'kpopper did not open this session, and its hooks never download or install the runtime.')
   case "$REPORT" in
     *'Install this active copy: '*)
-      TEXT=$(printf '%s\n%s %s' "$TEXT" "Offer to run the command above (it downloads this version's runtime from" \
+      TEXT=$(printf '%s\n%s %s' "$TEXT" "Offer to run an install command above (it downloads this version's runtime from" \
         'the kpopper GitHub release and checks its SHA-256), then ask the user to start a new session.') ;;
   esac
   printf '{"additional_context": "%s"}\n' "$(printf '%s' "$TEXT" | json_text)"

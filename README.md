@@ -803,7 +803,8 @@ codex plugin marketplace add ilanbm/kpopper
 codex plugin add kpopper@kpopper
 ```
 
-Install the native runtime in the plugin root printed by `codex plugin add` using the
+Install the native runtime in the plugin root printed by `codex plugin add`, or once for
+every copy of that version, using the
 [native runtime setup guide](docs/plugin-runtime.md#install-the-native-runtime).
 Then start a new task and review and trust kpopper's hooks when Codex asks.
 You can also inspect the hook definitions **inside Codex** with:

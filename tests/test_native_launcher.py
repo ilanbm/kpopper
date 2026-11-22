@@ -32,14 +32,35 @@ class NativeShellLaunchers(unittest.TestCase):
         self.binary.parent.mkdir(parents=True)
         self.write_executable(self.binary,
                               '#!/bin/sh\nprintf "<%s>\\n" "$@"\ncat\nexit "${NATIVE_EXIT:-0}"\n')
+        # The resolver looks for a machine-wide install under HOME, never the caller's.
+        self.home = self.root / "home with spaces"
+        self.home.mkdir()
         self.env = dict(os.environ, PATH=str(tools) + os.pathsep + "/usr/bin:/bin",
-                        PYTHON_CALLED=str(self.python_called))
+                        PYTHON_CALLED=str(self.python_called), HOME=str(self.home))
         self.env.pop("KPOPPER_RUNTIME", None)
         self.env.pop("CLAUDE_ENV_FILE", None)
 
     def write_executable(self, path, text):
         path.write_text(text)
         path.chmod(0o755)
+
+    def machine_wide(self, version, target="darwin-arm64", marker=None):
+        # What install.sh lays out for a version installed without --plugin-root.
+        package = self.home / ".local/lib/kpopper" / version / target
+        binary = package / "bin" / ("kpop.exe" if target == "windows-x86_64" else "kpop")
+        binary.parent.mkdir(parents=True)
+        self.write_executable(binary, '#!/bin/sh\necho "machine-wide %s"\nprintf "<%%s>\\n" "$@"\ncat\n' % version)
+        (package / ".kpopper-managed").write_text("%s\n" % (version if marker is None else marker))
+        return binary
+
+    def missing(self, version=None):
+        # The resolver's report when neither this copy nor the machine holds the runtime.
+        report = ("kpopper: native runtime is not installed for darwin-arm64 in this package.\n"
+                  'Install this active copy: sh "%s"\n' % (self.plugin / "scripts/install_native.sh"))
+        if version:
+            report += 'Or install once for every copy of this version: sh "%s" --version %s\n' % (
+                self.plugin / "install.sh", version)
+        return report
 
     def invoke(self, path, args=(), code=0):
         return subprocess.run(["sh", str(self.plugin / path), *args],
@@ -134,7 +155,6 @@ class NativeShellLaunchers(unittest.TestCase):
         self.write_executable(self.tools / "curl", '#!/bin/sh\n: > "$DOWNLOADED"\nexit 99\n')
         env = dict(self.env, CLAUDE_PLUGIN_ROOT=str(self.plugin), PLUGIN_ROOT=str(self.plugin),
                    DOWNLOADED=str(downloaded))
-        install = 'Install this active copy: sh "%s"\n' % (self.plugin / "scripts/install_native.sh")
         openers = 0
         for config in ("hooks/hooks.json", "adapters/codex/plugin-hooks.json", "adapters/codex/hooks.json"):
             for event, groups in json.loads((ROOT / config).read_text())["hooks"].items():
@@ -153,13 +173,12 @@ class NativeShellLaunchers(unittest.TestCase):
                         openers += 1
                         self.assertEqual(result.stderr, "")
                         self.assertTrue(result.stdout.startswith(
-                            "kpopper: native runtime is not installed for darwin-arm64 in this package.\n"
-                            + install), result.stdout)
-                        self.assertIn("kpopper did not open this session", result.stdout)
-                        self.assertIn("Offer to run the command above", result.stdout)
+                            self.missing("0.9.0") + "kpopper did not open this session"), result.stdout)
+                        self.assertIn("Offer to run an install command above", result.stdout)
                         self.assertIn("start a new session", result.stdout)
         self.assertEqual(openers, 3)
         self.assertFalse(self.binary.exists())
+        self.assertFalse((self.home / ".local").exists())
         self.assertFalse(downloaded.exists())
         self.assertFalse(self.python_called.exists())
 
@@ -218,7 +237,9 @@ class NativeShellLaunchers(unittest.TestCase):
                               'printf "C:/%s\\n" "$(CDPATH= cd -- "$2" && basename -- "$(pwd)")"\n')
         (self.plugin / "VERSION").write_text("9.8.7-test\n")
         install = ('Install this active copy: pwsh -NoProfile -File "C:/plugin with spaces/install.ps1" '
-                   '-Version "9.8.7-test" -PluginRoot "C:/plugin with spaces"\n')
+                   '-Version "9.8.7-test" -PluginRoot "C:/plugin with spaces"\n'
+                   'Or install once for every copy of this version: pwsh -NoProfile -File '
+                   '"C:/plugin with spaces/install.ps1" -Version "9.8.7-test"\n')
         for system in ("MINGW64_NT-10.0", "MSYS_NT-10.0", "CYGWIN_NT-10.0"):
             with self.subTest(system=system):
                 self.use_platform(system, "x86_64")
@@ -227,8 +248,129 @@ class NativeShellLaunchers(unittest.TestCase):
                 self.assertTrue(opened.stdout.startswith(
                     "kpopper: native runtime is not installed for windows-x86_64 in this package.\n"
                     + install + "kpopper did not open this session"), opened.stdout)
-                self.assertIn("Offer to run the command above", opened.stdout)
+                self.assertIn("Offer to run an install command above", opened.stdout)
                 self.assertEqual(self.invoke("scripts/bin/kpop").returncode, 1)
+        self.assertFalse(self.python_called.exists())
+
+    def test_the_copys_own_runtime_comes_before_a_machine_wide_install(self):
+        (self.plugin / "VERSION").write_text("0.17.0\n")
+        self.machine_wide("0.17.0")
+        resolved = self.invoke("scripts/native_runtime.sh", ("--path",))
+        self.assertEqual((resolved.returncode, resolved.stdout, resolved.stderr), (0, "%s\n" % self.binary, ""))
+        result = self.invoke("scripts/bin/kpop", ("check",))
+        self.assertEqual((result.returncode, result.stdout), (0, '<check>\n{"session_id":"test","cwd":"/example"}'))
+
+    def test_a_copy_without_its_runtime_uses_the_machine_wide_install_of_its_version(self):
+        # One install serves every copy of a version: app sessions, plugin caches, Codex.
+        self.binary.unlink()
+        (self.plugin / "VERSION").write_text("0.17.0\n")
+        installed = self.machine_wide("0.17.0")
+        resolved = self.invoke("scripts/native_runtime.sh", ("--path",))
+        self.assertEqual((resolved.returncode, resolved.stdout, resolved.stderr), (0, "%s\n" % installed, ""))
+        for name in ("kpop", "kpopper"):
+            result = self.invoke("scripts/bin/" + name, ("add", "p.value"))
+            self.assertEqual((result.returncode, result.stderr), (0, ""))
+            self.assertEqual(result.stdout, 'machine-wide 0.17.0\n<add>\n<p.value>\n'
+                             '{"session_id":"test","cwd":"/example"}')
+        for script, args, expected in [
+            ("session_open.sh", ("--host", "claude"), "<session-start>\n<--host>\n<claude>"),
+            ("session_gate.sh", ("--host", "claude", "--context", "UserPromptSubmit"),
+             "<session-context>\n<--event>\n<UserPromptSubmit>\n<--host>\n<claude>"),
+            ("hook.sh", ("ground_hook.py", "claude", "prompt"), "<_hook>\n<ground>\n<claude>\n<prompt>"),
+        ]:
+            with self.subTest(script=script):
+                result = self.invoke("scripts/" + script, args)
+                self.assertEqual((result.returncode, result.stderr), (0, ""))
+                self.assertTrue(result.stdout.startswith("machine-wide 0.17.0\n" + expected + "\n"), result.stdout)
+        self.assertFalse(self.python_called.exists())
+
+    def test_only_the_installers_mark_of_the_same_version_stands_in_for_the_copys_runtime(self):
+        self.binary.unlink()
+        (self.plugin / "VERSION").write_text("0.17.0\n")
+
+        def another_version():
+            self.machine_wide("0.16.1")
+
+        def unmarked():
+            (self.machine_wide("0.17.0").parents[1] / ".kpopper-managed").unlink()
+
+        def marked_for_another_version():
+            self.machine_wide("0.17.0", marker="0.16.1")
+
+        def marked_with_more_than_the_version():
+            self.machine_wide("0.17.0", marker="0.17.0\n0.16.1")
+
+        def not_executable():
+            self.machine_wide("0.17.0").chmod(0o644)
+
+        def a_directory():
+            binary = self.machine_wide("0.17.0")
+            binary.unlink()
+            binary.mkdir()
+
+        for layout in (another_version, unmarked, marked_for_another_version,
+                       marked_with_more_than_the_version, not_executable, a_directory):
+            with self.subTest(layout=layout.__name__):
+                shutil.rmtree(self.home / ".local", ignore_errors=True)
+                layout()
+                for path, args in (("scripts/native_runtime.sh", ("--path",)), ("scripts/bin/kpop", ("check",))):
+                    result = self.invoke(path, args)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (1, "", self.missing("0.17.0")))
+
+    def test_the_version_is_the_first_line_of_the_copys_version_file(self):
+        self.binary.unlink()
+        installed = self.machine_wide("0.17.0", marker="0.17.0\r")  # install.ps1 writes CRLF
+        for text in ("0.17.0\n", "0.17.0\r\n", "0.17.0\nanother line\n"):
+            with self.subTest(version=text):
+                (self.plugin / "VERSION").write_text(text)
+                resolved = self.invoke("scripts/native_runtime.sh", ("--path",))
+                self.assertEqual((resolved.returncode, resolved.stdout), (0, "%s\n" % installed))
+        # A version that is not a plain name finds nothing, not even a directory it would reach.
+        escaped = self.home / ".local/lib/0.17.0/darwin-arm64"
+        escaped.mkdir(parents=True)
+        shutil.copytree(installed.parent, escaped / "bin")
+        (escaped / ".kpopper-managed").write_text("../0.17.0\n")
+        for text in ("../0.17.0\n", "0.17.0 beta\n", "\n0.17.0\n", ""):
+            with self.subTest(version=text):
+                (self.plugin / "VERSION").write_text(text)
+                result = self.invoke("scripts/native_runtime.sh", ("--path",))
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", self.missing()))
+        (self.plugin / "VERSION").unlink()
+        result = self.invoke("scripts/native_runtime.sh", ("--path",))
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", self.missing()))
+
+    def test_with_no_runtime_anywhere_the_report_offers_the_install_for_every_copy(self):
+        self.binary.unlink()
+        (self.plugin / "VERSION").write_text("0.17.0\n")
+        # An empty HOME names no machine-wide install. (Unset, bash fills it from the user database.)
+        for home in (str(self.home), ""):
+            with self.subTest(home=home):
+                result = subprocess.run(["sh", str(self.plugin / "scripts/native_runtime.sh"), "--path"],
+                                        text=True, capture_output=True, timeout=10, cwd=self.root,
+                                        env=dict(self.env, HOME=home))
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (1, "", self.missing("0.17.0")))
+
+    def test_each_platform_falls_back_to_its_own_target(self):
+        self.binary.unlink()
+        (self.plugin / "VERSION").write_text("0.17.0\n")
+        for system, machine, target in [
+            ("Darwin", "x86_64", "darwin-x86_64"),
+            ("Linux", "x86_64", "linux-x86_64"),
+            ("Linux", "arm64", "linux-aarch64"),
+            ("MINGW64_NT-10.0", "x86_64", "windows-x86_64"),
+            ("MSYS_NT-10.0", "x86_64", "windows-x86_64"),
+            ("CYGWIN_NT-10.0", "x86_64", "windows-x86_64"),
+        ]:
+            with self.subTest(system=system, machine=machine):
+                self.use_platform(system, machine)
+                shutil.rmtree(self.home / ".local", ignore_errors=True)
+                installed = self.machine_wide("0.17.0", target=target)
+                resolved = self.invoke("scripts/native_runtime.sh", ("--path",))
+                self.assertEqual((resolved.returncode, resolved.stdout), (0, "%s\n" % installed), resolved.stderr)
+                result = self.invoke("scripts/bin/kpop", ("check",))
+                self.assertEqual((result.returncode, result.stderr), (0, ""))
+                self.assertTrue(result.stdout.startswith("machine-wide 0.17.0\n<check>\n"), result.stdout)
         self.assertFalse(self.python_called.exists())
 
     def test_a_hosted_package_without_commands_still_opens_the_session(self):

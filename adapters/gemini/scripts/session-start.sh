@@ -41,7 +41,7 @@ fi
 cat >/dev/null 2>&1
 case "$REPORT" in
   *'Install this active copy: '*)
-    OFFER="Offer to run the command above (it downloads this version's runtime from"
+    OFFER="Offer to run an install command above (it downloads this version's runtime from"
     OFFER="$OFFER the kpopper GitHub release and checks its SHA-256), then ask the user to start a new session." ;;
   *) OFFER= ;;
 esac

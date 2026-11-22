@@ -8,11 +8,13 @@ out of the Codex path.
 ## Native plugin
 
 Install the plugin first. Plugin installation alone does not install or download the
-native runtime, and a globally installed `kpop` is not used by plugin hooks. Run
+native runtime, and plugin hooks never use a `kpop` found on `PATH`. Run
 `sh "<plugin root>/scripts/install_native.sh"` with the plugin root that `codex plugin add`
-prints ([Windows](../../docs/plugin-runtime.md#install-the-native-runtime)), then start a
-new task. All commands in `plugin-hooks.json`,
-including prompt diagnostics, invoke the exact native package binary under `$PLUGIN_ROOT`.
+prints, or install that version once for the whole machine
+([both, and Windows](../../docs/plugin-runtime.md#install-the-native-runtime)), then start a
+new task. All commands in `plugin-hooks.json`, including prompt diagnostics, invoke the
+exact native package binary that `$PLUGIN_ROOT/scripts/native_runtime.sh` selects for the
+plugin's version.
 
 
 The Codex package loads the shared skill and these hooks:
